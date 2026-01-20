@@ -5,7 +5,7 @@ alwaysApply: false
 ---
 # Opik Optimizer Code Structure
 
-Keep modules small, explicit, and aligned with the optimizer architecture so contributors can navigate the SDK quickly.
+- Keep modules small, explicit, and aligned with the optimizer architecture so contributors can navigate the SDK quickly.
 
 ## Imports
 
@@ -36,7 +36,7 @@ Keep modules small, explicit, and aligned with the optimizer architecture so con
 - **`__init__.py`**: Must export the optimizer class in `__all__`
 - **`{algorithm_name}.py`**: Main optimizer class inheriting from `BaseOptimizer`
   - Implements `run_optimization()` (required)
-  - Optionally implements `pre_optimization()`, `get_config()`, `get_metadata()`
+  - Optionally implements `pre_optimize()`, `post_optimize()`, `get_config()`, `get_metadata()`
 - **`helpers.py`**: Utility functions used by the optimizer
   - Can be minimal/empty if no utilities needed
   - Add docstring explaining purpose if empty
@@ -62,14 +62,6 @@ Keep modules small, explicit, and aligned with the optimizer architecture so con
 - Algorithm-specific domain models or utilities can be added as needed
   - Examples: `parameter_search_space.py`, `parameter_spec.py` (parameter_optimizer)
   - Keep these when they represent core domain concepts
-
-### Template Reference
-
-See `src/opik_optimizer/algorithms/template_optimizer/` for a complete working template demonstrating:
-- All required BaseOptimizer hooks
-- Standardized file structure
-- Example implementations with placeholders
-- Pass-through implementation for testing structure
 
 ## Directory Layout
 
@@ -114,18 +106,16 @@ src/opik_optimizer/
 - Shared utilities that are reused across optimizers live in top-level directories (`utils/`, `optimization_config/`, `metrics/`, `mcp_utils/`)
 - `optimization_result.py`, `task_evaluator.py`, and `_llm_calls.py` are compatibility shims that re-export from `core/` for legacy imports; new code should prefer `core/` modules.
 
-## Public Surface
+## Public Surface, Module State and Configuration
 
 - Re-export public optimizers from package `__init__.py` files so users can import with `from opik_optimizer import EvolutionaryOptimizer`.
 - Keep internal helpers private with a leading underscore or by omitting them from `__all__`.
-
-## Module State and Configuration
-
 - Avoid work at import time beyond constant definition and lightweight configuration (`initialize_cache()` is triggered inside `BaseOptimizer`, not at module load).
 - Store configurable defaults as uppercase constants near the top of the module (for example, `DEFAULT_POPULATION_SIZE`).
 - When you need mutable shared state (caches, counters), encapsulate it in a dedicated module (`cache_config`, `utils/throttle.py`) rather than scattering globals.
 
-## Typing and Data Structures
+## Best Practice, Typing and Data Structures
 
 - Type annotate public methods and helper functions. Use `pydantic.BaseModel`, dataclasses, or TypedDicts for structured data exchanged between modules (for example, `OptimizationResult`, prompt variants).
 - Prefer immutable structures (tuples, frozen dataclasses) for candidate representations passed between operators to avoid accidental mutation.
+- Optimizers should call `evaluate()` (not `evaluate_prompt`) so counters, early-stop checks, and history tracking remain consistent.

@@ -25,45 +25,22 @@ Every optimizer algorithm package MUST have the following structure:
     └── {operation}.py
 ```
 
-## File Requirements
-
-### `__init__.py` (Required)
-
-- Must export the optimizer class
-- Use `__all__` to explicitly list exports
+- `__init__.py` (Required) which must export the optimizer class and use `__all__` to explicitly list exports
 
 ### `{algorithm_name}.py` (Required)
-
 - Main optimizer class inheriting from `BaseOptimizer`
 - Must implement `run_optimization(context: OptimizationContext) -> AlgorithmResult`
-- Optionally implement: `pre_optimization()`, `get_config()`, `get_metadata()`, `_should_stop_context()`
+- Optionally implement: `pre_optimize()`, `post_optimize()`, `get_config()`, `get_metadata()`, `_should_stop_context()`
 - Define `DEFAULT_PROMPTS: dict[str, str]` class attribute
+- Must implement `helpers.py`, utility functions used by the optimizer, and can be minimal/empty if no utilities needed
+- Must implement `types.py`, type definitions, enums, and data classes, and can be minimal/empty if no custom types needed
+- Must implement `prompts.py`, LLM prompt templates used by the algorithm, and can be minimal/empty if algorithm doesn't use LLM prompts
+- Must implement `reporting.py`, reporting utilities and context managers, and can import from `...reporting_utils` for standard reporting
 
-### `helpers.py` (Required)
-
-- Utility functions used by the optimizer
-- Can be minimal/empty if no utilities needed
-
-### `types.py` (Required)
-
-- Type definitions, enums, and data classes
-- Can be minimal/empty if no custom types needed
-
-### `prompts.py` (Required)
-
-- LLM prompt templates used by the algorithm
-- Can be minimal/empty if algorithm doesn't use LLM prompts
-
-### `reporting.py` (Required)
-
-- Reporting utilities and context managers
-- Can import from `...reporting_utils` for standard reporting
-
-## Optional Files
-
+### Optional Files
 - `adapter.py` - Only if algorithm needs adapter pattern
 - `ops/` - Only if algorithm has discrete operations
 
-## Template Reference
-
-See `algorithms/template_optimizer/` for a complete working template.
+## Other contracts and guidance
+- `run_optimization()` must return `AlgorithmResult`. The base class wraps it into `OptimizationResult`.
+- Use `evaluate()` for scoring candidates; it handles counters, early-stop checks, and history logging.

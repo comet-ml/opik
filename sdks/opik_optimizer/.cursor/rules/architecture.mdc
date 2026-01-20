@@ -9,7 +9,7 @@ The optimizer SDK layers iterative search loops on top of Opik's evaluation stac
 
 ## Key Components
 
-- `BaseOptimizer` (`base_optimizer.py`): shared lifecycle hooks, LiteLLM cache bootstrap, rate limiting, Opik optimisation tracking, history management (`OptimizationRound`), and `OptimizationResult` construction.
+- `BaseOptimizer` (`base_optimizer.py`): shared lifecycle hooks, evaluation orchestration, rate limiting, Opik optimisation tracking, history management (`OptimizationHistoryState`/`OptimizationRound`), and `OptimizationResult` construction.
 - `OptimizableAgent` (`agents/optimizable_agent.py`): wraps LiteLLM agents, attaches the active optimizer, throttles `_llm_complete`, and pushes optimisation ids into Opik spans via `opik_context`. Treat this class as the boundary for provider-specific behaviour.
 - `core/evaluation.evaluate` (`core/evaluation.py`): funnels evaluations through `opik.evaluation.evaluator`, handling sampling, threading, multi-metric objectives, and optimisation id tagging.
 - `core/results` (`core/results.py`): result/history layer containing `OptimizationResult`, `OptimizationHistoryState`, and round/trial records.
@@ -20,7 +20,7 @@ The optimizer SDK layers iterative search loops on top of Opik's evaluation stac
 
 ## Package Layout
 
-Each algorithm sits in its own package under `algorithms/` (`evolutionary_optimizer/`, `few_shot_bayesian_optimizer/`, `gepa_optimizer/`, `hierarchical_reflective_optimizer/`, `meta_prompt_optimizer/`, `mipro_optimizer/`, `parameter_optimizer/`).
+Each algorithm sits in its own package under `algorithms/` (`evolutionary_optimizer/`, `few_shot_bayesian_optimizer/`, `gepa_optimizer/`, `hierarchical_reflective_optimizer/`, `meta_prompt_optimizer/`, `parameter_optimizer/`).
 
 **All algorithms MUST follow the standardized structure** (see `code-structure.mdc` for details):
 - `__init__.py` - Required: exports optimizer class
@@ -34,9 +34,9 @@ Each algorithm sits in its own package under `algorithms/` (`evolutionary_optimi
 
 ## Execution Flow
 
-1. `optimize_prompt` (or `optimize_mcp`) validates inputs with `_validate_optimization_inputs`, seeds counters, and may start an Opik optimisation run (`self.opik_client.create_optimization`) storing the id on `self.current_optimization_id`.
+1. `optimize_prompt` validates inputs with `_validate_optimization_inputs`, seeds counters, and may start an Opik optimisation run (`self.opik_client.create_optimization`) storing the id on `self.current_optimization_id`.
 2. Subclasses generate candidate prompts or parameter sets via helper modules (mutation ops, prompt planners, MCP workflows).
-3. Candidate scoring flows `_evaluate_prompt` -> `evaluate_prompt` -> `core/evaluation.evaluate`. The evaluator enforces sampling, threading, LiteLLM throttling, and attaches optimisation ids using `opik_context.update_current_trace`.
+3. Candidate scoring flows `evaluate()` -> `evaluate_prompt` -> `core/evaluation.evaluate`. The evaluator enforces sampling, threading, LiteLLM throttling, and attaches optimisation ids using `opik_context.update_current_trace`.
 4. Progress reporting runs through `utils/display` while `OptimizationHistoryState` captures round/trial snapshots.
 5. The run returns an `OptimizationResult` built by the subclass or helper, including baseline metrics, final scores, metadata, and LiteLLM/tool counters. History is normalized via `OptimizationHistoryState` and exposed on the result.
 
@@ -48,7 +48,6 @@ Keep iteration logic free of side effects beyond the explicit history, reporting
 - Optimizer packages may import from `base_optimizer`, shared utilities, and siblings within the same package. Avoid reaching into unrelated optimizer packages.
 - Provider glue belongs in `integrations/` and must guard imports so the default install stays lightweight.
 - `datasets/` exposes deterministic sample datasets for demos/tests; omit benchmark-only assets from runtime packages. Pay attention to the dataset name suffixes (`_train`, `_validation`, `_test`, and `_sample`) to ensure the dataset name is unique. Use `utils/dataset.py` helpers for slice/streaming to avoid full materialization.
-- BaseOptimizer uses a consistent naming convention for lifecycle hooks: 1. `_on_*` - Internal framework hooks called by BaseOptimizer, 2. `pre_*` - Hooks called before an operation (can be overridden), 3. `post_*` - Hooks called after an operation (can be overridden)
-- Internal hooks: `_on_evaluation(context, prompts, score) -> None` - Display progress after evaluation, called automatically by `evaluate()` method, optimizers should NOT call this directly
+- BaseOptimizer uses a consistent lifecycle hook set: `pre_optimize`, `post_optimize`, `pre_baseline`, `post_baseline`, `pre_round`, `post_round`, `pre_trial`, `on_trial`, `post_trial`. Optimizers should not call `evaluate_prompt` directly; use `evaluate()` to keep counters, early-stop checks, and history aligned.
 - Keep algorithm-specific helpers, prompts, and operators inside the corresponding package. Cross-cutting utilities belong at the root (`optimization_config/`, `utils/`, `metrics/`).
 - Tag Opik traces through `opik_context.update_current_trace` so optimisation ids surface in logs and UI.
