@@ -363,7 +363,7 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
             f"Found {len(failure_modes)} distinct failure pattern{'s' if len(failure_modes) != 1 else ''}",
             style="bold yellow",
         ),
-        title="⚠️  IDENTIFIED FAILURE MODES",
+        title="⚠️ IDENTIFIED FAILURE MODES",
         title_align="left",
         border_style="yellow",
         width=PANEL_WIDTH,
