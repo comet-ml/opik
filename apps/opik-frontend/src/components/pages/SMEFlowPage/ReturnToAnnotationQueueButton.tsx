@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -12,14 +12,19 @@ const ReturnToAnnotationQueueButton: React.FC = () => {
 
   const queueId = annotationQueue?.id || "";
 
-  const { DialogComponent } = useNavigationBlocker({
-    condition: hasAnyUnsavedChanges,
-    title: "Unsaved changes",
-    description:
-      "You have unsaved changes to your annotations. If you leave now, your changes will be lost.",
-    confirmText: "Leave without saving",
-    cancelText: "Stay on page",
-  });
+  const navigationBlockerConfig = useMemo(
+    () => ({
+      condition: hasAnyUnsavedChanges,
+      title: "Unsaved changes",
+      description:
+        "You have unsaved changes to your annotations. If you leave now, your changes will be lost.",
+      confirmText: "Leave without saving",
+      cancelText: "Stay on page",
+    }),
+    [hasAnyUnsavedChanges],
+  );
+
+  const { DialogComponent } = useNavigationBlocker(navigationBlockerConfig);
 
   return (
     <>
