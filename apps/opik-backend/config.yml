@@ -837,3 +837,18 @@ freeModel:
   # Description: API key for the endpoint (optional for auth-less endpoints)
   # Default: empty
   apiKey: ${OPIK_FREE_MODEL_API_KEY:-}
+
+# Dataset Versioning Migration configuration
+datasetVersioningMigration:
+  # Default: false
+  # Description: Whether to run the dataset versioning migration on startup
+  enabled: ${DATASET_VERSIONING_MIGRATION_ENABLED:-"false"}
+  # Default: 100
+  # Description: Number of workspaces to process in each batch (for pagination through 150K+ workspaces)
+  workspaceBatchSize: ${DATASET_VERSIONING_MIGRATION_WORKSPACE_BATCH_SIZE:-100}
+  # Default: 3600 (1 hour)
+  # Description: Lock timeout in seconds for the migration process
+  lockTimeoutSeconds: ${DATASET_VERSIONING_MIGRATION_LOCK_TIMEOUT:-3600}
+  # Default: false
+  # Description: Whether to enable lazy migration (migrate datasets on first access)
+  lazyEnabled: ${DATASET_VERSIONING_MIGRATION_LAZY_ENABLED:-"false"}
