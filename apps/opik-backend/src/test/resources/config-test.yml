@@ -510,21 +510,6 @@ traceThreadConfig:
   # Default: 4s
   # Description: The time to wait for the close trace threads job to finish before releasing the lock
   closeTraceThreadJobLockTime: 3s
-
-# Dataset Versioning Migration configuration
-datasetVersioningMigration:
-  # Default: false for testing
-  # Description: Whether to run the dataset versioning migration on startup
-  enabled: false
-  # Default: 100
-  # Description: Number of workspaces to process in each batch (for pagination through 150K+ workspaces)
-  workspaceBatchSize: 100
-  # Default: 3600 (1 hour)
-  # Description: Lock timeout in seconds for the migration process
-  lockTimeoutSeconds: 3600
-  # Default: false for testing
-  # Description: Whether to enable lazy migration (migrate datasets on first access)
-  lazyEnabled: false
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: 300ms
@@ -540,6 +525,21 @@ datasetVersioningMigration:
   # Default: 3
   # Description: Maximum number of retry attempts for failed messages (1-10)
   maxRetries: 3
+
+# Dataset Versioning Migration configuration
+datasetVersioningMigration:
+  # Default: false for testing
+  # Description: Whether to run the dataset versioning migration on startup
+  enabled: false
+  # Default: 100
+  # Description: Number of workspaces to process in each batch (for pagination through 150K+ workspaces)
+  workspaceBatchSize: 100
+  # Default: 3600 (1 hour)
+  # Description: Lock timeout in seconds for the migration process
+  lockTimeoutSeconds: 3600
+  # Default: false for testing
+  # Description: Whether to enable lazy migration (migrate datasets on first access)
+  lazyEnabled: false
 
 # Job timeout configuration
 jobTimeout:
