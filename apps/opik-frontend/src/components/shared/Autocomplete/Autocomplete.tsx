@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import debounce from "lodash/debounce";
 import isFunction from "lodash/isFunction";
+import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
@@ -18,6 +19,7 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 
 type Props<T extends string> = {
   value: T;
@@ -28,6 +30,7 @@ type Props<T extends string> = {
   emptyMessage?: string;
   placeholder?: string;
   delay?: number;
+  className?: string;
 };
 
 const AutoComplete = <T extends string>({
@@ -39,6 +42,7 @@ const AutoComplete = <T extends string>({
   emptyMessage = "No items found",
   placeholder = "Search...",
   delay = 300,
+  className,
 }: Props<T>) => {
   const [open, setOpen] = useState(false);
   const [localValue, setLocalValue] = useState<T | undefined>(
@@ -119,10 +123,22 @@ const AutoComplete = <T extends string>({
     }
   }, []);
 
+  const handleClear = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+
+      const emptyValue = "" as T;
+      setLocalValue(emptyValue);
+      onValueChange(emptyValue);
+    },
+    [onValueChange],
+  );
+
   const displayValue = localValue ?? value ?? ("" as T);
+  const showClearButton = Boolean(displayValue);
 
   return (
-    <div className="flex items-center">
+    <div className="relative flex items-center">
       <Popover open={open} onOpenChange={setOpen}>
         <Command shouldFilter={false}>
           <PopoverAnchor asChild>
@@ -135,7 +151,11 @@ const AutoComplete = <T extends string>({
               onBlur={handleBlur}
             >
               <Input
-                className={cn({ "border-destructive": hasError })}
+                className={cn(
+                  { "border-destructive": hasError },
+                  showClearButton && "pr-7",
+                  className,
+                )}
                 placeholder={placeholder}
               />
             </CommandPrimitive.Input>
@@ -152,7 +172,7 @@ const AutoComplete = <T extends string>({
                 e.preventDefault();
               }
             }}
-            className="w-[--radix-popover-trigger-width] p-0"
+            className="w-[--radix-popover-trigger-width] min-w-64 p-0"
           >
             <CommandList onWheel={(e) => e.stopPropagation()}>
               {isLoading && (
@@ -187,6 +207,18 @@ const AutoComplete = <T extends string>({
           </PopoverContent>
         </Command>
       </Popover>
+      {showClearButton && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute right-1 size-6 shrink-0 text-foreground opacity-50 hover:opacity-100"
+          onClick={handleClear}
+          tabIndex={-1}
+          type="button"
+        >
+          <X className="size-4" />
+        </Button>
+      )}
     </div>
   );
 };

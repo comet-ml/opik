@@ -6,6 +6,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .automation_rule_evaluator_update_action import AutomationRuleEvaluatorUpdateAction
 from .llm_as_judge_code import LlmAsJudgeCode
 from .span_filter import SpanFilter
 from .span_llm_as_judge_code import SpanLlmAsJudgeCode
@@ -31,7 +32,7 @@ class Base(UniversalBaseModel):
     Multiple project IDs (new field for multi-project support)
     """
 
-    action: typing.Literal["evaluator"] = "evaluator"
+    action: AutomationRuleEvaluatorUpdateAction
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

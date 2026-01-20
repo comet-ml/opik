@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import get from "lodash/get";
+import uniqBy from "lodash/uniqBy";
 
 import { Groups } from "@/types/groups";
 import {
@@ -18,10 +19,9 @@ import {
   COLUMN_TYPE,
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
-  AggregatedFeedbackScore,
   SCORE_TYPE_FEEDBACK,
-  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
+import { getExperimentScore, RowWithScores } from "./scoresUtils";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import {
   buildGroupFieldName,
@@ -41,7 +41,7 @@ import {
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { DELETED_DATASET_LABEL } from "@/constants/groups";
+import { DELETED_DATASET_LABEL, GROUPING_KEY } from "@/constants/groups";
 import { Experiment, ExperimentsAggregations } from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
@@ -113,6 +113,34 @@ export const useExperimentsTableConfig = <
     setSelectedColumns,
   });
 
+  /**
+   * Generates a unique row ID for an experiment.
+   * When grouping is active, the same experiment can appear in multiple groups
+   * (e.g., when grouping by tags, an experiment with multiple tags appears once per tag).
+   * This method creates unique IDs by combining the experiment ID with grouping field values.
+   *
+   * @param row - The experiment row
+   * @returns A unique row ID (either simple "experimentId" or compound "experimentId|field:value")
+   */
+  const getExperimentRowId = useMemo(() => {
+    return (row: T) => {
+      // Find all grouping fields in the row
+      const groupingFields = Object.keys(row).filter((key) =>
+        key.startsWith(GROUPING_KEY),
+      );
+
+      if (groupingFields.length > 0) {
+        // Create a unique ID by combining the experiment ID with all grouping field values
+        const groupParts = groupingFields
+          .map((field) => `${field}:${row[field as keyof T]}`)
+          .join("|");
+        return `${row.id}|${groupParts}`;
+      }
+
+      return row.id;
+    };
+  }, []);
+
   const { checkboxClickHandler } = useMemo(() => {
     return {
       checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
@@ -120,49 +148,23 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
-    const getScoreByName = (
-      scores: AggregatedFeedbackScore[] | undefined,
-      scoreName: string,
-    ) => scores?.find((f) => f.name === scoreName);
-
     return [
       ...dynamicScoresColumns.map(
         ({ label, id, columnType, type: scoreType }) => {
           const actualType = scoreType || SCORE_TYPE_FEEDBACK;
-          const isExperimentScore = actualType === SCORE_TYPE_EXPERIMENT;
 
-          // Extract conditional values
-          const displayLabel = isExperimentScore ? label : `${label} (avg)`;
-          const scoresKey = isExperimentScore
-            ? "experiment_scores"
-            : "feedback_scores";
-
-          // Common fields
           const columnData: ColumnData<T> = {
             id,
-            label: displayLabel,
+            label,
             type: columnType,
             scoreType: actualType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
             aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row: T) => {
-              const rowWithScores = row as T & {
-                feedback_scores?: AggregatedFeedbackScore[];
-                experiment_scores?: AggregatedFeedbackScore[];
-              };
-              const scores = rowWithScores[scoresKey];
-              return getScoreByName(scores, label);
-            },
+            accessorFn: (row) => getExperimentScore(id, row as RowWithScores),
             customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) => {
-                const aggWithScores = aggregation as ExperimentsAggregations & {
-                  feedback_scores?: AggregatedFeedbackScore[];
-                  experiment_scores?: AggregatedFeedbackScore[];
-                };
-                const scores = aggWithScores[scoresKey];
-                return getScoreByName(scores, label)?.value;
-              },
+              accessorFn: (aggregation: ExperimentsAggregations) =>
+                getExperimentScore(id, aggregation)?.value,
             },
           };
 
@@ -173,9 +175,28 @@ export const useExperimentsTableConfig = <
   }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {
-    return experiments.filter(
-      (row) => rowSelection[row.id] && !checkIsGroupRowType(row.id),
-    );
+    const selected = experiments.filter((row) => {
+      if (checkIsGroupRowType(row.id)) {
+        return false;
+      }
+
+      // Check if this experiment is selected using either simple or compound ID
+      // When grouping is active, the rowSelection keys are compound IDs like "experimentId|grouping_field:value"
+      // We need to check both the simple ID and all possible compound IDs
+      if (rowSelection[row.id]) {
+        return true;
+      }
+
+      // Check if any compound ID containing this experiment ID is selected
+      return Object.keys(rowSelection).some((selectionKey) => {
+        return (
+          selectionKey.startsWith(`${row.id}|`) && rowSelection[selectionKey]
+        );
+      });
+    });
+
+    // Deduplicate by experiment ID since the same experiment can appear in multiple groups
+    return uniqBy(selected, "id");
   }, [rowSelection, experiments]);
 
   const groupFieldNames = useMemo(
@@ -354,6 +375,9 @@ export const useExperimentsTableConfig = <
     scoresColumnsData,
     checkboxClickHandler,
     groupFieldNames,
+
+    // Utility methods
+    getExperimentRowId,
 
     // Configs
     sortConfig,

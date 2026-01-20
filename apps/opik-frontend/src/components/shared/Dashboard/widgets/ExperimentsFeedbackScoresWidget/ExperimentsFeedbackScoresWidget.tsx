@@ -30,6 +30,7 @@ import {
 import LineChart from "@/components/shared/Charts/LineChart/LineChart";
 import BarChart from "@/components/shared/Charts/BarChart/BarChart";
 import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
+import { MAX_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
 
 const MAX_EXPERIMENTS_LIMIT = 100;
 const MAX_SELECTED_EXPERIMENTS = 10;
@@ -55,6 +56,21 @@ const shouldIncludeScore = (
     feedbackScores.length === 0 ||
     feedbackScores.includes(scoreName)
   );
+};
+
+const createUniqueEntityLabels = (data: DataRecord[]): string[] => {
+  const nameCounts: Record<string, number> = {};
+
+  data.forEach((record) => {
+    nameCounts[record.entityName] = (nameCounts[record.entityName] || 0) + 1;
+  });
+
+  return data.map((record) => {
+    const isDuplicate = (nameCounts[record.entityName] || 0) > 1;
+    return isDuplicate
+      ? `${record.entityName} (${record.entityId})`
+      : record.entityName;
+  });
 };
 
 function transformGroupedExperimentsToChartData(
@@ -192,6 +208,9 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       const config = selectMixedConfig(state);
       return {
         experimentIds: config?.experimentIds || [],
+        experimentDataSource: config?.experimentDataSource,
+        experimentFilters: config?.experimentFilters || [],
+        maxExperimentsCount: config?.maxExperimentsCount,
       };
     }),
   );
@@ -210,16 +229,28 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     | ExperimentsFeedbackScoresWidgetType["config"]
     | undefined;
 
-  const dataSource =
-    widgetConfig?.dataSource || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
   const chartType = widgetConfig?.chartType || CHART_TYPE.line;
   const feedbackScores = widgetConfig?.feedbackScores;
   const overrideDefaults = widgetConfig?.overrideDefaults;
 
+  const dataSource =
+    (overrideDefaults
+      ? widgetConfig?.dataSource
+      : globalConfig.experimentDataSource) ??
+    EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
+
   const validFilters = useMemo(() => {
-    const filters = (widgetConfig?.filters || []) as Filters;
-    return filters.filter(isFilterValid);
-  }, [widgetConfig?.filters]);
+    if (overrideDefaults) {
+      const filters = (widgetConfig?.filters || []) as Filters;
+      return filters.filter(isFilterValid);
+    }
+    return (globalConfig.experimentFilters || []).filter(isFilterValid);
+  }, [overrideDefaults, widgetConfig?.filters, globalConfig.experimentFilters]);
+
+  const maxExperimentsCount =
+    (overrideDefaults
+      ? widgetConfig?.maxExperimentsCount
+      : globalConfig.maxExperimentsCount) ?? MAX_MAX_EXPERIMENTS;
 
   const validGroups = useMemo(() => {
     const groups = (widgetConfig?.groups || []) as Groups;
@@ -227,8 +258,6 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   }, [widgetConfig?.groups]);
 
   const experimentIds = useMemo(() => {
-    // If overrideDefaults is true, use widget's own experimentIds
-    // Otherwise, always use global experimentIds
     if (overrideDefaults) {
       return widgetConfig?.experimentIds || [];
     }
@@ -261,13 +290,20 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     experimentsIds: isSelectExperimentsMode ? limitedExperimentIds : [],
   });
 
+  const experimentsListSize = useMemo(() => {
+    if (maxExperimentsCount && maxExperimentsCount > 0) {
+      return Math.min(maxExperimentsCount, MAX_EXPERIMENTS_LIMIT);
+    }
+    return MAX_EXPERIMENTS_LIMIT;
+  }, [maxExperimentsCount]);
+
   const { data: experimentsData, isPending: isExperimentsPending } =
     useExperimentsList(
       {
         workspaceName,
         filters: validFilters,
         page: 1,
-        size: MAX_EXPERIMENTS_LIMIT,
+        size: experimentsListSize,
       },
       {
         enabled: !hasGroups && !isSelectExperimentsMode,
@@ -342,29 +378,30 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   const hasMoreThanLimit =
     !hasGroups &&
     !isSelectExperimentsMode &&
-    totalExperiments > MAX_EXPERIMENTS_LIMIT;
+    totalExperiments > experimentsListSize;
 
   const warningMessage = hasMoreThanLimit
-    ? `Showing first ${MAX_EXPERIMENTS_LIMIT} of ${totalExperiments} experiments`
+    ? `Showing first ${experimentsListSize} of ${totalExperiments} experiments`
     : isSelectExperimentsMode && hasMoreThanMaxSelected
       ? `Showing first ${MAX_SELECTED_EXPERIMENTS} of ${experimentIds.length} selected experiments`
       : undefined;
 
   const { transformedData, chartConfig } = useMemo(() => {
-    if (chartType === CHART_TYPE.radar) {
-      const entityNames = chartData.data.map((record) => record.entityName);
-      const radarData = chartData.lines.map((scoreName) => {
+    if (chartType === CHART_TYPE.radar || chartType === CHART_TYPE.bar) {
+      const entityLabels = createUniqueEntityLabels(chartData.data);
+      const data = chartData.lines.map((scoreName) => {
         const point: Record<string, string | number> = { name: scoreName };
-        chartData.data.forEach((record) => {
+        chartData.data.forEach((record, index) => {
           if (record.scores[scoreName] !== undefined) {
-            point[record.entityName] = record.scores[scoreName];
+            point[entityLabels[index]] = record.scores[scoreName];
           }
         });
         return point;
       });
+
       return {
-        transformedData: radarData,
-        chartConfig: getDefaultHashedColorsChartConfig(entityNames),
+        transformedData: data,
+        chartConfig: getDefaultHashedColorsChartConfig(entityLabels),
       };
     }
 
@@ -452,7 +489,6 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
           config={chartConfig}
           data={transformedData}
           xAxisKey="name"
-          renderTooltipHeader={renderHeader}
           className="size-full"
         />
       );

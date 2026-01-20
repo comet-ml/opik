@@ -35,7 +35,6 @@ import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
@@ -100,7 +99,6 @@ public class ExperimentsResource {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
     private final @NonNull ExperimentSortingFactory sortingFactory;
-    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull ExperimentItemBulkIngestionService experimentItemBulkIngestionService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull ExperimentGroupingFactory groupingFactory;
@@ -121,24 +119,20 @@ public class ExperimentsResource {
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("sorting") String sorting,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIds) {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
-
-        var metadata = workspaceMetadataService
-                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
-                // Context not used for workspace metadata but added for consistency with project metadata endpoints.
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .block();
-
-        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
-            sortingFields = List.of();
-        }
 
         var experimentFilters = filtersFactory.newFilters(filters, ExperimentFilter.LIST_TYPE_REFERENCE);
 
         var types = Optional.ofNullable(typesQueryParam)
                 .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
+                .orElse(null);
+
+        var experimentIdsParsed = Optional.ofNullable(experimentIds)
+                .filter(param -> !param.isBlank())
+                .map(ParamsValidator::getIds)
                 .orElse(null);
 
         var experimentSearchCriteria = ExperimentSearchCriteria.builder()
@@ -151,16 +145,11 @@ public class ExperimentsResource {
                 .optimizationId(optimizationId)
                 .types(types)
                 .filters(experimentFilters)
+                .experimentIds(experimentIdsParsed)
                 .build();
 
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)
-                .map(experimentPage -> {
-                    if (metadata.cannotUseDynamicSorting()) {
-                        return experimentPage.toBuilder().sortableBy(List.of()).build();
-                    }
-                    return experimentPage;
-                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found experiments by '{}', count '{}', page '{}', size '{}'",

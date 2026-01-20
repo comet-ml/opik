@@ -244,6 +244,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
         templateStructure={prompt.template_structure}
+        type={activeVersion?.type}
         onSetActiveVersionId={setActiveVersionId}
       />
 

@@ -152,8 +152,8 @@ export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
     },
   ],
   variables: {
-    input: "",
-    output: "",
+    input: "input",
+    output: "output",
   },
   schema: [
     {
@@ -186,8 +186,8 @@ export const LLM_PROMPT_CUSTOM_SPAN_TEMPLATE: LLMPromptTemplate = {
     },
   ],
   variables: {
-    input: "",
-    output: "",
+    input: "input",
+    output: "output",
   },
   schema: [
     {
@@ -329,9 +329,9 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
       },
     ],
     variables: {
-      input: "",
+      input: "input",
       context: "",
-      output: "",
+      output: "output",
     },
     schema: [
       {
@@ -381,7 +381,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
       },
     ],
     variables: {
-      output: "",
+      output: "output",
     },
     schema: [
       {
@@ -450,8 +450,8 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
       },
     ],
     variables: {
-      input: "",
-      output: "",
+      input: "input",
+      output: "output",
       context: "",
     },
     schema: [
@@ -488,7 +488,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
     ],
     variables: {
       context: "",
-      output: "",
+      output: "output",
     },
     schema: [
       {
@@ -555,9 +555,9 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
       },
     ],
     variables: {
-      input: "",
+      input: "input",
       ground_truth: "",
-      output: "",
+      output: "output",
     },
     schema: [
       {
@@ -780,8 +780,8 @@ export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
     '            reason="Optional reason for the score"\n' +
     "        )",
   arguments: {
-    input: "",
-    output: "",
+    input: "input",
+    output: "output",
   },
 };
 
@@ -833,7 +833,7 @@ export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
     '            reason="Optional reason for the score"\n' +
     "        )",
   arguments: {
-    input: "",
-    output: "",
+    input: "input",
+    output: "output",
   },
 };

@@ -347,6 +347,7 @@ class RawDatasetsClient:
         items: typing.Sequence[DatasetItemWrite],
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -361,6 +362,9 @@ class RawDatasetsClient:
 
         dataset_id : typing.Optional[str]
             If null, dataset_name must be provided
+
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -378,6 +382,7 @@ class RawDatasetsClient:
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
+                "batch_group_id": batch_group_id,
             },
             headers={
                 "content-type": "application/json",
@@ -424,6 +429,9 @@ class RawDatasetsClient:
                 "dataset_id": dataset_id,
             },
             files={},
+            headers={
+                "content-type": "multipart/form-data",
+            },
             request_options=request_options,
             omit=OMIT,
         )
@@ -721,6 +729,7 @@ class RawDatasetsClient:
         item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -741,6 +750,9 @@ class RawDatasetsClient:
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
             Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple delete operations into a single dataset version. If null, mutates the latest version instead of creating a new one.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -757,6 +769,7 @@ class RawDatasetsClient:
                 "filters": convert_and_respect_annotation_metadata(
                     object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
                 ),
+                "batch_group_id": batch_group_id,
             },
             headers={
                 "content-type": "application/json",
@@ -1395,16 +1408,16 @@ class RawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def create_version_tag(
-        self, version_hash: str, id: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[None]:
         """
         Add a tag to a specific dataset version for easy reference (e.g., 'baseline', 'v1.0', 'production')
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         tag : str
 
@@ -1469,18 +1482,18 @@ class RawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, tag: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[None]:
         """
         Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
 
         Parameters
         ----------
+        id : str
+
         version_hash : str
 
         tag : str
-
-        id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1625,8 +1638,8 @@ class RawDatasetsClient:
 
     def update_dataset_version(
         self,
-        version_hash: str,
         id: str,
+        version_hash: str,
         *,
         change_description: typing.Optional[str] = OMIT,
         tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1637,9 +1650,9 @@ class RawDatasetsClient:
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         change_description : typing.Optional[str]
             Optional description of changes in this version
@@ -2024,6 +2037,7 @@ class AsyncRawDatasetsClient:
         items: typing.Sequence[DatasetItemWrite],
         dataset_name: typing.Optional[str] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2038,6 +2052,9 @@ class AsyncRawDatasetsClient:
 
         dataset_id : typing.Optional[str]
             If null, dataset_name must be provided
+
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -2055,6 +2072,7 @@ class AsyncRawDatasetsClient:
                 "items": convert_and_respect_annotation_metadata(
                     object_=items, annotation=typing.Sequence[DatasetItemWrite], direction="write"
                 ),
+                "batch_group_id": batch_group_id,
             },
             headers={
                 "content-type": "application/json",
@@ -2101,6 +2119,9 @@ class AsyncRawDatasetsClient:
                 "dataset_id": dataset_id,
             },
             files={},
+            headers={
+                "content-type": "multipart/form-data",
+            },
             request_options=request_options,
             omit=OMIT,
         )
@@ -2400,6 +2421,7 @@ class AsyncRawDatasetsClient:
         item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
         dataset_id: typing.Optional[str] = OMIT,
         filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        batch_group_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -2420,6 +2442,9 @@ class AsyncRawDatasetsClient:
         filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
             Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
+        batch_group_id : typing.Optional[str]
+            Optional batch group ID to group multiple delete operations into a single dataset version. If null, mutates the latest version instead of creating a new one.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2436,6 +2461,7 @@ class AsyncRawDatasetsClient:
                 "filters": convert_and_respect_annotation_metadata(
                     object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
                 ),
+                "batch_group_id": batch_group_id,
             },
             headers={
                 "content-type": "application/json",
@@ -3075,16 +3101,16 @@ class AsyncRawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def create_version_tag(
-        self, version_hash: str, id: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[None]:
         """
         Add a tag to a specific dataset version for easy reference (e.g., 'baseline', 'v1.0', 'production')
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         tag : str
 
@@ -3149,18 +3175,18 @@ class AsyncRawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, tag: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[None]:
         """
         Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
 
         Parameters
         ----------
+        id : str
+
         version_hash : str
 
         tag : str
-
-        id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3305,8 +3331,8 @@ class AsyncRawDatasetsClient:
 
     async def update_dataset_version(
         self,
-        version_hash: str,
         id: str,
+        version_hash: str,
         *,
         change_description: typing.Optional[str] = OMIT,
         tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -3317,9 +3343,9 @@ class AsyncRawDatasetsClient:
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         change_description : typing.Optional[str]
             Optional description of changes in this version

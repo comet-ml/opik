@@ -88,6 +88,7 @@ public class FilterQueryBuilder {
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
     private static final String SPAN_FEEDBACK_SCORE_COUNT_DB = "sfsc.span_feedback_scores_count";
+    private static final String EXPERIMENT_SCORE_COUNT_DB = "esc.experiment_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
@@ -112,7 +113,7 @@ public class FilterQueryBuilder {
     private static final String CHANGE_DESCRIPTION_DB = "change_description";
 
     /**
-     * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, etc.).
+     * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, Experiment, etc.).
      * Used to identify feedback score filters that require special handling in query building.
      */
     private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
@@ -120,7 +121,9 @@ public class FilterQueryBuilder {
             TraceField.SPAN_FEEDBACK_SCORES,
             SpanField.FEEDBACK_SCORES,
             TraceThreadField.FEEDBACK_SCORES,
-            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
+            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
+            ExperimentField.FEEDBACK_SCORES,
+            ExperimentField.EXPERIMENT_SCORES);
 
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
@@ -144,6 +147,8 @@ public class FilterQueryBuilder {
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.LIST,
+                            "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 0",
                             // MAP values are stored as JSON strings, NOT_CONTAINS works with raw value
                             FieldType.MAP,
                             "notILike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))",
@@ -180,6 +185,7 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s = :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s = :filter%2$d"),
                             Map.entry(FieldType.DURATION, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.LIST, "has(%1$s, :filter%2$d)"),
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1"),
                             Map.entry(FieldType.DICTIONARY,
@@ -198,6 +204,7 @@ public class FilterQueryBuilder {
                             Map.entry(FieldType.DATE_TIME_STATE_DB, "%1$s != :filter%2$d"),
                             Map.entry(FieldType.NUMBER, "%1$s != :filter%2$d"),
                             Map.entry(FieldType.DURATION, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.LIST, "NOT has(%1$s, :filter%2$d)"),
                             Map.entry(FieldType.FEEDBACK_SCORES_NUMBER,
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0"),
                             Map.entry(FieldType.DICTIONARY,
@@ -340,6 +347,9 @@ public class FilterQueryBuilder {
                     .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
                     .put(ExperimentField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
                     .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
+                    .put(ExperimentField.TAGS, TAGS_DB)
+                    .put(ExperimentField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(ExperimentField.EXPERIMENT_SCORES, VALUE_ANALYTICS_DB)
                     .build());
 
     private static final Map<OptimizationField, String> OPTIMIZATION_FIELDS_MAP = new EnumMap<>(
@@ -531,9 +541,14 @@ public class FilterQueryBuilder {
                 TraceField.FEEDBACK_SCORES,
                 SpanField.FEEDBACK_SCORES,
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
-                TraceThreadField.FEEDBACK_SCORES));
+                TraceThreadField.FEEDBACK_SCORES,
+                ExperimentField.FEEDBACK_SCORES));
 
-        map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
+        map.put(FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
+
+        map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(SpanField.FEEDBACK_SCORES));
+
+        map.put(FilterStrategy.EXPERIMENT_SCORES, Set.of(ExperimentField.EXPERIMENT_SCORES));
 
         map.put(FilterStrategy.EXPERIMENT_ITEM, Set.of(
                 ExperimentsComparisonValidKnownField.OUTPUT,
@@ -542,7 +557,8 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.EXPERIMENT, Set.of(
                 ExperimentField.METADATA,
                 ExperimentField.DATASET_ID,
-                ExperimentField.PROMPT_IDS));
+                ExperimentField.PROMPT_IDS,
+                ExperimentField.TAGS));
 
         map.put(FilterStrategy.PROMPT, Set.of(
                 PromptField.ID,
@@ -711,8 +727,17 @@ public class FilterQueryBuilder {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
         }
 
+        if (filter.operator() == Operator.IS_EMPTY
+                && filterStrategy == FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES));
+        }
+
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.SPAN_FEEDBACK_SCORES));
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.EXPERIMENT_SCORES));
         }
 
         if (isNotEmptyScoresFilter(filterStrategy, filter)) {
@@ -728,7 +753,8 @@ public class FilterQueryBuilder {
 
     private static boolean isNotEmptyScoresFilter(FilterStrategy filterStrategy, Filter filter) {
         return filter.operator() == Operator.IS_NOT_EMPTY
-                && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY,
+                        FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY)
                         .contains(filterStrategy);
     }
 
@@ -748,8 +774,12 @@ public class FilterQueryBuilder {
             return FEEDBACK_SCORE_COUNT_DB;
         }
 
-        if (filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+        if (filterStrategy == FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY) {
             return SPAN_FEEDBACK_SCORE_COUNT_DB;
+        }
+
+        if (filterStrategy == FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY) {
+            return EXPERIMENT_SCORE_COUNT_DB;
         }
 
         return switch (field) {

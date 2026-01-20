@@ -335,6 +335,9 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           )
         : {};
 
+    // Get score value from the first experiment (same as CompareTrialsDetails)
+    const firstExperiment = experiments?.[0];
+
     // Create column for each feedback score
     return sortedScoreNames.map((scoreName) => ({
       id: `score_${scoreName}`,
@@ -346,6 +349,9 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         experimentsIds,
         feedbackKey: scoreName,
         colorMap,
+        scoreValue: firstExperiment?.feedback_scores?.find(
+          (s) => s.name === scoreName,
+        )?.value,
       },
     })) as ColumnData<ExperimentsCompare>[];
   }, [experiments, experimentsIds, objectiveName]);

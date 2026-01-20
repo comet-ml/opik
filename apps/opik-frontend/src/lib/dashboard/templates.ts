@@ -5,7 +5,11 @@ import {
   TEMPLATE_SCOPE,
   EXPERIMENT_DATA_SOURCE,
 } from "@/types/dashboard";
-import { DASHBOARD_VERSION, createTemplateId } from "@/lib/dashboard/utils";
+import {
+  DASHBOARD_VERSION,
+  createTemplateId,
+  DEFAULT_MAX_EXPERIMENTS,
+} from "@/lib/dashboard/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 import { CHART_TYPE } from "@/constants/chart";
@@ -80,6 +84,9 @@ const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
       dateRange: DEFAULT_DATE_PRESET,
       projectIds: [],
       experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
     },
   },
 };
@@ -284,12 +291,78 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
           },
         ],
       },
+      {
+        id: "template-section-4",
+        title: "Span metrics",
+        widgets: [
+          {
+            id: "template-widget-10",
+            title: "Span feedback scores",
+            type: WIDGET_TYPE.PROJECT_METRICS,
+            config: {
+              metricType: METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES,
+              chartType: CHART_TYPE.line,
+              spanFilters: [],
+              feedbackScores: [],
+              overrideDefaults: false,
+            },
+          },
+          {
+            id: "template-widget-11",
+            title: "Number of spans",
+            type: WIDGET_TYPE.PROJECT_METRICS,
+            config: {
+              metricType: METRIC_NAME_TYPE.SPAN_COUNT,
+              chartType: CHART_TYPE.line,
+              spanFilters: [],
+              overrideDefaults: false,
+            },
+          },
+          {
+            id: "template-widget-12",
+            title: "Span duration",
+            type: WIDGET_TYPE.PROJECT_METRICS,
+            config: {
+              metricType: METRIC_NAME_TYPE.SPAN_DURATION,
+              chartType: CHART_TYPE.line,
+              spanFilters: [],
+              overrideDefaults: false,
+            },
+          },
+        ],
+        layout: [
+          {
+            i: "template-widget-10",
+            x: 0,
+            y: 0,
+            w: 3,
+            h: 4,
+          },
+          {
+            i: "template-widget-11",
+            x: 3,
+            y: 0,
+            w: 3,
+            h: 4,
+          },
+          {
+            i: "template-widget-12",
+            x: 0,
+            y: 4,
+            w: 3,
+            h: 4,
+          },
+        ],
+      },
     ],
     lastModified: Date.now(),
     config: {
       dateRange: DEFAULT_DATE_PRESET,
       projectIds: [],
       experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
     },
   },
 };
@@ -593,6 +666,9 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
       dateRange: DEFAULT_DATE_PRESET,
       projectIds: [],
       experimentIds: [],
+      experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+      experimentFilters: [],
+      maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
     },
   },
 };
