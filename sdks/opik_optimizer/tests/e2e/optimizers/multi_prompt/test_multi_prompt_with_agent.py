@@ -55,7 +55,7 @@ def create_multi_prompt_dict() -> dict[str, ChatPrompt]:
                 "based on the analysis provided."
             ),
             user="Analysis: {analysis}\n\nOriginal question: {text}",
-            assistant="Provide a concise, final answer referencing the analysis."
+            assistant="Provide a concise, final answer referencing the analysis.",
             model="openai/gpt-4o-mini",
         ),
     }
