@@ -400,7 +400,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 }))
                 .flatMap(datasetId -> {
                     // Ensure dataset is migrated if lazy migration is enabled
-                    return ensureLazyMigration(datasetId, workspaceId, userName)
+                    return ensureLazyMigration(datasetId, workspaceId)
                             .thenReturn(datasetId);
                 })
                 .flatMap(datasetId -> {
@@ -593,7 +593,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         log.info("Batch updating '{}' items by IDs with versioning for dataset '{}'", updateSize, datasetId);
 
         // Ensure dataset is migrated if lazy migration is enabled
-        return ensureLazyMigration(datasetId, workspaceId, userName)
+        return ensureLazyMigration(datasetId, workspaceId)
                 .then(Mono.defer(() -> {
                     // Get the latest version
                     return getLatestVersionOrError(datasetId, workspaceId)
@@ -665,7 +665,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         log.info("Batch updating items by filters with versioning for dataset '{}'", datasetId);
 
         // Ensure dataset is migrated if lazy migration is enabled
-        return ensureLazyMigration(datasetId, workspaceId, userName)
+        return ensureLazyMigration(datasetId, workspaceId)
                 .then(Mono.defer(() -> {
                     // Get the latest version
                     return getLatestVersionOrError(datasetId, workspaceId)
@@ -811,9 +811,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(dataset -> Mono.deferContextual(ctx -> {
-                    String userName = ctx.get(RequestContext.USER_NAME);
                     // Ensure dataset is migrated if lazy migration is enabled
-                    return ensureLazyMigration(dataset.id(), workspaceId, userName)
+                    return ensureLazyMigration(dataset.id(), workspaceId)
                             .thenReturn(dataset);
                 }))
                 .flatMapMany(dataset -> {
@@ -1048,7 +1047,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         datasetService.findById(datasetId, workspaceId, null);
 
         // Ensure dataset is migrated if lazy migration is enabled
-        return ensureLazyMigration(datasetId, workspaceId, userName)
+        return ensureLazyMigration(datasetId, workspaceId)
                 .then(Mono.defer(() -> {
                     // Get the latest version (using overload that takes workspaceId)
                     Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
@@ -1174,7 +1173,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 datasetItemIds.size(), datasetId, batchGroupId, createVersion);
 
         // Ensure dataset is migrated if lazy migration is enabled
-        return ensureLazyMigration(datasetId, workspaceId, userName)
+        return ensureLazyMigration(datasetId, workspaceId)
                 .then(Mono.defer(() -> {
                     // Get the latest version (use overload that takes workspaceId since we're in reactive context)
                     Optional<DatasetVersion> latestVersion = versionService.getLatestVersion(datasetId, workspaceId);
@@ -1262,10 +1261,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
 
             // Ensure dataset is migrated if lazy migration is enabled
-            return ensureLazyMigration(datasetItemSearchCriteria.datasetId(), workspaceId, userName)
+            return ensureLazyMigration(datasetItemSearchCriteria.datasetId(), workspaceId)
                     .then(Mono.defer(() -> getItemsInternal(page, size, datasetItemSearchCriteria)));
         });
     }
@@ -1910,7 +1908,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         datasetService.findById(datasetId, workspaceId, null);
 
                         // Ensure dataset is migrated if lazy migration is enabled
-                        return ensureLazyMigration(datasetId, workspaceId, userName);
+                        return ensureLazyMigration(datasetId, workspaceId);
                     }))
                     .then(Mono.defer(() -> {
 
@@ -2357,18 +2355,17 @@ class DatasetItemServiceImpl implements DatasetItemService {
      * the migration service to ensure the dataset has been migrated before proceeding
      * with the CRUD operation.
      *
-     * @param datasetId the dataset ID to ensure is migrated
+     * @param datasetId   the dataset ID to ensure is migrated
      * @param workspaceId the workspace ID
-     * @param userName the user performing the operation
      * @return a Mono that completes when the dataset is ensured to be migrated (or immediately if lazy migration is disabled)
      */
-    private Mono<Void> ensureLazyMigration(UUID datasetId, String workspaceId, String userName) {
+    private Mono<Void> ensureLazyMigration(UUID datasetId, String workspaceId) {
         if (!config.getDatasetVersioningMigration().isLazyEnabled()) {
             return Mono.empty();
         }
 
         log.debug("Lazy migration is enabled, ensuring dataset '{}' is migrated", datasetId);
-        return migrationService.ensureDatasetMigrated(datasetId, workspaceId, userName);
+        return migrationService.ensureDatasetMigrated(datasetId, workspaceId);
     }
 
 }

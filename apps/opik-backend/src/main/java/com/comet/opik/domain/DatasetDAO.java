@@ -218,11 +218,4 @@ public interface DatasetDAO {
     int updateStatus(@Bind("workspace_id") String workspaceId,
             @Bind("id") UUID id,
             @Bind("status") DatasetStatus status);
-
-    @SqlQuery("SELECT DISTINCT workspace_id FROM datasets " +
-            "WHERE workspace_id > :lastSeenWorkspaceId " +
-            "ORDER BY workspace_id " +
-            "LIMIT :batchSize")
-    List<String> findWorkspaceIdsBatch(@Bind("lastSeenWorkspaceId") String lastSeenWorkspaceId,
-            @Bind("batchSize") int batchSize);
 }

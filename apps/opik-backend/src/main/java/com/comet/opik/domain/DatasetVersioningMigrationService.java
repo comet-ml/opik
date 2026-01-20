@@ -42,13 +42,11 @@ public class DatasetVersioningMigrationService {
      * The migration is protected by a distributed lock to prevent concurrent
      * migrations of the same dataset.
      *
-     * @param datasetId the dataset ID to ensure is migrated
+     * @param datasetId   the dataset ID to ensure is migrated
      * @param workspaceId the workspace ID
-     * @param userName the user performing the operation
      * @return a Mono that completes when the dataset is ensured to be migrated
      */
-    public Mono<Void> ensureDatasetMigrated(@NonNull UUID datasetId, @NonNull String workspaceId,
-            @NonNull String userName) {
+    public Mono<Void> ensureDatasetMigrated(@NonNull UUID datasetId, @NonNull String workspaceId) {
         return Mono.defer(() -> {
             // First check if dataset has versions (fast check without lock)
             return hasVersions(datasetId, workspaceId)
@@ -64,7 +62,7 @@ public class DatasetVersioningMigrationService {
 
                         return lockService.executeWithLockCustomExpire(
                                 migrationLock,
-                                Mono.defer(() -> performLazyMigration(datasetId, workspaceId, userName)),
+                                Mono.defer(() -> performLazyMigration(datasetId, workspaceId)),
                                 DEFAULT_LOCK_TIMEOUT);
                     });
         });
@@ -94,12 +92,11 @@ public class DatasetVersioningMigrationService {
      * thread migrated it while waiting for the lock), then performs the migration.
      * The entire migration runs in a single transaction.
      *
-     * @param datasetId the dataset ID
+     * @param datasetId   the dataset ID
      * @param workspaceId the workspace ID
-     * @param userName the user performing the migration
      * @return a Mono that completes when migration is done
      */
-    private Mono<Void> performLazyMigration(UUID datasetId, String workspaceId, String userName) {
+    private Mono<Void> performLazyMigration(UUID datasetId, String workspaceId) {
         return Mono.<Void>fromCallable(() -> {
             // Run the entire migration in a single WRITE transaction
             return template.inTransaction(WRITE, handle -> {
@@ -117,7 +114,7 @@ public class DatasetVersioningMigrationService {
 
                 // Execute the reactive migration chain and block within the transaction
                 // This ensures all operations run in this single transaction
-                migrateSingleDataset(datasetId, workspaceId, userName).block();
+                migrateSingleDataset(datasetId, workspaceId).block();
 
                 log.info("Successfully completed lazy migration for dataset '{}'", datasetId);
                 return null;
@@ -189,7 +186,7 @@ public class DatasetVersioningMigrationService {
                                 versions.size(), lastSeenVersionId);
 
                         // Get the last version ID in this batch for the next cursor
-                        String nextCursor = versions.get(versions.size() - 1).versionId().toString();
+                        String nextCursor = versions.getLast().versionId().toString();
 
                         return processBatchItemsTotals(versions)
                                 .then(Mono.defer(() -> migrateItemsTotalInBatches(batchSize, nextCursor))); // Process next batch
@@ -230,14 +227,12 @@ public class DatasetVersioningMigrationService {
                             .toList();
 
                     // Update MySQL with calculated totals in a single batch
-                    return Mono.fromRunnable(() -> {
-                        template.inTransaction(WRITE, handle -> {
-                            var dao = handle.attach(DatasetVersionDAO.class);
-                            dao.batchUpdateItemsTotal(versionIds, itemsTotals);
-                            log.debug("Batch updated '{}' versions with items_total", versionIds.size());
-                            return null;
-                        });
-                    }).subscribeOn(Schedulers.boundedElastic()).then();
+                    return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
+                        var dao = handle.attach(DatasetVersionDAO.class);
+                        dao.batchUpdateItemsTotal(versionIds, itemsTotals);
+                        log.debug("Batch updated '{}' versions with items_total", versionIds.size());
+                        return null;
+                    })).subscribeOn(Schedulers.boundedElastic()).then();
                 })
                 .doOnSuccess(unused -> log.info("Successfully processed batch of '{}' versions", versions.size()))
                 .doOnError(error -> log.error("Failed to process batch of '{}' versions", versions.size(), error));
@@ -256,17 +251,16 @@ public class DatasetVersioningMigrationService {
      *   <li>Creates the 'latest' tag</li>
      * </ol>
      *
-     * @param datasetId the dataset ID to migrate
+     * @param datasetId   the dataset ID to migrate
      * @param workspaceId the workspace ID
-     * @param userName the user performing the migration
      * @return a Mono that completes when migration is done
      */
-    public Mono<Void> migrateSingleDataset(UUID datasetId, String workspaceId, String userName) {
+    public Mono<Void> migrateSingleDataset(UUID datasetId, String workspaceId) {
         UUID versionId = datasetId; // version 1 ID = dataset ID
 
         log.info("Migrating dataset '{}' in workspace '{}'", datasetId, workspaceId);
 
-        return ensureVersion1Exists(datasetId, versionId, workspaceId, userName)
+        return ensureVersion1Exists(datasetId, versionId, workspaceId)
                 .then(deleteItemsFromVersion1(datasetId, versionId))
                 .then(copyItemsToVersion1(datasetId, versionId))
                 .then(countAndUpdateItemsTotal(datasetId, versionId))
@@ -275,7 +269,7 @@ public class DatasetVersioningMigrationService {
                 .doOnError(error -> log.error("Failed to migrate dataset '{}'", datasetId, error));
     }
 
-    private Mono<Void> ensureVersion1Exists(UUID datasetId, UUID versionId, String workspaceId, String userName) {
+    private Mono<Void> ensureVersion1Exists(UUID datasetId, UUID versionId, String workspaceId) {
         return Mono.<Void>fromCallable(() -> {
             log.debug("Ensuring version 1 exists for dataset '{}'", datasetId);
 
