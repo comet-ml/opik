@@ -168,7 +168,8 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
                 )
                 generated_code = OptimizationCodeGenerator.generate(config, context)
             except (OptimizationError, KeyError, ValueError) as e:
-                # Configuration validation failed - log error and return failure result
+                # Configuration validation failed - log error and re-raise to trigger RQ failure
+                # This ensures the Java backend sees the job as failed and updates status/metrics
                 error_msg = str(e)
                 logger.error(
                     f"Configuration validation failed for {context.optimization_id}: {error_msg}"
@@ -177,7 +178,7 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
                     {"message": f"Configuration validation failed: {error_msg}"}
                 )
 
-                # Ensure log collector is closed before returning
+                # Ensure log collector is closed before re-raising
                 try:
                     log_collector.close()
                 except Exception as close_error:
@@ -185,12 +186,10 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
                         f"Error closing log collector after validation failure: {close_error}"
                     )
 
-                # Return error result - cancellation handle will auto-unregister on exit
-                return {
-                    "status": "error",
-                    "optimization_id": str(context.optimization_id),
-                    "error": error_msg,
-                }
+                # Re-raise exception so RQ marks job as failed
+                # This allows Java backend to detect failure and update optimization status/metrics
+                # Cancellation handle will auto-unregister on exit
+                raise
 
             # Write generated code to temporary file
             temp_file = None

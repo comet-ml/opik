@@ -6,7 +6,6 @@ making it easy to add new algorithms and parameters without code changes.
 """
 
 import inspect
-import json
 import logging
 from typing import Any, Callable, Dict, Optional, Type
 
@@ -437,7 +436,7 @@ class MetricCodeGenerator:
         return ScoreResult(
             value=0.0,
             name="json_schema_validator",
-            reason=f"Missing schema in dataset item key '{schema_key}'"
+            reason={format_python_value(f"Missing schema in dataset item key '{schema_key}'")}
         )
     return metric.score(
         output=llm_output,
