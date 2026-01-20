@@ -9,7 +9,8 @@ describe("parseEntityReferences", () => {
     const entityMap = new Map([
       ["01978716-1435-7749-b575-ff4982e17264", "answer"],
     ]);
-    const input = "Fetching span details for {span:01978716-1435-7749-b575-ff4982e17264}";
+    const input =
+      "Fetching span details for {span:01978716-1435-7749-b575-ff4982e17264}";
     const expected = "Fetching span details for answer";
 
     expect(parseEntityReferences(input, entityMap)).toBe(expected);
