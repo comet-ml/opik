@@ -1,1 +1,1 @@
-export * from "./FindFeedbackDefinitionsRequestType";
+export * from "./FindFeedbackDefinitionsRequestType.js";

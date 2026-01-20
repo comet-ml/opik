@@ -33,7 +33,7 @@ from ..types.span_update_type import SpanUpdateType
 from ..types.span_write import SpanWrite
 from ..types.span_write_type import SpanWriteType
 from ..types.value_entry import ValueEntry
-from .types.find_feedback_score_names_1_request_type import FindFeedbackScoreNames1RequestType
+from .types.find_feedback_score_names1request_type import FindFeedbackScoreNames1RequestType
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
 from .types.span_search_stream_request_public_type import SpanSearchStreamRequestPublicType
@@ -823,7 +823,7 @@ class RawSpansClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    def find_feedback_score_names_1(
+    def find_feedback_score_names1(
         self,
         *,
         project_id: typing.Optional[str] = None,
@@ -872,16 +872,16 @@ class RawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def get_span_comment(
-        self, comment_id: str, span_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, span_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[Comment]:
         """
         Get span comment
 
         Parameters
         ----------
-        comment_id : str
-
         span_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1993,7 +1993,7 @@ class AsyncRawSpansClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
-    async def find_feedback_score_names_1(
+    async def find_feedback_score_names1(
         self,
         *,
         project_id: typing.Optional[str] = None,
@@ -2042,16 +2042,16 @@ class AsyncRawSpansClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def get_span_comment(
-        self, comment_id: str, span_id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, span_id: str, comment_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[Comment]:
         """
         Get span comment
 
         Parameters
         ----------
-        comment_id : str
-
         span_id : str
+
+        comment_id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
