@@ -1,6 +1,8 @@
+import opik
 from opik_optimizer import ChatPrompt  # noqa: E402
 from opik_optimizer import MetaPromptOptimizer  # noqa: E402
 from opik_optimizer.datasets import hotpot  # noqa: E402
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia  # noqa: E402
 
 from utils.metrics import answer_correctness_score
 
