@@ -44,6 +44,10 @@ def score_candidate_prompts(
     current_round_best_score = best_score
     optimizer._total_candidates_in_round = len(candidate_prompts)
     dataset_name = getattr(getattr(context, "evaluation_dataset", None), "name", None)
+    is_validation = (
+        context.validation_dataset is not None
+        and context.evaluation_dataset is context.validation_dataset
+    )
 
     for candidate_count, candidate in enumerate(candidate_prompts):
         if optimizer._should_stop_context(context):
@@ -54,7 +58,7 @@ def score_candidate_prompts(
         with reporting.display_prompt_candidate_scoring_report(
             verbose=optimizer.verbose,
             dataset_name=dataset_name,
-            is_validation=False,
+            is_validation=is_validation,
             selection_summary=selection_summary,
         ) as reporter:
             reporter.set_generated_prompts(candidate_count, candidate)

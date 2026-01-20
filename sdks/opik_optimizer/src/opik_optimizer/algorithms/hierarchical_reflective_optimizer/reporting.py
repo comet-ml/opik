@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import math
 from typing import Any
 from collections.abc import Iterator
 
@@ -445,14 +446,18 @@ def display_iteration_improvement(
     if verbose < 1:
         return
 
+    improvement_str = f"{improvement:.2%}"
+    if math.isinf(improvement):
+        improvement_str = "inf"
+
     if improvement > 0:
         display_text_block(
-            f"│   ✓ Improvement: {improvement:.2%} (from {best_score:.4f} to {current_score:.4f})",
+            f"│   ✓ Improvement: {improvement_str} (from {best_score:.4f} to {current_score:.4f})",
             style="green bold",
         )
     else:
         display_text_block(
-            f"│   ✗ No improvement: {improvement:.2%} (score: {current_score:.4f}, best: {best_score:.4f})",
+            f"│   ✗ No improvement: {improvement_str} (score: {current_score:.4f}, best: {best_score:.4f})",
             style="yellow",
         )
 

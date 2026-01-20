@@ -327,9 +327,10 @@ class GepaOptimizer(BaseOptimizer):
         best_matches_seed = best_candidate == seed_candidate
 
         if logger.isEnabledFor(logging.DEBUG):
+            selected_label = best_idx if best_idx >= 0 else "baseline"
             logger.debug(
                 "selected candidate idx=%s opik=%.4f",
-                best_idx,
+                selected_label,
                 best_score,
             )
 

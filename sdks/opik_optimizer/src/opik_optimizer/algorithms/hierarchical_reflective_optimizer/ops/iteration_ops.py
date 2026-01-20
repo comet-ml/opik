@@ -151,10 +151,8 @@ def improve_over_failure_modes(
 
                 if improved_score is not None and improved_score > best_score:
                     reporting.display_iteration_improvement(
-                        improvement=(
-                            (improved_score - best_score) / best_score
-                            if best_score > 0
-                            else 0
+                        improvement=helpers.calculate_improvement(
+                            float(improved_score), float(best_score)
                         ),
                         current_score=float(improved_score),
                         best_score=float(best_score),
@@ -254,5 +252,8 @@ def finalize_iteration(
             optimizer.convergence_threshold * 100,
             round_index,
         )
+        context.should_stop = True
+        context.finish_reason = "no_improvement"
+        optimizer._should_stop_optimization = True
 
     return iteration_improvement

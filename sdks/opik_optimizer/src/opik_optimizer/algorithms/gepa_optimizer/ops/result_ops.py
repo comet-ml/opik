@@ -30,7 +30,7 @@ def build_algorithm_result(
     experiment_config: dict[str, Any] | None,
 ) -> AlgorithmResult:
     history_entries = optimizer.get_history_entries()
-    if history_entries:
+    if history_entries and best_idx >= 0:
         chosen_idx = min(best_idx, len(history_entries) - 1)
         chosen = history_entries[chosen_idx]
         extra = chosen.get("extra") or {}
@@ -84,7 +84,9 @@ def build_algorithm_result(
         "opik_rescored_scores": rescored,
         "candidate_summary": [],
         "best_candidate_iteration": 0,
-        "selected_candidate_index": best_idx if filtered_candidates else None,
+        "selected_candidate_index": (
+            best_idx if filtered_candidates and best_idx >= 0 else None
+        ),
         "selected_candidate_gepa_score": (
             filtered_val_scores[best_idx]
             if filtered_val_scores and 0 <= best_idx < len(filtered_val_scores)

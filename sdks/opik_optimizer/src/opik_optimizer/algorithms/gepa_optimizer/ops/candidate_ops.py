@@ -74,6 +74,8 @@ def select_best_candidate_index(
 
         best_idx = max(range(len(rescored)), key=_tie_break)
         best_score = rescored[best_idx]
+        if best_score <= initial_score:
+            return -1, float(initial_score)
         return best_idx, best_score
 
     if filtered_indexed_candidates:
