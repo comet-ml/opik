@@ -446,7 +446,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   placeholder: "Select span score",
                 },
               },
-              experiment_id: {
+              experiment_name: {
                 keyComponent: ExperimentsSelectBox,
                 keyComponentProps: {
                   className: "w-full min-w-72",
@@ -530,7 +530,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       {
         projectId,
         type: type as TRACE_DATA_TYPE,
-        filters,
+        filters: transformedFilters,
         search: search as string,
         fromTime: intervalStart,
         toTime: intervalEnd,
@@ -959,20 +959,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               id: "experiment_name",
               label: "Experiment name",
               type: COLUMN_TYPE.string,
-              customMeta: {
-                keyComponent: (props: {
-                  value: string;
-                  onValueChange: (value: string) => void;
-                }) => (
-                  <ExperimentsSelectBox
-                    {...props}
-                    sorting={[{ id: "name", desc: false }]}
-                    className="w-full min-w-72"
-                  />
-                ),
-                defaultOperator: "=" as FilterOperator,
-                operators: [{ label: "=", value: "=" as FilterOperator }],
-              },
             },
             {
               id: "experiment_id",
