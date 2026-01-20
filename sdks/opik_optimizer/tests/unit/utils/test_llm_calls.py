@@ -27,6 +27,31 @@ from opik_optimizer.core.state import OptimizationContext
 from tests.unit.test_helpers import make_mock_response
 
 
+class _NameCountModel(BaseModel):
+    name: str
+    count: int
+
+
+class _NameModel(BaseModel):
+    name: str
+
+
+class _FieldModel(BaseModel):
+    field: str
+
+
+class _RequiredFieldModel(BaseModel):
+    required_field: str
+
+
+def _role_of(message: Any) -> str | None:
+    if isinstance(message, dict):
+        value = message.get("role")
+        return value if isinstance(value, str) else None
+    value = getattr(message, "role", None)
+    return value if isinstance(value, str) else None
+
+
 class TestBuildCallTimeParams:
     """Tests for _build_call_time_params function."""
 
@@ -235,66 +260,46 @@ class TestParseResponse:
 
     def test_parses_structured_output_with_response_model(self) -> None:
         """When response_model is provided, should parse JSON into model."""
-
-        class TestModel(BaseModel):
-            name: str
-            count: int
-
         mock_response = make_mock_response('{"name": "test", "count": 42}')
 
-        result = _parse_response(mock_response, response_model=TestModel)
+        result = _parse_response(mock_response, response_model=_NameCountModel)
 
-        assert isinstance(result, TestModel)
+        assert isinstance(result, _NameCountModel)
         assert result.name == "test"
         assert result.count == 42
 
     def test_parses_structured_output_from_parsed_object(self) -> None:
         """Should prefer message.parsed when available."""
-
-        class TestModel(BaseModel):
-            name: str
-            count: int
-
         mock_response = make_mock_response(
             "not valid json",
             parsed={"name": "parsed", "count": 7},
         )
 
-        result = _parse_response(mock_response, response_model=TestModel)
+        result = _parse_response(mock_response, response_model=_NameCountModel)
 
-        assert isinstance(result, TestModel)
+        assert isinstance(result, _NameCountModel)
         assert result.name == "parsed"
         assert result.count == 7
 
     def test_parses_structured_output_from_parsed_model_instance(self) -> None:
         """Should return parsed model instance when it matches response_model."""
-
-        class TestModel(BaseModel):
-            name: str
-            count: int
-
-        parsed_model = TestModel(name="parsed", count=3)
+        parsed_model = _NameCountModel(name="parsed", count=3)
         mock_response = make_mock_response("{}", parsed=parsed_model)
 
-        result = _parse_response(mock_response, response_model=TestModel)
+        result = _parse_response(mock_response, response_model=_NameCountModel)
 
         assert result is parsed_model
 
     def test_parsed_object_invalid_falls_back_to_json(self) -> None:
         """Invalid parsed object should fall back to JSON parsing."""
-
-        class TestModel(BaseModel):
-            name: str
-            count: int
-
         mock_response = make_mock_response(
             '{"name": "json", "count": 11}',
             parsed={"name": "missing_count"},
         )
 
-        result = _parse_response(mock_response, response_model=TestModel)
+        result = _parse_response(mock_response, response_model=_NameCountModel)
 
-        assert isinstance(result, TestModel)
+        assert isinstance(result, _NameCountModel)
         assert result.name == "json"
         assert result.count == 11
 
@@ -339,27 +344,19 @@ class TestParseResponse:
 
     def test_raises_structured_output_parsing_error_on_invalid_json(self) -> None:
         """Should raise StructuredOutputParsingError when JSON is invalid."""
-
-        class TestModel(BaseModel):
-            field: str
-
         mock_response = make_mock_response("not valid json")
 
         with pytest.raises(StructuredOutputParsingError) as exc_info:
-            _parse_response(mock_response, response_model=TestModel)
+            _parse_response(mock_response, response_model=_FieldModel)
 
         assert exc_info.value.content == "not valid json"
 
     def test_raises_structured_output_parsing_error_on_schema_mismatch(self) -> None:
         """Should raise StructuredOutputParsingError when JSON doesn't match schema."""
-
-        class TestModel(BaseModel):
-            required_field: str
-
         mock_response = make_mock_response('{"wrong_field": "value"}')
 
         with pytest.raises(StructuredOutputParsingError) as exc_info:
-            _parse_response(mock_response, response_model=TestModel)
+            _parse_response(mock_response, response_model=_RequiredFieldModel)
 
         assert "required_field" in str(exc_info.value.content) or isinstance(
             exc_info.value.error, ValidationError
@@ -367,16 +364,12 @@ class TestParseResponse:
 
     def test_fallback_parsing_with_python_repr(self) -> None:
         """Should attempt fallback parsing for Python-style dicts."""
-
-        class TestModel(BaseModel):
-            name: str
-
         # Python repr style (single quotes) - fallback should handle this
         mock_response = make_mock_response("{'name': 'test'}")
 
-        result = _parse_response(mock_response, response_model=TestModel)
+        result = _parse_response(mock_response, response_model=_NameModel)
 
-        assert isinstance(result, TestModel)
+        assert isinstance(result, _NameModel)
         assert result.name == "test"
 
     def test_handles_none_finish_reason(self) -> None:
@@ -392,9 +385,6 @@ class TestParseResponse:
     def test_return_all_prefers_parsed_objects(self) -> None:
         """When return_all=True, should parse each choice via message.parsed."""
 
-        class TestModel(BaseModel):
-            name: str
-
         mock_response = MagicMock()
         mock_response.choices = [MagicMock(), MagicMock()]
         mock_response.choices[0].message.content = "invalid"
@@ -403,121 +393,120 @@ class TestParseResponse:
         mock_response.choices[1].message.parsed = {"name": "second"}
 
         result = _parse_response(
-            mock_response, response_model=TestModel, return_all=True
+            mock_response, response_model=_NameModel, return_all=True
         )
 
-        parsed_results = cast(list[TestModel], result)
+        parsed_results = cast(list[_NameModel], result)
         assert [item.name for item in parsed_results] == ["first", "second"]
 
 
 class TestStructuredOutputModels:
     """Tests for structured output response models used by optimizers."""
 
-    def test_mutation_response_wraps_messages_list(self) -> None:
-        from opik_optimizer.algorithms.evolutionary_optimizer.types import (
-            MutationResponse,
-        )
-
-        payload = [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}]
-        parsed = MutationResponse.model_validate(payload)
-
-        assert len(parsed.messages) == 2
-        first = parsed.messages[0]
-        role = first.get("role") if isinstance(first, dict) else getattr(first, "role")
-        assert role == "system"
-
-    def test_mutation_response_accepts_messages_dict(self) -> None:
-        from opik_optimizer.algorithms.evolutionary_optimizer.types import (
-            MutationResponse,
-        )
-
-        payload = {
-            "messages": [
-                {"role": "system", "content": "s"},
-                {"role": "user", "content": "u"},
-            ]
-        }
-        parsed = MutationResponse.model_validate(payload)
-
-        assert len(parsed.messages) == 2
-
-    def test_mutation_response_wraps_single_message_dict(self) -> None:
-        from opik_optimizer.algorithms.evolutionary_optimizer.types import (
-            MutationResponse,
-        )
-
-        payload = {"role": "system", "content": "s"}
-        parsed = MutationResponse.model_validate(payload)
-
-        assert len(parsed.messages) == 1
-        first = parsed.messages[0]
-        role = first.get("role") if isinstance(first, dict) else getattr(first, "role")
-        assert role == "system"
-
-    def test_prompt_candidates_response_wraps_list(self) -> None:
-        from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
-            PromptCandidatesResponse,
-        )
-
-        payload = [
-            {
-                "prompt": [
-                    {"role": "system", "content": "s"},
-                    {"role": "user", "content": "u"},
-                ]
-            }
-        ]
-        parsed = PromptCandidatesResponse.model_validate(payload)
-
-        assert len(parsed.prompts) == 1
-        first = parsed.prompts[0].prompt[0]
-        role = first.get("role") if isinstance(first, dict) else getattr(first, "role")
-        assert role == "system"
-
-    def test_prompt_candidates_response_accepts_dict(self) -> None:
-        from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
-            PromptCandidatesResponse,
-        )
-
-        payload = {
-            "prompts": [
+    @pytest.mark.parametrize(
+        "payload,expected_len,expected_first_role",
+        [
+            (
+                [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}],
+                2,
+                "system",
+            ),
+            (
                 {
-                    "prompt": [
+                    "messages": [
                         {"role": "system", "content": "s"},
                         {"role": "user", "content": "u"},
                     ]
+                },
+                2,
+                "system",
+            ),
+            ({"role": "system", "content": "s"}, 1, "system"),
+        ],
+    )
+    def test_mutation_response_normalizes_payloads(
+        self, payload: Any, expected_len: int, expected_first_role: str
+    ) -> None:
+        from opik_optimizer.algorithms.evolutionary_optimizer.types import (
+            MutationResponse,
+        )
+
+        parsed = MutationResponse.model_validate(payload)
+
+        assert len(parsed.messages) == expected_len
+        assert _role_of(parsed.messages[0]) == expected_first_role
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            (
+                [
+                    {
+                        "prompt": [
+                            {"role": "system", "content": "s"},
+                            {"role": "user", "content": "u"},
+                        ]
+                    }
+                ]
+            ),
+            (
+                {
+                    "prompts": [
+                        {
+                            "prompt": [
+                                {"role": "system", "content": "s"},
+                                {"role": "user", "content": "u"},
+                            ]
+                        }
+                    ]
                 }
-            ]
-        }
+            ),
+        ],
+    )
+    def test_prompt_candidates_response_normalizes_payloads(self, payload: Any) -> None:
+        from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
+            PromptCandidatesResponse,
+        )
+
         parsed = PromptCandidatesResponse.model_validate(payload)
 
         assert len(parsed.prompts) == 1
+        assert _role_of(parsed.prompts[0].prompt[0]) == "system"
 
-    def test_pattern_extraction_response_accepts_objects(self) -> None:
+    @pytest.mark.parametrize(
+        "payload,expected_patterns,expected_first",
+        [
+            (
+                [
+                    {"pattern": "Be concise", "example": "Short answers"},
+                    {"pattern": "Use citations"},
+                ],
+                None,
+                "Be concise",
+            ),
+            (["Pattern A", "Pattern B"], ["Pattern A", "Pattern B"], None),
+        ],
+    )
+    def test_pattern_extraction_response_normalizes_payloads(
+        self,
+        payload: Any,
+        expected_patterns: list[str] | None,
+        expected_first: str | None,
+    ) -> None:
         from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
             PatternExtractionResponse,
         )
 
-        payload = [
-            {"pattern": "Be concise", "example": "Short answers"},
-            {"pattern": "Use citations"},
-        ]
         parsed = PatternExtractionResponse.model_validate(payload)
+
+        if expected_patterns is not None:
+            assert parsed.patterns == expected_patterns
+            return
 
         assert len(parsed.patterns) == 2
         first = parsed.patterns[0]
         pattern_text = first.pattern if hasattr(first, "pattern") else first
-        assert pattern_text == "Be concise"
-
-    def test_pattern_extraction_response_wraps_list(self) -> None:
-        from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
-            PatternExtractionResponse,
-        )
-
-        payload = ["Pattern A", "Pattern B"]
-        parsed = PatternExtractionResponse.model_validate(payload)
-
-        assert parsed.patterns == ["Pattern A", "Pattern B"]
+        assert pattern_text == expected_first
 
 
 class TestStructuredOutputParsingError:

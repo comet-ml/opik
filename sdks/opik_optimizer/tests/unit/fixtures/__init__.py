@@ -19,6 +19,14 @@ from .data_factories import (
     ChatPromptFactory,
     EvaluationResultFactory,
 )
+from .assertions import (
+    assert_baseline_early_stop,
+    assert_invalid_prompt_raises,
+)
+from .prompt_builders import (
+    make_baseline_prompt,
+    make_two_prompt_bundle,
+)
 
 __all__ = [
     "LLMResponseBuilder",
@@ -27,4 +35,8 @@ __all__ = [
     "DatasetItemFactory",
     "ChatPromptFactory",
     "EvaluationResultFactory",
+    "assert_baseline_early_stop",
+    "assert_invalid_prompt_raises",
+    "make_baseline_prompt",
+    "make_two_prompt_bundle",
 ]
