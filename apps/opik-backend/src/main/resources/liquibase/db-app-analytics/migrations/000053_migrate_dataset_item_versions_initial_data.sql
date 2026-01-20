@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:000052_migrate_dataset_item_versions_initial_data
+--changeset idoberko2:000053_migrate_dataset_item_versions_initial_data
 --comment: Copy items from dataset_items (legacy) to dataset_item_versions for version 1
 
 -- Step 3: Copy items from legacy table to versioned table
