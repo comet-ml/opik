@@ -897,7 +897,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
                 )
                 <endif>
-            ), feedback_scores_combined_raw AS (
+            ), feedback_scores_combined AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -922,29 +922,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
                    AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
-            ), feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
-            ), feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
