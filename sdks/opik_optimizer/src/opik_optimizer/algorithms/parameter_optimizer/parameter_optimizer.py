@@ -23,6 +23,10 @@ from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...utils import display as display_utils
 from ...utils.logging import debug_log
+from ...utils.optuna_runtime import (
+    configure_optuna_logging,
+    record_optuna_trial_history,
+)
 from .types import ParameterType
 from .ops import sensitivity_analysis
 from .ops.search_ops import ParameterSearchSpace
@@ -449,13 +453,7 @@ class ParameterOptimizer(BaseOptimizer):
             },
         )
 
-        try:
-            optuna.logging.disable_default_handler()
-            optuna_logger = logging.getLogger("optuna")
-            optuna_logger.setLevel(logger.getEffectiveLevel())
-            optuna_logger.propagate = False
-        except Exception as exc:  # pragma: no cover - defensive safety
-            logger.warning("Could not configure Optuna logging: %s", exc)
+        configure_optuna_logging(logger=logger)
 
         sampler = sampler or optuna.samplers.TPESampler(seed=self.seed)
         study = optuna.create_study(direction="maximize", sampler=sampler)
@@ -685,46 +683,48 @@ class ParameterOptimizer(BaseOptimizer):
             local_trials = 0
 
         stage_counts: dict[str, int] = {}
-        for trial in study.trials:
-            if trial.state != TrialState.COMPLETE or trial.value is None:
-                continue
+
+        def _build_round_meta(trial: optuna.trial.FrozenTrial) -> dict[str, Any]:
+            stage = trial.user_attrs.get("stage", current_stage)
+            stage_counts[stage] = stage_counts.get(stage, 0) + 1
+            return {
+                "stage": stage,
+                "type": trial.user_attrs.get("type"),
+                "stage_count": stage_counts[stage],
+                "local_search_scale": trial.user_attrs.get("local_search_scale"),
+                "local_trials": trial.user_attrs.get("local_trials"),
+                "global_trials": trial.user_attrs.get("global_trials"),
+            }
+
+        def _build_prompt_payload(trial: optuna.trial.FrozenTrial) -> Any:
+            return trial.user_attrs.get("model_kwargs")
+
+        def _build_extra(trial: optuna.trial.FrozenTrial) -> dict[str, Any]:
+            stage = trial.user_attrs.get("stage", current_stage)
+            return {
+                "parameters": trial.user_attrs.get("parameters", {}),
+                "model": trial.user_attrs.get("model"),
+                "stage": stage,
+                "type": trial.user_attrs.get("type"),
+            }
+
+        def _timestamp(trial: optuna.trial.FrozenTrial) -> str:
             timestamp_source = (
                 trial.datetime_complete
                 or trial.datetime_start
                 or datetime.now(timezone.utc)
             )
-            stage = trial.user_attrs.get("stage", current_stage)
-            stage_counts[stage] = stage_counts.get(stage, 0) + 1
-            round_handle = self.pre_round(
-                context,
-                stage=stage,
-                type=trial.user_attrs.get("type"),
-                stage_count=stage_counts[stage],
-                local_search_scale=trial.user_attrs.get("local_search_scale"),
-                local_trials=trial.user_attrs.get("local_trials"),
-                global_trials=trial.user_attrs.get("global_trials"),
-            )
-            runtime.record_and_post_trial(
-                optimizer=self,
-                context=context,
-                prompt_or_payload=trial.user_attrs.get("model_kwargs"),
-                score=float(trial.value) if trial.value is not None else None,
-                candidate_id=f"trial{trial.number}",
-                extra={
-                    "parameters": trial.user_attrs.get("parameters", {}),
-                    "model": trial.user_attrs.get("model"),
-                    "stage": stage,
-                    "type": trial.user_attrs.get("type"),
-                },
-                round_handle=round_handle,
-                timestamp=timestamp_source.isoformat(),
-                post_extras=None,
-            )
-            self.post_round(
-                round_handle=round_handle,
-                context=context,
-                stop_reason=context.finish_reason,
-            )
+            return timestamp_source.isoformat()
+
+        record_optuna_trial_history(
+            optimizer=self,
+            context=context,
+            study=study,
+            build_prompt_payload=_build_prompt_payload,
+            build_extra=_build_extra,
+            build_round_meta=_build_round_meta,
+            timestamp_provider=_timestamp,
+        )
 
         try:
             importance = optuna_importance.get_param_importances(study)

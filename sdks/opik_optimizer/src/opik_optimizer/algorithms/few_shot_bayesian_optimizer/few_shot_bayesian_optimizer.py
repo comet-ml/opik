@@ -14,7 +14,11 @@ from opik import Dataset, opik_context
 
 from ... import base_optimizer
 from ...core import llm_calls as _llm_calls
-from ...core import runtime
+from ...utils.optuna_runtime import (
+    configure_optuna_logging,
+    extract_optuna_metadata,
+    record_optuna_trial_history,
+)
 from ...core.state import (
     OptimizationContext,
     AlgorithmResult,
@@ -578,18 +582,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             return score
 
-        # Configure Optuna Logging
-        try:
-            optuna.logging.disable_default_handler()
-            optuna_logger = logging.getLogger("optuna")
-            package_level = logging.getLogger("opik_optimizer").getEffectiveLevel()
-            optuna_logger.setLevel(package_level)
-            optuna_logger.propagate = False
-            logger.debug(
-                f"Optuna logger configured to level {logging.getLevelName(package_level)} and set to not propagate."
-            )
-        except Exception as e:
-            logger.warning(f"Could not configure Optuna logging within optimizer: {e}")
+        package_level = logging.getLogger("opik_optimizer").getEffectiveLevel()
+        configure_optuna_logging(logger=logger, level=package_level)
 
         # Explicitly create and seed the sampler for Optuna.
         # Note: Optuna warns that `multivariate` is experimental; we suppress that warning here.
@@ -616,66 +610,50 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         self._history_builder.clear()
-        for trial in study.trials:
-            if trial.state != optuna.trial.TrialState.COMPLETE:
-                logger.warning(
-                    f"Skipping trial {trial.number} from history due to state: {trial.state}. Value: {trial.value}"
-                )
-                continue
 
+        def _build_prompt_payload(trial: optuna.trial.FrozenTrial) -> Any:
             trial_config = trial.user_attrs.get("config", {})
-            prompt_cand_display = trial_config.get("message_list")  # Default to None
-            score_val = (
-                trial.value
-            )  # This can be None if trial failed to produce a score
-            timestamp = (
-                trial.datetime_start.isoformat()
-                if trial.datetime_start
-                else datetime.now().isoformat()
+            return trial_config.get("message_list")
+
+        def _build_extra(trial: optuna.trial.FrozenTrial) -> dict[str, Any]:
+            return {
+                "parameters": trial.user_attrs.get("parameters", {}),
+                "model_kwargs": trial.user_attrs.get("model_kwargs", {}),
+                "model": trial.user_attrs.get("model", {}),
+                "stage": trial.user_attrs.get("stage"),
+                "type": trial.user_attrs.get("type"),
+            }
+
+        def _build_round_meta(_: optuna.trial.FrozenTrial) -> dict[str, Any]:
+            return extract_optuna_metadata(study)
+
+        def _timestamp(trial: optuna.trial.FrozenTrial) -> str:
+            if trial.datetime_start:
+                return trial.datetime_start.isoformat()
+            return datetime.now().isoformat()
+
+        def _on_skip(trial: optuna.trial.FrozenTrial) -> None:
+            logger.warning(
+                "Skipping trial %s from history due to state: %s. Value: %s",
+                trial.number,
+                trial.state,
+                trial.value,
             )
-            sampler_info = type(study.sampler).__name__ if study.sampler else None
-            pruner_info = type(study.pruner).__name__ if study.pruner else None
-            round_handle = self.pre_round(
-                context,
-                sampler=sampler_info,
-                pruner=pruner_info,
-                study_direction=study.direction.name if study.direction else None,
-            )
-            runtime.record_and_post_trial(
-                optimizer=self,
-                context=context,
-                prompt_or_payload=prompt_cand_display,
-                score=score_val,
-                candidate_id=f"trial{trial.number}",
-                extra={
-                    "parameters": trial.user_attrs.get("parameters", {}),
-                    "model_kwargs": trial.user_attrs.get("model_kwargs", {}),
-                    "model": trial.user_attrs.get("model", {}),
-                    "stage": trial.user_attrs.get("stage"),
-                    "type": trial.user_attrs.get("type"),
-                },
-                round_handle=round_handle,
-                timestamp=timestamp,
-                post_extras=None,
-                post_metrics=None,
-            )
-            self.set_selection_meta(
-                {
-                    "sampler": sampler_info,
-                    "pruner": pruner_info,
-                    "study_direction": study.direction.name
-                    if study.direction
-                    else None,
-                    "stage": trial.user_attrs.get("stage")
-                    if trial is not None
-                    else None,
-                }
-            )
-            self.post_round(
-                round_handle,
-                context=context,
-                stop_reason=context.finish_reason,
-            )
+
+        record_optuna_trial_history(
+            optimizer=self,
+            context=context,
+            study=study,
+            build_prompt_payload=_build_prompt_payload,
+            build_extra=_build_extra,
+            build_round_meta=_build_round_meta,
+            timestamp_provider=_timestamp,
+            on_skip=_on_skip,
+        )
+
+        selection_meta = extract_optuna_metadata(study)
+        selection_meta["stage"] = None
+        self.set_selection_meta(selection_meta)
 
         best_trial = study.best_trial
         best_score = best_trial.value
