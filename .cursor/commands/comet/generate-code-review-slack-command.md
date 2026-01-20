@@ -245,6 +245,7 @@ The command is successful when:
   - Include video links or media that Slack MCP cannot send directly
   - Make final proof edits before sending
   - Have more control over the final message format
+- **Alternative for automatic sending**: If you don't need manual editing, use `cursor send-code-review-slack` to send the message directly to Slack.
 
 ---
 

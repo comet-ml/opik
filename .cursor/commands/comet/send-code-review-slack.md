@@ -145,12 +145,12 @@ This workflow will:
 
   Please review the following PR:
   
-  \{\{user_customization_text_if_provided\}\}
+  {{user_customization_text_if_provided}}
   
-  :jira_epic: jira link: \{\{Jira_URL\}\}
+  :jira_epic: jira link: {{Jira_URL}}
   :github: pr link: {{PR_link}}
-  :test_tube: test env link: \{\{test_env\}\}
-  \{\{baz_approved_status_if_available\}\}
+  :test_tube: test env link: {{test_env}}
+  {{baz_approved_status_if_available}}
   :react: fe summary (optional): {{description_in_one_line}}
   :java: be summary (optional): {{description_in_one_line}}
   :python: python summary (optional): {{description_in_one_line}}
@@ -174,7 +174,7 @@ This workflow will:
   
   :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
   :github: pr link: https://github.com/comet-ml/opik/pull/1234
-  :test_tube: test env link https://test.opik.com
+  :test_tube: test env link: https://test.opik.com
   :react: fe summary (optional): Added new metrics dashboard UI
   :java: be summary (optional): Implemented metrics aggregation endpoint
   ```
