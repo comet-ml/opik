@@ -1820,6 +1820,8 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                 GROUP BY workspace_id, project_id, trace_id
             ), feedback_scores_combined_raw AS (
                 SELECT
@@ -1988,8 +1990,14 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (
+                    SELECT id
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                  )
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -2008,8 +2016,14 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (
+                    SELECT id
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                  )
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -2209,7 +2223,9 @@ class TraceDAOImpl implements TraceDAO {
                         NULL) as duration,
                     error_info
                 FROM traces final
+                <if(guardrails_filters)>
                 LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                <endif>
                 <if(feedback_scores_empty_filters)>
                 LEFT JOIN fsc ON fsc.entity_id = traces.id
                 <endif>

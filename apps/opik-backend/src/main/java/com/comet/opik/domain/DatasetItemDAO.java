@@ -86,18 +86,6 @@ public interface DatasetItemDAO {
 @Slf4j
 class DatasetItemDAOImpl implements DatasetItemDAO {
 
-    /**
-     * Maximum decimal value bound for duration statistics in ClickHouse Decimal64(9).
-     * This ensures values stay within the precision limits while handling extreme values.
-     */
-    private static final String MAX_DECIMAL_BOUND = "999999999.999999999";
-
-    /**
-     * Minimum decimal value bound for duration statistics in ClickHouse Decimal64(9).
-     * This ensures values stay within the precision limits while handling extreme values.
-     */
-    private static final String MIN_DECIMAL_BOUND = "-999999999.999999999";
-
     private static final String INSERT_DATASET_ITEM = """
             INSERT INTO dataset_items (
                 id,
@@ -142,7 +130,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM dataset_items
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
+            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -156,7 +144,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
-            ORDER BY id DESC, last_updated_at DESC
+            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
@@ -191,7 +179,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-            ORDER BY id DESC, last_updated_at DESC
+            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit OFFSET :offset
             SETTINGS log_comment = '<log_comment>'
@@ -935,7 +923,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                        author
                 FROM feedback_scores_with_ranking
                 WHERE rn = 1
-            ),                     feedback_scores_final AS (
+            ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
                     project_id,
