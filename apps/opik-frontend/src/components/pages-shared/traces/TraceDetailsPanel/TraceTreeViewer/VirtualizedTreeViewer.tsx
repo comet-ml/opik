@@ -332,7 +332,9 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
         {config[TREE_DATABLOCK_TYPE.NUMBER_OF_ATTACHMENTS] &&
           Boolean(attachmentCount) && (
             <TooltipWrapper
-              content={`${attachmentCount ?? 0} attachment${(attachmentCount ?? 0) > 1 ? "s" : ""}`}
+              content={`${attachmentCount ?? 0} attachment${
+                (attachmentCount ?? 0) > 1 ? "s" : ""
+              }`}
             >
               <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
                 <Paperclip className="size-3 shrink-0" /> {attachmentCount}

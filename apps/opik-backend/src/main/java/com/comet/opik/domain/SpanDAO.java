@@ -758,7 +758,7 @@ class SpanDAO {
               AND project_id = :project_id
               AND entity_type = 'span'
               <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-              <if(uuid_to_time)> AND entity_id \<= :uuid_to_time <endif>
+              <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
               GROUP BY workspace_id, project_id, entity_id
             ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
