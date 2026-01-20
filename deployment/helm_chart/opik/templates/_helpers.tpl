@@ -100,7 +100,7 @@ Create the name of the service account to use
 {{- end }}
 {{/*
 Generate Content-Security-Policy header value from CSP configuration
-Usage: {{ include "comet-helm.cspHeaderValue" .Values.component.frontend.staticSite.contentSecurityPolicy }}
+Usage: {{ include "opik.cspHeaderValue" .Values.component.frontend.staticSite.contentSecurityPolicy }}
 Returns: "default-src 'self'; script-src 'self' 'unsafe-inline'"
 */}}
 {{- define "opik.cspHeaderValue" -}}
