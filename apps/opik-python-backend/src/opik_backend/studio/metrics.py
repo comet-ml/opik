@@ -1,6 +1,5 @@
 """Metric factory for Optimization Studio."""
 
-import ast
 import inspect
 import logging
 import uuid
@@ -220,106 +219,12 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
     return metric_fn
 
 
-import os
-import re
-
-# Environment variable to control code metric availability
-# Set to "true" to enable custom code metrics (requires proper isolation)
-CODE_METRIC_ENABLED = os.getenv("OPIK_CODE_METRIC_ENABLED", "true").lower() == "true"
-
-# Patterns that indicate potentially dangerous code
-# These are blocked to provide defense-in-depth (primary isolation is via subprocess)
-DANGEROUS_PATTERNS = [
-    (r'\bos\s*\.\s*(system|popen|spawn|exec|remove|unlink|rmdir|makedirs|chmod|chown)', 
-     "OS system/file operations are not allowed"),
-    (r'\bsubprocess\b', "subprocess module is not allowed"),
-    (r'\b__import__\s*\(', "Dynamic imports via __import__ are not allowed"),
-    (r'\beval\s*\(', "eval() is not allowed"),
-    (r'\bexec\s*\(', "exec() is not allowed"),
-    (r'\bcompile\s*\(', "compile() is not allowed"),
-    (r'\bopen\s*\(', "File operations via open() are not allowed"),
-    (r'\bglobals\s*\(', "globals() is not allowed"),
-    (r'\blocals\s*\(', "locals() is not allowed"),
-    (r'\bgetattr\s*\([^,]+,\s*["\']__', "Accessing dunder attributes via getattr is not allowed"),
-    (r'\bsetattr\s*\(', "setattr() is not allowed"),
-    (r'\bdelattr\s*\(', "delattr() is not allowed"),
-    (r'\b__builtins__\b', "Accessing __builtins__ is not allowed"),
-    (r'\b__code__\b', "Accessing __code__ is not allowed"),
-    (r'\b__globals__\b', "Accessing __globals__ is not allowed"),
-    (r'\bsocket\b', "socket module is not allowed"),
-    (r'\brequests\b', "requests module is not allowed (use allowed modules only)"),
-    (r'\burllib\b', "urllib module is not allowed"),
-    (r'\bhttpx\b', "httpx module is not allowed"),
-    (r'\baiohttp\b', "aiohttp module is not allowed"),
-]
-
-# Allowed import modules (whitelist)
-ALLOWED_MODULES = {
-    'json', 're', 'math', 'string', 'collections', 'itertools', 'functools',
-    'datetime', 'typing', 'dataclasses', 'enum', 'copy', 'hashlib',
-}
-
-
-def _validate_code_safety(code: str) -> None:
-    """Validate that user code doesn't contain dangerous patterns.
-    
-    This provides defense-in-depth. Primary isolation is via subprocess execution.
-    
-    Args:
-        code: The user-provided Python code
-        
-    Raises:
-        InvalidMetricError: If dangerous patterns are detected
-    """
-    # Check for dangerous patterns
-    for pattern, message in DANGEROUS_PATTERNS:
-        if re.search(pattern, code):
-            logger.warning(f"Code metric rejected: {message}. Pattern: {pattern}")
-            raise InvalidMetricError("code", f"Security violation: {message}")
-    
-    # Validate imports are from allowlist using ast for proper parsing
-    # This handles all import forms: import x, import x, y, from x import y, etc.
-    try:
-        tree = ast.parse(code)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                # import x, y, z
-                for alias in node.names:
-                    module = alias.name.split('.')[0]  # Get root module
-                    if not module.startswith('opik') and module not in ALLOWED_MODULES:
-                        logger.warning(f"Code metric rejected: Import of '{module}' is not allowed")
-                        raise InvalidMetricError(
-                            "code", 
-                            f"Import of '{module}' is not allowed. "
-                            f"Allowed modules: {', '.join(sorted(ALLOWED_MODULES))}, opik.*"
-                        )
-            elif isinstance(node, ast.ImportFrom):
-                # from x import y, z
-                if node.module:
-                    module = node.module.split('.')[0]  # Get root module
-                    if not module.startswith('opik') and module not in ALLOWED_MODULES:
-                        logger.warning(f"Code metric rejected: Import of '{module}' is not allowed")
-                        raise InvalidMetricError(
-                            "code", 
-                            f"Import of '{module}' is not allowed. "
-                            f"Allowed modules: {', '.join(sorted(ALLOWED_MODULES))}, opik.*"
-                        )
-    except SyntaxError:
-        # If code has syntax errors, let it fail later during exec with a clearer message
-        pass
-    
-    logger.debug("Code safety validation passed")
-
-
 @MetricFactory.register("code")
 def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
     """Build a custom code metric function.
     
-    SECURITY NOTE: User code is executed in an isolated subprocess with:
-    - Memory limits (via IsolatedSubprocessExecutor)
-    - Timeout limits (configurable)
-    - No access to parent process environment secrets
-    - Code validation against dangerous patterns
+    NOTE: User code execution follows the same pattern as automations (evaluation metrics).
+    Code is executed in a subprocess with process isolation.
     
     Supports two patterns:
     
@@ -341,59 +246,16 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
         Metric function with signature (dataset_item, llm_output) -> ScoreResult
         
     Raises:
-        InvalidMetricError: If code metrics are disabled, code is missing, 
-                           contains dangerous patterns, or is invalid
+        InvalidMetricError: If code is missing or invalid
     """
-    # Check if code metrics are enabled
-    if not CODE_METRIC_ENABLED:
-        logger.warning("Code metric creation rejected: feature is disabled via OPIK_CODE_METRIC_ENABLED=false")
-        raise InvalidMetricError(
-            "code", 
-            "Custom code metrics are disabled. Contact your administrator to enable this feature."
-        )
-    
     code = params.get("code")
     if not code:
         raise InvalidMetricError("code", "Missing 'code' parameter for code metric")
     
-    # Log code metric creation - avoid logging raw code at INFO level as it may contain secrets
     logger.info(f"Building code metric (code length: {len(code)} chars)")
-    # Only log code preview at DEBUG level (typically disabled in production)
-    if logger.isEnabledFor(logging.DEBUG):
-        code_preview = code[:200] + "..." if len(code) > 200 else code
-        logger.debug(f"Code metric preview: {code_preview!r}")
     
-    # Validate code safety (defense-in-depth, primary isolation is via subprocess)
-    _validate_code_safety(code)
-    
-    # Create a restricted import function that only allows approved modules
-    real_import = __builtins__['__import__'] if isinstance(__builtins__, dict) else __builtins__.__import__
-    
-    def restricted_import(name, globals=None, locals=None, fromlist=(), level=0):
-        """Restricted import that only allows approved modules."""
-        root_module = name.split('.')[0]
-        if root_module.startswith('opik') or root_module in ALLOWED_MODULES:
-            return real_import(name, globals, locals, fromlist, level)
-        raise ImportError(f"Import of '{name}' is not allowed. Allowed: {', '.join(sorted(ALLOWED_MODULES))}, opik.*")
-    
-    # Create a restricted namespace for code execution
-    # Start with real builtins (needed for class definitions, etc.) but override dangerous ones
-    if isinstance(__builtins__, dict):
-        safe_builtins = dict(__builtins__)
-    else:
-        safe_builtins = dict(vars(__builtins__))
-    
-    # Override/remove dangerous builtins
-    safe_builtins['__import__'] = restricted_import  # Use restricted import
-    safe_builtins['eval'] = None  # Block eval
-    safe_builtins['exec'] = None  # Block exec
-    safe_builtins['compile'] = None  # Block compile
-    safe_builtins['open'] = None  # Block file access
-    safe_builtins['input'] = None  # Block input
-    
-    # Create a module to execute the code
+    # Create a module to execute the code (same pattern as automations)
     module = ModuleType(str(uuid.uuid4()))
-    module.__dict__['__builtins__'] = safe_builtins
     
     # Pre-import commonly used modules in the metric code's namespace
     module.__dict__["json"] = __import__("json")
@@ -406,7 +268,6 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
     pre_exec_names = set(module.__dict__.keys())
     
     try:
-        # Execute with restricted globals
         exec(code, module.__dict__)
         logger.info("Code metric compiled successfully")
     except Exception as e:
@@ -460,17 +321,33 @@ def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
         if isinstance(value, ScoreResult):
             return value
         
-        # Numeric value - wrap with default name
+        # Numeric value - wrap with default name, clamped to [0.0, 1.0]
         if isinstance(value, (int, float)):
-            logger.debug(f"Coercing numeric metric result {value} to ScoreResult")
-            return ScoreResult(name="code", value=float(value), reason="")
+            original_value = float(value)
+            clamped_value = max(0.0, min(1.0, original_value))
+            if clamped_value != original_value:
+                logger.warning(
+                    f"Code metric returned value {original_value} outside [0.0, 1.0] range, "
+                    f"clamped to {clamped_value}"
+                )
+            else:
+                logger.debug(f"Coercing numeric metric result {original_value} to ScoreResult")
+            return ScoreResult(name="code", value=clamped_value, reason="")
         
-        # Dict with expected keys - construct ScoreResult
+        # Dict with expected keys - construct ScoreResult, clamped to [0.0, 1.0]
         if isinstance(value, dict) and "value" in value:
-            logger.debug(f"Coercing dict metric result to ScoreResult: {value}")
+            original_value = float(value["value"])
+            clamped_value = max(0.0, min(1.0, original_value))
+            if clamped_value != original_value:
+                logger.warning(
+                    f"Code metric dict returned value {original_value} outside [0.0, 1.0] range, "
+                    f"clamped to {clamped_value}"
+                )
+            else:
+                logger.debug(f"Coercing dict metric result to ScoreResult: {value}")
             return ScoreResult(
                 name=value.get("name", "code"),
-                value=float(value["value"]),
+                value=clamped_value,
                 reason=value.get("reason", "")
             )
         

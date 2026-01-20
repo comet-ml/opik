@@ -4,6 +4,7 @@ import { CodeMetricParameters } from "@/types/optimizations";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { EditorView } from "@codemirror/view";
+import { Extension } from "@codemirror/state";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,14 @@ const DEFAULT_CODE = `def evaluation_metric(dataset_item, llm_output):
         value=1.0,
         reason="Evaluation passed"
     )`;
+
+// Static CodeMirror configuration - defined at module level to avoid recreation on every render
+const CODEMIRROR_EXTENSIONS: Extension[] = [python(), EditorView.lineWrapping];
+const CODEMIRROR_BASIC_SETUP = {
+  lineNumbers: true,
+  foldGutter: false,
+  highlightActiveLine: true,
+} as const;
 
 const CodeMetricConfigs = ({ configs, onChange }: CodeMetricConfigsProps) => {
   const theme = useCodemirrorTheme();
@@ -44,14 +53,10 @@ const CodeMetricConfigs = ({ configs, onChange }: CodeMetricConfigsProps) => {
             placeholder={DEFAULT_CODE}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            extensions={[python(), EditorView.lineWrapping]}
+            extensions={CODEMIRROR_EXTENSIONS}
             minHeight="200px"
             maxHeight="400px"
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: false,
-              highlightActiveLine: true,
-            }}
+            basicSetup={CODEMIRROR_BASIC_SETUP}
           />
         </div>
         <p className="text-xs text-muted-slate">
