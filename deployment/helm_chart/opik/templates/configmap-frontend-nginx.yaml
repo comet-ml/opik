@@ -80,14 +80,8 @@ data:
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Frame-Options "DENY" always;
         add_header X-XSS-Protection "0" always;
-        {{- if .Values.component.frontend.csp.enabled }}
-        {{- $cspParts := list }}
-        {{- range $directive, $sources := .Values.component.frontend.csp }}
-        {{- if ne $directive "enabled" }}
-        {{- $cspParts = append $cspParts (printf "%s %s" $directive (join " " $sources)) }}
-        {{- end }}
-        {{- end }}
-        add_header Content-Security-Policy "{{ join "; " $cspParts }};" always;
+        {{- with .Values.component.frontend.contentSecurityPolicy }}
+        add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" . }};" always;
         {{- end }}
         {{- if .Values.component.frontend.hstsEnabled }}
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;

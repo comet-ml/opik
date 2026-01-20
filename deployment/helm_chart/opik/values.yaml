@@ -351,8 +351,7 @@ component:
     hstsEnabled: false
     # Content Security Policy (CSP) configuration
     # Customize these lists to allow additional external services (analytics, CDNs, etc.)
-    csp:
-      enabled: true
+    contentSecurityPolicy:
       # Default source for all directives
       default-src:
         - "'self'"
