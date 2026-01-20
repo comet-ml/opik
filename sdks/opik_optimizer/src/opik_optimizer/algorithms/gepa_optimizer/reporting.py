@@ -21,6 +21,7 @@ from ...utils.display import (
     format_prompt_snippet,
     display_renderable,
 )
+from ...api_objects import chat_prompt
 
 
 # FIXME: Move to a pareto util/extension
@@ -433,3 +434,18 @@ def _format_score(value: Any) -> str:
         return f"{float(value):.4f}"
     except Exception:
         return str(value)
+
+
+def candidate_summary_text(
+    candidate: dict[str, str],
+    base_prompts: dict[str, chat_prompt.ChatPrompt],
+) -> str:
+    """Get a summary text representation of a candidate for display."""
+    for prompt_name in base_prompts:
+        system_key = f"{prompt_name}_system_0"
+        if system_key in candidate:
+            return candidate[system_key][:200]
+    for key, value in candidate.items():
+        if not key.startswith("_") and key not in ("source", "id"):
+            return str(value)[:200]
+    return "<no content>"

@@ -3,24 +3,16 @@ from typing import Any, cast
 
 
 from ...base_optimizer import BaseOptimizer
-from ...core import runtime
 from ...core.state import (
     AlgorithmResult,
     OptimizationContext,
     build_optimization_metadata,
 )
-from ...utils.reporting import (
-    convert_tqdm_to_rich,
-    suppress_opik_logs,
-)
-from ...api_objects import chat_prompt
-from ...api_objects.types import rebuild_content_with_new_text
-from ...utils.candidate import unique_ordered_by_key
 from ...utils.prompt_library import PromptOverrides
-from ...utils.logging import debug_log
 from . import helpers, reporting as gepa_reporting
 from . import prompts as gepa_prompts
 from .adapter import OpikGEPAAdapter
+from .ops import candidate_ops, result_ops, scoring_ops
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +83,8 @@ class GepaOptimizer(BaseOptimizer):
         self._adapter_metric_calls = 0
         self._adapter = None  # Will be set during optimization
         self._validation_dataset = None
+        self._gepa_rescored_scores: list[float] = []
+        self._gepa_filtered_val_scores: list[float | None] = []
 
         # FIXME: When we have an Opik adapter, map this into GEPA's LLM calls directly
         if model_parameters:
@@ -109,14 +103,6 @@ class GepaOptimizer(BaseOptimizer):
             "model": self.model,
             "n_threads": self.n_threads,
         }
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    # ------------------------------------------------------------------
-    # Base optimizer overrides
-    # ------------------------------------------------------------------
 
     def pre_optimize(self, context: OptimizationContext) -> None:
         """Set up GEPA-specific state before optimization."""
@@ -202,20 +188,9 @@ class GepaOptimizer(BaseOptimizer):
             if not p.model_kwargs:
                 p.model_kwargs = dict(self.model_parameters)
 
-        seed_candidate: dict[str, str] = {}
-        for prompt_name, prompt_obj in optimizable_prompts.items():
-            messages = prompt_obj.get_messages()
-            for idx, msg in enumerate(messages):
-                component_key = f"{prompt_name}_{msg['role']}_{idx}"
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    text_parts = [
-                        part.get("text", "")
-                        for part in content
-                        if isinstance(part, dict) and part.get("type") == "text"
-                    ]
-                    content = " ".join(text_parts)
-                seed_candidate[component_key] = str(content)
+        seed_candidate = candidate_ops.build_seed_candidate(
+            optimizable_prompts=optimizable_prompts
+        )
 
         input_key, output_key = helpers.infer_dataset_keys(dataset)
 
@@ -318,189 +293,36 @@ class GepaOptimizer(BaseOptimizer):
         val_scores: list[float] = list(getattr(gepa_result, "val_aggregate_scores", []))
 
         # Filter duplicate candidates based on content
-        indexed_candidates: list[tuple[int, dict[str, str]]] = list(
-            enumerate(candidates)
-        )
-        filtered_indexed_candidates = unique_ordered_by_key(
-            indexed_candidates,
-            key=lambda item: str(sorted(item[1].items())),
-        )
-        filtered_candidates: list[dict[str, str]] = [
-            candidate for _, candidate in filtered_indexed_candidates
-        ]
-        filtered_val_scores: list[float | None] = [
-            val_scores[idx] if idx < len(val_scores) else None
-            for idx, _ in filtered_indexed_candidates
-        ]
-
-        rescored: list[float] = []
-        self._history_builder.clear()
-        default_split = (
-            "validation" if self._validation_dataset is not None else "train"
-        )
-        self.set_default_dataset_split(default_split)
-
-        # Wrap rescoring to prevent OPIK messages and experiment link displays
-        with suppress_opik_logs():
-            with convert_tqdm_to_rich(verbose=0):
-                for idx, (original_idx, candidate) in enumerate(
-                    filtered_indexed_candidates
-                ):
-                    # Rebuild prompts from candidate
-                    prompt_variants = self._rebuild_prompts_from_candidate(
-                        optimizable_prompts, candidate
-                    )
-
-                    try:
-                        # Use base evaluate() to ensure trial counters and best tracking update
-                        context.evaluation_dataset = dataset
-                        score = self.evaluate(context, prompt_variants)
-                        score = float(score)
-                    except Exception:
-                        logger.debug(
-                            "Rescoring failed for candidate %s", idx, exc_info=True
-                        )
-                        score = 0.0
-
-                    rescored.append(score)
-                    candidate_id = candidate.get("id") or f"gepa_candidate_{idx}"
-                    debug_log(
-                        "candidate_start",
-                        candidate_index=idx,
-                        candidate_id=candidate_id,
-                        trials_completed=context.trials_completed,
-                    )
-                    components = {
-                        k: v
-                        for k, v in candidate.items()
-                        if not k.startswith("_") and k not in ("source", "id")
-                    }
-                    round_handle = self.pre_round(context, candidate_id=candidate_id)
-                    runtime.record_and_post_trial(
-                        optimizer=self,
-                        context=context,
-                        prompt_or_payload=prompt_variants,
-                        score=score,
-                        candidate_id=candidate_id,
-                        metrics={
-                            f"gepa_{metric.__name__}": filtered_val_scores[idx],
-                            metric.__name__: score,
-                        },
-                        extra={
-                            "components": components,
-                            "source": candidate.get("source"),
-                        },
-                        round_handle=round_handle,
-                        post_extras={
-                            "components": components,
-                            "candidate_id": candidate_id,
-                        },
-                    )
-                    debug_log(
-                        "candidate_end",
-                        candidate_index=idx,
-                        candidate_id=candidate_id,
-                        score=score,
-                        trials_completed=context.trials_completed,
-                    )
-                    self.set_selection_meta(
-                        {
-                            "selection_policy": candidate_selection_strategy,
-                            "opik_rescored_scores": rescored,
-                            "gepa_scores": filtered_val_scores,
-                        }
-                    )
-                    self.post_round(
-                        round_handle,
-                        context=context,
-                        stop_reason=context.finish_reason
-                        if context.should_stop
-                        else None,
-                    )
-
-        if rescored:
-
-            def _tie_break(idx: int) -> tuple[float, float, int]:
-                opik_score = rescored[idx]
-                gepa_score = filtered_val_scores[idx]
-                gepa_numeric = (
-                    float(gepa_score)
-                    if isinstance(gepa_score, (int, float))
-                    else float("-inf")
-                )
-                return opik_score, gepa_numeric, idx
-
-            best_idx = max(range(len(rescored)), key=_tie_break)
-            best_score = rescored[best_idx]
-        else:
-            if filtered_indexed_candidates:
-                gepa_best_idx = getattr(gepa_result, "best_idx", 0) or 0
-                best_idx = next(
-                    (
-                        i
-                        for i, (original_idx, _) in enumerate(
-                            filtered_indexed_candidates
-                        )
-                        if original_idx == gepa_best_idx
-                    ),
-                    0,
-                )
-                if filtered_val_scores and 0 <= best_idx < len(filtered_val_scores):
-                    score_value = filtered_val_scores[best_idx]
-                    best_score = float(score_value) if score_value is not None else 0.0
-                else:
-                    best_score = float(initial_score)
-            else:
-                best_idx = 0
-                best_score = float(initial_score)
-
-        # Get best candidate and rebuild final prompts
-        best_candidate = (
-            filtered_candidates[best_idx] if filtered_candidates else seed_candidate
+        (
+            filtered_candidates,
+            filtered_val_scores,
+            filtered_indexed_candidates,
+        ) = candidate_ops.filter_duplicate_candidates(
+            candidates=candidates,
+            val_scores=val_scores,
         )
 
-        history_entries = self.get_history_entries()
-        if history_entries:
-            # Mark selection metadata on the chosen candidate entry
-            chosen_idx = min(best_idx, len(history_entries) - 1)
-            chosen = history_entries[chosen_idx]
-            extra = chosen.get("extra") or {}
-            extra.update(
-                {
-                    "selected": True,
-                    "selection_metric": "opik_score",
-                    "selection_meta": {
-                        "opik_score": rescored[best_idx] if rescored else None,
-                        "gepa_score": (
-                            filtered_val_scores[best_idx]
-                            if filtered_val_scores
-                            and 0 <= best_idx < len(filtered_val_scores)
-                            else None
-                        ),
-                        "selection_policy": candidate_selection_strategy,
-                    },
-                }
-            )
-            extra["acquisition"] = {
-                "opik_score": rescored[best_idx] if rescored else None,
-                "gepa_score": (
-                    filtered_val_scores[best_idx]
-                    if filtered_val_scores and 0 <= best_idx < len(filtered_val_scores)
-                    else None
-                ),
-            }
-            chosen["extra"] = extra
-        debug_log(
-            "selection",
-            candidate_index=best_idx,
-            candidate_id=filtered_candidates[best_idx].get("id")
-            if filtered_candidates and 0 <= best_idx < len(filtered_candidates)
-            else None,
-            best_score=best_score,
+        rescored = scoring_ops.rescore_candidates(
+            optimizer=self,
+            context=context,
+            dataset=dataset,
+            optimizable_prompts=optimizable_prompts,
+            filtered_indexed_candidates=filtered_indexed_candidates,
+            filtered_val_scores=filtered_val_scores,
             selection_policy=candidate_selection_strategy,
         )
-        final_prompts = self._rebuild_prompts_from_candidate(
-            optimizable_prompts, best_candidate
+
+        best_idx, best_score = candidate_ops.select_best_candidate_index(
+            rescored=rescored,
+            filtered_val_scores=filtered_val_scores,
+            filtered_indexed_candidates=filtered_indexed_candidates,
+            initial_score=float(initial_score),
+            gepa_result=gepa_result,
+        )
+        best_candidate = (
+            filtered_candidates[best_idx]
+            if filtered_candidates and 0 <= best_idx < len(filtered_candidates)
+            else seed_candidate
         )
 
         # Check if best matches initial seed
@@ -515,99 +337,22 @@ class GepaOptimizer(BaseOptimizer):
 
         # finish_reason, stopped_early, stop_reason are handled by base class
 
-        # Build metadata for the result
-        metadata: dict[str, Any] = {
-            "num_candidates": len(filtered_candidates),
-            "num_components": len(seed_candidate),
-            "total_metric_calls": getattr(gepa_result, "total_metric_calls", None),
-            "parents": getattr(gepa_result, "parents", None),
-            "val_scores": filtered_val_scores,
-            "opik_rescored_scores": rescored,
-            "candidate_summary": [],
-            "best_candidate_iteration": 0,
-            "selected_candidate_index": best_idx if filtered_candidates else None,
-            "selected_candidate_gepa_score": (
-                filtered_val_scores[best_idx]
-                if filtered_val_scores and 0 <= best_idx < len(filtered_val_scores)
-                else None
-            ),
-            "selected_candidate_opik_score": best_score,
-            "adapter_metric_used": True,
-            "adapter_metric_call_count": self._adapter_metric_calls,
-            "dataset_item_ids": [item.get("id") for item in train_items],
-        }
-        if best_matches_seed:
-            metadata["final_evaluation_reused_baseline"] = True
-        if experiment_config:
-            metadata["experiment"] = experiment_config
-
-        return AlgorithmResult(
-            best_prompts=final_prompts,
+        return result_ops.build_algorithm_result(
+            optimizer=self,
+            best_idx=best_idx,
             best_score=best_score,
-            history=self.get_history_entries(),
-            metadata=metadata,
+            best_candidate=best_candidate,
+            filtered_candidates=filtered_candidates,
+            filtered_val_scores=filtered_val_scores,
+            rescored=rescored,
+            candidate_selection_strategy=candidate_selection_strategy,
+            best_matches_seed=best_matches_seed,
+            seed_candidate=seed_candidate,
+            optimizable_prompts=optimizable_prompts,
+            train_items=train_items,
+            gepa_result=gepa_result,
+            experiment_config=experiment_config,
         )
-
-    # ------------------------------------------------------------------
-    # Helpers for multi-prompt optimization
-    # ------------------------------------------------------------------
-
-    def _rebuild_prompts_from_candidate(
-        self,
-        base_prompts: dict[str, chat_prompt.ChatPrompt],
-        candidate: dict[str, str],
-    ) -> dict[str, chat_prompt.ChatPrompt]:
-        """Rebuild prompts with optimized messages from a GEPA candidate.
-
-        Args:
-            base_prompts: Dict of original prompts to use as templates.
-            candidate: Dict mapping component keys (e.g., "prompt_name_role_idx") to optimized content.
-
-        Returns:
-            Dict of ChatPrompt objects with optimized message content,
-            preserving tools, function_map, model, model_kwargs, and multimodal parts.
-        """
-        rebuilt: dict[str, chat_prompt.ChatPrompt] = {}
-        for prompt_name, prompt_obj in base_prompts.items():
-            original_messages = prompt_obj.get_messages()
-            new_messages = []
-            for idx, msg in enumerate(original_messages):
-                component_key = f"{prompt_name}_{msg['role']}_{idx}"
-                original_content = msg.get("content", "")
-                optimized_text = candidate.get(component_key)
-
-                if optimized_text is not None:
-                    # Use helper to preserve image parts while updating text
-                    new_content = rebuild_content_with_new_text(
-                        original_content, optimized_text
-                    )
-                else:
-                    new_content = original_content
-
-                new_messages.append({"role": msg["role"], "content": new_content})
-
-            # prompt.copy() preserves tools, function_map, model, model_kwargs
-            new_prompt = prompt_obj.copy()
-            new_prompt.set_messages(new_messages)
-            rebuilt[prompt_name] = new_prompt
-        return rebuilt
-
-    def _get_candidate_summary_text(
-        self,
-        candidate: dict[str, str],
-        base_prompts: dict[str, chat_prompt.ChatPrompt],
-    ) -> str:
-        """Get a summary text representation of a candidate for display."""
-        # Try to get system prompt content first for backward-compatible display
-        for prompt_name in base_prompts:
-            system_key = f"{prompt_name}_system_0"
-            if system_key in candidate:
-                return candidate[system_key][:200]
-        # Fall back to first component
-        for key, value in candidate.items():
-            if not key.startswith("_") and key not in ("source", "id"):
-                return str(value)[:200]
-        return "<no content>"
 
     def _build_optimization_config(self) -> dict[str, Any]:
         return build_optimization_metadata(self)
