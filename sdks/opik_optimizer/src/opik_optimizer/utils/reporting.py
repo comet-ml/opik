@@ -111,14 +111,20 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
         return _TqdmAdapter(iterable, desc_value, total, disable)
 
     # Convert tqdm to rich progress bars
-    original__tqdm = opik.evaluation.engine.evaluation_tasks_executor._tqdm
+    original__tqdm = getattr(opik.evaluation.engine.evaluation_tasks_executor, "_tqdm", None)
+    original_tqdm = getattr(opik.evaluation.engine.evaluation_tasks_executor, "tqdm", None)
     opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track  # type: ignore[assignment]
+    if original_tqdm is not None:
+        opik.evaluation.engine.evaluation_tasks_executor.tqdm = _tqdm_to_track  # type: ignore[assignment]
 
     try:
         yield
     finally:
         # Restore original tqdm implementation
-        opik.evaluation.engine.evaluation_tasks_executor._tqdm = original__tqdm
+        if original__tqdm is not None:
+            opik.evaluation.engine.evaluation_tasks_executor._tqdm = original__tqdm
+        if original_tqdm is not None:
+            opik.evaluation.engine.evaluation_tasks_executor.tqdm = original_tqdm
 
 
 def suppress_experiment_reporting(func: F) -> F:
