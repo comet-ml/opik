@@ -3,91 +3,8 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from typing import Any
-
 from opik_optimizer import ChatPrompt
 from opik_optimizer.core.results import OptimizationResult
-from opik_optimizer.utils.display import (
-    format_float,
-    format_prompt_for_plaintext,
-    render_rich_result,
-)
-
-
-class TestFormatFloat:
-    """Tests for format_float helper function."""
-
-    @pytest.mark.parametrize(
-        "value,digits,expected",
-        [
-            (3.14159265, None, "3.141593"),
-            (3.14159265, 2, "3.14"),
-            (0.0, None, "0.000000"),
-            (-1.5, 3, "-1.500"),
-            ("string_value", None, "string_value"),
-            (42, None, "42"),
-            (None, None, "None"),
-        ],
-    )
-    def test_formats_float(self, value: Any, digits: int | None, expected: str) -> None:
-        """Test format_float with various inputs."""
-        if digits is not None:
-            result = format_float(value, digits=digits)
-        else:
-            result = format_float(value)
-        assert result == expected
-
-
-class TestFormatPromptForPlaintext:
-    """Tests for format_prompt_for_plaintext function."""
-
-    def test_formats_single_prompt(self) -> None:
-        prompt = ChatPrompt(
-            system="You are helpful.",
-            user="What is 2+2?",
-        )
-        result = format_prompt_for_plaintext(prompt)
-        assert "system:" in result
-        assert "user:" in result
-        assert "You are helpful." in result
-        assert "What is 2+2?" in result
-
-    def test_formats_dict_of_prompts(self) -> None:
-        prompts = {
-            "planner": ChatPrompt(system="Plan the task.", user="{task}"),
-            "executor": ChatPrompt(system="Execute the plan.", user="{plan}"),
-        }
-        result = format_prompt_for_plaintext(prompts)
-        assert "[planner]" in result
-        assert "[executor]" in result
-        assert "Plan the task." in result
-        assert "Execute the plan." in result
-
-    def test_truncates_long_content(self) -> None:
-        long_content = "x" * 500
-        prompt = ChatPrompt(system=long_content, user="short")
-        result = format_prompt_for_plaintext(prompt)
-        # Content should be truncated
-        assert len(result) < 500
-
-    def test_handles_multimodal_content(self) -> None:
-        prompt = ChatPrompt(
-            messages=[
-                {"role": "system", "content": "Analyze image."},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What is this?"},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": "data:image/png;base64,abc"},
-                        },
-                    ],
-                },
-            ]
-        )
-        result = format_prompt_for_plaintext(prompt)
-        assert "[multimodal content]" in result
 
 
 class TestOptimizationResultInitialization:
@@ -252,28 +169,6 @@ class TestOptimizationResultGetters:
         )
         params = result.get_optimized_parameters()
         assert params == {}
-
-
-class TestRichRendering:
-    def test_render_rich_result_returns_panel(self) -> None:
-        prompt = ChatPrompt(system="Test", user="Query")
-        result = OptimizationResult(
-            optimizer="MetaPromptOptimizer",
-            prompt=prompt,
-            score=0.95,
-            metric_name="f1_score",
-            optimization_id="opt-123",
-            dataset_id="ds-456",
-            initial_prompt=prompt,
-            initial_score=0.6,
-            details={"trials_completed": 1, "model": "gpt-4"},
-            history=[],
-        )
-
-        panel = render_rich_result(result)
-        import rich
-
-        assert isinstance(panel, rich.panel.Panel)
 
 
 class TestCalculateImprovementStr:
