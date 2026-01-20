@@ -26,7 +26,9 @@ class TestEvolutionaryOptimizerEarlyStop:
         dataset = make_mock_dataset(
             STANDARD_DATASET_ITEMS, name="test-dataset", dataset_id="dataset-123"
         )
-        optimizer = EvolutionaryOptimizer(model="gpt-4o", perfect_score=0.95, enable_moo=False)
+        optimizer = EvolutionaryOptimizer(
+            model="gpt-4o", perfect_score=0.95, enable_moo=False
+        )
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **_kwargs: 0.96)
         monkeypatch.setattr(
@@ -69,7 +71,9 @@ class TestEvolutionaryOptimizerEarlyStop:
             max_trials=1,
         )
 
-        assert_baseline_early_stop(result, perfect_score=0.95, trials_completed=1, history_len=1)
+        assert_baseline_early_stop(
+            result, perfect_score=0.95, trials_completed=1, history_len=1
+        )
 
     def test_optimization_tracks_trials_and_rounds(
         self,
@@ -129,7 +133,8 @@ class TestEvolutionaryOptimizerEarlyStop:
         monkeypatch.setattr(
             population_ops,
             "initialize_population",
-            lambda **_kwargs: [ChatPrompt(system="s", user="u")] * optimizer.population_size,
+            lambda **_kwargs: [ChatPrompt(system="s", user="u")]
+            * optimizer.population_size,
         )
 
         prompt = ChatPrompt(system="test", user="{question}")
@@ -145,4 +150,3 @@ class TestEvolutionaryOptimizerEarlyStop:
         assert len(candidates) >= 1
         if len(candidates) == 1:
             assert candidates[0].get("id") == "fallback"
-

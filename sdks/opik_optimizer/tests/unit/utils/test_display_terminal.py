@@ -22,4 +22,3 @@ def test_render_rich_result_returns_panel() -> None:
     import rich
 
     assert isinstance(panel, rich.panel.Panel)
-

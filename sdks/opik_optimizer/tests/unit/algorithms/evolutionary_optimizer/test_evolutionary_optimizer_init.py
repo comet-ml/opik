@@ -18,9 +18,10 @@ class TestEvolutionaryOptimizerInit:
             ),
         ],
     )
-    def test_initialization(self, kwargs: dict[str, Any], expected: dict[str, Any]) -> None:
+    def test_initialization(
+        self, kwargs: dict[str, Any], expected: dict[str, Any]
+    ) -> None:
         """Test optimizer initialization with defaults and custom params."""
         optimizer = EvolutionaryOptimizer(**kwargs)
         for key, value in expected.items():
             assert getattr(optimizer, key) == value
-

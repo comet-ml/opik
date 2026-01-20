@@ -110,4 +110,3 @@ class TestEvolutionaryOptimizerOptimizePrompt:
         assert isinstance(result.score, (int, float))
         assert hasattr(result, "history")
         assert hasattr(result, "details")
-

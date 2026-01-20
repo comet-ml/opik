@@ -234,3 +234,59 @@ class TestDefaultOptimizePrompt:
         )
 
         assert result.history
+
+    def test_baseline_forwards_experiment_config(
+        self,
+        simple_chat_prompt,
+        mock_opik_client,
+        mock_metric,
+        monkeypatch,
+    ) -> None:
+        """User-provided experiment_config should be present in baseline evaluation call."""
+        mock_opik_client()
+        mock_ds = make_mock_dataset(
+            [{"id": "1", "input": "test"}],
+            name="test-dataset",
+            dataset_id="ds-123",
+        )
+
+        from typing import Any, cast
+
+        captured: dict[str, Any] = {}
+
+        class BaselineCaptureOptimizer(BaseOptimizer):
+            def run_optimization(self, context: OptimizationContext) -> AlgorithmResult:
+                # No further evaluations; we only care about baseline plumbing.
+                return AlgorithmResult(
+                    best_prompts=context.prompts,
+                    best_score=context.baseline_score or 0.0,
+                    history=[],
+                    metadata={},
+                )
+
+            def get_config(self, context: OptimizationContext):
+                _ = context
+                return {"optimizer": "BaselineCaptureOptimizer"}
+
+            def get_optimizer_metadata(self):
+                return {}
+
+        optimizer = BaselineCaptureOptimizer(model="gpt-4", perfect_score=0.95)
+
+        def fake_evaluate_prompt(**kwargs):
+            captured["experiment_config"] = kwargs.get("experiment_config")
+            return 0.1
+
+        monkeypatch.setattr(optimizer, "evaluate_prompt", fake_evaluate_prompt)
+
+        optimizer.optimize_prompt(
+            prompt=simple_chat_prompt,
+            dataset=mock_ds,
+            metric=mock_metric,
+            max_trials=1,
+            experiment_config={"test_key": "test_value"},
+        )
+
+        assert isinstance(captured.get("experiment_config"), dict)
+        experiment_config = cast(dict[str, Any], captured["experiment_config"])
+        assert experiment_config["test_key"] == "test_value"

@@ -3,6 +3,8 @@
 # mypy: disable-error-code=no-untyped-def
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
@@ -178,3 +180,47 @@ class TestSkipAndResultHelpers:
         assert result.initial_score == 0.75
         assert result.history == []
         assert result.details["stopped_early"] is True
+
+
+class TestMetricRequiredFields:
+    """Tests for metric.required_fields validation on the evaluation dataset."""
+
+    @pytest.fixture
+    def optimizer(self) -> ConcreteOptimizer:
+        return ConcreteOptimizer(model="gpt-4")
+
+    def test_required_fields_enforced_on_validation_dataset_when_provided(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt,
+        mock_opik_client,
+    ) -> None:
+        """Metrics with required_fields should be validated against evaluation dataset (validation split)."""
+        mock_opik_client()
+        training_ds = make_mock_dataset(
+            [{"id": "1", "question": "Q1", "answer": "A1"}],
+            name="training",
+            dataset_id="train-123",
+        )
+        # Missing the required "answer" field on the evaluation dataset
+        validation_ds = make_mock_dataset(
+            [{"id": "2", "question": "Q2"}],
+            name="validation",
+            dataset_id="val-123",
+        )
+
+        def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+            _ = dataset_item, llm_output
+            return 0.0
+
+        metric_fn.__name__ = "metric_with_required_fields"
+        metric_fn.required_fields = ("answer",)  # type: ignore[attr-defined]
+
+        with pytest.raises(ValueError, match="requires dataset fields"):
+            optimizer._setup_optimization(
+                prompt=simple_chat_prompt,
+                dataset=training_ds,
+                metric=metric_fn,  # type: ignore[arg-type]
+                compute_baseline=False,
+                validation_dataset=validation_ds,
+            )

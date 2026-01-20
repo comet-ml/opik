@@ -40,7 +40,8 @@ def test_uses_validation_dataset_when_provided(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         population_ops,
         "initialize_population",
-        lambda **_kwargs: [ChatPrompt(system="s", user="u")] * optimizer.population_size,
+        lambda **_kwargs: [ChatPrompt(system="s", user="u")]
+        * optimizer.population_size,
     )
 
     prompt = ChatPrompt(system="test", user="{question}")
@@ -79,7 +80,8 @@ def test_validation_dataset_sets_history_split(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         population_ops,
         "initialize_population",
-        lambda **_kwargs: [ChatPrompt(system="s", user="u")] * optimizer.population_size,
+        lambda **_kwargs: [ChatPrompt(system="s", user="u")]
+        * optimizer.population_size,
     )
 
     prompt = ChatPrompt(system="test", user="{question}")
@@ -94,4 +96,3 @@ def test_validation_dataset_sets_history_split(monkeypatch: pytest.MonkeyPatch) 
     assert result.history
     first_round = result.history[0]
     assert first_round.get("dataset_split") == "validation"
-

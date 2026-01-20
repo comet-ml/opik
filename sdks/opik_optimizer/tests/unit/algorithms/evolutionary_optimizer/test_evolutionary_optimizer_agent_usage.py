@@ -37,7 +37,9 @@ class TestEvolutionaryOptimizerAgentUsage:
 
         def mock_evaluate(_context, *args, **kwargs):
             _ = (args, kwargs)
-            agent_set_during_eval[0] = hasattr(optimizer, "agent") and optimizer.agent is not None
+            agent_set_during_eval[0] = (
+                hasattr(optimizer, "agent") and optimizer.agent is not None
+            )
             return 0.6
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **_kwargs: 0.5)
@@ -57,9 +59,11 @@ class TestEvolutionaryOptimizerAgentUsage:
             pass
 
         assert hasattr(optimizer, "agent")
-        assert agent_set_during_eval[0], "optimizer.agent should be set during evaluation"
+        assert agent_set_during_eval[0], (
+            "optimizer.agent should be set during evaluation"
+        )
 
-    def test_agent_set_inpre_optimize(self, monkeypatch) -> None:
+    def test_agent_set_in_pre_optimize(self, monkeypatch) -> None:
         """
         Verify that self.agent is set during pre_optimize.
 
@@ -85,4 +89,3 @@ class TestEvolutionaryOptimizerAgentUsage:
 
         assert hasattr(optimizer, "agent"), "pre_optimize should set self.agent"
         assert optimizer.agent is mock_agent, "self.agent should be context.agent"
-

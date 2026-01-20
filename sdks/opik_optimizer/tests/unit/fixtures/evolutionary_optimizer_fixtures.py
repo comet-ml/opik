@@ -13,11 +13,17 @@ import pytest
 
 from opik_optimizer import EvolutionaryOptimizer
 from opik_optimizer.api_objects import chat_prompt
-from opik_optimizer.algorithms.evolutionary_optimizer.ops import crossover_ops, mutation_ops
+from opik_optimizer.algorithms.evolutionary_optimizer.ops import (
+    crossover_ops,
+    mutation_ops,
+)
+from opik_optimizer.core.state import OptimizationContext
 from opik_optimizer.core.state import AlgorithmResult
 
 
-def _should_apply_evolutionary_optimizer_shortcuts(request: pytest.FixtureRequest) -> bool:
+def _should_apply_evolutionary_optimizer_shortcuts(
+    request: pytest.FixtureRequest,
+) -> bool:
     # Only apply to EvolutionaryOptimizer *algorithm* tests, not the underlying ops
     # tests (which need real llm/semantic behavior to be testable).
     return "test_evolutionary_optimizer" in request.node.nodeid
@@ -66,7 +72,7 @@ def _minimize_generation_work(
         return
 
     def _fast_run_generation(
-        self,
+        self: EvolutionaryOptimizer,
         generation_idx: int,
         population: list[Any],
         initial_prompts: dict[str, chat_prompt.ChatPrompt],
@@ -92,8 +98,12 @@ def _fast_run_optimization(
     if not _should_apply_evolutionary_optimizer_shortcuts(request):
         return
 
-    def _run_optimization(self, context):  # type: ignore[no-untyped-def]
-        self._test_context = context
+    def _run_optimization(
+        self: EvolutionaryOptimizer, context: OptimizationContext
+    ) -> AlgorithmResult:
+        # Stored for `_fast_run_generation` trial accounting.
+        # Use setattr to avoid introducing a real attribute on the class.
+        setattr(self, "_test_context", context)
         if context.validation_dataset is not None:
             context.evaluation_dataset = context.validation_dataset
 
@@ -113,17 +123,19 @@ def _fast_run_optimization(
 
 
 @pytest.fixture(autouse=True)
-def _fast_evaluate(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+def _fast_evaluate(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
     """Skip display/stop checks while still calling evaluate_prompt."""
     if not _should_apply_evolutionary_optimizer_shortcuts(request):
         return
 
-    def _evaluate(  # type: ignore[no-untyped-def]
-        self,
-        context,
-        prompts,
-        experiment_config=None,
-    ):
+    def _evaluate(
+        self: EvolutionaryOptimizer,
+        context: OptimizationContext,
+        prompts: Any,
+        experiment_config: dict[str, Any] | None = None,
+    ) -> float:
         score = self.evaluate_prompt(
             prompt=prompts,
             dataset=context.evaluation_dataset,
@@ -136,10 +148,12 @@ def _fast_evaluate(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureReque
         )
         coerced_score = self._coerce_score(score)
         context.trials_completed += 1
-        if context.current_best_score is None or coerced_score > context.current_best_score:
+        if (
+            context.current_best_score is None
+            or coerced_score > context.current_best_score
+        ):
             context.current_best_score = coerced_score
             context.current_best_prompt = prompts
         return coerced_score
 
     monkeypatch.setattr(EvolutionaryOptimizer, "evaluate", _evaluate)
-

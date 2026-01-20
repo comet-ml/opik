@@ -1,9 +1,11 @@
 """Tests for evolutionary optimizer population_ops module."""
 
-import pytest
 import json
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock
+
+import pytest
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops import (
@@ -13,23 +15,32 @@ from opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops import 
 from tests.unit.test_helpers import make_fake_llm_call
 
 
+@pytest.fixture
+def initializing_population_context(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
+    """Patch the reporting context manager used by initialize_population()."""
+    mock_report = MagicMock()
+    mock_context = MagicMock()
+    mock_context.__enter__ = MagicMock(return_value=mock_report)
+    mock_context.__exit__ = MagicMock(return_value=False)
+
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops.reporting.initializing_population",
+        lambda verbose=0, **_kwargs: mock_context,
+    )
+    return mock_report
+
+
 class TestInitializePopulation:
     """Tests for initialize_population function."""
 
     def test_returns_single_prompt_for_population_size_1(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        evo_prompts: Any,
+        initializing_population_context: MagicMock,
     ) -> None:
         """Should return just the initial prompt when population_size is 1."""
-        # Mock the reporting context manager
-        mock_report = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__ = MagicMock(return_value=mock_report)
-        mock_context.__exit__ = MagicMock(return_value=False)
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops.reporting.initializing_population",
-            lambda verbose: mock_context,
-        )
+        _ = initializing_population_context
 
         prompt = ChatPrompt(system="Test prompt", user="{input}")
 
@@ -48,20 +59,14 @@ class TestInitializePopulation:
         assert result[0] is prompt
 
     def test_generates_fresh_start_prompts(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+        self,
+        evo_prompts: Any,
+        initializing_population_context: MagicMock,
+        mock_llm_sequence: Callable[[list[Any]], dict[str, Any]],
     ) -> None:
         """Should generate fresh start prompts as part of population."""
-        mock_report = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__ = MagicMock(return_value=mock_report)
-        mock_context.__exit__ = MagicMock(return_value=False)
+        _ = initializing_population_context
 
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops.reporting.initializing_population",
-            lambda verbose: mock_context,
-        )
-
-        # Mock LLM to return fresh prompts
         fresh_response = json.dumps(
             [
                 [
@@ -89,15 +94,7 @@ class TestInitializePopulation:
             }
         )
 
-        call_count = {"n": 0}
-
-        def fake_call_model(**kwargs: object) -> str:
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return fresh_response
-            return variation_response
-
-        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
+        mock_llm_sequence([fresh_response, variation_response])
 
         prompt = ChatPrompt(system="Original prompt", user="{input}")
 
@@ -116,18 +113,13 @@ class TestInitializePopulation:
         assert len(result) >= 1
 
     def test_handles_llm_error_for_fresh_starts(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        evo_prompts: Any,
+        initializing_population_context: MagicMock,
     ) -> None:
         """Should handle LLM errors gracefully when generating fresh starts."""
-        mock_report = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__ = MagicMock(return_value=mock_report)
-        mock_context.__exit__ = MagicMock(return_value=False)
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops.reporting.initializing_population",
-            lambda verbose: mock_context,
-        )
+        _ = initializing_population_context
 
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
@@ -152,18 +144,13 @@ class TestInitializePopulation:
         assert result[0] is prompt
 
     def test_handles_json_decode_error(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        evo_prompts: Any,
+        initializing_population_context: MagicMock,
     ) -> None:
         """Should handle invalid JSON responses from LLM."""
-        mock_report = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__ = MagicMock(return_value=mock_report)
-        mock_context.__exit__ = MagicMock(return_value=False)
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops.reporting.initializing_population",
-            lambda verbose: mock_context,
-        )
+        _ = initializing_population_context
 
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
@@ -187,18 +174,13 @@ class TestInitializePopulation:
         assert len(result) >= 1
 
     def test_generates_variations_on_initial_prompt(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+        self,
+        evo_prompts: Any,
+        initializing_population_context: MagicMock,
+        mock_llm_sequence: Callable[[list[Any]], dict[str, Any]],
     ) -> None:
         """Should generate variations of the initial prompt."""
-        mock_report = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__ = MagicMock(return_value=mock_report)
-        mock_context.__exit__ = MagicMock(return_value=False)
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops.reporting.initializing_population",
-            lambda verbose: mock_context,
-        )
+        _ = initializing_population_context
 
         # Mock LLM responses
         fresh_response = json.dumps(
@@ -234,15 +216,7 @@ class TestInitializePopulation:
             }
         )
 
-        call_count = {"n": 0}
-
-        def fake_call_model(**kwargs: object) -> str:
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return fresh_response
-            return variation_response
-
-        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
+        mock_llm_sequence([fresh_response, variation_response])
 
         prompt = ChatPrompt(system="Original", user="{q}")
 
@@ -260,18 +234,13 @@ class TestInitializePopulation:
         assert len(result) >= 1
 
     def test_deduplicates_population(
-        self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
+        self,
+        evo_prompts: Any,
+        initializing_population_context: MagicMock,
+        mock_llm_sequence: Callable[[list[Any]], dict[str, Any]],
     ) -> None:
         """Should remove duplicate prompts from the population."""
-        mock_report = MagicMock()
-        mock_context = MagicMock()
-        mock_context.__enter__ = MagicMock(return_value=mock_report)
-        mock_context.__exit__ = MagicMock(return_value=False)
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops.reporting.initializing_population",
-            lambda verbose: mock_context,
-        )
+        _ = initializing_population_context
 
         # Return identical prompts
         same_messages = [
@@ -283,15 +252,7 @@ class TestInitializePopulation:
             {"prompts": [{"prompt": same_messages}, {"prompt": same_messages}]}
         )
 
-        call_count = {"n": 0}
-
-        def fake_call_model(**kwargs: object) -> str:
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                return fresh_response
-            return variation_response
-
-        monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
+        mock_llm_sequence([fresh_response, variation_response])
 
         prompt = ChatPrompt(messages=same_messages)
 
