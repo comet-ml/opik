@@ -64,6 +64,7 @@ class OptimizableAgent(ABC):
     optimizer: Any | None = None
     project_name: str | None = None
     trace_metadata: dict[str, Any] | None = None
+    trace_phase: str = "Prompt Optimization"
 
     def __init__(
         self,
@@ -80,6 +81,7 @@ class OptimizableAgent(ABC):
             **kwargs: Additional keyword arguments (for abstract interface compatibility).
         """
         self.project_name = resolve_project_name(project_name)
+        self.trace_phase = "Prompt Optimization"
         if prompt is not None:
             # TODO: Deprecate legacy API initialization pattern. Prefer using invoke_agent() directly.
             # Legacy API: initialize with prompt
@@ -169,6 +171,14 @@ class OptimizableAgent(ABC):
 
         if query is not None:
             all_messages.append({"role": "user", "content": query})
+
+        optimizer_ref = self.optimizer
+        phase = self.trace_phase or "Prompt Optimization"
+        if optimizer_ref is not None and hasattr(optimizer_ref, "_tag_trace"):
+            try:
+                optimizer_ref._tag_trace(phase=phase)
+            except Exception:
+                pass
 
         # Push trace metadata for better visibility (tools/LLM logs in Opik)
         try:

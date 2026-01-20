@@ -261,6 +261,7 @@ def run_generation(
                         output_style_guidance=optimizer.output_style_guidance,
                         model=optimizer.model,
                         model_parameters=optimizer.model_parameters,
+                        use_semantic=optimizer.enable_semantic_crossover,
                         verbose=optimizer.verbose,
                         prompts=optimizer._prompts,
                     )

@@ -61,15 +61,37 @@ def compute_adaptive_mutation_rate(
     else:
         generations_without_improvement = 0
 
+    base_rate = current_rate
+    diversity_bonus = 0.0
+    if current_diversity < diversity_threshold:
+        diversity_gap = diversity_threshold - current_diversity
+        diversity_bonus = diversity_gap * 0.5
+        logger.debug(
+            "Low diversity detected (%.3f), diversity_bonus=%.3f",
+            current_diversity,
+            diversity_bonus,
+        )
+
     if generations_without_improvement >= restart_generations:
-        return min(current_rate * 2.5, max_rate), generations_without_improvement
-    if recent_improvement < 0.01 and current_diversity < diversity_threshold:
-        return min(current_rate * 2.0, max_rate), generations_without_improvement
-    if recent_improvement < 0.01:
-        return min(current_rate * 1.5, max_rate), generations_without_improvement
-    if recent_improvement > 0.05:
-        return max(current_rate * 0.8, min_rate), generations_without_improvement
-    return current_rate, generations_without_improvement
+        adjusted_rate = min(base_rate * 2.5 + diversity_bonus, max_rate)
+    elif recent_improvement < 0.01 and current_diversity < diversity_threshold:
+        adjusted_rate = min(base_rate * 2.0 + diversity_bonus, max_rate)
+    elif recent_improvement < 0.01:
+        adjusted_rate = min(base_rate * 1.5 + diversity_bonus * 0.5, max_rate)
+    elif recent_improvement > 0.05:
+        adjusted_rate = max(base_rate * 0.8 + diversity_bonus * 0.3, min_rate)
+    else:
+        adjusted_rate = min(base_rate + diversity_bonus, max_rate)
+
+    if adjusted_rate != base_rate:
+        logger.debug(
+            "Adaptive mutation: base=%.3f adjusted=%.3f diversity=%.3f",
+            base_rate,
+            adjusted_rate,
+            current_diversity,
+        )
+
+    return adjusted_rate, generations_without_improvement
 
 
 def _get_synonym(

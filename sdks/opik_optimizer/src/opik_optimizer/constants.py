@@ -95,10 +95,21 @@ EVOLUTIONARY_DEFAULT_RESTART_GENERATIONS = 3
 EVOLUTIONARY_DEFAULT_EARLY_STOPPING_GENERATIONS = 5
 EVOLUTIONARY_DEFAULT_ENABLE_MOO = True
 EVOLUTIONARY_DEFAULT_ENABLE_LLM_CROSSOVER = True
+EVOLUTIONARY_DEFAULT_ENABLE_SEMANTIC_CROSSOVER = False
 EVOLUTIONARY_DEFAULT_OUTPUT_STYLE_GUIDANCE = (
     "Produce clear, effective, and high-quality responses suitable for the task."
 )
 EVOLUTIONARY_DEFAULT_MOO_WEIGHTS = (1.0, -1.0)
+
+# Optimizer short names for tagging.
+OPTIMIZER_SHORT_NAMES = {
+    "GepaOptimizer": "GEPA",
+    "EvolutionaryOptimizer": "EVGO",
+    "FewShotBayesianOptimizer": "FSBO",
+    "HierarchicalReflectiveOptimizer": "HRPO",
+    "MetaPromptOptimizer": "MEPO",
+    "ParameterOptimizer": "PARAM",
+}
 
 
 def is_optimization_studio() -> bool:

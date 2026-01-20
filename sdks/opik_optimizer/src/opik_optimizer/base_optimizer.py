@@ -24,6 +24,7 @@ from .api_objects import chat_prompt
 from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
 from .constants import (
+    OPTIMIZER_SHORT_NAMES,
     resolve_project_name,
     normalize_eval_threads,
 )
@@ -58,7 +59,6 @@ except importlib.metadata.PackageNotFoundError:  # pragma: no cover - dev instal
 class BaseOptimizer(ABC):
     # Subclasses define their prompts here
     DEFAULT_PROMPTS: dict[str, str] = {}
-
     # ------------------------------------------------------------------
     # Input validation & setup
     # ------------------------------------------------------------------
@@ -136,6 +136,34 @@ class BaseOptimizer(ABC):
     def prompts(self) -> PromptLibrary:
         """Access the prompt library for this optimizer."""
         return self._prompts
+
+    def _get_optimizer_short_name(self) -> str:
+        """Get the short name for this optimizer class for tagging."""
+        class_name = self.__class__.__name__
+        return OPTIMIZER_SHORT_NAMES.get(class_name, class_name)
+
+    def _tag_trace(
+        self, phase: str | None = "Evaluation", extra_tags: list[str] | None = None
+    ) -> None:
+        """Best-effort trace tagging for optimizer evaluation."""
+        if not self.current_optimization_id:
+            return
+        tags = [self._get_optimizer_short_name(), self.current_optimization_id]
+        if phase:
+            tags.append(phase)
+        if extra_tags:
+            tags.extend(extra_tags)
+        try:
+            opik_context.update_current_trace(tags=tags)
+        except Exception:
+            pass
+
+    def _update_trace_metadata(self, metadata: dict[str, Any]) -> None:
+        """Best-effort trace metadata update."""
+        try:
+            opik_context.update_current_trace(metadata=metadata)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Stopping & early-stop logic
@@ -249,8 +277,21 @@ class BaseOptimizer(ABC):
         # TODO: Refactor _attach_agent_owner to keep this inside core/llm_calls.py?
         try:
             setattr(agent, "_optimizer_owner", self)
+            setattr(agent, "optimizer", self)
+            if getattr(agent, "trace_phase", None) is None:
+                setattr(agent, "trace_phase", "Prompt Optimization")
         except Exception:
             pass
+
+    def _set_agent_trace_phase(self, agent: OptimizableAgent, phase: str) -> None:
+        """Best-effort setter for agent trace tagging phase."""
+        try:
+            agent.trace_phase = phase  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive for custom agents
+            logger.debug(
+                "Unable to set trace_phase on agent instance of %s",
+                agent.__class__.__name__,
+            )
 
     # ------------------------------------------------------------------
     # Input normalization & validation
@@ -1529,6 +1570,7 @@ class BaseOptimizer(ABC):
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
+        self._set_agent_trace_phase(agent, "Evaluation")
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             # Let the agent push usage/cost counters back into this optimizer.
@@ -1591,21 +1633,18 @@ class BaseOptimizer(ABC):
                             selection_result.candidate_logprobs,
                         )
 
-                    try:
-                        opik_context.update_current_trace(
-                            metadata={
-                                "opik_optimizer": {
-                                    "selection_policy": selection_result.policy,
-                                    "n_requested": requested_n,
-                                    "candidates_scored": len(candidates),
-                                    "candidate_scores": selection_result.candidate_scores,
-                                    "candidate_logprobs": selection_result.candidate_logprobs,
-                                    "chosen_index": selection_result.chosen_index,
-                                }
+                    self._update_trace_metadata(
+                        {
+                            "opik_optimizer": {
+                                "selection_policy": selection_result.policy,
+                                "n_requested": requested_n,
+                                "candidates_scored": len(candidates),
+                                "candidate_scores": selection_result.candidate_scores,
+                                "candidate_logprobs": selection_result.candidate_logprobs,
+                                "chosen_index": selection_result.chosen_index,
                             }
-                        )
-                    except Exception:
-                        pass
+                        }
+                    )
             else:
                 raw_model_output = agent.invoke_agent(
                     prompts=prompts_dict,
@@ -1614,11 +1653,7 @@ class BaseOptimizer(ABC):
                 )
                 cleaned_model_output = raw_model_output.strip()
 
-            # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
-                )
+            self._tag_trace(phase="Evaluation")
 
             result = {
                 "llm_output": cleaned_model_output,

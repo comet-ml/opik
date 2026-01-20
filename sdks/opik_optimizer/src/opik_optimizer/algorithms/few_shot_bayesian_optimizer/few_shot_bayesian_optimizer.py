@@ -10,7 +10,7 @@ import optuna
 import optuna.samplers
 import optuna.pruners
 
-from opik import Dataset, opik_context
+from opik import Dataset
 
 from ... import base_optimizer
 from ...core import llm_calls as _llm_calls
@@ -799,6 +799,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         few_shot_examples: str,
         allow_tool_use: bool | None = None,
     ) -> Callable[[dict[str, Any]], dict[str, Any]]:
+        self._set_agent_trace_phase(agent, "Evaluation")
+
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             """
             Process a single dataset item through the LLM task.
@@ -830,11 +832,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 allow_tool_use=bool(effective_allow_tool_use),
             )
 
-            # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
-                )
+            self._tag_trace(phase="Evaluation")
 
             return {"llm_output": result}
 

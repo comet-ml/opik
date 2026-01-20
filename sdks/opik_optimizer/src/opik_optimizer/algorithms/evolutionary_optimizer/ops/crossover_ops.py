@@ -195,6 +195,48 @@ def _llm_crossover_messages(
     return first_child_messages, second_child_messages
 
 
+def _semantic_crossover_messages(
+    messages_1: list[dict[str, Any]],
+    messages_2: list[dict[str, Any]],
+    output_style_guidance: str,
+    model: str,
+    model_parameters: dict[str, Any],
+    prompts: PromptLibrary,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Apply semantic LLM-based crossover to a single prompt's messages."""
+    user_prompt_for_semantic_crossover = prompts.get(
+        "semantic_crossover_user_prompt_template",
+        parent1_messages=messages_1,
+        parent2_messages=messages_2,
+        style=output_style_guidance,
+    )
+
+    response = _llm_calls.call_model(
+        messages=[
+            {
+                "role": "system",
+                "content": prompts.get(
+                    "semantic_crossover_system_prompt_template",
+                    style=output_style_guidance,
+                ),
+            },
+            {"role": "user", "content": user_prompt_for_semantic_crossover},
+        ],
+        model=model,
+        model_parameters=model_parameters,
+        response_model=CrossoverResponse,
+        is_reasoning=True,
+        return_all=_llm_calls.requested_multiple_candidates(model_parameters),
+    )
+
+    response_item = response[0] if isinstance(response, list) else response
+
+    first_child_messages = [msg.model_dump() for msg in response_item.child_1]
+    second_child_messages = [msg.model_dump() for msg in response_item.child_2]
+
+    return first_child_messages, second_child_messages
+
+
 def llm_deap_crossover(
     ind1: Any,
     ind2: Any,
@@ -202,6 +244,7 @@ def llm_deap_crossover(
     model: str,
     model_parameters: dict[str, Any],
     prompts: PromptLibrary,
+    use_semantic: bool = False,
     verbose: int = 1,
 ) -> tuple[Any, Any]:
     """Perform crossover by asking an LLM to blend two parent prompts.
@@ -230,14 +273,41 @@ def llm_deap_crossover(
                 )
 
                 try:
-                    child1_messages, child2_messages = _llm_crossover_messages(
-                        messages_1,
-                        messages_2,
-                        output_style_guidance,
-                        model,
-                        model_parameters,
-                        prompts=prompts,
-                    )
+                    if use_semantic:
+                        try:
+                            child1_messages, child2_messages = (
+                                _semantic_crossover_messages(
+                                    messages_1,
+                                    messages_2,
+                                    output_style_guidance,
+                                    model,
+                                    model_parameters,
+                                    prompts=prompts,
+                                )
+                            )
+                        except (StructuredOutputParsingError, Exception) as e:
+                            logger.debug(
+                                "Semantic crossover failed for prompt '%s': %s",
+                                prompt_name,
+                                e,
+                            )
+                            child1_messages, child2_messages = _llm_crossover_messages(
+                                messages_1,
+                                messages_2,
+                                output_style_guidance,
+                                model,
+                                model_parameters,
+                                prompts=prompts,
+                            )
+                    else:
+                        child1_messages, child2_messages = _llm_crossover_messages(
+                            messages_1,
+                            messages_2,
+                            output_style_guidance,
+                            model,
+                            model_parameters,
+                            prompts=prompts,
+                        )
                     child1_data[prompt_name] = child1_messages
                     child2_data[prompt_name] = child2_messages
                 except (StructuredOutputParsingError, Exception) as e:

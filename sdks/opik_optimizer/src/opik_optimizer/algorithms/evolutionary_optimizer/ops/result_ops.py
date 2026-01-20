@@ -140,6 +140,7 @@ def build_algorithm_result(
         ),
         "adaptive_mutation": optimizer.adaptive_mutation,
         "llm_crossover_enabled": optimizer.enable_llm_crossover,
+        "semantic_crossover_enabled": optimizer.enable_semantic_crossover,
         "seed": optimizer.seed,
         "user_output_style_guidance": optimizer.output_style_guidance,
         "infer_output_style": optimizer.infer_output_style,

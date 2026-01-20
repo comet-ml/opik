@@ -39,6 +39,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         trace_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.project_name = resolve_project_name(project_name)
+        self.trace_phase = "Prompt Optimization"
         self._warned_no_logprobs = False
         self.init_llm()
 
@@ -132,6 +133,10 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
 
     def _update_trace_metadata(self) -> None:
         try:
+            optimizer_ref = getattr(self, "_optimizer_owner", None)
+            phase = getattr(self, "trace_phase", None) or "Prompt Optimization"
+            if optimizer_ref is not None and hasattr(optimizer_ref, "_tag_trace"):
+                optimizer_ref._tag_trace(phase=phase)
             opik_context.update_current_trace(metadata=self.trace_metadata)
         except Exception:
             pass
@@ -295,10 +300,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
 
         all_messages = self._prepare_messages(all_messages, dataset_item)
 
-        try:
-            opik_context.update_current_trace(metadata=self.trace_metadata)
-        except Exception:
-            pass
+        self._update_trace_metadata()
 
         response = self._llm_complete(
             model=prompt.model,

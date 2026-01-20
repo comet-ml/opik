@@ -66,6 +66,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         adaptive_mutation: Whether to use adaptive mutation that adjusts based on population diversity
         enable_moo: Whether to enable multi-objective optimization (optimizes metric and prompt length)
         enable_llm_crossover: Whether to enable LLM-based crossover operations
+        enable_semantic_crossover: Whether to use semantic crossover before standard LLM crossover
         output_style_guidance: Optional guidance for output style in generated prompts
         infer_output_style: Whether to automatically infer output style from the dataset
         n_threads: Number of threads for parallel evaluation
@@ -87,6 +88,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
     DEFAULT_RESTART_THRESHOLD = constants.EVOLUTIONARY_DEFAULT_RESTART_THRESHOLD
     DEFAULT_RESTART_GENERATIONS = constants.EVOLUTIONARY_DEFAULT_RESTART_GENERATIONS
     DEFAULT_DIVERSITY_THRESHOLD = constants.EVOLUTIONARY_DEFAULT_DIVERSITY_THRESHOLD
+    DEFAULT_ENABLE_SEMANTIC_CROSSOVER = (
+        constants.EVOLUTIONARY_DEFAULT_ENABLE_SEMANTIC_CROSSOVER
+    )
 
     # Prompt templates for this optimizer
     # Keys match what ops files expect (e.g., prompts.get("infer_style_system_prompt"))
@@ -103,6 +107,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         "variation_user_prompt_template": evo_prompts.VARIATION_USER_PROMPT_TEMPLATE,
         "llm_crossover_system_prompt_template": evo_prompts.LLM_CROSSOVER_SYSTEM_PROMPT_TEMPLATE,
         "llm_crossover_user_prompt_template": evo_prompts.LLM_CROSSOVER_USER_PROMPT_TEMPLATE,
+        "semantic_crossover_system_prompt_template": evo_prompts.SEMANTIC_CROSSOVER_SYSTEM_PROMPT_TEMPLATE,
+        "semantic_crossover_user_prompt_template": evo_prompts.SEMANTIC_CROSSOVER_USER_PROMPT_TEMPLATE,
         "radical_innovation_system_prompt_template": evo_prompts.RADICAL_INNOVATION_SYSTEM_PROMPT_TEMPLATE,
         "radical_innovation_user_prompt_template": evo_prompts.RADICAL_INNOVATION_USER_PROMPT_TEMPLATE,
         "mutation_strategy_rephrase": evo_prompts.MUTATION_STRATEGY_REPHRASE,
@@ -125,6 +131,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             "generations": self.num_generations,
             "mutation_rate": self.mutation_rate,
             "crossover_rate": self.crossover_rate,
+            "semantic_crossover": self.enable_semantic_crossover,
         }
 
     def get_metadata(self, context: OptimizationContext) -> dict[str, Any]:
@@ -139,6 +146,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             "mutation_rate": self.mutation_rate,
             "crossover_rate": self.crossover_rate,
             "enable_moo": self.enable_moo,
+            "enable_semantic_crossover": self.enable_semantic_crossover,
         }
 
     def _finalize_finish_reason(self, context: OptimizationContext) -> None:
@@ -191,6 +199,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
         adaptive_mutation: bool = constants.EVOLUTIONARY_DEFAULT_ADAPTIVE_MUTATION,
         enable_moo: bool = constants.EVOLUTIONARY_DEFAULT_ENABLE_MOO,
         enable_llm_crossover: bool = constants.EVOLUTIONARY_DEFAULT_ENABLE_LLM_CROSSOVER,
+        enable_semantic_crossover: bool = (
+            constants.EVOLUTIONARY_DEFAULT_ENABLE_SEMANTIC_CROSSOVER
+        ),
         output_style_guidance: str | None = None,
         infer_output_style: bool = False,
         n_threads: int = constants.DEFAULT_NUM_THREADS,
@@ -231,6 +242,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self.adaptive_mutation = adaptive_mutation
         self.enable_moo = enable_moo
         self.enable_llm_crossover = enable_llm_crossover
+        self.enable_semantic_crossover = enable_semantic_crossover
         self.seed = seed
         self.selection_policy = "tournament"
         self.output_style_guidance = (

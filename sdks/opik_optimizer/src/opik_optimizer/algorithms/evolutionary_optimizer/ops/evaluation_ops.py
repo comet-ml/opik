@@ -8,7 +8,6 @@ from .... import helpers
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
 import opik
-from opik import opik_context  # noqa: F401 - used in llm_task closure
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .. import evolutionary_optimizer  # noqa: F401
@@ -99,6 +98,7 @@ def evaluate_bundle(
         raise ValueError("EvolutionaryOptimizer requires an agent to run evaluations.")
 
     agent = optimizer.agent
+    optimizer._set_agent_trace_phase(agent, "Evaluation")
 
     def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
         # Pass full bundle to the agent
@@ -107,14 +107,7 @@ def evaluate_bundle(
             dataset_item=dataset_item,
         )
 
-        # Add tags to trace for optimization tracking
-        if (
-            hasattr(optimizer, "current_optimization_id")
-            and optimizer.current_optimization_id
-        ):
-            opik_context.update_current_trace(
-                tags=[optimizer.current_optimization_id, "Evaluation", "Bundle"]
-            )
+        optimizer._tag_trace(phase="Evaluation", extra_tags=["Bundle"])
 
         return {"llm_output": model_output}
 
