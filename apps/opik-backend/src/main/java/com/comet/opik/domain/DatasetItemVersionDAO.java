@@ -2873,7 +2873,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return asyncTemplate.stream(connection -> {
             var statement = connection.createStatement(query);
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+            // Note: We don't use bindWorkspaceIdToFlux here because workspace_id is explicitly
+            // included in the query tuples. This is a cross-workspace migration query.
+            return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, rowMetadata) -> {
                         String versionIdStr = row.get("dataset_version_id", String.class);
