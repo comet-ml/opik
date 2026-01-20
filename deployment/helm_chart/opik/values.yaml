@@ -234,6 +234,11 @@ component:
       # OPTSTUDIO_EXECUTION_TIMEOUT: "7200"
       # TTL for optimization logs in Redis in seconds (default: 86400 = 24 hours)
       # OPTSTUDIO_LOG_REDIS_TTL: "86400"
+      # Default max output tokens for optimizer LLM calls (default: 8192)
+      # Prevents truncation of structured JSON outputs from LLM
+      # OPTSTUDIO_LLM_MAX_TOKENS: "8192"
+      # TTL for failed RQ jobs in Redis in seconds (default: 86400 = 1 day)
+      # RQ_WORKER_TTL_FAILURE: "86400"
     
     # Optional: Reference external Kubernetes secrets for sensitive configuration
     # Use this to inject LLM API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
@@ -338,6 +343,8 @@ component:
     maps: []
     # use internal aws resolvr on vpc
     awsResolver: false
+    # Enable HSTS header (only enable when running behind HTTPS termination)
+    hstsEnabled: false
     upstreamConfig: {}
       # proxy_read_timeout: 60
       # proxy_connect_timeout: 60
@@ -418,6 +425,7 @@ redis:
     size: 8Gi
 
 altinity-clickhouse-operator:
+  enabled: true
   metrics:
     enabled: false
   serviceMonitor:

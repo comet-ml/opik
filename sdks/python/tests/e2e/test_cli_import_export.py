@@ -909,3 +909,261 @@ class TestCLIImportExport:
         assert (
             stats.get("projects", 0) >= 1
         ), "Expected at least 1 project to be imported"
+
+    def test_export_import_llm_span_preserves_type_and_usage(
+        self,
+        opik_client: opik.Opik,
+        test_data_dir: Path,
+    ) -> None:
+        """Test that LLM span type and usage data (including non-standard tokens) are preserved during import/export.
+
+        This test verifies that:
+        1. Span type="llm" is preserved after import
+        2. Usage data with non-standard tokens (e.g., cached_tokens, reasoning_tokens) is preserved
+        3. Cost is calculated by the backend based on usage
+        """
+        # Create a unique project name for this test
+        project_name = f"cli-test-llm-span-{random_chars()}"
+
+        # Create a trace with an LLM span that has usage with non-standard tokens
+        # Using OpenAI format with detailed token breakdown that affects cost calculation
+        llm_usage = {
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "total_tokens": 150,
+            # Non-standard tokens that some providers track and use for cost calculation
+            "completion_tokens_details": {
+                "reasoning_tokens": 20,  # Used in o1 models
+                "audio_tokens": 0,
+                "accepted_prediction_tokens": 0,
+                "rejected_prediction_tokens": 0,
+            },
+            "prompt_tokens_details": {
+                "cached_tokens": 25,  # Cached tokens have different pricing
+                "audio_tokens": 0,
+            },
+        }
+
+        # Create trace
+        trace = opik_client.trace(
+            name="test-llm-trace",
+            input={"prompt": "What is the capital of France?"},
+            output={"response": "Paris"},
+            project_name=project_name,
+        )
+
+        # Create LLM span with type="llm", usage, model, and provider
+        span = opik_client.span(
+            trace_id=trace.id,
+            name="llm-call",
+            type="llm",
+            input={
+                "messages": [
+                    {"role": "user", "content": "What is the capital of France?"}
+                ]
+            },
+            output={"content": "Paris"},
+            usage=llm_usage,
+            model="gpt-4o-mini",
+            provider="openai",
+            project_name=project_name,
+        )
+
+        original_span_id = span.id
+        opik_client.flush()
+
+        # Wait for data to be available and get original span data
+        import time
+
+        time.sleep(2)  # Give backend time to process and calculate cost
+
+        original_span_data = opik_client.get_span_content(id=original_span_id)
+        assert original_span_data is not None, "Failed to get original span data"
+        assert (
+            original_span_data.type == "llm"
+        ), f"Original span type should be 'llm', got {original_span_data.type}"
+        assert (
+            original_span_data.usage is not None
+        ), "Original span should have usage data"
+
+        # Store original values for comparison
+        original_type = original_span_data.type
+        original_usage = original_span_data.usage
+        original_model = original_span_data.model
+        original_provider = original_span_data.provider
+        original_cost = original_span_data.total_estimated_cost
+
+        print(
+            f"Original span - type: {original_type}, model: {original_model}, provider: {original_provider}"
+        )
+        print(f"Original usage: {original_usage}")
+        print(f"Original cost: {original_cost}")
+
+        # Export the project
+        export_project_by_name(
+            name=project_name,
+            workspace="default",
+            output_path=str(test_data_dir),
+            max_results=None,
+            filter_string=None,
+            force=False,
+            debug=False,
+            format="json",
+            api_key=None,
+        )
+
+        # Verify export was created
+        project_dir = test_data_dir / "default" / "projects" / project_name
+        assert project_dir.exists(), f"Export directory not found: {project_dir}"
+
+        trace_files = list(project_dir.glob("trace_*.json"))
+        assert (
+            len(trace_files) == 1
+        ), f"Expected 1 trace file, found: {len(trace_files)}"
+
+        # Verify exported JSON contains correct span data
+        with open(trace_files[0], "r") as f:
+            exported_data = json.load(f)
+
+        exported_spans = exported_data.get("spans", [])
+        assert (
+            len(exported_spans) == 1
+        ), f"Expected 1 span in export, found: {len(exported_spans)}"
+
+        exported_span = exported_spans[0]
+        assert (
+            exported_span.get("type") == "llm"
+        ), f"Exported span type should be 'llm', got {exported_span.get('type')}"
+        assert exported_span.get("model") == "gpt-4o-mini", "Exported model mismatch"
+        assert exported_span.get("provider") == "openai", "Exported provider mismatch"
+        assert (
+            exported_span.get("usage") is not None
+        ), "Exported span should have usage data"
+
+        # Import the project to a new project (by modifying the project directory name)
+        imported_project_name = f"{project_name}-imported"
+        imported_project_dir = (
+            test_data_dir / "default" / "projects" / imported_project_name
+        )
+        project_dir.rename(imported_project_dir)
+
+        # Also update the project_name in the trace file
+        trace_file = list(imported_project_dir.glob("trace_*.json"))[0]
+        with open(trace_file, "r") as f:
+            trace_data = json.load(f)
+        trace_data["project_name"] = imported_project_name
+        with open(trace_file, "w") as f:
+            json.dump(trace_data, f)
+
+        # Import the project
+        source_dir = test_data_dir / "default" / "projects"
+        stats = import_projects_from_directory(
+            client=opik_client,
+            source_dir=source_dir,
+            dry_run=False,
+            name_pattern=imported_project_name,
+            debug=True,
+            recreate_experiments_flag=False,
+        )
+
+        assert (
+            stats.get("projects", 0) >= 1
+        ), "Expected at least 1 project to be imported"
+        assert stats.get("traces", 0) >= 1, "Expected at least 1 trace to be imported"
+
+        opik_client.flush()
+        time.sleep(2)  # Give backend time to process
+
+        # Find the imported trace and span
+        imported_traces = opik_client.search_traces(project_name=imported_project_name)
+        assert (
+            len(imported_traces) >= 1
+        ), f"Expected at least 1 imported trace, found: {len(imported_traces)}"
+
+        imported_trace = imported_traces[0]
+        imported_spans = opik_client.search_spans(
+            project_name=imported_project_name,
+            trace_id=imported_trace.id,
+        )
+        assert (
+            len(imported_spans) >= 1
+        ), f"Expected at least 1 imported span, found: {len(imported_spans)}"
+
+        imported_span = imported_spans[0]
+        imported_span_data = opik_client.get_span_content(id=imported_span.id)
+
+        print(
+            f"Imported span - type: {imported_span_data.type}, model: {imported_span_data.model}, provider: {imported_span_data.provider}"
+        )
+        print(f"Imported usage: {imported_span_data.usage}")
+        print(f"Imported cost: {imported_span_data.total_estimated_cost}")
+
+        # Verify span type is preserved
+        assert (
+            imported_span_data.type == "llm"
+        ), f"Imported span type should be 'llm', got '{imported_span_data.type}'"
+
+        # Verify model and provider are preserved
+        assert (
+            imported_span_data.model == original_model
+        ), f"Model mismatch: expected '{original_model}', got '{imported_span_data.model}'"
+        assert (
+            imported_span_data.provider == original_provider
+        ), f"Provider mismatch: expected '{original_provider}', got '{imported_span_data.provider}'"
+
+        # Verify usage data is preserved (key token counts should match)
+        assert (
+            imported_span_data.usage is not None
+        ), "Imported span should have usage data"
+
+        # Check standard token counts
+        assert imported_span_data.usage.get("prompt_tokens") == original_usage.get(
+            "prompt_tokens"
+        ), (
+            f"prompt_tokens mismatch: expected {original_usage.get('prompt_tokens')}, "
+            f"got {imported_span_data.usage.get('prompt_tokens')}"
+        )
+        assert imported_span_data.usage.get("completion_tokens") == original_usage.get(
+            "completion_tokens"
+        ), (
+            f"completion_tokens mismatch: expected {original_usage.get('completion_tokens')}, "
+            f"got {imported_span_data.usage.get('completion_tokens')}"
+        )
+        assert imported_span_data.usage.get("total_tokens") == original_usage.get(
+            "total_tokens"
+        ), (
+            f"total_tokens mismatch: expected {original_usage.get('total_tokens')}, "
+            f"got {imported_span_data.usage.get('total_tokens')}"
+        )
+
+        # Check non-standard token fields are preserved
+        # The backend stores these with 'original_usage.' prefix for provider-specific token details
+        assert (
+            imported_span_data.usage.get(
+                "original_usage.completion_tokens_details.reasoning_tokens"
+            )
+            == llm_usage["completion_tokens_details"]["reasoning_tokens"]
+        ), (
+            f"reasoning_tokens mismatch: expected {llm_usage['completion_tokens_details']['reasoning_tokens']}, "
+            f"got {imported_span_data.usage.get('original_usage.completion_tokens_details.reasoning_tokens')}"
+        )
+        assert (
+            imported_span_data.usage.get(
+                "original_usage.prompt_tokens_details.cached_tokens"
+            )
+            == llm_usage["prompt_tokens_details"]["cached_tokens"]
+        ), (
+            f"cached_tokens mismatch: expected {llm_usage['prompt_tokens_details']['cached_tokens']}, "
+            f"got {imported_span_data.usage.get('original_usage.prompt_tokens_details.cached_tokens')}"
+        )
+
+        # Verify cost is calculated (should be non-None if backend supports cost calculation for this model)
+        # Note: Cost calculation depends on backend having pricing info for the model
+        if original_cost is not None:
+            assert (
+                imported_span_data.total_estimated_cost is not None
+            ), "Expected imported span to have cost calculated by backend"
+            # Cost should be the same since usage is the same
+            assert (
+                imported_span_data.total_estimated_cost == original_cost
+            ), f"Cost mismatch: expected {original_cost}, got {imported_span_data.total_estimated_cost}"
