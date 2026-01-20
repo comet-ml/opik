@@ -109,7 +109,7 @@ import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetails
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
 import ExperimentCell from "@/components/shared/DataTableCells/ExperimentCell";
-import { Filter, FilterOperator } from "@/types/filters";
+import { Filter, FilterOperator, Filters } from "@/types/filters";
 import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
@@ -121,6 +121,23 @@ const getRowId = (d: Trace | Span) => d.id;
 const REFETCH_INTERVAL = 30000;
 
 const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
+
+/**
+ * Transform experiment_name filter field to experiment_id for backend.
+ * This allows having two separate filters in the UI (dropdown and text input)
+ * that both send experiment_id to the backend.
+ */
+const transformExperimentFilters = (filters: Filters): Filters => {
+  return filters.map((filter: Filter) => {
+    if (filter.field === "experiment_name") {
+      return {
+        ...filter,
+        field: "experiment_id",
+      };
+    }
+    return filter;
+  });
+};
 
 /**
  * Formats a score name with the span suffix for display in column labels
@@ -464,12 +481,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
+  const transformedFilters = useMemo(
+    () => transformExperimentFilters(filters),
+    [filters],
+  );
+
   const { data, isPending, refetch } = useTracesOrSpansList(
     {
       projectId,
       type: type as TRACE_DATA_TYPE,
       sorting: sortedColumns,
-      filters,
+      filters: transformedFilters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -489,7 +511,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       projectId,
       type: type as TRACE_DATA_TYPE,
       sorting: sortedColumns,
-      filters,
+      filters: transformedFilters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -934,7 +956,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               type: COLUMN_TYPE.string,
             },
             {
-              id: "experiment_id",
+              id: "experiment_name",
               label: "Experiment name",
               type: COLUMN_TYPE.string,
               customMeta: {
