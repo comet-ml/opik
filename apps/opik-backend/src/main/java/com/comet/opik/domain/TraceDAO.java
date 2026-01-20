@@ -1120,7 +1120,7 @@ class TraceDAOImpl implements TraceDAO {
                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration
-                FROM traces t
+                FROM traces FINAL t
                     LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
@@ -2327,7 +2327,7 @@ class TraceDAOImpl implements TraceDAO {
 
     private static final String SELECT_TRACE_IDS_BY_THREAD_IDS = """
             SELECT DISTINCT id
-            FROM traces
+            FROM traces FINAL
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
             AND thread_id IN :thread_ids
@@ -2366,7 +2366,7 @@ class TraceDAOImpl implements TraceDAO {
                         project_id,
                         created_by,
                         created_at
-                    FROM traces
+                    FROM traces FINAL
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
                       AND thread_id IN :thread_ids
