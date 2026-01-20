@@ -733,7 +733,6 @@ class OpikTracer(BaseTracer):
                 if resume_value := _extract_resume_value_from_command(input_value):
                     span_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
-
             run_dict_outputs = run_dict.get("outputs")
             span_output = (
                 langchain_helpers.extract_command_update(run_dict_outputs)
