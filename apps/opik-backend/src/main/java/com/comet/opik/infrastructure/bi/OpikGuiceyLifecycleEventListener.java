@@ -41,7 +41,6 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setupDailyJob();
                 setTraceThreadsClosingJob();
                 setMetricsAlertJob();
-                runDatasetVersioningMigrationIfEnabled();
                 runDatasetVersionItemsTotalMigrationIfEnabled();
             }
 
@@ -210,32 +209,10 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         log.info("Cleared GuiceJobManager instance");
     }
 
-    private void runDatasetVersioningMigrationIfEnabled() {
+    private void runDatasetVersionItemsTotalMigrationIfEnabled() {
         var config = injector.get().getInstance(OpikConfiguration.class).getDatasetVersioningMigration();
 
-        if (config == null || !config.isEnabled()) {
-            log.info("Dataset versioning migration is disabled");
-            return;
-        }
-
-        log.info("Starting dataset versioning migration (async)");
-        var migrationService = injector.get().getInstance(
-                com.comet.opik.domain.DatasetVersioningMigrationService.class);
-
-        migrationService.runMigration(
-                config.getWorkspaceBatchSize(),
-                java.time.Duration.ofSeconds(config.getLockTimeoutSeconds()))
-                .subscribe(
-                        unused -> {
-                        },
-                        error -> log.error("Dataset versioning migration failed", error),
-                        () -> log.info("Dataset versioning migration completed successfully"));
-    }
-
-    private void runDatasetVersionItemsTotalMigrationIfEnabled() {
-        var config = injector.get().getInstance(OpikConfiguration.class).getDatasetVersionItemsTotalMigration();
-
-        if (config == null || !config.isEnabled()) {
+        if (config == null || !config.isItemsTotalEnabled()) {
             log.info("Dataset version items_total migration is disabled");
             return;
         }

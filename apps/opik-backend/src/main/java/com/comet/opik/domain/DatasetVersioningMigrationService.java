@@ -9,7 +9,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -30,20 +29,8 @@ public class DatasetVersioningMigrationService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
 
-    private static final Lock MIGRATION_LOCK = new Lock("dataset_versioning_migration");
     private static final Lock ITEMS_TOTAL_MIGRATION_LOCK = new Lock("dataset_version_items_total_migration");
     private static final String CURSOR_MIN = ""; // Empty string is less than any string value
-
-    public Mono<Void> runMigration(int workspaceBatchSize, Duration lockTimeout) {
-        log.info(
-                "Starting workspace-based dataset versioning migration with workspace batch size '{}' and lock timeout '{}'",
-                workspaceBatchSize, lockTimeout);
-
-        return lockService.executeWithLockCustomExpire(
-                MIGRATION_LOCK,
-                Mono.defer(() -> migrateAllWorkspaces(workspaceBatchSize, CURSOR_MIN)),
-                lockTimeout);
-    }
 
     /**
      * Ensures a dataset has been migrated to the versioning system (lazy migration).
@@ -256,81 +243,6 @@ public class DatasetVersioningMigrationService {
                 .doOnError(error -> log.error("Failed to process batch of '{}' versions", versions.size(), error));
     }
 
-    private Mono<Void> migrateAllWorkspaces(int workspaceBatchSize, String lastSeenWorkspaceId) {
-        return Mono.defer(() -> {
-            log.debug("Fetching batch of workspaces (cursor: '{}')", lastSeenWorkspaceId);
-
-            return Mono.fromCallable(() -> {
-                // Fetch workspace IDs in batches (handles 150K+ workspaces)
-                return template.inTransaction(WRITE, handle -> {
-                    var dao = handle.attach(DatasetDAO.class);
-                    return dao.findWorkspaceIdsBatch(lastSeenWorkspaceId, workspaceBatchSize);
-                });
-            })
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .flatMap(workspaceIds -> {
-                        if (workspaceIds.isEmpty()) {
-                            log.info("Dataset versioning migration complete - no more workspaces to process");
-                            return Mono.empty();
-                        }
-
-                        log.info("Processing batch of '{}' workspaces (cursor: '{}')",
-                                workspaceIds.size(), lastSeenWorkspaceId);
-
-                        String nextCursor = workspaceIds.get(workspaceIds.size() - 1); // Last workspace ID in batch
-
-                        return Flux.fromIterable(workspaceIds)
-                                .concatMap(this::migrateWorkspace) // Sequential processing
-                                .then()
-                                .then(Mono.defer(() -> migrateAllWorkspaces(workspaceBatchSize, nextCursor))); // Next batch
-                    });
-        });
-    }
-
-    private Mono<Void> migrateWorkspace(String workspaceId) {
-        log.info("Migrating workspace '{}'", workspaceId);
-
-        return datasetItemVersionDAO.findDatasetsWithHashMismatchInWorkspace(workspaceId)
-                .collectList()
-                .flatMap(datasetIds -> {
-                    if (datasetIds.isEmpty()) {
-                        log.info("No datasets to migrate in workspace '{}'", workspaceId);
-                        return Mono.empty();
-                    }
-
-                    log.info("Migrating '{}' datasets in workspace '{}'", datasetIds.size(), workspaceId);
-
-                    return Flux.fromIterable(datasetIds)
-                            .concatMap(datasetId -> migrateDatasetInWorkspace(datasetId, workspaceId))
-                            .then()
-                            .doOnSuccess(unused -> log.info("Successfully migrated workspace '{}'", workspaceId));
-                });
-    }
-
-    private Mono<Void> migrateDatasetInWorkspace(UUID datasetId, String workspaceId) {
-        return Mono.fromCallable(() -> {
-            return template.inTransaction(WRITE, handle -> {
-                var dao = handle.attach(DatasetDAO.class);
-                var dataset = dao.findById(datasetId, workspaceId);
-
-                if (dataset.isEmpty()) {
-                    log.warn("Dataset '{}' not found in workspace '{}' - skipping",
-                            datasetId, workspaceId);
-                    return null;
-                }
-
-                return new DatasetInfo(dataset.get().createdBy(), workspaceId);
-            });
-        })
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(datasetInfo -> {
-                    if (datasetInfo == null) {
-                        return Mono.empty();
-                    }
-                    return migrateSingleDataset(datasetId, workspaceId, datasetInfo.userName());
-                });
-    }
-
     /**
      * Migrates a single dataset to the versioning system.
      * <p>
@@ -361,9 +273,6 @@ public class DatasetVersioningMigrationService {
                 .then(ensureLatestTagExists(datasetId, versionId, workspaceId))
                 .doOnSuccess(unused -> log.info("Successfully migrated dataset '{}'", datasetId))
                 .doOnError(error -> log.error("Failed to migrate dataset '{}'", datasetId, error));
-    }
-
-    private record DatasetInfo(String userName, String workspaceId) {
     }
 
     private Mono<Void> ensureVersion1Exists(UUID datasetId, UUID versionId, String workspaceId, String userName) {

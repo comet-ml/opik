@@ -839,30 +839,19 @@ freeModel:
   apiKey: ${OPIK_FREE_MODEL_API_KEY:-}
 
 # Dataset Versioning Migration configuration
+# Includes both lazy migration (on-demand) and items_total migration (startup)
 datasetVersioningMigration:
-  # Default: false
-  # Description: Whether to run the dataset versioning migration on startup
-  enabled: ${DATASET_VERSIONING_MIGRATION_ENABLED:-"false"}
-  # Default: 100
-  # Description: Number of workspaces to process in each batch (for pagination through 150K+ workspaces)
-  workspaceBatchSize: ${DATASET_VERSIONING_MIGRATION_WORKSPACE_BATCH_SIZE:-100}
-  # Default: 3600 (1 hour)
-  # Description: Lock timeout in seconds for the migration process
-  lockTimeoutSeconds: ${DATASET_VERSIONING_MIGRATION_LOCK_TIMEOUT:-3600}
   # Default: false
   # Description: Whether to enable lazy migration (migrate datasets on first access)
   lazyEnabled: ${DATASET_VERSIONING_MIGRATION_LAZY_ENABLED:-"false"}
-
-# Dataset Version Items Total Migration configuration
-# This migration calculates and updates the items_total field for dataset versions
-# that were created by the Liquibase migration (where dataset_id = dataset_version_id)
-datasetVersionItemsTotalMigration:
   # Default: false
   # Description: Whether to run the items_total migration on startup
   # Set to true to enable the migration, false to disable after completion
-  enabled: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED:-"false"}
+  # This migration calculates and updates the items_total field for dataset versions
+  # that were created by the Liquibase migration (where dataset_id = dataset_version_id)
+  itemsTotalEnabled: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED:-"false"}
   # Default: 100
-  # Description: Number of dataset versions to process in each batch
+  # Description: Number of dataset versions to process in each batch for items_total migration
   # Smaller batches reduce memory usage but increase total migration time
   batchSize: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_BATCH_SIZE:-100}
   # Default: 3600 (1 hour)
