@@ -3,6 +3,7 @@ import React, {
   useEffect,
   forwardRef,
   useImperativeHandle,
+  useState,
 } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,7 +18,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Description } from "@/components/ui/description";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -33,6 +33,8 @@ import FeedbackDefinitionsAndScoresSelectBox, {
   ScoreSource,
 } from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import WidgetOverrideDefaultsSection from "@/components/shared/Dashboard/widgets/shared/WidgetOverrideDefaultsSection/WidgetOverrideDefaultsSection";
+import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 import { cn } from "@/lib/utils";
 import {
@@ -189,7 +191,18 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     metricType === METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES;
 
   const isMetadataBreakdown = breakdown.field === BREAKDOWN_FIELD.METADATA;
-  const hasBreakdown = breakdown.field !== BREAKDOWN_FIELD.NONE;
+  const hasBreakdownField = breakdown.field !== BREAKDOWN_FIELD.NONE;
+
+  // Local state to track if the group row UI should be shown
+  // This allows showing the dropdown without immediately triggering a BE call
+  const [showGroupRow, setShowGroupRow] = useState(hasBreakdownField);
+
+  // Sync showGroupRow with actual breakdown state when breakdown changes externally
+  useEffect(() => {
+    if (hasBreakdownField) {
+      setShowGroupRow(true);
+    }
+  }, [hasBreakdownField]);
 
   // Get compatible breakdown fields for the current metric type (excluding NONE)
   const compatibleBreakdownFields = useMemo(() => {
@@ -254,10 +267,22 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   }));
 
   const handleMetricTypeChange = (value: string) => {
+    // Check if current breakdown field is compatible with the new metric type
+    const newCompatibleFields = getCompatibleBreakdownFields(value);
+    const currentBreakdownField = breakdown.field;
+
+    // Reset breakdown if current field is not compatible with new metric type
+    const shouldResetBreakdown =
+      currentBreakdownField !== BREAKDOWN_FIELD.NONE &&
+      !newCompatibleFields.includes(currentBreakdownField);
+
     updatePreviewWidget({
       config: {
         ...config,
         metricType: value,
+        ...(shouldResetBreakdown && {
+          breakdown: { field: BREAKDOWN_FIELD.NONE },
+        }),
       },
     });
   };
@@ -303,15 +328,13 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   };
 
   const handleAddGroup = () => {
-    // Set a default breakdown field when "Add group" is clicked
-    const defaultField =
-      compatibleBreakdownFields.length > 0
-        ? compatibleBreakdownFields[0]
-        : BREAKDOWN_FIELD.TAGS;
-    handleBreakdownChange({ field: defaultField, metadataKey: undefined });
+    // Only show the group row UI without setting a breakdown field
+    // The preview won't update until a field is actually selected
+    setShowGroupRow(true);
   };
 
   const handleRemoveGroup = () => {
+    setShowGroupRow(false);
     handleBreakdownChange({
       field: BREAKDOWN_FIELD.NONE,
       metadataKey: undefined,
@@ -432,14 +455,14 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
 
           {/* Group by Section - matches experiment widget pattern */}
           <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="groupby" className="border-t">
-              <AccordionTrigger className="py-3 hover:no-underline">
-                Group by {hasBreakdown && "(1)"}
+            <AccordionItem value="groupby" className="">
+              <AccordionTrigger className="h-11 py-1.5 hover:no-underline">
+                Group by {hasBreakdownField && "(1)"}
               </AccordionTrigger>
               <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
                 <Description>Add groups to aggregate data.</Description>
                 <div className="space-y-3">
-                  {hasBreakdown ? (
+                  {showGroupRow ? (
                     <>
                       {/* Group row with field selector and remove button */}
                       <div className="flex items-start gap-2">
@@ -455,7 +478,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                               "field",
                             ]);
                             return (
-                              <FormItem className="flex-1">
+                              <FormItem className="min-w-40">
                                 <FormControl>
                                   <SelectBox
                                     className={cn({
@@ -463,7 +486,11 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                                         validationErrors?.message,
                                       ),
                                     })}
-                                    value={field.value || ""}
+                                    value={
+                                      field.value === BREAKDOWN_FIELD.NONE
+                                        ? ""
+                                        : field.value || ""
+                                    }
                                     onChange={(value) => {
                                       field.onChange(value);
                                       handleBreakdownChange({
@@ -483,6 +510,49 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                             );
                           }}
                         />
+                        {/* Configuration key input when Configuration field is selected */}
+                        {isMetadataBreakdown && (
+                          <FormField
+                            control={form.control}
+                            name="breakdown.metadataKey"
+                            render={({ field, formState }) => {
+                              const validationErrors = get(formState.errors, [
+                                "breakdown",
+                                "metadataKey",
+                              ]);
+                              return (
+                                <FormItem className="min-w-32 max-w-[30vw] flex-1">
+                                  <FormControl>
+                                    <TracesOrSpansPathsAutocomplete
+                                      className={cn("w-full", {
+                                        "border-destructive": Boolean(
+                                          validationErrors?.message,
+                                        ),
+                                      })}
+                                      rootKeys={["metadata"]}
+                                      projectId={projectId}
+                                      type={
+                                        isSpanMetric
+                                          ? TRACE_DATA_TYPE.spans
+                                          : TRACE_DATA_TYPE.traces
+                                      }
+                                      placeholder="key"
+                                      excludeRoot={true}
+                                      value={field.value || ""}
+                                      onValueChange={(value) => {
+                                        field.onChange(value);
+                                        handleBreakdownChange({
+                                          metadataKey: value,
+                                        });
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              );
+                            }}
+                          />
+                        )}
                         <Button
                           type="button"
                           variant="minimal"
@@ -493,47 +563,6 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                           <X className="size-4" />
                         </Button>
                       </div>
-
-                      {/* Metadata key input when metadata field is selected */}
-                      {isMetadataBreakdown && (
-                        <FormField
-                          control={form.control}
-                          name="breakdown.metadataKey"
-                          render={({ field, formState }) => {
-                            const validationErrors = get(formState.errors, [
-                              "breakdown",
-                              "metadataKey",
-                            ]);
-                            return (
-                              <FormItem className="ml-8">
-                                <FormLabel>Metadata key</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    className={cn({
-                                      "border-destructive": Boolean(
-                                        validationErrors?.message,
-                                      ),
-                                    })}
-                                    value={field.value || ""}
-                                    onChange={(e) => {
-                                      field.onChange(e.target.value);
-                                      handleBreakdownChange({
-                                        metadataKey: e.target.value,
-                                      });
-                                    }}
-                                    placeholder="e.g., agent_id, environment"
-                                  />
-                                </FormControl>
-                                <Description>
-                                  The key to extract from the metadata JSON for
-                                  grouping.
-                                </Description>
-                                <FormMessage />
-                              </FormItem>
-                            );
-                          }}
-                        />
-                      )}
                     </>
                   ) : (
                     <Button
