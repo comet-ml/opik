@@ -2,8 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import PlaygroundPrompt from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import { generateDefaultPrompt } from "@/lib/playground";
-import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
+import {
+  generateDefaultPrompt,
+  getDefaultConfigByProvider,
+} from "@/lib/playground";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { Button } from "@/components/ui/button";
 import { Plus, RotateCcw } from "lucide-react";
 import {
@@ -25,6 +28,9 @@ import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { getAndClearPlaygroundPrefill } from "@/hooks/useOpenInPlayground";
+import { useToast } from "@/components/ui/use-toast";
+import { PlaygroundPromptType } from "@/types/playground";
 
 interface PlaygroundPromptsState {
   workspaceName: string;
@@ -52,9 +58,11 @@ const PlaygroundPrompts = ({
   const resetKeyRef = useRef(0);
   const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
+  const prefillCheckedRef = useRef(false);
+  const { toast } = useToast();
 
   const promptIds = usePromptIds();
-  const [lastPickedModel] = useLastPickedModel({
+  const [lastPickedModel, setLastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
   const { calculateModelProvider, calculateDefaultModel } =
@@ -106,6 +114,99 @@ const PlaygroundPrompts = ({
     resetDatasetFilters,
     setDatasetVariables,
     onResetHeight,
+  ]);
+
+  // Load prefill data from trace/span if available
+  const loadPrefillData = useCallback(() => {
+    const prefillData = getAndClearPlaygroundPrefill();
+    if (!prefillData || prefillData.messages.length === 0) {
+      return null;
+    }
+
+    // Try to resolve the model from the prefill data
+    let model: PROVIDER_MODEL_TYPE | "" = "";
+    let provider: COMPOSED_PROVIDER_TYPE | "" = "";
+
+    if (prefillData.model) {
+      // Try to find the model in available providers
+      const resolvedModel = calculateDefaultModel(
+        prefillData.model as PROVIDER_MODEL_TYPE,
+        providerKeys,
+      );
+      if (resolvedModel) {
+        model = resolvedModel;
+        provider = calculateModelProvider(model);
+      }
+    }
+
+    // If no model resolved, use the last picked model or default
+    if (!model) {
+      model = calculateDefaultModel(lastPickedModel || "", providerKeys);
+      provider = calculateModelProvider(model);
+    }
+
+    // Create the prompt with prefill data
+    const newPrompt: PlaygroundPromptType = {
+      id: `prefill-${Date.now()}`,
+      name: "Prompt from Trace",
+      messages: prefillData.messages,
+      model,
+      provider,
+      configs: getDefaultConfigByProvider(provider, model),
+    };
+
+    return newPrompt;
+  }, [
+    calculateDefaultModel,
+    calculateModelProvider,
+    providerKeys,
+    lastPickedModel,
+  ]);
+
+  // Check for prefill data on mount
+  useEffect(() => {
+    if (prefillCheckedRef.current || isPendingProviderKeys) {
+      return;
+    }
+
+    prefillCheckedRef.current = true;
+    const prefillPrompt = loadPrefillData();
+
+    if (prefillPrompt) {
+      // Set up playground with the prefilled prompt
+      setPromptMap([prefillPrompt.id], { [prefillPrompt.id]: prefillPrompt });
+      setDatasetId(null);
+      setSelectedRuleIds(null);
+      clearCreatedExperiments();
+      setIsRunning(false);
+      resetDatasetFilters();
+      setDatasetVariables([]);
+      onResetHeight();
+
+      // Update last picked model if we have one
+      if (prefillPrompt.model) {
+        setLastPickedModel(prefillPrompt.model);
+      }
+
+      toast({
+        title: "Trace loaded in Playground",
+        description:
+          "The messages from your trace have been loaded. You can now modify and re-run them.",
+      });
+    }
+  }, [
+    isPendingProviderKeys,
+    loadPrefillData,
+    setPromptMap,
+    setDatasetId,
+    setSelectedRuleIds,
+    clearCreatedExperiments,
+    setIsRunning,
+    resetDatasetFilters,
+    setDatasetVariables,
+    onResetHeight,
+    setLastPickedModel,
+    toast,
   ]);
 
   useEffect(() => {
