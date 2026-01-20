@@ -105,6 +105,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self.max_parallel_batches = max_parallel_batches
         self.batch_size = batch_size
         self.convergence_threshold = convergence_threshold
+        self._iterations_completed = 0
         self._should_stop_optimization = False  # Flag to exit all loops
 
         # Initialize hierarchical analyzer
@@ -461,7 +462,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         """
         return {
             "trials_completed": context.trials_completed,
-            "iterations_completed": context.trials_completed,
+            "iterations_completed": self._iterations_completed,
             "convergence_threshold": self.convergence_threshold,
         }
 
@@ -489,6 +490,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         iteration = 0
         previous_iteration_score: float = initial_score
         self._history_builder.clear()
+        self._iterations_completed = iteration
 
         while context.trials_completed < max_trials:
             # Check should_stop flag at start of each iteration
@@ -496,6 +498,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 break
 
             iteration += 1
+            self._iterations_completed = iteration
             logger.info(
                 f"Starting iteration {iteration} (trials: {context.trials_completed}/{max_trials})"
             )
