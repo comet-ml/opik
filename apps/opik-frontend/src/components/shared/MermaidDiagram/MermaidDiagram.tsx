@@ -4,7 +4,7 @@ import mermaid from "mermaid";
 mermaid.initialize({
   startOnLoad: false,
   htmlLabels: true,
-  securityLevel: "strict",
+  securityLevel: "antiscript",
 });
 
 type MermaidDiagramProps = {
