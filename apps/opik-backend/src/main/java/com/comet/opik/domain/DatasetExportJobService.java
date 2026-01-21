@@ -144,6 +144,17 @@ public interface DatasetExportJobService {
      * @return Mono emitting number of deleted records
      */
     Mono<Integer> deleteExpiredJobs(Set<UUID> jobIds);
+
+    /**
+     * Deletes a completed export job and its associated file from storage.
+     * This is a user-initiated deletion, not the automatic cleanup.
+     *
+     * @param jobId The job ID to delete
+     * @return Mono completing when the job and file are deleted
+     * @throws NotFoundException if job doesn't exist or doesn't belong to the current workspace
+     * @throws IllegalStateException if job is not in COMPLETED status
+     */
+    Mono<Void> deleteCompletedJob(UUID jobId);
 }
 
 @Slf4j
@@ -402,6 +413,39 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                 var dao = handle.attach(DatasetExportJobDAO.class);
                 return dao.deleteJobsByIds(userName, jobIds);
             })).subscribeOn(Schedulers.boundedElastic());
+        });
+    }
+
+    @Override
+    public Mono<Void> deleteCompletedJob(@NonNull UUID jobId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.fromCallable(() -> {
+                template.inTransaction(WRITE, handle -> {
+                    var dao = handle.attach(DatasetExportJobDAO.class);
+
+                    // Verify job exists and belongs to workspace
+                    var job = dao.findById(workspaceId, jobId)
+                            .orElseThrow(() -> new NotFoundException(EXPORT_JOB_NOT_FOUND.formatted(jobId)));
+
+                    // Only allow deletion of completed jobs
+                    if (job.status() != DatasetExportStatus.COMPLETED) {
+                        log.warn("Cannot delete export job '{}' with status '{}'", jobId, job.status());
+                        throw new IllegalStateException(
+                                "Cannot delete export job '%s'. Only completed jobs can be deleted.".formatted(jobId));
+                    }
+
+                    // Delete from database
+                    int deleted = dao.deleteByIds(workspaceId, Set.of(jobId));
+                    if (deleted > 0) {
+                        log.info("Deleted export job '{}' from workspace '{}'", jobId, workspaceId);
+                    }
+
+                    return job.filePath();
+                });
+                return null;
+            }).subscribeOn(Schedulers.boundedElastic()).then();
         });
     }
 }

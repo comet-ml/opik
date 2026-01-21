@@ -838,6 +838,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "Job marked as viewed"),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
+    @RateLimited
     public Response markDatasetExportJobViewed(@PathParam("jobId") @NotNull UUID jobId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -911,5 +912,27 @@ public class DatasetsResource {
                 .header("Content-Disposition", contentDisposition.toString())
                 .header("Content-Type", "text/csv")
                 .build();
+    }
+
+    @DELETE
+    @Path("/export-jobs/{jobId}")
+    @Operation(operationId = "deleteDatasetExportJob", summary = "Delete dataset export job", description = "Deletes a completed dataset export job and its associated file from storage. Only COMPLETED jobs can be deleted.", responses = {
+            @ApiResponse(responseCode = "204", description = "Export job and file deleted successfully"),
+            @ApiResponse(responseCode = "400", description = "Export job is not in COMPLETED status")
+    })
+    @RateLimited
+    public Response deleteDatasetExportJob(@PathParam("jobId") @NotNull UUID jobId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting export job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        csvExportService.deleteExport(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted export job '{}' and its file on workspaceId '{}'", jobId, workspaceId);
+
+        return Response.noContent().build();
     }
 }

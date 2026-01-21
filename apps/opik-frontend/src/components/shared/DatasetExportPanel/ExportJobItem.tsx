@@ -9,7 +9,9 @@ import {
 } from "@/store/DatasetExportStore";
 import useDatasetExportJob from "@/api/datasets/useDatasetExportJob";
 import useMarkExportJobViewedMutation from "@/api/datasets/useMarkExportJobViewedMutation";
+import useDeleteDatasetExportJobMutation from "@/api/datasets/useDeleteDatasetExportJobMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useToast } from "@/components/ui/use-toast";
 import { isJobLoading, isJobCompleted, isJobFailed } from "./utils";
 import { getExportJobDownloadUrl } from "@/api/datasets/exportJobHelpers";
@@ -23,6 +25,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   const removeJob = useRemoveExportJob();
   const updateJob = useUpdateExportJob();
   const [isHovered, setIsHovered] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { toast } = useToast();
 
   // Poll for job status updates (every 5 seconds for PENDING/PROCESSING jobs)
@@ -42,6 +45,10 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
 
   // Mark as viewed mutation - query invalidation is handled in the hook
   const { mutate: markAsViewed } = useMarkExportJobViewedMutation();
+
+  // Delete mutation
+  const { mutate: deleteExportJob, isPending: isDeleting } =
+    useDeleteDatasetExportJobMutation();
 
   // Combined effect: Update store when job status changes, and show toast for failed jobs
   // This handles both jobs that fail during polling and jobs loaded from API
@@ -96,6 +103,34 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     removeJob(job.id);
   };
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = () => {
+    deleteExportJob(
+      { jobId: job.id },
+      {
+        onSuccess: () => {
+          removeJob(job.id);
+          toast({
+            title: "Export deleted",
+            description: `The export file for "${datasetName}" has been removed.`,
+          });
+        },
+        onError: () => {
+          toast({
+            title: "Delete failed",
+            description: "Failed to delete the export file. Please try again.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+    setShowDeleteConfirm(false);
+  };
+
   // Render status indicator icon
   const renderStatusIndicator = () => {
     if (isLoading) {
@@ -116,19 +151,32 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   const renderActionButton = () => {
     if (isCompleted && isHovered) {
       return (
-        <TooltipWrapper content="Download">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDownload();
-            }}
-            className="size-5"
-          >
-            <Download className="size-4 text-foreground-secondary" />
-          </Button>
-        </TooltipWrapper>
+        <div className="flex items-center gap-0.5">
+          <TooltipWrapper content="Download">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownload();
+              }}
+              className="size-5"
+            >
+              <Download className="size-4 text-foreground-secondary" />
+            </Button>
+          </TooltipWrapper>
+          <TooltipWrapper content="Delete">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="size-5"
+            >
+              <X className="size-4 text-muted-foreground" />
+            </Button>
+          </TooltipWrapper>
+        </div>
       );
     }
 
@@ -151,32 +199,45 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   };
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 py-2 border-b last:border-b-0",
-        isCompleted && "cursor-pointer hover:bg-muted/50",
-      )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={isCompleted ? handleDownload : undefined}
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        {renderStatusIndicator()}
-        <span className="truncate text-sm">{datasetName}</span>
-        {isFailed && (
-          <span className="shrink-0 text-xs text-destructive">Failed</span>
+    <>
+      <div
+        className={cn(
+          "flex items-center gap-2 py-2 border-b last:border-b-0",
+          isCompleted && "cursor-pointer hover:bg-muted/50",
         )}
-        {isCompleted && (
-          <span className="shrink-0 text-xs text-green-600">Ready</span>
-        )}
-        {isLoading && (
-          <span className="shrink-0 text-xs text-muted-foreground">
-            Exporting...
-          </span>
-        )}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onClick={isCompleted ? handleDownload : undefined}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          {renderStatusIndicator()}
+          <span className="truncate text-sm">{datasetName}</span>
+          {isFailed && (
+            <span className="shrink-0 text-xs text-destructive">Failed</span>
+          )}
+          {isCompleted && (
+            <span className="shrink-0 text-xs text-green-600">Ready</span>
+          )}
+          {isLoading && (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              Exporting...
+            </span>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center">{renderActionButton()}</div>
       </div>
-      <div className="flex shrink-0 items-center">{renderActionButton()}</div>
-    </div>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        setOpen={setShowDeleteConfirm}
+        onConfirm={handleConfirmDelete}
+        title="Delete export file?"
+        description="This will permanently remove the generated export file. You'll need to generate a new export to download it again. This action cannot be undone."
+        confirmText="Delete"
+        confirmButtonVariant="destructive"
+        cancelText="Cancel"
+      />
+    </>
   );
 };
 

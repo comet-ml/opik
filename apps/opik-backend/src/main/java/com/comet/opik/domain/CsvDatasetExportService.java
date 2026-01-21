@@ -24,6 +24,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @ImplementedBy(CsvDatasetExportServiceImpl.class)
@@ -86,6 +87,17 @@ public interface CsvDatasetExportService {
      * @throws IllegalStateException if job is not in COMPLETED status
      */
     Mono<InputStream> downloadExport(UUID jobId);
+
+    /**
+     * Deletes a completed export job and its associated file from storage.
+     * Only COMPLETED jobs can be deleted by users.
+     *
+     * @param jobId The job ID to delete
+     * @return Mono completing when the job and file are deleted
+     * @throws NotFoundException if job doesn't exist
+     * @throws IllegalStateException if job is not in COMPLETED status or dataset export feature is disabled
+     */
+    Mono<Void> deleteExport(UUID jobId);
 }
 
 @Slf4j
@@ -266,6 +278,43 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
 
                     return Mono.fromCallable(() -> fileService.download(job.filePath()))
                             .subscribeOn(Schedulers.boundedElastic());
+                });
+    }
+
+    @Override
+    public Mono<Void> deleteExport(@NonNull UUID jobId) {
+        if (!exportConfig.isEnabled()) {
+            log.warn("CSV dataset export is disabled; cannot delete export job: '{}'", jobId);
+            return Mono.error(new IllegalStateException("Dataset export is disabled"));
+        }
+
+        log.info("Deleting export job: '{}'", jobId);
+
+        return jobService.getJob(jobId)
+                .flatMap(job -> {
+                    // Only allow deletion of completed jobs
+                    if (job.status() != DatasetExportStatus.COMPLETED) {
+                        log.warn("Cannot delete export job '{}' with status '{}'", jobId, job.status());
+                        return Mono.error(new IllegalStateException(
+                                "Cannot delete export job '%s'. Only completed jobs can be deleted."
+                                        .formatted(jobId)));
+                    }
+
+                    // Delete file from storage first
+                    return Mono.fromRunnable(() -> {
+                        if (job.filePath() != null) {
+                            fileService.deleteObjects(Set.of(job.filePath()));
+                            log.info("Deleted export file: '{}'", job.filePath());
+                        }
+                    })
+                            .subscribeOn(Schedulers.boundedElastic())
+                            // Then delete job from database
+                            .then(jobService.deleteCompletedJob(jobId));
+                })
+                // Idempotent: if job not found, consider it already deleted
+                .onErrorResume(NotFoundException.class, e -> {
+                    log.info("Export job '{}' not found, already deleted (idempotent)", jobId);
+                    return Mono.empty();
                 });
     }
 }
