@@ -34,6 +34,8 @@ import FeedbackDefinitionsAndScoresSelectBox, {
 } from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import WidgetOverrideDefaultsSection from "@/components/shared/Dashboard/widgets/shared/WidgetOverrideDefaultsSection/WidgetOverrideDefaultsSection";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 import { cn } from "@/lib/utils";
@@ -190,6 +192,11 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES ||
     metricType === METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES;
 
+  // For feedback score metrics, group by is only allowed when exactly one metric is selected
+  const hasExactlyOneMetricSelected = feedbackScores.length === 1;
+  const isGroupByDisabledForFeedbackScore =
+    isFeedbackScoreMetric && !hasExactlyOneMetricSelected;
+
   const isMetadataBreakdown = breakdown.field === BREAKDOWN_FIELD.METADATA;
   const hasBreakdownField = breakdown.field !== BREAKDOWN_FIELD.NONE;
 
@@ -306,12 +313,26 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   };
 
   const handleFeedbackScoresChange = (newFeedbackScores: string[]) => {
+    // If changing from exactly one metric to something else, clear the breakdown
+    const wasExactlyOne = feedbackScores.length === 1;
+    const isExactlyOne = newFeedbackScores.length === 1;
+    const shouldClearBreakdown =
+      wasExactlyOne && !isExactlyOne && hasBreakdownField;
+
     updatePreviewWidget({
       config: {
         ...config,
         feedbackScores: newFeedbackScores,
+        ...(shouldClearBreakdown && {
+          breakdown: { field: BREAKDOWN_FIELD.NONE },
+        }),
       },
     });
+
+    // Also hide the group row if breakdown is being cleared
+    if (shouldClearBreakdown) {
+      setShowGroupRow(false);
+    }
   };
 
   const handleBreakdownChange = (newBreakdown: Partial<BreakdownConfig>) => {
@@ -335,6 +356,9 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
 
   const handleRemoveGroup = () => {
     setShowGroupRow(false);
+    // Reset the form field values so they don't retain the previous selection
+    form.setValue("breakdown.field", BREAKDOWN_FIELD.NONE);
+    form.setValue("breakdown.metadataKey", undefined);
     handleBreakdownChange({
       field: BREAKDOWN_FIELD.NONE,
       metadataKey: undefined,
@@ -462,7 +486,25 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
               <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
                 <Description>Add groups to aggregate data.</Description>
                 <div className="space-y-3">
-                  {showGroupRow ? (
+                  {isGroupByDisabledForFeedbackScore ? (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled
+                        className="w-fit"
+                      >
+                        <Plus className="mr-1 size-3.5" />
+                        Add group
+                      </Button>
+                      <ExplainerIcon
+                        {...EXPLAINERS_MAP[
+                          EXPLAINER_ID.feedback_score_groupby_requires_single_metric
+                        ]}
+                      />
+                    </div>
+                  ) : showGroupRow ? (
                     <>
                       {/* Group row with field selector and remove button */}
                       <div className="flex items-start gap-2">
