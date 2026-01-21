@@ -15,11 +15,13 @@ import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
+import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
+import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import FiltersSection from "@/components/shared/FiltersSection/FiltersSection";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { EXPERIMENT_DATA_SOURCE } from "@/types/dashboard";
-import { Filters } from "@/types/filters";
+import { FilterOperator, Filters } from "@/types/filters";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
@@ -140,6 +142,39 @@ const DashboardDataSourceSection: React.FC<DashboardDataSourceSectionProps> = ({
       setValue("maxExperimentsCount", value);
     },
     [setValue],
+  );
+
+  const dataConfig = useMemo(
+    () => ({
+      rowsMap: {
+        [COLUMN_DATASET_ID]: {
+          keyComponent: DatasetSelectBox as React.FunctionComponent<unknown> & {
+            placeholder: string;
+            value: string;
+            onValueChange: (value: string) => void;
+          },
+          keyComponentProps: {
+            className: "w-full min-w-72",
+          },
+          defaultOperator: "=" as FilterOperator,
+          operators: [{ label: "=", value: "=" as FilterOperator }],
+          sortingMessage: "Last experiment created",
+        },
+        [COLUMN_METADATA_ID]: {
+          keyComponent:
+            ExperimentsPathsAutocomplete as React.FunctionComponent<unknown> & {
+              placeholder: string;
+              value: string;
+              onValueChange: (value: string) => void;
+            },
+          keyComponentProps: {
+            placeholder: "key",
+            excludeRoot: true,
+          },
+        },
+      },
+    }),
+    [],
   );
 
   const renderProjectSelector = () => {
@@ -277,6 +312,7 @@ const DashboardDataSourceSection: React.FC<DashboardDataSourceSectionProps> = ({
               <FiltersSection
                 filters={filters}
                 columns={EXPERIMENT_FILTER_COLUMNS as ColumnData<unknown>[]}
+                config={dataConfig}
                 onChange={handleFiltersChange}
                 label="Filters"
                 description="Filter experiments shown in widgets that use experiment data. Leave empty to include all experiments."
