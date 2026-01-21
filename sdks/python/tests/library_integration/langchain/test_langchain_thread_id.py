@@ -2,24 +2,13 @@
 Tests for thread_id resolution in OpikTracer (GitHub Issue #4794).
 """
 
-import pytest
-
 from langchain_core.language_models import fake
 from langchain_core.prompts import PromptTemplate
 
 from opik.integrations.langchain.opik_tracer import OpikTracer
 
-from ...testlib import (
-    ANY_BUT_NONE,
-    ANY_DICT,
-    TraceModel,
-    SpanModel,
-    assert_equal,
-)
-
 
 class TestThreadIdResolution:
-
     def test_opik_tracer__thread_id_from_metadata__single_invocation(
         self, fake_backend
     ):
@@ -109,9 +98,7 @@ class TestThreadIdResolution:
         assert fake_backend.trace_trees[0].thread_id == "fixed-thread"
         assert fake_backend.trace_trees[1].thread_id == "fixed-thread"
 
-    def test_opik_tracer__no_thread_id__traces_have_no_thread_id(
-        self, fake_backend
-    ):
+    def test_opik_tracer__no_thread_id__traces_have_no_thread_id(self, fake_backend):
         llm = fake.FakeListLLM(responses=["response"])
         prompt = PromptTemplate(input_variables=["input"], template="{input}")
         chain = prompt | llm
