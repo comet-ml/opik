@@ -6464,22 +6464,21 @@ class TracesResourceTest {
             // Given: Create workspace, project, and dataset
             var context = setupWorkspaceProjectDataset();
 
-            // Create experiments with specific names for sorting (using random suffix to avoid conflicts)
-            var randomSuffix = RandomStringUtils.secure().nextAlphanumeric(5);
+            // Create experiments with specific names for sorting (using unique random suffixes to avoid conflicts)
             var experimentA = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("A-experiment-" + randomSuffix)
+                    .name("A-experiment-" + RandomStringUtils.secure().nextAlphanumeric(10))
                     .datasetId(context.datasetId())
                     .build();
             var experimentAId = experimentResourceClient.create(experimentA, API_KEY, context.workspaceName());
 
             var experimentB = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("B-experiment-" + randomSuffix)
+                    .name("B-experiment-" + RandomStringUtils.secure().nextAlphanumeric(10))
                     .datasetId(context.datasetId())
                     .build();
             var experimentBId = experimentResourceClient.create(experimentB, API_KEY, context.workspaceName());
 
             var experimentC = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("C-experiment-" + randomSuffix)
+                    .name("C-experiment-" + RandomStringUtils.secure().nextAlphanumeric(10))
                     .datasetId(context.datasetId())
                     .build();
             var experimentCId = experimentResourceClient.create(experimentC, API_KEY, context.workspaceName());
