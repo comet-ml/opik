@@ -81,7 +81,11 @@ def _try_create_temp_copy(file_path: str) -> Optional[str]:
         return temp_file.name
     except Exception:
         temp_file.close()
-        LOGGER.error("Failed to create temporary copy of attachment: %s. Opik will try to use the original file.", file_path, exc_info=True)
+        LOGGER.error(
+            "Failed to create temporary copy of attachment: %s. Opik will try to use the original file.",
+            file_path,
+            exc_info=True,
+        )
         return None
 
 
