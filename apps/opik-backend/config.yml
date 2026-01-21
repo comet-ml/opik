@@ -725,6 +725,9 @@ jobTimeout:
   # Default: 30s
   # Description: Timeout for the trace threads closing job execution
   traceThreadsClosingJobTimeout: ${OPIK_TRACE_THREADS_CLOSING_JOB_TIMEOUT:-30}
+  # Default: 3600s (1 hour)
+  # Description: Timeout for the dataset version items_total migration job execution
+  datasetVersionItemsTotalMigrationJobTimeout: ${OPIK_DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT:-3600}
 
 # Response formatting configuration
 responseFormatting:
@@ -858,3 +861,7 @@ datasetVersioningMigration:
   # Description: Lock timeout in seconds for the migration process
   # Should be long enough to complete the migration
   lockTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_LOCK_TIMEOUT:-3600}
+  # Default: 30 seconds
+  # Description: Delay in seconds before starting the items_total migration job after application startup
+  # This allows the service to stabilize before running the migration
+  startupDelaySeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_STARTUP_DELAY:-30}

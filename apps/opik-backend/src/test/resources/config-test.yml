@@ -546,6 +546,10 @@ datasetVersioningMigration:
   # Description: Lock timeout in seconds for the migration process
   # Should be long enough to complete the migration
   lockTimeoutSeconds: 3600
+  # Default: 30 seconds
+  # Description: Delay in seconds before starting the items_total migration job after application startup
+  # This allows the service to stabilize before running the migration
+  startupDelaySeconds: 30
 
 # Job timeout configuration
 jobTimeout:
@@ -555,6 +559,9 @@ jobTimeout:
   # Default: 30s
   # Description: Timeout for the trace threads closing job execution
   traceThreadsClosingJobTimeout: 30
+  # Default: 3600s (1 hour)
+  # Description: Timeout for the dataset version items_total migration job execution
+  datasetVersionItemsTotalMigrationJobTimeout: 3600
 
 # Response formatting configuration
 responseFormatting:

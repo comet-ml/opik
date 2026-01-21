@@ -39,4 +39,12 @@ public class DatasetVersioningMigrationConfig {
      */
     @JsonProperty
     @NotNull @Min(1) private int lockTimeoutSeconds;
+
+    /**
+     * Delay in seconds before starting the items_total migration job after application startup.
+     * This allows the service to stabilize before running the migration.
+     * Default: 30 seconds
+     */
+    @JsonProperty
+    @NotNull @Min(0) private int startupDelaySeconds = 30;
 }

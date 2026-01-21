@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.bi;
 
+import com.comet.opik.api.resources.v1.jobs.DatasetVersionItemsTotalMigrationJob;
 import com.comet.opik.api.resources.v1.jobs.TraceThreadsClosingJob;
 import com.comet.opik.domain.alerts.MetricsAlertJob;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -41,7 +42,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
                 setupDailyJob();
                 setTraceThreadsClosingJob();
                 setMetricsAlertJob();
-                runDatasetVersionItemsTotalMigrationIfEnabled();
+                scheduleDatasetVersionItemsTotalMigrationJobIfEnabled();
             }
 
             case GuiceyLifecycle.ApplicationShutdown -> shutdownJobManagerScheduler();
@@ -209,25 +210,47 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         log.info("Cleared GuiceJobManager instance");
     }
 
-    private void runDatasetVersionItemsTotalMigrationIfEnabled() {
+    /**
+     * Schedules the dataset version items_total migration job if enabled.
+     * <p>
+     * This is a one-time migration job that runs after application startup with a configurable delay.
+     * The job calculates and updates the items_total field for dataset versions created by
+     * Liquibase migrations. After successful completion, disable the job by setting
+     * {@code datasetVersioningMigration.itemsTotalEnabled: false} in the configuration.
+     */
+    private void scheduleDatasetVersionItemsTotalMigrationJobIfEnabled() {
         var config = injector.get().getInstance(OpikConfiguration.class).getDatasetVersioningMigration();
 
         if (config == null || !config.isItemsTotalEnabled()) {
-            log.info("Dataset version items_total migration is disabled");
+            log.info("Dataset version items_total migration job is disabled");
             return;
         }
 
-        log.info("Starting dataset version items_total migration (async)");
-        var migrationService = injector.get().getInstance(
-                com.comet.opik.domain.DatasetVersioningMigrationService.class);
+        try {
+            Duration startupDelay = Duration.ofSeconds(config.getStartupDelaySeconds());
 
-        migrationService.runItemsTotalMigration(
-                config.getBatchSize(),
-                java.time.Duration.ofSeconds(config.getLockTimeoutSeconds()))
-                .subscribe(
-                        unused -> {
-                        },
-                        error -> log.error("Dataset version items_total migration failed", error),
-                        () -> log.info("Dataset version items_total migration completed successfully"));
+            var jobDetail = JobBuilder.newJob(DatasetVersionItemsTotalMigrationJob.class)
+                    .storeDurably()
+                    .build();
+
+            // Schedule job to run once after startup delay
+            var trigger = TriggerBuilder.newTrigger()
+                    .forJob(jobDetail)
+                    .startAt(java.util.Date.from(java.time.Instant.now().plus(startupDelay)))
+                    .build();
+
+            var scheduler = getScheduler();
+            scheduler.addJob(jobDetail, false);
+            scheduler.scheduleJob(trigger);
+
+            log.info("Dataset version items_total migration job scheduled successfully with startup delay of '{}'",
+                    startupDelay);
+            log.info("The job will run once. After successful completion, disable it by setting " +
+                    "datasetVersioningMigration.itemsTotalEnabled: false");
+        } catch (SchedulerException e) {
+            log.error("Failed to schedule dataset version items_total migration job", e);
+        } catch (Exception e) {
+            log.error("Unexpected error setting up dataset version items_total migration job", e);
+        }
     }
 }
