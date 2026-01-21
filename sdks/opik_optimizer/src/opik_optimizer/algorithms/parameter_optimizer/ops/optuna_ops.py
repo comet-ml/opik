@@ -50,6 +50,7 @@ def build_optuna_objective(
     agent: OptimizableAgent | None,
     experiment_config: dict[str, Any] | None,
     n_samples: int | None,
+    n_sample_strategy: str | None,
     total_trials: int,
 ) -> Callable[[Trial], float]:
     def objective(trial: Trial) -> float:
@@ -97,6 +98,7 @@ def build_optuna_objective(
                 verbose=optimizer.verbose,
                 experiment_config=experiment_config,
                 n_samples=n_samples,
+                n_sample_strategy=n_sample_strategy or context.n_sample_strategy,
             )
 
             prev_best_score = best_state["score"]
