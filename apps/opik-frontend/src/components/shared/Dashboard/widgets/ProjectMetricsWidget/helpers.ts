@@ -26,6 +26,18 @@ const FEEDBACK_SCORE_METRIC_TYPES = [
   METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES,
 ];
 
+const DURATION_METRIC_TYPES = [
+  METRIC_NAME_TYPE.TRACE_DURATION,
+  METRIC_NAME_TYPE.THREAD_DURATION,
+  METRIC_NAME_TYPE.SPAN_DURATION,
+];
+
+const DURATION_LABELS: Record<string, string> = {
+  p50: "P50",
+  p90: "P90",
+  p99: "P99",
+};
+
 const calculateProjectMetricsTitle = (
   config: Record<string, unknown>,
 ): string => {
@@ -38,11 +50,22 @@ const calculateProjectMetricsTitle = (
 
   const baseTitle = METRIC_LABELS[metricType] || DEFAULT_TITLE;
 
+  // For feedback score metrics with exactly one score selected
   if (
     FEEDBACK_SCORE_METRIC_TYPES.includes(metricType as METRIC_NAME_TYPE) &&
     widgetConfig.feedbackScores?.length === 1
   ) {
     return `${baseTitle} - ${widgetConfig.feedbackScores[0]}`;
+  }
+
+  // For duration metrics with exactly one percentile selected
+  if (
+    DURATION_METRIC_TYPES.includes(metricType as METRIC_NAME_TYPE) &&
+    widgetConfig.durationMetrics?.length === 1
+  ) {
+    const percentile = widgetConfig.durationMetrics[0];
+    const percentileLabel = DURATION_LABELS[percentile] || percentile.toUpperCase();
+    return `${baseTitle} - ${percentileLabel}`;
   }
 
   return baseTitle;

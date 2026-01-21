@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/accordion";
 
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import { LoadableSelectBox } from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
 import FeedbackDefinitionsAndScoresSelectBox, {
@@ -140,6 +141,12 @@ const CHART_TYPE_OPTIONS = [
   { value: CHART_TYPE.bar, label: "Bar chart" },
 ];
 
+const DURATION_METRIC_OPTIONS = [
+  { value: "p50", label: "P50 (Median)" },
+  { value: "p90", label: "P90" },
+  { value: "p99", label: "P99" },
+];
+
 const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const widgetData = useDashboardStore(
     (state) => state.previewWidget!,
@@ -168,6 +175,10 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     () => (config.feedbackScores as string[] | undefined) || [],
     [config.feedbackScores],
   );
+  const durationMetrics = useMemo<string[]>(
+    () => (config.durationMetrics as string[] | undefined) || [],
+    [config.durationMetrics],
+  );
 
   const breakdown = useMemo(
     () =>
@@ -191,11 +202,24 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     metricType === METRIC_NAME_TYPE.FEEDBACK_SCORES ||
     metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES ||
     metricType === METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES;
+  const isDurationMetric =
+    metricType === METRIC_NAME_TYPE.TRACE_DURATION ||
+    metricType === METRIC_NAME_TYPE.THREAD_DURATION ||
+    metricType === METRIC_NAME_TYPE.SPAN_DURATION;
 
   // For feedback score metrics, group by is only allowed when exactly one metric is selected
-  const hasExactlyOneMetricSelected = feedbackScores.length === 1;
+  const hasExactlyOneFeedbackScoreSelected = feedbackScores.length === 1;
   const isGroupByDisabledForFeedbackScore =
-    isFeedbackScoreMetric && !hasExactlyOneMetricSelected;
+    isFeedbackScoreMetric && !hasExactlyOneFeedbackScoreSelected;
+
+  // For duration metrics, group by is only allowed when exactly one metric is selected
+  const hasExactlyOneDurationMetricSelected = durationMetrics.length === 1;
+  const isGroupByDisabledForDuration =
+    isDurationMetric && !hasExactlyOneDurationMetricSelected;
+
+  // Combined check for group by disabled state
+  const isGroupByDisabled =
+    isGroupByDisabledForFeedbackScore || isGroupByDisabledForDuration;
 
   const isMetadataBreakdown = breakdown.field === BREAKDOWN_FIELD.METADATA;
   const hasBreakdownField = breakdown.field !== BREAKDOWN_FIELD.NONE;
@@ -237,6 +261,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
       threadFilters,
       spanFilters,
       feedbackScores,
+      durationMetrics,
       breakdown,
       overrideDefaults,
     },
@@ -323,6 +348,29 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
       config: {
         ...config,
         feedbackScores: newFeedbackScores,
+        ...(shouldClearBreakdown && {
+          breakdown: { field: BREAKDOWN_FIELD.NONE },
+        }),
+      },
+    });
+
+    // Also hide the group row if breakdown is being cleared
+    if (shouldClearBreakdown) {
+      setShowGroupRow(false);
+    }
+  };
+
+  const handleDurationMetricsChange = (newDurationMetrics: string[]) => {
+    // If changing from exactly one metric to something else, clear the breakdown
+    const wasExactlyOne = durationMetrics.length === 1;
+    const isExactlyOne = newDurationMetrics.length === 1;
+    const shouldClearBreakdown =
+      wasExactlyOne && !isExactlyOne && hasBreakdownField;
+
+    updatePreviewWidget({
+      config: {
+        ...config,
+        durationMetrics: newDurationMetrics,
         ...(shouldClearBreakdown && {
           breakdown: { field: BREAKDOWN_FIELD.NONE },
         }),
@@ -450,6 +498,47 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
             />
           )}
 
+          {isDurationMetric && (
+            <FormField
+              control={form.control}
+              name="durationMetrics"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, [
+                  "durationMetrics",
+                ]);
+                return (
+                  <FormItem>
+                    <FormLabel>Duration metrics</FormLabel>
+                    <FormControl>
+                      <LoadableSelectBox
+                        buttonClassName={cn("w-full", {
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                        value={field.value || []}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          handleDurationMetricsChange(value);
+                        }}
+                        options={DURATION_METRIC_OPTIONS}
+                        placeholder="All percentiles"
+                        multiselect
+                        showSelectAll
+                        selectAllLabel="All percentiles"
+                      />
+                    </FormControl>
+                    <Description>
+                      Select specific duration percentiles to display. Leave
+                      empty to show all percentiles.
+                    </Description>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+          )}
+
           <ProjectWidgetFiltersSection
             control={form.control}
             fieldName={
@@ -486,7 +575,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
               <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
                 <Description>Add groups to aggregate data.</Description>
                 <div className="space-y-3">
-                  {isGroupByDisabledForFeedbackScore ? (
+                  {isGroupByDisabled ? (
                     <div className="flex items-center gap-2">
                       <Button
                         type="button"
@@ -500,7 +589,9 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                       </Button>
                       <ExplainerIcon
                         {...EXPLAINERS_MAP[
-                          EXPLAINER_ID.feedback_score_groupby_requires_single_metric
+                          isGroupByDisabledForDuration
+                            ? EXPLAINER_ID.duration_groupby_requires_single_metric
+                            : EXPLAINER_ID.feedback_score_groupby_requires_single_metric
                         ]}
                       />
                     </div>

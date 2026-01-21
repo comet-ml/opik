@@ -103,6 +103,7 @@ export enum EXPLAINER_ID {
   optimizer_infer_output_style = "optimizer_infer_output_style",
   // Dashboard widget explainers
   feedback_score_groupby_requires_single_metric = "feedback_score_groupby_requires_single_metric",
+  duration_groupby_requires_single_metric = "duration_groupby_requires_single_metric",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -682,5 +683,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.feedback_score_groupby_requires_single_metric,
     description:
       "Group by is available only when exactly one metric is selected. Select a single metric from the Metrics dropdown to enable grouping.",
+  },
+  [EXPLAINER_ID.duration_groupby_requires_single_metric]: {
+    id: EXPLAINER_ID.duration_groupby_requires_single_metric,
+    description:
+      "Group by is available only when exactly one duration percentile is selected. Select a single percentile from the Duration metrics dropdown to enable grouping.",
   },
 };
