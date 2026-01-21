@@ -30,7 +30,6 @@ public class DatasetVersioningMigrationService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
 
-    private static final Lock ITEMS_TOTAL_MIGRATION_LOCK = new Lock("dataset_version_items_total_migration");
     private static final String CURSOR_MIN = ""; // Empty string is less than any string value
 
     /**
@@ -132,21 +131,18 @@ public class DatasetVersioningMigrationService {
      * migration) and items_total is 0.
      * <p>
      * The migration is safe to run multiple times and will continue from where it stopped.
-     * It processes versions in batches to avoid memory issues and uses a distributed lock
-     * to prevent concurrent executions.
+     * It processes versions in batches to avoid memory issues.
+     * <p>
+     * Note: Locking is now handled at the job level to prevent deadlocks and follow
+     * the pattern used by other jobs in the codebase.
      *
      * @param batchSize number of versions to process in each batch
-     * @param lockTimeout timeout for the distributed lock
      * @return a Mono that completes when the migration is done
      */
-    public Mono<Void> runItemsTotalMigration(int batchSize, Duration lockTimeout) {
-        log.info("Starting dataset version items_total migration with batch size '{}' and lock timeout '{}'",
-                batchSize, lockTimeout);
+    public Mono<Void> runItemsTotalMigration(int batchSize) {
+        log.info("Starting dataset version items_total migration with batch size '{}'", batchSize);
 
-        return lockService.executeWithLockCustomExpire(
-                ITEMS_TOTAL_MIGRATION_LOCK,
-                Mono.defer(() -> migrateItemsTotalInBatches(batchSize, CURSOR_MIN)),
-                lockTimeout);
+        return Mono.defer(() -> migrateItemsTotalInBatches(batchSize, CURSOR_MIN));
     }
 
     /**
