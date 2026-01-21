@@ -22,6 +22,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { EXPERIMENT_DATA_SOURCE } from "@/types/dashboard";
 import { FilterOperator, Filters } from "@/types/filters";
+import { isFilterValid } from "@/lib/filters";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
@@ -84,6 +85,14 @@ const DashboardDataSourceSection: React.FC<DashboardDataSourceSectionProps> = ({
   const filters = useMemo(
     () => (isArray(experimentFilters) ? experimentFilters : []),
     [experimentFilters],
+  );
+
+  const configAutocompleteFilters = useMemo(
+    () =>
+      filters.filter((f) => {
+        return isFilterValid(f) && f.field !== COLUMN_METADATA_ID;
+      }),
+    [filters],
   );
 
   const filterErrors = useMemo(() => {
@@ -170,11 +179,12 @@ const DashboardDataSourceSection: React.FC<DashboardDataSourceSectionProps> = ({
           keyComponentProps: {
             placeholder: "key",
             excludeRoot: true,
+            filters: configAutocompleteFilters,
           },
         },
       },
     }),
-    [],
+    [configAutocompleteFilters],
   );
 
   const renderProjectSelector = () => {
