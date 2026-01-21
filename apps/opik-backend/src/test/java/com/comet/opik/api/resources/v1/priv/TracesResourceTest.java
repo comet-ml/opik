@@ -31,6 +31,8 @@ import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.FilterOperator;
+import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -6671,8 +6673,8 @@ class TracesResourceTest {
             // When: Filter by experiment1Id
             var filters = List.of(
                     Filter.builder()
-                            .field(com.comet.opik.api.filter.TraceField.EXPERIMENT_ID.getQueryParamField())
-                            .operator(com.comet.opik.api.filter.FilterOperator.EQUALS)
+                            .field(TraceField.EXPERIMENT_ID.getQueryParamField())
+                            .operator(FilterOperator.EQUALS)
                             .value(experiment1Id.toString())
                             .build());
             var filtersJson = URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
