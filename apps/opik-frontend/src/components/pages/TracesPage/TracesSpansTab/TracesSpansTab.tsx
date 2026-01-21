@@ -109,7 +109,7 @@ import { SelectItem } from "@/components/ui/select";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
-import { Filter, FilterOperator, Filters } from "@/types/filters";
+import { Filter, FilterOperator } from "@/types/filters";
 import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
@@ -121,22 +121,6 @@ const getRowId = (d: Trace | Span) => d.id;
 const REFETCH_INTERVAL = 30000;
 
 const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
-
-/**
- * Transform experiment_name filter field to experiment_id for backend.
- * The experiment filter uses a dropdown that selects by name but sends the experiment ID.
- */
-const transformExperimentFilters = (filters: Filters): Filters => {
-  return filters.map((filter: Filter) => {
-    if (filter.field === "experiment_name") {
-      return {
-        ...filter,
-        field: "experiment_id",
-      };
-    }
-    return filter;
-  });
-};
 
 /**
  * Formats a score name with the span suffix for display in column labels
@@ -445,7 +429,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   placeholder: "Select span score",
                 },
               },
-              experiment_name: {
+              experiment_id: {
                 keyComponent: ExperimentsSelectBox,
                 keyComponentProps: {
                   className: "w-full min-w-72",
@@ -480,17 +464,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const transformedFilters = useMemo(
-    () => transformExperimentFilters(filters),
-    [filters],
-  );
-
   const { data, isPending, refetch } = useTracesOrSpansList(
     {
       projectId,
       type: type as TRACE_DATA_TYPE,
       sorting: sortedColumns,
-      filters: transformedFilters,
+      filters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -510,7 +489,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       projectId,
       type: type as TRACE_DATA_TYPE,
       sorting: sortedColumns,
-      filters: transformedFilters,
+      filters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -529,7 +508,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       {
         projectId,
         type: type as TRACE_DATA_TYPE,
-        filters: transformedFilters,
+        filters,
         search: search as string,
         fromTime: intervalStart,
         toTime: intervalEnd,
@@ -876,7 +855,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
             },
             {
-              id: "experiment_name",
+              id: "experiment_id",
               label: "Experiment",
               type: COLUMN_TYPE.string,
               cell: ResourceCell as never,
@@ -954,7 +933,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               type: COLUMN_TYPE.string,
             },
             {
-              id: "experiment_name",
+              id: "experiment_id",
               label: "Experiment",
               type: COLUMN_TYPE.string,
             },

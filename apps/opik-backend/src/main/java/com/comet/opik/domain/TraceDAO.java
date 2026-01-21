@@ -2947,7 +2947,7 @@ class TraceDAOImpl implements TraceDAO {
 
             var finalTemplate = template;
             // Field mapping for experiment - sort by experiment name (tuple element 2)
-            var fieldMapping = Map.of("experiment_name", "eaag.experiment.2");
+            var fieldMapping = Map.of("experiment_id", "eaag.experiment.2");
             Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(), fieldMapping))
                     .ifPresent(sortFields -> {
 
@@ -2959,7 +2959,7 @@ class TraceDAOImpl implements TraceDAO {
                             finalTemplate.add("sort_has_span_statistics", true);
                         }
 
-                        if (sortFields.contains("experiment_name") || sortFields.contains("eaag.experiment")) {
+                        if (sortFields.contains("experiment_id") || sortFields.contains("eaag.experiment")) {
                             finalTemplate.add("sort_has_experiment", true);
                         }
 
