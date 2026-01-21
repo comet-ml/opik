@@ -18,6 +18,7 @@ from ..utils.tool_helpers import (
 )
 from .. import helpers
 from . import agent as agent_utils
+from .. import constants
 
 # Valid reasons for optimization to finish
 FinishReason = Literal[
@@ -61,6 +62,8 @@ class OptimizationContext:
     optimization_id: str | None
     experiment_config: dict[str, Any] | None
     n_samples: int | None
+    n_minibatch_samples: int | None = None
+    n_sample_strategy: str = constants.DEFAULT_N_SAMPLE_STRATEGY
     max_trials: int
     project_name: str
     allow_tool_use: bool = True
