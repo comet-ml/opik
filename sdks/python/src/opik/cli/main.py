@@ -11,6 +11,7 @@ from . import harbor
 from . import healthcheck
 from . import imports
 from . import proxy
+from . import smoke_test
 from . import usage_report
 
 __version__: str = "0.0.0+dev"
@@ -47,3 +48,4 @@ cli.add_command(exports.export_group)
 cli.add_command(imports.import_group)
 cli.add_command(usage_report.usage_report)
 cli.add_command(harbor.harbor)
+cli.add_command(smoke_test.smoke_test)
