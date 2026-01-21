@@ -1088,7 +1088,9 @@ class TraceDAOImpl implements TraceDAO {
             ), experiments_agg AS (
                 SELECT
                     ei.trace_id,
-                    tuple(e.id AS id, e.name AS name, e.dataset_id AS dataset_id) AS experiment
+                    e.id AS experiment_id,
+                    e.name AS experiment_name,
+                    e.dataset_id AS experiment_dataset_id
                 FROM experiment_items ei
                 INNER JOIN (
                     SELECT id, name, dataset_id
@@ -1252,7 +1254,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
-                  <if(!exclude_experiment)>, eaag.experiment AS experiment<endif>
+                  <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
@@ -2470,7 +2472,7 @@ class TraceDAOImpl implements TraceDAO {
             SETTINGS log_comment = '<log_comment>';
             """;
 
-    private static final Map<String, String> EXPERIMENT_FIELD_MAPPING = Map.of("experiment_id", "eaag.experiment.name");
+    private static final Map<String, String> EXPERIMENT_FIELD_MAPPING = Map.of("experiment_id", "eaag.experiment_name");
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -2840,8 +2842,7 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
-                .experiment(
-                        mapExperiment(getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment", List.class)))
+                .experiment(mapExperiment(exclude, row))
                 .build();
     }
 
@@ -2861,18 +2862,19 @@ class TraceDAOImpl implements TraceDAO {
                 .toList());
     }
 
-    private ExperimentReference mapExperiment(List<Object> experiment) {
-        if (experiment == null || experiment.isEmpty()) {
+    private ExperimentReference mapExperiment(Set<Trace.TraceField> exclude, Row row) {
+        String experimentId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_id", String.class);
+        String experimentName = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_name", String.class);
+        String experimentDatasetId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_dataset_id",
+                String.class);
+
+        if (StringUtils.isBlank(experimentId) || StringUtils.isBlank(experimentName)
+                || StringUtils.isBlank(experimentDatasetId)) {
             return null;
         }
-        // Tuple from ClickHouse: (id, name, dataset_id)
-        String idStr = (String) experiment.get(0);
-        String name = (String) experiment.get(1);
-        String datasetIdStr = (String) experiment.get(2);
-        if (StringUtils.isBlank(idStr) || StringUtils.isBlank(name) || StringUtils.isBlank(datasetIdStr)) {
-            return null;
-        }
-        return new ExperimentReference(UUID.fromString(idStr), name, UUID.fromString(datasetIdStr));
+
+        return new ExperimentReference(UUID.fromString(experimentId), experimentName,
+                UUID.fromString(experimentDatasetId));
     }
 
     private Publisher<TraceDetails> mapToTraceDetails(Result result) {
