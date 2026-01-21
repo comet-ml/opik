@@ -656,13 +656,13 @@ Dataset Item          Task Output           Metric Input
 ┌─────────────┐      ┌────────────┐        ┌────────────┐
 │ question    │ ──▶  │            │        │            │
 │ answer      │      │ response   │ ──▶    │ output     │
-│ context     │      │            │        │ expected   │
+│ context     │      │            │        │ substring  │
 └─────────────┘      └────────────┘        └────────────┘
                            │                     ▲
                            │    scoringKeyMapping│
                            └─────────────────────┘
                            output ← response
-                           expected ← answer
+                           substring ← answer
 ```
 
 ### Type Definition
