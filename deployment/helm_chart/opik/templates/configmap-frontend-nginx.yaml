@@ -80,7 +80,9 @@ data:
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Frame-Options "DENY" always;
         add_header X-XSS-Protection "0" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';" always;
+        {{- if .Values.component.frontend.csp.enabled }}
+        add_header Content-Security-Policy "default-src 'self'; script-src {{ .Values.component.frontend.csp.scriptSrc | join " " }}; style-src {{ .Values.component.frontend.csp.styleSrc | join " " }}; img-src {{ .Values.component.frontend.csp.imgSrc | join " " }}; media-src {{ .Values.component.frontend.csp.mediaSrc | join " " }}; font-src {{ .Values.component.frontend.csp.fontSrc | join " " }}; connect-src {{ .Values.component.frontend.csp.connectSrc | join " " }}; object-src 'none'; base-uri 'self'; frame-ancestors {{ .Values.component.frontend.csp.frameAncestors | join " " }};" always;
+        {{- end }}
         {{- if .Values.component.frontend.hstsEnabled }}
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
         {{- end }}

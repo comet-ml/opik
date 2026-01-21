@@ -15,6 +15,7 @@ This workflow will:
 - Extract test environment link from PR description
 - Extract component summaries (FE, BE, Python) from PR description
 - Prompt only for missing information
+- Allow user to customize the message slightly
 - Format the message according to the code review template
 - Send the message to #opik-code-review channel via Slack MCP (`ghcr.io/korotovsky/slack-mcp-server`)
 - Verify successful delivery
@@ -32,6 +33,7 @@ This workflow will:
 - **FE summary**: Extracted from PR description (looks for frontend/React/FE mentions) or prompted if not found
 - **BE summary**: Extracted from PR description (looks for backend/Java/BE mentions) or prompted if not found
 - **Python summary**: Extracted from PR description (looks for Python/Python SDK mentions) or prompted if not found
+- **Baz approved status**: Extracted from PR status checks (optional, may not be available)
 
 ### Configuration
 - **Slack MCP**: Required - uses custom Slack MCP server (`ghcr.io/korotovsky/slack-mcp-server`)
@@ -85,6 +87,13 @@ This workflow will:
   - If not found in title, check PR description "## Issues" section for `OPIK-\d+` pattern
   - If still not found, prompt: "Jira ticket not found in PR. Enter Jira ticket number (e.g., OPIK-1234):"
   - Validate format and store
+  - **Build Jira URL**: Construct Jira link as `https://comet-ml.atlassian.net/browse/{TICKET}` (e.g., `https://comet-ml.atlassian.net/browse/OPIK-1234`)
+
+- **Extract Baz approved status (optional)**:
+  - Try to fetch PR status checks using GitHub MCP
+  - Look for status checks or CI checks that might indicate "Baz approved" or similar approval status
+  - If found, store the status (e.g., "Baz approved: ✅" or "Baz status: pending")
+  - If not found or unavailable, skip this field (it\'s optional)
 
 - **Extract test environment link from PR description and comments**:
   - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
@@ -116,33 +125,65 @@ This workflow will:
 
 ---
 
-### 4. Format Slack Message
+### 4. Prompt for Message Customization
+
+- **Allow user to customize message**: After extracting all information, prompt the user:
+  > "Would you like to customize the message? (Enter any additional text to prepend/append, or press Enter to use default message):"
+- **If user provides customization text**: Store it for inclusion in the final message
+- **If user presses Enter (empty)**: Proceed with default message format
+- **Note**: User can add context, emphasize certain points, or include additional information
+
+---
+
+### 5. Format Slack Message
 
 - **Use PR link**: Use the PR URL extracted from Step 2 (or provided manually)
 
 - **Build message text** according to the template:
   ```
-  :jira_epic: jira ticket: {{Jira-ticket}}
+  Hi team,
+
+  Please review the following PR:
+  
+  {{user_customization_text_if_provided}}
+  
+  :jira_epic: jira link: {{Jira_URL}}
   :github: pr link: {{PR_link}}
   :test_tube: test env link: {{test_env}}
+  {{baz_approved_status_if_available}}
   :react: fe summary (optional): {{description_in_one_line}}
   :java: be summary (optional): {{description_in_one_line}}
   :python: python summary (optional): {{description_in_one_line}}
   ```
 
+- **Message structure**:
+  - **Start with greeting**: Always begin with "Hi team,\n\nPlease review the following PR:\n"
+  - **User customization**: If user provided customization text in Step 4, include it after the greeting (before the structured fields)
+  - **Jira link**: Include full Jira URL with ticket (e.g., `https://comet-ml.atlassian.net/browse/OPIK-1234`)
+  - **PR link**: Include GitHub PR URL
+  - **Test env link**: Include test environment URL
+  - **Baz approved status**: Only include if extracted from PR status checks (optional field)
+  - **Component summaries**: Only include optional fields that were provided (skip empty ones)
+
 - **Only include optional fields** that were provided (skip empty ones)
 - **Format example**:
   ```
-  :jira_epic: jira ticket: OPIK-1234
+  Hi team,
+
+  Please review the following PR:
+  
+  :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
   :github: pr link: https://github.com/comet-ml/opik/pull/1234
-  :test_tube: test env link https://test.opik.com
+  :test_tube: test env link: https://test.opik.com
   :react: fe summary (optional): Added new metrics dashboard UI
   :java: be summary (optional): Implemented metrics aggregation endpoint
   ```
 
+- **Note about videos**: Slack has limitations on sending videos directly. Videos should be added to the PR description, and the link can be shared in Slack. For easier communication with the product team, consider using the `cursor generate-code-review-slack-command` command to generate a copiable Slack command that you can edit before sending (allowing you to add @ mentions, media links, and final proof editing).
+
 ---
 
-### 5. Send Slack Message
+### 6. Send Slack Message
 
 - **Use Slack MCP tool `conversations_add_message`** from `ghcr.io/korotovsky/slack-mcp-server`
 - This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) configured according to `.cursor/SLACK_MCP_SETUP.md`
@@ -167,7 +208,7 @@ This workflow will:
 
 ---
 
-### 6. Verification & Summary
+### 7. Verification & Summary
 
 - **Display confirmation**: 
   > "✅ Slack message sent successfully to #opik-code-review channel"
@@ -239,7 +280,7 @@ The command is successful when:
 4. ✅ Jira ticket is extracted from PR or provided manually
 5. ✅ Test environment link is extracted from PR or provided manually
 6. ✅ Component summaries are extracted from PR or provided manually (optional)
-7. ✅ Message is formatted according to template
+7. ✅ Message is formatted according to template (with greeting and Jira link)
 8. ✅ Slack message is sent successfully via `conversations_add_message` MCP tool (posts as user account)
 9. ✅ User receives confirmation of successful delivery
 
@@ -257,7 +298,7 @@ The command is successful when:
   - Requires `SLACK_MCP_ADD_MESSAGE_TOOL=true` to enable the tool
   - Requires Docker to be installed and running
   - Token starts with `xoxp-` and requires `chat:write` scope in User Token Scopes
-- **Message format**: Follows the exact template provided with emoji prefixes
+- **Message format**: Follows the exact template provided with emoji prefixes, includes greeting and Jira link
 - **Automatic extraction**: Extracts information from PR title and description to minimize manual input
 - **Fallback to prompts**: Only prompts for information that cannot be extracted from PR
 - **Optional fields**: Only included in message if extracted from PR or provided by user
@@ -265,6 +306,7 @@ The command is successful when:
 - **PR detection**: Automatically finds PR for current branch, falls back to manual input if needed
 - **Smart extraction**: Uses heuristics to find test environment links and component summaries in PR description
 - **MCP Configuration**: Slack MCP must be configured before using this command (see `.cursor/SLACK_MCP_SETUP.md` for detailed setup)
+- **Video limitations**: Slack cannot send videos directly. Use `cursor generate-code-review-slack-command` to generate a copiable command that you can edit before sending (allowing you to add @ mentions, media links, and final proof editing)
 
 ---
 
@@ -294,14 +336,15 @@ cursor send-code-review-slack
 #    - FE: Added new metrics dashboard UI (from Details section)
 #    - BE: Implemented metrics aggregation endpoint (from Details section)
 #    - Python: (not found, prompts user)
-# 5. Format message according to template
-# 6. Send formatted message to Slack via conversations_add_message MCP tool (posts as user account)
+# 5. Prompt for message customization (optional)
+# 6. Format message according to template (with greeting and Jira link)
+# 7. Send formatted message to Slack via conversations_add_message MCP tool (posts as user account)
 
 # Output:
 # ✅ Slack message sent successfully to #opik-code-review channel
 # 
 # Message sent:
-# :jira_epic: jira ticket: OPIK-1234
+# :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
 # :github: pr link: https://github.com/comet-ml/opik/pull/1234
 # :test_tube: test env link: https://test.opik.com
 # :react: fe summary (optional): Added new metrics dashboard UI
@@ -321,6 +364,7 @@ cursor send-code-review-slack
 # Frontend summary not found in PR. Enter frontend summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
 # Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip): Implemented metrics endpoint
 # Python summary not found in PR. Enter Python summary (one line, optional - press Enter to skip): [Enter pressed - skipped]
+# Would you like to customize the message? (Enter any additional text to prepend/append, or press Enter to use default message): [Enter pressed - using default]
 ```
 
 ---

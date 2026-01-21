@@ -1,1 +1,1 @@
-export { type WelcomeWizardSubmission } from "./WelcomeWizardSubmission";
+export type { WelcomeWizardSubmission } from "./WelcomeWizardSubmission.js";
