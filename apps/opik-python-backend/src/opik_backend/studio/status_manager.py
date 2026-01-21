@@ -32,12 +32,12 @@ class OptimizationStatusManager:
         Args:
             status: New status ("running", "completed", "error", etc.)
         """
-        logger.info(f"Updating optimization {self.optimization_id} status to '{status}'")
+        logger.debug(f"Updating optimization {self.optimization_id} status to '{status}'")
         self.client.rest_client.optimizations.update_optimizations_by_id(
             self.optimization_id,
             status=status
         )
-        logger.info(f"Optimization {self.optimization_id} status updated to '{status}'")
+        logger.debug(f"Optimization {self.optimization_id} status updated to '{status}'")
     
     def mark_running(self) -> None:
         """Mark optimization as running."""

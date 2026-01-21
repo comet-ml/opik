@@ -71,7 +71,7 @@ class OptimizerFactory:
         if "max_tokens" not in model_params:
             model_params = {**model_params, "max_tokens": LLM_MAX_TOKENS}
 
-        logger.info(
+        logger.debug(
             f"Initializing {optimizer_type} optimizer with params: {optimizer_params}"
         )
 
@@ -80,7 +80,7 @@ class OptimizerFactory:
             model=model, model_parameters=model_params, **optimizer_params
         )
 
-        logger.info(f"Created {optimizer_type} optimizer instance")
+        logger.debug(f"Created {optimizer_type} optimizer instance")
         return optimizer
 
     @classmethod

@@ -64,6 +64,11 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 
+# Configure opik_optimizer log level separately (default: DEBUG to show optimizer output)
+# This can be set via OPIK_OPTIMIZER_LOG_LEVEL env var (automatically inherited by subprocess)
+OPTIMIZER_LOG_LEVEL = os.environ.get("OPIK_OPTIMIZER_LOG_LEVEL", "DEBUG").upper()
+logging.getLogger("opik_optimizer").setLevel(getattr(logging, OPTIMIZER_LOG_LEVEL, logging.DEBUG))
+
 # Suppress Pydantic serialization warnings from LiteLLM
 # These occur due to LiteLLM's varying response structures across providers
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
@@ -154,7 +159,7 @@ def main():
         # Force verbose mode for testing Rich output
         config.optimizer_params["verbose"] = True
 
-        logger.info(f"Processing optimization: {context.optimization_id}")
+        logger.debug(f"Processing optimization: {context.optimization_id}")
         logger.debug(f"Using model: {config.model} with params: {config.model_params}")
 
         # Initialize Opik client (sets env vars for SDK)
