@@ -330,9 +330,13 @@ class ProjectMetricsWithBreakdownResourceTest {
                 requestBuilder.breakdown(BreakdownConfig.builder()
                         .field(breakdownField)
                         .metadataKey("env")
+                        .subMetric("p50")
                         .build());
             } else {
-                requestBuilder.breakdown(BreakdownConfig.builder().field(breakdownField).build());
+                requestBuilder.breakdown(BreakdownConfig.builder()
+                        .field(breakdownField)
+                        .subMetric("p50")
+                        .build());
             }
 
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, requestBuilder.build(),
@@ -359,7 +363,10 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 1, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(invalidField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(invalidField)
+                            .subMetric("p50")
+                            .build())
                     .build();
 
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
@@ -379,6 +386,8 @@ class ProjectMetricsWithBreakdownResourceTest {
     @DisplayName("Token Usage with Breakdown")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TokenUsageWithBreakdownTest {
+
+        private static final String USAGE_KEY_NAME = "completion_tokens";
 
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.ProjectMetricsWithBreakdownResourceTest#traceValidBreakdownFields")
@@ -408,9 +417,13 @@ class ProjectMetricsWithBreakdownResourceTest {
                 requestBuilder.breakdown(BreakdownConfig.builder()
                         .field(breakdownField)
                         .metadataKey("env")
+                        .subMetric(USAGE_KEY_NAME)
                         .build());
             } else {
-                requestBuilder.breakdown(BreakdownConfig.builder().field(breakdownField).build());
+                requestBuilder.breakdown(BreakdownConfig.builder()
+                        .field(breakdownField)
+                        .subMetric(USAGE_KEY_NAME)
+                        .build());
             }
 
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, requestBuilder.build(),
@@ -436,7 +449,10 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 1, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(invalidField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(invalidField)
+                            .subMetric(USAGE_KEY_NAME)
+                            .build())
                     .build();
 
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
@@ -534,6 +550,8 @@ class ProjectMetricsWithBreakdownResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FeedbackScoresWithBreakdownTest {
 
+        private static final String FEEDBACK_SCORE_NAME = "test-score";
+
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.ProjectMetricsWithBreakdownResourceTest#traceValidBreakdownFields")
         @DisplayName("happyPath: valid breakdown field returns grouped results with multiple data points")
@@ -547,10 +565,10 @@ class ProjectMetricsWithBreakdownResourceTest {
             // Create traces with feedback scores in 2 time buckets (use past hours)
             Instant bucket1 = subtract(marker, 2, interval);
             Instant bucket2 = subtract(marker, 1, interval);
-            createTracesWithFeedbackScores(projectName, bucket1, breakdownField, "group-a", 2);
-            createTracesWithFeedbackScores(projectName, bucket2, breakdownField, "group-a", 2);
-            createTracesWithFeedbackScores(projectName, bucket1, breakdownField, "group-b", 2);
-            createTracesWithFeedbackScores(projectName, bucket2, breakdownField, "group-b", 2);
+            createTracesWithFeedbackScores(projectName, bucket1, breakdownField, "group-a", 2, FEEDBACK_SCORE_NAME);
+            createTracesWithFeedbackScores(projectName, bucket2, breakdownField, "group-a", 2, FEEDBACK_SCORE_NAME);
+            createTracesWithFeedbackScores(projectName, bucket1, breakdownField, "group-b", 2, FEEDBACK_SCORE_NAME);
+            createTracesWithFeedbackScores(projectName, bucket2, breakdownField, "group-b", 2, FEEDBACK_SCORE_NAME);
 
             var requestBuilder = ProjectMetricRequest.builder()
                     .metricType(MetricType.FEEDBACK_SCORES)
@@ -562,9 +580,13 @@ class ProjectMetricsWithBreakdownResourceTest {
                 requestBuilder.breakdown(BreakdownConfig.builder()
                         .field(breakdownField)
                         .metadataKey("env")
+                        .subMetric(FEEDBACK_SCORE_NAME)
                         .build());
             } else {
-                requestBuilder.breakdown(BreakdownConfig.builder().field(breakdownField).build());
+                requestBuilder.breakdown(BreakdownConfig.builder()
+                        .field(breakdownField)
+                        .subMetric(FEEDBACK_SCORE_NAME)
+                        .build());
             }
 
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, requestBuilder.build(),
@@ -590,7 +612,10 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 1, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(invalidField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(invalidField)
+                            .subMetric(FEEDBACK_SCORE_NAME)
+                            .build())
                     .build();
 
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
@@ -784,7 +809,10 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 3, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(breakdownField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(breakdownField)
+                            .subMetric("p50")
+                            .build())
                     .build();
 
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, Double.class, API_KEY,
@@ -811,7 +839,10 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 1, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(invalidField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(invalidField)
+                            .subMetric("p50")
+                            .build())
                     .build();
 
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
@@ -832,6 +863,8 @@ class ProjectMetricsWithBreakdownResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ThreadFeedbackScoresWithBreakdownTest {
 
+        private static final String FEEDBACK_SCORE_NAME = "thread-test-score";
+
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.ProjectMetricsWithBreakdownResourceTest#threadValidBreakdownFields")
         @DisplayName("happyPath: valid breakdown field returns grouped results with multiple data points")
@@ -845,17 +878,20 @@ class ProjectMetricsWithBreakdownResourceTest {
             // Create threads with feedback scores in 2 time buckets (use past hours)
             Instant bucket1 = subtract(marker, 2, interval);
             Instant bucket2 = subtract(marker, 1, interval);
-            createThreadsWithFeedbackScores(projectName, bucket1, breakdownField, "group-a", 2);
-            createThreadsWithFeedbackScores(projectName, bucket2, breakdownField, "group-a", 2);
-            createThreadsWithFeedbackScores(projectName, bucket1, breakdownField, "group-b", 2);
-            createThreadsWithFeedbackScores(projectName, bucket2, breakdownField, "group-b", 2);
+            createThreadsWithFeedbackScores(projectName, bucket1, breakdownField, "group-a", 2, FEEDBACK_SCORE_NAME);
+            createThreadsWithFeedbackScores(projectName, bucket2, breakdownField, "group-a", 2, FEEDBACK_SCORE_NAME);
+            createThreadsWithFeedbackScores(projectName, bucket1, breakdownField, "group-b", 2, FEEDBACK_SCORE_NAME);
+            createThreadsWithFeedbackScores(projectName, bucket2, breakdownField, "group-b", 2, FEEDBACK_SCORE_NAME);
 
             var request = ProjectMetricRequest.builder()
                     .metricType(MetricType.THREAD_FEEDBACK_SCORES)
                     .interval(interval)
                     .intervalStart(subtract(marker, 3, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(breakdownField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(breakdownField)
+                            .subMetric(FEEDBACK_SCORE_NAME)
+                            .build())
                     .build();
 
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, Double.class, API_KEY,
@@ -881,7 +917,10 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 1, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(invalidField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(invalidField)
+                            .subMetric(FEEDBACK_SCORE_NAME)
+                            .build())
                     .build();
 
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
@@ -1011,9 +1050,13 @@ class ProjectMetricsWithBreakdownResourceTest {
                 requestBuilder.breakdown(BreakdownConfig.builder()
                         .field(breakdownField)
                         .metadataKey("env")
+                        .subMetric("p50")
                         .build());
             } else {
-                requestBuilder.breakdown(BreakdownConfig.builder().field(breakdownField).build());
+                requestBuilder.breakdown(BreakdownConfig.builder()
+                        .field(breakdownField)
+                        .subMetric("p50")
+                        .build());
             }
 
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, requestBuilder.build(),
@@ -1040,7 +1083,10 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 1, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(invalidField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(invalidField)
+                            .subMetric("p50")
+                            .build())
                     .build();
 
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
@@ -1060,6 +1106,8 @@ class ProjectMetricsWithBreakdownResourceTest {
     @DisplayName("Span Token Usage with Breakdown")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SpanTokenUsageWithBreakdownTest {
+
+        private static final String USAGE_KEY_NAME = "completion_tokens";
 
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.ProjectMetricsWithBreakdownResourceTest#spanValidBreakdownFields")
@@ -1089,9 +1137,13 @@ class ProjectMetricsWithBreakdownResourceTest {
                 requestBuilder.breakdown(BreakdownConfig.builder()
                         .field(breakdownField)
                         .metadataKey("env")
+                        .subMetric(USAGE_KEY_NAME)
                         .build());
             } else {
-                requestBuilder.breakdown(BreakdownConfig.builder().field(breakdownField).build());
+                requestBuilder.breakdown(BreakdownConfig.builder()
+                        .field(breakdownField)
+                        .subMetric(USAGE_KEY_NAME)
+                        .build());
             }
 
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, requestBuilder.build(),
@@ -1117,7 +1169,10 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 1, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(invalidField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(invalidField)
+                            .subMetric(USAGE_KEY_NAME)
+                            .build())
                     .build();
 
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
@@ -1139,6 +1194,8 @@ class ProjectMetricsWithBreakdownResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class SpanFeedbackScoresWithBreakdownTest {
 
+        private static final String FEEDBACK_SCORE_NAME = "span-test-score";
+
         @ParameterizedTest
         @MethodSource("com.comet.opik.api.resources.v1.priv.ProjectMetricsWithBreakdownResourceTest#spanValidBreakdownFields")
         @DisplayName("happyPath: valid breakdown field returns grouped results with multiple data points")
@@ -1152,10 +1209,10 @@ class ProjectMetricsWithBreakdownResourceTest {
             // Create spans with feedback scores in 2 time buckets (use past hours)
             Instant bucket1 = subtract(marker, 2, interval);
             Instant bucket2 = subtract(marker, 1, interval);
-            createSpansWithFeedbackScores(projectName, bucket1, breakdownField, "group-a", 2);
-            createSpansWithFeedbackScores(projectName, bucket2, breakdownField, "group-a", 2);
-            createSpansWithFeedbackScores(projectName, bucket1, breakdownField, "group-b", 2);
-            createSpansWithFeedbackScores(projectName, bucket2, breakdownField, "group-b", 2);
+            createSpansWithFeedbackScores(projectName, bucket1, breakdownField, "group-a", 2, FEEDBACK_SCORE_NAME);
+            createSpansWithFeedbackScores(projectName, bucket2, breakdownField, "group-a", 2, FEEDBACK_SCORE_NAME);
+            createSpansWithFeedbackScores(projectName, bucket1, breakdownField, "group-b", 2, FEEDBACK_SCORE_NAME);
+            createSpansWithFeedbackScores(projectName, bucket2, breakdownField, "group-b", 2, FEEDBACK_SCORE_NAME);
 
             var requestBuilder = ProjectMetricRequest.builder()
                     .metricType(MetricType.SPAN_FEEDBACK_SCORES)
@@ -1167,9 +1224,13 @@ class ProjectMetricsWithBreakdownResourceTest {
                 requestBuilder.breakdown(BreakdownConfig.builder()
                         .field(breakdownField)
                         .metadataKey("env")
+                        .subMetric(FEEDBACK_SCORE_NAME)
                         .build());
             } else {
-                requestBuilder.breakdown(BreakdownConfig.builder().field(breakdownField).build());
+                requestBuilder.breakdown(BreakdownConfig.builder()
+                        .field(breakdownField)
+                        .subMetric(FEEDBACK_SCORE_NAME)
+                        .build());
             }
 
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, requestBuilder.build(),
@@ -1195,7 +1256,10 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .interval(interval)
                     .intervalStart(subtract(marker, 1, interval))
                     .intervalEnd(Instant.now())
-                    .breakdown(BreakdownConfig.builder().field(invalidField).build())
+                    .breakdown(BreakdownConfig.builder()
+                            .field(invalidField)
+                            .subMetric(FEEDBACK_SCORE_NAME)
+                            .build())
                     .build();
 
             try (var response = client.target(URL_TEMPLATE.formatted(baseURI, projectId))
@@ -1321,7 +1385,7 @@ class ProjectMetricsWithBreakdownResourceTest {
     }
 
     private void createTracesWithFeedbackScores(String projectName, Instant marker, BreakdownField breakdownField,
-            String groupValue, int count) {
+            String groupValue, int count, String scoreName) {
         for (int i = 0; i < count; i++) {
             Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
             var traceBuilder = factory.manufacturePojo(Trace.class).toBuilder()
@@ -1336,7 +1400,7 @@ class ProjectMetricsWithBreakdownResourceTest {
             List<FeedbackScoreBatchItem> scores = List.of(FeedbackScoreBatchItem.builder()
                     .id(trace.id())
                     .projectName(projectName)
-                    .name("score-" + RANDOM.nextInt(1000))
+                    .name(scoreName)
                     .value(BigDecimal.valueOf(RANDOM.nextDouble()))
                     .source(ScoreSource.SDK)
                     .build());
@@ -1446,7 +1510,7 @@ class ProjectMetricsWithBreakdownResourceTest {
     }
 
     private void createThreadsWithFeedbackScores(String projectName, Instant marker, BreakdownField breakdownField,
-            String groupValue, int count) {
+            String groupValue, int count, String scoreName) {
         for (int i = 0; i < count; i++) {
             String threadId = RandomStringUtils.secure().nextAlphabetic(10);
             Instant traceStartTime = marker.plus(i, ChronoUnit.SECONDS);
@@ -1467,7 +1531,7 @@ class ProjectMetricsWithBreakdownResourceTest {
             List<FeedbackScoreBatchItemThread> scores = List.of(FeedbackScoreBatchItemThread.builder()
                     .threadId(threadId)
                     .projectName(projectName)
-                    .name("score-" + RANDOM.nextInt(1000))
+                    .name(scoreName)
                     .value(BigDecimal.valueOf(RANDOM.nextDouble()))
                     .source(ScoreSource.SDK)
                     .build());
@@ -1541,7 +1605,7 @@ class ProjectMetricsWithBreakdownResourceTest {
     }
 
     private void createSpansWithFeedbackScores(String projectName, Instant marker, BreakdownField breakdownField,
-            String groupValue, int count) {
+            String groupValue, int count, String scoreName) {
         for (int i = 0; i < count; i++) {
             Instant spanStartTime = marker.plus(i, ChronoUnit.SECONDS);
             var spanBuilder = factory.manufacturePojo(Span.class).toBuilder()
@@ -1556,7 +1620,7 @@ class ProjectMetricsWithBreakdownResourceTest {
             List<FeedbackScoreBatchItem> scores = List.of(FeedbackScoreBatchItem.builder()
                     .id(span.id())
                     .projectName(projectName)
-                    .name("score-" + RANDOM.nextInt(1000))
+                    .name(scoreName)
                     .value(BigDecimal.valueOf(RANDOM.nextDouble()))
                     .source(ScoreSource.SDK)
                     .build());
