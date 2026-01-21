@@ -73,7 +73,7 @@ public class DatasetVersionItemsTotalMigrationJob extends Job implements Interru
         var lock = new Lock("dataset_version_migration_job",
                 DatasetVersionItemsTotalMigrationJob.class.getSimpleName());
         Duration jobTimeout = Duration.ofSeconds(config.getItemsTotalJobTimeoutSeconds());
-        Duration lockWaitTime = Duration.ofSeconds(5); // Short wait to check if another job instance is running
+        Duration lockWaitTime = Duration.ofSeconds(config.getItemsTotalLockTimeoutSeconds());
         int batchSize = config.getItemsTotalDatasetsBatchSize();
 
         // Use bestEffortLock to prevent duplicate job executions
