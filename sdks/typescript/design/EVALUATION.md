@@ -342,7 +342,7 @@ EvaluationEngine.calculateScores()
 **Error Handling**: If validation fails, the metric is skipped and a descriptive error is logged:
 
 ```
-Metric 'contains_metric' is skipped, missing required arguments: expected. 
+Metric 'contains_metric' is skipped, missing required arguments: substring.
 Available arguments: output, input, context.
 ```
 
@@ -377,7 +377,7 @@ const result = metric.score({
   output: "hello",
   expected: "hello",
 });
-// { name: "exact_match_metric", value: 1.0 }
+// { name: "exact_match", value: 1.0 }
 ```
 
 #### IsJson
@@ -641,10 +641,10 @@ const result = await evaluate({
   task: async (item) => ({
     response: await llm.generate(item.question),  // Returns "response"
   }),
-  scoringMetrics: [new Contains()],  // Expects "output" and "expected"
+  scoringMetrics: [new Contains()],  // Expects "output" and "substring"
   scoringKeyMapping: {
     output: "response",        // Map "output" ← "response"
-    expected: "answer",        // Map "expected" ← dataset's "answer"
+    substring: "answer",        // Map "substring" ← dataset's "answer"
   },
 });
 ```
