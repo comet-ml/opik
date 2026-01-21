@@ -1,6 +1,6 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { DATASETS_REST_ENDPOINT, QueryConfig } from "@/api/api";
-import { DatasetExportJob, DATASET_EXPORT_STATUS } from "@/types/datasets";
+import { DatasetExportJob } from "@/types/datasets";
 
 type UseDatasetExportJobParams = {
   jobId: string;
@@ -18,13 +18,6 @@ const getDatasetExportJob = async (
   return data;
 };
 
-// Polling interval for checking job status (5 seconds)
-const POLLING_INTERVAL_MS = 5000;
-
-const isTerminalStatus = (status?: DATASET_EXPORT_STATUS) =>
-  status === DATASET_EXPORT_STATUS.COMPLETED ||
-  status === DATASET_EXPORT_STATUS.FAILED;
-
 export default function useDatasetExportJob(
   params: UseDatasetExportJobParams,
   options?: QueryConfig<DatasetExportJob>,
@@ -33,11 +26,6 @@ export default function useDatasetExportJob(
     queryKey: ["dataset-export-job", { jobId: params.jobId }],
     queryFn: (context) => getDatasetExportJob(context, params),
     enabled: Boolean(params.jobId),
-    // Poll every 5 seconds until terminal status
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return isTerminalStatus(status) ? false : POLLING_INTERVAL_MS;
-    },
     ...options,
   });
 }
