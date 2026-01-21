@@ -857,12 +857,12 @@ datasetVersioningMigration:
   # Default: 3600 (1 hour)
   # Description: Lock timeout in seconds for the items_total migration process
   # Should be long enough to complete the migration
-  itemsTotalLockTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_LOCK_TIMEOUT:-3600}
+  itemsTotalLockTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_LOCK_TIMEOUT_SECONDS:-3600}
   # Default: 30 seconds
   # Description: Delay in seconds before starting the items_total migration job after application startup
   # This allows the service to stabilize before running the migration
-  itemsTotalStartupDelaySeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_STARTUP_DELAY:-30}
+  itemsTotalStartupDelaySeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_STARTUP_DELAY_SECONDS:-30}
   # Default: 3600s (1 hour)
   # Description: Job execution timeout in seconds for the items_total migration
   # Should be long enough to complete the entire migration process
-  itemsTotalJobTimeoutSeconds: ${OPIK_DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT:-3600}
+  itemsTotalJobTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS:-3600}
