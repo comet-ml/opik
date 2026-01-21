@@ -110,6 +110,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   const feedbackScores = widget?.config?.feedbackScores as string[] | undefined;
   const durationMetrics = widget?.config?.durationMetrics as string[] | undefined;
+  const usageMetrics = widget?.config?.usageMetrics as string[] | undefined;
   const breakdown = widget?.config?.breakdown as BreakdownConfig | undefined;
 
   // Check if this is a feedback score metric
@@ -117,6 +118,11 @@ const ProjectMetricsWidget: React.FunctionComponent<
     metricName === METRIC_NAME_TYPE.FEEDBACK_SCORES ||
     metricName === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES ||
     metricName === METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES;
+
+  // Check if this is a token usage metric
+  const isTokenUsageMetric =
+    metricName === METRIC_NAME_TYPE.TOKEN_USAGE ||
+    metricName === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
   // Only pass breakdown if it's enabled (field is not NONE)
   // Also skip if METADATA is selected but no metadataKey is provided
@@ -161,13 +167,26 @@ const ProjectMetricsWidget: React.FunctionComponent<
       return undefined;
     }
 
+    // For token usage metrics, include the selected usage key as subMetric
+    if (isTokenUsageMetric && usageMetrics && usageMetrics.length === 1) {
+      return {
+        ...breakdown,
+        subMetric: usageMetrics[0],
+      };
+    }
+
+    // For token usage metrics without exactly one metric selected, don't apply breakdown
+    if (isTokenUsageMetric) {
+      return undefined;
+    }
+
     return breakdown;
-  }, [breakdown, isFeedbackScoreMetric, feedbackScores, isDurationMetric, durationMetrics]);
+  }, [breakdown, isFeedbackScoreMetric, feedbackScores, isDurationMetric, durationMetrics, isTokenUsageMetric, usageMetrics]);
 
   const filterLineCallback = useCallback(
     (lineName: string) => {
       // When breakdown is applied, the line names are group names (e.g., tag values),
-      // not feedback score names or duration percentile names, so we shouldn't filter them
+      // not feedback score names, duration percentile names, or usage key names, so we shouldn't filter them
       if (effectiveBreakdown) {
         return true;
       }
@@ -187,9 +206,15 @@ const ProjectMetricsWidget: React.FunctionComponent<
         return percentile ? durationMetrics.includes(percentile) : true;
       }
 
+      // Filter for token usage metrics (completion_tokens, prompt_tokens, total_tokens)
+      if (isTokenUsageMetric) {
+        if (!usageMetrics || usageMetrics.length === 0) return true;
+        return usageMetrics.includes(lineName);
+      }
+
       return true;
     },
-    [feedbackScores, durationMetrics, isFeedbackScoreMetric, isDurationMetric, effectiveBreakdown],
+    [feedbackScores, durationMetrics, usageMetrics, isFeedbackScoreMetric, isDurationMetric, isTokenUsageMetric, effectiveBreakdown],
   );
 
   if (!widget) {
