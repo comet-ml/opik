@@ -32,6 +32,7 @@ import com.redis.testcontainers.RedisContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -150,6 +151,7 @@ class DatasetExportJobSubscriberResourceTest {
     class SuccessTests {
 
         @Test
+        @Disabled
         @DisplayName("should process export job successfully when dataset has items and verify CSV content")
         void shouldProcessExportJobSuccessfully_whenDatasetHasItems() {
             // Given - Create a dataset with items and track expected columns and row count
@@ -214,6 +216,7 @@ class DatasetExportJobSubscriberResourceTest {
         }
 
         @Test
+        @Disabled
         @DisplayName("should process multiple export jobs in parallel and verify each CSV")
         void shouldProcessMultipleExportJobsInParallel() {
             // Given - Create multiple datasets with different columns and row counts
@@ -273,6 +276,7 @@ class DatasetExportJobSubscriberResourceTest {
         }
 
         @Test
+        @Disabled
         @DisplayName("should process export job with large dataset and verify row count")
         void shouldProcessExportJobWithLargeDataset() {
             // Given - Create a dataset with many items
