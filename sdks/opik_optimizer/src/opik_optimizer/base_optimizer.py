@@ -627,7 +627,7 @@ class BaseOptimizer(ABC):
 
     def _score_from_evaluation_result(
         self,
-        evaluation_result: EvaluationResult,
+        evaluation_result: EvaluationResult | EvaluationResultOnDictItems,
         *,
         metric_name: str,
         empty_score: float | None = None,
@@ -650,7 +650,9 @@ class BaseOptimizer(ABC):
         experiment_config: dict[str, Any] | None = None,
         *,
         empty_score: float | None = None,
-    ) -> tuple[float, EvaluationResult]:
+        n_samples: int | None = None,
+        n_sample_strategy: str | None = None,
+    ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems]:
         """Evaluate prompts and return both the score and EvaluationResult."""
         self.pre_trial(context, prompts)
         try:
@@ -669,8 +671,8 @@ class BaseOptimizer(ABC):
                     metric=context.metric,
                     agent=context.agent,
                     experiment_config=experiment_config,
-                    n_samples=context.n_samples,
-                    n_sample_strategy=context.n_sample_strategy,
+                    n_samples=context.n_samples if n_samples is None else n_samples,
+                    n_sample_strategy=n_sample_strategy or context.n_sample_strategy,
                     n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
