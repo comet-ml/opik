@@ -39,6 +39,7 @@ export enum TEMPLATE_SCOPE {
 export interface BreakdownConfig {
   field: BREAKDOWN_FIELD;
   metadataKey?: string;
+  subMetric?: string;
 }
 
 export interface ProjectMetricsWidget {

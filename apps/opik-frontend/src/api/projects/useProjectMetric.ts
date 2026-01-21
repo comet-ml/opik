@@ -67,6 +67,7 @@ const processBreakdownConfig = (breakdown?: BreakdownConfig) => {
   return {
     field: breakdown.field,
     ...(breakdown.metadataKey && { metadata_key: breakdown.metadataKey }),
+    ...(breakdown.subMetric && { sub_metric: breakdown.subMetric }),
   };
 };
 
