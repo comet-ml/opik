@@ -124,8 +124,7 @@ const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
 
 /**
  * Transform experiment_name filter field to experiment_id for backend.
- * The experiment_name filter uses a dropdown that selects by name but sends ID.
- * The experiment_id filter is already correct (text input for UUID).
+ * The experiment filter uses a dropdown that selects by name but sends the experiment ID.
  */
 const transformExperimentFilters = (filters: Filters): Filters => {
   return filters.map((filter: Filter) => {
@@ -890,21 +889,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 }),
               },
             },
-            {
-              id: "experiment_id",
-              label: "Experiment ID",
-              type: COLUMN_TYPE.string,
-              cell: ResourceCell as never,
-              accessorFn: (row: BaseTraceData) => get(row, "experiment.id"),
-              customMeta: {
-                nameKey: "experiment.id",
-                idKey: "experiment.dataset_id",
-                resource: RESOURCE_TYPE.experiment,
-                getSearch: (row: BaseTraceData) => ({
-                  experiments: [get(row, "experiment.id")],
-                }),
-              },
-            },
           ]
         : []),
       ...(type === TRACE_DATA_TYPE.spans
@@ -971,12 +955,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
             {
               id: "experiment_name",
-              label: "Experiment name",
-              type: COLUMN_TYPE.string,
-            },
-            {
-              id: "experiment_id",
-              label: "Experiment ID",
+              label: "Experiment",
               type: COLUMN_TYPE.string,
             },
             {
