@@ -193,15 +193,42 @@ describe("AnnotationView - Button Label Logic", () => {
       expect(screen.getByText("Update + next")).toBeInTheDocument();
     });
 
-    it('should show "Update + complete" when completed item has changes and no other unprocessed items', () => {
+    it('should show "Update + next" when reviewing completed items in review mode (not last item)', () => {
       mockUseSMEFlow.mockReturnValue({
         ...defaultContextValue,
         isCurrentItemProcessed: true,
         validationState: {
-          canSubmit: true, // Has unsaved changes
+          canSubmit: true,
           errors: [],
         },
-        unprocessedItems: [], // No other unprocessed items
+        unprocessedItems: [],
+        queueItems: [
+          { id: "item-1", name: "Item 1" },
+          { id: "item-2", name: "Item 2" },
+          { id: "item-3", name: "Item 3" },
+        ],
+      });
+
+      render(<AnnotationView header={<div>Header</div>} />, { wrapper });
+
+      expect(screen.getByText("Update + next")).toBeInTheDocument();
+    });
+
+    it('should show "Update + complete" when reviewing completed items in review mode (last item)', () => {
+      mockUseSMEFlow.mockReturnValue({
+        ...defaultContextValue,
+        currentIndex: 2,
+        isCurrentItemProcessed: true,
+        validationState: {
+          canSubmit: true,
+          errors: [],
+        },
+        unprocessedItems: [],
+        queueItems: [
+          { id: "item-1", name: "Item 1" },
+          { id: "item-2", name: "Item 2" },
+          { id: "item-3", name: "Item 3" },
+        ],
       });
 
       render(<AnnotationView header={<div>Header</div>} />, { wrapper });

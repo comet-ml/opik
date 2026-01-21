@@ -13,12 +13,16 @@ const GetStartedView: React.FC = () => {
     annotationQueue,
     canStartAnnotation,
     handleStartAnnotating,
+    handleReviewAnnotations,
     processedCount,
+    totalCount,
   } = useSMEFlow();
 
   if (!annotationQueue) {
     return null;
   }
+
+  const allItemsCompleted = processedCount === totalCount && totalCount > 0;
 
   return (
     <SMEFlowLayout
@@ -37,12 +41,15 @@ const GetStartedView: React.FC = () => {
         <>
           <ReturnToAnnotationQueueButton />
           <div className="flex gap-2">
-            <Button
-              onClick={handleStartAnnotating}
-              disabled={!canStartAnnotation}
-            >
-              {processedCount > 0 ? "Resume annotating" : "Start annotating"}
-            </Button>
+            {canStartAnnotation ? (
+              <Button onClick={handleStartAnnotating}>
+                {processedCount > 0 ? "Resume annotating" : "Start annotating"}
+              </Button>
+            ) : allItemsCompleted ? (
+              <Button onClick={handleReviewAnnotations}>
+                Review annotations
+              </Button>
+            ) : null}
           </div>
         </>
       }
