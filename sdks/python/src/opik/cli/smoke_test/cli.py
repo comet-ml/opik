@@ -12,6 +12,7 @@ from rich.console import Console
 
 import opik
 from opik import Attachment, opik_context, track
+from opik.api_objects import opik_client
 
 
 console = Console()
@@ -89,7 +90,10 @@ def smoke_test(
         console.print(f"[cyan]Project:[/cyan] {project_name}")
 
         # Create a trace using context manager
-        with opik.start_as_current_trace(name="smoke-test", project_name=project_name):
+        # Use flush=True to ensure the cached client flushes when trace ends
+        with opik.start_as_current_trace(
+            name="smoke-test", project_name=project_name, flush=True
+        ):
             console.print("[green]✓[/green] Created trace")
 
             # Add random data to trace
@@ -125,7 +129,13 @@ def smoke_test(
 
         console.print("[green]✓[/green] Ended trace")
 
-        # End the client (flush remaining data)
+        # Flush the cached client used by start_as_current_trace to ensure trace data is sent
+        cached_client = opik_client.get_client_cached()
+        cached_client.flush()
+        console.print("[green]✓[/green] Flushed cached client")
+
+        # Flush and end the explicit client
+        client.flush()
         client.end()
         console.print("[green]✓[/green] Flushed data to Opik")
 
