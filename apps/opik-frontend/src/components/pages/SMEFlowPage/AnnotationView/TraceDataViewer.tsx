@@ -1,12 +1,13 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, LayoutGrid, List } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Button } from "@/components/ui/button";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import { Trace } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
@@ -14,6 +15,10 @@ import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
 import useTraceById from "@/api/traces/useTraceById";
 import { useProcessedInputData } from "@/hooks/useProcessedInputData";
 import AttachmentsList from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
+import { customViewStorage } from "@/lib/customViewStorage";
+import AnnotationCustomViewPanel from "./AnnotationCustomViewPanel";
+import { CustomViewSchema } from "@/types/custom-view";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
@@ -23,6 +28,12 @@ const TraceDataViewer: React.FC = () => {
 
   const trace = currentItem as Trace;
   const nextTrace = nextItem as Trace | undefined;
+
+  // View mode state
+  const [viewMode, setViewMode] = useState<"classic" | "custom">(() =>
+    customViewStorage.getViewMode(),
+  );
+  const [savedSchema, setSavedSchema] = useState<CustomViewSchema | null>(null);
 
   // Fetch full trace data (not truncated)
   const { data: fullTrace, isFetching } = useTraceById(
@@ -52,6 +63,21 @@ const TraceDataViewer: React.FC = () => {
 
   const { media } = useProcessedInputData(displayTrace?.input);
 
+  // Load saved schema for the current trace's project
+  useEffect(() => {
+    if (!displayTrace?.project_id) return;
+
+    const schema = customViewStorage.load(displayTrace.project_id);
+    setSavedSchema(schema);
+  }, [displayTrace?.project_id]);
+
+  // Toggle handler
+  const handleToggleViewMode = useCallback(() => {
+    const newMode = viewMode === "classic" ? "custom" : "classic";
+    setViewMode(newMode);
+    customViewStorage.setViewMode(newMode);
+  }, [viewMode]);
+
   // Handlers for scroll position changes
   const handleInputScrollChange = useCallback(
     (updaterOrValue: number | ((old: number) => number)) => {
@@ -77,68 +103,121 @@ const TraceDataViewer: React.FC = () => {
 
   return (
     <div className="relative pr-4">
+      {/* Loading indicator */}
       {isFetching && (
         <div className="absolute right-6 top-2 z-10">
           <Loader2 className="size-4 animate-spin text-slate-400" />
         </div>
       )}
-      <Accordion
-        type="multiple"
-        className="w-full"
-        defaultValue={["attachments", "input", "output"]}
-      >
-        {displayTrace && <AttachmentsList data={displayTrace} media={media} />}
-        <AccordionItem className="group" value="input">
-          <AccordionTrigger>Input</AccordionTrigger>
-          <AccordionContent
-            forceMount
-            className="group-data-[state=closed]:hidden"
-          >
-            <SyntaxHighlighter
-              data={displayTrace?.input || {}}
-              prettifyConfig={{ fieldType: "input" }}
-              preserveKey="syntax-highlighter-annotation-input"
-              withSearch
-              scrollPosition={state.input.scrollTop}
-              onScrollPositionChange={handleInputScrollChange}
-              maxHeight="400px"
-            />
-          </AccordionContent>
-        </AccordionItem>
 
-        <AccordionItem className="group" value="output">
-          <AccordionTrigger>Output</AccordionTrigger>
-          <AccordionContent
-            forceMount
-            className="group-data-[state=closed]:hidden"
+      {/* View mode toggle header */}
+      <div className="mb-4 flex items-center justify-between border-b pb-3">
+        <div className="comet-body-s-accented">
+          {viewMode === "classic" ? "Standard View" : "Custom View"}
+        </div>
+        <div className="flex items-center gap-2">
+          {viewMode === "custom" && !savedSchema && (
+            <span className="comet-body-xs text-muted-slate">
+              No saved view for this project
+            </span>
+          )}
+          <TooltipWrapper
+            content={`Switch to ${
+              viewMode === "classic" ? "custom" : "standard"
+            } view`}
           >
-            <SyntaxHighlighter
-              data={displayTrace?.output || {}}
-              prettifyConfig={{ fieldType: "output" }}
-              preserveKey="syntax-highlighter-annotation-output"
-              withSearch
-              scrollPosition={state.output.scrollTop}
-              onScrollPositionChange={handleOutputScrollChange}
-              maxHeight="400px"
-            />
-          </AccordionContent>
-        </AccordionItem>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleToggleViewMode}
+            >
+              {viewMode === "classic" ? (
+                <LayoutGrid className="size-4" />
+              ) : (
+                <List className="size-4" />
+              )}
+            </Button>
+          </TooltipWrapper>
+        </div>
+      </div>
 
-        <AccordionItem className="group" value="metadata">
-          <AccordionTrigger>Metadata</AccordionTrigger>
-          <AccordionContent
-            forceMount
-            className="group-data-[state=closed]:hidden"
-          >
-            <SyntaxHighlighter
-              data={displayTrace?.metadata || {}}
-              preserveKey="syntax-highlighter-annotation-metadata"
-              withSearch
-              maxHeight="400px"
-            />
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+      {/* Conditional rendering based on view mode */}
+      {viewMode === "classic" ? (
+        <Accordion
+          type="multiple"
+          className="w-full"
+          defaultValue={["attachments", "input", "output"]}
+        >
+          {displayTrace && (
+            <AttachmentsList data={displayTrace} media={media} />
+          )}
+          <AccordionItem className="group" value="input">
+            <AccordionTrigger>Input</AccordionTrigger>
+            <AccordionContent
+              forceMount
+              className="group-data-[state=closed]:hidden"
+            >
+              <SyntaxHighlighter
+                data={displayTrace?.input || {}}
+                prettifyConfig={{ fieldType: "input" }}
+                preserveKey="syntax-highlighter-annotation-input"
+                withSearch
+                scrollPosition={state.input.scrollTop}
+                onScrollPositionChange={handleInputScrollChange}
+                maxHeight="400px"
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem className="group" value="output">
+            <AccordionTrigger>Output</AccordionTrigger>
+            <AccordionContent
+              forceMount
+              className="group-data-[state=closed]:hidden"
+            >
+              <SyntaxHighlighter
+                data={displayTrace?.output || {}}
+                prettifyConfig={{ fieldType: "output" }}
+                preserveKey="syntax-highlighter-annotation-output"
+                withSearch
+                scrollPosition={state.output.scrollTop}
+                onScrollPositionChange={handleOutputScrollChange}
+                maxHeight="400px"
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem className="group" value="metadata">
+            <AccordionTrigger>Metadata</AccordionTrigger>
+            <AccordionContent
+              forceMount
+              className="group-data-[state=closed]:hidden"
+            >
+              <SyntaxHighlighter
+                data={displayTrace?.metadata || {}}
+                preserveKey="syntax-highlighter-annotation-metadata"
+                withSearch
+                maxHeight="400px"
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      ) : savedSchema && displayTrace ? (
+        <AnnotationCustomViewPanel
+          trace={displayTrace}
+          viewSchema={savedSchema}
+        />
+      ) : (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <LayoutGrid className="mb-4 size-12 text-muted-slate" />
+          <div className="comet-body-s mb-2 text-muted-slate">
+            No custom view saved for this project
+          </div>
+          <div className="comet-body-xs text-muted-slate">
+            Create a custom view in the Custom View Demo page first
+          </div>
+        </div>
+      )}
     </div>
   );
 };

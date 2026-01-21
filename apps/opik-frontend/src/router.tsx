@@ -22,6 +22,7 @@ import EmptyPageLayout from "@/components/layout/EmptyPageLayout/EmptyPageLayout
 import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/components/pages/TracesPage/TracesPage";
+import CustomViewDemoPage from "@/components/pages/CustomViewDemoPage/CustomViewDemoPage";
 import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/components/pages/PromptsPage/PromptsPage";
 import PromptPage from "@/components/pages/PromptPage/PromptPage";
@@ -209,6 +210,15 @@ const tracesRoute = createRoute({
   path: "/traces",
   getParentRoute: () => projectRoute,
   component: TracesPage,
+});
+
+const customViewDemoRoute = createRoute({
+  path: "/custom-view-demo",
+  getParentRoute: () => projectRoute,
+  component: CustomViewDemoPage,
+  staticData: {
+    title: "Custom View Demo",
+  },
 });
 
 // ----------- experiments
@@ -489,7 +499,7 @@ const routeTree = rootRoute.addChildren([
       dashboardsRoute.addChildren([dashboardsPageRoute, dashboardDetailRoute]),
       projectsRoute.addChildren([
         projectsListRoute,
-        projectRoute.addChildren([tracesRoute]),
+        projectRoute.addChildren([tracesRoute, customViewDemoRoute]),
       ]),
       experimentsRoute.addChildren([
         experimentsListRoute,
