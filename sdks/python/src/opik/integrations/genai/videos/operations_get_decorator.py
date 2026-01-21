@@ -38,9 +38,7 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
     to track video saves with attachments.
     """
 
-    def __init__(
-        self, project_name: Optional[str], upload_videos: bool
-    ) -> None:
+    def __init__(self, project_name: Optional[str], upload_videos: bool) -> None:
         super().__init__()
         self._project_name = project_name
         self._upload_videos = upload_videos
