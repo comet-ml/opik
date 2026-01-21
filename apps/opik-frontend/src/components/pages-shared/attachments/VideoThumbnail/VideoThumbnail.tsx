@@ -1,6 +1,6 @@
 import React from "react";
 import { VideoIcon } from "lucide-react";
-import ReactPlayer from "react-player";
+import ReactPlayer from "react-player/lazy";
 import { useInView } from "react-intersection-observer";
 
 import { useVideoThumbnail } from "@/hooks/useVideoThumbnail";
