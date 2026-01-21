@@ -30,4 +30,3 @@ class TestCleanup:
         optimizer.cleanup()
 
         assert optimizer._opik_client is None
-

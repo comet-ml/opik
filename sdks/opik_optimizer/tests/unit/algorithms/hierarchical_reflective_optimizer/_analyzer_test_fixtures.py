@@ -71,4 +71,3 @@ def mock_evaluation_result() -> MagicMock:
 
     mock.test_results = test_results
     return mock
-

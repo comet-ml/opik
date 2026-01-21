@@ -97,4 +97,3 @@ class TestStructuralMutation:
         )
 
         assert isinstance(result, ChatPrompt)
-

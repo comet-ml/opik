@@ -70,4 +70,3 @@ class TestHierarchicalAnalyzerConcurrency:
             await analyzer.analyze_async(mock_evaluation_result)
 
             assert max_concurrent == 1
-

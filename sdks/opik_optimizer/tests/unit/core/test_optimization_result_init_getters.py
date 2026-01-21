@@ -168,4 +168,3 @@ class TestOptimizationResultGetters:
         )
         params = result.get_optimized_parameters()
         assert params == {}
-

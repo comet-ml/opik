@@ -67,4 +67,3 @@ class TestHierarchicalAnalyzerErrorHandling:
         ):
             result = await analyzer.analyze_async(mock_result)
             assert isinstance(result, HierarchicalRootCauseAnalysis)
-

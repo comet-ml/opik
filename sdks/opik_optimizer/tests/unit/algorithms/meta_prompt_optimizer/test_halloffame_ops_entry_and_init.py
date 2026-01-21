@@ -83,4 +83,3 @@ class TestPromptHallOfFame:
 
         assert hof.max_size == 5
         assert hof.pattern_extraction_interval == 3
-

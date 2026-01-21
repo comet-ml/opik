@@ -1,5 +1,7 @@
 """Unit tests for BaseOptimizer history lifecycle helpers."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -120,4 +122,3 @@ def test_post_round_defaults_without_context(simple_chat_prompt) -> None:
     entries = optimizer.get_history_entries()
     assert entries[-1]["stop_reason"] == "completed"
     assert entries[-1]["stopped"] is False
-

@@ -1,5 +1,7 @@
 """Unit tests for BaseOptimizer misc framework helpers (init + utility methods)."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
 from typing import Any

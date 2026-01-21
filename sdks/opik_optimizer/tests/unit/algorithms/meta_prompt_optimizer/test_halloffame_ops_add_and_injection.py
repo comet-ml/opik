@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import PromptHallOfFame
+from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import (
+    PromptHallOfFame,
+)
 from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers import (
     make_hof_entry,
 )
@@ -76,26 +78,42 @@ class TestPromptHallOfFameShouldExtractPatterns:
     def test_returns_false_when_not_enough_entries(self) -> None:
         """Should return False when fewer than 3 entries."""
         hof = PromptHallOfFame()
-        hof.add(make_hof_entry(score=0.8, trial=1, prompt_messages=[], baseline_score=0.8))
-        hof.add(make_hof_entry(score=0.9, trial=2, prompt_messages=[], baseline_score=0.9))
+        hof.add(
+            make_hof_entry(score=0.8, trial=1, prompt_messages=[], baseline_score=0.8)
+        )
+        hof.add(
+            make_hof_entry(score=0.9, trial=2, prompt_messages=[], baseline_score=0.9)
+        )
 
         assert hof.should_extract_patterns(10) is False
 
     def test_returns_false_when_interval_not_reached(self) -> None:
         """Should return False when interval not reached."""
         hof = PromptHallOfFame(pattern_extraction_interval=10)
-        hof.add(make_hof_entry(score=0.7, trial=1, prompt_messages=[], baseline_score=0.7))
-        hof.add(make_hof_entry(score=0.8, trial=2, prompt_messages=[], baseline_score=0.8))
-        hof.add(make_hof_entry(score=0.9, trial=3, prompt_messages=[], baseline_score=0.9))
+        hof.add(
+            make_hof_entry(score=0.7, trial=1, prompt_messages=[], baseline_score=0.7)
+        )
+        hof.add(
+            make_hof_entry(score=0.8, trial=2, prompt_messages=[], baseline_score=0.8)
+        )
+        hof.add(
+            make_hof_entry(score=0.9, trial=3, prompt_messages=[], baseline_score=0.9)
+        )
 
         assert hof.should_extract_patterns(5) is False
 
     def test_returns_true_when_conditions_met(self) -> None:
         """Should return True when enough entries and interval reached."""
         hof = PromptHallOfFame(pattern_extraction_interval=5)
-        hof.add(make_hof_entry(score=0.7, trial=1, prompt_messages=[], baseline_score=0.7))
-        hof.add(make_hof_entry(score=0.8, trial=2, prompt_messages=[], baseline_score=0.8))
-        hof.add(make_hof_entry(score=0.9, trial=3, prompt_messages=[], baseline_score=0.9))
+        hof.add(
+            make_hof_entry(score=0.7, trial=1, prompt_messages=[], baseline_score=0.7)
+        )
+        hof.add(
+            make_hof_entry(score=0.8, trial=2, prompt_messages=[], baseline_score=0.8)
+        )
+        hof.add(
+            make_hof_entry(score=0.9, trial=3, prompt_messages=[], baseline_score=0.9)
+        )
 
         assert hof.should_extract_patterns(6) is True
 
@@ -168,4 +186,3 @@ class TestPromptHallOfFameGetPatternsForInjection:
         new_count = hof.pattern_usage_count["pattern_x"]
 
         assert new_count == initial_count + 1
-

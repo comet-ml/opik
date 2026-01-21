@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
 
 from opik_optimizer.api_objects.chat_prompt import ChatPrompt
 
@@ -158,4 +157,3 @@ class TestChatPromptModelValidate:
         prompt = ChatPrompt.model_validate(data)
 
         assert prompt.messages == [{"role": "user", "content": "Hello"}]
-

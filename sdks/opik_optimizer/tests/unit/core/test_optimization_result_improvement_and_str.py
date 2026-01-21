@@ -161,4 +161,3 @@ class TestOptimizationResultEdgeCases:
         )
         output = str(result)
         assert "temperature" in output
-

@@ -1,5 +1,7 @@
 """Unit tests for BaseOptimizer evaluate() trial hook wiring."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
 from typing import Any
@@ -128,4 +130,3 @@ def test_post_trial_not_called_by_evaluate(
 
     optimizer.evaluate(context, {"main": simple_chat_prompt})
     assert optimizer.post_trial_called is False
-

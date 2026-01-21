@@ -38,4 +38,3 @@ class TestChatPromptReplaceInMessages:
 
         assert result is messages
         assert messages[0]["content"] == "Hello World!"
-

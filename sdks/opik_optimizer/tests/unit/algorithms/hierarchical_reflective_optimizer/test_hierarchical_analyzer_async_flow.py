@@ -199,4 +199,3 @@ class TestHierarchicalAnalyzerAsync:
                 mock_evaluation_result, project_name="test"
             )
             assert result is synthesis_response
-

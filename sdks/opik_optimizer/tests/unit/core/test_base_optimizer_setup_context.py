@@ -1,12 +1,14 @@
 """Unit tests for BaseOptimizer._setup_optimization: prompt/context basics."""
 
+# mypy: disable-error-code=no-untyped-def
+
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 import pytest
 
+from opik_optimizer.api_objects.types import MetricFunction
 from opik_optimizer.core.state import OptimizationContext
 from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
 from tests.unit.test_helpers import make_mock_dataset
@@ -18,7 +20,7 @@ def optimizer() -> ConcreteOptimizer:
 
 
 @pytest.fixture
-def mock_metric() -> Callable[[dict[str, Any], str], float]:
+def mock_metric() -> MetricFunction:
     def metric(dataset_item: dict[str, Any], llm_output: str) -> float:
         _ = dataset_item, llm_output
         return 1.0
@@ -33,7 +35,7 @@ class TestSetupOptimizationContext:
         optimizer: ConcreteOptimizer,
         simple_chat_prompt,
         mock_opik_client,
-        mock_metric: Callable[[dict[str, Any], str], float],
+        mock_metric: MetricFunction,
     ) -> None:
         """_setup_optimization should return an OptimizationContext."""
         mock_opik_client()
@@ -60,7 +62,7 @@ class TestSetupOptimizationContext:
         optimizer: ConcreteOptimizer,
         simple_chat_prompt,
         mock_opik_client,
-        mock_metric: Callable[[dict[str, Any], str], float],
+        mock_metric: MetricFunction,
     ) -> None:
         """Single ChatPrompt should be normalized to dict."""
         mock_opik_client()
@@ -86,7 +88,7 @@ class TestSetupOptimizationContext:
         optimizer: ConcreteOptimizer,
         simple_chat_prompt,
         mock_opik_client,
-        mock_metric: Callable[[dict[str, Any], str], float],
+        mock_metric: MetricFunction,
     ) -> None:
         """Dict of prompts should be preserved."""
         mock_opik_client()
@@ -106,4 +108,3 @@ class TestSetupOptimizationContext:
 
         assert context.prompts is prompts
         assert context.is_single_prompt_optimization is False
-

@@ -236,4 +236,3 @@ def test_semantic_mutation_invalid_json_response(
         },
         {"role": "user", "content": "{question}"},
     ]
-

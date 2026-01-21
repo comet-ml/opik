@@ -6,7 +6,9 @@ from typing import Any
 
 import pytest
 
-from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import PromptHallOfFame
+from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import (
+    PromptHallOfFame,
+)
 from opik_optimizer.core.llm_calls import StructuredOutputParsingError
 from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers import (
     make_hof_entry,
@@ -238,4 +240,3 @@ class TestPromptHallOfFameExtractPatterns:
         assert "Pattern A" in result
         assert len(calls) == 2
         assert "Return ONLY valid JSON" in calls[1]["messages"][1]["content"]
-

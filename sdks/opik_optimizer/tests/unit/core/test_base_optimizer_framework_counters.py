@@ -42,4 +42,3 @@ class TestCounterManagement:
 
         assert optimizer.llm_call_counter == 0
         assert optimizer.llm_call_tools_counter == 0
-

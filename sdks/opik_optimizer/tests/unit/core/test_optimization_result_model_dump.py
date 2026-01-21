@@ -33,4 +33,3 @@ class TestOptimizationResultModelDump:
         assert dumped["optimizer"] == "TestOptimizer"
         assert dumped["optimization_id"] == "opt-123"
         assert dumped["llm_calls"] == 50
-

@@ -45,4 +45,3 @@ class TestChatPromptWithTools:
         prompt = ChatPrompt(system="Test", function_map={"my_tool": my_tracked_tool})
 
         assert prompt.function_map["my_tool"] is my_tracked_tool
-

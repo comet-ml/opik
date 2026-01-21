@@ -106,4 +106,3 @@ class TestChatPromptEdgeCases:
         messages = prompt.get_messages(dataset_item={"code": "{x: 1}"})
 
         assert messages[0]["content"] == "Code: {x: 1}"
-

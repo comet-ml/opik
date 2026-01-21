@@ -128,4 +128,3 @@ class TestOptimizationResultDisplay:
             mock_console.return_value = MagicMock()
             result.display()
             mock_console.return_value.print.assert_called_once()
-

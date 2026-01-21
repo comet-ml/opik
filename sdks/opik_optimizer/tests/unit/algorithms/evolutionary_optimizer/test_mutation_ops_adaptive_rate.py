@@ -54,4 +54,3 @@ class TestAdaptiveMutationRate:
 
         assert adjusted_rate == max(current_rate * 0.8, 0.1)
         assert generations == 0
-

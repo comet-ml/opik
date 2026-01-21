@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import HallOfFameEntry
+from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import (
+    HallOfFameEntry,
+)
 
 
 def make_system_messages(content: str) -> list[dict[str, str]]:
@@ -40,4 +42,3 @@ def make_hof_entry(
         extracted_patterns=extracted_patterns,
         metadata=metadata or {},
     )
-

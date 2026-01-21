@@ -83,4 +83,3 @@ class TestHierarchicalRootCauseAnalyzer:
     ) -> None:
         """Test that validation passes when reasons exist."""
         analyzer._validate_reasons_present(mock_evaluation_result.test_results)
-
