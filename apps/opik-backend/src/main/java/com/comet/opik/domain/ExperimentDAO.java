@@ -73,60 +73,6 @@ import static java.util.stream.Collectors.toSet;
 @Slf4j
 class ExperimentDAO {
 
-    private static final String PROJECT_ID_FILTER = """
-            <if(project_id)>
-            AND id IN (
-                SELECT DISTINCT experiment_id
-                FROM experiment_items
-                WHERE workspace_id = :workspace_id
-                AND trace_id IN (
-                    SELECT id FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-            )
-            <endif>
-            """;
-
-    private static final String PROJECT_DELETED_FILTER = """
-            <if(project_deleted)>
-            AND id IN (
-                SELECT DISTINCT ei.experiment_id
-                FROM experiment_items ei
-                LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
-                WHERE ei.workspace_id = :workspace_id
-                GROUP BY ei.experiment_id
-                HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
-            )
-            <endif>
-            """;
-
-    private static final String EXPERIMENT_PROJECTS_CTE = """
-            experiment_trace_ids AS (
-                -- Get any trace_id per experiment (all traces have same project_id)
-                SELECT experiment_id, any(trace_id) as trace_id
-                FROM experiment_items_final
-                GROUP BY experiment_id
-            ), experiment_projects AS (
-                -- All traces from an experiment belong to the same project (SDK invariant)
-                -- Look up project_id only for the trace_ids we need (one trace per experiment)
-                -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
-                SELECT
-                    et.experiment_id,
-                    ifNull(t.project_id, '') AS project_id
-                FROM experiment_trace_ids et
-                LEFT JOIN (
-                    SELECT id, project_id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_trace_ids)
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) t ON et.trace_id = t.id
-            )""";
-
     /**
      * The query validates if already exists with this id. Failing if so.
      * That way only insert is allowed, but not update.
@@ -220,8 +166,30 @@ class ExperimentDAO {
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
-                %1$s
-                %2$s
+                <if(project_id)>
+                AND id IN (
+                    SELECT DISTINCT experiment_id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN (
+                        SELECT id FROM traces
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY id DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                )
+                <endif>
+                <if(project_deleted)>
+                AND id IN (
+                    SELECT DISTINCT ei.experiment_id
+                    FROM experiment_items ei
+                    LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
+                    WHERE ei.workspace_id = :workspace_id
+                    GROUP BY ei.experiment_id
+                    HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
+                )
+                <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
                 <if(limit &&
@@ -446,7 +414,28 @@ class ExperimentDAO {
                     GROUP BY entity_id
                 ) AS tc ON ei.trace_id = tc.entity_id
                 GROUP BY ei.experiment_id
-            ), %3$s
+            ), experiment_trace_ids AS (
+                -- Get any trace_id per experiment (all traces have same project_id)
+                SELECT experiment_id, any(trace_id) as trace_id
+                FROM experiment_items_final
+                GROUP BY experiment_id
+            ), experiment_projects AS (
+                -- All traces from an experiment belong to the same project (SDK invariant)
+                -- Look up project_id only for the trace_ids we need (one trace per experiment)
+                -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
+                SELECT
+                    et.experiment_id,
+                    ifNull(t.project_id, '') AS project_id
+                FROM experiment_trace_ids et
+                LEFT JOIN (
+                    SELECT id, project_id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_trace_ids)
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) t ON et.trace_id = t.id
+            )
             SELECT
                 e.workspace_id as workspace_id,
                 e.dataset_id as dataset_id,
@@ -529,7 +518,7 @@ class ExperimentDAO {
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
-            """.formatted(PROJECT_ID_FILTER, PROJECT_DELETED_FILTER, EXPERIMENT_PROJECTS_CTE);
+            """;
 
     private static final String FIND_COUNT = """
             WITH experiments_initial AS (
@@ -544,8 +533,30 @@ class ExperimentDAO {
                 <if(experiment_ids)> AND id IN :experiment_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
-                %1$s
-                %2$s
+                <if(project_id)>
+                AND id IN (
+                    SELECT DISTINCT experiment_id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN (
+                        SELECT id FROM traces
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY id DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                )
+                <endif>
+                <if(project_deleted)>
+                AND id IN (
+                    SELECT DISTINCT ei.experiment_id
+                    FROM experiment_items ei
+                    LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
+                    WHERE ei.workspace_id = :workspace_id
+                    GROUP BY ei.experiment_id
+                    HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
+                )
+                <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_final AS (
@@ -683,7 +694,7 @@ class ExperimentDAO {
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
-            """.formatted(PROJECT_ID_FILTER, PROJECT_DELETED_FILTER);
+            """;
 
     private static final String FIND_GROUPS = """
             WITH experiments_filtered AS (
@@ -699,14 +710,48 @@ class ExperimentDAO {
                 <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%%', :name, '%%')) <endif>
                 <if(filters)> AND <filters> <endif>
-                %1$s
+                <if(project_id)>
+                AND id IN (
+                    SELECT DISTINCT experiment_id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN (
+                        SELECT id FROM traces
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        ORDER BY id DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                )
+                <endif>
             ), experiment_items_final AS (
                 SELECT
                     id, experiment_id, trace_id
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN (SELECT id FROM experiments_filtered)
-            ), %2$s, experiments_with_projects AS (
+            ), experiment_trace_ids AS (
+                -- Get any trace_id per experiment (all traces have same project_id)
+                SELECT experiment_id, any(trace_id) as trace_id
+                FROM experiment_items_final
+                GROUP BY experiment_id
+            ), experiment_projects AS (
+                -- All traces from an experiment belong to the same project (SDK invariant)
+                -- Look up project_id only for the trace_ids we need (one trace per experiment)
+                -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
+                SELECT
+                    et.experiment_id,
+                    ifNull(t.project_id, '') AS project_id
+                FROM experiment_trace_ids et
+                LEFT JOIN (
+                    SELECT id, project_id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_trace_ids)
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) t ON et.trace_id = t.id
+            ), experiments_with_projects AS (
                 SELECT
                     ef.id,
                     ef.dataset_id,
@@ -723,7 +768,7 @@ class ExperimentDAO {
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
-            """.formatted(PROJECT_ID_FILTER, EXPERIMENT_PROJECTS_CTE);
+            """;
 
     private static final String FIND_GROUPS_AGGREGATIONS = """
             WITH experiments_final AS (
@@ -895,7 +940,28 @@ class ExperimentDAO {
                       AND length(JSON_VALUE(score, '$.name')) > 0
                 ) AS es
                 GROUP BY experiment_id
-            ), %s, experiments_full AS (
+            ), experiment_trace_ids AS (
+                -- Get any trace_id per experiment (all traces have same project_id)
+                SELECT experiment_id, any(trace_id) as trace_id
+                FROM experiment_items_final
+                GROUP BY experiment_id
+            ), experiment_projects AS (
+                -- All traces from an experiment belong to the same project (SDK invariant)
+                -- Look up project_id only for the trace_ids we need (one trace per experiment)
+                -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
+                SELECT
+                    et.experiment_id,
+                    ifNull(t.project_id, '') AS project_id
+                FROM experiment_trace_ids et
+                LEFT JOIN (
+                    SELECT id, project_id
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_trace_ids)
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) t ON et.trace_id = t.id
+            ), experiments_full AS (
                 SELECT
                     e.id as id,
                     e.dataset_id AS dataset_id,
@@ -927,7 +993,7 @@ class ExperimentDAO {
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
-            """.formatted(EXPERIMENT_PROJECTS_CTE);
+            """;
 
     private static final String FIND_BY_NAME = """
             SELECT
