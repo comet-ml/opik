@@ -7,7 +7,7 @@ from dspy import __version__ as dspy_version
 import pytest
 
 import opik
-from opik import context_storage, semantic_version
+from opik import context_storage, opik_context, semantic_version
 from opik.api_objects import opik_client, span, trace
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.dspy.callback import OpikCallback
@@ -760,3 +760,48 @@ def test_dspy__cache_enabled_first_call__has_usage_and_cache_hit_false(
 
     # First call should not be a cache hit
     assert lm_span.metadata.get("cache_hit") is False
+
+
+def test_dspy_callback__opik_context_api_accessible_during_execution(
+    fake_backend,
+):
+    """
+    Verify that spans/traces created by DSPy callback are accessible via
+    opik.opik_context API during callback execution.
+    """
+    captured_context = {}
+
+    original_call = dspy.LM.__call__
+
+    def patched_call(self, *args, **kwargs):
+        captured_context["span"] = opik_context.get_current_span_data()
+        captured_context["trace"] = opik_context.get_current_trace_data()
+        return original_call(self, *args, **kwargs)
+
+    dspy.LM.__call__ = patched_call
+
+    try:
+        lm = dspy.LM(cache=False, model="openai/gpt-4o-mini")
+        dspy.configure(lm=lm)
+
+        opik_callback = OpikCallback()
+        dspy.settings.configure(callbacks=[opik_callback])
+
+        cot = dspy.ChainOfThought("question -> answer")
+        cot(question="What is the meaning of life?")
+
+        opik_callback.flush()
+    finally:
+        dspy.LM.__call__ = original_call
+
+    # Verify context was accessible during LM call
+    assert captured_context["span"] is not None
+    assert captured_context["trace"] is not None
+    assert captured_context["span"].name == "Predict"
+    assert captured_context["trace"].name == "ChainOfThought"
+
+    # Verify IDs match the logged data
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+    assert trace_tree.id == captured_context["trace"].id
+    assert trace_tree.spans[0].id == captured_context["span"].id
