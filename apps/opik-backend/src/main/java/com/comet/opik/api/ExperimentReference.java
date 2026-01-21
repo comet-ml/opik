@@ -10,16 +10,17 @@ import java.util.Comparator;
 import java.util.UUID;
 
 /**
- * Reference to an experiment with its ID and name.
+ * Reference to an experiment with its ID, name, and dataset ID.
  * Used in traces to represent associated experiments.
  * Implements Comparable for natural ordering by experiment name, then by experiment ID.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-@Schema(description = "Experiment reference with ID and name")
+@Schema(description = "Experiment reference with ID, name, and dataset ID")
 public record ExperimentReference(
         @NotNull @Schema(description = "Experiment ID") UUID id,
-        @NotNull @Schema(description = "Experiment name") String name)
+        @NotNull @Schema(description = "Experiment name") String name,
+        @NotNull @Schema(description = "Dataset ID") UUID datasetId)
         implements
             Comparable<ExperimentReference> {
 

@@ -1088,10 +1088,10 @@ class TraceDAOImpl implements TraceDAO {
             ), experiments_agg AS (
                 SELECT
                     ei.trace_id,
-                    tuple(e.id, e.name) AS experiment
+                    tuple(e.id, e.name, e.dataset_id) AS experiment
                 FROM experiment_items ei
                 INNER JOIN (
-                    SELECT id, name
+                    SELECT id, name, dataset_id
                     FROM experiments
                     WHERE workspace_id = :workspace_id
                     ORDER BY id DESC, last_updated_at DESC
@@ -2863,13 +2863,14 @@ class TraceDAOImpl implements TraceDAO {
         if (experiment == null || experiment.isEmpty()) {
             return null;
         }
-        // Tuple from ClickHouse: (id, name)
+        // Tuple from ClickHouse: (id, name, dataset_id)
         String idStr = (String) experiment.get(0);
         String name = (String) experiment.get(1);
-        if (StringUtils.isBlank(idStr) || StringUtils.isBlank(name)) {
+        String datasetIdStr = (String) experiment.get(2);
+        if (StringUtils.isBlank(idStr) || StringUtils.isBlank(name) || StringUtils.isBlank(datasetIdStr)) {
             return null;
         }
-        return new ExperimentReference(UUID.fromString(idStr), name);
+        return new ExperimentReference(UUID.fromString(idStr), name, UUID.fromString(datasetIdStr));
     }
 
     private Publisher<TraceDetails> mapToTraceDetails(Result result) {

@@ -72,7 +72,8 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
-import IdCell from "@/components/shared/DataTableCells/IdCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
@@ -108,7 +109,6 @@ import { SelectItem } from "@/components/ui/select";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
-import ExperimentCell from "@/components/shared/DataTableCells/ExperimentCell";
 import { Filter, FilterOperator, Filters } from "@/types/filters";
 import {
   USER_FEEDBACK_COLUMN_ID,
@@ -880,16 +880,30 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               id: "experiment_name",
               label: "Experiment",
               type: COLUMN_TYPE.string,
-              cell: ExperimentCell as never,
-              accessorFn: (row: BaseTraceData) => get(row, "experiment"),
+              cell: ResourceCell as never,
+              customMeta: {
+                nameKey: "experiment.name",
+                idKey: "experiment.dataset_id",
+                resource: RESOURCE_TYPE.experiment,
+                getSearch: (row: BaseTraceData) => ({
+                  experiments: [get(row, "experiment.id")],
+                }),
+              },
             },
             {
               id: "experiment_id",
               label: "Experiment ID",
               type: COLUMN_TYPE.string,
-              cell: IdCell as never,
-              accessorFn: (row: BaseTraceData) =>
-                get(row, "experiment.id", "-"),
+              cell: ResourceCell as never,
+              accessorFn: (row: BaseTraceData) => get(row, "experiment.id"),
+              customMeta: {
+                nameKey: "experiment.id",
+                idKey: "experiment.dataset_id",
+                resource: RESOURCE_TYPE.experiment,
+                getSearch: (row: BaseTraceData) => ({
+                  experiments: [get(row, "experiment.id")],
+                }),
+              },
             },
           ]
         : []),
