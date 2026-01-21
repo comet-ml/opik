@@ -164,13 +164,14 @@ const buildGroupPath = (
   });
 
   sortedEntries.forEach(([value, node]) => {
+    const isEmptyListGroup = value === "";
     const currentFilters = [
       ...accumulatedFilters,
       createFilter({
         field: currentGroup.field,
         key: currentGroup.key,
         type: currentGroup.type,
-        operator: "=",
+        operator: isEmptyListGroup ? "is_empty" : "=",
         value,
       }),
     ];

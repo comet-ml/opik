@@ -27,7 +27,7 @@ const OptimizationsNewPage: React.FC = () => {
     [templateId],
   );
 
-  const { data: rerunOptimization, isPending: isRerunPending } =
+  const { data: rerunOptimization, isFetching: isRerunFetching } =
     useOptimizationById(
       { optimizationId: rerunId || "" },
       {
@@ -83,7 +83,7 @@ const OptimizationsNewPage: React.FC = () => {
     internalCreateOrGetDataset();
   }, [rerunData, templateData, getOrCreateDataset, form, workspaceName]);
 
-  if (isRerunPending) {
+  if (Boolean(rerunId) && isRerunFetching) {
     return <Loader message="Loading optimization..." />;
   }
 

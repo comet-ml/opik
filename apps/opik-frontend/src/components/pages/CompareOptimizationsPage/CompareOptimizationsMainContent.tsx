@@ -21,6 +21,8 @@ type CompareOptimizationsMainContentProps = {
   onRowClick: (row: Experiment) => void;
   onSortChange: OnChangeFn<ColumnSort[]>;
   onColumnsWidthChange: OnChangeFn<Record<string, number>>;
+  highlightedTrialId?: string;
+  bestExperiment?: Experiment;
 };
 
 const CompareOptimizationsMainContent: React.FC<
@@ -38,6 +40,8 @@ const CompareOptimizationsMainContent: React.FC<
   onRowClick,
   onSortChange,
   onColumnsWidthChange,
+  highlightedTrialId,
+  bestExperiment,
 }) => {
   const showTrialsView =
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
@@ -60,11 +64,15 @@ const CompareOptimizationsMainContent: React.FC<
           onSortChange={onSortChange}
           columnsWidth={columnsWidth}
           onColumnsWidthChange={onColumnsWidthChange}
+          highlightedTrialId={highlightedTrialId}
         />
       )}
       {showConfigurationView && optimization?.studio_config && (
         <CompareOptimizationsConfiguration
           studioConfig={optimization.studio_config}
+          datasetId={optimization.dataset_id}
+          optimizationId={optimization.id}
+          bestExperiment={bestExperiment}
         />
       )}
     </div>

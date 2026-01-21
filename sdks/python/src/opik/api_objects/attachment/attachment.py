@@ -13,8 +13,13 @@ class Attachment(pydantic.BaseModel):
             If not provided, the original filename of the data will be used.
         content_type: The MIME type of the data to be added to the attachment.
             If not specified, it will be inferred from the data file.
+        create_temp_copy: If True, a temporary copy of the file will be created
+            before upload. This ensures the file remains available even if the
+            original is deleted. The temp file will be deleted after upload.
+            Default is True.
     """
 
     data: str
     file_name: Optional[str] = None
     content_type: Optional[str] = None
+    create_temp_copy: bool = True

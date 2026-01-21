@@ -6,6 +6,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentBatchUpdate;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
@@ -633,6 +634,19 @@ public class ExperimentService {
                 .doOnSuccess(unused -> log.info("Successfully updated experiment with id '{}'", id))
                 .onErrorResume(throwable -> {
                     log.error("Failed to update experiment with id '{}'", id, throwable);
+                    return Mono.error(throwable);
+                });
+    }
+
+    public Mono<Void> batchUpdate(@NonNull ExperimentBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' experiments", batchUpdate.ids().size());
+
+        boolean mergeTags = batchUpdate.mergeTags();
+        return experimentDAO.update(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' experiments", batchUpdate.ids().size()))
+                .onErrorResume(throwable -> {
+                    log.error("Failed to complete batch update of the '{}' experiments", batchUpdate.ids().size(),
+                            throwable);
                     return Mono.error(throwable);
                 });
     }
