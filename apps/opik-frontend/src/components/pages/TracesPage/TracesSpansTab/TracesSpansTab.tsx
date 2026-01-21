@@ -29,6 +29,7 @@ import useTracesOrSpansList, {
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
   COLUMN_COMMENTS_ID,
+  COLUMN_EXPERIMENT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_SPAN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAIL_STATISTIC_ID,
@@ -72,6 +73,8 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
@@ -88,6 +91,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
+import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -106,7 +110,7 @@ import { SelectItem } from "@/components/ui/select";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
-import { Filter } from "@/types/filters";
+import { Filter, FilterOperator } from "@/types/filters";
 import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
@@ -425,6 +429,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   type: TRACE_DATA_TYPE.spans,
                   placeholder: "Select span score",
                 },
+              },
+              [COLUMN_EXPERIMENT_ID]: {
+                keyComponent: ExperimentsSelectBox,
+                keyComponentProps: {
+                  className: "w-full min-w-72",
+                },
+                defaultOperator: "=" as FilterOperator,
+                operators: [{ label: "=", value: "=" as FilterOperator }],
               },
             }
           : {}),
@@ -843,6 +855,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               },
               explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
             },
+            {
+              id: COLUMN_EXPERIMENT_ID,
+              label: "Experiment",
+              type: COLUMN_TYPE.string,
+              cell: ResourceCell as never,
+              customMeta: {
+                nameKey: "experiment.name",
+                idKey: "experiment.dataset_id",
+                resource: RESOURCE_TYPE.experiment,
+                getSearch: (row: BaseTraceData) => ({
+                  experiments: [get(row, "experiment.id")],
+                }),
+              },
+            },
           ]
         : []),
       ...(type === TRACE_DATA_TYPE.spans
@@ -908,8 +934,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               type: COLUMN_TYPE.string,
             },
             {
-              id: "experiment_id",
-              label: "Experiment ID",
+              id: COLUMN_EXPERIMENT_ID,
+              label: "Experiment",
               type: COLUMN_TYPE.string,
             },
             {
