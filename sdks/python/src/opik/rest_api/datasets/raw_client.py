@@ -429,6 +429,9 @@ class RawDatasetsClient:
                 "dataset_id": dataset_id,
             },
             files={},
+            headers={
+                "content-type": "multipart/form-data",
+            },
             request_options=request_options,
             omit=OMIT,
         )
@@ -1405,16 +1408,16 @@ class RawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def create_version_tag(
-        self, version_hash: str, id: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[None]:
         """
         Add a tag to a specific dataset version for easy reference (e.g., 'baseline', 'v1.0', 'production')
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         tag : str
 
@@ -1479,18 +1482,18 @@ class RawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, tag: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[None]:
         """
         Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
 
         Parameters
         ----------
+        id : str
+
         version_hash : str
 
         tag : str
-
-        id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1635,8 +1638,8 @@ class RawDatasetsClient:
 
     def update_dataset_version(
         self,
-        version_hash: str,
         id: str,
+        version_hash: str,
         *,
         change_description: typing.Optional[str] = OMIT,
         tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -1647,9 +1650,9 @@ class RawDatasetsClient:
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         change_description : typing.Optional[str]
             Optional description of changes in this version
@@ -2116,6 +2119,9 @@ class AsyncRawDatasetsClient:
                 "dataset_id": dataset_id,
             },
             files={},
+            headers={
+                "content-type": "multipart/form-data",
+            },
             request_options=request_options,
             omit=OMIT,
         )
@@ -3095,16 +3101,16 @@ class AsyncRawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def create_version_tag(
-        self, version_hash: str, id: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[None]:
         """
         Add a tag to a specific dataset version for easy reference (e.g., 'baseline', 'v1.0', 'production')
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         tag : str
 
@@ -3169,18 +3175,18 @@ class AsyncRawDatasetsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def delete_version_tag(
-        self, version_hash: str, tag: str, id: str, *, request_options: typing.Optional[RequestOptions] = None
+        self, id: str, version_hash: str, tag: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[None]:
         """
         Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.
 
         Parameters
         ----------
+        id : str
+
         version_hash : str
 
         tag : str
-
-        id : str
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3325,8 +3331,8 @@ class AsyncRawDatasetsClient:
 
     async def update_dataset_version(
         self,
-        version_hash: str,
         id: str,
+        version_hash: str,
         *,
         change_description: typing.Optional[str] = OMIT,
         tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -3337,9 +3343,9 @@ class AsyncRawDatasetsClient:
 
         Parameters
         ----------
-        version_hash : str
-
         id : str
+
+        version_hash : str
 
         change_description : typing.Optional[str]
             Optional description of changes in this version

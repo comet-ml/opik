@@ -63,6 +63,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -195,6 +196,36 @@ class DatasetVersionResourceTest {
                             .build();
                 })
                 .toList();
+    }
+
+    /**
+     * Creates dataset items WITHOUT batch_group_id (simulates old SDK behavior).
+     * This will mutate the latest version instead of creating a new one.
+     */
+    private void createDatasetItemsWithoutBatchGroupId(UUID datasetId, int count) {
+        List<DatasetItem> itemsList = IntStream.range(0, count)
+                .mapToObj(i -> {
+                    DatasetItem item = factory.manufacturePojo(DatasetItem.class);
+                    Map<String, JsonNode> data = Map.of(
+                            "input", JsonUtils.getJsonNodeFromString("\"test input " + i + "\""),
+                            "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));
+                    return item.toBuilder()
+                            .id(null)
+                            .source(DatasetItemSource.MANUAL)
+                            .traceId(null)
+                            .spanId(null)
+                            .data(data)
+                            .build();
+                })
+                .toList();
+
+        var batch = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(itemsList)
+                // NO batch_group_id - simulates old SDK
+                .build();
+
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
     }
 
     /**
@@ -3222,6 +3253,327 @@ class DatasetVersionResourceTest {
             var itemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 20, updatedVersion.versionHash(),
                     API_KEY, TEST_WORKSPACE);
             assertThat(itemsPage.content()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("Bug OPIK-3894: Batched deletion with same batch_group_id should append to same version")
+        void deleteItems_whenBatchedDeletionWithSameBatchGroupId_thenAppendsToSameVersion() {
+            // Given - Create dataset with 20 items (simulating larger dataset)
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 20);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(20);
+
+            // Get items from version 1
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 30, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(20);
+
+            // Simulate SDK batching: SDK breaks 10-item deletion into 2 batches with same batch_group_id
+            var batchGroupId = UUID.randomUUID();
+
+            // When - Batch 1: Delete first 5 items with batch_group_id
+            var batch1Ids = v1Items.subList(0, 5).stream()
+                    .map(DatasetItem::id)
+                    .collect(Collectors.toSet());
+
+            var deleteRequest1 = DatasetItemsDelete.builder()
+                    .itemIds(batch1Ids)
+                    .batchGroupId(batchGroupId) // Same batch_group_id for all batches
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest1, TEST_WORKSPACE, API_KEY);
+
+            // Then - Version 2 created with 5 items deleted
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(2);
+
+            var version2AfterBatch1 = getLatestVersion(datasetId);
+            assertThat(version2AfterBatch1.itemsTotal()).isEqualTo(15); // 20 - 5 = 15
+            assertThat(version2AfterBatch1.itemsDeleted()).isEqualTo(5);
+
+            // When - Batch 2: Delete next 5 items with SAME batch_group_id
+            var batch2Ids = v1Items.subList(5, 10).stream()
+                    .map(DatasetItem::id)
+                    .collect(Collectors.toSet());
+
+            var deleteRequest2 = DatasetItemsDelete.builder()
+                    .itemIds(batch2Ids)
+                    .batchGroupId(batchGroupId) // SAME batch_group_id - should append to version 2
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest2, TEST_WORKSPACE, API_KEY);
+
+            // Then - STILL only 2 versions (batch 2 appended to version 2, not created version 3)
+            var versionsAfterBatch2 = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versionsAfterBatch2.content())
+                    .as("Should still have 2 versions - batch 2 appends to version 2")
+                    .hasSize(2);
+
+            // Version 2 should now have 10 items deleted total (5 from batch 1 + 5 from batch 2)
+            var version2AfterBatch2 = getLatestVersion(datasetId);
+            assertThat(version2AfterBatch2.id())
+                    .as("Should be the same version ID")
+                    .isEqualTo(version2AfterBatch1.id());
+            assertThat(version2AfterBatch2.itemsTotal())
+                    .as("Should have 10 items remaining (20 - 10 deleted)")
+                    .isEqualTo(10);
+            assertThat(version2AfterBatch2.itemsDeleted())
+                    .as("Should show 10 total items deleted")
+                    .isEqualTo(10);
+
+            // Verify the actual items in version 2
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 30, version2AfterBatch2.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items).hasSize(10);
+        }
+
+        @Test
+        @DisplayName("Deletion correctly filters out non-existent IDs during row ID mapping")
+        void deleteItems_whenFirstItemDoesNotExist_thenFiltersNonExistentAndDeletesValid() {
+            // Given - Create dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 10);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(10);
+
+            // Get items from version 1
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 20, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(10);
+
+            // When - Try to delete items where the FIRST ID is non-existent, but the rest are valid
+            var nonExistentId = UUID.randomUUID(); // Completely made-up ID that doesn't exist
+            var validIds = v1Items.subList(0, 5).stream()
+                    .map(DatasetItem::datasetItemId) // Use stable dataset_item_id (SDK path)
+                    .collect(Collectors.toSet());
+
+            // Create a list where non-existent ID is FIRST (order matters!)
+            var idsWithNonExistentFirst = new java.util.LinkedHashSet<UUID>();
+            idsWithNonExistentFirst.add(nonExistentId); // NON-EXISTENT ID FIRST
+            idsWithNonExistentFirst.addAll(validIds); // Valid IDs after
+
+            var batchGroupId = UUID.randomUUID();
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .itemIds(idsWithNonExistentFirst)
+                    .batchGroupId(batchGroupId)
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest, TEST_WORKSPACE, API_KEY);
+
+            // Then - System correctly handles non-existent first ID by filtering it during mapping
+            var versionsAfter = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versionsAfter.content())
+                    .as("Version 2 should be created with 5 valid items deleted")
+                    .hasSize(2);
+
+            // Version 2 was created with 5 items deleted (non-existent ID was filtered out)
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.itemsTotal()).isEqualTo(5); // 10 - 5 = 5 items remaining
+            assertThat(version2.itemsDeleted()).isEqualTo(5); // 5 valid items deleted
+        }
+
+        @Test
+        @DisplayName("Bug OPIK-3894 FIX: When some IDs are non-existent, resolve dataset from any existing ID")
+        void deleteItems_whenSomeIdsAreNonExistentDatasetItemIds_thenResolvesFromExistingIds() {
+            // Given - Create dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 10);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(10);
+
+            // Get items from version 1
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 20, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(10);
+
+            // When - Delete with mix: non-existent IDs FIRST, then valid IDs
+            // Before fix: would fail because first ID doesn't resolve to a dataset
+            // After fix: should try all IDs until one resolves successfully
+            var nonExistentIds = Set.of(UUID.randomUUID(), UUID.randomUUID());
+            var validIds = v1Items.subList(0, 5).stream()
+                    .map(DatasetItem::datasetItemId)
+                    .collect(Collectors.toSet());
+
+            var mixedIds = new java.util.LinkedHashSet<UUID>();
+            mixedIds.addAll(nonExistentIds); // Non-existent first
+            mixedIds.addAll(validIds); // Valid after
+
+            var batchGroupId = UUID.randomUUID();
+            var deleteRequest = DatasetItemsDelete.builder()
+                    .itemIds(mixedIds)
+                    .batchGroupId(batchGroupId)
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest, TEST_WORKSPACE, API_KEY);
+
+            // Then - FIX: Version 2 should be created with 5 items deleted
+            var versionsAfter = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versionsAfter.content())
+                    .as("FIX: Should create version 2 by resolving dataset from valid IDs")
+                    .hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.itemsTotal()).isEqualTo(5); // 10 - 5 = 5
+            assertThat(version2.itemsDeleted()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("Bug OPIK-3894: After first batch deletes items, second batch with same batch_group_id but deleted IDs fails")
+        void deleteItems_whenSecondBatchContainsAlreadyDeletedIds_thenSecondBatchFails() {
+            // Given - Create dataset with 20 items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 20);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(20);
+
+            // Get items from version 1 - save their stable dataset_item_ids
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 30, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(20);
+
+            var allItemIds = v1Items.stream()
+                    .map(DatasetItem::datasetItemId)
+                    .collect(Collectors.toList());
+
+            // Simulate SDK batching: same batch_group_id for related batches
+            var batchGroupId = UUID.randomUUID();
+
+            // When - Batch 1: Delete first 10 items (simulating partial deletion of 2500 items)
+            var batch1Ids = new HashSet<>(allItemIds.subList(0, 10));
+            var deleteRequest1 = DatasetItemsDelete.builder()
+                    .itemIds(batch1Ids)
+                    .batchGroupId(batchGroupId)
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest1, TEST_WORKSPACE, API_KEY);
+
+            // Version 2 created with 10 items deleted
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.itemsTotal()).isEqualTo(10);
+            assertThat(version2.itemsDeleted()).isEqualTo(10);
+
+            // When - Batch 2: SDK retries with SAME IDs (already deleted) + new IDs
+            // This simulates SDK bug where it resends some already-deleted IDs
+            var batch2Ids = new java.util.HashSet<UUID>();
+            batch2Ids.addAll(allItemIds.subList(5, 10)); // 5 already deleted
+            batch2Ids.addAll(allItemIds.subList(10, 15)); // 5 new items to delete
+
+            var deleteRequest2 = DatasetItemsDelete.builder()
+                    .itemIds(batch2Ids) // Mix of deleted + valid IDs
+                    .batchGroupId(batchGroupId) // SAME batch_group_id
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest2, TEST_WORKSPACE, API_KEY);
+
+            // Then - Version 2 should be updated with 5 more items deleted (the valid ones)
+            var version2Updated = getLatestVersion(datasetId);
+            assertThat(version2Updated.id()).isEqualTo(version2.id()); // Same version
+            assertThat(version2Updated.itemsTotal())
+                    .as("Should have 5 items remaining (20 - 10 - 5)")
+                    .isEqualTo(5);
+            assertThat(version2Updated.itemsDeleted())
+                    .as("Should show 15 total items deleted (10 + 5)")
+                    .isEqualTo(15);
+
+            // Verify actual items
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 30, version2Updated.versionHash(), API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items).hasSize(5);
+        }
+
+        @Test
+        @DisplayName("Bug OPIK-3894: Complete ticket reproduction - old SDK update, new SDK insert, batched delete")
+        void deleteItems_whenCompleteTicketScenario_thenAllOperationsSucceed() {
+            // STEP 1: Create dataset with initial items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 100);
+
+            var version1 = getLatestVersion(datasetId);
+            assertThat(version1.itemsTotal()).isEqualTo(100);
+
+            // STEP 2: Update via OLD SDK (<0.83) - no batch_group_id, mutates latest version
+            // Use helper method without batch_group_id to simulate old SDK
+            createDatasetItemsWithoutBatchGroupId(datasetId, 1);
+
+            // Verify STILL version 1 (mutated in-place)
+            var versionsAfterUpdate = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versionsAfterUpdate.content()).hasSize(1);
+            assertThat(versionsAfterUpdate.content().get(0).itemsTotal()).isEqualTo(101);
+
+            // STEP 3: Insert 150 items with NEW SDK (with batch_group_id) - creates version 2
+            createDatasetItems(datasetId, 150);
+
+            var versionsAfterInsert = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versionsAfterInsert.content()).hasSize(2);
+
+            var version2 = getLatestVersion(datasetId);
+            assertThat(version2.itemsTotal()).isEqualTo(251); // 101 + 150
+
+            // STEP 4: Delete 300 items with NEW SDK in batches (SDK sends row IDs)
+            // Note: We only have 251 items, so SDK will send all 251 row IDs in batches
+            var allItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 300, version2.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            var allRowIds = allItems.stream()
+                    .map(DatasetItem::id) // SDK sends row IDs, not dataset_item_ids
+                    .collect(Collectors.toList());
+
+            // batches: 100, 151 (non-overlapping batches with same batch_group_id)
+            var batchGroupId2 = UUID.randomUUID();
+
+            // Batch 1: First 1000 items
+            var batch1Ids = new HashSet<>(allRowIds.subList(0, 100));
+            var deleteRequest1 = DatasetItemsDelete.builder()
+                    .itemIds(batch1Ids)
+                    .batchGroupId(batchGroupId2)
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest1, TEST_WORKSPACE, API_KEY);
+
+            // Verify version 3 created
+            var versionsAfterBatch1 = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versionsAfterBatch1.content()).hasSize(3);
+
+            var version3 = getLatestVersion(datasetId);
+            assertThat(version3.itemsDeleted()).isEqualTo(100);
+            assertThat(version3.itemsTotal()).isEqualTo(151);
+
+            // Batch 2: Remaining 151 items (SAME batch_group_id - should append to version 3)
+            var batch2Ids = new HashSet<>(allRowIds.subList(100, allRowIds.size()));
+            var deleteRequest2 = DatasetItemsDelete.builder()
+                    .itemIds(batch2Ids)
+                    .batchGroupId(batchGroupId2)
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest2, TEST_WORKSPACE, API_KEY);
+
+            // Verify STILL version 3 (appended)
+            var versionsAfterBatch2 = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versionsAfterBatch2.content()).hasSize(3);
+
+            var version3Updated = getLatestVersion(datasetId);
+            assertThat(version3Updated.id()).isEqualTo(version3.id());
+            assertThat(version3Updated.itemsDeleted()).isEqualTo(251);
+            assertThat(version3Updated.itemsTotal()).isEqualTo(0);
+
+            // STEP 5: Try another deletion with new batch_group_id (no items left)
+            var deleteRequest3 = DatasetItemsDelete.builder()
+                    .itemIds(Set.of(UUID.randomUUID(), UUID.randomUUID()))
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.deleteDatasetItems(deleteRequest3, TEST_WORKSPACE, API_KEY);
+
+            // Should not create new version (no items to delete)
+            var versionsAfterDelete3 = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versionsAfterDelete3.content()).hasSize(3);
+
+            // STEP 6: Try dataset.clear() (no items left)
+            var clearRequest = DatasetItemsDelete.builder()
+                    .datasetId(datasetId)
+                    .filters(List.of())
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.deleteDatasetItems(clearRequest, TEST_WORKSPACE, API_KEY);
+
+            var finalVersion = getLatestVersion(datasetId);
+            assertThat(finalVersion.itemsTotal()).isEqualTo(0);
         }
     }
 }

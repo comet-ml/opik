@@ -2,7 +2,7 @@
 
 # isort: skip_file
 
-from .find_feedback_score_names_1_request_type import FindFeedbackScoreNames1RequestType
+from .find_feedback_score_names1request_type import FindFeedbackScoreNames1RequestType
 from .get_span_stats_request_type import GetSpanStatsRequestType
 from .get_spans_by_project_request_type import GetSpansByProjectRequestType
 from .span_search_stream_request_public_type import SpanSearchStreamRequestPublicType

@@ -9,3 +9,7 @@ export const isJobCompleted = (status: DATASET_EXPORT_STATUS) =>
 
 export const isJobFailed = (status: DATASET_EXPORT_STATUS) =>
   status === DATASET_EXPORT_STATUS.FAILED;
+
+export const isTerminalStatus = (status?: DATASET_EXPORT_STATUS) =>
+  status === DATASET_EXPORT_STATUS.COMPLETED ||
+  status === DATASET_EXPORT_STATUS.FAILED;

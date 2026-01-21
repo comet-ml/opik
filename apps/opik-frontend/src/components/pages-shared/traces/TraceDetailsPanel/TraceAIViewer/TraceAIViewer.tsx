@@ -31,17 +31,20 @@ import Loader from "@/components/shared/Loader/Loader";
 import { TraceAnalyzerLLMMessage, MESSAGE_TYPE } from "@/types/ai-assistant";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
+import { Span } from "@/types/traces";
 
 interface TraceAIViewerProps {
   traceId: string;
   activeSection?: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue | null) => void;
+  spans?: Span[];
 }
 
 const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
   traceId,
   activeSection,
   setActiveSection,
+  spans,
 }) => {
   const [chat, setChat] = useState<{
     value: string;
@@ -86,6 +89,18 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
     contentLength: totalContentLength,
     isStreaming: isRunning,
   });
+
+  // Build entity map once for all messages (span ID -> span name)
+  // This includes ALL spans regardless of filters or collapsed state
+  const entityMap = useMemo(() => {
+    const map = new Map<string, string>();
+    spans?.forEach((span) => {
+      if (span.id && span.name) {
+        map.set(span.id, span.name);
+      }
+    });
+    return map;
+  }, [spans]);
 
   useEffect(() => {
     setChat({ value: "", messages: [] });
@@ -484,7 +499,11 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
             ) : (
               <div className="flex w-full flex-col gap-2 py-4">
                 {chat.messages.map((m) => (
-                  <TraceChatMessage key={m.id} message={m} />
+                  <TraceChatMessage
+                    key={m.id}
+                    message={m}
+                    entityMap={entityMap}
+                  />
                 ))}
                 {isThinking && (
                   <div className="mb-2 flex justify-start">

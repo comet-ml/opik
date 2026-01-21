@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 
 import { DatasetItem } from "@/types/datasets";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,19 @@ import difference from "lodash/difference";
 import union from "lodash/union";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import NavigationTag from "@/components/shared/NavigationTag/NavigationTag";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import { createFilter } from "@/lib/filters";
+import { COLUMN_TYPE } from "@/types/shared";
+
+const COLLAPSE_KEYS_BUTTON_WIDTH = 340;
 
 interface ExperimentDatasetProps {
-  data: DatasetItem["data"] | undefined;
+  data?: DatasetItem["data"];
+  datasetItemId?: string;
 }
 
 const SELECTED_DATA_SET_ITEM_KEYS =
@@ -26,7 +36,17 @@ const SELECTED_DATA_SET_ITEM_KEYS =
 const DYNAMIC_DATA_SET_ITEM_KEYS =
   "experiment-sidebar-dynamic-dataset-item-keys";
 
-const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
+const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
+  const datasetId = useDatasetIdFromCompareExperimentsURL();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const handleResize = useCallback((node: HTMLDivElement) => {
+    setIsCollapsed(node.offsetWidth < COLLAPSE_KEYS_BUTTON_WIDTH);
+  }, []);
+
+  const { ref: containerRef } =
+    useObserveResizeNode<HTMLDivElement>(handleResize);
+
   const [selectedKeys, setSelectedKeys] = useLocalStorageState<string[] | null>(
     SELECTED_DATA_SET_ITEM_KEYS,
     {
@@ -70,34 +90,64 @@ const ExperimentDataset = ({ data }: ExperimentDatasetProps) => {
   }, [dataKeys, setSelectedKeys, setDynamicKeys]);
 
   return (
-    <div className="min-w-72 max-w-full flex-1 pr-6 pt-4">
-      <div className="flex items-center justify-between pb-4">
-        <div className="flex items-center gap-1">
-          <h4 className="comet-body-accented">Dataset item</h4>
+    <div ref={containerRef} className="min-w-72 max-w-full flex-1 pr-6 pt-4">
+      <div className="flex items-center justify-between gap-2 pb-4">
+        <div className="flex min-w-0 shrink items-center gap-1">
+          <h4 className="comet-body-accented truncate">Dataset item</h4>
           <ExplainerIcon
             {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item]}
           />
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm" variant="outline">
-              <Braces className="mr-2 size-4" />
-              Keys
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {dataKeys.map((key) => (
-              <DropdownMenuCustomCheckboxItem
-                key={key}
-                checked={selectedKeys?.includes(key)}
-                onSelect={(event) => event.preventDefault()}
-                onCheckedChange={() => handleCheckChange(key)}
-              >
-                {key}
-              </DropdownMenuCustomCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex shrink-0 items-center gap-2">
+          {datasetItemId && (
+            <NavigationTag
+              id={datasetId}
+              name="View in dataset"
+              resource={RESOURCE_TYPE.datasetItem}
+              search={{
+                row: datasetItemId,
+                filters: [
+                  createFilter({
+                    field: "id",
+                    type: COLUMN_TYPE.string,
+                    operator: "=",
+                    value: datasetItemId,
+                  }),
+                ],
+              }}
+              tooltipContent="View this item in the dataset"
+              className="h-8"
+            />
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              {isCollapsed ? (
+                <TooltipWrapper content="Keys">
+                  <Button size="icon-sm" variant="outline">
+                    <Braces className="size-4" />
+                  </Button>
+                </TooltipWrapper>
+              ) : (
+                <Button size="sm" variant="outline">
+                  <Braces className="mr-2 size-4" />
+                  Keys
+                </Button>
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {dataKeys.map((key) => (
+                <DropdownMenuCustomCheckboxItem
+                  key={key}
+                  checked={selectedKeys?.includes(key)}
+                  onSelect={(event) => event.preventDefault()}
+                  onCheckedChange={() => handleCheckChange(key)}
+                >
+                  {key}
+                </DropdownMenuCustomCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       <ExperimentDatasetItems data={data} selectedKeys={selectedKeys || []} />

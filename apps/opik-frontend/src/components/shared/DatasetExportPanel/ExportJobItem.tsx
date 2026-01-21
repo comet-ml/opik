@@ -9,12 +9,18 @@ import {
 } from "@/store/DatasetExportStore";
 import useDatasetExportJob from "@/api/datasets/useDatasetExportJob";
 import useMarkExportJobViewedMutation from "@/api/datasets/useMarkExportJobViewedMutation";
-import useDeleteDatasetExportJobMutation from "@/api/datasets/useDeleteDatasetExportJobMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useToast } from "@/components/ui/use-toast";
-import { isJobLoading, isJobCompleted, isJobFailed } from "./utils";
+import {
+  isJobLoading,
+  isJobCompleted,
+  isJobFailed,
+  isTerminalStatus,
+} from "./utils";
 import { getExportJobDownloadUrl } from "@/api/datasets/exportJobHelpers";
+
+// Polling interval for checking job status (5 seconds)
+const POLLING_INTERVAL_MS = 5000;
 
 interface ExportJobItemProps {
   jobInfo: ExportJobInfo;
@@ -40,6 +46,11 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
         isJobLoading(job.status) ||
         isJobCompleted(job.status) ||
         (isJobFailed(job.status) && !job.viewed_at),
+      // Poll every 5 seconds until terminal status
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        return isTerminalStatus(status) ? false : POLLING_INTERVAL_MS;
+      },
     },
   );
 

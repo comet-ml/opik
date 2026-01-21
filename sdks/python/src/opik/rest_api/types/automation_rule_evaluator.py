@@ -7,6 +7,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .automation_rule_evaluator_action import AutomationRuleEvaluatorAction
 from .llm_as_judge_code import LlmAsJudgeCode
 from .project_reference import ProjectReference
 from .span_filter import SpanFilter
@@ -48,7 +49,7 @@ class Base(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
-    action: typing.Literal["evaluator"] = "evaluator"
+    action: AutomationRuleEvaluatorAction
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
