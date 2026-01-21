@@ -258,15 +258,6 @@ public interface DatasetItemVersionDAO {
     }
 
     /**
-     * Finds datasets in a specific workspace that need migration by comparing hash and count
-     * between legacy and versioned tables.
-     *
-     * @param workspaceId the workspace ID to filter by
-     * @return Flux emitting dataset IDs that need migration in the specified workspace
-     */
-    Flux<UUID> findDatasetsWithHashMismatchInWorkspace(String workspaceId);
-
-    /**
      * Soft deletes all items from a specific dataset version.
      *
      * @param datasetId the dataset ID
@@ -1504,32 +1495,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     // Migration queries
-    private static final String FIND_DATASETS_WITH_HASH_MISMATCH_IN_WORKSPACE = """
-            WITH legacy AS (
-                SELECT dataset_id,
-                       groupBitXor(data_hash) as hash,
-                       count(DISTINCT id) as cnt
-                FROM dataset_items
-                WHERE workspace_id = :workspaceId
-                GROUP BY dataset_id
-            ),
-            versioned AS (
-                SELECT dataset_id,
-                       groupBitXor(data_hash) as hash,
-                       count(DISTINCT id) as cnt
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspaceId
-                  AND dataset_version_id = dataset_id
-                GROUP BY dataset_id
-            )
-            SELECT COALESCE(l.dataset_id, v.dataset_id) as dataset_id
-            FROM legacy l
-            FULL OUTER JOIN versioned v ON l.dataset_id = v.dataset_id
-            WHERE (COALESCE(l.hash, 0) != COALESCE(v.hash, 0)
-                   OR COALESCE(l.cnt, 0) != COALESCE(v.cnt, 0))
-            ORDER BY dataset_id ASC
-            """;
-
     private static final String DELETE_ITEMS_FROM_VERSION_MIGRATION = """
             DELETE FROM dataset_item_versions
             WHERE workspace_id = :workspaceId
@@ -2734,29 +2699,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     FilterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM);
                 });
-    }
-
-    @Override
-    public Flux<UUID> findDatasetsWithHashMismatchInWorkspace(String workspaceId) {
-        log.debug("Finding datasets with hash mismatch in workspace '{}'", workspaceId);
-
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(FIND_DATASETS_WITH_HASH_MISMATCH_IN_WORKSPACE)
-                    .bind("workspaceId", workspaceId);
-
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
-                    "find_datasets_with_hash_mismatch_in_workspace");
-
-            return Flux.from(statement.execute())
-                    .flatMap(result -> result.map((row, rowMetadata) -> {
-                        String datasetIdStr = row.get("dataset_id", String.class);
-                        return UUID.fromString(datasetIdStr);
-                    }))
-                    .collectList()
-                    .doOnSuccess(datasets -> log.debug("Found '{}' datasets with hash mismatch in workspace '{}'",
-                            datasets.size(), workspaceId))
-                    .doFinally(signalType -> endSegment(segment));
-        }).flatMapMany(Flux::fromIterable);
     }
 
     @Override
