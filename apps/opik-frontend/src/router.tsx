@@ -44,6 +44,7 @@ import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper
 import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
+import JsonPathExplorerPage from "@/components/pages/JsonPathExplorerPage/JsonPathExplorerPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -135,6 +136,16 @@ const getStartedRoute = createRoute({
   staticData: {
     hideUpgradeButton: true,
   },
+});
+
+// ----------- json path explorer
+const jsonPathExplorerRoute = createRoute({
+  path: "/json-path-explorer",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "JSON Path Explorer",
+  },
+  component: JsonPathExplorerPage,
 });
 
 // ----------- home
@@ -515,6 +526,7 @@ const routeTree = rootRoute.addChildren([
         redirectDatasetsRoute,
       ]),
       playgroundRoute,
+      jsonPathExplorerRoute,
       configurationRoute,
       alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
       onlineEvaluationRoute,

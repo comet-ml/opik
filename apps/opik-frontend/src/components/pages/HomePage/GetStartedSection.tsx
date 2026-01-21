@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import {
+  Braces,
   Construction,
   FlaskConical,
   InspectionPanel,
@@ -74,6 +75,16 @@ const GetStartedSection = () => {
             <FlaskConical className="size-3.5 text-action-playground-text" />
           </div>
           <div className="comet-body-s">Try out playground</div>
+        </Link>
+        <Link
+          className="flex w-full max-w-[300px] cursor-pointer items-center gap-3 rounded-md border bg-background p-4 transition-shadow hover:shadow-action-card dark:hover:bg-primary-foreground dark:hover:shadow-none"
+          to={"/$workspaceName/json-path-explorer"}
+          params={{ workspaceName }}
+        >
+          <div className="flex size-[24px] items-center justify-center rounded bg-muted">
+            <Braces className="size-3.5 text-muted-slate" />
+          </div>
+          <div className="comet-body-s">JSON Path Explorer</div>
         </Link>
       </div>
 
