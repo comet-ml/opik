@@ -5,7 +5,7 @@ import {
   PrettyLLMMessageVideoBlockProps,
   PrettyLLMMessageAudioPlayerBlockProps,
   PrettyLLMMessageCodeBlockProps,
-  PrettyLLMMessageFooterProps,
+  PrettyLLMMessageUsageProps,
   MessageRole,
 } from "@/components/shared/PrettyLLMMessage/types";
 
@@ -53,7 +53,13 @@ export interface LLMMessageDescriptor {
   role: MessageRole;
   label?: string;
   blocks: LLMBlockDescriptor[];
-  footer?: PrettyLLMMessageFooterProps;
+  finishReason?: string;
+}
+
+// Mapper result with messages and shared usage
+export interface LLMMapperResult {
+  messages: LLMMessageDescriptor[];
+  usage?: PrettyLLMMessageUsageProps["usage"];
 }
 
 // Provider detector contract
@@ -66,7 +72,7 @@ export type ProviderDetector = (
 export type ProviderMapper = (
   data: unknown,
   prettifyConfig?: { fieldType?: "input" | "output" },
-) => LLMMessageDescriptor[];
+) => LLMMapperResult;
 
 // Provider interface
 export interface LLMProviderImplementation {

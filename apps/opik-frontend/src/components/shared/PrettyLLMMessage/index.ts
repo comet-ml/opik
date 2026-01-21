@@ -3,6 +3,8 @@ import PrettyLLMMessageRoot from "./PrettyLLMMessageRoot";
 import PrettyLLMMessageHeader from "./PrettyLLMMessageHeader";
 import PrettyLLMMessageContent from "./PrettyLLMMessageContent";
 import PrettyLLMMessageFooter from "./PrettyLLMMessageFooter";
+import PrettyLLMMessageFinishReason from "./PrettyLLMMessageFinishReason";
+import PrettyLLMMessageUsage from "./PrettyLLMMessageUsage";
 import PrettyLLMMessageTextBlock from "./PrettyLLMMessageTextBlock";
 import PrettyLLMMessageImageBlock from "./PrettyLLMMessageImageBlock";
 import PrettyLLMMessageAudioPlayerBlock from "./PrettyLLMMessageAudioPlayerBlock";
@@ -15,6 +17,8 @@ const PrettyLLMMessage = {
   Header: PrettyLLMMessageHeader,
   Content: PrettyLLMMessageContent,
   Footer: PrettyLLMMessageFooter,
+  FinishReason: PrettyLLMMessageFinishReason,
+  Usage: PrettyLLMMessageUsage,
   TextBlock: PrettyLLMMessageTextBlock,
   ImageBlock: PrettyLLMMessageImageBlock,
   AudioPlayerBlock: PrettyLLMMessageAudioPlayerBlock,
@@ -29,6 +33,8 @@ export { PrettyLLMMessageRoot };
 export { PrettyLLMMessageHeader };
 export { PrettyLLMMessageContent };
 export { PrettyLLMMessageFooter };
+export { PrettyLLMMessageFinishReason };
+export { PrettyLLMMessageUsage };
 export { PrettyLLMMessageTextBlock };
 export { PrettyLLMMessageImageBlock };
 export { PrettyLLMMessageAudioPlayerBlock };
@@ -42,6 +48,8 @@ export type {
   PrettyLLMMessageHeaderProps,
   PrettyLLMMessageContentProps,
   PrettyLLMMessageFooterProps,
+  PrettyLLMMessageFinishReasonProps,
+  PrettyLLMMessageUsageProps,
   PrettyLLMMessageTextBlockProps,
   PrettyLLMMessageImageBlockProps,
   PrettyLLMMessageAudioPlayerBlockProps,

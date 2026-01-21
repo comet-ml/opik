@@ -12,11 +12,11 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].role).toBe("user");
-      expect(result[0].blocks).toHaveLength(1);
-      expect(result[0].blocks[0].blockType).toBe("text");
-      expect(result[1].role).toBe("assistant");
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("user");
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      expect(result.messages[1].role).toBe("assistant");
     });
 
     it("should map direct array format", () => {
@@ -26,9 +26,9 @@ describe("mapOpenAIMessages", () => {
       ];
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].role).toBe("user");
-      expect(result[0].blocks[0].blockType).toBe("text");
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("user");
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
     });
 
     it("should map custom input format with text field", () => {
@@ -48,17 +48,19 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result).toHaveLength(2);
-      expect(result[0].role).toBe("system");
-      expect(result[0].blocks[0].blockType).toBe("text");
-      if (result[0].blocks[0].blockType === "text") {
-        expect(result[0].blocks[0].props.children).toBe(
+      expect(result.messages).toHaveLength(2);
+      expect(result.messages[0].role).toBe("system");
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe(
           "You are a helpful assistant",
         );
       }
-      expect(result[1].role).toBe("user");
-      if (result[1].blocks[0].blockType === "text") {
-        expect(result[1].blocks[0].props.children).toBe("What is 2+2?");
+      expect(result.messages[1].role).toBe("user");
+      if (result.messages[1].blocks[0].blockType === "text") {
+        expect(result.messages[1].blocks[0].props.children).toBe(
+          "What is 2+2?",
+        );
       }
     });
 
@@ -80,10 +82,10 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].blocks).toHaveLength(2);
-      expect(result[0].blocks[0].blockType).toBe("text");
-      expect(result[0].blocks[1].blockType).toBe("image");
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].blocks).toHaveLength(2);
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      expect(result.messages[0].blocks[1].blockType).toBe("image");
     });
   });
 
@@ -99,11 +101,11 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("assistant");
-      expect(result[0].blocks[0].blockType).toBe("text");
-      if (result[0].blocks[0].blockType === "text") {
-        expect(result[0].blocks[0].props.children).toBe("Hello!");
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("assistant");
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe("Hello!");
       }
     });
 
@@ -124,20 +126,19 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("assistant");
-      expect(result[0].blocks[0].blockType).toBe("text");
-      if (result[0].blocks[0].blockType === "text") {
-        expect(result[0].blocks[0].props.children).toBe("Hello!");
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("assistant");
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe("Hello!");
       }
-      // Check footer data
-      expect(result[0].footer).toBeDefined();
-      expect(result[0].footer?.usage).toEqual({
+      // Check finish reason and usage
+      expect(result.messages[0].finishReason).toBe("stop");
+      expect(result.usage).toEqual({
         prompt_tokens: 10,
         completion_tokens: 5,
         total_tokens: 15,
       });
-      expect(result[0].footer?.finishReason).toBe("stop");
     });
 
     it("should map custom output format", () => {
@@ -152,21 +153,22 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("assistant");
-      expect(result[0].blocks).toHaveLength(1);
-      expect(result[0].blocks[0].blockType).toBe("text");
-      if (result[0].blocks[0].blockType === "text") {
-        expect(result[0].blocks[0].props.children).toBe("This is the answer");
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("assistant");
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe(
+          "This is the answer",
+        );
       }
-      // Check footer data
-      expect(result[0].footer).toBeDefined();
-      expect(result[0].footer?.usage).toEqual({
+      // Check finish reason and usage
+      expect(result.messages[0].finishReason).toBe("stop");
+      expect(result.usage).toEqual({
         prompt_tokens: 180,
         completion_tokens: 219,
         total_tokens: 399,
       });
-      expect(result[0].footer?.finishReason).toBe("stop");
     });
 
     it("should map custom output format with minimal data", () => {
@@ -175,31 +177,39 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("assistant");
-      if (result[0].blocks[0].blockType === "text") {
-        expect(result[0].blocks[0].props.children).toBe("Simple response");
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("assistant");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe(
+          "Simple response",
+        );
       }
     });
   });
 
   describe("Edge cases", () => {
-    it("should return empty array for null data", () => {
-      expect(mapOpenAIMessages(null, { fieldType: "input" })).toEqual([]);
+    it("should return empty result for null data", () => {
+      expect(mapOpenAIMessages(null, { fieldType: "input" })).toEqual({
+        messages: [],
+      });
     });
 
-    it("should return empty array for undefined data", () => {
-      expect(mapOpenAIMessages(undefined, { fieldType: "input" })).toEqual([]);
+    it("should return empty result for undefined data", () => {
+      expect(mapOpenAIMessages(undefined, { fieldType: "input" })).toEqual({
+        messages: [],
+      });
     });
 
-    it("should return empty array when fieldType is not specified", () => {
+    it("should return empty result when fieldType is not specified", () => {
       const data = [{ role: "user", content: "Hello" }];
-      expect(mapOpenAIMessages(data, {})).toEqual([]);
+      expect(mapOpenAIMessages(data, {})).toEqual({ messages: [] });
     });
 
-    it("should return empty array for invalid format", () => {
+    it("should return empty result for invalid format", () => {
       const data = { invalid: "format" };
-      expect(mapOpenAIMessages(data, { fieldType: "input" })).toEqual([]);
+      expect(mapOpenAIMessages(data, { fieldType: "input" })).toEqual({
+        messages: [],
+      });
     });
   });
 
@@ -216,11 +226,11 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("tool");
-      expect(result[0].label).toBe("get_weather");
-      expect(result[0].blocks).toHaveLength(1);
-      expect(result[0].blocks[0].blockType).toBe("code");
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("tool");
+      expect(result.messages[0].label).toBe("get_weather");
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("code");
     });
 
     it("should normalize legacy function role to tool in direct array format", () => {
@@ -233,11 +243,11 @@ describe("mapOpenAIMessages", () => {
       ];
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("tool");
-      expect(result[0].label).toBe("calculate_sum");
-      expect(result[0].blocks).toHaveLength(1);
-      expect(result[0].blocks[0].blockType).toBe("code");
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("tool");
+      expect(result.messages[0].label).toBe("calculate_sum");
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("code");
     });
 
     it("should normalize legacy function role in output format", () => {
@@ -255,11 +265,11 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("tool");
-      expect(result[0].label).toBe("search_database");
-      expect(result[0].blocks).toHaveLength(1);
-      expect(result[0].blocks[0].blockType).toBe("code");
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("tool");
+      expect(result.messages[0].label).toBe("search_database");
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("code");
     });
 
     it("should preserve function name as label when normalizing", () => {
@@ -274,8 +284,8 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result[0].role).toBe("tool");
-      expect(result[0].label).toBe("my_custom_function");
+      expect(result.messages[0].role).toBe("tool");
+      expect(result.messages[0].label).toBe("my_custom_function");
     });
 
     it("should handle function role without name field", () => {
@@ -289,8 +299,8 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result[0].role).toBe("tool");
-      expect(result[0].label).toBe(undefined);
+      expect(result.messages[0].role).toBe("tool");
+      expect(result.messages[0].label).toBe(undefined);
     });
 
     it("should format JSON content in function messages", () => {
@@ -305,9 +315,9 @@ describe("mapOpenAIMessages", () => {
       };
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result[0].blocks[0].blockType).toBe("code");
-      if (result[0].blocks[0].blockType === "code") {
-        const code = result[0].blocks[0].props.code;
+      expect(result.messages[0].blocks[0].blockType).toBe("code");
+      if (result.messages[0].blocks[0].blockType === "code") {
+        const code = result.messages[0].blocks[0].props.code;
         // Should be pretty-printed JSON
         expect(code).toContain("\n");
         expect(code).toContain("status");
@@ -340,14 +350,14 @@ describe("mapOpenAIMessages", () => {
 
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("assistant");
-      expect(result[0].blocks).toHaveLength(2);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("assistant");
+      expect(result.messages[0].blocks).toHaveLength(2);
 
       // First block should be audio
-      expect(result[0].blocks[0].blockType).toBe("audio");
-      if (result[0].blocks[0].blockType === "audio") {
-        expect(result[0].blocks[0].props.audios).toEqual([
+      expect(result.messages[0].blocks[0].blockType).toBe("audio");
+      if (result.messages[0].blocks[0].blockType === "audio") {
+        expect(result.messages[0].blocks[0].props.audios).toEqual([
           {
             url: "[output-attachment-1-1768563367373.wav]",
             name: "audio_696a22a63a3c8191881b0c0e87a8c59c",
@@ -356,12 +366,12 @@ describe("mapOpenAIMessages", () => {
       }
 
       // Second block should be text with transcript
-      expect(result[0].blocks[1].blockType).toBe("text");
-      if (result[0].blocks[1].blockType === "text") {
-        expect(result[0].blocks[1].props.children).toBe(
+      expect(result.messages[0].blocks[1].blockType).toBe("text");
+      if (result.messages[0].blocks[1].blockType === "text") {
+        expect(result.messages[0].blocks[1].props.children).toBe(
           "I received the first audio sample. Please go ahead and send the second one as well so I can confirm.",
         );
-        expect(result[0].blocks[1].props.showMoreButton).toBe(true);
+        expect(result.messages[0].blocks[1].props.showMoreButton).toBe(true);
       }
     });
 
@@ -383,11 +393,11 @@ describe("mapOpenAIMessages", () => {
 
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].blocks).toHaveLength(1);
-      expect(result[0].blocks[0].blockType).toBe("audio");
-      if (result[0].blocks[0].blockType === "audio") {
-        expect(result[0].blocks[0].props.audios).toEqual([
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("audio");
+      if (result.messages[0].blocks[0].blockType === "audio") {
+        expect(result.messages[0].blocks[0].props.audios).toEqual([
           {
             url: "[audio-file.wav]",
             name: "audio_123",
@@ -415,11 +425,11 @@ describe("mapOpenAIMessages", () => {
 
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].blocks).toHaveLength(1);
-      expect(result[0].blocks[0].blockType).toBe("text");
-      if (result[0].blocks[0].blockType === "text") {
-        expect(result[0].blocks[0].props.children).toBe(
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].blocks).toHaveLength(1);
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe(
           "This is just a transcript without audio data.",
         );
       }
@@ -445,11 +455,11 @@ describe("mapOpenAIMessages", () => {
 
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].blocks).toHaveLength(2);
-      expect(result[0].blocks[0].blockType).toBe("audio");
-      if (result[0].blocks[0].blockType === "audio") {
-        expect(result[0].blocks[0].props.audios).toEqual([
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].blocks).toHaveLength(2);
+      expect(result.messages[0].blocks[0].blockType).toBe("audio");
+      if (result.messages[0].blocks[0].blockType === "audio") {
+        expect(result.messages[0].blocks[0].props.audios).toEqual([
           {
             url: "https://example.com/audio.wav",
             name: "audio_789",
@@ -477,24 +487,24 @@ describe("mapOpenAIMessages", () => {
 
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].blocks).toHaveLength(3);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].blocks).toHaveLength(3);
 
       // First block should be text content
-      expect(result[0].blocks[0].blockType).toBe("text");
-      if (result[0].blocks[0].blockType === "text") {
-        expect(result[0].blocks[0].props.children).toBe(
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe(
           "Here is the audio response:",
         );
       }
 
       // Second block should be audio
-      expect(result[0].blocks[1].blockType).toBe("audio");
+      expect(result.messages[0].blocks[1].blockType).toBe("audio");
 
       // Third block should be transcript
-      expect(result[0].blocks[2].blockType).toBe("text");
-      if (result[0].blocks[2].blockType === "text") {
-        expect(result[0].blocks[2].props.children).toBe(
+      expect(result.messages[0].blocks[2].blockType).toBe("text");
+      if (result.messages[0].blocks[2].blockType === "text") {
+        expect(result.messages[0].blocks[2].props.children).toBe(
           "Transcript of the audio",
         );
       }
@@ -518,8 +528,8 @@ describe("mapOpenAIMessages", () => {
 
       const result = mapOpenAIMessages(data, { fieldType: "output" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].blocks).toHaveLength(0);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].blocks).toHaveLength(0);
     });
   });
 
@@ -555,24 +565,28 @@ describe("mapOpenAIMessages", () => {
 
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("user");
-      expect(result[0].blocks).toHaveLength(2);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe("user");
+      expect(result.messages[0].blocks).toHaveLength(2);
 
       // First block should be text
-      expect(result[0].blocks[0].blockType).toBe("text");
-      if (result[0].blocks[0].blockType === "text") {
-        expect(result[0].blocks[0].props.children).toBe(
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      if (result.messages[0].blocks[0].blockType === "text") {
+        expect(result.messages[0].blocks[0].props.children).toBe(
           "I'm sending you two identical audio samples. Please confirm you received them.",
         );
       }
 
       // Second block should be audio with both files
-      expect(result[0].blocks[1].blockType).toBe("audio");
-      if (result[0].blocks[1].blockType === "audio") {
-        expect(result[0].blocks[1].props.audios).toHaveLength(2);
-        expect(result[0].blocks[1].props.audios?.[0].url).toBe("[image_0]");
-        expect(result[0].blocks[1].props.audios?.[1].url).toBe("[image_1]");
+      expect(result.messages[0].blocks[1].blockType).toBe("audio");
+      if (result.messages[0].blocks[1].blockType === "audio") {
+        expect(result.messages[0].blocks[1].props.audios).toHaveLength(2);
+        expect(result.messages[0].blocks[1].props.audios?.[0].url).toBe(
+          "[image_0]",
+        );
+        expect(result.messages[0].blocks[1].props.audios?.[1].url).toBe(
+          "[image_1]",
+        );
       }
     });
 
@@ -610,14 +624,14 @@ describe("mapOpenAIMessages", () => {
 
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].blocks).toHaveLength(4);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].blocks).toHaveLength(4);
 
       // Verify block order: text, audio, text, image
-      expect(result[0].blocks[0].blockType).toBe("text");
-      expect(result[0].blocks[1].blockType).toBe("audio");
-      expect(result[0].blocks[2].blockType).toBe("text");
-      expect(result[0].blocks[3].blockType).toBe("image");
+      expect(result.messages[0].blocks[0].blockType).toBe("text");
+      expect(result.messages[0].blocks[1].blockType).toBe("audio");
+      expect(result.messages[0].blocks[2].blockType).toBe("text");
+      expect(result.messages[0].blocks[3].blockType).toBe("image");
     });
 
     it("should handle input_audio with empty data", () => {
@@ -640,8 +654,8 @@ describe("mapOpenAIMessages", () => {
 
       const result = mapOpenAIMessages(data, { fieldType: "input" });
 
-      expect(result).toHaveLength(1);
-      expect(result[0].blocks).toHaveLength(0);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].blocks).toHaveLength(0);
     });
   });
 });

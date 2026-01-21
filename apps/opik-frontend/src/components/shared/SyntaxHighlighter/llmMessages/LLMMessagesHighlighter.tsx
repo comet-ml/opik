@@ -13,7 +13,12 @@ import {
 } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { getProvider } from "./providers/registry";
-import { LLMProvider, LLMMessageDescriptor, LLMBlockDescriptor } from "./types";
+import {
+  LLMProvider,
+  LLMMessageDescriptor,
+  LLMBlockDescriptor,
+  LLMMapperResult,
+} from "./types";
 import { useLLMMessagesExpandAll } from "@/components/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 
 export interface LLMMessagesHighlighterProps {
@@ -41,11 +46,13 @@ const LLMMessagesHighlighter: React.FC<LLMMessagesHighlighterProps> = ({
   preserveKey,
 }) => {
   // Get provider implementation and map messages
-  const messages = useMemo<LLMMessageDescriptor[]>(() => {
+  const mapperResult = useMemo<LLMMapperResult>(() => {
     const providerImpl = getProvider(provider);
-    if (!providerImpl) return [];
+    if (!providerImpl) return { messages: [] };
     return providerImpl.mapper(data, prettifyConfig);
   }, [data, prettifyConfig, provider]);
+
+  const { messages, usage } = mapperResult;
 
   // Get all message IDs for expand/collapse all functionality
   const allMessageIds = useMemo(() => {
@@ -109,29 +116,36 @@ const LLMMessagesHighlighter: React.FC<LLMMessagesHighlighterProps> = ({
           style={maxHeight ? { maxHeight } : undefined}
         >
           {messages.length > 0 ? (
-            <PrettyLLMMessage.Container
-              type="multiple"
-              value={expandedMessages}
-              onValueChange={handleValueChange}
-            >
-              {messages.map((message) => (
-                <PrettyLLMMessage.Root key={message.id} value={message.id}>
-                  <PrettyLLMMessage.Header
-                    role={message.role}
-                    label={message.label}
-                  />
-                  <PrettyLLMMessage.Content>
-                    {renderContentBlocks(message)}
-                    {message.footer && (
-                      <PrettyLLMMessage.Footer
-                        usage={message.footer.usage}
-                        finishReason={message.footer.finishReason}
-                      />
-                    )}
-                  </PrettyLLMMessage.Content>
-                </PrettyLLMMessage.Root>
-              ))}
-            </PrettyLLMMessage.Container>
+            <>
+              <PrettyLLMMessage.Container
+                type="multiple"
+                value={expandedMessages}
+                onValueChange={handleValueChange}
+                className="space-y-1"
+              >
+                {messages.map((message) => (
+                  <PrettyLLMMessage.Root key={message.id} value={message.id}>
+                    <PrettyLLMMessage.Header
+                      role={message.role}
+                      label={message.label}
+                    />
+                    <PrettyLLMMessage.Content>
+                      {renderContentBlocks(message)}
+                      {message.finishReason && (
+                        <PrettyLLMMessage.FinishReason
+                          finishReason={message.finishReason}
+                        />
+                      )}
+                    </PrettyLLMMessage.Content>
+                  </PrettyLLMMessage.Root>
+                ))}
+              </PrettyLLMMessage.Container>
+              {usage && (
+                <div className="mt-3">
+                  <PrettyLLMMessage.Usage usage={usage} />
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-sm text-muted-foreground">No messages</div>
           )}

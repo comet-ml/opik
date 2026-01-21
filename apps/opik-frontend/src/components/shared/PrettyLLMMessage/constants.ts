@@ -39,8 +39,8 @@ export const ROLE_CONFIG: Record<
   tool: {
     icon: Wrench,
     label: "Tool",
-    iconColor: "text-[var(--tag-purple-text)]",
-    iconBgColor: "bg-[var(--tag-purple-bg)]",
+    iconColor: "text-[var(--tag-burgundy-text)]",
+    iconBgColor: "bg-[var(--tag-burgundy-bg)]",
   },
   function: {
     icon: CodeIcon,

@@ -61,3 +61,17 @@ export interface PrettyLLMMessageFooterProps {
   finishReason?: string;
   className?: string;
 }
+
+export interface PrettyLLMMessageFinishReasonProps {
+  finishReason?: string;
+  className?: string;
+}
+
+export interface PrettyLLMMessageUsageProps {
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+  className?: string;
+}

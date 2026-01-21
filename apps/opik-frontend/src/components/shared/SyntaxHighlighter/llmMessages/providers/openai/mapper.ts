@@ -3,6 +3,7 @@ import {
   ProviderMapper,
   LLMMessageDescriptor,
   LLMBlockDescriptor,
+  LLMMapperResult,
 } from "../../types";
 import { MessageRole } from "@/components/shared/PrettyLLMMessage/types";
 import { isPlaceholder } from "../../utils";
@@ -635,78 +636,85 @@ const mapOpenAIMessage = (
 };
 
 /**
- * Maps OpenAI input format to LLMMessageDescriptor array
+ * Maps OpenAI input format to LLMMapperResult
  */
-const mapOpenAIInput = (data: OpenAIInputData): LLMMessageDescriptor[] => {
+const mapOpenAIInput = (data: OpenAIInputData): LLMMapperResult => {
   if (!data.messages || !Array.isArray(data.messages)) {
-    return [];
+    return { messages: [] };
   }
 
-  return data.messages.map((msg, index) =>
+  const messages = data.messages.map((msg, index) =>
     mapOpenAIMessage(msg, index, "input"),
   );
+
+  return { messages };
 };
 
 /**
- * Maps OpenAI output format to LLMMessageDescriptor array
+ * Maps OpenAI output format to LLMMapperResult
  */
-const mapOpenAIOutput = (data: OpenAIOutputData): LLMMessageDescriptor[] => {
+const mapOpenAIOutput = (data: OpenAIOutputData): LLMMapperResult => {
   if (!data.choices || !Array.isArray(data.choices)) {
-    return [];
+    return { messages: [] };
   }
 
-  return data.choices.map((choice, index) => {
+  const messages = data.choices.map((choice, index) => {
     const message = mapOpenAIMessage(choice.message, index, "output");
 
-    // Add footer data if available
-    const hasFooterData = data.usage || choice.finish_reason;
-    if (hasFooterData) {
-      message.footer = {
-        usage: data.usage,
-        finishReason: choice.finish_reason,
-      };
+    // Add finish reason to message if available
+    if (choice.finish_reason) {
+      message.finishReason = choice.finish_reason;
     }
 
     return message;
   });
+
+  return {
+    messages,
+    usage: data.usage,
+  };
 };
 
 /**
- * Maps direct array input format to LLMMessageDescriptor array
+ * Maps direct array input format to LLMMapperResult
  */
-const mapDirectArrayInput = (
-  data: OpenAIDirectArrayInput,
-): LLMMessageDescriptor[] => {
+const mapDirectArrayInput = (data: OpenAIDirectArrayInput): LLMMapperResult => {
   if (!Array.isArray(data) || data.length === 0) {
-    return [];
+    return { messages: [] };
   }
 
-  return data.map((msg, index) => mapOpenAIMessage(msg, index, "input"));
+  const messages = data.map((msg, index) =>
+    mapOpenAIMessage(msg, index, "input"),
+  );
+
+  return { messages };
 };
 
 /**
- * Maps custom input format to LLMMessageDescriptor array
+ * Maps custom input format to LLMMapperResult
  */
 const mapCustomInputFormat = (
   data: OpenAICustomInputFormat,
-): LLMMessageDescriptor[] => {
+): LLMMapperResult => {
   if (!data.input || !Array.isArray(data.input)) {
-    return [];
+    return { messages: [] };
   }
 
-  return data.input.map((msg, index) =>
+  const messages = data.input.map((msg, index) =>
     mapCustomInputMessage(msg, index, "input"),
   );
+
+  return { messages };
 };
 
 /**
- * Maps custom output format to LLMMessageDescriptor array
+ * Maps custom output format to LLMMapperResult
  */
 const mapCustomOutputFormat = (
   data: OpenAICustomOutputFormat,
-): LLMMessageDescriptor[] => {
+): LLMMapperResult => {
   if (typeof data.text !== "string") {
-    return [];
+    return { messages: [] };
   }
 
   // Create a single assistant message with the text content
@@ -722,32 +730,30 @@ const mapCustomOutputFormat = (
     },
   ];
 
-  // Add footer data if available
-  const hasFooterData = data.usage || data.finish_reason;
-  const footer = hasFooterData
-    ? {
-        usage: data.usage,
-        finishReason: data.finish_reason,
-      }
-    : undefined;
+  const message: LLMMessageDescriptor = {
+    id: generateMessageId(0, "output"),
+    role: "assistant" as MessageRole,
+    blocks,
+  };
 
-  return [
-    {
-      id: generateMessageId(0, "output"),
-      role: "assistant" as MessageRole,
-      blocks,
-      footer,
-    },
-  ];
+  // Add finish reason if available
+  if (data.finish_reason) {
+    message.finishReason = data.finish_reason;
+  }
+
+  return {
+    messages: [message],
+    usage: data.usage,
+  };
 };
 
 /**
- * Maps OpenAI format data to normalized LLMMessageDescriptor array.
+ * Maps OpenAI format data to normalized LLMMapperResult.
  * Supports multiple input and output formats.
  */
 export const mapOpenAIMessages: ProviderMapper = (data, prettifyConfig) => {
   if (!data) {
-    return [];
+    return { messages: [] };
   }
 
   const isInput = prettifyConfig?.fieldType === "input";
@@ -786,5 +792,5 @@ export const mapOpenAIMessages: ProviderMapper = (data, prettifyConfig) => {
     }
   }
 
-  return [];
+  return { messages: [] };
 };
