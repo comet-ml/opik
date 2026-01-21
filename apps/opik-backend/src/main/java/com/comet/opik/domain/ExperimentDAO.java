@@ -153,7 +153,7 @@ class ExperimentDAO {
             WITH experiments_final AS (
                 SELECT
                     *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
-                FROM experiments final
+                FROM experiments FINAL
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(optimization_id)> AND optimization_id = :optimization_id <endif>
@@ -167,7 +167,6 @@ class ExperimentDAO {
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
                 <if(limit &&
                 !feedback_scores_filters &&
                 !feedback_scores_empty_filters &&
