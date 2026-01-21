@@ -194,6 +194,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             prompts=prompts,
             experiment_config=context.experiment_config,
             empty_score=empty_score,
+            n_samples=n_samples,
+            n_sample_strategy=context.n_sample_strategy,
         )
 
     def _improve_prompt(
@@ -479,6 +481,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         metric = context.metric
         agent = context.agent
         n_samples = context.n_samples
+        minibatch_samples = (
+            context.n_minibatch_samples
+            if context.n_minibatch_samples is not None
+            else n_samples
+        )
         max_trials = context.max_trials
         max_retries = context.extra_params.get("max_retries", 2)
         optimization = context.optimization
@@ -519,7 +526,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 dataset=dataset,
                 metric=metric,
                 agent=agent,
-                n_samples=n_samples,
+                n_samples=minibatch_samples,
             )
 
             # Display synthesis results
@@ -546,7 +553,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 validation_dataset=validation_dataset,
                 metric=metric,
                 agent=agent,
-                n_samples=n_samples,
+                n_samples=minibatch_samples,
                 max_retries=max_retries,
                 max_trials=max_trials,
                 optimization_id=optimization.id if optimization else None,
