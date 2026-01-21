@@ -182,8 +182,8 @@ class TestOptunaHistoryRedaction:
             validation_dataset=None,
             experiment_config=None,
             n_samples=None,
-            n_minibatch_samples=None,
-            n_sample_strategy=None,
+            n_samples_minibatch=None,
+            n_samples_strategy=None,
             agent=None,
             project_name="Optimization",
             optimization_id=None,
@@ -233,7 +233,7 @@ class TestOptunaHistoryRedaction:
             agent=context.agent,
             experiment_config=experiment_config,
             n_samples=None,
-            n_sample_strategy=None,
+            n_samples_strategy=None,
             total_trials=1,
         )
 

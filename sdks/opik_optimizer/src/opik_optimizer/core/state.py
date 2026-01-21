@@ -64,8 +64,8 @@ class OptimizationContext:
     n_samples: int | None
     max_trials: int
     project_name: str
-    n_minibatch_samples: int | None = None
-    n_sample_strategy: str = constants.DEFAULT_N_SAMPLE_STRATEGY
+    n_samples_minibatch: int | None = None
+    n_samples_strategy: str = constants.DEFAULT_N_SAMPLES_STRATEGY
     allow_tool_use: bool = True
     baseline_score: float | None = None
     extra_params: dict[str, Any] = field(default_factory=dict)

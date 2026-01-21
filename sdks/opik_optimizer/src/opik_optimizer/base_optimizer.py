@@ -394,8 +394,8 @@ class BaseOptimizer(ABC):
         metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         n_samples: int | None = None,
-        n_minibatch_samples: int | None = None,
-        n_sample_strategy: str | None = None,
+        n_samples_minibatch: int | None = None,
+        n_samples_strategy: str | None = None,
         experiment_config: dict[str, Any] | None = None,
         validation_dataset: Dataset | None = None,
         project_name: str | None = None,
@@ -471,11 +471,11 @@ class BaseOptimizer(ABC):
         # Create initial prompts
         initial_prompts = {name: p.copy() for name, p in optimizable_prompts.items()}
 
-        resolved_strategy = n_sample_strategy or getattr(
-            self, "n_sample_strategy", None
+        resolved_strategy = n_samples_strategy or getattr(
+            self, "n_samples_strategy", None
         )
         if not isinstance(resolved_strategy, str) or not resolved_strategy:
-            resolved_strategy = constants.DEFAULT_N_SAMPLE_STRATEGY
+            resolved_strategy = constants.DEFAULT_N_SAMPLES_STRATEGY
 
         # Return optimization context
         context = OptimizationContext(
@@ -491,8 +491,8 @@ class BaseOptimizer(ABC):
             optimization_id=self.current_optimization_id,
             experiment_config=experiment_config,
             n_samples=n_samples,
-            n_minibatch_samples=n_minibatch_samples,
-            n_sample_strategy=resolved_strategy,
+            n_samples_minibatch=n_samples_minibatch,
+            n_samples_strategy=resolved_strategy,
             max_trials=max_trials,
             project_name=project_name,
             allow_tool_use=bool(extra_params.get("allow_tool_use", True)),
@@ -503,7 +503,7 @@ class BaseOptimizer(ABC):
 
         # Keep history default split aligned with evaluation dataset.
         self.set_default_dataset_split(dataset_split)
-        self.n_sample_strategy = resolved_strategy
+        self.n_samples_strategy = resolved_strategy
         return context
 
     def _calculate_baseline(self, context: OptimizationContext) -> float:
@@ -612,7 +612,7 @@ class BaseOptimizer(ABC):
                     agent=context.agent,
                     experiment_config=experiment_config,
                     n_samples=context.n_samples,
-                    n_sample_strategy=context.n_sample_strategy,
+                    n_samples_strategy=context.n_samples_strategy,
                     n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
@@ -656,7 +656,7 @@ class BaseOptimizer(ABC):
         *,
         empty_score: float | None = None,
         n_samples: int | None = None,
-        n_sample_strategy: str | None = None,
+        n_samples_strategy: str | None = None,
         sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems]:
         """Evaluate prompts and return both the score and EvaluationResult."""
@@ -678,7 +678,7 @@ class BaseOptimizer(ABC):
                     agent=context.agent,
                     experiment_config=experiment_config,
                     n_samples=context.n_samples if n_samples is None else n_samples,
-                    n_sample_strategy=n_sample_strategy or context.n_sample_strategy,
+                    n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
                     n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
@@ -916,7 +916,7 @@ class BaseOptimizer(ABC):
 
         resolved_strategy = (
             strategy
-            or getattr(self, "n_sample_strategy", None)
+            or getattr(self, "n_samples_strategy", None)
             or sampling.DEFAULT_STRATEGY
         )
         resolved_seed = seed_override if seed_override is not None else self.seed
@@ -933,7 +933,7 @@ class BaseOptimizer(ABC):
         self,
         dataset: Dataset,
         n_samples: int | None,
-        n_minibatch_samples: int | None,
+        n_samples_minibatch: int | None,
         *,
         dataset_item_ids: list[str] | None = None,
         phase: str = "minibatch",
@@ -942,7 +942,7 @@ class BaseOptimizer(ABC):
     ) -> sampling.SamplingPlan:
         """Build a sampling plan for an inner-loop minibatch."""
         effective_n_samples = (
-            n_minibatch_samples if n_minibatch_samples is not None else n_samples
+            n_samples_minibatch if n_samples_minibatch is not None else n_samples
         )
         return self._prepare_sampling_plan(
             dataset=dataset,
@@ -1164,8 +1164,8 @@ class BaseOptimizer(ABC):
         agent: OptimizableAgent | None,
         experiment_config: dict | None,
         n_samples: int | None,
-        n_minibatch_samples: int | None,
-        n_sample_strategy: str | None,
+        n_samples_minibatch: int | None,
+        n_samples_strategy: str | None,
         auto_continue: bool,
         project_name: str | None,
         optimization_id: str | None,
@@ -1184,8 +1184,8 @@ class BaseOptimizer(ABC):
             metric=metric,
             agent=agent,
             n_samples=n_samples,
-            n_minibatch_samples=n_minibatch_samples,
-            n_sample_strategy=n_sample_strategy,
+            n_samples_minibatch=n_samples_minibatch,
+            n_samples_strategy=n_samples_strategy,
             experiment_config=experiment_config,
             validation_dataset=validation_dataset,
             project_name=project_name,
@@ -1201,6 +1201,8 @@ class BaseOptimizer(ABC):
             dataset=getattr(dataset, "name", None),
             max_trials=max_trials,
             n_samples=n_samples,
+            n_samples_minibatch=n_samples_minibatch,
+            n_samples_strategy=context.n_samples_strategy,
             n_threads=getattr(self, "n_threads", None),
         )
 
@@ -1288,8 +1290,8 @@ class BaseOptimizer(ABC):
         agent: OptimizableAgent | None,
         experiment_config: dict | None,
         n_samples: int | None,
-        n_minibatch_samples: int | None,
-        n_sample_strategy: str | None,
+        n_samples_minibatch: int | None,
+        n_samples_strategy: str | None,
         auto_continue: bool,
         project_name: str | None,
         optimization_id: str | None,
@@ -1305,8 +1307,8 @@ class BaseOptimizer(ABC):
             "agent": agent,
             "experiment_config": experiment_config,
             "n_samples": n_samples,
-            "n_minibatch_samples": n_minibatch_samples,
-            "n_sample_strategy": n_sample_strategy,
+            "n_samples_minibatch": n_samples_minibatch,
+            "n_samples_strategy": n_samples_strategy,
             "auto_continue": auto_continue,
             "project_name": project_name,
             "optimization_id": optimization_id,
@@ -1376,8 +1378,8 @@ class BaseOptimizer(ABC):
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
-        n_minibatch_samples: int | None = None,
-        n_sample_strategy: str | None = None,
+        n_samples_minibatch: int | None = None,
+        n_samples_strategy: str | None = None,
         auto_continue: bool = False,
         project_name: str | None = None,
         optimization_id: str | None = None,
@@ -1408,8 +1410,9 @@ class BaseOptimizer(ABC):
            agent: Optional agent for prompt execution (defaults to LiteLLMAgent)
            experiment_config: Optional configuration for the experiment
            n_samples: Number of samples to use for evaluation
-           n_minibatch_samples: Optional number of samples for inner-loop minibatches
-           n_sample_strategy: Sampling strategy name (default "epoch_shuffled")
+           n_samples_minibatch: Optional number of samples for inner-loop minibatches
+           n_samples_strategy: Sampling strategy name (default "epoch_shuffled")
+               TODO: keep internal until the strategy set is stabilized.
            auto_continue: Whether to continue optimization automatically
            project_name: Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")
            optimization_id: Optional ID to use when creating the Opik optimization run
@@ -1429,8 +1432,8 @@ class BaseOptimizer(ABC):
                 agent=agent,
                 experiment_config=experiment_config,
                 n_samples=n_samples,
-                n_minibatch_samples=n_minibatch_samples,
-                n_sample_strategy=n_sample_strategy,
+                n_samples_minibatch=n_samples_minibatch,
+                n_samples_strategy=n_samples_strategy,
                 auto_continue=auto_continue,
                 project_name=project_name,
                 optimization_id=optimization_id,
@@ -1651,7 +1654,7 @@ class BaseOptimizer(ABC):
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
-        n_sample_strategy: str | None = None,
+        n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: Literal[True] = True,
         allow_tool_use: bool | None = None,
@@ -1671,7 +1674,7 @@ class BaseOptimizer(ABC):
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
-        n_sample_strategy: str | None = None,
+        n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: Literal[False] = False,
         allow_tool_use: bool | None = None,
@@ -1690,7 +1693,7 @@ class BaseOptimizer(ABC):
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
-        n_sample_strategy: str | None = None,
+        n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
         allow_tool_use: bool | None = None,
@@ -1821,11 +1824,19 @@ class BaseOptimizer(ABC):
             dataset_item_ids=dataset_item_ids,
             phase=phase,
             seed_override=sampling_seed,
-            strategy=n_sample_strategy,
+            strategy=n_samples_strategy,
         )
         resolved_ids = sampling_plan.dataset_item_ids
         resolved_n_samples = (
             None if resolved_ids is not None else sampling_plan.nb_samples
+        )
+        debug_log(
+            "evaluation_sampling",
+            sampling_tag=sampling_tag,
+            sampling_mode=sampling_plan.mode,
+            n_samples=n_samples,
+            resolved_n_samples=resolved_n_samples,
+            dataset_item_ids_count=len(resolved_ids) if resolved_ids else 0,
         )
 
         result = task_evaluator.evaluate(

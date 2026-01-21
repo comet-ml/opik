@@ -54,7 +54,7 @@ def run_root_cause_analysis(
                     metric=metric,
                     agent=agent,
                     n_samples=n_samples,
-                    n_sample_strategy=context.n_sample_strategy,
+                    n_samples_strategy=context.n_samples_strategy,
                     n_threads=normalize_eval_threads(
                         getattr(optimizer, "n_threads", None)
                     ),

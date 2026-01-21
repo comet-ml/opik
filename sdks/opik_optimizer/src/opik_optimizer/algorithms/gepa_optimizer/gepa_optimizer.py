@@ -171,7 +171,7 @@ class GepaOptimizer(BaseOptimizer):
 
         reflection_minibatch_size = context.extra_params.get(
             "reflection_minibatch_size",
-            context.n_minibatch_samples or 3,
+            context.n_samples_minibatch or 3,
         )
         candidate_selection_strategy = context.extra_params.get(
             "candidate_selection_strategy", "pareto"
@@ -201,7 +201,7 @@ class GepaOptimizer(BaseOptimizer):
             n_samples=n_samples,
             phase="train",
             seed_override=seed,
-            strategy=context.n_sample_strategy,
+            strategy=context.n_samples_strategy,
         )
 
         val_source = validation_dataset or dataset
@@ -210,7 +210,7 @@ class GepaOptimizer(BaseOptimizer):
             n_samples=n_samples,
             phase="val",
             seed_override=seed,
-            strategy=context.n_sample_strategy,
+            strategy=context.n_samples_strategy,
         )
 
         def _apply_plan(items: list[dict[str, Any]], plan: Any) -> list[dict[str, Any]]:

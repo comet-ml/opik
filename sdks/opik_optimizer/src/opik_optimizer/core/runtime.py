@@ -329,9 +329,20 @@ def show_configuration(
     context: OptimizationContext,
     prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
 ) -> None:
+    optimizer_config = dict(optimizer.get_config(context))
+    if "n_samples" not in optimizer_config and context.n_samples is not None:
+        optimizer_config["n_samples"] = context.n_samples
+    if (
+        "n_samples_minibatch" not in optimizer_config
+        and context.n_samples_minibatch is not None
+    ):
+        optimizer_config["n_samples_minibatch"] = context.n_samples_minibatch
+    if "n_samples_strategy" not in optimizer_config and context.n_samples_strategy:
+        optimizer_config["n_samples_strategy"] = context.n_samples_strategy
+
     optimizer._display.show_configuration(
         prompt=prompt,
-        optimizer_config=optimizer.get_config(context),
+        optimizer_config=optimizer_config,
     )
 
 

@@ -157,7 +157,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
-        n_sample_strategy: str | None = None,
+        n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
         allow_tool_use: bool = False,
@@ -196,7 +196,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset_item_ids=dataset_item_ids,
             experiment_config=experiment_config,
             n_samples=n_samples,
-            n_sample_strategy=n_sample_strategy,
+            n_samples_strategy=n_samples_strategy,
             seed=seed,
             return_evaluation_result=False,
             allow_tool_use=allow_tool_use,
@@ -536,7 +536,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_samples=n_samples,
             phase="optimization_eval",
             seed_override=self.seed,
-            strategy=context.n_sample_strategy,
+            strategy=context.n_samples_strategy,
         )
         eval_dataset_item_ids = sampling_plan.dataset_item_ids
         effective_n_samples = (

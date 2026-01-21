@@ -67,7 +67,7 @@ def evaluate_bundle(
         dataset_item_ids=dataset_item_ids,
         phase="trial",
         seed_override=optimizer.seed,
-        strategy=getattr(optimizer, "n_sample_strategy", None),
+        strategy=getattr(optimizer, "n_samples_strategy", None),
     )
     resolved_ids = sampling_plan.dataset_item_ids
     effective_n_samples = None if resolved_ids is not None else sampling_plan.nb_samples

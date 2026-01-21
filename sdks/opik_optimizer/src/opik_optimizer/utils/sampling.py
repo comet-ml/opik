@@ -9,7 +9,7 @@ import random
 from .. import constants
 from . import rng as rng_utils
 
-DEFAULT_STRATEGY = constants.DEFAULT_N_SAMPLE_STRATEGY
+DEFAULT_STRATEGY = constants.DEFAULT_N_SAMPLES_STRATEGY
 
 __all__ = ["SamplingPlan", "resolve_sampling", "DEFAULT_STRATEGY"]
 

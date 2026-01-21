@@ -196,7 +196,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             experiment_config=context.experiment_config,
             empty_score=empty_score,
             n_samples=n_samples,
-            n_sample_strategy=context.n_sample_strategy,
+            n_samples_strategy=context.n_samples_strategy,
             sampling_tag=sampling_tag,
         )
 
@@ -490,8 +490,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         agent = context.agent
         n_samples = context.n_samples
         minibatch_samples = (
-            context.n_minibatch_samples
-            if context.n_minibatch_samples is not None
+            context.n_samples_minibatch
+            if context.n_samples_minibatch is not None
             else n_samples
         )
         max_trials = context.max_trials
