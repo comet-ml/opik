@@ -1088,7 +1088,7 @@ class TraceDAOImpl implements TraceDAO {
             ), experiments_agg AS (
                 SELECT
                     ei.trace_id,
-                    tuple(e.id, e.name, e.dataset_id) AS experiment
+                    tuple(e.id AS id, e.name AS name, e.dataset_id AS dataset_id) AS experiment
                 FROM experiment_items ei
                 INNER JOIN (
                     SELECT id, name, dataset_id
@@ -2470,6 +2470,8 @@ class TraceDAOImpl implements TraceDAO {
             SETTINGS log_comment = '<log_comment>';
             """;
 
+    private static final Map<String, String> EXPERIMENT_FIELD_MAPPING = Map.of("experiment_id", "eaag.experiment.name");
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceSortingFactory sortingFactory;
@@ -2946,9 +2948,8 @@ class TraceDAOImpl implements TraceDAO {
             template.add("log_comment", logComment);
 
             var finalTemplate = template;
-            // Field mapping for experiment - sort by experiment name (tuple element 2)
-            var fieldMapping = Map.of("experiment_id", "eaag.experiment.2");
-            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(), fieldMapping))
+            Optional.ofNullable(
+                    sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(), EXPERIMENT_FIELD_MAPPING))
                     .ifPresent(sortFields -> {
 
                         if (sortFields.contains("feedback_scores")) {
