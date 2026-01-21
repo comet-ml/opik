@@ -2795,9 +2795,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, rowMetadata) -> {
-                        String versionIdStr = row.get("dataset_version_id", String.class);
-                        Long count = row.get("count", Long.class);
-                        return new DatasetVersionItemsCount(UUID.fromString(versionIdStr), count != null ? count : 0L);
+                        UUID versionId = Optional.ofNullable(row.get("dataset_version_id", String.class))
+                                .map(UUID::fromString)
+                                .orElseThrow(() -> new IllegalStateException("dataset_version_id cannot be null"));
+                        long count = Optional.ofNullable(row.get("count", Long.class))
+                                .orElse(0L);
+                        return DatasetVersionItemsCount.builder()
+                                .versionId(versionId)
+                                .count(count)
+                                .build();
                     }));
         })
                 .collectList()

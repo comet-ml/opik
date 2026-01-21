@@ -1,5 +1,7 @@
 package com.comet.opik.domain;
 
+import lombok.Builder;
+
 import java.util.UUID;
 
 /**
@@ -8,5 +10,6 @@ import java.util.UUID;
  * according to the dataset_item_versions table's ordering key:
  * (workspace_id, dataset_id, dataset_version_id, id).
  */
+@Builder(toBuilder = true)
 public record DatasetVersionInfo(String workspaceId, UUID datasetId, UUID versionId) {
 }
