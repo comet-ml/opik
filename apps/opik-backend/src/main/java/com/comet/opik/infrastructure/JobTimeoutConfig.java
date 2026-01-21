@@ -12,7 +12,4 @@ public class JobTimeoutConfig {
 
     @Valid @JsonProperty
     private int traceThreadsClosingJobTimeout;
-
-    @Valid @JsonProperty
-    private int datasetVersionItemsTotalMigrationJobTimeout;
 }

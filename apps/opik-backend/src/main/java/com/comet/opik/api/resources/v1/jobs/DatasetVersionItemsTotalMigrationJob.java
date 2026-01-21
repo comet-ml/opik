@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.jobs;
 
 import com.comet.opik.domain.DatasetVersioningMigrationService;
 import com.comet.opik.infrastructure.DatasetVersioningMigrationConfig;
-import com.comet.opik.infrastructure.JobTimeoutConfig;
 import io.dropwizard.jobs.Job;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -42,7 +41,6 @@ public class DatasetVersionItemsTotalMigrationJob extends Job implements Interru
 
     private final DatasetVersioningMigrationService migrationService;
     private final DatasetVersioningMigrationConfig config;
-    private final JobTimeoutConfig jobTimeoutConfig;
 
     private final AtomicBoolean interrupted = new AtomicBoolean(false);
     private final AtomicReference<Disposable> currentExecution = new AtomicReference<>();
@@ -50,11 +48,9 @@ public class DatasetVersionItemsTotalMigrationJob extends Job implements Interru
     @Inject
     public DatasetVersionItemsTotalMigrationJob(
             @NonNull DatasetVersioningMigrationService migrationService,
-            @NonNull @Config("datasetVersioningMigration") DatasetVersioningMigrationConfig config,
-            @NonNull @Config("jobTimeout") JobTimeoutConfig jobTimeoutConfig) {
+            @NonNull @Config("datasetVersioningMigration") DatasetVersioningMigrationConfig config) {
         this.migrationService = migrationService;
         this.config = config;
-        this.jobTimeoutConfig = jobTimeoutConfig;
     }
 
     @Override
@@ -72,7 +68,7 @@ public class DatasetVersionItemsTotalMigrationJob extends Job implements Interru
 
         // Execute the migration with timeout protection
         Disposable subscription = migrationService.runItemsTotalMigration(batchSize, lockTimeout)
-                .timeout(Duration.ofSeconds(jobTimeoutConfig.getDatasetVersionItemsTotalMigrationJobTimeout()))
+                .timeout(Duration.ofSeconds(config.getItemsTotalJobTimeoutSeconds()))
                 .subscribe(
                         unused -> {
                             // onNext - not used for Mono<Void>
