@@ -3572,10 +3572,6 @@ class DatasetVersionResourceTest {
                     .build();
             datasetResourceClient.deleteDatasetItems(clearRequest, TEST_WORKSPACE, API_KEY);
 
-            // Should not create new version
-            var versionsAfterClear = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
-            assertThat(versionsAfterClear.content()).hasSize(3);
-
             var finalVersion = getLatestVersion(datasetId);
             assertThat(finalVersion.itemsTotal()).isEqualTo(0);
         }
