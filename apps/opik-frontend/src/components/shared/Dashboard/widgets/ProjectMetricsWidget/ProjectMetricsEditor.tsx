@@ -48,7 +48,9 @@ import {
 
 import get from "lodash/get";
 
-import useProjectMetric, { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import useProjectMetric, {
+  METRIC_NAME_TYPE,
+} from "@/api/projects/useProjectMetric";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import {
@@ -149,7 +151,6 @@ const DURATION_METRIC_OPTIONS = [
   { value: "p99", label: "P99" },
 ];
 
-
 const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const widgetData = useDashboardStore(
     (state) => state.previewWidget!,
@@ -231,9 +232,10 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     useProjectMetric(
       {
         projectId,
-        metricName: metricType === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE
-          ? METRIC_NAME_TYPE.SPAN_TOKEN_USAGE
-          : METRIC_NAME_TYPE.TOKEN_USAGE,
+        metricName:
+          metricType === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE
+            ? METRIC_NAME_TYPE.SPAN_TOKEN_USAGE
+            : METRIC_NAME_TYPE.TOKEN_USAGE,
         interval,
         intervalStart,
         intervalEnd,
