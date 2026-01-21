@@ -6,7 +6,6 @@ Context-learning operations (dataset example stuffing) for Meta-Prompt Optimizer
 
 from collections.abc import Sequence
 import logging
-import random
 import re
 
 import opik
@@ -14,6 +13,7 @@ import opik
 from ....api_objects.types import MetricFunction
 from ....utils import token as token_utils
 from ....utils.logging import compact_debug_text, debug_log
+from ....utils import rng as rng_utils
 from .... import constants
 from .. import prompts as meta_prompts
 
@@ -21,12 +21,16 @@ logger = logging.getLogger(__name__)
 
 
 def _sample_dataset_items(
-    dataset: opik.Dataset, num_examples: int
+    dataset: opik.Dataset,
+    num_examples: int,
+    *,
+    seed: int | None = None,
 ) -> Sequence[dict[str, object]]:
     try:
         items = dataset.get_items()
         num_to_sample = min(num_examples, len(items))
-        return random.sample(items, num_to_sample) if len(items) > 0 else []
+        rng = rng_utils.make_rng(seed, "task_context")
+        return rng.sample(items, num_to_sample) if len(items) > 0 else []
     except Exception as exc:
         logger.warning("Could not get samples from dataset: %s", exc)
         return []
@@ -199,6 +203,7 @@ def get_task_context(
     max_tokens: int = 2000,
     model: str = "gpt-4",
     extract_metric_understanding: bool = True,
+    seed: int | None = None,
 ) -> tuple[str, int]:
     """
     Get task-specific context from the dataset and metric configuration.
@@ -207,7 +212,7 @@ def get_task_context(
     if dataset is None:
         return "", 0
 
-    samples = _sample_dataset_items(dataset, num_examples)
+    samples = _sample_dataset_items(dataset, num_examples, seed=seed)
     if not samples:
         return "", 0
 

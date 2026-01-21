@@ -5,7 +5,6 @@ Single-prompt candidate generation for the Meta-Prompt Optimizer.
 import copy
 import json
 import logging
-import random
 import re
 from typing import Any
 from collections.abc import Callable, Sequence
@@ -123,8 +122,12 @@ def sanitize_generated_prompts(
     return sanitized
 
 
-def _build_pattern_guidance(optimizer: Any, winning_patterns: list[str] | None) -> str:
-    if not winning_patterns or random.random() >= optimizer.pattern_injection_rate:
+def _build_pattern_guidance(
+    optimizer: Any,
+    winning_patterns: list[str] | None,
+    rng: Any,
+) -> str:
+    if not winning_patterns or rng.random() >= optimizer.pattern_injection_rate:
         return ""
     pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
     pattern_guidance += (
@@ -372,7 +375,10 @@ def generate_candidate_prompts(
             source=current_prompt,
         )
 
-        pattern_guidance = _build_pattern_guidance(optimizer, winning_patterns)
+        candidate_rng = optimizer._derive_rng("candidate_generation", round_num)
+        pattern_guidance = _build_pattern_guidance(
+            optimizer, winning_patterns, candidate_rng
+        )
         history_context = build_history_context_fn(previous_rounds)
         task_context_str, analysis_instruction, metric_focus_instruction = (
             _build_context_instructions(optimizer, metric, get_task_context_fn)
