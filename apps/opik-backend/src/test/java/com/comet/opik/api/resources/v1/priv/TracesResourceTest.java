@@ -6387,8 +6387,8 @@ class TracesResourceTest {
             var context = setupWorkspaceProjectDataset();
 
             // Create experiment
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("experiment-" + RandomStringUtils.secure().nextAlphanumeric(10))
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("experiment")
                     .datasetId(context.datasetId())
                     .build();
             var experimentId = experimentResourceClient.create(experiment, API_KEY, context.workspaceName());
@@ -6464,21 +6464,21 @@ class TracesResourceTest {
             // Given: Create workspace, project, and dataset
             var context = setupWorkspaceProjectDataset();
 
-            // Create experiments with specific names for sorting (using unique random suffixes to avoid conflicts)
-            var experimentA = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("A-experiment-" + RandomStringUtils.secure().nextAlphanumeric(10))
+            // Create experiments with specific names for sorting
+            var experimentA = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-A")
                     .datasetId(context.datasetId())
                     .build();
             var experimentAId = experimentResourceClient.create(experimentA, API_KEY, context.workspaceName());
 
-            var experimentB = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("B-experiment-" + RandomStringUtils.secure().nextAlphanumeric(10))
+            var experimentB = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-B")
                     .datasetId(context.datasetId())
                     .build();
             var experimentBId = experimentResourceClient.create(experimentB, API_KEY, context.workspaceName());
 
-            var experimentC = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("C-experiment-" + RandomStringUtils.secure().nextAlphanumeric(10))
+            var experimentC = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-C")
                     .datasetId(context.datasetId())
                     .build();
             var experimentCId = experimentResourceClient.create(experimentC, API_KEY, context.workspaceName());
@@ -6573,15 +6573,15 @@ class TracesResourceTest {
             // Given: Create workspace, project, and dataset
             var context = setupWorkspaceProjectDataset();
 
-            // Create two experiments (using unique random names to avoid conflicts)
-            var experiment1 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("experiment-1-" + RandomStringUtils.secure().nextAlphanumeric(10))
+            // Create two experiments
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-1")
                     .datasetId(context.datasetId())
                     .build();
             var experiment1Id = experimentResourceClient.create(experiment1, API_KEY, context.workspaceName());
 
-            var experiment2 = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("experiment-2-" + RandomStringUtils.secure().nextAlphanumeric(10))
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-2")
                     .datasetId(context.datasetId())
                     .build();
             var experiment2Id = experimentResourceClient.create(experiment2, API_KEY, context.workspaceName());
