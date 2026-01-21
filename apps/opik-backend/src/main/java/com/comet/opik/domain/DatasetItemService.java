@@ -602,51 +602,47 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 UUID newVersionId = idGenerator.generateId();
                                 int baseItemsCount = latestVersion.itemsTotal();
 
-                                return Mono.just(baseItemsCount)
-                                        .flatMap(itemsCount -> {
+                                // For ID-based: generate single UUID pool and split it
+                                int totalPoolSize = baseItemsCount * 2; // Conservative: 2x base count
+                                List<UUID> allUuids = generateUuidPool(idGenerator, totalPoolSize);
+                                List<UUID> updateUuids = allUuids.subList(0, updateSize);
+                                List<UUID> copyUuids = allUuids.subList(updateSize, allUuids.size());
 
-                                            // For ID-based: generate single UUID pool and split it
-                                            int totalPoolSize = itemsCount * 2; // Conservative: 2x base count
-                                            List<UUID> allUuids = generateUuidPool(idGenerator, totalPoolSize);
-                                            List<UUID> updateUuids = allUuids.subList(0, updateSize);
-                                            List<UUID> copyUuids = allUuids.subList(updateSize, allUuids.size());
+                                log.debug(
+                                        "Split UUID pool for ID-based update: updateSize='{}', copySize='{}'",
+                                        updateUuids.size(), copyUuids.size());
 
-                                            log.debug(
-                                                    "Split UUID pool for ID-based update: updateSize='{}', copySize='{}'",
-                                                    updateUuids.size(), copyUuids.size());
+                                // Perform batch update
+                                return versionDao
+                                        .batchUpdateItems(datasetId, baseVersionId, newVersionId,
+                                                batchUpdate,
+                                                updateUuids)
+                                        .flatMap(updatedCount -> {
+                                            if (updatedCount == 0) {
+                                                log.info("No items found to update for dataset '{}'",
+                                                        datasetId);
+                                                return Mono.empty();
+                                            }
 
-                                            // Perform batch update
+                                            log.info(
+                                                    "Batch updated '{}' items by IDs for dataset '{}', baseVersion='{}'",
+                                                    updatedCount, datasetId, baseVersionId);
+
+                                            // Generate UUIDs for unchanged items
+                                            List<UUID> unchangedUuids = generateUnchangedUuidsReversed(
+                                                    baseItemsCount);
+
+                                            // Copy unchanged items using applyDelta (exclude updated IDs)
                                             return versionDao
-                                                    .batchUpdateItems(datasetId, baseVersionId, newVersionId,
-                                                            batchUpdate,
-                                                            updateUuids)
-                                                    .flatMap(updatedCount -> {
-                                                        if (updatedCount == 0) {
-                                                            log.info("No items found to update for dataset '{}'",
-                                                                    datasetId);
-                                                            return Mono.empty();
-                                                        }
-
-                                                        log.info(
-                                                                "Batch updated '{}' items by IDs for dataset '{}', baseVersion='{}'",
-                                                                updatedCount, datasetId, baseVersionId);
-
-                                                        // Generate UUIDs for unchanged items
-                                                        List<UUID> unchangedUuids = generateUnchangedUuidsReversed(
-                                                                baseItemsCount);
-
-                                                        // Copy unchanged items using applyDelta (exclude updated IDs)
-                                                        return versionDao
-                                                                .applyDelta(datasetId, baseVersionId, newVersionId,
-                                                                        List.of(), // No added items
-                                                                        List.of(), // No edited items (already done via batch update)
-                                                                        batchUpdate.ids(), // Exclude updated items from copy
-                                                                        unchangedUuids)
-                                                                .flatMap(unchangedCount -> createVersionMetadata(
-                                                                        datasetId, newVersionId, baseVersionId,
-                                                                        updatedCount, unchangedCount, false,
-                                                                        workspaceId, userName));
-                                                    });
+                                                    .applyDelta(datasetId, baseVersionId, newVersionId,
+                                                            List.of(), // No added items
+                                                            List.of(), // No edited items (already done via batch update)
+                                                            batchUpdate.ids(), // Exclude updated items from copy
+                                                            unchangedUuids)
+                                                    .flatMap(unchangedCount -> createVersionMetadata(
+                                                            datasetId, newVersionId, baseVersionId,
+                                                            updatedCount, unchangedCount, false,
+                                                            workspaceId, userName));
                                         });
                             });
                 }))
@@ -674,56 +670,52 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 UUID newVersionId = idGenerator.generateId();
                                 int baseItemsCount = latestVersion.itemsTotal();
 
-                                return Mono.just(baseItemsCount)
-                                        .flatMap(itemsCount -> {
+                                // For filter-based: generate 2 separate UUID pools
+                                List<UUID> updateUuids = generateUuidPool(idGenerator, baseItemsCount * 2);
+                                List<UUID> copyUuids = generateUuidPool(idGenerator, baseItemsCount * 2);
 
-                                            // For filter-based: generate 2 separate UUID pools
-                                            List<UUID> updateUuids = generateUuidPool(idGenerator, itemsCount * 2);
-                                            List<UUID> copyUuids = generateUuidPool(idGenerator, itemsCount * 2);
+                                log.debug(
+                                        "Generated separate UUID pools for filter-based update: updateSize='{}', copySize='{}'",
+                                        updateUuids.size(), copyUuids.size());
 
-                                            log.debug(
-                                                    "Generated separate UUID pools for filter-based update: updateSize='{}', copySize='{}'",
-                                                    updateUuids.size(), copyUuids.size());
+                                // Perform batch update
+                                return versionDao
+                                        .batchUpdateItems(datasetId, baseVersionId, newVersionId,
+                                                batchUpdate,
+                                                updateUuids)
+                                        .flatMap(updatedCount -> {
+                                            if (updatedCount == 0) {
+                                                log.info("No items found to update for dataset '{}'",
+                                                        datasetId);
+                                                return Mono.empty();
+                                            }
 
-                                            // Perform batch update
+                                            log.info(
+                                                    "Batch updated '{}' items by filters for dataset '{}', baseVersion='{}'",
+                                                    updatedCount, datasetId, baseVersionId);
+
+                                            // Copy unchanged items (those NOT matching the filters)
+                                            // Special case: empty filters list means "select all" - no unchanged items to copy
+                                            if (batchUpdate.filters() != null
+                                                    && batchUpdate.filters().isEmpty()) {
+                                                // Empty filters means all items were updated - nothing to copy
+                                                log.info(
+                                                        "Empty filters (select all) - skipping copy of unchanged items");
+                                                return createVersionMetadata(
+                                                        datasetId, newVersionId, baseVersionId,
+                                                        updatedCount, 0L, true,
+                                                        workspaceId, userName);
+                                            }
+
+                                            // Copy unchanged items using copyVersionItems (exclude matching filters)
                                             return versionDao
-                                                    .batchUpdateItems(datasetId, baseVersionId, newVersionId,
-                                                            batchUpdate,
-                                                            updateUuids)
-                                                    .flatMap(updatedCount -> {
-                                                        if (updatedCount == 0) {
-                                                            log.info("No items found to update for dataset '{}'",
-                                                                    datasetId);
-                                                            return Mono.empty();
-                                                        }
-
-                                                        log.info(
-                                                                "Batch updated '{}' items by filters for dataset '{}', baseVersion='{}'",
-                                                                updatedCount, datasetId, baseVersionId);
-
-                                                        // Copy unchanged items (those NOT matching the filters)
-                                                        // Special case: empty filters list means "select all" - no unchanged items to copy
-                                                        if (batchUpdate.filters() != null
-                                                                && batchUpdate.filters().isEmpty()) {
-                                                            // Empty filters means all items were updated - nothing to copy
-                                                            log.info(
-                                                                    "Empty filters (select all) - skipping copy of unchanged items");
-                                                            return createVersionMetadata(
-                                                                    datasetId, newVersionId, baseVersionId,
-                                                                    updatedCount, 0L, true,
-                                                                    workspaceId, userName);
-                                                        }
-
-                                                        // Copy unchanged items using copyVersionItems (exclude matching filters)
-                                                        return versionDao
-                                                                .copyVersionItems(datasetId, baseVersionId,
-                                                                        newVersionId,
-                                                                        batchUpdate.filters(), copyUuids)
-                                                                .flatMap(unchangedCount -> createVersionMetadata(
-                                                                        datasetId, newVersionId, baseVersionId,
-                                                                        updatedCount, unchangedCount, true,
-                                                                        workspaceId, userName));
-                                                    });
+                                                    .copyVersionItems(datasetId, baseVersionId,
+                                                            newVersionId,
+                                                            batchUpdate.filters(), copyUuids)
+                                                    .flatMap(unchangedCount -> createVersionMetadata(
+                                                            datasetId, newVersionId, baseVersionId,
+                                                            updatedCount, unchangedCount, true,
+                                                            workspaceId, userName));
                                         });
                             });
                 }))
