@@ -541,15 +541,15 @@ datasetVersioningMigration:
   # Default: 100
   # Description: Number of dataset versions to process in each batch for items_total migration
   # Smaller batches reduce memory usage but increase total migration time
-  batchSize: 100
+  itemsTotalDatasetsBatchSize: 100
   # Default: 3600 (1 hour)
-  # Description: Lock timeout in seconds for the migration process
+  # Description: Lock timeout in seconds for the items_total migration process
   # Should be long enough to complete the migration
-  lockTimeoutSeconds: 3600
+  itemsTotalLockTimeoutSeconds: 3600
   # Default: 30 seconds
   # Description: Delay in seconds before starting the items_total migration job after application startup
   # This allows the service to stabilize before running the migration
-  startupDelaySeconds: 30
+  itemsTotalStartupDelaySeconds: 30
 
 # Job timeout configuration
 jobTimeout:

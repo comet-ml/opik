@@ -227,7 +227,7 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
         }
 
         try {
-            Duration startupDelay = Duration.ofSeconds(config.getStartupDelaySeconds());
+            Duration startupDelay = Duration.ofSeconds(config.getItemsTotalStartupDelaySeconds());
 
             var jobDetail = JobBuilder.newJob(DatasetVersionItemsTotalMigrationJob.class)
                     .storeDurably()

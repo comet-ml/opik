@@ -67,8 +67,8 @@ public class DatasetVersionItemsTotalMigrationJob extends Job implements Interru
 
         log.info("Starting dataset version items_total migration job");
 
-        Duration lockTimeout = Duration.ofSeconds(config.getLockTimeoutSeconds());
-        int batchSize = config.getBatchSize();
+        Duration lockTimeout = Duration.ofSeconds(config.getItemsTotalLockTimeoutSeconds());
+        int batchSize = config.getItemsTotalDatasetsBatchSize();
 
         // Execute the migration with timeout protection
         Disposable subscription = migrationService.runItemsTotalMigration(batchSize, lockTimeout)

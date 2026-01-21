@@ -31,14 +31,14 @@ public class DatasetVersioningMigrationConfig {
      * Smaller batches reduce memory usage but increase total migration time.
      */
     @JsonProperty
-    @NotNull @Min(1) @Max(1000) private int batchSize;
+    @NotNull @Min(1) @Max(1000) private int itemsTotalDatasetsBatchSize;
 
     /**
-     * Lock timeout in seconds to prevent concurrent migrations.
+     * Lock timeout in seconds to prevent concurrent items_total migrations.
      * Should be long enough to complete the migration.
      */
     @JsonProperty
-    @NotNull @Min(1) private int lockTimeoutSeconds;
+    @NotNull @Min(1) private int itemsTotalLockTimeoutSeconds;
 
     /**
      * Delay in seconds before starting the items_total migration job after application startup.
@@ -46,5 +46,5 @@ public class DatasetVersioningMigrationConfig {
      * Default: 30 seconds
      */
     @JsonProperty
-    @NotNull @Min(0) private int startupDelaySeconds = 30;
+    @NotNull @Min(0) private int itemsTotalStartupDelaySeconds = 30;
 }
