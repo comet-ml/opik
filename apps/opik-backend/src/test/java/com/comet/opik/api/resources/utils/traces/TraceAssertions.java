@@ -27,7 +27,7 @@ public class TraceAssertions {
     public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "spanFeedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost",
             "spanCount", "llmSpanCount", "hasToolSpans", "duration", "comments", "threadId", "guardrailsValidations",
-            "providers"};
+            "providers", "experiment"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "valueByAuthor"};
