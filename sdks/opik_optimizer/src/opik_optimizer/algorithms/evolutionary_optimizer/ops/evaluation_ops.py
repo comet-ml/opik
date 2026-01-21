@@ -60,19 +60,33 @@ def evaluate_bundle(
             model_parameters=metadata.get("model_kwargs"),
         )
 
+    sampling_plan = optimizer._prepare_sampling_plan(
+        dataset=dataset,
+        n_samples=n_samples,
+        dataset_item_ids=dataset_item_ids,
+        phase="trial",
+        seed_override=optimizer.seed,
+        strategy=getattr(optimizer, "n_sample_strategy", None),
+    )
+    resolved_ids = sampling_plan.dataset_item_ids
+    effective_n_samples = (
+        None if resolved_ids is not None else sampling_plan.nb_samples
+    )
+
     configuration_updates = helpers.drop_none(
         {
             "n_samples_for_eval": (
-                len(dataset_item_ids) if dataset_item_ids is not None else n_samples
+                len(resolved_ids) if resolved_ids is not None else effective_n_samples
             ),
             "total_dataset_items": total_items,
             "bundle_mode": True,
             "num_prompts_in_bundle": len(prompts_bundle),
+            "sampling_mode": sampling_plan.mode,
         }
     )
     evaluation_details = helpers.drop_none(
         {
-            "dataset_item_ids": dataset_item_ids,
+            "dataset_item_ids": resolved_ids,
             "optimization_id": optimization_id,
         }
     )
@@ -113,12 +127,12 @@ def evaluate_bundle(
 
     score = task_evaluator.evaluate(
         dataset=dataset,
-        dataset_item_ids=dataset_item_ids,
+        dataset_item_ids=resolved_ids,
         metric=metric,
         evaluated_task=llm_task,
         num_threads=optimizer.n_threads,
         project_name=optimizer.project_name,
-        n_samples=n_samples if dataset_item_ids is None else None,
+        n_samples=effective_n_samples,
         experiment_config=experiment_config,
         optimization_id=optimization_id,
         verbose=verbose,
