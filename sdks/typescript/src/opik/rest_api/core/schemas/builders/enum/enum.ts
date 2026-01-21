@@ -1,6 +1,6 @@
-import { Schema, SchemaType } from "../../Schema";
-import { createIdentitySchemaCreator } from "../../utils/createIdentitySchemaCreator";
-import { getErrorMessageForIncorrectType } from "../../utils/getErrorMessageForIncorrectType";
+import { type Schema, SchemaType } from "../../Schema.js";
+import { createIdentitySchemaCreator } from "../../utils/createIdentitySchemaCreator.js";
+import { getErrorMessageForIncorrectType } from "../../utils/getErrorMessageForIncorrectType.js";
 
 export function enum_<U extends string, E extends U[]>(values: E): Schema<E[number], E[number]> {
     const validValues = new Set<string>(values);

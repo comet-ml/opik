@@ -1,2 +1,2 @@
-export * from "./DatasetWriteVisibility";
-export * from "./DatasetUpdateVisibility";
+export * from "./DatasetUpdateVisibility.js";
+export * from "./DatasetWriteVisibility.js";

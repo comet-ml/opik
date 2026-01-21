@@ -1126,18 +1126,23 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .collectList()
                 .flatMap(mappings -> {
                     if (mappings.isEmpty()) {
-                        // IDs are already dataset_item_ids (from SDK) - resolve dataset from first item
+                        // IDs are already dataset_item_ids (from SDK) - resolve dataset from any existing item
                         log.info("No row ID mappings found, treating as dataset_item_ids and resolving dataset");
-                        UUID firstItemId = ids.iterator().next();
 
-                        return versionDao.resolveDatasetIdFromItemId(firstItemId)
-                                .flatMap(datasetId -> deleteByDatasetItemIdsInDataset(ids, datasetId, workspaceId,
-                                        userName,
-                                        batchGroupId, createVersion))
+                        // Try to resolve dataset ID from any of the provided IDs (not just the first)
+                        // This handles cases where some IDs may not exist (already deleted)
+                        return versionDao.resolveDatasetIdFromItemIds(ids)
+                                .flatMap(datasetId -> {
+                                    log.info("Resolved dataset '{}' for deletion request with '{}' item IDs",
+                                            datasetId, ids.size());
+                                    return deleteByDatasetItemIdsInDataset(ids, datasetId, workspaceId, userName,
+                                            batchGroupId, createVersion);
+                                })
                                 .switchIfEmpty(Mono.defer(() -> {
-                                    // Item not found - DELETE is idempotent, so this is not an error
-                                    log.info("Item '{}' not found in versioned table, treating as already deleted",
-                                            firstItemId);
+                                    // None of the items found - DELETE is idempotent, so this is not an error
+                                    log.info(
+                                            "None of the '{}' items found in versioned table, treating as already deleted",
+                                            ids.size());
                                     return Mono.empty();
                                 }));
                     }
@@ -2139,12 +2144,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Deletes items from an existing version using filters.
      * This is used for filter-based deletions when createVersion=false.
-     * Empty filter list means "delete all" (no filters = match everything).
+     * Null or empty filter list means "delete all" (no filters = match everything).
      */
     private Mono<Void> deleteItemsFromExistingVersionByFilters(UUID datasetId, UUID versionId,
             List<DatasetItemFilter> filters, String workspaceId, String userName) {
 
-        log.info("Deleting items from existing version '{}' for dataset '{}' using filters (empty = delete all)",
+        log.info(
+                "Deleting items from existing version '{}' for dataset '{}' using filters (null or empty = delete all)",
                 versionId, datasetId);
 
         return Mono.defer(() -> {
@@ -2193,18 +2199,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Resolves the datasetId for a delete operation.
      * If datasetId is provided, uses it directly.
-     * If only itemIds are provided, resolves datasetId from the first item.
+     * If only itemIds are provided, resolves datasetId by looking up the row IDs.
      *
      * @param datasetId the dataset ID (may be null)
-     * @param ids the item IDs to delete (may be null)
+     * @param ids the item IDs to delete (row IDs from client, may be null)
      * @return Mono emitting the resolved datasetId
      */
     private Mono<UUID> getDatasetIdOrResolveItemDatasetId(UUID datasetId, Set<UUID> ids) {
         if (datasetId != null) {
             return Mono.just(datasetId);
         } else if (CollectionUtils.isNotEmpty(ids)) {
-            // Resolve datasetId from first item
-            return versionDao.resolveDatasetIdFromItemId(ids.iterator().next());
+            // Map row IDs to get dataset_id directly from the mapping
+            return versionDao.mapRowIdsToDatasetItemIds(ids)
+                    .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetId)
+                    .next(); // Get the first mapping's dataset_id (all should be from same dataset)
         } else {
             return Mono.error(new BadRequestException("Must provide either datasetId or itemIds"));
         }
@@ -2248,15 +2256,19 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                 batchGroupId);
                         datasetItemIds = ids;
 
-                        // If datasetId is null, resolve it from the first item
+                        // If datasetId is null, resolve it from any existing item (not just first)
                         if (resolvedDatasetId == null && !ids.isEmpty()) {
-                            return versionDao.resolveDatasetIdFromItemId(ids.iterator().next())
-                                    .flatMap(resolvedId -> proceedWithGroupedDeletion(batchGroupId, datasetItemIds,
-                                            resolvedId,
-                                            filters, workspaceId, userName, createVersion))
-                                    .switchIfEmpty(Mono.defer(() -> {
-                                        log.info("Item not found for batch_group_id '{}', treating as already deleted",
+                            return versionDao.resolveDatasetIdFromItemIds(ids)
+                                    .flatMap(resolvedId -> {
+                                        log.info("Resolved dataset '{}' for batch_group_id '{}'", resolvedId,
                                                 batchGroupId);
+                                        return proceedWithGroupedDeletion(batchGroupId, datasetItemIds, resolvedId,
+                                                filters, workspaceId, userName, createVersion);
+                                    })
+                                    .switchIfEmpty(Mono.defer(() -> {
+                                        log.info(
+                                                "None of the '{}' items found for batch_group_id '{}', treating as already deleted",
+                                                ids.size(), batchGroupId);
                                         return Mono.empty();
                                     }));
                         }
