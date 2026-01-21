@@ -38,9 +38,12 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
     to track video saves with attachments.
     """
 
-    def __init__(self, project_name: Optional[str] = None) -> None:
+    def __init__(
+        self, project_name: Optional[str], upload_videos: bool
+    ) -> None:
         super().__init__()
         self._project_name = project_name
+        self._upload_videos = upload_videos
 
     @override
     def _start_span_inputs_preprocessor(
@@ -75,6 +78,7 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
                 project_name=self._project_name,
                 tags=current_span_data.tags,
                 metadata=current_span_data.metadata,
+                upload_video=self._upload_videos,
             )
 
         return arguments_helpers.EndSpanParameters(output=output)

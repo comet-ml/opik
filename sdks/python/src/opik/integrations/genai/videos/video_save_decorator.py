@@ -19,6 +19,7 @@ def patch_videos_save(
     project_name: Optional[str],
     tags: Optional[List[str]],
     metadata: Optional[Dict[str, Any]],
+    upload_video: bool,
 ) -> None:
     """Patch save method on all videos in the operation response."""
     if (
@@ -39,7 +40,10 @@ def patch_videos_save(
 
         original_save = video.save
         decorator = _create_video_save_decorator(
-            project_name=project_name, tags=tags, metadata=metadata
+            project_name=project_name,
+            tags=tags,
+            metadata=metadata,
+            upload_video=upload_video,
         )
         # Use object.__setattr__ to bypass Pydantic's attribute validation
         object.__setattr__(video, "save", decorator(original_save))
@@ -50,6 +54,7 @@ def _create_video_save_decorator(
     project_name: Optional[str],
     tags: Optional[List[str]],
     metadata: Optional[Dict[str, Any]],
+    upload_video: bool,
 ) -> Callable[[Callable[[str], None]], Callable[[str], None]]:
     """Create a decorator that tracks Video.save calls."""
 
@@ -65,11 +70,14 @@ def _create_video_save_decorator(
                 project_name=project_name,
             ) as span_data:
                 result = func(file)
-                span_data.update(
-                    attachments=[
-                        attachment.Attachment(data=str(file), content_type="video/mp4")
-                    ]
-                )
+                if upload_video:
+                    span_data.update(
+                        attachments=[
+                            attachment.Attachment(
+                                data=str(file), content_type="video/mp4"
+                            )
+                        ]
+                    )
                 return result
 
         return wrapper

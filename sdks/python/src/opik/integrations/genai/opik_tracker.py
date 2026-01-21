@@ -16,7 +16,9 @@ def _get_provider(client: genai.Client) -> str:
 
 
 def track_genai(
-    client: genai.Client, project_name: Optional[str] = None
+    client: genai.Client,
+    project_name: Optional[str] = None,
+    upload_videos: bool = True,
 ) -> genai.Client:
     """
     Adds Opik tracking to an genai.Client.
@@ -36,6 +38,8 @@ def track_genai(
     Args:
         client: An instance of genai.Client.
         project_name: The name of the project to log data.
+        upload_videos: Whether to upload generated videos as attachments
+            when video.save is called. Defaults to True.
 
     Returns:
         The modified genai.Client with Opik tracking enabled.
@@ -49,7 +53,7 @@ def track_genai(
     provider = _get_provider(client)
 
     _patch_generate_content(client, provider, project_name)
-    _patch_generate_videos(client, provider, project_name)
+    _patch_generate_videos(client, provider, project_name, upload_videos)
 
     return client
 
@@ -109,6 +113,7 @@ def _patch_generate_videos(
     client: genai.Client,
     provider: str,
     project_name: Optional[str],
+    upload_videos: bool,
 ) -> None:
     """Patch generate_videos and operations.get methods with Opik tracking."""
     from . import videos
@@ -138,17 +143,21 @@ def _patch_generate_videos(
         )(client.aio.models.generate_videos)
 
     # Patch operations.get to track polling and patch Video.save on completed videos
-    _patch_operations_get(client, project_name)
+    _patch_operations_get(client, project_name, upload_videos)
 
 
-def _patch_operations_get(client: genai.Client, project_name: Optional[str]) -> None:
+def _patch_operations_get(
+    client: genai.Client, project_name: Optional[str], upload_videos: bool
+) -> None:
     """Patch operations.get to track polling and patch Video.save on completed videos."""
     from . import videos
 
     if not hasattr(client, "operations") or not hasattr(client.operations, "get"):
         return
 
-    operations_decorator = videos.OperationsGetTrackDecorator(project_name=project_name)
+    operations_decorator = videos.OperationsGetTrackDecorator(
+        project_name=project_name, upload_videos=upload_videos
+    )
     client.operations.get = operations_decorator.track(
         name="operations.get",
         type="general",
