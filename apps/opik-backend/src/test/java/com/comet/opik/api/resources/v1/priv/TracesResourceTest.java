@@ -3,9 +3,12 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreItem;
@@ -6368,13 +6371,13 @@ class TracesResourceTest {
             UUID projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
 
             // Create dataset
-            var dataset = factory.manufacturePojo(com.comet.opik.api.Dataset.class).toBuilder()
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .name("dataset-" + RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
             // Create experiment
-            var experiment = factory.manufacturePojo(com.comet.opik.api.Experiment.class).toBuilder()
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
                     .name("experiment-" + RandomStringUtils.secure().nextAlphanumeric(10))
                     .datasetId(datasetId)
                     .build();
@@ -6402,7 +6405,7 @@ class TracesResourceTest {
             traceResourceClient.batchCreateTraces(List.of(trace1, trace2), API_KEY, workspaceName);
 
             // Link trace1 to experiment
-            var experimentItem = factory.manufacturePojo(com.comet.opik.api.ExperimentItem.class).toBuilder()
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentId)
                     .traceId(trace1.id())
                     .feedbackScores(null)
@@ -6459,7 +6462,7 @@ class TracesResourceTest {
             UUID projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
 
             // Create dataset
-            var dataset = factory.manufacturePojo(com.comet.opik.api.Dataset.class).toBuilder()
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .name("dataset-" + RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
@@ -6600,7 +6603,7 @@ class TracesResourceTest {
             UUID projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
 
             // Create dataset
-            var dataset = factory.manufacturePojo(com.comet.opik.api.Dataset.class).toBuilder()
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
                     .name("dataset-" + RandomStringUtils.secure().nextAlphanumeric(10))
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
