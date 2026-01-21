@@ -52,6 +52,7 @@ export interface ProjectMetricsWidget {
     threadFilters?: Filters;
     spanFilters?: Filters;
     feedbackScores?: string[];
+    durationMetrics?: string[];
     breakdown?: BreakdownConfig;
     overrideDefaults?: boolean;
   } & Record<string, unknown>;

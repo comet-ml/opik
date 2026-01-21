@@ -109,6 +109,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
     metricName === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
   const feedbackScores = widget?.config?.feedbackScores as string[] | undefined;
+  const durationMetrics = widget?.config?.durationMetrics as string[] | undefined;
   const breakdown = widget?.config?.breakdown as BreakdownConfig | undefined;
 
   // Check if this is a feedback score metric
@@ -120,6 +121,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
   // Only pass breakdown if it's enabled (field is not NONE)
   // Also skip if METADATA is selected but no metadataKey is provided
   // For feedback score metrics, we need exactly one metric selected to add it as subMetric
+  // For duration metrics, we need exactly one percentile selected to add it as subMetric
   const effectiveBreakdown = useMemo(() => {
     if (!breakdown || breakdown.field === BREAKDOWN_FIELD.NONE) {
       return undefined;
@@ -146,26 +148,48 @@ const ProjectMetricsWidget: React.FunctionComponent<
       return undefined;
     }
 
+    // For duration metrics, include the selected percentile as subMetric
+    if (isDurationMetric && durationMetrics && durationMetrics.length === 1) {
+      return {
+        ...breakdown,
+        subMetric: durationMetrics[0],
+      };
+    }
+
+    // For duration metrics without exactly one percentile selected, don't apply breakdown
+    if (isDurationMetric) {
+      return undefined;
+    }
+
     return breakdown;
-  }, [breakdown, isFeedbackScoreMetric, feedbackScores]);
+  }, [breakdown, isFeedbackScoreMetric, feedbackScores, isDurationMetric, durationMetrics]);
 
   const filterLineCallback = useCallback(
     (lineName: string) => {
       // When breakdown is applied, the line names are group names (e.g., tag values),
-      // not feedback score names, so we shouldn't filter them
+      // not feedback score names or duration percentile names, so we shouldn't filter them
       if (effectiveBreakdown) {
         return true;
       }
-      if (
-        metricName !== METRIC_NAME_TYPE.FEEDBACK_SCORES &&
-        metricName !== METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES &&
-        metricName !== METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES
-      )
-        return true;
-      if (!feedbackScores || feedbackScores.length === 0) return true;
-      return feedbackScores.includes(lineName);
+
+      // Filter for feedback score metrics
+      if (isFeedbackScoreMetric) {
+        if (!feedbackScores || feedbackScores.length === 0) return true;
+        return feedbackScores.includes(lineName);
+      }
+
+      // Filter for duration metrics (p50, p90, p99)
+      if (isDurationMetric) {
+        if (!durationMetrics || durationMetrics.length === 0) return true;
+        // Line names are like "duration.p50", "duration.p90", etc.
+        // We need to check if the percentile part matches
+        const percentile = lineName.split(".").pop();
+        return percentile ? durationMetrics.includes(percentile) : true;
+      }
+
+      return true;
     },
-    [feedbackScores, metricName, effectiveBreakdown],
+    [feedbackScores, durationMetrics, isFeedbackScoreMetric, isDurationMetric, effectiveBreakdown],
   );
 
   if (!widget) {
