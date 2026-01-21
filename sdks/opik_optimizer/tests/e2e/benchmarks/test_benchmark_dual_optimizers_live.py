@@ -1,9 +1,7 @@
 import json
 import os
-from concurrent.futures import Future
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 import opik_optimizer
 import pytest
@@ -12,36 +10,10 @@ from opik.evaluation.metrics.heuristics.equals import Equals
 from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from benchmarks.local import runner as local_runner
+from tests.e2e.optimizers.utils import system_message, user_message
+from ._benchmark_test_helpers import InlineExecutor
 
 pytestmark = pytest.mark.integration
-
-
-class InlineExecutor:
-    """Synchronous stand-in to keep the benchmark runner single-process in tests."""
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        self.submissions: list[tuple] = []
-
-    def __enter__(self) -> "InlineExecutor":  # pragma: no cover - trivial
-        return self
-
-    def __exit__(
-        self, exc_type: Any, exc: Any, _tb: Any
-    ) -> None:  # pragma: no cover - trivial
-        _ = exc_type
-        return None
-
-    def submit(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future[Any]:
-        result = fn(*args, **kwargs)
-        fut: Future[Any] = Future()
-        fut.set_result(result)
-        return fut
-
-    def shutdown(
-        self, wait: bool = True, _cancel_futures: bool = False
-    ) -> None:  # pragma: no cover - trivial
-        _ = _cancel_futures
-        return None
 
 
 def _skip_without_openai() -> None:
@@ -73,11 +45,8 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
         "INITIAL_PROMPTS",
         {
             "tiny_test": [
-                {
-                    "role": "system",
-                    "content": "Answer the question correctly and concisely.",
-                },
-                {"role": "user", "content": "{text}"},
+                system_message("Answer the question correctly and concisely."),
+                user_message("{text}"),
             ]
         },
     )

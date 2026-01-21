@@ -9,10 +9,8 @@ Tests verify that all prompt-focused optimizers:
 """
 
 import os
-import copy
 
 import pytest
-from typing import Any
 
 from opik import Dataset
 
@@ -31,9 +29,11 @@ from ..utils import (
     mock_search,
     CALCULATOR_TOOL,
     SEARCH_TOOL,
+    assert_tools_preserved,
     create_optimizer_config,
     get_parameter_space,
     levenshtein_metric,
+    run_optimizer,
 )
 
 
@@ -96,10 +96,6 @@ def test_single_prompt_with_tools(
         model="openai/gpt-4o-mini",
     )
 
-    # Keep a deep copy for comparison
-    original_tools = copy.deepcopy(original_prompt.tools)
-    original_function_map_keys = set(original_prompt.function_map.keys())
-
     dataset = tiny_dataset
 
     # Create optimizer with minimal config
@@ -109,30 +105,16 @@ def test_single_prompt_with_tools(
         verbose=0,
     )
     optimizer = optimizer_class(**config)
-
-    gepa_kwargs: dict[str, Any] = {}
-    if optimizer_class == GepaOptimizer:
-        gepa_kwargs["reflection_minibatch_size"] = 1
-
-    # Run optimization - ParameterOptimizer uses optimize_parameter
-    if optimizer_class == ParameterOptimizer:
-        results = optimizer.optimize_parameter(
-            prompt=original_prompt,
-            dataset=dataset,
-            metric=levenshtein_metric,
-            parameter_space=get_parameter_space(),
-            n_samples=1,
-            max_trials=1,
-        )
-    else:
-        results = optimizer.optimize_prompt(
-            dataset=dataset,
-            metric=levenshtein_metric,
-            prompt=original_prompt,
-            n_samples=1,
-            max_trials=1,
-            **gepa_kwargs,
-        )
+    results = run_optimizer(
+        optimizer_class=optimizer_class,
+        optimizer=optimizer,
+        prompt=original_prompt,
+        dataset=dataset,
+        metric=levenshtein_metric,
+        parameter_space=get_parameter_space(),
+        n_samples=1,
+        max_trials=1,
+    )
 
     # Validate results structure
     assert results.optimizer == optimizer_class.__name__, (
@@ -148,20 +130,7 @@ def test_single_prompt_with_tools(
         f"Optimized prompt should be ChatPrompt, got {type(optimized_prompt)}"
     )
 
-    # Verify tools are preserved
-    assert optimized_prompt.tools == original_tools, (
-        f"Tools were modified during optimization.\n"
-        f"Original: {original_tools}\n"
-        f"Optimized: {optimized_prompt.tools}"
-    )
-
-    # Verify function_map keys are preserved
-    optimized_function_map_keys = set(optimized_prompt.function_map.keys())
-    assert optimized_function_map_keys == original_function_map_keys, (
-        f"Function map keys were modified.\n"
-        f"Original: {original_function_map_keys}\n"
-        f"Optimized: {optimized_function_map_keys}"
-    )
+    assert_tools_preserved(original_prompt, optimized_prompt)
 
     # Verify prompt has valid messages
     messages = optimized_prompt.get_messages()

@@ -10,6 +10,7 @@ from opik_optimizer.algorithms.evolutionary_optimizer.helpers import (
     calculate_population_diversity,
 )
 from opik_optimizer.algorithms.evolutionary_optimizer import helpers
+from tests.unit.fixtures import assistant_message, system_message, user_message
 
 
 class TestGetTaskDescriptionForLLM:
@@ -36,10 +37,10 @@ class TestGetTaskDescriptionForLLM:
     def test_handles_complex_prompt(self) -> None:
         prompt = ChatPrompt(
             messages=[
-                {"role": "system", "content": "You are a code reviewer."},
-                {"role": "user", "content": "Review this code: {code}"},
-                {"role": "assistant", "content": "I'll review your code."},
-                {"role": "user", "content": "What issues did you find?"},
+                system_message("You are a code reviewer."),
+                user_message("Review this code: {code}"),
+                assistant_message("I'll review your code."),
+                user_message("What issues did you find?"),
             ]
         )
         description = get_task_description_for_llm(prompt)
@@ -59,24 +60,25 @@ class TestCalculatePopulationDiversity:
         assert diversity == 0.0
 
     def test_single_individual_returns_zero(self) -> None:
-        population = [{"prompt": [{"role": "system", "content": "Test"}]}]
+        population = [{"prompt": [system_message("Test")]}]
         diversity = calculate_population_diversity(population)
         assert diversity == 0.0
 
     def test_identical_individuals_low_diversity(self) -> None:
-        individual = {"prompt": [{"role": "system", "content": "Test prompt"}]}
+        individual = {"prompt": [system_message("Test prompt")]}
         population = [individual, individual.copy(), individual.copy()]
         diversity = calculate_population_diversity(population)
         assert diversity >= 0.0
 
     def test_different_individuals_have_diversity(self) -> None:
         population = [
-            {"prompt": [{"role": "system", "content": "Short test"}]},
+            {"prompt": [system_message("Short test")]},
             {
                 "prompt": [
                     {
-                        "role": "system",
-                        "content": "A completely different and much longer prompt content",
+                        **system_message(
+                            "A completely different and much longer prompt content"
+                        ),
                     }
                 ]
             },
@@ -155,26 +157,28 @@ class _ResponseModel:
 
 
 def test_parse_llm_messages_returns_list_passthrough() -> None:
-    messages = [{"role": "system", "content": "x"}]
+    messages = [system_message("x")]
     assert helpers.parse_llm_messages(messages) == messages
 
 
 def test_parse_llm_messages_handles_dict_with_messages() -> None:
-    payload = {"messages": [{"role": "user", "content": "y"}]}
+    payload = {"messages": [user_message("y")]}
     assert helpers.parse_llm_messages(payload) == payload["messages"]
 
 
 def test_parse_llm_messages_handles_dict_without_messages() -> None:
-    payload = {"role": "user", "content": "z"}
+    payload = user_message("z")
     assert helpers.parse_llm_messages(payload) == [payload]
 
 
 def test_parse_llm_messages_handles_model_dump() -> None:
-    payload = {"messages": [{"role": "assistant", "content": "ok"}]}
+    payload = {"messages": [assistant_message("ok")]}
     model = _ResponseModel(payload)
     assert helpers.parse_llm_messages(model) == payload["messages"]
 
 
 def test_parse_llm_messages_handles_json_string() -> None:
-    payload = '[{"role": "system", "content": "hi"}]'
-    assert helpers.parse_llm_messages(payload) == [{"role": "system", "content": "hi"}]
+    import json
+
+    payload = json.dumps([system_message("hi")])
+    assert helpers.parse_llm_messages(payload) == [system_message("hi")]

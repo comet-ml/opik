@@ -1,8 +1,6 @@
 import json
-from concurrent.futures import Future
 from pathlib import Path
 from typing import Any
-from collections.abc import Callable
 
 from opik_optimizer import ChatPrompt
 import opik_optimizer
@@ -12,31 +10,8 @@ import pytest
 from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from benchmarks.local import runner as local_runner
-
-
-class InlineExecutor:
-    """Synchronous stand-in for ProcessPoolExecutor used in smoke tests."""
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
-        self.submissions: list[tuple] = []
-
-    def __enter__(self) -> "InlineExecutor":
-        return self
-
-    def __exit__(self, exc_type: Any, exc: Any, _tb: Any) -> None:  # type: ignore[override]
-        _ = exc_type
-        return None
-
-    def submit(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future[Any]:
-        result = fn(*args, **kwargs)
-        self.submissions.append((fn, args, kwargs, result))
-        fut: Future[Any] = Future()
-        fut.set_result(result)
-        return fut
-
-    def shutdown(self, wait: bool = True, _cancel_futures: bool = False) -> None:
-        _ = _cancel_futures
-        return None
+from tests.e2e.optimizers.utils import system_message
+from ._benchmark_test_helpers import InlineExecutor
 
 
 class DummyDataset:
@@ -110,7 +85,7 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
         benchmark_config,
         "INITIAL_PROMPTS",
         {
-            "toy_train": [{"role": "system", "content": "Say hi to {question}"}],
+            "toy_train": [system_message("Say hi to {question}")],
         },
     )
     monkeypatch.setattr(

@@ -9,6 +9,7 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer import (
 )
 from opik_optimizer.algorithms.meta_prompt_optimizer import MetaPromptOptimizer
 from opik_optimizer.utils.prompt_library import PromptLibrary
+from tests.unit.fixtures import system_message
 
 
 def test_few_shot_prompt_factory_updates_placeholder() -> None:
@@ -70,9 +71,7 @@ def test_meta_prompt_synthesis_with_custom_template() -> None:
 
     custom_template = "Synthesize: {best_score} - {top_performers}"
     result = meta_prompts.build_synthesis_prompt(
-        top_prompts_with_scores=[
-            ([{"role": "system", "content": "test"}], 0.8, "reason")
-        ],
+        top_prompts_with_scores=[([system_message("test")], 0.8, "reason")],
         task_context_str="context",
         best_score=0.9,
         num_prompts=2,

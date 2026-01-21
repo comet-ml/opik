@@ -22,9 +22,59 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer impor
     MetaPromptOptimizer,
 )
 from opik_optimizer.core import runtime
+from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers import (
+    make_prompt_json,
+    make_system_prompt_json,
+)
+from tests.unit.fixtures import system_message, user_message
+from tests.unit.fixtures import role_only
 from tests.unit.test_helpers import make_optimization_context
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
+
+
+def _sanitize_system_prompts(
+    contents: list[str], *, metric_name: str = "my_metric"
+) -> dict[str, Any]:
+    """Helper to build system-only prompt candidates and run sanitization."""
+    prompt_json = make_system_prompt_json(contents)
+    return sanitize_generated_prompts(prompt_json, metric_name)
+
+
+def _assert_single_prompt(result: dict[str, Any]) -> dict[str, Any]:
+    assert len(result["prompts"]) == 1
+    return result["prompts"][0]
+
+
+METRIC_LEAKAGE_PATTERNS = [
+    "f1 score",
+    "f1-score",
+    "token-level",
+    "exact match",
+    "bleu",
+    "meteor",
+    "rogue",
+]
+
+DATASET_LEAKAGE_PATTERNS = [
+    "supporting_facts",
+    "supporting facts",
+    "answer field",
+    "context field",
+    "question field",
+    "training data",
+]
+
+EVALUATION_LEAKAGE_PATTERNS = [
+    "Match the ground truth exactly.",
+    "Compare against the gold standard.",
+    "Optimize for the evaluation metric.",
+    "Focus on the scoring function.",
+]
+
+BENCHMARK_DATASET_NAMES = [
+    "hotpotqa",
+]
 
 
 class TestSanitizeGeneratedPrompts:
@@ -32,121 +82,65 @@ class TestSanitizeGeneratedPrompts:
 
     def test_removes_prompts_with_metric_name(self) -> None:
         """Should remove prompts containing the metric name."""
-        prompt_json = {
-            "prompts": [
-                {
-                    "prompt": [
-                        {
-                            "role": "system",
-                            "content": "Optimize for accuracy_score metric.",
-                        }
-                    ]
-                },
-                {"prompt": [{"role": "system", "content": "Be helpful and concise."}]},
-            ]
-        }
+        result = _sanitize_system_prompts(
+            ["Optimize for accuracy_score metric.", "Be helpful and concise."],
+            metric_name="accuracy_score",
+        )
 
-        result = sanitize_generated_prompts(prompt_json, "accuracy_score")
+        kept = _assert_single_prompt(result)
+        assert "accuracy_score" not in kept["prompt"][0]["content"]
 
-        assert len(result["prompts"]) == 1
-        assert "accuracy_score" not in result["prompts"][0]["prompt"][0]["content"]
+    @pytest.mark.parametrize("pattern", METRIC_LEAKAGE_PATTERNS)
+    def test_removes_metric_patterns(self, pattern: str) -> None:
+        """Should remove prompts containing common metric patterns."""
+        result = _sanitize_system_prompts([f"Optimize for {pattern}.", "Clean prompt."])
+        kept = _assert_single_prompt(result)
+        assert "Clean prompt" in kept["prompt"][0]["content"]
 
-    def test_removes_prompts_with_dataset_references(self) -> None:
-        """Should remove prompts referencing dataset-specific terms."""
-        prompt_json = {
-            "prompts": [
-                {
-                    "prompt": [
-                        {
-                            "role": "system",
-                            "content": "Use the supporting_facts field to answer.",
-                        }
-                    ]
-                },
-                {
-                    "prompt": [
-                        {"role": "system", "content": "Answer questions clearly."}
-                    ]
-                },
-            ]
-        }
+    @pytest.mark.parametrize("pattern", DATASET_LEAKAGE_PATTERNS)
+    def test_removes_dataset_patterns(self, pattern: str) -> None:
+        """Should remove prompts containing dataset-specific patterns."""
+        result = _sanitize_system_prompts([f"Use the {pattern}.", "Clean prompt."])
+        kept = _assert_single_prompt(result)
+        assert "Clean prompt" in kept["prompt"][0]["content"]
 
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
+    @pytest.mark.parametrize("content", EVALUATION_LEAKAGE_PATTERNS)
+    def test_removes_evaluation_terms(self, content: str) -> None:
+        """Should remove prompts referencing evaluation/scoring terms."""
+        result = _sanitize_system_prompts(
+            [content, "Safe prompt."], metric_name="test_metric"
+        )
+        kept = _assert_single_prompt(result)
+        assert "Safe prompt" in kept["prompt"][0]["content"]
 
-        assert len(result["prompts"]) == 1
-        assert "supporting_facts" not in result["prompts"][0]["prompt"][0]["content"]
-
-    def test_removes_prompts_with_evaluation_terms(self) -> None:
-        """Should remove prompts referencing evaluation-specific terms."""
-        test_cases = [
-            "Match the ground truth exactly.",
-            "Compare against the gold standard.",
-            "Optimize for the evaluation metric.",
-            "Focus on the scoring function.",
-        ]
-
-        for content in test_cases:
-            prompt_json = {
-                "prompts": [
-                    {"prompt": [{"role": "system", "content": content}]},
-                    {"prompt": [{"role": "system", "content": "Safe prompt."}]},
-                ]
-            }
-
-            result = sanitize_generated_prompts(prompt_json, "test_metric")
-
-            assert len(result["prompts"]) == 1, f"Failed for: {content}"
-
-    def test_removes_prompts_with_common_benchmark_names(self) -> None:
+    @pytest.mark.parametrize("dataset_name", BENCHMARK_DATASET_NAMES)
+    def test_removes_common_benchmark_names(self, dataset_name: str) -> None:
         """Should remove prompts referencing common benchmark dataset names."""
-        benchmark_names = ["hotpotqa"]
-
-        for name in benchmark_names:
-            prompt_json = {
-                "prompts": [
-                    {
-                        "prompt": [
-                            {"role": "system", "content": f"Answer like in {name}."}
-                        ]
-                    },
-                    {"prompt": [{"role": "system", "content": "Be helpful."}]},
-                ]
-            }
-
-            result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-            assert len(result["prompts"]) == 1, f"Failed for: {name}"
+        result = _sanitize_system_prompts(
+            [f"Answer like in {dataset_name}.", "Be helpful."]
+        )
+        kept = _assert_single_prompt(result)
+        assert "Be helpful" in kept["prompt"][0]["content"]
 
     def test_case_insensitive_matching(self) -> None:
         """Should match patterns case-insensitively."""
-        prompt_json = {
-            "prompts": [
-                {
-                    "prompt": [
-                        {"role": "system", "content": "Optimize for F1 SCORE metric."}
-                    ]
-                },
-                {"prompt": [{"role": "system", "content": "Good prompt."}]},
-            ]
-        }
-
-        result = sanitize_generated_prompts(prompt_json, "other_metric")
-
+        result = _sanitize_system_prompts(
+            ["Optimize for F1 SCORE metric.", "Good prompt."],
+            metric_name="other_metric",
+        )
         assert len(result["prompts"]) == 1
 
     def test_preserves_clean_prompts(self) -> None:
         """Should preserve prompts without data leakage."""
-        prompt_json = {
-            "prompts": [
-                {
-                    "prompt": [
-                        {"role": "system", "content": "You are a helpful assistant."},
-                        {"role": "user", "content": "Answer my question."},
-                    ]
-                },
-                {"prompt": [{"role": "system", "content": "Be concise and accurate."}]},
+        prompt_json = make_prompt_json(
+            [
+                [
+                    system_message("You are a helpful assistant."),
+                    user_message("Answer my question."),
+                ],
+                [system_message("Be concise and accurate.")],
             ]
-        }
+        )
 
         result = sanitize_generated_prompts(prompt_json, "my_metric")
 
@@ -164,8 +158,8 @@ class TestSanitizeGeneratedPrompts:
         """Should handle prompts with missing content gracefully."""
         prompt_json = {
             "prompts": [
-                {"prompt": [{"role": "system"}]},  # No content field
-                {"prompt": [{"role": "system", "content": "Valid."}]},
+                {"prompt": [role_only("system")]},  # No content field
+                {"prompt": [system_message("Valid.")]},
             ]
         }
 
@@ -176,12 +170,9 @@ class TestSanitizeGeneratedPrompts:
 
     def test_returns_new_dict_not_modifying_original(self) -> None:
         """Should return a new dict, preserving original structure."""
-        prompt_json = {
-            "prompts": [
-                {"prompt": [{"role": "system", "content": "Contains dataset term."}]},
-                {"prompt": [{"role": "system", "content": "Clean prompt here."}]},
-            ]
-        }
+        prompt_json = make_system_prompt_json(
+            ["Contains dataset term.", "Clean prompt here."]
+        )
         original_count = len(prompt_json["prompts"])
 
         result = sanitize_generated_prompts(prompt_json, "my_metric")
@@ -225,8 +216,8 @@ class TestFormatAgentPromptsForPrompt:
         prompts = {
             "agent": ChatPrompt(
                 messages=[
-                    {"role": "system", "content": "System message"},
-                    {"role": "user", "content": "User message"},
+                    system_message("System message"),
+                    user_message("User message"),
                 ]
             )
         }
@@ -331,61 +322,6 @@ class TestAgentMetadata:
 
         assert meta.improvement_focus is None
         assert meta.reasoning is None
-
-
-class TestDataLeakagePatterns:
-    """Focused tests for specific data leakage patterns."""
-
-    @pytest.mark.parametrize(
-        "pattern",
-        [
-            "f1 score",
-            "f1-score",
-            "token-level",
-            "exact match",
-            "bleu",
-            "meteor",
-            "rogue",
-        ],
-    )
-    def test_removes_metric_patterns(self, pattern: str) -> None:
-        """Should remove prompts containing common metric patterns."""
-        prompt_json = {
-            "prompts": [
-                {"prompt": [{"role": "system", "content": f"Optimize for {pattern}."}]},
-                {"prompt": [{"role": "system", "content": "Clean prompt."}]},
-            ]
-        }
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        assert len(result["prompts"]) == 1
-        assert "Clean prompt" in result["prompts"][0]["prompt"][0]["content"]
-
-    @pytest.mark.parametrize(
-        "pattern",
-        [
-            "supporting_facts",
-            "supporting facts",
-            "answer field",
-            "context field",
-            "question field",
-            "training data",
-        ],
-    )
-    def test_removes_dataset_patterns(self, pattern: str) -> None:
-        """Should remove prompts containing dataset-specific patterns."""
-        prompt_json = {
-            "prompts": [
-                {"prompt": [{"role": "system", "content": f"Use the {pattern}."}]},
-                {"prompt": [{"role": "system", "content": "Clean prompt."}]},
-            ]
-        }
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        assert len(result["prompts"]) == 1
-        assert "Clean prompt" in result["prompts"][0]["prompt"][0]["content"]
 
 
 def test_history_builder_assigns_trial_indices() -> None:

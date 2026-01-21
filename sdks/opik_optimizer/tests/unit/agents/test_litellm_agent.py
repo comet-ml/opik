@@ -9,6 +9,8 @@ import pytest
 
 from opik_optimizer.agents.litellm_agent import LiteLLMAgent
 from opik_optimizer.api_objects import chat_prompt
+from tests.unit.fixtures.builders import make_litellm_completion_response
+from tests.unit.fixtures import system_message, user_message
 
 
 @pytest.fixture
@@ -24,8 +26,8 @@ def simple_prompt() -> chat_prompt.ChatPrompt:
         name="test-prompt",
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "{input}"},
+            system_message("You are a helpful assistant."),
+            user_message("{input}"),
         ],
     )
 
@@ -37,8 +39,8 @@ def tool_prompt() -> chat_prompt.ChatPrompt:
         name="tool-prompt",
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You can use tools."},
-            {"role": "user", "content": "{input}"},
+            system_message("You can use tools."),
+            user_message("{input}"),
         ],
         tools=[
             {
@@ -93,14 +95,11 @@ class TestLiteLLMAgentInvoke:
         self, agent: LiteLLMAgent, simple_prompt: chat_prompt.ChatPrompt
     ) -> None:
         """Test invoking with a single prompt."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Hello!"
-        mock_response.cost = 0.001
-        mock_response.usage = MagicMock()
-        mock_response.usage.prompt_tokens = 10
-        mock_response.usage.completion_tokens = 5
-        mock_response.usage.total_tokens = 15
+        mock_response = make_litellm_completion_response(
+            "Hello!",
+            cost=0.001,
+            usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        )
 
         with patch.object(agent, "_llm_complete", return_value=mock_response):
             result = agent.invoke_agent(
@@ -129,11 +128,7 @@ class TestLiteLLMAgentInvoke:
         self, agent: LiteLLMAgent, simple_prompt: chat_prompt.ChatPrompt
     ) -> None:
         """Test that messages are formatted with dataset_item."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.cost = None
-        mock_response.usage = None
+        mock_response = make_litellm_completion_response("response")
 
         captured_messages: list[dict[str, Any]] = []
 
@@ -148,6 +143,11 @@ class TestLiteLLMAgentInvoke:
                 prompts={"test": simple_prompt},
                 dataset_item={"input": "formatted input"},
             )
+
+        assert any(
+            m.get("role") == "user" and m.get("content") == "formatted input"
+            for m in captured_messages
+        )
 
     def test_tool_loop_returns_last_tool_response_when_capped(
         self, agent: LiteLLMAgent
@@ -190,9 +190,7 @@ class TestLiteLLMAgentInvoke:
 
         message = _ToolMessage()
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message = message
+        mock_response = make_litellm_completion_response(message=message)
 
         with patch.object(
             agent,
@@ -217,14 +215,11 @@ class TestLiteLLMAgentCostTracking:
 
     def test_llm_complete_attaches_cost(self, agent: LiteLLMAgent) -> None:
         """Test that _llm_complete attaches cost to response."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.cost = 0.005
-        mock_response.usage = MagicMock()
-        mock_response.usage.prompt_tokens = 100
-        mock_response.usage.completion_tokens = 50
-        mock_response.usage.total_tokens = 150
+        mock_response = make_litellm_completion_response(
+            "response",
+            cost=0.005,
+            usage={"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+        )
 
         with patch("litellm.completion", return_value=mock_response):
             with patch(
@@ -234,7 +229,7 @@ class TestLiteLLMAgentCostTracking:
 
                 result = agent._llm_complete(
                     model="gpt-4o",
-                    messages=[{"role": "user", "content": "test"}],
+                    messages=[user_message("test")],
                     tools=None,
                 )
 
@@ -253,11 +248,9 @@ class TestLiteLLMAgentCostTracking:
 
     def test_llm_complete_handles_missing_usage(self, agent: LiteLLMAgent) -> None:
         """Test handling of responses without usage data."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.cost = None
-        mock_response.usage = None
+        mock_response = make_litellm_completion_response(
+            "response", cost=None, usage=None
+        )
 
         with patch("litellm.completion", return_value=mock_response):
             with patch(
@@ -267,7 +260,7 @@ class TestLiteLLMAgentCostTracking:
 
                 result = agent._llm_complete(
                     model="gpt-4o",
-                    messages=[{"role": "user", "content": "test"}],
+                    messages=[user_message("test")],
                     tools=None,
                 )
 
@@ -282,17 +275,7 @@ class TestLiteLLMAgentMultipleChoices:
         self, agent: LiteLLMAgent, simple_prompt: chat_prompt.ChatPrompt
     ) -> None:
         """Test that multiple choices are concatenated."""
-        mock_response = MagicMock()
-        mock_response.choices = [
-            MagicMock(),
-            MagicMock(),
-        ]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.content = "Choice 1"
-        mock_response.choices[1].message = MagicMock()
-        mock_response.choices[1].message.content = "Choice 2"
-        mock_response.cost = None
-        mock_response.usage = None
+        mock_response = make_litellm_completion_response(["Choice 1", "Choice 2"])
 
         with patch.object(agent, "_llm_complete", return_value=mock_response):
             result = agent.invoke_agent(
@@ -307,17 +290,7 @@ class TestLiteLLMAgentMultipleChoices:
         self, agent: LiteLLMAgent, simple_prompt: chat_prompt.ChatPrompt
     ) -> None:
         """Test invoke_agent_candidates returns each choice separately."""
-        mock_response = MagicMock()
-        mock_response.choices = [
-            MagicMock(),
-            MagicMock(),
-        ]
-        mock_response.choices[0].message = MagicMock()
-        mock_response.choices[0].message.content = "Choice A"
-        mock_response.choices[1].message = MagicMock()
-        mock_response.choices[1].message.content = "Choice B"
-        mock_response.cost = None
-        mock_response.usage = None
+        mock_response = make_litellm_completion_response(["Choice A", "Choice B"])
 
         with patch.object(agent, "_llm_complete", return_value=mock_response):
             result = agent.invoke_agent_candidates(
@@ -331,10 +304,7 @@ class TestLiteLLMAgentMultipleChoices:
         self, agent: LiteLLMAgent, simple_prompt: chat_prompt.ChatPrompt
     ) -> None:
         """Test handling of empty choices list."""
-        mock_response = MagicMock()
-        mock_response.choices = []
-        mock_response.cost = None
-        mock_response.usage = None
+        mock_response = make_litellm_completion_response([])
 
         with patch.object(agent, "_llm_complete", return_value=mock_response):
             result = agent.invoke_agent(
@@ -350,7 +320,7 @@ class TestLiteLLMAgentPrepareMessages:
 
     def test_prepare_messages_default(self, agent: LiteLLMAgent) -> None:
         """Test default _prepare_messages returns messages unchanged."""
-        messages = [{"role": "user", "content": "test"}]
+        messages = [user_message("test")]
         result = agent._prepare_messages(messages, {"input": "data"})
         assert result == messages
 
@@ -363,10 +333,10 @@ class TestLiteLLMAgentPrepareMessages:
                 messages: list[dict[str, Any]],
                 dataset_item: dict[str, Any] | None,
             ) -> list[dict[str, Any]]:
-                return messages + [{"role": "user", "content": "extra"}]
+                return messages + [user_message("extra")]
 
         agent = CustomAgent(project_name="test")
-        messages = [{"role": "user", "content": "original"}]
+        messages = [user_message("original")]
         result = agent._prepare_messages(messages, None)
 
         assert len(result) == 2
@@ -382,4 +352,4 @@ class TestLiteLLMAgentRateLimiting:
         # by inspecting the wrapper
         method = agent._llm_complete
         # Rate limited methods have __wrapped__ attribute
-        assert hasattr(method, "__wrapped__") or callable(method)
+        assert hasattr(method, "__wrapped__")

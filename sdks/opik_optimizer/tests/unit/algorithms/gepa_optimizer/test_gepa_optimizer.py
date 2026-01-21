@@ -8,6 +8,8 @@ import pytest
 
 from opik_optimizer import ChatPrompt, GepaOptimizer, OptimizationResult
 from opik_optimizer.algorithms.gepa_optimizer.adapter import OpikGEPAAdapter
+from tests.unit.fixtures import assert_baseline_early_stop, assert_invalid_prompt_raises
+from tests.unit.fixtures import make_baseline_prompt, make_two_prompt_bundle
 from tests.unit.test_helpers import (
     make_mock_dataset,
     make_optimization_context,
@@ -86,12 +88,7 @@ class TestGepaOptimizerOptimizePrompt:
         mock_optimization_context()
 
         optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompts = {
-            "main": ChatPrompt(name="main", system="Main", user="{question}"),
-            "secondary": ChatPrompt(
-                name="secondary", system="Secondary", user="{input}"
-            ),
-        }
+        prompts = make_two_prompt_bundle()
         dataset = mock_dataset(
             sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
         )
@@ -131,13 +128,12 @@ class TestGepaOptimizerOptimizePrompt:
             sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
         )
 
-        with pytest.raises((ValueError, TypeError)):
-            optimizer.optimize_prompt(
-                prompt="invalid string",  # type: ignore[arg-type]
-                dataset=dataset,
-                metric=sample_metric,
-                max_trials=1,
-            )
+        assert_invalid_prompt_raises(
+            optimizer,
+            dataset=dataset,
+            metric=sample_metric,
+            max_trials=1,
+        )
 
 
 class TestGepaOptimizerEarlyStop:
@@ -157,7 +153,7 @@ class TestGepaOptimizerEarlyStop:
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
 
-        prompt = ChatPrompt(system="baseline", user="{question}")
+        prompt = make_baseline_prompt()
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
@@ -165,10 +161,7 @@ class TestGepaOptimizerEarlyStop:
             max_trials=1,
         )
 
-        assert result.details["stopped_early"] is True
-        assert result.details["stop_reason"] == "baseline_score_met_threshold"
-        assert result.details["perfect_score"] == 0.95
-        assert result.initial_score == result.score
+        assert_baseline_early_stop(result, perfect_score=0.95, trials_completed=1)
         # Early stop happens before run_optimization, so only baseline was evaluated
         # Framework sets trials_completed to 1 (baseline evaluation counts as 1 trial)
         assert result.details["trials_completed"] == 1
@@ -190,7 +183,7 @@ class TestGepaOptimizerEarlyStop:
 
         monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.96)
 
-        prompt = ChatPrompt(system="baseline", user="{question}")
+        prompt = make_baseline_prompt()
         result = optimizer.optimize_prompt(
             prompt=prompt,
             dataset=dataset,
@@ -198,12 +191,9 @@ class TestGepaOptimizerEarlyStop:
             max_trials=1,
         )
 
-        assert result.details["stopped_early"] is True
-        # Early stop happens before run_optimization, so only baseline was evaluated
-        # The optimizer returns 0 from get_metadata (no optimization trials yet)
-        # The base class defaults this to 1 to reflect the baseline evaluation
-        assert result.details["trials_completed"] == 1
-        assert len(result.history) == 1
+        assert_baseline_early_stop(
+            result, perfect_score=0.95, trials_completed=1, history_len=1
+        )
 
 
 class TestGepaOptimizerAgentUsage:
@@ -275,7 +265,7 @@ def test_gepa_adapter_records_per_item_metrics() -> None:
     dataset = make_mock_dataset(
         STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
     )
-    prompt = ChatPrompt(system="baseline", user="{question}")
+    prompt = make_baseline_prompt()
 
     def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
         return 0.1

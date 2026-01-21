@@ -11,6 +11,7 @@ import litellm
 from pydantic import BaseModel
 
 from opik_optimizer.core import llm_calls as _llm_calls
+from tests.e2e.optimizers.utils import user_message
 
 
 class JsonRetryResponse(BaseModel):
@@ -46,10 +47,11 @@ def test_call_model_retries_with_json_instructions_live(
     monkeypatch.setattr(litellm, "completion", flaky_completion)
 
     result = _llm_calls.call_model(
-        messages=[{"role": "user", "content": "Return JSON with key value=2"}],
+        messages=[user_message("Return JSON with key value=2")],
         model=model,
         response_model=JsonRetryResponse,
     )
 
     assert isinstance(result, JsonRetryResponse)
     assert isinstance(result.value, int)
+    assert result.value == 2

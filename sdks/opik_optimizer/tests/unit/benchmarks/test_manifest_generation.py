@@ -3,6 +3,7 @@ from pathlib import Path
 
 
 from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
+from tests.unit.fixtures import system_message, user_message
 
 
 def test_manifest_tasks_and_datasets(tmp_path: Path) -> None:
@@ -67,11 +68,8 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
                 "metrics": ["benchmarks.metrics.hotpot.hotpot_f1"],
                 "test_mode": True,
                 "prompt": [
-                    {
-                        "role": "system",
-                        "content": "Answer the question briefly and correctly.",
-                    },
-                    {"role": "user", "content": "{text}"},
+                    system_message("Answer the question briefly and correctly."),
+                    user_message("{text}"),
                 ],
             }
         ],

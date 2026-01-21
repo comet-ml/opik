@@ -88,6 +88,56 @@ def make_mock_response(
     return mock_response
 
 
+def make_litellm_completion_response(
+    contents: str | list[str] | None = "response",
+    *,
+    cost: float | None = None,
+    usage: dict[str, int] | None = None,
+    message: Any | None = None,
+) -> MagicMock:
+    """
+    Create a minimal LiteLLM `completion()`-like response for agent tests.
+
+    This is intentionally more flexible than `make_mock_response`:
+    - supports multiple choices (list of contents)
+    - supports tool-calling message objects via `message=...`
+    - supports `.cost` and `.usage` attributes used by LiteLLM + our agent wrapper
+    """
+    mock_response = MagicMock()
+
+    if message is not None:
+        mock_choice = MagicMock()
+        mock_choice.message = message
+        mock_response.choices = [mock_choice]
+    else:
+        if contents is None:
+            contents_list: list[str] = ["response"]
+        elif isinstance(contents, list):
+            contents_list = contents
+        else:
+            contents_list = [contents]
+
+        choices: list[MagicMock] = []
+        for content in contents_list:
+            mock_choice = MagicMock()
+            mock_choice.message = MagicMock()
+            mock_choice.message.content = content
+            choices.append(mock_choice)
+        mock_response.choices = choices
+
+    mock_response.cost = cost
+    if usage is None:
+        mock_response.usage = None
+    else:
+        usage_obj = MagicMock()
+        usage_obj.prompt_tokens = usage.get("prompt_tokens", 0)
+        usage_obj.completion_tokens = usage.get("completion_tokens", 0)
+        usage_obj.total_tokens = usage.get("total_tokens", 0)
+        mock_response.usage = usage_obj
+
+    return mock_response
+
+
 def make_candidate_agent(
     *,
     candidates: list[str] | None = None,
