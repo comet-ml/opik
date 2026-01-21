@@ -14,14 +14,14 @@ class DummyDataset:
     def __len__(self) -> int:
         return len(self._records)
 
-    def shuffle(self, *, seed: int) -> "DummyDataset":
+    def shuffle(self, *, seed: int) -> DummyDataset:
         return self
 
-    def filter(self, function: Callable[[dict[str, int]], bool]) -> "DummyDataset":
+    def filter(self, function: Callable[[dict[str, int]], bool]) -> DummyDataset:
         self._records = [record for record in self._records if function(record)]
         return self
 
-    def select(self, indices: range) -> "DummyDataset":
+    def select(self, indices: range) -> DummyDataset:
         return DummyDataset([self._records[i] for i in indices])
 
     def to_list(self) -> list[dict[str, int]]:
@@ -62,7 +62,9 @@ def test_download_and_slice_hf_dataset_raises_when_slice_exceeds_total() -> None
         )
 
 
-def test_download_and_slice_hf_dataset_respects_filter_by(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_download_and_slice_hf_dataset_respects_filter_by(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     def load_fn(**kwargs: object) -> DummyDataset:
         del kwargs
         return DummyDataset([{"value": 0}, {"value": 1}, {"value": 2}, {"value": 3}])
@@ -79,7 +81,9 @@ def test_download_and_slice_hf_dataset_respects_filter_by(monkeypatch: pytest.Mo
     assert result == [{"value": 2}, {"value": 3}]
 
 
-def test_fetch_records_for_slice_falls_back_to_download(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_records_for_slice_falls_back_to_download(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     slice_request = dataset_utils.SliceRequest(
         source_split="train",
         start=0,

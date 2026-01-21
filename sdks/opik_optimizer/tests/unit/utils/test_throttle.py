@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 
 import pytest
 
 from opik_optimizer.utils import throttle
 
 
-class DummyLimiter:
+class DummyLimiter(throttle.RateLimiter):
     def __init__(self) -> None:
+        # Avoid initializing the base limiter (pyrate dependency) since tests mock behavior.
         self.acquire_called = False
         self.acquire_async_called = False
 
