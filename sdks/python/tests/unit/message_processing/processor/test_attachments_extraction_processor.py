@@ -143,6 +143,7 @@ def test_process_span_message_extracts_from_input(processor, mock_streamer):
         data="/tmp/image.png",
         file_name="input-attachment-123.png",
         content_type="image/png",
+        create_temp_copy=False,
     )
 
     mock_attachment_with_context = attachment_context.AttachmentWithContext(
@@ -212,6 +213,7 @@ def test_process_span_message_extracts_from_output(processor, mock_streamer):
         data="/tmp/output.png",
         file_name="output-attachment-456.png",
         content_type="image/png",
+        create_temp_copy=False,
     )
 
     mock_attachment_with_context = attachment_context.AttachmentWithContext(
@@ -268,6 +270,7 @@ def test_process_span_message_extracts_from_metadata(processor, mock_streamer):
         data="/tmp/doc.pdf",
         file_name="metadata-attachment-789.pdf",
         content_type="application/pdf",
+        create_temp_copy=False,
     )
 
     mock_attachment_with_context = attachment_context.AttachmentWithContext(
@@ -318,6 +321,7 @@ def test_process_trace_message_extracts_attachments(processor, mock_streamer):
         data="/tmp/trace-data.png",
         file_name="input-attachment-trace.png",
         content_type="image/png",
+        create_temp_copy=False,
     )
 
     mock_attachment_with_context = attachment_context.AttachmentWithContext(
@@ -381,6 +385,7 @@ def test_process_update_span_message(processor, mock_streamer):
         data="/tmp/update.png",
         file_name="input-attachment.png",
         content_type="image/png",
+        create_temp_copy=False,
     )
 
     mock_attachment_with_context = attachment_context.AttachmentWithContext(
@@ -429,6 +434,7 @@ def test_process_update_trace_message(processor, mock_streamer):
         data="/tmp/result.png",
         file_name="output-attachment.png",
         content_type="image/png",
+        create_temp_copy=False,
     )
 
     mock_attachment_with_context = attachment_context.AttachmentWithContext(
@@ -490,6 +496,7 @@ def test_process_multiple_attachments_from_different_contexts(processor, mock_st
                     data="/tmp/input.png",
                     file_name="input-att.png",
                     content_type="image/png",
+                    create_temp_copy=False,
                 ),
                 entity_type="span",
                 entity_id="span-multi",
@@ -503,6 +510,7 @@ def test_process_multiple_attachments_from_different_contexts(processor, mock_st
                     data="/tmp/output.png",
                     file_name="output-att.png",
                     content_type="image/png",
+                    create_temp_copy=False,
                 ),
                 entity_type="span",
                 entity_id="span-multi",
@@ -516,6 +524,7 @@ def test_process_multiple_attachments_from_different_contexts(processor, mock_st
                     data="/tmp/meta.pdf",
                     file_name="meta-att.pdf",
                     content_type="application/pdf",
+                    create_temp_copy=False,
                 ),
                 entity_type="span",
                 entity_id="span-multi",

@@ -33,7 +33,9 @@ def test_start_as_current_span__inside__happy_flow(fake_backend):
         span.feedback_scores = [FeedbackScoreDict(name="feedback-score-1", value=0.5)]
         span.input = {"input": "test-input"}
         span.output = {"output": "test-output"}
-        span.attachments = [attachment.Attachment(data="./test_file.txt")]
+        span.attachments = [
+            attachment.Attachment(data="./test_file.txt", create_temp_copy=False)
+        ]
 
     assert len(fake_backend.trace_trees) == 1
 
