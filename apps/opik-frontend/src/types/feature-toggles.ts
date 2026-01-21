@@ -9,6 +9,7 @@ export enum FeatureToggleKeys {
   CSV_UPLOAD_ENABLED = "csv_upload_enabled",
   EXPORT_ENABLED = "export_enabled",
   DATASET_VERSIONING_ENABLED = "dataset_versioning_enabled",
+  DATASET_EXPORT_ENABLED = "dataset_export_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED = "span_user_defined_metric_python_enabled",
   OPTIMIZATION_STUDIO_ENABLED = "optimization_studio_enabled",
