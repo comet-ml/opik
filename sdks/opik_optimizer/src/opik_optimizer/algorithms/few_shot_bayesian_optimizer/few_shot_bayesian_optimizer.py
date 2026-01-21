@@ -36,7 +36,7 @@ from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
 from ...utils.logging import debug_log
 from ...constants import normalize_eval_threads
-from . import helpers, types
+from . import types
 from . import prompts as few_shot_prompts
 from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
 from collections.abc import Callable
@@ -131,6 +131,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # Instance state for custom evaluation (used by overridden evaluate_prompt)
         self._custom_evaluated_task: Callable[..., dict[str, Any]] | None = None
         self._custom_eval_item_ids: list[str] | None = None
+        self._custom_eval_n_samples: int | None = None
         self._custom_allow_tool_use: bool | None = None
 
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
@@ -156,9 +157,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
+        n_sample_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
         allow_tool_use: bool = False,
+        use_evaluate_on_dict_items: bool | None = None,
     ) -> float:
         """
         Override evaluate_prompt to support custom evaluated_task.
@@ -176,6 +179,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 experiment_config=experiment_config,
                 verbose=verbose,
                 allow_tool_use=allow_tool_use,
+                use_evaluate_on_dict_items=use_evaluate_on_dict_items,
             )
 
         # Default behavior: delegate to parent
@@ -191,9 +195,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset_item_ids=dataset_item_ids,
             experiment_config=experiment_config,
             n_samples=n_samples,
+            n_sample_strategy=n_sample_strategy,
             seed=seed,
             return_evaluation_result=False,
             allow_tool_use=allow_tool_use,
+            use_evaluate_on_dict_items=use_evaluate_on_dict_items,
         )
 
     def _evaluate_custom_task(
@@ -205,6 +211,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         experiment_config: dict | None,
         verbose: int,
         allow_tool_use: bool | None,
+        use_evaluate_on_dict_items: bool | None,
     ) -> float:
         n_threads = normalize_eval_threads(n_threads or self.n_threads)
         if self._custom_evaluated_task is None:
@@ -221,6 +228,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             experiment_config=experiment_config,
             optimization_id=self.current_optimization_id,
             verbose=verbose,
+            n_samples=self._custom_eval_n_samples,
+            use_evaluate_on_dict_items=bool(use_evaluate_on_dict_items),
         )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
@@ -264,7 +273,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         if not dataset:
             return [], []
 
-        rng = helpers.make_rng(self.seed, "split_dataset", train_ratio)
+        rng = self._derive_rng("split_dataset", train_ratio)
         dataset_copy = dataset.copy()
         rng.shuffle(dataset_copy)
 
@@ -520,16 +529,26 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 columnar_search_space.columns,
             )
 
-        eval_dataset_items = evaluation_dataset.get_items()
-        eval_dataset_item_ids = [item["id"] for item in eval_dataset_items]
-        if n_samples is not None and n_samples < len(dataset_items):
-            rng = helpers.make_rng(self.seed, "optimization_eval_ids", n_samples)
-            eval_dataset_item_ids = rng.sample(eval_dataset_item_ids, n_samples)
+        sampling_plan = self._prepare_sampling_plan(
+            dataset=evaluation_dataset,
+            n_samples=n_samples,
+            phase="optimization_eval",
+            seed_override=self.seed,
+            strategy=context.n_sample_strategy,
+        )
+        eval_dataset_item_ids = sampling_plan.dataset_item_ids
+        effective_n_samples = (
+            None if eval_dataset_item_ids is not None else sampling_plan.nb_samples
+        )
 
         configuration_updates = parent_helpers.drop_none(
             {
                 "n_trials": n_trials,
-                "n_samples": n_samples,
+                "n_samples": (
+                    len(eval_dataset_item_ids)
+                    if eval_dataset_item_ids is not None
+                    else effective_n_samples
+                ),
                 "baseline_score": baseline_score,
             }
         )
@@ -651,6 +670,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             # Set custom task for evaluate_prompt override
             self._custom_evaluated_task = llm_task
             self._custom_eval_item_ids = eval_dataset_item_ids
+            self._custom_eval_n_samples = effective_n_samples
             try:
                 # Use base optimizer's evaluate() which handles:
                 # - Trial counting (context.trials_completed)
@@ -661,6 +681,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 # Clear custom task state
                 self._custom_evaluated_task = None
                 self._custom_eval_item_ids = None
+                self._custom_eval_n_samples = None
                 self._custom_allow_tool_use = None
 
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
