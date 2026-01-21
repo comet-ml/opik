@@ -122,6 +122,14 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert result.score == 0.85
         assert result.initial_score == 0.5
 
+    def test_sanitized_prompt_name_collision_raises(self) -> None:
+        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+
+        with pytest.raises(
+            ValueError, match="Prompt name collision after sanitization"
+        ):
+            optimizer._sanitize_prompt_field_names(["chat-prompt", "chat_prompt"])
+
     def test_dict_prompt_returns_dict(
         self,
         mock_optimization_context,

@@ -2,6 +2,7 @@ from typing import Any, cast
 
 import copy
 import json
+import re
 import logging
 import warnings
 from datetime import datetime
@@ -270,6 +271,27 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         split_idx = int(len(dataset_copy) * train_ratio)
         return dataset_copy[:split_idx], dataset_copy[split_idx:]
 
+    def _sanitize_prompt_field_names(
+        self, prompt_names: list[str]
+    ) -> tuple[list[str], dict[str, str]]:
+        """Normalize prompt names to valid identifiers for dynamic models."""
+        sanitized_names: list[str] = []
+        original_to_sanitized: dict[str, str] = {}
+        seen: dict[str, str] = {}
+        for name in prompt_names:
+            sanitized = re.sub(r"\W", "_", name).strip("_")
+            if not sanitized or sanitized[0].isdigit():
+                sanitized = f"prompt_{sanitized}"
+            if sanitized in seen and seen[sanitized] != name:
+                raise ValueError(
+                    "Prompt name collision after sanitization: "
+                    f"{seen[sanitized]!r} and {name!r} -> {sanitized!r}"
+                )
+            seen[sanitized] = name
+            sanitized_names.append(sanitized)
+            original_to_sanitized[name] = sanitized
+        return sanitized_names, original_to_sanitized
+
     def _create_few_shot_prompt_template(
         self,
         model: str,
@@ -311,9 +333,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             {"role": "user", "content": json.dumps(user_message)},
         ]
 
+        sanitized_names, original_to_sanitized = self._sanitize_prompt_field_names(
+            list(prompts.keys())
+        )
         # Create dynamic response model with explicit fields for each prompt
         DynamicFewShotPromptMessages = types.create_few_shot_response_model(
-            prompt_names=list(prompts.keys())
+            prompt_names=sanitized_names
         )
 
         logger.debug(f"few_shot_prompt_template - Calling LLM with: {messages}")
@@ -363,7 +388,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 # Access field using getattr since field names are dynamic
                 messages = [
                     x.model_dump(mode="json")
-                    for x in getattr(response_content, prompt_name)
+                    for x in getattr(
+                        response_content, original_to_sanitized[prompt_name]
+                    )
                 ]
                 new_prompt = prompts[prompt_name].copy()
                 new_prompt.set_messages(messages)

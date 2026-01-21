@@ -35,6 +35,7 @@ def rescore_candidates(
         with convert_tqdm_to_rich(verbose=0):
             round_handle = optimizer.pre_round(context, candidate_id="gepa_candidates")
             best_score = None
+            dataset_name = getattr(dataset, "name", None)
             for idx, (_, candidate) in enumerate(filtered_indexed_candidates):
                 prompt_variants = candidate_ops.rebuild_prompts_from_candidate(
                     base_prompts=optimizable_prompts,
@@ -72,6 +73,7 @@ def rescore_candidates(
                         else None
                     ),
                     selection_policy=selection_policy,
+                    dataset_name=dataset_name,
                 )
             optimizer.set_selection_meta(
                 {
