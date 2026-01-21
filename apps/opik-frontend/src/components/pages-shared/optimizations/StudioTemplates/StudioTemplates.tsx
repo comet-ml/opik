@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   SquareDashedMousePointer,
   MessageSquare,
-  FileJson,
+  ShieldAlert,
 } from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
@@ -17,8 +17,8 @@ const TEMPLATE_ICONS: Record<
     icon: MessageSquare,
     color: "text-template-icon-performance",
   },
-  "json-output": {
-    icon: FileJson,
+  "jailbreak-password": {
+    icon: ShieldAlert,
     color: "text-template-icon-metrics",
   },
 };
