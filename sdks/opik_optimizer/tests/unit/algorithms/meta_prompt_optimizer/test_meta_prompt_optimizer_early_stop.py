@@ -43,4 +43,3 @@ class TestMetaPromptOptimizerEarlyStop:
         )
 
         assert_baseline_early_stop(result, perfect_score=0.95)
-

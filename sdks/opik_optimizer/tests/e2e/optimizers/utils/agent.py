@@ -88,4 +88,3 @@ class MultiPromptTestAgent(OptimizableAgent):
         )
 
         return respond_response.choices[0].message.content
-

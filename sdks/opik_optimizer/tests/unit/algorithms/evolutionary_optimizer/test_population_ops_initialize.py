@@ -118,7 +118,11 @@ class TestInitializePopulation:
 
         # At minimum: original + one fresh + one variation.
         assert len(result) >= 3
-        assert _system_contents(result) >= {"Original prompt", "Fresh prompt 1", "Variation 1"}
+        assert _system_contents(result) >= {
+            "Original prompt",
+            "Fresh prompt 1",
+            "Variation 1",
+        }
 
     def test_handles_llm_error_for_fresh_starts(
         self,
@@ -174,7 +178,9 @@ class TestInitializePopulation:
         mock_llm_sequence(
             [
                 json.dumps([same_messages]),
-                json.dumps({"prompts": [{"prompt": same_messages}, {"prompt": same_messages}]}),
+                json.dumps(
+                    {"prompts": [{"prompt": same_messages}, {"prompt": same_messages}]}
+                ),
             ]
         )
 
@@ -185,4 +191,3 @@ class TestInitializePopulation:
         )
 
         assert len(result) == 1
-

@@ -28,12 +28,17 @@ def run_optimizer(
     - Everything else uses optimize_prompt
     """
     extra_kwargs: dict[str, Any] = dict(kwargs)
-    if optimizer_class == GepaOptimizer and "reflection_minibatch_size" not in extra_kwargs:
+    if (
+        optimizer_class == GepaOptimizer
+        and "reflection_minibatch_size" not in extra_kwargs
+    ):
         extra_kwargs["reflection_minibatch_size"] = 1
 
     if optimizer_class == ParameterOptimizer:
         if parameter_space is None:
-            raise ValueError("parameter_space is required for ParameterOptimizer e2e runs")
+            raise ValueError(
+                "parameter_space is required for ParameterOptimizer e2e runs"
+            )
         return optimizer.optimize_parameter(
             prompt=prompt,
             dataset=dataset,
@@ -54,4 +59,3 @@ def run_optimizer(
         max_trials=max_trials,
         **extra_kwargs,
     )
-

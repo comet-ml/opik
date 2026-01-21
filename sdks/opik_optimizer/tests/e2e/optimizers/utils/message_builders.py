@@ -31,4 +31,3 @@ def assistant_message(content: Any, **extra: Any) -> Message:
 
 def tool_message(content: Any, **extra: Any) -> Message:
     return {"role": "tool", "content": content, **extra}
-

@@ -24,11 +24,15 @@ class TestMetaPromptOptimizerMultiPrompt:
 
         optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         prompts = {
-            "system_prompt": ChatPrompt(name="system_prompt", system="System", user="{question}"),
+            "system_prompt": ChatPrompt(
+                name="system_prompt", system="System", user="{question}"
+            ),
             "assistant_prompt": ChatPrompt(
                 name="assistant_prompt", system="Assistant", user="{input}"
             ),
-            "reviewer_prompt": ChatPrompt(name="reviewer_prompt", system="Reviewer", user="{text}"),
+            "reviewer_prompt": ChatPrompt(
+                name="reviewer_prompt", system="Reviewer", user="{text}"
+            ),
         }
         dataset = mock_dataset(
             sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
@@ -152,4 +156,3 @@ class TestMetaPromptOptimizerMultiPrompt:
         assert result.optimizer == "MetaPromptOptimizer"
         assert isinstance(result.details, dict)
         assert hasattr(result, "history")
-

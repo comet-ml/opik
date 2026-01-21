@@ -107,14 +107,18 @@ class TestSanitizeGeneratedPrompts:
     @pytest.mark.parametrize("content", EVALUATION_LEAKAGE_PATTERNS)
     def test_removes_evaluation_terms(self, content: str) -> None:
         """Should remove prompts referencing evaluation/scoring terms."""
-        result = _sanitize_system_prompts([content, "Safe prompt."], metric_name="test_metric")
+        result = _sanitize_system_prompts(
+            [content, "Safe prompt."], metric_name="test_metric"
+        )
         kept = _assert_single_prompt(result)
         assert "Safe prompt" in kept["prompt"][0]["content"]
 
     @pytest.mark.parametrize("dataset_name", BENCHMARK_DATASET_NAMES)
     def test_removes_common_benchmark_names(self, dataset_name: str) -> None:
         """Should remove prompts referencing common benchmark dataset names."""
-        result = _sanitize_system_prompts([f"Answer like in {dataset_name}.", "Be helpful."])
+        result = _sanitize_system_prompts(
+            [f"Answer like in {dataset_name}.", "Be helpful."]
+        )
         kept = _assert_single_prompt(result)
         assert "Be helpful" in kept["prompt"][0]["content"]
 

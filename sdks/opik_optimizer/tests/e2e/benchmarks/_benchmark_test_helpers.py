@@ -13,7 +13,7 @@ class InlineExecutor:
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.submissions: list[tuple] = []
 
-    def __enter__(self) -> "InlineExecutor":  # pragma: no cover - trivial
+    def __enter__(self) -> InlineExecutor:  # pragma: no cover - trivial
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, _tb: Any) -> None:  # pragma: no cover
@@ -30,4 +30,3 @@ class InlineExecutor:
     def shutdown(self, wait: bool = True, _cancel_futures: bool = False) -> None:
         _ = wait, _cancel_futures
         return None
-

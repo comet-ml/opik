@@ -20,8 +20,9 @@ class TestMetaPromptOptimizerInit:
             ),
         ],
     )
-    def test_initialization(self, kwargs: dict[str, Any], expected: dict[str, Any]) -> None:
+    def test_initialization(
+        self, kwargs: dict[str, Any], expected: dict[str, Any]
+    ) -> None:
         optimizer = MetaPromptOptimizer(**kwargs)
         for key, value in expected.items():
             assert getattr(optimizer, key) == value
-

@@ -117,4 +117,3 @@ class TestShouldRestartPopulation:
 
         assert len(new_history) == 4
         assert new_history[-1] == 0.85
-
