@@ -271,9 +271,10 @@ public interface DatasetItemVersionDAO {
      *
      * @param datasetId the dataset ID
      * @param versionId the version ID
+     * @param workspaceId the workspace ID
      * @return Mono emitting the number of deleted rows
      */
-    Mono<Long> deleteItemsFromVersion(UUID datasetId, UUID versionId);
+    Mono<Long> deleteItemsFromVersion(UUID datasetId, UUID versionId, String workspaceId);
 
     /**
      * Copies all items from legacy dataset_items table to dataset_item_versions for a specific dataset.
@@ -281,18 +282,20 @@ public interface DatasetItemVersionDAO {
      *
      * @param datasetId the dataset ID
      * @param versionId the version ID (should equal datasetId for version 1)
+     * @param workspaceId the workspace ID
      * @return Mono emitting the number of copied rows
      */
-    Mono<Long> copyItemsFromLegacy(UUID datasetId, UUID versionId);
+    Mono<Long> copyItemsFromLegacy(UUID datasetId, UUID versionId, String workspaceId);
 
     /**
      * Counts items in a specific dataset version.
      *
      * @param datasetId the dataset ID
      * @param versionId the version ID
+     * @param workspaceId the workspace ID
      * @return Mono emitting the count of items
      */
-    Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId);
+    Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId, String workspaceId);
 
     /**
      * Counts items for multiple dataset versions in a single query.
@@ -1529,7 +1532,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String DELETE_ITEMS_FROM_VERSION_MIGRATION = """
             DELETE FROM dataset_item_versions
-            WHERE dataset_id = :datasetId
+            WHERE workspace_id = :workspaceId
+              AND dataset_id = :datasetId
               AND dataset_version_id = :versionId
             """;
 
@@ -1558,13 +1562,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 last_updated_by,
                 workspace_id
             FROM dataset_items
-            WHERE dataset_id = :datasetId
+            WHERE workspace_id = :workspaceId
+              AND dataset_id = :datasetId
             """;
 
     private static final String COUNT_ITEMS_IN_VERSION = """
             SELECT count(DISTINCT id) as count
             FROM dataset_item_versions
-            WHERE dataset_id = :datasetId
+            WHERE workspace_id = :workspaceId
+              AND dataset_id = :datasetId
               AND dataset_version_id = :versionId
             """;
 
@@ -2754,11 +2760,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     @Override
-    public Mono<Long> deleteItemsFromVersion(UUID datasetId, UUID versionId) {
-        log.debug("Deleting items from version '{}' for dataset '{}'", versionId, datasetId);
+    public Mono<Long> deleteItemsFromVersion(UUID datasetId, UUID versionId, String workspaceId) {
+        log.debug("Deleting items from version '{}' for dataset '{}' in workspace '{}'", versionId, datasetId,
+                workspaceId);
 
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(DELETE_ITEMS_FROM_VERSION_MIGRATION)
+                    .bind("workspaceId", workspaceId)
                     .bind("datasetId", datasetId.toString())
                     .bind("versionId", versionId.toString());
 
@@ -2774,11 +2782,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     @Override
-    public Mono<Long> copyItemsFromLegacy(UUID datasetId, UUID versionId) {
-        log.debug("Copying items from legacy table for dataset '{}' to version '{}'", datasetId, versionId);
+    public Mono<Long> copyItemsFromLegacy(UUID datasetId, UUID versionId, String workspaceId) {
+        log.debug("Copying items from legacy table for dataset '{}' to version '{}' in workspace '{}'", datasetId,
+                versionId, workspaceId);
 
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(COPY_ITEMS_FROM_LEGACY)
+                    .bind("workspaceId", workspaceId)
                     .bind("versionId", versionId.toString())
                     .bind("datasetId", datasetId.toString());
 
@@ -2795,11 +2805,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     }
 
     @Override
-    public Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId) {
-        log.debug("Counting items in version '{}' for dataset '{}'", versionId, datasetId);
+    public Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId, String workspaceId) {
+        log.debug("Counting items in version '{}' for dataset '{}' in workspace '{}'", versionId, datasetId,
+                workspaceId);
 
         return asyncTemplate.nonTransaction(connection -> {
             var statement = connection.createStatement(COUNT_ITEMS_IN_VERSION)
+                    .bind("workspaceId", workspaceId)
                     .bind("datasetId", datasetId.toString())
                     .bind("versionId", versionId.toString());
 

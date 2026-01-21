@@ -260,9 +260,9 @@ public class DatasetVersioningMigrationService {
         log.info("Migrating dataset '{}' in workspace '{}'", datasetId, workspaceId);
 
         return ensureVersion1Exists(datasetId, versionId, workspaceId)
-                .then(deleteItemsFromVersion1(datasetId, versionId))
-                .then(copyItemsToVersion1(datasetId, versionId))
-                .then(countAndUpdateItemsTotal(datasetId, versionId))
+                .then(deleteItemsFromVersion1(datasetId, versionId, workspaceId))
+                .then(copyItemsToVersion1(datasetId, versionId, workspaceId))
+                .then(countAndUpdateItemsTotal(datasetId, versionId, workspaceId))
                 .then(ensureLatestTagExists(datasetId, versionId, workspaceId))
                 .doOnSuccess(unused -> log.info("Successfully migrated dataset '{}'", datasetId))
                 .doOnError(error -> log.error("Failed to migrate dataset '{}'", datasetId, error));
@@ -288,10 +288,10 @@ public class DatasetVersioningMigrationService {
         }).subscribeOn(Schedulers.boundedElastic());
     }
 
-    private Mono<Void> deleteItemsFromVersion1(UUID datasetId, UUID versionId) {
+    private Mono<Void> deleteItemsFromVersion1(UUID datasetId, UUID versionId, String workspaceId) {
         log.debug("Deleting items from version 1 for dataset '{}'", datasetId);
 
-        return datasetItemVersionDAO.deleteItemsFromVersion(datasetId, versionId)
+        return datasetItemVersionDAO.deleteItemsFromVersion(datasetId, versionId, workspaceId)
                 .doOnSuccess(deletedCount -> {
                     if (deletedCount > 0) {
                         log.info("Deleted '{}' items from version 1 for dataset '{}'", deletedCount, datasetId);
@@ -302,10 +302,10 @@ public class DatasetVersioningMigrationService {
                 .then();
     }
 
-    private Mono<Void> copyItemsToVersion1(UUID datasetId, UUID versionId) {
+    private Mono<Void> copyItemsToVersion1(UUID datasetId, UUID versionId, String workspaceId) {
         log.debug("Copying items to version 1 for dataset '{}'", datasetId);
 
-        return datasetItemVersionDAO.copyItemsFromLegacy(datasetId, versionId)
+        return datasetItemVersionDAO.copyItemsFromLegacy(datasetId, versionId, workspaceId)
                 .doOnSuccess(copiedCount -> {
                     if (copiedCount > 0) {
                         log.info("Copied '{}' items to version 1 for dataset '{}'", copiedCount, datasetId);
@@ -316,10 +316,10 @@ public class DatasetVersioningMigrationService {
                 .then();
     }
 
-    private Mono<Void> countAndUpdateItemsTotal(UUID datasetId, UUID versionId) {
+    private Mono<Void> countAndUpdateItemsTotal(UUID datasetId, UUID versionId, String workspaceId) {
         log.debug("Counting and updating items_total for dataset '{}'", datasetId);
 
-        return datasetItemVersionDAO.countItemsInVersion(datasetId, versionId)
+        return datasetItemVersionDAO.countItemsInVersion(datasetId, versionId, workspaceId)
                 .flatMap(count -> {
                     log.debug("Dataset '{}' has '{}' items in version 1", datasetId, count);
 
