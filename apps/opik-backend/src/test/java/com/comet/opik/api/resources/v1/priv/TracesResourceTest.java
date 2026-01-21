@@ -6357,7 +6357,7 @@ class TracesResourceTest {
     class ExperimentReferenceTest {
 
         private record TestContext(String workspaceName, String workspaceId, String projectName, UUID projectId,
-                UUID datasetId) {
+                String datasetName, UUID datasetId) {
         }
 
         private TestContext setupWorkspaceProjectDataset() {
@@ -6371,12 +6371,13 @@ class TracesResourceTest {
                     .build();
             UUID projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
 
+            var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(10);
             var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
-                    .name("dataset-" + RandomStringUtils.secure().nextAlphanumeric(10))
+                    .name(datasetName)
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
-            return new TestContext(workspaceName, workspaceId, projectName, projectId, datasetId);
+            return new TestContext(workspaceName, workspaceId, projectName, projectId, datasetName, datasetId);
         }
 
         @Test
@@ -6388,7 +6389,7 @@ class TracesResourceTest {
             // Create experiment
             var experiment = experimentResourceClient.createPartialExperiment()
                     .name("experiment")
-                    .datasetId(context.datasetId())
+                    .datasetName(context.datasetName())
                     .build();
             var experimentId = experimentResourceClient.create(experiment, API_KEY, context.workspaceName());
 
@@ -6466,19 +6467,19 @@ class TracesResourceTest {
             // Create experiments with specific names for sorting
             var experimentA = experimentResourceClient.createPartialExperiment()
                     .name("experiment-A")
-                    .datasetId(context.datasetId())
+                    .datasetName(context.datasetName())
                     .build();
             var experimentAId = experimentResourceClient.create(experimentA, API_KEY, context.workspaceName());
 
             var experimentB = experimentResourceClient.createPartialExperiment()
                     .name("experiment-B")
-                    .datasetId(context.datasetId())
+                    .datasetName(context.datasetName())
                     .build();
             var experimentBId = experimentResourceClient.create(experimentB, API_KEY, context.workspaceName());
 
             var experimentC = experimentResourceClient.createPartialExperiment()
                     .name("experiment-C")
-                    .datasetId(context.datasetId())
+                    .datasetName(context.datasetName())
                     .build();
             var experimentCId = experimentResourceClient.create(experimentC, API_KEY, context.workspaceName());
 
@@ -6575,13 +6576,13 @@ class TracesResourceTest {
             // Create two experiments
             var experiment1 = experimentResourceClient.createPartialExperiment()
                     .name("experiment-1")
-                    .datasetId(context.datasetId())
+                    .datasetName(context.datasetName())
                     .build();
             var experiment1Id = experimentResourceClient.create(experiment1, API_KEY, context.workspaceName());
 
             var experiment2 = experimentResourceClient.createPartialExperiment()
                     .name("experiment-2")
-                    .datasetId(context.datasetId())
+                    .datasetName(context.datasetName())
                     .build();
             var experiment2Id = experimentResourceClient.create(experiment2, API_KEY, context.workspaceName());
 
