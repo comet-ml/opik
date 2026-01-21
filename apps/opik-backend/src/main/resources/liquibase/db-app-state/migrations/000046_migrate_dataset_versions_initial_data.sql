@@ -10,7 +10,7 @@ SELECT
     d.id,                                    -- dataset_id
     'v1',                                    -- version_hash (version 1 identifier)
     d.workspace_id,                          -- workspace_id
-    0,                                       -- items_total (will be computed by application)
+    -1,                                      -- items_total = -1 (sentinel value indicating not yet migrated)
     0,                                       -- items_added (initial version has no delta)
     0,                                       -- items_modified (initial version has no delta)
     0,                                       -- items_deleted (initial version has no delta)

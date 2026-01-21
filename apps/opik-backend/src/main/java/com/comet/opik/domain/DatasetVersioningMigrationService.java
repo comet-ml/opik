@@ -128,7 +128,7 @@ public class DatasetVersioningMigrationService {
      * <p>
      * This migration calculates and updates the items_total field for dataset versions
      * where dataset_id = dataset_version_id (indicating they were created by the Liquibase
-     * migration) and items_total is 0.
+     * migration) and items_total is -1 (sentinel value for unmigrated versions).
      * <p>
      * The migration is safe to run multiple times and will continue from where it stopped.
      * It processes versions in batches to avoid memory issues.
@@ -151,9 +151,9 @@ public class DatasetVersioningMigrationService {
      * This method continuously processes batches until no more versions need migration.
      * Uses cursor-based pagination to iterate through all versions.
      * Each batch:
-     * 1. Finds versions where dataset_id = dataset_version_id and items_total = 0
+     * 1. Finds versions where dataset_id = dataset_version_id and items_total = -1
      * 2. Calculates item counts from ClickHouse in a single query
-     * 3. Updates MySQL with the calculated totals
+     * 3. Updates MySQL with the calculated totals (including 0 for versions with no items)
      *
      * @param batchSize number of versions to process per batch
      * @param lastSeenVersionId cursor for pagination (UUID string)
@@ -203,33 +203,32 @@ public class DatasetVersioningMigrationService {
     private Mono<Void> processBatchItemsTotals(List<DatasetVersionInfo> versions) {
         log.debug("Calculating items_total for '{}' versions", versions.size());
 
-        // Create a map from versionId to workspaceId for lookup
-        var versionToWorkspaceMap = versions.stream()
-                .collect(Collectors.toMap(
-                        DatasetVersionInfo::versionId,
-                        DatasetVersionInfo::workspaceId));
-
         // Calculate item counts from ClickHouse
         return datasetItemVersionDAO.countItemsInVersionsBatch(versions)
                 .collectList()
                 .flatMap(itemCounts -> {
-                    if (itemCounts.isEmpty()) {
-                        log.info("No items found for batch of '{}' versions", versions.size());
-                        return Mono.empty();
-                    }
+                    // Create a map of versionId -> count for versions that have items
+                    var versionCountMap = itemCounts.stream()
+                            .collect(Collectors.toMap(
+                                    DatasetVersionItemsCount::versionId,
+                                    DatasetVersionItemsCount::count));
 
-                    log.info("Updating items_total for '{}' versions in a single batch", itemCounts.size());
+                    // Build lists for all versions (including those with 0 items)
+                    List<String> workspaceIds = versions.stream()
+                            .map(DatasetVersionInfo::workspaceId)
+                            .toList();
+                    List<UUID> versionIds = versions.stream()
+                            .map(DatasetVersionInfo::versionId)
+                            .toList();
+                    List<Long> itemsTotals = versions.stream()
+                            .map(v -> versionCountMap.getOrDefault(v.versionId(), 0L))
+                            .toList();
 
-                    // Extract workspace IDs, version IDs, and totals for batch update
-                    List<String> workspaceIds = itemCounts.stream()
-                            .map(count -> versionToWorkspaceMap.get(count.versionId()))
-                            .toList();
-                    List<UUID> versionIds = itemCounts.stream()
-                            .map(DatasetVersionItemsCount::versionId)
-                            .toList();
-                    List<Long> itemsTotals = itemCounts.stream()
-                            .map(DatasetVersionItemsCount::count)
-                            .toList();
+                    long versionsWithItems = itemsTotals.stream().filter(count -> count > 0).count();
+                    long versionsWithZeroItems = itemsTotals.stream().filter(count -> count == 0).count();
+
+                    log.info("Updating items_total for '{}' versions ({} with items, {} with zero items)",
+                            versions.size(), versionsWithItems, versionsWithZeroItems);
 
                     // Update MySQL with calculated totals in a single batch
                     return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {

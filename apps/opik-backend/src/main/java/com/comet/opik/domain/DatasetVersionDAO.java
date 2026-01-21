@@ -447,7 +447,7 @@ public interface DatasetVersionDAO {
      * Finds dataset versions that need items_total migration using cursor-based pagination.
      * These are versions where:
      * - dataset_id = id (version created by Liquibase migration)
-     * - items_total = 0 (not yet calculated)
+     * - items_total = -1 (sentinel value indicating not yet migrated)
      * - id > lastSeenVersionId (for pagination)
      *
      * Returns workspace_id, dataset_id, and version_id to optimize ClickHouse queries
@@ -461,7 +461,7 @@ public interface DatasetVersionDAO {
             SELECT workspace_id, dataset_id, id AS version_id
             FROM dataset_versions
             WHERE dataset_id = id
-              AND items_total = 0
+              AND items_total = -1
               AND id > :lastSeenVersionId
             ORDER BY id
             LIMIT :limit
