@@ -109,7 +109,9 @@ const ProjectMetricsWidget: React.FunctionComponent<
     metricName === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
   const feedbackScores = widget?.config?.feedbackScores as string[] | undefined;
-  const durationMetrics = widget?.config?.durationMetrics as string[] | undefined;
+  const durationMetrics = widget?.config?.durationMetrics as
+    | string[]
+    | undefined;
   const usageMetrics = widget?.config?.usageMetrics as string[] | undefined;
   const breakdown = widget?.config?.breakdown as BreakdownConfig | undefined;
 
@@ -142,7 +144,11 @@ const ProjectMetricsWidget: React.FunctionComponent<
     }
 
     // For feedback score metrics, include the selected metric name as subMetric
-    if (isFeedbackScoreMetric && feedbackScores && feedbackScores.length === 1) {
+    if (
+      isFeedbackScoreMetric &&
+      feedbackScores &&
+      feedbackScores.length === 1
+    ) {
       return {
         ...breakdown,
         subMetric: feedbackScores[0],
@@ -181,7 +187,15 @@ const ProjectMetricsWidget: React.FunctionComponent<
     }
 
     return breakdown;
-  }, [breakdown, isFeedbackScoreMetric, feedbackScores, isDurationMetric, durationMetrics, isTokenUsageMetric, usageMetrics]);
+  }, [
+    breakdown,
+    isFeedbackScoreMetric,
+    feedbackScores,
+    isDurationMetric,
+    durationMetrics,
+    isTokenUsageMetric,
+    usageMetrics,
+  ]);
 
   const filterLineCallback = useCallback(
     (lineName: string) => {
@@ -214,7 +228,15 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
       return true;
     },
-    [feedbackScores, durationMetrics, usageMetrics, isFeedbackScoreMetric, isDurationMetric, isTokenUsageMetric, effectiveBreakdown],
+    [
+      feedbackScores,
+      durationMetrics,
+      usageMetrics,
+      isFeedbackScoreMetric,
+      isDurationMetric,
+      isTokenUsageMetric,
+      effectiveBreakdown,
+    ],
   );
 
   if (!widget) {
