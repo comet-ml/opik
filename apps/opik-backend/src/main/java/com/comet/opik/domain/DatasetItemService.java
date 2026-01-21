@@ -2128,46 +2128,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Resolves the datasetId for a delete operation.
      * If datasetId is provided, uses it directly.
-     * If only itemIds are provided, first maps them from row IDs to dataset_item_ids if needed,
-     * then resolves datasetId from any existing item.
+     * If only itemIds are provided, resolves datasetId by looking up the row IDs.
      *
      * @param datasetId the dataset ID (may be null)
-     * @param ids the item IDs to delete (may be row IDs or dataset_item_ids, may be null)
+     * @param ids the item IDs to delete (row IDs from client, may be null)
      * @return Mono emitting the resolved datasetId
      */
     private Mono<UUID> getDatasetIdOrResolveItemDatasetId(UUID datasetId, Set<UUID> ids) {
         if (datasetId != null) {
             return Mono.just(datasetId);
         } else if (CollectionUtils.isNotEmpty(ids)) {
-            // First, try to map row IDs to dataset_item_ids
+            // Map row IDs to get dataset_id directly from the mapping
             return versionDao.mapRowIdsToDatasetItemIds(ids)
-                    .collectList()
-                    .flatMap(mappings -> {
-                        Set<UUID> idsToResolve;
-                        if (mappings.isEmpty()) {
-                            // IDs are already dataset_item_ids (or don't exist as row IDs)
-                            log.debug("No row ID mappings found, treating IDs as dataset_item_ids");
-                            idsToResolve = ids;
-                        } else {
-                            // Use the mapped dataset_item_ids
-                            idsToResolve = mappings.stream()
-                                    .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)
-                                    .collect(Collectors.toSet());
-                            log.debug("Mapped '{}' row IDs to '{}' dataset_item_ids for dataset resolution",
-                                    ids.size(), idsToResolve.size());
-                        }
-
-                        // Now resolve datasetId from any existing item (not just first, in case some IDs don't exist)
-                        return Flux.fromIterable(idsToResolve)
-                                .flatMap(itemId -> versionDao.resolveDatasetIdFromItemId(itemId)
-                                        .flux()
-                                        .onErrorResume(e -> {
-                                            log.debug("Failed to resolve dataset for item '{}': {}", itemId,
-                                                    e.getMessage());
-                                            return Flux.empty();
-                                        }))
-                                .next(); // Get the first successful resolution
-                    });
+                    .map(DatasetItemVersionDAO.DatasetItemIdMapping::datasetId)
+                    .next(); // Get the first mapping's dataset_id (all should be from same dataset)
         } else {
             return Mono.error(new BadRequestException("Must provide either datasetId or itemIds"));
         }
