@@ -53,6 +53,7 @@ export interface ProjectMetricsWidget {
     spanFilters?: Filters;
     feedbackScores?: string[];
     durationMetrics?: string[];
+    usageMetrics?: string[];
     breakdown?: BreakdownConfig;
     overrideDefaults?: boolean;
   } & Record<string, unknown>;

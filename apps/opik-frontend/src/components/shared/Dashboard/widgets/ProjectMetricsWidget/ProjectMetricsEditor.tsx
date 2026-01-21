@@ -48,7 +48,9 @@ import {
 
 import get from "lodash/get";
 
-import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import useProjectMetric, { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
+import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import {
   DashboardWidget,
   ProjectMetricsWidget,
@@ -147,6 +149,7 @@ const DURATION_METRIC_OPTIONS = [
   { value: "p99", label: "P99" },
 ];
 
+
 const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const widgetData = useDashboardStore(
     (state) => state.previewWidget!,
@@ -179,6 +182,10 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     () => (config.durationMetrics as string[] | undefined) || [],
     [config.durationMetrics],
   );
+  const usageMetrics = useMemo<string[]>(
+    () => (config.usageMetrics as string[] | undefined) || [],
+    [config.usageMetrics],
+  );
 
   const breakdown = useMemo(
     () =>
@@ -188,11 +195,20 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     [config.breakdown],
   );
 
-  const globalProjectId = useDashboardStore((state) => {
+  const globalConfig = useDashboardStore((state) => {
     const config = selectMixedConfig(state);
-    return config?.projectIds?.[0];
+    return {
+      projectId: config?.projectIds?.[0],
+      dateRange: config?.dateRange ?? DEFAULT_DATE_PRESET,
+    };
   });
-  const projectId = localProjectId || globalProjectId || "";
+  const projectId = localProjectId || globalConfig.projectId || "";
+
+  // Calculate interval config for API calls (same as widget preview)
+  const { interval, intervalStart, intervalEnd } = useMemo(
+    () => calculateIntervalConfig(globalConfig.dateRange),
+    [globalConfig.dateRange],
+  );
 
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
   const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";
@@ -206,6 +222,45 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     metricType === METRIC_NAME_TYPE.TRACE_DURATION ||
     metricType === METRIC_NAME_TYPE.THREAD_DURATION ||
     metricType === METRIC_NAME_TYPE.SPAN_DURATION;
+  const isTokenUsageMetric =
+    metricType === METRIC_NAME_TYPE.TOKEN_USAGE ||
+    metricType === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
+
+  // Fetch usage metric data to extract usage key options (same API call as widget preview)
+  const { data: usageMetricData, isPending: isLoadingUsageKeys } =
+    useProjectMetric(
+      {
+        projectId,
+        metricName: metricType === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE
+          ? METRIC_NAME_TYPE.SPAN_TOKEN_USAGE
+          : METRIC_NAME_TYPE.TOKEN_USAGE,
+        interval,
+        intervalStart,
+        intervalEnd,
+      },
+      {
+        enabled: isTokenUsageMetric && !!projectId,
+      },
+    );
+
+  // Extract unique usage key names from the metric results
+  const usageKeyOptions = useMemo(() => {
+    if (!usageMetricData?.results) return [];
+
+    const uniqueNames = new Set<string>();
+    usageMetricData.results.forEach((result) => {
+      if (result.name) {
+        uniqueNames.add(result.name);
+      }
+    });
+
+    return Array.from(uniqueNames)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({
+        value: name,
+        label: name,
+      }));
+  }, [usageMetricData?.results]);
 
   // For feedback score metrics, group by is only allowed when exactly one metric is selected
   const hasExactlyOneFeedbackScoreSelected = feedbackScores.length === 1;
@@ -217,9 +272,16 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   const isGroupByDisabledForDuration =
     isDurationMetric && !hasExactlyOneDurationMetricSelected;
 
+  // For token usage metrics, group by is only allowed when exactly one metric is selected
+  const hasExactlyOneUsageMetricSelected = usageMetrics.length === 1;
+  const isGroupByDisabledForUsage =
+    isTokenUsageMetric && !hasExactlyOneUsageMetricSelected;
+
   // Combined check for group by disabled state
   const isGroupByDisabled =
-    isGroupByDisabledForFeedbackScore || isGroupByDisabledForDuration;
+    isGroupByDisabledForFeedbackScore ||
+    isGroupByDisabledForDuration ||
+    isGroupByDisabledForUsage;
 
   const isMetadataBreakdown = breakdown.field === BREAKDOWN_FIELD.METADATA;
   const hasBreakdownField = breakdown.field !== BREAKDOWN_FIELD.NONE;
@@ -262,6 +324,7 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
       spanFilters,
       feedbackScores,
       durationMetrics,
+      usageMetrics,
       breakdown,
       overrideDefaults,
     },
@@ -371,6 +434,29 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
       config: {
         ...config,
         durationMetrics: newDurationMetrics,
+        ...(shouldClearBreakdown && {
+          breakdown: { field: BREAKDOWN_FIELD.NONE },
+        }),
+      },
+    });
+
+    // Also hide the group row if breakdown is being cleared
+    if (shouldClearBreakdown) {
+      setShowGroupRow(false);
+    }
+  };
+
+  const handleUsageMetricsChange = (newUsageMetrics: string[]) => {
+    // If changing from exactly one metric to something else, clear the breakdown
+    const wasExactlyOne = usageMetrics.length === 1;
+    const isExactlyOne = newUsageMetrics.length === 1;
+    const shouldClearBreakdown =
+      wasExactlyOne && !isExactlyOne && hasBreakdownField;
+
+    updatePreviewWidget({
+      config: {
+        ...config,
+        usageMetrics: newUsageMetrics,
         ...(shouldClearBreakdown && {
           breakdown: { field: BREAKDOWN_FIELD.NONE },
         }),
@@ -539,6 +625,48 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
             />
           )}
 
+          {isTokenUsageMetric && projectId && (
+            <FormField
+              control={form.control}
+              name="usageMetrics"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, [
+                  "usageMetrics",
+                ]);
+                return (
+                  <FormItem>
+                    <FormLabel>Usage metrics</FormLabel>
+                    <FormControl>
+                      <LoadableSelectBox
+                        buttonClassName={cn("w-full", {
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                        value={field.value || []}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          handleUsageMetricsChange(value);
+                        }}
+                        options={usageKeyOptions}
+                        isLoading={isLoadingUsageKeys}
+                        placeholder="All usage metrics"
+                        multiselect
+                        showSelectAll
+                        selectAllLabel="All usage metrics"
+                      />
+                    </FormControl>
+                    <Description>
+                      Select specific usage metrics to display. Leave empty to
+                      show all usage metrics.
+                    </Description>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+          )}
+
           <ProjectWidgetFiltersSection
             control={form.control}
             fieldName={
@@ -591,7 +719,9 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
                         {...EXPLAINERS_MAP[
                           isGroupByDisabledForDuration
                             ? EXPLAINER_ID.duration_groupby_requires_single_metric
-                            : EXPLAINER_ID.feedback_score_groupby_requires_single_metric
+                            : isGroupByDisabledForUsage
+                              ? EXPLAINER_ID.usage_groupby_requires_single_metric
+                              : EXPLAINER_ID.feedback_score_groupby_requires_single_metric
                         ]}
                       />
                     </div>

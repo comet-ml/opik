@@ -35,6 +35,7 @@ export const ProjectMetricsWidgetSchema = z.object({
   spanFilters: FiltersArraySchema.optional(),
   feedbackScores: z.array(z.string()).optional(),
   durationMetrics: z.array(z.string()).optional(),
+  usageMetrics: z.array(z.string()).optional(),
   breakdown: BreakdownConfigSchema.optional(),
   overrideDefaults: z.boolean().optional(),
 });

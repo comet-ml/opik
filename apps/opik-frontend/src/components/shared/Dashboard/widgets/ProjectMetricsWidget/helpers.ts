@@ -38,6 +38,12 @@ const DURATION_LABELS: Record<string, string> = {
   p99: "P99",
 };
 
+const TOKEN_USAGE_METRIC_TYPES = [
+  METRIC_NAME_TYPE.TOKEN_USAGE,
+  METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
+];
+
+
 const calculateProjectMetricsTitle = (
   config: Record<string, unknown>,
 ): string => {
@@ -66,6 +72,15 @@ const calculateProjectMetricsTitle = (
     const percentile = widgetConfig.durationMetrics[0];
     const percentileLabel = DURATION_LABELS[percentile] || percentile.toUpperCase();
     return `${baseTitle} - ${percentileLabel}`;
+  }
+
+  // For token usage metrics with exactly one usage key selected
+  if (
+    TOKEN_USAGE_METRIC_TYPES.includes(metricType as METRIC_NAME_TYPE) &&
+    widgetConfig.usageMetrics?.length === 1
+  ) {
+    const usageKey = widgetConfig.usageMetrics[0];
+    return `${baseTitle} - ${usageKey}`;
   }
 
   return baseTitle;
