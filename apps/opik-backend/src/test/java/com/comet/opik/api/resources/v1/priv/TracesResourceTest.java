@@ -36,6 +36,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -6675,8 +6676,8 @@ class TracesResourceTest {
 
             // When: Filter by experiment1Id
             var filters = List.of(
-                    Filter.builder()
-                            .field(TraceField.EXPERIMENT_ID.getQueryParamField())
+                    TraceFilter.builder()
+                            .field(TraceField.EXPERIMENT_ID)
                             .operator(Operator.EQUAL)
                             .value(experiment1Id.toString())
                             .build());
