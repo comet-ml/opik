@@ -661,6 +661,8 @@ def _build_result_overview_table(result: Any) -> rich.table.Table:
     table.add_column()
 
     table.add_row("Optimizer:", f"[bold]{result.optimizer}[/bold]")
+    if getattr(result, "dataset_id", None):
+        table.add_row("Dataset ID:", str(result.dataset_id))
     table.add_row("Model Used:", f"{model_name}")
     table.add_row("Metric Evaluated:", f"[bold]{result.metric_name}[/bold]")
     table.add_row("Initial Score:", initial_score_str)

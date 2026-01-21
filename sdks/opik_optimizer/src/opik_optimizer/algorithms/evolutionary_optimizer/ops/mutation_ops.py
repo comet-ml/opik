@@ -1,4 +1,5 @@
-from typing import Any
+from typing import Any, Protocol
+from collections.abc import Sequence
 
 import copy
 import json
@@ -24,6 +25,19 @@ from ..types import MutationResponse
 
 logger = logging.getLogger(__name__)
 creator = _creator
+
+
+class RandomLike(Protocol):
+    def random(self) -> float: ...
+
+    def randint(self, a: int, b: int) -> int: ...
+
+    def sample(self, seq: Sequence[Any], k: int) -> list[Any]: ...
+
+    def choice(self, seq: Sequence[Any]) -> Any: ...
+
+    def shuffle(self, seq: list[Any]) -> None: ...
+
 
 _reporting_module: Any = types.ModuleType(__name__ + ".reporting")
 _reporting_module.display_error = display_error
@@ -165,7 +179,7 @@ def _word_level_mutation(
     model: str,
     model_parameters: dict[str, Any],
     prompts: PromptLibrary,
-    rng: random.Random,
+    rng: RandomLike,
 ) -> Content:
     """Perform word-level mutation, handling both string and content parts."""
     text = extract_text_from_content(msg_content)
@@ -204,7 +218,7 @@ def _word_level_mutation_prompt(
     model: str,
     model_parameters: dict[str, Any],
     prompts: PromptLibrary,
-    rng: random.Random,
+    rng: RandomLike,
 ) -> chat_prompt.ChatPrompt:
     mutated_messages: list[dict[str, Any]] = []
     for message in prompt.get_messages():
@@ -235,7 +249,7 @@ def _structural_mutation(
     model: str,
     model_parameters: dict[str, Any],
     prompts: PromptLibrary,
-    rng: random.Random,
+    rng: RandomLike,
 ) -> chat_prompt.ChatPrompt:
     """Perform structural mutation (reordering, combining, splitting)."""
     mutated_messages: list[dict[str, Any]] = []
@@ -307,7 +321,7 @@ def _semantic_mutation(
     verbose: int,
     output_style_guidance: str,
     prompts: PromptLibrary,
-    rng: random.Random,
+    rng: RandomLike,
 ) -> chat_prompt.ChatPrompt:
     """Enhanced semantic mutation with multiple strategies."""
     current_output_style_guidance = output_style_guidance

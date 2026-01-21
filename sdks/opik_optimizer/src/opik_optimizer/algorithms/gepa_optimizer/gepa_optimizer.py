@@ -170,7 +170,8 @@ class GepaOptimizer(BaseOptimizer):
         experiment_config = context.experiment_config
 
         reflection_minibatch_size = context.extra_params.get(
-            "reflection_minibatch_size", 3
+            "reflection_minibatch_size",
+            context.n_minibatch_samples or 3,
         )
         candidate_selection_strategy = context.extra_params.get(
             "candidate_selection_strategy", "pareto"
@@ -195,14 +196,35 @@ class GepaOptimizer(BaseOptimizer):
 
         input_key, output_key = helpers.infer_dataset_keys(dataset)
 
-        train_items = dataset.get_items()
-        if n_samples and 0 < n_samples < len(train_items):
-            train_items = train_items[:n_samples]
+        train_plan = self._prepare_sampling_plan(
+            dataset=dataset,
+            n_samples=n_samples,
+            phase="train",
+            seed_override=seed,
+            strategy=context.n_sample_strategy,
+        )
 
         val_source = validation_dataset or dataset
-        val_items = val_source.get_items()
-        if n_samples and 0 < n_samples < len(val_items):
-            val_items = val_items[:n_samples]
+        val_plan = self._prepare_sampling_plan(
+            dataset=val_source,
+            n_samples=n_samples,
+            phase="val",
+            seed_override=seed,
+            strategy=context.n_sample_strategy,
+        )
+
+        def _apply_plan(items: list[dict[str, Any]], plan: Any) -> list[dict[str, Any]]:
+            if not items:
+                return items
+            if plan.dataset_item_ids:
+                id_set = set(plan.dataset_item_ids)
+                return [item for item in items if item.get("id") in id_set]
+            if plan.nb_samples is not None and plan.nb_samples < len(items):
+                return items[: plan.nb_samples]
+            return items
+
+        train_items = _apply_plan(dataset.get_items(), train_plan)
+        val_items = _apply_plan(val_source.get_items(), val_plan)
 
         effective_n_samples = len(train_items)
         max_metric_calls = max_trials * effective_n_samples

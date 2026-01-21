@@ -471,6 +471,12 @@ class BaseOptimizer(ABC):
         # Create initial prompts
         initial_prompts = {name: p.copy() for name, p in optimizable_prompts.items()}
 
+        resolved_strategy = n_sample_strategy or getattr(
+            self, "n_sample_strategy", None
+        )
+        if not isinstance(resolved_strategy, str) or not resolved_strategy:
+            resolved_strategy = constants.DEFAULT_N_SAMPLE_STRATEGY
+
         # Return optimization context
         context = OptimizationContext(
             prompts=optimizable_prompts,
@@ -486,8 +492,7 @@ class BaseOptimizer(ABC):
             experiment_config=experiment_config,
             n_samples=n_samples,
             n_minibatch_samples=n_minibatch_samples,
-            n_sample_strategy=n_sample_strategy
-            or getattr(self, "n_sample_strategy", constants.DEFAULT_N_SAMPLE_STRATEGY),
+            n_sample_strategy=resolved_strategy,
             max_trials=max_trials,
             project_name=project_name,
             allow_tool_use=bool(extra_params.get("allow_tool_use", True)),
@@ -498,7 +503,7 @@ class BaseOptimizer(ABC):
 
         # Keep history default split aligned with evaluation dataset.
         self.set_default_dataset_split(dataset_split)
-        self.n_sample_strategy = context.n_sample_strategy
+        self.n_sample_strategy = resolved_strategy
         return context
 
     def _calculate_baseline(self, context: OptimizationContext) -> float:
@@ -652,6 +657,7 @@ class BaseOptimizer(ABC):
         empty_score: float | None = None,
         n_samples: int | None = None,
         n_sample_strategy: str | None = None,
+        sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems]:
         """Evaluate prompts and return both the score and EvaluationResult."""
         self.pre_trial(context, prompts)
@@ -676,6 +682,7 @@ class BaseOptimizer(ABC):
                     n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
+                    sampling_tag=sampling_tag,
                     return_evaluation_result=True,
                 )
         except Exception:
@@ -945,6 +952,26 @@ class BaseOptimizer(ABC):
             seed_override=seed_override,
             strategy=strategy,
         )
+
+    @staticmethod
+    def _build_sampling_tag(
+        *,
+        scope: str,
+        round_index: int | None = None,
+        candidate_id: str | None = None,
+        batch_index: int | None = None,
+        attempt: int | None = None,
+    ) -> str:
+        parts = [scope]
+        if round_index is not None:
+            parts.append(f"round:{round_index}")
+        if candidate_id is not None:
+            parts.append(f"candidate:{candidate_id}")
+        if batch_index is not None:
+            parts.append(f"batch:{batch_index}")
+        if attempt is not None:
+            parts.append(f"attempt:{attempt}")
+        return ":".join(parts)
 
     # ------------------------------------------------------------------
     # Hooks (subclass extension points)
@@ -1261,6 +1288,8 @@ class BaseOptimizer(ABC):
         agent: OptimizableAgent | None,
         experiment_config: dict | None,
         n_samples: int | None,
+        n_minibatch_samples: int | None,
+        n_sample_strategy: str | None,
         auto_continue: bool,
         project_name: str | None,
         optimization_id: str | None,
@@ -1627,6 +1656,7 @@ class BaseOptimizer(ABC):
         return_evaluation_result: Literal[True] = True,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
+        sampling_tag: str | None = None,
     ) -> EvaluationResult | EvaluationResultOnDictItems: ...
 
     @overload
@@ -1646,6 +1676,7 @@ class BaseOptimizer(ABC):
         return_evaluation_result: Literal[False] = False,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
+        sampling_tag: str | None = None,
     ) -> float: ...
 
     def evaluate_prompt(
@@ -1664,15 +1695,18 @@ class BaseOptimizer(ABC):
         return_evaluation_result: bool = False,
         allow_tool_use: bool | None = None,
         use_evaluate_on_dict_items: bool | None = None,
+        sampling_tag: str | None = None,
     ) -> float | EvaluationResult | EvaluationResultOnDictItems:
         sampling_seed = seed if seed is not None else self.seed
         n_threads = normalize_eval_threads(n_threads)
         if allow_tool_use is None:
             allow_tool_use = True
         if use_evaluate_on_dict_items is None:
+            # TODO(opik-sdk): remove this flag once evaluate_on_dict_items is the default path.
             use_evaluate_on_dict_items = constants.ENABLE_EVALUATE_ON_DICT_ITEMS
-
-        selection_rng = rng_utils.make_rng(sampling_seed, "candidate_selection")
+        selection_rng = rng_utils.make_rng(
+            sampling_seed, "candidate_selection", sampling_tag or ""
+        )
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
@@ -1780,11 +1814,12 @@ class BaseOptimizer(ABC):
             build_optimizer_version=_OPTIMIZER_VERSION,
         )
 
+        phase = "eval" if sampling_tag is None else f"eval:{sampling_tag}"
         sampling_plan = self._prepare_sampling_plan(
             dataset=dataset,
             n_samples=n_samples,
             dataset_item_ids=dataset_item_ids,
-            phase="eval",
+            phase=phase,
             seed_override=sampling_seed,
             strategy=n_sample_strategy,
         )

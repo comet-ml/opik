@@ -33,4 +33,5 @@ def test_render_rich_result_returns_panel() -> None:
     assert "MetaPromptOptimizer" in output
     assert "f1_score" in output
     assert "0.95" in output
+    assert "ds-456" in output
     assert "Open in Opik Dashboard" in output

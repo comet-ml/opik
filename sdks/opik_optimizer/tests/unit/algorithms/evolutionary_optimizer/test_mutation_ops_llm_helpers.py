@@ -81,14 +81,18 @@ class TestWordLevelMutation:
     ) -> None:
         content = "Hello"
         result = mutation_ops._word_level_mutation(
-            msg_content=content, model="gpt-4", model_parameters={}, prompts=evo_prompts
+            msg_content=content,
+            model="gpt-4",
+            model_parameters={},
+            prompts=evo_prompts,
+            rng=force_random(monkeypatch, random_value=0.1),
         )
         assert result == content
 
     def test_synonym_mutation_path(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        force_random(monkeypatch, random_value=0.1, randint_value=0)
+        rng = force_random(monkeypatch, random_value=0.1, randint_value=0)
         patch_get_synonym(monkeypatch, return_value="great")
 
         result = mutation_ops._word_level_mutation(
@@ -96,26 +100,28 @@ class TestWordLevelMutation:
             model="gpt-4",
             model_parameters={},
             prompts=evo_prompts,
+            rng=rng,
         )
         assert "great" in result or "world" in result
 
     def test_word_swap_mutation_path(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        force_random(monkeypatch, random_value=0.4, sample_value=[0, 2])
+        rng = force_random(monkeypatch, random_value=0.4, sample_value=[0, 2])
 
         result = mutation_ops._word_level_mutation(
             msg_content="Hello beautiful world",
             model="gpt-4",
             model_parameters={},
             prompts=evo_prompts,
+            rng=rng,
         )
         assert isinstance(result, str)
 
     def test_modify_phrase_mutation_path(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        force_random(monkeypatch, random_value=0.8, randint_value=0)
+        rng = force_random(monkeypatch, random_value=0.8, randint_value=0)
         patch_modify_phrase(monkeypatch, return_value="Hi")
 
         result = mutation_ops._word_level_mutation(
@@ -123,13 +129,14 @@ class TestWordLevelMutation:
             model="gpt-4",
             model_parameters={},
             prompts=evo_prompts,
+            rng=rng,
         )
         assert isinstance(result, str)
 
     def test_handles_content_parts(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        force_random(monkeypatch, random_value=0.1, randint_value=0)
+        rng = force_random(monkeypatch, random_value=0.1, randint_value=0)
         patch_get_synonym(monkeypatch, return_value="Greetings")
 
         content_parts: Content = cast(
@@ -148,6 +155,7 @@ class TestWordLevelMutation:
             model="gpt-4",
             model_parameters={},
             prompts=evo_prompts,
+            rng=rng,
         )
         assert isinstance(result, list)
 
@@ -158,7 +166,7 @@ class TestWordLevelMutationPrompt:
     def test_mutates_all_messages(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        force_random(monkeypatch, random_value=0.1, randint_value=0)
+        rng = force_random(monkeypatch, random_value=0.1, randint_value=0)
         patch_get_synonym(monkeypatch, return_value="modified")
 
         prompt = ChatPrompt(system="You are helpful.", user="Answer the question.")
@@ -168,6 +176,7 @@ class TestWordLevelMutationPrompt:
             model="gpt-4",
             model_parameters={},
             prompts=evo_prompts,
+            rng=rng,
         )
 
         assert isinstance(result, ChatPrompt)

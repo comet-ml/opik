@@ -31,6 +31,7 @@ def run_root_cause_analysis(
     metric: MetricFunction,
     agent: Any,
     n_samples: int | None,
+    sampling_tag: str | None = None,
 ) -> HierarchicalRootCauseAnalysis:
     with reporting.display_root_cause_analysis(
         verbose=optimizer.verbose
@@ -60,6 +61,7 @@ def run_root_cause_analysis(
                     experiment_config=context.experiment_config,
                     return_evaluation_result=True,
                     allow_tool_use=context.allow_tool_use,
+                    sampling_tag=sampling_tag,
                 )
             hierarchical_analysis = optimizer._hierarchical_root_cause_analysis(
                 train_dataset_experiment_result

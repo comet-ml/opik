@@ -89,6 +89,10 @@ def build_optuna_objective(
                 global_trials=stage_ref.get("global_trials"),
             )
             optimizer.pre_trial(context, tuned_prompts, round_handle=round_handle)
+            sampling_tag = optimizer._build_sampling_tag(
+                scope="parameter_trial",
+                candidate_id=str(trial.number),
+            )
             score = optimizer.evaluate_prompt(
                 prompt=tuned_prompts,
                 agent=agent,
@@ -99,6 +103,7 @@ def build_optuna_objective(
                 experiment_config=experiment_config,
                 n_samples=n_samples,
                 n_sample_strategy=n_sample_strategy or context.n_sample_strategy,
+                sampling_tag=sampling_tag,
             )
 
             prev_best_score = best_state["score"]

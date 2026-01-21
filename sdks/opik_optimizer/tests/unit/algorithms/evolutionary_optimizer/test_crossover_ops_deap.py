@@ -15,7 +15,7 @@ class TestDeapCrossover:
             deap_crossover,
         )
 
-        random.seed(42)
+        rng = random.Random(42)
 
         ind1 = make_deap_individual(
             {
@@ -34,7 +34,7 @@ class TestDeapCrossover:
             }
         )
 
-        child1, child2 = deap_crossover(ind1, ind2, verbose=0)
+        child1, child2 = deap_crossover(ind1, ind2, verbose=0, rng=rng)
 
         assert "main" in child1
         assert "main" in child2
@@ -46,7 +46,7 @@ class TestDeapCrossover:
             deap_crossover,
         )
 
-        random.seed(42)
+        rng = random.Random(42)
 
         ind1 = make_deap_individual({"main": [system_message("Content. More.")]})
         setattr(ind1, "prompts_metadata", {"main": {"name": "main_prompt"}})
@@ -54,7 +54,7 @@ class TestDeapCrossover:
         ind2 = make_deap_individual({"main": [system_message("Alpha. Beta.")]})
         setattr(ind2, "prompts_metadata", {"main": {"name": "main_prompt_v2"}})
 
-        child1, child2 = deap_crossover(ind1, ind2, verbose=0)
+        child1, child2 = deap_crossover(ind1, ind2, verbose=0, rng=rng)
 
         assert hasattr(child1, "prompts_metadata")
         assert hasattr(child2, "prompts_metadata")
@@ -64,7 +64,7 @@ class TestDeapCrossover:
             deap_crossover,
         )
 
-        random.seed(42)
+        rng = random.Random(42)
 
         ind1 = make_deap_individual(
             {"prompt_a": [system_message("A content. More A.")]}
@@ -73,7 +73,7 @@ class TestDeapCrossover:
             {"prompt_b": [system_message("B content. More B.")]}
         )
 
-        child1, child2 = deap_crossover(ind1, ind2, verbose=0)
+        child1, child2 = deap_crossover(ind1, ind2, verbose=0, rng=rng)
 
         assert "prompt_a" in child1
         assert "prompt_b" in child1

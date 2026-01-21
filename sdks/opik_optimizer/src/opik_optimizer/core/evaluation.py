@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import Any, overload, Literal
+from typing import Any, Literal, TypeAlias, overload
 from collections.abc import Callable
 
 import opik
@@ -18,7 +18,7 @@ try:
 except Exception:  # pragma: no cover - older Opik SDK fallback
     _evaluate_on_dict_items = None
 
-EvaluationResultType = (
+EvaluationResultType: TypeAlias = (
     opik_evaluation_result.EvaluationResult
     | opik_evaluation_result.EvaluationResultOnDictItems
 )
@@ -360,6 +360,7 @@ def _evaluate_internal(
 
     eval_metrics = [_create_metric_class(metric)]
     if use_evaluate_on_dict_items:
+        # TODO(opik-sdk): remove this branch once dict-item evaluation is the default.
         if _evaluate_on_dict_items is None:
             raise RuntimeError(
                 "opik.evaluate_on_dict_items is not available in this SDK version."

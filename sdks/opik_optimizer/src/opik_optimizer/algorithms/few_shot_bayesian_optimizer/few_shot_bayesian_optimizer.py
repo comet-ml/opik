@@ -162,6 +162,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return_evaluation_result: bool = False,
         allow_tool_use: bool = False,
         use_evaluate_on_dict_items: bool | None = None,
+        sampling_tag: str | None = None,
     ) -> float:
         """
         Override evaluate_prompt to support custom evaluated_task.
@@ -200,6 +201,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             return_evaluation_result=False,
             allow_tool_use=allow_tool_use,
             use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+            sampling_tag=sampling_tag,
         )
 
     def _evaluate_custom_task(

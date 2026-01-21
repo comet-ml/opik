@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 from typing import Any
 
 import pytest
@@ -26,22 +27,7 @@ class TestDeapMutation:
         if not hasattr(creator, "Individual"):
             creator.create("Individual", dict, fitness=None)
 
-        call_count = {"n": 0}
-
-        def controlled_random() -> float:
-            call_count["n"] += 1
-            if call_count["n"] <= 2:
-                return 0.5
-            return 0.3
-
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            controlled_random,
-        )
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.choice",
-            lambda seq: seq[0] if seq else "rephrase",
-        )
+        rng = random.Random(123)
 
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
@@ -80,6 +66,7 @@ class TestDeapMutation:
             optimization_id="opt-123",
             verbose=0,
             prompts=evo_prompts,
+            rng=rng,
         )
 
         assert hasattr(result, "keys")

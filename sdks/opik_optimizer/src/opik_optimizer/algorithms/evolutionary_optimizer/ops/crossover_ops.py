@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Protocol
 
 import copy
 import logging
@@ -29,8 +29,14 @@ sys.modules[_reporting_module.__name__] = _reporting_module
 reporting = _reporting_module
 
 
+class RandomLike(Protocol):
+    def randint(self, a: int, b: int) -> int: ...
+
+    def shuffle(self, seq: list[Any]) -> None: ...
+
+
 def _deap_crossover_chunking_strategy(
-    messages_1_str: str, messages_2_str: str, rng: random.Random
+    messages_1_str: str, messages_2_str: str, rng: RandomLike
 ) -> tuple[str, str]:
     chunks1 = [chunk.strip() for chunk in messages_1_str.split(".") if chunk.strip()]
     chunks2 = [chunk.strip() for chunk in messages_2_str.split(".") if chunk.strip()]
@@ -48,7 +54,7 @@ def _deap_crossover_chunking_strategy(
 
 
 def _deap_crossover_word_level(
-    messages_1_str: str, messages_2_str: str, rng: random.Random
+    messages_1_str: str, messages_2_str: str, rng: RandomLike
 ) -> tuple[str, str]:
     words1 = messages_1_str.split()
     words2 = messages_2_str.split()
@@ -66,7 +72,7 @@ def _deap_crossover_word_level(
 def _crossover_messages(
     messages_1: list[dict[str, Any]],
     messages_2: list[dict[str, Any]],
-    rng: random.Random,
+    rng: RandomLike,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply crossover to a single prompt's messages.
 
@@ -321,7 +327,7 @@ def llm_deap_crossover(
                         f"LLM crossover failed for prompt '{prompt_name}': {e}. Using DEAP crossover."
                     )
                     child1_messages, child2_messages = _crossover_messages(
-                        messages_1, messages_2
+                        messages_1, messages_2, random.Random()
                     )
                     child1_data[prompt_name] = child1_messages
                     child2_data[prompt_name] = child2_messages
