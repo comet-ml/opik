@@ -181,10 +181,11 @@ public interface DatasetItemVersionDAO {
     /**
      * Removes items from an existing version in ClickHouse based on filters.
      * This is used for filter-based delete operations where items matching the filters should be removed.
+     * Null or empty filter list means "delete all" (no filters = match everything).
      *
      * @param datasetId the dataset ID
      * @param versionId the version ID to remove items from
-     * @param filters the filters to match items to remove
+     * @param filters the filters to match items to remove (null or empty = delete all)
      * @param workspaceId the workspace ID
      * @return the number of items removed
      */
@@ -2191,10 +2192,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @Override
     @WithSpan
     public Mono<Long> removeItemsFromVersionByFilters(@NonNull UUID datasetId, @NonNull UUID versionId,
-            @NonNull List<DatasetItemFilter> filters, @NonNull String workspaceId) {
+            List<DatasetItemFilter> filters, @NonNull String workspaceId) {
 
-        // Empty filter list means "delete all" (no filters = match everything)
-        log.info("Removing items from version '{}' for dataset '{}' using '{}' filters (empty = delete all)",
+        // Null or empty filter list means "delete all" (no filters = match everything)
+        log.info("Removing items from version '{}' for dataset '{}' using '{}' filters (null or empty = delete all)",
                 versionId, datasetId, filters != null ? filters.size() : 0);
 
         return asyncTemplate.nonTransaction(connection -> {

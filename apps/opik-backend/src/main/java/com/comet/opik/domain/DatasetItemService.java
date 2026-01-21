@@ -2081,12 +2081,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
     /**
      * Deletes items from an existing version using filters.
      * This is used for filter-based deletions when createVersion=false.
-     * Empty filter list means "delete all" (no filters = match everything).
+     * Null or empty filter list means "delete all" (no filters = match everything).
      */
     private Mono<Void> deleteItemsFromExistingVersionByFilters(UUID datasetId, UUID versionId,
             List<DatasetItemFilter> filters, String workspaceId, String userName) {
 
-        log.info("Deleting items from existing version '{}' for dataset '{}' using filters (empty = delete all)",
+        log.info(
+                "Deleting items from existing version '{}' for dataset '{}' using filters (null or empty = delete all)",
                 versionId, datasetId);
 
         return Mono.defer(() -> {
