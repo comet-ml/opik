@@ -6,9 +6,12 @@ from dataclasses import dataclass
 from typing import Any
 import random
 
+from .. import constants
 from . import rng as rng_utils
 
-DEFAULT_STRATEGY = "epoch_shuffled"
+DEFAULT_STRATEGY = constants.DEFAULT_N_SAMPLE_STRATEGY
+
+__all__ = ["SamplingPlan", "resolve_sampling", "DEFAULT_STRATEGY"]
 
 
 @dataclass(frozen=True)

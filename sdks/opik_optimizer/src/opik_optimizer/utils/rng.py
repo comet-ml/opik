@@ -10,6 +10,7 @@ from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
+__all__ = ["make_rng", "derive_rng", "sample_ids", "shuffle", "Batch", "batched"]
 
 def _hash_seed(seed: int | None, *parts: object) -> int | None:
     """Derive a deterministic seed from a base seed and contextual tags."""
