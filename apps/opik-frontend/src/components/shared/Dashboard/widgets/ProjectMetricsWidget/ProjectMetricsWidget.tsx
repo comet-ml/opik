@@ -109,9 +109,53 @@ const ProjectMetricsWidget: React.FunctionComponent<
     metricName === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
   const feedbackScores = widget?.config?.feedbackScores as string[] | undefined;
+  const breakdown = widget?.config?.breakdown as BreakdownConfig | undefined;
+
+  // Check if this is a feedback score metric
+  const isFeedbackScoreMetric =
+    metricName === METRIC_NAME_TYPE.FEEDBACK_SCORES ||
+    metricName === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES ||
+    metricName === METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES;
+
+  // Only pass breakdown if it's enabled (field is not NONE)
+  // Also skip if METADATA is selected but no metadataKey is provided
+  // For feedback score metrics, we need exactly one metric selected to add it as subMetric
+  const effectiveBreakdown = useMemo(() => {
+    if (!breakdown || breakdown.field === BREAKDOWN_FIELD.NONE) {
+      return undefined;
+    }
+
+    // Check if METADATA field without metadataKey
+    if (
+      breakdown.field === BREAKDOWN_FIELD.METADATA &&
+      (!breakdown.metadataKey || breakdown.metadataKey.trim() === "")
+    ) {
+      return undefined;
+    }
+
+    // For feedback score metrics, include the selected metric name as subMetric
+    if (isFeedbackScoreMetric && feedbackScores && feedbackScores.length === 1) {
+      return {
+        ...breakdown,
+        subMetric: feedbackScores[0],
+      };
+    }
+
+    // For feedback score metrics without exactly one metric selected, don't apply breakdown
+    if (isFeedbackScoreMetric) {
+      return undefined;
+    }
+
+    return breakdown;
+  }, [breakdown, isFeedbackScoreMetric, feedbackScores]);
 
   const filterLineCallback = useCallback(
     (lineName: string) => {
+      // When breakdown is applied, the line names are group names (e.g., tag values),
+      // not feedback score names, so we shouldn't filter them
+      if (effectiveBreakdown) {
+        return true;
+      }
       if (
         metricName !== METRIC_NAME_TYPE.FEEDBACK_SCORES &&
         metricName !== METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES &&
@@ -121,7 +165,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       if (!feedbackScores || feedbackScores.length === 0) return true;
       return feedbackScores.includes(lineName);
     },
-    [feedbackScores, metricName],
+    [feedbackScores, metricName, effectiveBreakdown],
   );
 
   if (!widget) {
@@ -135,19 +179,6 @@ const ProjectMetricsWidget: React.FunctionComponent<
     const traceFilters = widget.config?.traceFilters as Filter[] | undefined;
     const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
     const spanFilters = widget.config?.spanFilters as Filter[] | undefined;
-    const breakdown = widget.config?.breakdown as BreakdownConfig | undefined;
-
-    // Only pass breakdown if it's enabled (field is not NONE)
-    // Also skip if METADATA is selected but no metadataKey is provided
-    const effectiveBreakdown =
-      breakdown &&
-      breakdown.field !== BREAKDOWN_FIELD.NONE &&
-      !(
-        breakdown.field === BREAKDOWN_FIELD.METADATA &&
-        (!breakdown.metadataKey || breakdown.metadataKey.trim() === "")
-      )
-        ? breakdown
-        : undefined;
 
     if (!projectId) {
       return (
