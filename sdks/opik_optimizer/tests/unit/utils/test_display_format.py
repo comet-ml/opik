@@ -5,6 +5,7 @@ import pytest
 from opik_optimizer import ChatPrompt
 from opik_optimizer.utils.display.format import format_float
 from opik_optimizer.utils.display.format import format_prompt_for_plaintext
+from tests.unit.fixtures import system_message, user_message
 
 
 @pytest.mark.parametrize(
@@ -57,17 +58,16 @@ def test_format_prompt_for_plaintext_truncates_long_content() -> None:
 def test_format_prompt_for_plaintext_handles_multimodal_content() -> None:
     prompt = ChatPrompt(
         messages=[
-            {"role": "system", "content": "Analyze image."},
-            {
-                "role": "user",
-                "content": [
+            system_message("Analyze image."),
+            user_message(
+                [
                     {"type": "text", "text": "What is this?"},
                     {
                         "type": "image_url",
                         "image_url": {"url": "data:image/png;base64,abc"},
                     },
-                ],
-            },
+                ]
+            ),
         ]
     )
     rendered = format_prompt_for_plaintext(prompt)

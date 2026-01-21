@@ -11,6 +11,8 @@ Note: Some optimizers are expected to fail initially as they don't yet
 support content_parts. These will be updated to support multimodal prompts.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 import pytest
@@ -20,7 +22,6 @@ import opik
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
-import opik_optimizer
 from opik_optimizer import (
     ChatPrompt,
     EvolutionaryOptimizer,
@@ -30,8 +31,13 @@ from opik_optimizer import (
     HierarchicalReflectiveOptimizer,
     ParameterOptimizer,
 )
-from opik_optimizer.algorithms.parameter_optimizer.ops.search_ops import (
-    ParameterSearchSpace,
+from ..utils import (
+    assert_multimodal_structure_preserved,
+    create_optimizer_config,
+    get_parameter_space,
+    run_optimizer,
+    system_message,
+    user_message,
 )
 
 
@@ -42,16 +48,6 @@ pytestmark = [
         reason="OPENAI_API_KEY environment variable required",
     ),
 ]
-
-
-# -----------------------------------------------------------------------------
-# Helpers
-# -----------------------------------------------------------------------------
-
-
-def get_driving_hazard_dataset() -> opik.Dataset:
-    """Get the driving hazard dataset for multimodal testing."""
-    return opik_optimizer.datasets.driving_hazard(test_mode=True)
 
 
 def hazard_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -66,65 +62,6 @@ def hazard_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     )
 
 
-def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
-    """
-    Create minimal optimizer configuration for fast testing.
-    """
-    base_config = {
-        "model": "openai/gpt-4o-mini",
-        "model_parameters": {
-            "temperature": 0.7,
-        },
-        "verbose": 0,
-        "seed": 42,
-        "name": f"e2e-multimodal-{optimizer_class.__name__}",
-    }
-
-    optimizer_specific: dict[type, dict[str, Any]] = {
-        EvolutionaryOptimizer: {
-            "population_size": 2,
-            "num_generations": 1,
-            "n_threads": 2,
-            "enable_llm_crossover": False,
-            "enable_moo": False,
-            "elitism_size": 1,
-        },
-        MetaPromptOptimizer: {
-            "n_threads": 2,
-            "prompts_per_round": 1,
-        },
-        FewShotBayesianOptimizer: {
-            "min_examples": 1,
-            "max_examples": 2,
-        },
-        GepaOptimizer: {
-            "n_threads": 2,
-        },
-        HierarchicalReflectiveOptimizer: {
-            "n_threads": 2,
-            "max_parallel_batches": 2,
-            "batch_size": 2,
-            "convergence_threshold": 0.01,
-        },
-        ParameterOptimizer: {
-            "n_threads": 2,
-            "default_n_trials": 1,
-            "local_search_ratio": 0.0,
-        },
-    }
-
-    return {**base_config, **optimizer_specific.get(optimizer_class, {})}
-
-
-def get_parameter_space() -> ParameterSearchSpace:
-    """Create a simple parameter space for testing."""
-    return ParameterSearchSpace.model_validate(
-        {
-            "temperature": {"type": "float", "min": 0.1, "max": 1.0},
-        }
-    )
-
-
 def create_multimodal_prompt() -> ChatPrompt:
     """Create a multimodal ChatPrompt with text and image content."""
     system_prompt = (
@@ -134,19 +71,13 @@ def create_multimodal_prompt() -> ChatPrompt:
     return ChatPrompt(
         name="multimodal-prompt",
         messages=[
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": [
+            system_message(system_prompt),
+            user_message(
+                [
                     {"type": "text", "text": "{question}"},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": "{image}",
-                        },
-                    },
-                ],
-            },
+                    {"type": "image_url", "image_url": {"url": "{image}"}},
+                ]
+            ),
         ],
         model="openai/gpt-4o-mini",
     )
@@ -168,7 +99,10 @@ def create_multimodal_prompt() -> ChatPrompt:
         ParameterOptimizer,
     ],
 )
-def test_multimodal_prompt(optimizer_class: type) -> None:
+def test_multimodal_prompt(
+    optimizer_class: type,
+    setup_driving_hazard_dataset: opik.Dataset,
+) -> None:
     """
     Test that optimizers can handle multimodal prompts with text and images.
 
@@ -182,35 +116,22 @@ def test_multimodal_prompt(optimizer_class: type) -> None:
     # Create multimodal prompt
     original_prompt = create_multimodal_prompt()
 
-    # Get multimodal dataset
-    dataset = get_driving_hazard_dataset()
+    # Get multimodal dataset (created once per session via conftest)
+    dataset = setup_driving_hazard_dataset
 
     # Create optimizer with minimal config
-    config = create_optimizer_config(optimizer_class)
+    config = create_optimizer_config(optimizer_class, max_tokens=5000, verbose=0)
     optimizer = optimizer_class(**config)
-
-    gepa_kwargs: dict[str, Any] = {}
-    if optimizer_class == GepaOptimizer:
-        gepa_kwargs["reflection_minibatch_size"] = 1
-    # Run optimization - ParameterOptimizer uses optimize_parameter
-    if optimizer_class == ParameterOptimizer:
-        results = optimizer.optimize_parameter(
-            prompt=original_prompt,
-            dataset=dataset,
-            metric=hazard_metric,
-            parameter_space=get_parameter_space(),
-            n_samples=1,
-            max_trials=1,
-        )
-    else:
-        results = optimizer.optimize_prompt(
-            dataset=dataset,
-            metric=hazard_metric,
-            prompt=original_prompt,
-            n_samples=1,
-            max_trials=1,
-            **gepa_kwargs,
-        )
+    results = run_optimizer(
+        optimizer_class=optimizer_class,
+        optimizer=optimizer,
+        prompt=original_prompt,
+        dataset=dataset,
+        metric=hazard_metric,
+        parameter_space=get_parameter_space(),
+        n_samples=1,
+        max_trials=1,
+    )
 
     # Validate results structure
     assert results.optimizer == optimizer_class.__name__, (
@@ -221,46 +142,13 @@ def test_multimodal_prompt(optimizer_class: type) -> None:
     optimized_prompt = results.prompt
 
     if isinstance(optimized_prompt, ChatPrompt):
-        optimized_messages = optimized_prompt.get_messages()
+        assert_multimodal_structure_preserved(original_prompt, optimized_prompt)
     elif isinstance(optimized_prompt, list):
-        optimized_messages = optimized_prompt
+        # Some algorithms may return a list[dict] for prompts.
+        # Re-wrap to use shared assertions and keep behavior identical.
+        wrapped = ChatPrompt(messages=optimized_prompt)
+        assert_multimodal_structure_preserved(original_prompt, wrapped)
     else:
         pytest.fail(f"Unexpected prompt type: {type(optimized_prompt)}")
-
-    assert len(optimized_messages) > 0, "Optimized prompt should have messages"
-
-    # Verify multimodal structure is preserved
-    has_multimodal_content = False
-    for i, msg in enumerate(optimized_messages):
-        assert isinstance(msg, dict), f"Message {i} should be dict"
-        assert "role" in msg, f"Message {i} should have 'role'"
-        assert "content" in msg, f"Message {i} should have 'content'"
-
-        content = msg.get("content")
-        if isinstance(content, list):
-            has_multimodal_content = True
-
-            # Verify content parts structure
-            for part in content:
-                assert isinstance(part, dict), "Content part should be dict"
-                assert "type" in part, "Content part should have 'type'"
-
-                if part["type"] == "image_url":
-                    assert "image_url" in part, "Image part should have 'image_url'"
-                    assert isinstance(part["image_url"], dict), (
-                        "image_url should be dict"
-                    )
-                    assert "url" in part["image_url"], "image_url should have 'url'"
-
-                    # Verify placeholder is preserved
-                    url = part["image_url"]["url"]
-                    assert "{" in url and "}" in url, (
-                        f"Image URL placeholder not preserved: {url}"
-                    )
-
-    assert has_multimodal_content, (
-        "Optimized prompt should preserve multimodal content structure. "
-        "The optimizer may not support content_parts yet."
-    )
 
     print(f"✅ {optimizer_class.__name__}: Multimodal prompt - PASSED")

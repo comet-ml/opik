@@ -8,6 +8,7 @@ import pytest
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.core.results import OptimizationResult
+from tests.unit.fixtures import system_message, user_message
 
 
 class TestOptimizationResultRich:
@@ -59,17 +60,16 @@ class TestOptimizationResultRich:
         result = OptimizationResult(
             prompt=ChatPrompt(
                 messages=[
-                    {"role": "system", "content": "Analyze."},
-                    {
-                        "role": "user",
-                        "content": [
+                    system_message("Analyze."),
+                    user_message(
+                        [
                             {"type": "text", "text": "What is this?"},
                             {
                                 "type": "image_url",
                                 "image_url": {"url": "data:image/png;base64,abc"},
                             },
-                        ],
-                    },
+                        ]
+                    ),
                 ]
             ),
             score=0.85,

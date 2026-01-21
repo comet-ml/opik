@@ -1,9 +1,9 @@
 """
-Small helpers for constructing chat message dicts in tests.
+Small helpers for constructing chat message dicts in e2e tests.
 
 These reduce boilerplate like:
     {"role": "system", "content": "..."}
-and make intent clearer at call sites.
+and make intent clearer at call sites (especially for multimodal content).
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ Message = dict[str, Any]
 
 
 def role_only(role: str, **extra: Any) -> Message:
-    """Create a message dict containing only a role (plus optional extra keys)."""
     return {"role": role, **extra}
 
 
@@ -32,3 +31,4 @@ def assistant_message(content: Any, **extra: Any) -> Message:
 
 def tool_message(content: Any, **extra: Any) -> Message:
     return {"role": "tool", "content": content, **extra}
+

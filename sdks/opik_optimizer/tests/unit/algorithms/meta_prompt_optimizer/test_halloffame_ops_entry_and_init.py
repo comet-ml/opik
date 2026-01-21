@@ -8,6 +8,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import (
     HallOfFameEntry,
     PromptHallOfFame,
 )
+from tests.unit.fixtures import system_message, user_message
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -18,8 +19,8 @@ class TestHallOfFameEntry:
     def test_stores_required_fields(self) -> None:
         """Should store all required fields correctly."""
         messages = [
-            {"role": "system", "content": "Be helpful."},
-            {"role": "user", "content": "{question}"},
+            system_message("Be helpful."),
+            user_message("{question}"),
         ]
 
         entry = HallOfFameEntry(

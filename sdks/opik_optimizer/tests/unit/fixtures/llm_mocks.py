@@ -69,10 +69,11 @@ def create_structured_response(
         from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
             CandidatePromptsResponse
         )
+        from tests.unit.fixtures import system_message
 
         response = create_structured_response(
             CandidatePromptsResponse,
-            candidates=[{"role": "system", "content": "New prompt"}]
+            candidates=[system_message("New prompt")]
         )
     """
     return model_class(**fields)

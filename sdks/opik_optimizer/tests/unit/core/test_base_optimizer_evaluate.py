@@ -24,6 +24,7 @@ from tests.unit.test_helpers import (
     make_optimization_context,
 )
 from collections.abc import Callable
+from tests.unit.fixtures import user_message
 
 
 @pytest.mark.parametrize(
@@ -57,7 +58,7 @@ def test_evaluate_prompt_selection_policies(
 
     prompt = chat_prompt.ChatPrompt(
         name="p",
-        messages=[{"role": "user", "content": "{input}"}],
+        messages=[user_message("{input}")],
         model_parameters=model_params,
     )
 

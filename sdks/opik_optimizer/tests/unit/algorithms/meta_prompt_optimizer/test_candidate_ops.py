@@ -27,6 +27,7 @@ from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers impor
     make_system_prompt_json,
 )
 from tests.unit.fixtures import system_message, user_message
+from tests.unit.fixtures import role_only
 from tests.unit.test_helpers import make_optimization_context
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
@@ -45,6 +46,37 @@ def _assert_single_prompt(result: dict[str, Any]) -> dict[str, Any]:
     return result["prompts"][0]
 
 
+METRIC_LEAKAGE_PATTERNS = [
+    "f1 score",
+    "f1-score",
+    "token-level",
+    "exact match",
+    "bleu",
+    "meteor",
+    "rogue",
+]
+
+DATASET_LEAKAGE_PATTERNS = [
+    "supporting_facts",
+    "supporting facts",
+    "answer field",
+    "context field",
+    "question field",
+    "training data",
+]
+
+EVALUATION_LEAKAGE_PATTERNS = [
+    "Match the ground truth exactly.",
+    "Compare against the gold standard.",
+    "Optimize for the evaluation metric.",
+    "Focus on the scoring function.",
+]
+
+BENCHMARK_DATASET_NAMES = [
+    "hotpotqa",
+]
+
+
 class TestSanitizeGeneratedPrompts:
     """Tests for sanitize_generated_prompts function."""
 
@@ -58,39 +90,33 @@ class TestSanitizeGeneratedPrompts:
         kept = _assert_single_prompt(result)
         assert "accuracy_score" not in kept["prompt"][0]["content"]
 
-    def test_removes_prompts_with_dataset_references(self) -> None:
-        """Should remove prompts referencing dataset-specific terms."""
-        result = _sanitize_system_prompts(
-            ["Use the supporting_facts field to answer.", "Answer questions clearly."]
-        )
-
+    @pytest.mark.parametrize("pattern", METRIC_LEAKAGE_PATTERNS)
+    def test_removes_metric_patterns(self, pattern: str) -> None:
+        """Should remove prompts containing common metric patterns."""
+        result = _sanitize_system_prompts([f"Optimize for {pattern}.", "Clean prompt."])
         kept = _assert_single_prompt(result)
-        assert "supporting_facts" not in kept["prompt"][0]["content"]
+        assert "Clean prompt" in kept["prompt"][0]["content"]
 
-    def test_removes_prompts_with_evaluation_terms(self) -> None:
-        """Should remove prompts referencing evaluation-specific terms."""
-        test_cases = [
-            "Match the ground truth exactly.",
-            "Compare against the gold standard.",
-            "Optimize for the evaluation metric.",
-            "Focus on the scoring function.",
-        ]
+    @pytest.mark.parametrize("pattern", DATASET_LEAKAGE_PATTERNS)
+    def test_removes_dataset_patterns(self, pattern: str) -> None:
+        """Should remove prompts containing dataset-specific patterns."""
+        result = _sanitize_system_prompts([f"Use the {pattern}.", "Clean prompt."])
+        kept = _assert_single_prompt(result)
+        assert "Clean prompt" in kept["prompt"][0]["content"]
 
-        for content in test_cases:
-            result = _sanitize_system_prompts(
-                [content, "Safe prompt."], metric_name="test_metric"
-            )
-            assert len(result["prompts"]) == 1, f"Failed for: {content}"
+    @pytest.mark.parametrize("content", EVALUATION_LEAKAGE_PATTERNS)
+    def test_removes_evaluation_terms(self, content: str) -> None:
+        """Should remove prompts referencing evaluation/scoring terms."""
+        result = _sanitize_system_prompts([content, "Safe prompt."], metric_name="test_metric")
+        kept = _assert_single_prompt(result)
+        assert "Safe prompt" in kept["prompt"][0]["content"]
 
-    def test_removes_prompts_with_common_benchmark_names(self) -> None:
+    @pytest.mark.parametrize("dataset_name", BENCHMARK_DATASET_NAMES)
+    def test_removes_common_benchmark_names(self, dataset_name: str) -> None:
         """Should remove prompts referencing common benchmark dataset names."""
-        benchmark_names = ["hotpotqa"]
-
-        for name in benchmark_names:
-            result = _sanitize_system_prompts(
-                [f"Answer like in {name}.", "Be helpful."]
-            )
-            assert len(result["prompts"]) == 1, f"Failed for: {name}"
+        result = _sanitize_system_prompts([f"Answer like in {dataset_name}.", "Be helpful."])
+        kept = _assert_single_prompt(result)
+        assert "Be helpful" in kept["prompt"][0]["content"]
 
     def test_case_insensitive_matching(self) -> None:
         """Should match patterns case-insensitively."""
@@ -128,7 +154,7 @@ class TestSanitizeGeneratedPrompts:
         """Should handle prompts with missing content gracefully."""
         prompt_json = {
             "prompts": [
-                {"prompt": [{"role": "system"}]},  # No content field
+                {"prompt": [role_only("system")]},  # No content field
                 {"prompt": [system_message("Valid.")]},
             ]
         }
@@ -292,45 +318,6 @@ class TestAgentMetadata:
 
         assert meta.improvement_focus is None
         assert meta.reasoning is None
-
-
-class TestDataLeakagePatterns:
-    """Focused tests for specific data leakage patterns."""
-
-    @pytest.mark.parametrize(
-        "pattern",
-        [
-            "f1 score",
-            "f1-score",
-            "token-level",
-            "exact match",
-            "bleu",
-            "meteor",
-            "rogue",
-        ],
-    )
-    def test_removes_metric_patterns(self, pattern: str) -> None:
-        """Should remove prompts containing common metric patterns."""
-        result = _sanitize_system_prompts([f"Optimize for {pattern}.", "Clean prompt."])
-        kept = _assert_single_prompt(result)
-        assert "Clean prompt" in kept["prompt"][0]["content"]
-
-    @pytest.mark.parametrize(
-        "pattern",
-        [
-            "supporting_facts",
-            "supporting facts",
-            "answer field",
-            "context field",
-            "question field",
-            "training data",
-        ],
-    )
-    def test_removes_dataset_patterns(self, pattern: str) -> None:
-        """Should remove prompts containing dataset-specific patterns."""
-        result = _sanitize_system_prompts([f"Use the {pattern}.", "Clean prompt."])
-        kept = _assert_single_prompt(result)
-        assert "Clean prompt" in kept["prompt"][0]["content"]
 
 
 def test_history_builder_assigns_trial_indices() -> None:

@@ -178,5 +178,7 @@ def test_parse_llm_messages_handles_model_dump() -> None:
 
 
 def test_parse_llm_messages_handles_json_string() -> None:
-    payload = '[{"role": "system", "content": "hi"}]'
+    import json
+
+    payload = json.dumps([system_message("hi")])
     assert helpers.parse_llm_messages(payload) == [system_message("hi")]

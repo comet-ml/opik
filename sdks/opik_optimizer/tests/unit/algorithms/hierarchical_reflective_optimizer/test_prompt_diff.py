@@ -5,6 +5,7 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer.reporting impor
 from tests.unit.fixtures import (
     Message,
     assistant_message,
+    role_only,
     system_message,
     tool_message,
     user_message,
@@ -243,8 +244,8 @@ class TestComputeMessageDiffOrder:
     def test_missing_content_defaults_to_empty_string(self) -> None:
         """Test that messages without 'content' key default to empty string."""
         # Arrange
-        initial_messages = [{"role": "system"}]
-        optimized_messages = [{"role": "system"}]
+        initial_messages = [role_only("system")]
+        optimized_messages = [role_only("system")]
 
         # Act
         result = compute_message_diff_order(initial_messages, optimized_messages)

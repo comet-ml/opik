@@ -5,6 +5,8 @@ This module provides a simple multi-prompt agent that can be used
 to test multi-prompt optimization across all optimizers.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 import litellm
@@ -51,6 +53,8 @@ class MultiPromptTestAgent(OptimizableAgent):
         Returns:
             Final response string
         """
+        _ = allow_tool_use
+
         tracked_completion = track_completion()(litellm.completion)
 
         # Step 1: Analyze the input
@@ -84,3 +88,4 @@ class MultiPromptTestAgent(OptimizableAgent):
         )
 
         return respond_response.choices[0].message.content
+

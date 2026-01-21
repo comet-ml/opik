@@ -33,6 +33,7 @@ from .message_builders import (
     user_message,
     assistant_message,
     tool_message,
+    role_only,
 )
 
 __all__ = [
@@ -51,4 +52,5 @@ __all__ = [
     "user_message",
     "assistant_message",
     "tool_message",
+    "role_only",
 ]

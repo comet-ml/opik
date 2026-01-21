@@ -9,7 +9,6 @@ Tests verify that all prompt-focused optimizers:
 """
 
 import os
-from typing import Any
 
 import pytest
 
@@ -29,6 +28,7 @@ from ..utils import (
     create_optimizer_config,
     get_parameter_space,
     levenshtein_metric,
+    run_optimizer,
 )
 
 
@@ -114,30 +114,17 @@ def test_multi_prompt_with_agent(
     )
     optimizer = optimizer_class(**config)
 
-    gepa_kwargs: dict[str, Any] = {}
-    if optimizer_class == GepaOptimizer:
-        gepa_kwargs["reflection_minibatch_size"] = 1
-    # Run optimization - ParameterOptimizer uses optimize_parameter
-    if optimizer_class == ParameterOptimizer:
-        results = optimizer.optimize_parameter(
-            prompt=original_prompts,
-            dataset=dataset,
-            metric=levenshtein_metric,
-            parameter_space=get_parameter_space(),
-            agent=agent,
-            n_samples=1,
-            max_trials=1,
-        )
-    else:
-        results = optimizer.optimize_prompt(
-            dataset=dataset,
-            metric=levenshtein_metric,
-            prompt=original_prompts,
-            agent=agent,
-            n_samples=1,
-            max_trials=1,
-            **gepa_kwargs,
-        )
+    results = run_optimizer(
+        optimizer_class=optimizer_class,
+        optimizer=optimizer,
+        prompt=original_prompts,
+        dataset=dataset,
+        metric=levenshtein_metric,
+        agent=agent,
+        parameter_space=get_parameter_space(),
+        n_samples=1,
+        max_trials=1,
+    )
 
     # Validate results structure
     assert results.optimizer == optimizer_class.__name__, (

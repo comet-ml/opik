@@ -15,7 +15,7 @@ from .mock_tools import (
     SEARCH_TOOL,
     WEATHER_TOOL,
 )
-from .test_agent import MultiPromptTestAgent
+from .agent import MultiPromptTestAgent
 from .assertions import (
     assert_tools_preserved,
     assert_prompt_changed,
@@ -27,6 +27,15 @@ from .config import (
     get_parameter_space,
     levenshtein_metric,
 )
+from .message_builders import (
+    Message,
+    role_only,
+    system_message,
+    user_message,
+    assistant_message,
+    tool_message,
+)
+from .run_helpers import run_optimizer
 
 __all__ = [
     # Mock tools
@@ -47,4 +56,13 @@ __all__ = [
     "create_optimizer_config",
     "get_parameter_space",
     "levenshtein_metric",
+    # Message builders
+    "Message",
+    "role_only",
+    "system_message",
+    "user_message",
+    "assistant_message",
+    "tool_message",
+    # Run helpers
+    "run_optimizer",
 ]

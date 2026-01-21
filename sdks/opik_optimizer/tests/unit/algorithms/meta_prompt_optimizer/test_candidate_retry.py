@@ -22,6 +22,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.types import (
 )
 from opik_optimizer.core.llm_calls import StructuredOutputParsingError
 from opik_optimizer.core.results import OptimizationRound
+from tests.unit.fixtures import system_message, user_message
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -41,8 +42,8 @@ def _build_prompt_candidate() -> PromptCandidatesResponse:
         prompts=[
             {
                 "prompt": [
-                    {"role": "system", "content": "s"},
-                    {"role": "user", "content": "u"},
+                    system_message("s"),
+                    user_message("u"),
                 ]
             }
         ]

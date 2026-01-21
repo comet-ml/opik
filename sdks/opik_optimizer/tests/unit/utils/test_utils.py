@@ -73,10 +73,7 @@ def test_get_optimization_run_url_by_id(monkeypatch: MonkeyPatch) -> None:
 
 def test_json_to_dict_parses_raw_json_list() -> None:
     """Ensure json_to_dict handles plain JSON arrays of chat messages."""
-    payload = """[
-        {"role": "system", "content": "Be concise."},
-        {"role": "user", "content": "Question"}
-    ]"""
+    payload = json.dumps([system_message("Be concise."), user_message("Question")])
 
     result = json_to_dict(payload)
 
@@ -88,11 +85,9 @@ def test_json_to_dict_parses_raw_json_list() -> None:
 
 def test_json_to_dict_strips_json_code_block() -> None:
     """Ensure json_to_dict trims ```json fenced responses before parsing."""
-    payload = """```json
-    [
-        {"role": "assistant", "content": "Sure"}
-    ]
-    ```"""
+    payload = f"""```json
+{json.dumps([assistant_message("Sure")])}
+```"""
 
     result = json_to_dict(payload)
 
@@ -106,7 +101,7 @@ def test_json_to_dict_handles_python_literal(
     # Clear any leftover output from previous tests (e.g., optimizer cleanup logging)
     capsys.readouterr()
 
-    payload = """[{'role': 'system', 'content': 'Do not forget to cite sources.'}]"""
+    payload = repr([system_message("Do not forget to cite sources.")])
 
     result = json_to_dict(payload)
 
@@ -129,9 +124,9 @@ def test_json_to_dict_returns_none_on_unparseable() -> None:
 
 def test_json_to_dict_handles_code_block_without_json_tag() -> None:
     """Test json_to_dict handles code blocks without json tag."""
-    payload = """```
-    [{"role": "user", "content": "Test"}]
-    ```"""
+    payload = f"""```
+{json.dumps([user_message("Test")])}
+```"""
     result = json_to_dict(payload)
     assert result == [user_message("Test")]
 

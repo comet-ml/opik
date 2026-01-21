@@ -22,6 +22,7 @@ from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.core.state import AlgorithmResult
 from tests.unit.test_helpers import make_mock_dataset
 from tests.unit.fixtures.assertions import assert_baseline_early_stop
+from tests.unit.fixtures import system_message
 
 
 @pytest.fixture
@@ -29,7 +30,7 @@ def simple_chat_prompt() -> chat_prompt.ChatPrompt:
     """Create a simple chat prompt for testing."""
     return chat_prompt.ChatPrompt(
         name="test_prompt",
-        messages=[{"role": "system", "content": "You are a helpful assistant."}],
+        messages=[system_message("You are a helpful assistant.")],
     )
 
 
