@@ -90,36 +90,35 @@ public class DatasetVersioningMigrationService {
      * <p>
      * This method double-checks if the dataset still needs migration (in case another
      * thread migrated it while waiting for the lock), then performs the migration.
-     * The entire migration runs in a single transaction.
+     * The migration runs reactively without blocking.
      *
      * @param datasetId   the dataset ID
      * @param workspaceId the workspace ID
      * @return a Mono that completes when migration is done
      */
     private Mono<Void> performLazyMigration(UUID datasetId, String workspaceId) {
-        return Mono.<Void>fromCallable(() -> {
-            // Run the entire migration in a single WRITE transaction
+        return Mono.fromCallable(() -> {
+            // Double-check if dataset still needs migration in a transaction
             return template.inTransaction(WRITE, handle -> {
-                // Double-check if dataset still needs migration
                 var dao = handle.attach(DatasetVersionDAO.class);
-                long count = dao.countByDatasetId(datasetId, workspaceId);
-
-                if (count > 0) {
-                    // Another thread already migrated this dataset
-                    log.debug("Dataset '{}' was already migrated by another thread", datasetId);
-                    return null;
-                }
-
-                log.info("Starting lazy migration for dataset '{}' in a single transaction", datasetId);
-
-                // Execute the reactive migration chain and block within the transaction
-                // This ensures all operations run in this single transaction
-                migrateSingleDataset(datasetId, workspaceId).block();
-
-                log.info("Successfully completed lazy migration for dataset '{}'", datasetId);
-                return null;
+                return dao.countByDatasetId(datasetId, workspaceId);
             });
-        }).subscribeOn(Schedulers.boundedElastic());
+        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(count -> {
+                    if (count > 0) {
+                        // Another thread already migrated this dataset
+                        log.debug("Dataset '{}' was already migrated by another thread", datasetId);
+                        return Mono.empty();
+                    }
+
+                    log.info("Starting lazy migration for dataset '{}'", datasetId);
+
+                    // Execute the reactive migration chain without blocking
+                    return migrateSingleDataset(datasetId, workspaceId)
+                            .doOnSuccess(unused -> log.info("Successfully completed lazy migration for dataset '{}'",
+                                    datasetId));
+                });
     }
 
     private static final Duration DEFAULT_LOCK_TIMEOUT = Duration.ofSeconds(30);
