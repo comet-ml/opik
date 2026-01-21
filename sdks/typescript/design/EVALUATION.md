@@ -131,7 +131,7 @@ interface EvaluateOptions<T> {
 
 type EvaluationTask<T> = (
   datasetItem: T
-) => Promise<{ output: string; [key: string]: unknown }>;
+) => Promise<Record<string, unknown>> | Record<string, unknown>;
 ```
 
 **Usage**:
@@ -360,9 +360,9 @@ import { Contains } from "opik/evaluation/metrics";
 const metric = new Contains();
 const result = metric.score({
   output: "The answer is 42",
-  expected: "42",
+  substring: "42",
 });
-// { name: "contains_metric", value: 1.0 }
+// { name: "contains", value: 1.0 }
 ```
 
 #### ExactMatch
@@ -602,13 +602,10 @@ export abstract class OpikBaseModel {
 
 ```typescript
 type SupportedModelId =
-  | "gpt-4o"
-  | "gpt-4o-mini"
-  | "gpt-4-turbo"
-  | "claude-3-5-sonnet"
-  | "claude-3-opus"
-  | "gemini-1.5-pro"
-  | "gemini-1.5-flash";
+  // OpenAI models (e.g. "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "o1","o3-mini", etc.)
+  // Anthropic Claude models (e.g. "claude-3-5-sonnet", "claude-3-5-sonnet-latest", "claude-3-opus")
+  // Google Gemini (e.g. "gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-flash")
+  string;
 ```
 
 ### Model Resolution
