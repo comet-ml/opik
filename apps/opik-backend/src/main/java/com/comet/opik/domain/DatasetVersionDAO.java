@@ -417,15 +417,18 @@ public interface DatasetVersionDAO {
             UPDATE dataset_versions
             SET items_total = :items_total,
                 last_updated_at = NOW()
-            WHERE id = :version_id
+            WHERE workspace_id = :workspace_id
+              AND id = :version_id
             """)
-    void updateItemsTotal(@Bind("version_id") UUID versionId,
+    void updateItemsTotal(@Bind("workspace_id") String workspaceId,
+            @Bind("version_id") UUID versionId,
             @Bind("items_total") long itemsTotal);
 
     /**
      * Batch update items_total for multiple dataset versions.
      * Uses JDBI's @SqlBatch to execute multiple updates efficiently in a single batch.
      *
+     * @param workspaceIds list of workspace IDs (must match versionIds order and size)
      * @param versionIds list of version IDs to update
      * @param itemsTotals list of items_total values (must match versionIds order and size)
      */
@@ -433,9 +436,11 @@ public interface DatasetVersionDAO {
             UPDATE dataset_versions
             SET items_total = :items_total,
                 last_updated_at = NOW()
-            WHERE id = :version_id
+            WHERE workspace_id = :workspace_id
+              AND id = :version_id
             """)
-    void batchUpdateItemsTotal(@Bind("version_id") List<UUID> versionIds,
+    void batchUpdateItemsTotal(@Bind("workspace_id") List<String> workspaceIds,
+            @Bind("version_id") List<UUID> versionIds,
             @Bind("items_total") List<Long> itemsTotals);
 
     /**

@@ -16,6 +16,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -206,6 +207,12 @@ public class DatasetVersioningMigrationService {
     private Mono<Void> processBatchItemsTotals(List<DatasetVersionInfo> versions) {
         log.debug("Calculating items_total for '{}' versions", versions.size());
 
+        // Create a map from versionId to workspaceId for lookup
+        var versionToWorkspaceMap = versions.stream()
+                .collect(Collectors.toMap(
+                        DatasetVersionInfo::versionId,
+                        DatasetVersionInfo::workspaceId));
+
         // Calculate item counts from ClickHouse
         return datasetItemVersionDAO.countItemsInVersionsBatch(versions)
                 .collectList()
@@ -217,7 +224,10 @@ public class DatasetVersioningMigrationService {
 
                     log.info("Updating items_total for '{}' versions in a single batch", itemCounts.size());
 
-                    // Extract version IDs and totals for batch update
+                    // Extract workspace IDs, version IDs, and totals for batch update
+                    List<String> workspaceIds = itemCounts.stream()
+                            .map(count -> versionToWorkspaceMap.get(count.versionId()))
+                            .toList();
                     List<UUID> versionIds = itemCounts.stream()
                             .map(DatasetVersionItemsCount::versionId)
                             .toList();
@@ -228,7 +238,7 @@ public class DatasetVersioningMigrationService {
                     // Update MySQL with calculated totals in a single batch
                     return Mono.fromRunnable(() -> template.inTransaction(WRITE, handle -> {
                         var dao = handle.attach(DatasetVersionDAO.class);
-                        dao.batchUpdateItemsTotal(versionIds, itemsTotals);
+                        dao.batchUpdateItemsTotal(workspaceIds, versionIds, itemsTotals);
                         log.debug("Batch updated '{}' versions with items_total", versionIds.size());
                         return null;
                     })).subscribeOn(Schedulers.boundedElastic()).then();
@@ -326,7 +336,7 @@ public class DatasetVersioningMigrationService {
                     return Mono.<Void>fromCallable(() -> {
                         template.inTransaction(WRITE, handle -> {
                             handle.attach(DatasetVersionDAO.class)
-                                    .updateItemsTotal(versionId, count);
+                                    .updateItemsTotal(workspaceId, versionId, count);
                             return null;
                         });
                         return null;
