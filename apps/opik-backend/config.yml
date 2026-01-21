@@ -844,7 +844,7 @@ datasetVersioningMigration:
   # Default: false
   # Description: Whether to enable lazy migration (migrate datasets on first access)
   lazyEnabled: ${DATASET_VERSIONING_MIGRATION_LAZY_ENABLED:-"false"}
-  # Default: false
+  # Default: true
   # Description: Whether to run the items_total migration on startup
   # Set to true to enable the migration, false to disable after completion
   # This migration calculates and updates the items_total field for dataset versions

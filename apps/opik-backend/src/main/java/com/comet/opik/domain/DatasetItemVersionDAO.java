@@ -1158,27 +1158,31 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String SELECT_COLUMNS_BY_VERSION = """
             SELECT
-                mapFromArrays(
-                    groupArray(key),
-                    groupArray(types)
+                arrayFold(
+                    (acc, x) -> mapFromArrays(
+                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
+                    ),
+                    arrayDistinct(
+                        arrayFlatten(
+                            groupArray(
+                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
+                            )
+                        )
+                    ),
+                    CAST(map(), 'Map(String, Array(String))')
                 ) AS columns
             FROM (
                 SELECT
-                    key,
-                    arrayDistinct(groupArray(type)) AS types
-                FROM (
-                    SELECT
-                        id,
-                        column_types
-                    FROM dataset_item_versions FINAL
-                    WHERE dataset_id = :datasetId
-                    AND dataset_version_id = :versionId
-                    AND workspace_id = :workspace_id
-                ) AS lastRows
-                ARRAY JOIN mapKeys(column_types) AS key
-                ARRAY JOIN column_types[key] AS type
-                GROUP BY key
-            )
+                    id,
+                    data
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ) AS lastRows
             """;
 
     private static final String SELECT_ITEM_ID_MAPPING_BY_ROW_IDS = """
