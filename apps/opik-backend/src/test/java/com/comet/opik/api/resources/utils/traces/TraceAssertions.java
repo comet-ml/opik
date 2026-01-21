@@ -99,6 +99,7 @@ public class TraceAssertions {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.DURATION, it -> it.toBuilder().duration(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.VISIBILITY_MODE, it -> it.toBuilder().visibilityMode(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.PROVIDERS, it -> it.toBuilder().providers(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.EXPERIMENT, it -> it.toBuilder().experiment(null).build());
     }
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {

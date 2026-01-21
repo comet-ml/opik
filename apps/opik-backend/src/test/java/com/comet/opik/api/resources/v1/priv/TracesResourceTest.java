@@ -6464,21 +6464,22 @@ class TracesResourceTest {
             // Given: Create workspace, project, and dataset
             var context = setupWorkspaceProjectDataset();
 
-            // Create experiments with specific names for sorting
+            // Create experiments with specific names for sorting (using random suffix to avoid conflicts)
+            var randomSuffix = RandomStringUtils.secure().nextAlphanumeric(5);
             var experimentA = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("A-experiment")
+                    .name("A-experiment-" + randomSuffix)
                     .datasetId(context.datasetId())
                     .build();
             var experimentAId = experimentResourceClient.create(experimentA, API_KEY, context.workspaceName());
 
             var experimentB = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("B-experiment")
+                    .name("B-experiment-" + randomSuffix)
                     .datasetId(context.datasetId())
                     .build();
             var experimentBId = experimentResourceClient.create(experimentB, API_KEY, context.workspaceName());
 
             var experimentC = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .name("C-experiment")
+                    .name("C-experiment-" + randomSuffix)
                     .datasetId(context.datasetId())
                     .build();
             var experimentCId = experimentResourceClient.create(experimentC, API_KEY, context.workspaceName());
@@ -6557,13 +6558,13 @@ class TracesResourceTest {
             assertThat(actualTraces).hasSize(3);
 
             if (direction == Direction.ASC) {
-                assertThat(actualTraces.get(0).experiment().name()).isEqualTo("A-experiment");
-                assertThat(actualTraces.get(1).experiment().name()).isEqualTo("B-experiment");
-                assertThat(actualTraces.get(2).experiment().name()).isEqualTo("C-experiment");
+                assertThat(actualTraces.get(0).experiment().name()).isEqualTo(experimentA.name());
+                assertThat(actualTraces.get(1).experiment().name()).isEqualTo(experimentB.name());
+                assertThat(actualTraces.get(2).experiment().name()).isEqualTo(experimentC.name());
             } else {
-                assertThat(actualTraces.get(0).experiment().name()).isEqualTo("C-experiment");
-                assertThat(actualTraces.get(1).experiment().name()).isEqualTo("B-experiment");
-                assertThat(actualTraces.get(2).experiment().name()).isEqualTo("A-experiment");
+                assertThat(actualTraces.get(0).experiment().name()).isEqualTo(experimentC.name());
+                assertThat(actualTraces.get(1).experiment().name()).isEqualTo(experimentB.name());
+                assertThat(actualTraces.get(2).experiment().name()).isEqualTo(experimentA.name());
             }
         }
 
