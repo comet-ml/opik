@@ -1084,7 +1084,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         // Try to resolve dataset ID from any of the provided IDs (not just the first)
                         // This handles cases where some IDs may not exist (already deleted)
-                        return resolveDatasetIdFromItemIds(ids)
+                        return versionDao.resolveDatasetIdFromItemIds(ids)
                                 .flatMap(datasetId -> {
                                     log.info("Resolved dataset '{}' for deletion request with '{}' item IDs",
                                             datasetId, ids.size());
@@ -2187,7 +2187,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                         // If datasetId is null, resolve it from any existing item (not just first)
                         if (resolvedDatasetId == null && !ids.isEmpty()) {
-                            return resolveDatasetIdFromItemIds(ids)
+                            return versionDao.resolveDatasetIdFromItemIds(ids)
                                     .flatMap(resolvedId -> {
                                         log.info("Resolved dataset '{}' for batch_group_id '{}'", resolvedId,
                                                 batchGroupId);
@@ -2279,24 +2279,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .put(RequestContext.USER_NAME, userName));
                     }
                 });
-    }
-
-    /**
-     * Resolves the datasetId from a set of dataset_item_ids by trying each ID until one succeeds.
-     * This handles cases where some IDs may not exist (already deleted).
-     *
-     * @param ids the set of dataset_item_ids to try
-     * @return Mono emitting the resolved datasetId, or empty if none of the IDs exist
-     */
-    private Mono<UUID> resolveDatasetIdFromItemIds(Set<UUID> ids) {
-        return Flux.fromIterable(ids)
-                .flatMap(itemId -> versionDao.resolveDatasetIdFromItemId(itemId)
-                        .flux()
-                        .onErrorResume(e -> {
-                            log.debug("Failed to resolve dataset for item '{}': {}", itemId, e.getMessage());
-                            return Flux.empty();
-                        }))
-                .next(); // Get the first successful resolution
     }
 
 }

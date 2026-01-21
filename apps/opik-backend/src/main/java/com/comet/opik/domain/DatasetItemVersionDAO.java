@@ -205,6 +205,16 @@ public interface DatasetItemVersionDAO {
     Mono<UUID> resolveDatasetIdFromItemId(UUID datasetItemId);
 
     /**
+     * Resolves the dataset ID from a set of dataset_item_ids in a single query.
+     * Returns the first valid dataset ID found.
+     * This is more efficient than calling resolveDatasetIdFromItemId multiple times.
+     *
+     * @param datasetItemIds the set of stable item IDs (dataset_item_ids)
+     * @return Mono emitting the first resolved dataset ID, or empty if none of the IDs exist
+     */
+    Mono<UUID> resolveDatasetIdFromItemIds(Set<UUID> datasetItemIds);
+
+    /**
      * Gets an item by its dataset_item_id from a specific version.
      *
      * @param datasetId the dataset ID
@@ -1106,6 +1116,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_item_id = :datasetItemId
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1
+            """;
+
+    private static final String RESOLVE_DATASET_ID_FROM_ITEM_IDS = """
+            SELECT
+                dataset_id
+            FROM dataset_item_versions
+            WHERE dataset_item_id IN :datasetItemIds
+            AND workspace_id = :workspace_id
+            GROUP BY dataset_id
             LIMIT 1
             """;
 
@@ -2338,6 +2358,43 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 log.debug("Resolved dataset '{}' for item '{}'", datasetId, datasetItemId);
                             } else {
                                 log.debug("No dataset found for item '{}'", datasetItemId);
+                            }
+                        })
+                        .doFinally(signalType -> endSegment(segment));
+            });
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<UUID> resolveDatasetIdFromItemIds(@NonNull Set<UUID> datasetItemIds) {
+        if (datasetItemIds.isEmpty()) {
+            log.debug("Empty dataset_item_ids set provided, returning empty");
+            return Mono.empty();
+        }
+
+        log.debug("Resolving dataset ID from '{}' item IDs", datasetItemIds.size());
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(RESOLVE_DATASET_ID_FROM_ITEM_IDS)
+                    .bind("datasetItemIds", datasetItemIds.stream()
+                            .map(UUID::toString)
+                            .toArray(String[]::new));
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "resolve_dataset_id_from_item_ids");
+
+            return makeMonoContextAware((userName, workspaceId) -> {
+                statement.bind("workspace_id", workspaceId);
+
+                return Flux.from(statement.execute())
+                        .flatMap(result -> result
+                                .map((row, rowMetadata) -> UUID.fromString(row.get("dataset_id", String.class))))
+                        .next()
+                        .doOnSuccess(datasetId -> {
+                            if (datasetId != null) {
+                                log.debug("Resolved dataset '{}' from '{}' item IDs", datasetId, datasetItemIds.size());
+                            } else {
+                                log.debug("No dataset found for '{}' item IDs", datasetItemIds.size());
                             }
                         })
                         .doFinally(signalType -> endSegment(segment));
