@@ -22,6 +22,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.reactivestreams.Publisher;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -48,6 +49,7 @@ public interface ProjectMetricsDAO {
 
     String TRACE_DURATION_PREFIX = "duration";
     String THREAD_DURATION_PREFIX = "thread_duration";
+    String SPAN_DURATION_PREFIX = "span_duration";
     String P50 = "p50";
     String P90 = "p90";
     String P99 = "p99";
@@ -624,20 +626,25 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_TRACE_DURATION_WITH_BREAKDOWN = """
             %s
-            SELECT <bucket> AS bucket,
-                   <group_expression> AS group_name,
-                   arrayMap(
-                     v -> toDecimal64(
-                            greatest(
-                              least(if(isFinite(v), v, 0),  999999999.999999999),
-                              -999999999.999999999
-                            ),
-                            9
-                          ),
-                     quantiles(0.5, 0.9, 0.99)(duration)
-                   ) AS duration
-            FROM traces_filtered t
-            GROUP BY bucket, group_name
+            SELECT
+              bucket,
+              group_name,
+              toDecimal64(
+                greatest(
+                  least(if(isFinite(v), v, 0), 999999999.999999999),
+                  -999999999.999999999
+                ),
+                9
+              ) AS duration
+            FROM
+            (
+              SELECT
+                <bucket> AS bucket,
+                <group_expression> AS group_name,
+                quantile(<sub_metric>)(duration) AS v
+              FROM traces_filtered t
+              GROUP BY bucket, group_name
+            )
             ORDER BY bucket, group_name;
             """.formatted(TRACE_FILTERED_PREFIX);
 
@@ -761,6 +768,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
+                AND name = '<sub_metric>'
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -799,6 +807,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         fs.value
                 FROM feedback_scores_final fs
                 JOIN traces_filtered t ON t.id = fs.entity_id
+                WHERE fs.name = '<sub_metric>'
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -865,6 +874,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         fs.value
                 FROM feedback_scores_final fs
                 JOIN spans_filtered s ON s.id = fs.entity_id
+                WHERE fs.name = '<sub_metric>'
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -899,20 +909,25 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_SPAN_DURATION_WITH_BREAKDOWN = """
             %s
-            SELECT <bucket> AS bucket,
-                   <group_expression> AS group_name,
-                   arrayMap(
-                     v -> toDecimal64(
-                            greatest(
-                              least(if(isFinite(v), v, 0),  999999999.999999999),
-                              -999999999.999999999
-                            ),
-                            9
-                          ),
-                     quantiles(0.5, 0.9, 0.99)(duration)
-                   ) AS duration
-            FROM spans_filtered s
-            GROUP BY bucket, group_name
+            SELECT
+              bucket,
+              group_name,
+              toDecimal64(
+                greatest(
+                  least(if(isFinite(v), v, 0), 999999999.999999999),
+                  -999999999.999999999
+                ),
+                9
+              ) AS duration
+            FROM
+            (
+              SELECT
+                <bucket> AS bucket,
+                <group_expression> AS group_name,
+                quantile(<sub_metric>)(duration) AS v
+              FROM spans_filtered s
+              GROUP BY bucket, group_name
+            )
             ORDER BY bucket, group_name;
             """.formatted(SPAN_FILTERED_PREFIX);
 
@@ -971,6 +986,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 FROM spans_filtered s
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
+                AND name = '<sub_metric>'
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -1021,6 +1037,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         project_id
                     FROM threads_filtered
                 ) t ON t.thread_model_id = fs.entity_id
+                WHERE fs.name = '<sub_metric>'
             )
             SELECT <bucket> AS bucket,
                     group_name,
@@ -1131,20 +1148,25 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
 
     private static final String GET_THREAD_DURATION_WITH_BREAKDOWN = """
             %s
-            SELECT <bucket> AS bucket,
-                   <group_expression> AS group_name,
-                   arrayMap(
-                     v -> toDecimal64(
-                            greatest(
-                              least(if(isFinite(v), v, 0),  999999999.999999999),
-                              -999999999.999999999
-                            ),
-                            9
-                          ),
-                     quantiles(0.5, 0.9, 0.99)(duration)
-                   ) AS duration
-            FROM threads_filtered t
-            GROUP BY bucket, group_name
+            SELECT
+              bucket,
+              group_name,
+              toDecimal64(
+                greatest(
+                  least(if(isFinite(v), v, 0), 999999999.999999999),
+                  -999999999.999999999
+                ),
+                9
+              ) AS duration
+            FROM
+            (
+              SELECT
+                <bucket> AS bucket,
+                <group_expression> AS group_name,
+                quantile(<sub_metric>)(duration) AS v
+              FROM threads_filtered t
+              GROUP BY bucket, group_name
+            )
             ORDER BY bucket, group_name;
             """.formatted(THREAD_FILTERED_PREFIX);
 
@@ -1152,12 +1174,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 request.hasBreakdown() ? GET_TRACE_DURATION_WITH_BREAKDOWN : GET_TRACE_DURATION, "traceDuration")
-                .flatMapMany(result -> result
-                        .map((row, metadata) -> request.hasBreakdown()
-                                ? mapDurationWithBreakdown(row, TRACE_DURATION_PREFIX)
-                                : mapDuration(row, TRACE_DURATION_PREFIX)))
-                .reduce(Stream::concat)
-                .map(Stream::toList));
+                .flatMapMany(result -> request.hasBreakdown()
+                        ? rowToDataPointWithBreakdown(result,
+                                row -> String.join(".", TRACE_DURATION_PREFIX, request.breakdown().subMetric()),
+                                row -> row.get("duration", BigDecimal.class))
+                        : Flux.from(result.map((row, metadata) -> mapDuration(row, TRACE_DURATION_PREFIX)))
+                                .flatMap(Flux::fromStream))
+                .collectList());
     }
 
     private Stream<Entry> mapDuration(Row row, String prefix) {
@@ -1174,28 +1197,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                         Entry.builder().name(String.join(".", prefix, P99))
                                 .time(row.get("bucket", Instant.class))
                                 .value(getP(durations, 2))
-                                .build()))
-                .orElse(Stream.empty());
-    }
-
-    private Stream<Entry> mapDurationWithBreakdown(Row row, String prefix) {
-        String groupName = RowUtils.getOptionalValue(row, "group_name", String.class);
-        return Optional.ofNullable(row.get("duration", List.class))
-                .map(durations -> Stream.of(
-                        Entry.builder().name(String.join(".", prefix, P50))
-                                .time(row.get("bucket", Instant.class))
-                                .value(getP(durations, 0))
-                                .groupName(groupName)
-                                .build(),
-                        Entry.builder().name(String.join(".", prefix, P90))
-                                .time(row.get("bucket", Instant.class))
-                                .value(getP(durations, 1))
-                                .groupName(groupName)
-                                .build(),
-                        Entry.builder().name(String.join(".", prefix, P99))
-                                .time(row.get("bucket", Instant.class))
-                                .value(getP(durations, 2))
-                                .groupName(groupName)
                                 .build()))
                 .orElse(Stream.empty());
     }
@@ -1236,12 +1237,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 request.hasBreakdown() ? GET_THREAD_DURATION_WITH_BREAKDOWN : GET_THREAD_DURATION,
                 "threadDuration")
-                .flatMapMany(result -> result
-                        .map((row, metadata) -> request.hasBreakdown()
-                                ? mapDurationWithBreakdown(row, THREAD_DURATION_PREFIX)
-                                : mapDuration(row, THREAD_DURATION_PREFIX)))
-                .reduce(Stream::concat)
-                .map(Stream::toList));
+                .flatMapMany(result -> request.hasBreakdown()
+                        ? rowToDataPointWithBreakdown(result,
+                                row -> String.join(".", THREAD_DURATION_PREFIX, request.breakdown().subMetric()),
+                                row -> row.get("duration", BigDecimal.class))
+                        : Flux.from(result.map((row, metadata) -> mapDuration(row, THREAD_DURATION_PREFIX)))
+                                .flatMap(Flux::fromStream))
+                .collectList());
     }
 
     @Override
@@ -1250,7 +1252,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 request.hasBreakdown() ? GET_FEEDBACK_SCORES_WITH_BREAKDOWN : GET_FEEDBACK_SCORES,
                 "feedbackScores")
                 .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> "feedback_scores",
+                        ? rowToDataPointWithBreakdown(result,
+                                row -> "feedback_scores " + request.breakdown().subMetric(),
                                 row -> row.get("value", BigDecimal.class))
                         : rowToDataPoint(result,
                                 row -> row.get("name", String.class),
@@ -1264,7 +1267,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 request.hasBreakdown() ? GET_THREAD_FEEDBACK_SCORES_WITH_BREAKDOWN : GET_THREAD_FEEDBACK_SCORES,
                 "threadFeedbackScores")
                 .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> "thread_feedback_scores",
+                        ? rowToDataPointWithBreakdown(result,
+                                row -> "thread_feedback_scores " + request.breakdown().subMetric(),
                                 row -> row.get("value", BigDecimal.class))
                         : rowToDataPoint(result,
                                 row -> row.get("name", String.class),
@@ -1277,7 +1281,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 request.hasBreakdown() ? GET_TOKEN_USAGE_WITH_BREAKDOWN : GET_TOKEN_USAGE, "token usage")
                 .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> "tokens",
+                        ? rowToDataPointWithBreakdown(result,
+                                row -> "token_usage " + request.breakdown().subMetric(),
                                 row -> row.get("value", Long.class))
                         : rowToDataPoint(result,
                                 row -> row.get("name", String.class),
@@ -1385,12 +1390,13 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     public Mono<List<Entry>> getSpanDuration(UUID projectId, ProjectMetricRequest request) {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 request.hasBreakdown() ? GET_SPAN_DURATION_WITH_BREAKDOWN : GET_SPAN_DURATION, "spanDuration")
-                .flatMapMany(result -> result
-                        .map((row, metadata) -> request.hasBreakdown()
-                                ? mapDurationWithBreakdown(row, "duration")
-                                : mapDuration(row, "duration")))
-                .reduce(Stream::concat)
-                .map(Stream::toList));
+                .flatMapMany(result -> request.hasBreakdown()
+                        ? rowToDataPointWithBreakdown(result,
+                                row -> String.join(".", SPAN_DURATION_PREFIX, request.breakdown().subMetric()),
+                                row -> row.get("duration", BigDecimal.class))
+                        : Flux.from(result.map((row, metadata) -> mapDuration(row, SPAN_DURATION_PREFIX)))
+                                .flatMap(Flux::fromStream))
+                .collectList());
     }
 
     @Override
@@ -1410,7 +1416,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return template.nonTransaction(connection -> getMetric(projectId, request, connection,
                 request.hasBreakdown() ? GET_SPAN_TOKEN_USAGE_WITH_BREAKDOWN : GET_SPAN_TOKEN_USAGE, "spanTokenUsage")
                 .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> "span_tokens",
+                        ? rowToDataPointWithBreakdown(result,
+                                row -> "span_token_usage " + request.breakdown().subMetric(),
                                 row -> row.get("value", Long.class))
                         : rowToDataPoint(result,
                                 row -> row.get("name", String.class),
@@ -1424,7 +1431,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 request.hasBreakdown() ? GET_SPAN_FEEDBACK_SCORES_WITH_BREAKDOWN : GET_SPAN_FEEDBACK_SCORES,
                 "spanFeedbackScores")
                 .flatMapMany(result -> request.hasBreakdown()
-                        ? rowToDataPointWithBreakdown(result, row -> "span_feedback_scores",
+                        ? rowToDataPointWithBreakdown(result,
+                                row -> "span_feedback_scores " + request.breakdown().subMetric(),
                                 row -> row.get("value", BigDecimal.class))
                         : rowToDataPoint(result,
                                 row -> row.get("name", String.class),
@@ -1498,6 +1506,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             if (request.hasBreakdown()) {
                 template.add("group_expression",
                         getBreakdownGroupExpression(request.metricType(), request.breakdown()));
+                Optional.ofNullable(request.breakdown().subMetric())
+                        .map(this::mapSubMetric)
+                        .ifPresent(subMetric -> template.add("sub_metric", subMetric));
             }
 
             // Add uuid flags for conditional SQL generation
@@ -1676,5 +1687,17 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private String intervalToSql(TimeInterval interval) {
         return Optional.ofNullable(INTERVAL_TO_SQL.get(interval))
                 .orElseThrow(() -> new IllegalArgumentException("Invalid interval: " + interval));
+    }
+
+    /**
+     * Maps sub-metric names (p50, p90, p99) to ClickHouse quantile values (0.5, 0.9, 0.99).
+     */
+    private String mapSubMetric(String subMetric) {
+        return switch (subMetric.toLowerCase()) {
+            case "p50" -> "0.5";
+            case "p90" -> "0.9";
+            case "p99" -> "0.99";
+            default -> subMetric;
+        };
     }
 }

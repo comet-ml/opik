@@ -12,12 +12,15 @@ import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -83,10 +86,55 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         return projectService.getOrFail(projectId).then();
     }
 
+    private static final Set<MetricType> DURATION_METRICS = EnumSet.of(
+            MetricType.DURATION,
+            MetricType.SPAN_DURATION,
+            MetricType.THREAD_DURATION);
+
+    private static final Set<MetricType> FEEDBACK_SCORES_METRICS = EnumSet.of(
+            MetricType.FEEDBACK_SCORES,
+            MetricType.SPAN_FEEDBACK_SCORES,
+            MetricType.THREAD_FEEDBACK_SCORES);
+
+    private static final Set<MetricType> TOKEN_USAGE_METRICS = EnumSet.of(
+            MetricType.TOKEN_USAGE,
+            MetricType.SPAN_TOKEN_USAGE);
+
+    private static final Set<String> VALID_DURATION_SUB_METRICS = Set.of("p50", "p90", "p99");
+
     private Mono<Void> validateBreakdownConfig(ProjectMetricRequest request) {
         if (request.hasBreakdown()) {
             try {
                 request.breakdown().validate(request.metricType());
+
+                String subMetric = request.breakdown().subMetric();
+                // For duration metrics with breakdown, subMetric is required (p50, p90, p99)
+                if (DURATION_METRICS.contains(request.metricType())) {
+                    if (StringUtils.isBlank(subMetric)) {
+                        return Mono.error(new BadRequestException(
+                                "sub_metric is required for duration metrics with breakdown. Valid values: p50, p90, p99"));
+                    }
+                    if (!VALID_DURATION_SUB_METRICS.contains(subMetric.toLowerCase())) {
+                        return Mono.error(new BadRequestException(
+                                "Invalid sub_metric '%s'. Valid values: p50, p90, p99".formatted(subMetric)));
+                    }
+                }
+
+                // For feedback scores metrics with breakdown, subMetric (feedback score name) is required
+                if (FEEDBACK_SCORES_METRICS.contains(request.metricType())) {
+                    if (StringUtils.isBlank(subMetric)) {
+                        return Mono.error(new BadRequestException(
+                                "sub_metric is required for feedback scores metrics with breakdown. It should be the feedback score name."));
+                    }
+                }
+
+                // For token usage metrics with breakdown, subMetric (usage key name) is required
+                if (TOKEN_USAGE_METRICS.contains(request.metricType())) {
+                    if (StringUtils.isBlank(subMetric)) {
+                        return Mono.error(new BadRequestException(
+                                "sub_metric is required for token usage metrics with breakdown. It should be the usage key name (e.g., completion_tokens, prompt_tokens)."));
+                    }
+                }
             } catch (IllegalArgumentException e) {
                 return Mono.error(new BadRequestException(e.getMessage()));
             }

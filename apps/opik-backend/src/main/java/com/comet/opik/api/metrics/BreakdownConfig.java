@@ -18,7 +18,8 @@ import lombok.Builder;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record BreakdownConfig(
         BreakdownField field,
-        String metadataKey) {
+        String metadataKey,
+        String subMetric) {
 
     // Fixed defaults - not configurable
     public static final int LIMIT = 10;
