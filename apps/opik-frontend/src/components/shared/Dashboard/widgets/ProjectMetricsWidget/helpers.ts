@@ -43,7 +43,6 @@ const TOKEN_USAGE_METRIC_TYPES = [
   METRIC_NAME_TYPE.SPAN_TOKEN_USAGE,
 ];
 
-
 const calculateProjectMetricsTitle = (
   config: Record<string, unknown>,
 ): string => {
@@ -70,7 +69,8 @@ const calculateProjectMetricsTitle = (
     widgetConfig.durationMetrics?.length === 1
   ) {
     const percentile = widgetConfig.durationMetrics[0];
-    const percentileLabel = DURATION_LABELS[percentile] || percentile.toUpperCase();
+    const percentileLabel =
+      DURATION_LABELS[percentile] || percentile.toUpperCase();
     return `${baseTitle} - ${percentileLabel}`;
   }
 
