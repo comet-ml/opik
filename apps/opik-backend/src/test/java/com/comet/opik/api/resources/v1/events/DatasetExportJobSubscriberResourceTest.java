@@ -50,7 +50,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -79,7 +78,6 @@ class DatasetExportJobSubscriberResourceTest {
     private static final String WORKSPACE_NAME = "test-workspace";
 
     private static final int AWAIT_TIMEOUT_SECONDS = 30;
-    private static final Duration EXPORT_JOB_TTL = Duration.ofHours(1);
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -162,7 +160,7 @@ class DatasetExportJobSubscriberResourceTest {
             Dataset dataset = createDatasetWithItemsAndColumns(expectedColumns, expectedRowCount);
 
             // When - Use CsvDatasetExportService to create job and publish to Redis stream
-            DatasetExportJob job = csvExportService.startExport(dataset.id(), EXPORT_JOB_TTL)
+            DatasetExportJob job = csvExportService.startExport(dataset.id())
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -196,7 +194,7 @@ class DatasetExportJobSubscriberResourceTest {
             datasetResourceClient.createDataset(dataset, API_KEY, WORKSPACE_NAME);
 
             // When - Use CsvDatasetExportService to create job and publish to Redis stream
-            DatasetExportJob job = csvExportService.startExport(dataset.id(), EXPORT_JOB_TTL)
+            DatasetExportJob job = csvExportService.startExport(dataset.id())
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -234,19 +232,19 @@ class DatasetExportJobSubscriberResourceTest {
             Dataset dataset3 = createDatasetWithItemsAndColumns(columns3, rowCount3);
 
             // When - Use CsvDatasetExportService to create jobs and publish to Redis stream
-            DatasetExportJob job1 = csvExportService.startExport(dataset1.id(), EXPORT_JOB_TTL)
+            DatasetExportJob job1 = csvExportService.startExport(dataset1.id())
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
-            DatasetExportJob job2 = csvExportService.startExport(dataset2.id(), EXPORT_JOB_TTL)
+            DatasetExportJob job2 = csvExportService.startExport(dataset2.id())
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
-            DatasetExportJob job3 = csvExportService.startExport(dataset3.id(), EXPORT_JOB_TTL)
+            DatasetExportJob job3 = csvExportService.startExport(dataset3.id())
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -287,7 +285,7 @@ class DatasetExportJobSubscriberResourceTest {
             Dataset dataset = createDatasetWithItemsAndColumns(expectedColumns, expectedRowCount);
 
             // When - Use CsvDatasetExportService to create job and publish to Redis stream
-            DatasetExportJob job = csvExportService.startExport(dataset.id(), EXPORT_JOB_TTL)
+            DatasetExportJob job = csvExportService.startExport(dataset.id())
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -323,7 +321,7 @@ class DatasetExportJobSubscriberResourceTest {
 
             // When - Use CsvDatasetExportService to start export for non-existent dataset
             // The export should complete successfully with an empty file (no columns, no items)
-            DatasetExportJob job = csvExportService.startExport(nonExistentDatasetId, EXPORT_JOB_TTL)
+            DatasetExportJob job = csvExportService.startExport(nonExistentDatasetId)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
