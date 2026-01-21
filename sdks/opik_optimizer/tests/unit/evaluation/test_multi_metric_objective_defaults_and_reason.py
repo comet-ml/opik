@@ -160,4 +160,3 @@ class TestMultiMetricObjectiveNamingAndReason:
         result = multi_metric(dataset_item={}, llm_output="test output")
 
         assert result.reason == "total=0.35"
-

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from opik_optimizer.core import llm_calls as _llm_calls
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.core.state import OptimizationContext
+from tests.unit.fixtures import user_message
 from tests.unit.test_helpers import make_mock_response
 
 
@@ -42,7 +43,7 @@ class TestCallModelSync:
                 mock_track.return_value = lambda x: x
                 with patch("litellm.completion", return_value=mock_response):
                     _llm_calls.call_model(
-                        messages=[{"role": "user", "content": "test"}],
+                        messages=[user_message("test")],
                         model="gpt-4o",
                     )
                     mock_inc.assert_called_once()
@@ -55,7 +56,7 @@ class TestCallModelSync:
             mock_track.return_value = lambda x: mock_completion
 
             result = _llm_calls.call_model(
-                messages=[{"role": "user", "content": "test"}],
+                messages=[user_message("test")],
                 model="gpt-4o",
                 response_model=SampleResponseModel,
             )
@@ -78,7 +79,7 @@ class TestCallModelSync:
             mock_track.return_value = lambda x: mock_completion
 
             result = _llm_calls.call_model(
-                messages=[{"role": "user", "content": "test"}],
+                messages=[user_message("test")],
                 model="gpt-4o",
                 response_model=SampleResponseModel,
             )
@@ -101,7 +102,7 @@ class TestCallModelAsync:
                 mock_track.return_value = lambda x: async_mock
 
                 await _llm_calls.call_model_async(
-                    messages=[{"role": "user", "content": "test"}],
+                    messages=[user_message("test")],
                     model="gpt-4o",
                 )
                 mock_inc.assert_called_once()
@@ -115,7 +116,7 @@ class TestCallModelAsync:
             mock_track.return_value = lambda x: async_mock
 
             result = await _llm_calls.call_model_async(
-                messages=[{"role": "user", "content": "test"}],
+                messages=[user_message("test")],
                 model="gpt-4o",
                 response_model=SampleResponseModel,
             )
@@ -139,7 +140,7 @@ class TestCallModelAsync:
             mock_track.return_value = lambda x: mock_completion
 
             result = await _llm_calls.call_model_async(
-                messages=[{"role": "user", "content": "test"}],
+                messages=[user_message("test")],
                 model="gpt-4o",
                 response_model=SampleResponseModel,
             )
@@ -161,7 +162,7 @@ class TestCallModelAsync:
             mock_track.return_value = lambda x: capture_call
 
             await _llm_calls.call_model_async(
-                messages=[{"role": "user", "content": "test"}],
+                messages=[user_message("test")],
                 model="gpt-4o",
                 model_parameters={"temperature": 0.5},
                 temperature=0.7,
@@ -185,7 +186,7 @@ class TestCallModelAsync:
             "opik_optimizer.core.llm_calls.track_completion", side_effect=capture_track
         ):
             await _llm_calls.call_model_async(
-                messages=[{"role": "user", "content": "test"}],
+                messages=[user_message("test")],
                 model="gpt-4o",
                 project_name="my-project",
             )

@@ -111,4 +111,3 @@ class TestMultiMetricObjectiveMetadata:
         assert raw_scores[1].value == 0.2
         assert raw_scores[2].name == "metric_returning_0_1"
         assert raw_scores[2].value == 0.1
-

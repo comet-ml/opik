@@ -26,9 +26,23 @@ from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers impor
     make_prompt_json,
     make_system_prompt_json,
 )
+from tests.unit.fixtures import system_message, user_message
 from tests.unit.test_helpers import make_optimization_context
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
+
+
+def _sanitize_system_prompts(
+    contents: list[str], *, metric_name: str = "my_metric"
+) -> dict[str, Any]:
+    """Helper to build system-only prompt candidates and run sanitization."""
+    prompt_json = make_system_prompt_json(contents)
+    return sanitize_generated_prompts(prompt_json, metric_name)
+
+
+def _assert_single_prompt(result: dict[str, Any]) -> dict[str, Any]:
+    assert len(result["prompts"]) == 1
+    return result["prompts"][0]
 
 
 class TestSanitizeGeneratedPrompts:
@@ -36,25 +50,22 @@ class TestSanitizeGeneratedPrompts:
 
     def test_removes_prompts_with_metric_name(self) -> None:
         """Should remove prompts containing the metric name."""
-        prompt_json = make_system_prompt_json(
-            ["Optimize for accuracy_score metric.", "Be helpful and concise."]
+        result = _sanitize_system_prompts(
+            ["Optimize for accuracy_score metric.", "Be helpful and concise."],
+            metric_name="accuracy_score",
         )
 
-        result = sanitize_generated_prompts(prompt_json, "accuracy_score")
-
-        assert len(result["prompts"]) == 1
-        assert "accuracy_score" not in result["prompts"][0]["prompt"][0]["content"]
+        kept = _assert_single_prompt(result)
+        assert "accuracy_score" not in kept["prompt"][0]["content"]
 
     def test_removes_prompts_with_dataset_references(self) -> None:
         """Should remove prompts referencing dataset-specific terms."""
-        prompt_json = make_system_prompt_json(
+        result = _sanitize_system_prompts(
             ["Use the supporting_facts field to answer.", "Answer questions clearly."]
         )
 
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        assert len(result["prompts"]) == 1
-        assert "supporting_facts" not in result["prompts"][0]["prompt"][0]["content"]
+        kept = _assert_single_prompt(result)
+        assert "supporting_facts" not in kept["prompt"][0]["content"]
 
     def test_removes_prompts_with_evaluation_terms(self) -> None:
         """Should remove prompts referencing evaluation-specific terms."""
@@ -66,10 +77,9 @@ class TestSanitizeGeneratedPrompts:
         ]
 
         for content in test_cases:
-            prompt_json = make_system_prompt_json([content, "Safe prompt."])
-
-            result = sanitize_generated_prompts(prompt_json, "test_metric")
-
+            result = _sanitize_system_prompts(
+                [content, "Safe prompt."], metric_name="test_metric"
+            )
             assert len(result["prompts"]) == 1, f"Failed for: {content}"
 
     def test_removes_prompts_with_common_benchmark_names(self) -> None:
@@ -77,22 +87,17 @@ class TestSanitizeGeneratedPrompts:
         benchmark_names = ["hotpotqa"]
 
         for name in benchmark_names:
-            prompt_json = make_system_prompt_json(
+            result = _sanitize_system_prompts(
                 [f"Answer like in {name}.", "Be helpful."]
             )
-
-            result = sanitize_generated_prompts(prompt_json, "my_metric")
-
             assert len(result["prompts"]) == 1, f"Failed for: {name}"
 
     def test_case_insensitive_matching(self) -> None:
         """Should match patterns case-insensitively."""
-        prompt_json = make_system_prompt_json(
-            ["Optimize for F1 SCORE metric.", "Good prompt."]
+        result = _sanitize_system_prompts(
+            ["Optimize for F1 SCORE metric.", "Good prompt."],
+            metric_name="other_metric",
         )
-
-        result = sanitize_generated_prompts(prompt_json, "other_metric")
-
         assert len(result["prompts"]) == 1
 
     def test_preserves_clean_prompts(self) -> None:
@@ -100,10 +105,10 @@ class TestSanitizeGeneratedPrompts:
         prompt_json = make_prompt_json(
             [
                 [
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    {"role": "user", "content": "Answer my question."},
+                    system_message("You are a helpful assistant."),
+                    user_message("Answer my question."),
                 ],
-                [{"role": "system", "content": "Be concise and accurate."}],
+                [system_message("Be concise and accurate.")],
             ]
         )
 
@@ -124,7 +129,7 @@ class TestSanitizeGeneratedPrompts:
         prompt_json = {
             "prompts": [
                 {"prompt": [{"role": "system"}]},  # No content field
-                {"prompt": [{"role": "system", "content": "Valid."}]},
+                {"prompt": [system_message("Valid.")]},
             ]
         }
 
@@ -181,8 +186,8 @@ class TestFormatAgentPromptsForPrompt:
         prompts = {
             "agent": ChatPrompt(
                 messages=[
-                    {"role": "system", "content": "System message"},
-                    {"role": "user", "content": "User message"},
+                    system_message("System message"),
+                    user_message("User message"),
                 ]
             )
         }
@@ -306,14 +311,9 @@ class TestDataLeakagePatterns:
     )
     def test_removes_metric_patterns(self, pattern: str) -> None:
         """Should remove prompts containing common metric patterns."""
-        prompt_json = make_system_prompt_json(
-            [f"Optimize for {pattern}.", "Clean prompt."]
-        )
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        assert len(result["prompts"]) == 1
-        assert "Clean prompt" in result["prompts"][0]["prompt"][0]["content"]
+        result = _sanitize_system_prompts([f"Optimize for {pattern}.", "Clean prompt."])
+        kept = _assert_single_prompt(result)
+        assert "Clean prompt" in kept["prompt"][0]["content"]
 
     @pytest.mark.parametrize(
         "pattern",
@@ -328,12 +328,9 @@ class TestDataLeakagePatterns:
     )
     def test_removes_dataset_patterns(self, pattern: str) -> None:
         """Should remove prompts containing dataset-specific patterns."""
-        prompt_json = make_system_prompt_json([f"Use the {pattern}.", "Clean prompt."])
-
-        result = sanitize_generated_prompts(prompt_json, "my_metric")
-
-        assert len(result["prompts"]) == 1
-        assert "Clean prompt" in result["prompts"][0]["prompt"][0]["content"]
+        result = _sanitize_system_prompts([f"Use the {pattern}.", "Clean prompt."])
+        kept = _assert_single_prompt(result)
+        assert "Clean prompt" in kept["prompt"][0]["content"]
 
 
 def test_history_builder_assigns_trial_indices() -> None:

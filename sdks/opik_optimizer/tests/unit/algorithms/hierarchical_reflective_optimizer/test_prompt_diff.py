@@ -2,6 +2,13 @@ from opik_optimizer.algorithms.hierarchical_reflective_optimizer.reporting impor
     MessageDiffItem,
     compute_message_diff_order,
 )
+from tests.unit.fixtures import (
+    Message,
+    assistant_message,
+    system_message,
+    tool_message,
+    user_message,
+)
 
 
 class TestComputeMessageDiffOrder:
@@ -9,15 +16,12 @@ class TestComputeMessageDiffOrder:
         """Test that when system message changes and user is unchanged, they display in optimized order (system first, then user)."""
         # Arrange
         initial_messages = [
-            {"role": "system", "content": "Provide a concise answer to the question."},
-            {"role": "user", "content": "What is the capital of France?"},
+            system_message("Provide a concise answer to the question."),
+            user_message("What is the capital of France?"),
         ]
         optimized_messages = [
-            {
-                "role": "system",
-                "content": "Provide a concise and accurate answer to the question.",
-            },
-            {"role": "user", "content": "What is the capital of France?"},
+            system_message("Provide a concise and accurate answer to the question."),
+            user_message("What is the capital of France?"),
         ]
 
         # Act
@@ -44,12 +48,10 @@ class TestComputeMessageDiffOrder:
     def test_message_added(self) -> None:
         """Test that a newly added message role is correctly identified."""
         # Arrange
-        initial_messages = [
-            {"role": "user", "content": "What is the capital of France?"}
-        ]
+        initial_messages = [user_message("What is the capital of France?")]
         optimized_messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "What is the capital of France?"},
+            system_message("You are a helpful assistant."),
+            user_message("What is the capital of France?"),
         ]
 
         # Act
@@ -72,12 +74,10 @@ class TestComputeMessageDiffOrder:
         """Test that a removed message role is correctly identified."""
         # Arrange
         initial_messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "What is the capital of France?"},
+            system_message("You are a helpful assistant."),
+            user_message("What is the capital of France?"),
         ]
-        optimized_messages = [
-            {"role": "user", "content": "What is the capital of France?"}
-        ]
+        optimized_messages = [user_message("What is the capital of France?")]
 
         # Act
         result = compute_message_diff_order(initial_messages, optimized_messages)
@@ -99,12 +99,12 @@ class TestComputeMessageDiffOrder:
         """Test when all messages remain unchanged."""
         # Arrange
         initial_messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"},
+            system_message("You are a helpful assistant."),
+            user_message("Hello!"),
         ]
         optimized_messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"},
+            system_message("You are a helpful assistant."),
+            user_message("Hello!"),
         ]
 
         # Act
@@ -120,14 +120,14 @@ class TestComputeMessageDiffOrder:
         """Test complex scenario with multiple roles having different change types."""
         # Arrange
         initial_messages = [
-            {"role": "system", "content": "Old system message"},
-            {"role": "user", "content": "User message"},
-            {"role": "assistant", "content": "Assistant response"},
+            system_message("Old system message"),
+            user_message("User message"),
+            assistant_message("Assistant response"),
         ]
         optimized_messages = [
-            {"role": "system", "content": "New system message"},
-            {"role": "user", "content": "User message"},
-            {"role": "tool", "content": "Tool output"},
+            system_message("New system message"),
+            user_message("User message"),
+            tool_message("Tool output"),
         ]
 
         # Act
@@ -158,10 +158,10 @@ class TestComputeMessageDiffOrder:
     def test_empty_initial_messages(self) -> None:
         """Test when starting with no messages."""
         # Arrange
-        initial_messages: list[dict[str, str]] = []
+        initial_messages: list[Message] = []
         optimized_messages = [
-            {"role": "system", "content": "New system message"},
-            {"role": "user", "content": "New user message"},
+            system_message("New system message"),
+            user_message("New user message"),
         ]
 
         # Act
@@ -177,10 +177,10 @@ class TestComputeMessageDiffOrder:
         """Test when all messages are removed."""
         # Arrange
         initial_messages = [
-            {"role": "system", "content": "System message"},
-            {"role": "user", "content": "User message"},
+            system_message("System message"),
+            user_message("User message"),
         ]
-        optimized_messages: list[dict[str, str]] = []
+        optimized_messages: list[Message] = []
 
         # Act
         result = compute_message_diff_order(initial_messages, optimized_messages)
@@ -193,12 +193,12 @@ class TestComputeMessageDiffOrder:
         """Test that when roles are reordered, the result follows optimized order."""
         # Arrange
         initial_messages = [
-            {"role": "user", "content": "Question"},
-            {"role": "system", "content": "Instructions"},
+            user_message("Question"),
+            system_message("Instructions"),
         ]
         optimized_messages = [
-            {"role": "system", "content": "Instructions"},
-            {"role": "user", "content": "Question"},
+            system_message("Instructions"),
+            user_message("Question"),
         ]
 
         # Act
@@ -214,10 +214,8 @@ class TestComputeMessageDiffOrder:
     def test_content_with_newlines(self) -> None:
         """Test that multiline content is handled correctly."""
         # Arrange
-        initial_messages = [{"role": "system", "content": "Line 1\nLine 2\nLine 3"}]
-        optimized_messages = [
-            {"role": "system", "content": "Line 1\nModified Line 2\nLine 3"}
-        ]
+        initial_messages = [system_message("Line 1\nLine 2\nLine 3")]
+        optimized_messages = [system_message("Line 1\nModified Line 2\nLine 3")]
 
         # Act
         result = compute_message_diff_order(initial_messages, optimized_messages)
@@ -260,8 +258,8 @@ class TestComputeMessageDiffOrder:
     def test_whitespace_changes_detected(self) -> None:
         """Test that whitespace-only changes are detected as changed."""
         # Arrange
-        initial_messages = [{"role": "system", "content": "Hello World"}]
-        optimized_messages = [{"role": "system", "content": "Hello  World"}]  # 2 spaces
+        initial_messages = [system_message("Hello World")]
+        optimized_messages = [system_message("Hello  World")]  # 2 spaces
 
         # Act
         result = compute_message_diff_order(initial_messages, optimized_messages)
@@ -274,12 +272,12 @@ class TestComputeMessageDiffOrder:
         """Test that when a role appears multiple times, only the first occurrence is used."""
         # Arrange
         initial_messages = [
-            {"role": "user", "content": "First message"},
-            {"role": "user", "content": "Second message"},
+            user_message("First message"),
+            user_message("Second message"),
         ]
         optimized_messages = [
-            {"role": "user", "content": "Updated first message"},
-            {"role": "user", "content": "Updated second message"},
+            user_message("Updated first message"),
+            user_message("Updated second message"),
         ]
 
         # Act

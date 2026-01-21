@@ -4,6 +4,7 @@ import random
 from tests.unit.algorithms.evolutionary_optimizer._crossover_test_helpers import (
     make_deap_individual,
 )
+from tests.unit.fixtures import system_message, user_message
 
 
 class TestDeapCrossover:
@@ -19,16 +20,16 @@ class TestDeapCrossover:
         ind1 = make_deap_individual(
             {
                 "main": [
-                    {"role": "system", "content": "First prompt. Second sentence."},
-                    {"role": "user", "content": "Question here. Another question."},
+                    system_message("First prompt. Second sentence."),
+                    user_message("Question here. Another question."),
                 ]
             }
         )
         ind2 = make_deap_individual(
             {
                 "main": [
-                    {"role": "system", "content": "Alpha prompt. Beta sentence."},
-                    {"role": "user", "content": "Query here. Another query."},
+                    system_message("Alpha prompt. Beta sentence."),
+                    user_message("Query here. Another query."),
                 ]
             }
         )
@@ -47,14 +48,10 @@ class TestDeapCrossover:
 
         random.seed(42)
 
-        ind1 = make_deap_individual(
-            {"main": [{"role": "system", "content": "Content. More."}]}
-        )
+        ind1 = make_deap_individual({"main": [system_message("Content. More.")]})
         setattr(ind1, "prompts_metadata", {"main": {"name": "main_prompt"}})
 
-        ind2 = make_deap_individual(
-            {"main": [{"role": "system", "content": "Alpha. Beta."}]}
-        )
+        ind2 = make_deap_individual({"main": [system_message("Alpha. Beta.")]})
         setattr(ind2, "prompts_metadata", {"main": {"name": "main_prompt_v2"}})
 
         child1, child2 = deap_crossover(ind1, ind2, verbose=0)
@@ -70,10 +67,10 @@ class TestDeapCrossover:
         random.seed(42)
 
         ind1 = make_deap_individual(
-            {"prompt_a": [{"role": "system", "content": "A content. More A."}]}
+            {"prompt_a": [system_message("A content. More A.")]}
         )
         ind2 = make_deap_individual(
-            {"prompt_b": [{"role": "system", "content": "B content. More B."}]}
+            {"prompt_b": [system_message("B content. More B.")]}
         )
 
         child1, child2 = deap_crossover(ind1, ind2, verbose=0)

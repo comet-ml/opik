@@ -27,6 +27,13 @@ from .prompt_builders import (
     make_baseline_prompt,
     make_two_prompt_bundle,
 )
+from .message_builders import (
+    Message,
+    system_message,
+    user_message,
+    assistant_message,
+    tool_message,
+)
 
 __all__ = [
     "LLMResponseBuilder",
@@ -39,4 +46,9 @@ __all__ = [
     "assert_invalid_prompt_raises",
     "make_baseline_prompt",
     "make_two_prompt_bundle",
+    "Message",
+    "system_message",
+    "user_message",
+    "assistant_message",
+    "tool_message",
 ]

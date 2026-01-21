@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import mutation_ops
+from tests.unit.fixtures import system_message, user_message
 from tests.unit.test_helpers import make_fake_llm_call
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
@@ -44,7 +46,7 @@ class TestDeapMutation:
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(
-                '[{"role": "system", "content": "Mutated"}, {"role": "user", "content": "Question"}]'
+                json.dumps([system_message("Mutated"), user_message("Question")])
             ),
         )
 
@@ -60,8 +62,8 @@ class TestDeapMutation:
         individual = creator.Individual(
             {
                 "main": [
-                    {"role": "system", "content": "Original"},
-                    {"role": "user", "content": "Q"},
+                    system_message("Original"),
+                    user_message("Q"),
                 ]
             }
         )

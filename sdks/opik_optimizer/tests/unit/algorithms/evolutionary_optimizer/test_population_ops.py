@@ -12,7 +12,31 @@ from opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops import 
     initialize_population,
     should_restart_population,
 )
+from tests.unit.fixtures import system_message, user_message
 from tests.unit.test_helpers import make_fake_llm_call
+
+
+def _initialize_population_with_defaults(
+    *,
+    prompt: ChatPrompt,
+    evo_prompts: Any,
+    population_size: int,
+) -> list[ChatPrompt]:
+    """
+    Call initialize_population() with the test module's standard defaults.
+
+    Keeping these defaults in one place makes the individual tests easier to read.
+    """
+    return initialize_population(
+        prompt=prompt,
+        output_style_guidance="Be concise",
+        model="gpt-4",
+        model_parameters={},
+        prompts=evo_prompts,
+        optimization_id="opt-123",
+        population_size=population_size,
+        verbose=0,
+    )
 
 
 @pytest.fixture
@@ -35,7 +59,6 @@ class TestInitializePopulation:
 
     def test_returns_single_prompt_for_population_size_1(
         self,
-        monkeypatch: pytest.MonkeyPatch,
         evo_prompts: Any,
         initializing_population_context: MagicMock,
     ) -> None:
@@ -44,15 +67,8 @@ class TestInitializePopulation:
 
         prompt = ChatPrompt(system="Test prompt", user="{input}")
 
-        result = initialize_population(
-            prompt=prompt,
-            output_style_guidance="Be concise",
-            model="gpt-4",
-            model_parameters={},
-            prompts=evo_prompts,
-            optimization_id="opt-123",
-            population_size=1,
-            verbose=0,
+        result = _initialize_population_with_defaults(
+            prompt=prompt, evo_prompts=evo_prompts, population_size=1
         )
 
         assert len(result) == 1
@@ -70,8 +86,8 @@ class TestInitializePopulation:
         fresh_response = json.dumps(
             [
                 [
-                    {"role": "system", "content": "Fresh prompt 1"},
-                    {"role": "user", "content": "{input}"},
+                    system_message("Fresh prompt 1"),
+                    user_message("{input}"),
                 ]
             ]
         )
@@ -80,14 +96,14 @@ class TestInitializePopulation:
                 "prompts": [
                     {
                         "prompt": [
-                            {"role": "system", "content": "Variation 1"},
-                            {"role": "user", "content": "{input}"},
+                            system_message("Variation 1"),
+                            user_message("{input}"),
                         ]
                     },
                     {
                         "prompt": [
-                            {"role": "system", "content": "Variation 2"},
-                            {"role": "user", "content": "{input}"},
+                            system_message("Variation 2"),
+                            user_message("{input}"),
                         ]
                     },
                 ]
@@ -98,15 +114,8 @@ class TestInitializePopulation:
 
         prompt = ChatPrompt(system="Original prompt", user="{input}")
 
-        result = initialize_population(
-            prompt=prompt,
-            output_style_guidance="Be concise",
-            model="gpt-4",
-            model_parameters={},
-            prompts=evo_prompts,
-            optimization_id="opt-123",
-            population_size=5,
-            verbose=0,
+        result = _initialize_population_with_defaults(
+            prompt=prompt, evo_prompts=evo_prompts, population_size=5
         )
 
         # Should have generated more than just the original
@@ -128,15 +137,8 @@ class TestInitializePopulation:
 
         prompt = ChatPrompt(system="Original prompt", user="{input}")
 
-        result = initialize_population(
-            prompt=prompt,
-            output_style_guidance="Be concise",
-            model="gpt-4",
-            model_parameters={},
-            prompts=evo_prompts,
-            optimization_id="opt-123",
-            population_size=5,
-            verbose=0,
+        result = _initialize_population_with_defaults(
+            prompt=prompt, evo_prompts=evo_prompts, population_size=5
         )
 
         # Should still return at least the original prompt
@@ -159,15 +161,8 @@ class TestInitializePopulation:
 
         prompt = ChatPrompt(system="Original prompt", user="{input}")
 
-        result = initialize_population(
-            prompt=prompt,
-            output_style_guidance="Be concise",
-            model="gpt-4",
-            model_parameters={},
-            prompts=evo_prompts,
-            optimization_id="opt-123",
-            population_size=5,
-            verbose=0,
+        result = _initialize_population_with_defaults(
+            prompt=prompt, evo_prompts=evo_prompts, population_size=5
         )
 
         # Should still return at least the original
@@ -186,8 +181,8 @@ class TestInitializePopulation:
         fresh_response = json.dumps(
             [
                 [
-                    {"role": "system", "content": "Fresh"},
-                    {"role": "user", "content": "{q}"},
+                    system_message("Fresh"),
+                    user_message("{q}"),
                 ]
             ]
         )
@@ -196,20 +191,20 @@ class TestInitializePopulation:
                 "prompts": [
                     {
                         "prompt": [
-                            {"role": "system", "content": "Var 1"},
-                            {"role": "user", "content": "{q}"},
+                            system_message("Var 1"),
+                            user_message("{q}"),
                         ]
                     },
                     {
                         "prompt": [
-                            {"role": "system", "content": "Var 2"},
-                            {"role": "user", "content": "{q}"},
+                            system_message("Var 2"),
+                            user_message("{q}"),
                         ]
                     },
                     {
                         "prompt": [
-                            {"role": "system", "content": "Var 3"},
-                            {"role": "user", "content": "{q}"},
+                            system_message("Var 3"),
+                            user_message("{q}"),
                         ]
                     },
                 ]
@@ -220,15 +215,8 @@ class TestInitializePopulation:
 
         prompt = ChatPrompt(system="Original", user="{q}")
 
-        result = initialize_population(
-            prompt=prompt,
-            output_style_guidance="Be concise",
-            model="gpt-4",
-            model_parameters={},
-            prompts=evo_prompts,
-            optimization_id="opt-123",
-            population_size=5,
-            verbose=0,
+        result = _initialize_population_with_defaults(
+            prompt=prompt, evo_prompts=evo_prompts, population_size=5
         )
 
         assert len(result) >= 1
@@ -244,8 +232,8 @@ class TestInitializePopulation:
 
         # Return identical prompts
         same_messages = [
-            {"role": "system", "content": "Same content"},
-            {"role": "user", "content": "{q}"},
+            system_message("Same content"),
+            user_message("{q}"),
         ]
         fresh_response = json.dumps([same_messages])
         variation_response = json.dumps(
@@ -256,15 +244,8 @@ class TestInitializePopulation:
 
         prompt = ChatPrompt(messages=same_messages)
 
-        result = initialize_population(
-            prompt=prompt,
-            output_style_guidance="Be concise",
-            model="gpt-4",
-            model_parameters={},
-            prompts=evo_prompts,
-            optimization_id="opt-123",
-            population_size=5,
-            verbose=0,
+        result = _initialize_population_with_defaults(
+            prompt=prompt, evo_prompts=evo_prompts, population_size=5
         )
 
         # Duplicates should be removed
@@ -274,7 +255,7 @@ class TestInitializePopulation:
 class TestShouldRestartPopulation:
     """Tests for should_restart_population function."""
 
-    def test_no_restart_on_improvement(self, evo_prompts: Any) -> None:
+    def test_no_restart_on_improvement(self) -> None:
         """Should not restart when there is improvement."""
         curr_best = 0.9
         history = [0.7, 0.75, 0.8]
@@ -295,7 +276,7 @@ class TestShouldRestartPopulation:
         assert len(new_history) == 4
         assert new_history[-1] == curr_best
 
-    def test_restart_after_stagnation(self, evo_prompts: Any) -> None:
+    def test_restart_after_stagnation(self) -> None:
         """Should trigger restart after too many generations without improvement."""
         curr_best = 0.80  # Same as before, no improvement
         history = [0.80]
@@ -314,7 +295,7 @@ class TestShouldRestartPopulation:
         assert should_restart is True
         assert new_gens >= restart_generations
 
-    def test_no_restart_with_empty_history(self, evo_prompts: Any) -> None:
+    def test_no_restart_with_empty_history(self) -> None:
         """Should not restart on first generation."""
         curr_best = 0.5
         history: list[float] = []
@@ -334,7 +315,7 @@ class TestShouldRestartPopulation:
         assert len(new_history) == 1
         assert new_history[0] == curr_best
 
-    def test_increments_stagnation_counter(self, evo_prompts: Any) -> None:
+    def test_increments_stagnation_counter(self) -> None:
         """Should increment counter when no significant improvement."""
         curr_best = 0.81  # Only 1.25% improvement (threshold is 1%)
         history = [0.80]
@@ -353,7 +334,7 @@ class TestShouldRestartPopulation:
         # Counter should increment since improvement is below threshold
         assert new_gens == 3
 
-    def test_resets_counter_on_significant_improvement(self, evo_prompts: Any) -> None:
+    def test_resets_counter_on_significant_improvement(self) -> None:
         """Should reset counter when improvement exceeds threshold."""
         curr_best = 0.90  # 12.5% improvement, exceeds threshold
         history = [0.80]
@@ -372,7 +353,7 @@ class TestShouldRestartPopulation:
         assert should_restart is False
         assert new_gens == 0  # Reset due to improvement
 
-    def test_appends_to_history(self, evo_prompts: Any) -> None:
+    def test_appends_to_history(self) -> None:
         """Should always append current best to history."""
         curr_best = 0.85
         history = [0.7, 0.75, 0.8]
@@ -399,7 +380,7 @@ class TestRestartPopulation:
     # which makes it more suitable for integration testing.
     # Here we test the basic logic through should_restart_population.
 
-    def test_restart_population_is_imported(self, evo_prompts: Any) -> None:
+    def test_restart_population_is_imported(self) -> None:
         """Verify restart_population can be imported."""
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.population_ops import (
             restart_population,

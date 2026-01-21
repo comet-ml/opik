@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from opik_optimizer import ChatPrompt
+from tests.unit.fixtures import assistant_message, system_message, user_message
 
 
 @pytest.fixture
@@ -23,10 +24,10 @@ def chat_prompt_with_messages() -> ChatPrompt:
     return ChatPrompt(
         name="messages-prompt",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello, {name}!"},
-            {"role": "assistant", "content": "Hello! How can I help you today?"},
-            {"role": "user", "content": "{question}"},
+            system_message("You are a helpful assistant."),
+            user_message("Hello, {name}!"),
+            assistant_message("Hello! How can I help you today?"),
+            user_message("{question}"),
         ],
     )
 
@@ -37,17 +38,16 @@ def multimodal_chat_prompt() -> ChatPrompt:
     return ChatPrompt(
         name="multimodal-prompt",
         messages=[
-            {"role": "system", "content": "Analyze the image."},
-            {
-                "role": "user",
-                "content": [
+            system_message("Analyze the image."),
+            user_message(
+                [
                     {"type": "text", "text": "What is in this image?"},
                     {
                         "type": "image_url",
                         "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="},
                     },
-                ],
-            },
+                ]
+            ),
         ],
     )
 

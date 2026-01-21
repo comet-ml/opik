@@ -6,6 +6,7 @@ import pytest
 from tests.unit.algorithms.evolutionary_optimizer._crossover_test_helpers import (
     make_deap_individual,
 )
+from tests.unit.fixtures import system_message, user_message
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -23,12 +24,12 @@ class TestLLMCrossoverMessages:
 
         mock_response = CrossoverResponse(
             child_1=[
-                {"role": "system", "content": "Blended system prompt"},
-                {"role": "user", "content": "Blended user prompt"},
+                system_message("Blended system prompt"),
+                user_message("Blended user prompt"),
             ],
             child_2=[
-                {"role": "system", "content": "Alternative system prompt"},
-                {"role": "user", "content": "Alternative user prompt"},
+                system_message("Alternative system prompt"),
+                user_message("Alternative user prompt"),
             ],
         )
 
@@ -38,12 +39,12 @@ class TestLLMCrossoverMessages:
         )
 
         messages1 = [
-            {"role": "system", "content": "System A"},
-            {"role": "user", "content": "User A"},
+            system_message("System A"),
+            user_message("User A"),
         ]
         messages2 = [
-            {"role": "system", "content": "System B"},
-            {"role": "user", "content": "User B"},
+            system_message("System B"),
+            user_message("User B"),
         ]
 
         child1, child2 = _llm_crossover_messages(
@@ -81,12 +82,8 @@ class TestLLMDeapCrossover:
 
         random.seed(42)
 
-        ind1 = make_deap_individual(
-            {"main": [{"role": "system", "content": "First. Second."}]}
-        )
-        ind2 = make_deap_individual(
-            {"main": [{"role": "system", "content": "Alpha. Beta."}]}
-        )
+        ind1 = make_deap_individual({"main": [system_message("First. Second.")]})
+        ind2 = make_deap_individual({"main": [system_message("Alpha. Beta.")]})
 
         child1, child2 = llm_deap_crossover(
             ind1,
@@ -110,8 +107,8 @@ class TestLLMDeapCrossover:
         )
 
         mock_response = CrossoverResponse(
-            child_1=[{"role": "system", "content": "LLM generated 1"}],
-            child_2=[{"role": "system", "content": "LLM generated 2"}],
+            child_1=[system_message("LLM generated 1")],
+            child_2=[system_message("LLM generated 2")],
         )
 
         monkeypatch.setattr(
@@ -122,12 +119,8 @@ class TestLLMDeapCrossover:
             lambda *_a, **_k: None,
         )
 
-        ind1 = make_deap_individual(
-            {"main": [{"role": "system", "content": "Original 1"}]}
-        )
-        ind2 = make_deap_individual(
-            {"main": [{"role": "system", "content": "Original 2"}]}
-        )
+        ind1 = make_deap_individual({"main": [system_message("Original 1")]})
+        ind2 = make_deap_individual({"main": [system_message("Original 2")]})
 
         child1, child2 = llm_deap_crossover(
             ind1,
@@ -153,8 +146,8 @@ class TestLLMDeapCrossover:
             *_args: Any, **_kwargs: Any
         ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             return (
-                [{"role": "system", "content": "Semantic child 1"}],
-                [{"role": "system", "content": "Semantic child 2"}],
+                [system_message("Semantic child 1")],
+                [system_message("Semantic child 2")],
             )
 
         def fake_llm(
@@ -173,12 +166,8 @@ class TestLLMDeapCrossover:
             fake_llm,
         )
 
-        ind1 = make_deap_individual(
-            {"main": [{"role": "system", "content": "Original 1"}]}
-        )
-        ind2 = make_deap_individual(
-            {"main": [{"role": "system", "content": "Original 2"}]}
-        )
+        ind1 = make_deap_individual({"main": [system_message("Original 1")]})
+        ind2 = make_deap_individual({"main": [system_message("Original 2")]})
 
         child1, child2 = llm_deap_crossover(
             ind1,
@@ -206,8 +195,8 @@ class TestLLMDeapCrossover:
             raise Exception("Semantic failed")
 
         mock_response = CrossoverResponse(
-            child_1=[{"role": "system", "content": "LLM fallback 1"}],
-            child_2=[{"role": "system", "content": "LLM fallback 2"}],
+            child_1=[system_message("LLM fallback 1")],
+            child_2=[system_message("LLM fallback 2")],
         )
 
         monkeypatch.setattr(
@@ -222,12 +211,8 @@ class TestLLMDeapCrossover:
             lambda *_a, **_k: None,
         )
 
-        ind1 = make_deap_individual(
-            {"main": [{"role": "system", "content": "Original 1"}]}
-        )
-        ind2 = make_deap_individual(
-            {"main": [{"role": "system", "content": "Original 2"}]}
-        )
+        ind1 = make_deap_individual({"main": [system_message("Original 1")]})
+        ind2 = make_deap_individual({"main": [system_message("Original 2")]})
 
         child1, child2 = llm_deap_crossover(
             ind1,

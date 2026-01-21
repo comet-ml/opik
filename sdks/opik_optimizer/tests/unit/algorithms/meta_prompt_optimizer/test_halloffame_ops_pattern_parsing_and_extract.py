@@ -13,6 +13,7 @@ from opik_optimizer.core.llm_calls import StructuredOutputParsingError
 from tests.unit.algorithms.meta_prompt_optimizer._meta_prompt_test_helpers import (
     make_hof_entry,
 )
+from tests.unit.fixtures import system_message
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
 
@@ -76,7 +77,7 @@ class TestPromptHallOfFameIdentifyPatternsInPrompt:
         """Should identify patterns that appear in prompt."""
         hof = PromptHallOfFame()
 
-        prompt_messages = [{"role": "system", "content": "Be concise and helpful."}]
+        prompt_messages = [system_message("Be concise and helpful.")]
         patterns = [
             "Be concise | Example: short answers",
             "Use examples | Example: show demonstrations",
@@ -91,7 +92,7 @@ class TestPromptHallOfFameIdentifyPatternsInPrompt:
         hof = PromptHallOfFame()
 
         # Use very specific patterns that won't match "Simple prompt."
-        prompt_messages = [{"role": "system", "content": "Simple prompt."}]
+        prompt_messages = [system_message("Simple prompt.")]
         patterns = ["xyzzy_unique_pattern", "qwerty_another_unique"]
 
         result = hof._identify_patterns_in_prompt(prompt_messages, patterns)
@@ -102,7 +103,7 @@ class TestPromptHallOfFameIdentifyPatternsInPrompt:
         """Should match patterns case-insensitively."""
         hof = PromptHallOfFame()
 
-        prompt_messages = [{"role": "system", "content": "BE HELPFUL AND CONCISE"}]
+        prompt_messages = [system_message("BE HELPFUL AND CONCISE")]
         patterns = ["be helpful"]
 
         result = hof._identify_patterns_in_prompt(prompt_messages, patterns)
@@ -120,14 +121,14 @@ class TestPromptHallOfFameExtractPatterns:
             make_hof_entry(
                 score=0.8,
                 trial=1,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
         hof.add(
             make_hof_entry(
                 score=0.9,
                 trial=2,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
 
@@ -142,21 +143,21 @@ class TestPromptHallOfFameExtractPatterns:
             make_hof_entry(
                 score=0.7,
                 trial=1,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
         hof.add(
             make_hof_entry(
                 score=0.8,
                 trial=2,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
         hof.add(
             make_hof_entry(
                 score=0.9,
                 trial=3,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
 
@@ -176,21 +177,21 @@ class TestPromptHallOfFameExtractPatterns:
             make_hof_entry(
                 score=0.7,
                 trial=1,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
         hof.add(
             make_hof_entry(
                 score=0.8,
                 trial=2,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
         hof.add(
             make_hof_entry(
                 score=0.9,
                 trial=3,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
 
@@ -207,21 +208,21 @@ class TestPromptHallOfFameExtractPatterns:
             make_hof_entry(
                 score=0.7,
                 trial=1,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
         hof.add(
             make_hof_entry(
                 score=0.8,
                 trial=2,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
         hof.add(
             make_hof_entry(
                 score=0.9,
                 trial=3,
-                prompt_messages=[{"role": "system", "content": "Test prompt"}],
+                prompt_messages=[system_message("Test prompt")],
             )
         )
 

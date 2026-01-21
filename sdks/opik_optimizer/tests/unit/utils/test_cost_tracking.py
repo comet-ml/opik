@@ -10,6 +10,8 @@ from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.core.state import OptimizationContext
 from opik_optimizer.core.results import OptimizationResult
+from tests.unit.fixtures import system_message, user_message
+from tests.unit.fixtures import assistant_message
 
 
 class DummyOptimizer(BaseOptimizer):
@@ -46,8 +48,8 @@ def tool_prompt() -> chat_prompt.ChatPrompt:
         name="tool-prompt",
         model="dummy-model",
         messages=[
-            {"role": "system", "content": "You can use tools."},
-            {"role": "user", "content": "{input}"},
+            system_message("You can use tools."),
+            user_message("{input}"),
         ],
         tools=[
             {
@@ -115,7 +117,7 @@ def test_invoke_agent_tracks_cost_with_tools_and_model_kwargs(
     tool_call_msg.__getitem__ = (
         lambda self, key: tool_calls_data if key == "tool_calls" else None
     )
-    tool_call_msg.to_dict = lambda: {"role": "assistant", "tool_calls": tool_calls_data}
+    tool_call_msg.to_dict = lambda: assistant_message("", tool_calls=tool_calls_data)
 
     tool_call_response = MagicMock()
     tool_call_response.choices = [MagicMock()]
@@ -132,10 +134,7 @@ def test_invoke_agent_tracks_cost_with_tools_and_model_kwargs(
     final_msg.__getitem__ = (
         lambda self, key: "The weather is Sunny in NYC" if key == "content" else None
     )
-    final_msg.to_dict = lambda: {
-        "role": "assistant",
-        "content": "The weather is Sunny in NYC",
-    }
+    final_msg.to_dict = lambda: assistant_message("The weather is Sunny in NYC")
 
     final_response = MagicMock()
     final_response.choices = [MagicMock()]

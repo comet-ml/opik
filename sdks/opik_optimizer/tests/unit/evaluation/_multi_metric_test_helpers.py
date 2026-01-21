@@ -13,4 +13,3 @@ def make_constant_metric(name: str, value: float) -> Any:
 
     metric.__name__ = name
     return metric
-

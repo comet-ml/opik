@@ -11,6 +11,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from opik_optimizer.core.llm_calls import _parse_response, StructuredOutputParsingError
+from tests.unit.fixtures import system_message, user_message
 from tests.unit.test_helpers import make_mock_response
 
 
@@ -155,21 +156,21 @@ class TestStructuredOutputModels:
         "payload,expected_len,expected_first_role",
         [
             (
-                [{"role": "system", "content": "s"}, {"role": "user", "content": "u"}],
+                [system_message("s"), user_message("u")],
                 2,
                 "system",
             ),
             (
                 {
                     "messages": [
-                        {"role": "system", "content": "s"},
-                        {"role": "user", "content": "u"},
+                        system_message("s"),
+                        user_message("u"),
                     ]
                 },
                 2,
                 "system",
             ),
-            ({"role": "system", "content": "s"}, 1, "system"),
+            (system_message("s"), 1, "system"),
         ],
     )
     def test_mutation_response_normalizes_payloads(
@@ -191,8 +192,8 @@ class TestStructuredOutputModels:
                 [
                     {
                         "prompt": [
-                            {"role": "system", "content": "s"},
-                            {"role": "user", "content": "u"},
+                            system_message("s"),
+                            user_message("u"),
                         ]
                     }
                 ]
@@ -202,8 +203,8 @@ class TestStructuredOutputModels:
                     "prompts": [
                         {
                             "prompt": [
-                                {"role": "system", "content": "s"},
-                                {"role": "user", "content": "u"},
+                                system_message("s"),
+                                user_message("u"),
                             ]
                         }
                     ]

@@ -92,4 +92,3 @@ class TestMultiMetricObjectiveNormalization:
 
         with pytest.raises(ValueError, match="single ScoreResult"):
             multi_metric(dataset_item={}, llm_output="test output")
-

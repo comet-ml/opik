@@ -1,5 +1,7 @@
 import random
 
+from tests.unit.fixtures import assistant_message, system_message, user_message
+
 
 class TestCrossoverMessages:
     """Tests for _crossover_messages function."""
@@ -12,12 +14,12 @@ class TestCrossoverMessages:
         random.seed(42)
 
         messages1 = [
-            {"role": "system", "content": "First sentence. Second sentence."},
-            {"role": "user", "content": "Question one. Question two."},
+            system_message("First sentence. Second sentence."),
+            user_message("Question one. Question two."),
         ]
         messages2 = [
-            {"role": "system", "content": "Alpha sentence. Beta sentence."},
-            {"role": "user", "content": "Query one. Query two."},
+            system_message("Alpha sentence. Beta sentence."),
+            user_message("Query one. Query two."),
         ]
 
         child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
@@ -35,28 +37,26 @@ class TestCrossoverMessages:
         random.seed(42)
 
         messages1 = [
-            {
-                "role": "user",
-                "content": [
+            user_message(
+                [
                     {"type": "text", "text": "First part. Second part."},
                     {
                         "type": "image_url",
                         "image_url": {"url": "data:image/png;base64,abc"},
                     },
-                ],
-            }
+                ]
+            )
         ]
         messages2 = [
-            {
-                "role": "user",
-                "content": [
+            user_message(
+                [
                     {"type": "text", "text": "Alpha part. Beta part."},
                     {
                         "type": "image_url",
                         "image_url": {"url": "data:image/png;base64,xyz"},
                     },
-                ],
-            }
+                ]
+            )
         ]
 
         child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
@@ -71,8 +71,8 @@ class TestCrossoverMessages:
 
         random.seed(42)
 
-        messages1 = [{"role": "system", "content": "System content. More content."}]
-        messages2 = [{"role": "user", "content": "User content. More user content."}]
+        messages1 = [system_message("System content. More content.")]
+        messages2 = [user_message("User content. More user content.")]
 
         child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
 
@@ -87,11 +87,11 @@ class TestCrossoverMessages:
         random.seed(42)
 
         messages1 = [
-            {"role": "system", "content": "System content. More content."},
-            {"role": "user", "content": "User content. User question."},
-            {"role": "assistant", "content": "Assistant reply. More reply."},
+            system_message("System content. More content."),
+            user_message("User content. User question."),
+            assistant_message("Assistant reply. More reply."),
         ]
-        messages2 = [{"role": "system", "content": "Alpha system. Beta system."}]
+        messages2 = [system_message("Alpha system. Beta system.")]
 
         child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
 

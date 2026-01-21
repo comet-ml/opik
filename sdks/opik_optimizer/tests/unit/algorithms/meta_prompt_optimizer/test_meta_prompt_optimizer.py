@@ -292,12 +292,7 @@ class TestMetaPromptOptimizerMultiPrompt:
         )
 
         optimizer = MetaPromptOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
-        prompts = {
-            "main": ChatPrompt(name="main", system="Main", user="{question}"),
-            "secondary": ChatPrompt(
-                name="secondary", system="Secondary", user="{input}"
-            ),
-        }
+        prompts = make_two_prompt_bundle()
         dataset = mock_dataset(
             sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
         )

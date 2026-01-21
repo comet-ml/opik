@@ -7,6 +7,7 @@ from opik_optimizer.utils.helpers import json_to_dict
 from opik_optimizer.utils.display.format import format_prompt
 from opik_optimizer.utils.reporting import get_optimization_run_url_by_id
 from opik_optimizer.utils.logging import setup_logging
+from tests.unit.fixtures import assistant_message, system_message, user_message
 
 
 @pytest.mark.parametrize(
@@ -80,8 +81,8 @@ def test_json_to_dict_parses_raw_json_list() -> None:
     result = json_to_dict(payload)
 
     assert result == [
-        {"role": "system", "content": "Be concise."},
-        {"role": "user", "content": "Question"},
+        system_message("Be concise."),
+        user_message("Question"),
     ]
 
 
@@ -95,7 +96,7 @@ def test_json_to_dict_strips_json_code_block() -> None:
 
     result = json_to_dict(payload)
 
-    assert result == [{"role": "assistant", "content": "Sure"}]
+    assert result == [assistant_message("Sure")]
 
 
 def test_json_to_dict_handles_python_literal(
@@ -109,7 +110,7 @@ def test_json_to_dict_handles_python_literal(
 
     result = json_to_dict(payload)
 
-    assert result == [{"role": "system", "content": "Do not forget to cite sources."}]
+    assert result == [system_message("Do not forget to cite sources.")]
 
     # Check that json_to_dict didn't produce any output
     captured = capsys.readouterr()
@@ -132,7 +133,7 @@ def test_json_to_dict_handles_code_block_without_json_tag() -> None:
     [{"role": "user", "content": "Test"}]
     ```"""
     result = json_to_dict(payload)
-    assert result == [{"role": "user", "content": "Test"}]
+    assert result == [user_message("Test")]
 
 
 class TestConvertLiteralsToJsonCompatible:

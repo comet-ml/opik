@@ -2,6 +2,7 @@ from __future__ import annotations
 
 
 from opik_optimizer.api_objects.chat_prompt import ChatPrompt
+from tests.unit.fixtures import assistant_message, user_message
 
 
 class TestChatPromptSerialization:
@@ -23,7 +24,7 @@ class TestChatPromptSerialization:
 
     def test_to_dict_includes_messages(self) -> None:
         """to_dict should include messages when present."""
-        messages = [{"role": "user", "content": "Hello"}]
+        messages = [user_message("Hello")]
         prompt = ChatPrompt(messages=messages)
         result = prompt.to_dict()
 
@@ -63,7 +64,7 @@ class TestChatPromptCopy:
 
     def test_copy_deep_copies_messages(self) -> None:
         """copy should deep copy messages list."""
-        original = ChatPrompt(messages=[{"role": "user", "content": "Hello"}])
+        original = ChatPrompt(messages=[user_message("Hello")])
         copied = original.copy()
 
         assert copied.messages is not None
@@ -114,7 +115,7 @@ class TestChatPromptSetMessages:
     def test_replaces_existing_content(self) -> None:
         """set_messages should replace all existing content."""
         prompt = ChatPrompt(system="Old system", user="Old user")
-        new_messages = [{"role": "assistant", "content": "New content"}]
+        new_messages = [assistant_message("New content")]
 
         prompt.set_messages(new_messages)
 
@@ -125,7 +126,7 @@ class TestChatPromptSetMessages:
     def test_deep_copies_messages(self) -> None:
         """set_messages should deep copy the input."""
         prompt = ChatPrompt(system="Test")
-        messages = [{"role": "user", "content": "Original"}]
+        messages = [user_message("Original")]
 
         prompt.set_messages(messages)
         messages[0]["content"] = "Modified"
@@ -153,7 +154,7 @@ class TestChatPromptModelValidate:
 
     def test_creates_from_dict_with_messages(self) -> None:
         """model_validate should create prompt from dict with messages."""
-        data = {"messages": [{"role": "user", "content": "Hello"}]}
+        data = {"messages": [user_message("Hello")]}
         prompt = ChatPrompt.model_validate(data)
 
-        assert prompt.messages == [{"role": "user", "content": "Hello"}]
+        assert prompt.messages == [user_message("Hello")]

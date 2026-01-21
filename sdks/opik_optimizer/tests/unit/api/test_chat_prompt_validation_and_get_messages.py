@@ -1,39 +1,32 @@
 import pytest
 
 from opik_optimizer.api_objects.chat_prompt import ChatPrompt
+from tests.unit.fixtures import user_message
 
 
 def test_rejects_empty_text_message() -> None:
     with pytest.raises(ValueError):
-        ChatPrompt(messages=[{"role": "user", "content": "   "}])
+        ChatPrompt(messages=[user_message("   ")])
 
 
 def test_rejects_empty_multimodal_message() -> None:
     with pytest.raises(ValueError):
-        ChatPrompt(messages=[{"role": "user", "content": []}])
+        ChatPrompt(messages=[user_message([])])
+
+    with pytest.raises(ValueError):
+        ChatPrompt(messages=[user_message([{"type": "text", "text": "   \n"}])])
 
     with pytest.raises(ValueError):
         ChatPrompt(
             messages=[
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": "   \n"}],
-                }
-            ]
-        )
-
-    with pytest.raises(ValueError):
-        ChatPrompt(
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
+                user_message(
+                    [
                         {
                             "type": "image_url",
                             "image_url": {"url": "   ", "detail": "high"},
                         }
-                    ],
-                }
+                    ]
+                )
             ]
         )
 
@@ -41,17 +34,16 @@ def test_rejects_empty_multimodal_message() -> None:
 def test_get_messages_with_content_parts() -> None:
     prompt = ChatPrompt(
         messages=[
-            {
-                "role": "user",
-                "content": [
+            user_message(
+                [
                     {"type": "text", "text": "Question about {topic}:"},
                     {
                         "type": "image_url",
                         "image_url": {"url": "{image_url}", "detail": "high"},
                     },
                     {"type": "text", "text": "What do you see?"},
-                ],
-            }
+                ]
+            )
         ]
     )
 

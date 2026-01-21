@@ -7,10 +7,11 @@ from typing import Any
 from opik_optimizer.algorithms.meta_prompt_optimizer.ops.halloffame_ops import (
     HallOfFameEntry,
 )
+from tests.unit.fixtures import system_message
 
 
 def make_system_messages(content: str) -> list[dict[str, str]]:
-    return [{"role": "system", "content": content}]
+    return [system_message(content)]
 
 
 def make_prompt_json(prompts: list[list[dict[str, Any]]]) -> dict[str, Any]:

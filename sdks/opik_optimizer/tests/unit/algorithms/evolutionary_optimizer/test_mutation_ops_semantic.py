@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 import opik_optimizer
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import mutation_ops
+from tests.unit.fixtures import system_message, user_message
 from tests.unit.test_helpers import make_fake_llm_call
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
@@ -23,7 +25,12 @@ class TestRadicalInnovationMutation:
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
             make_fake_llm_call(
-                '[{"role": "system", "content": "New innovative prompt"}, {"role": "user", "content": "{input}"}]'
+                json.dumps(
+                    [
+                        system_message("New innovative prompt"),
+                        user_message("{input}"),
+                    ]
+                )
             ),
         )
 
@@ -179,9 +186,13 @@ def test_semantic_mutation_invalid_json_response(
         **_kwargs: Any,
     ) -> str:
         _ = (messages, is_reasoning, model, model_parameters)
-        return (
-            "[{'role': 'system', 'content': 'Provide a brief and direct answer to the question.'}, "
-            "{'role': 'user', 'content': '{question}'}]"
+        # Intentionally return a *non-JSON* python-literal-like string (single quotes)
+        # to exercise the fallback parsing logic.
+        return repr(
+            [
+                system_message("Provide a brief and direct answer to the question."),
+                user_message("{question}"),
+            ]
         )
 
     monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
@@ -212,8 +223,8 @@ def test_semantic_mutation_invalid_json_response(
 
     original_prompt = opik_optimizer.ChatPrompt(
         messages=[
-            {"role": "system", "content": "Provide factual answers."},
-            {"role": "user", "content": "What is the capital of France?"},
+            system_message("Provide factual answers."),
+            user_message("What is the capital of France?"),
         ]
     )
 
@@ -230,9 +241,6 @@ def test_semantic_mutation_invalid_json_response(
     assert result is not original_prompt
     assert captured == {}
     assert result.get_messages() == [
-        {
-            "role": "system",
-            "content": "Provide a brief and direct answer to the question.",
-        },
-        {"role": "user", "content": "{question}"},
+        system_message("Provide a brief and direct answer to the question."),
+        user_message("{question}"),
     ]

@@ -12,6 +12,7 @@ import random
 import string
 
 from opik_optimizer import ChatPrompt
+from .message_builders import assistant_message, system_message, user_message
 
 
 class _RandomLike(Protocol):
@@ -164,12 +165,15 @@ class ChatPromptFactory:
         messages: list[dict[str, Any]] = []
 
         if include_system:
-            messages.append({"role": "system", "content": self.default_system})
+            messages.append(system_message(self.default_system))
 
         for i in range(message_count):
             role = "user" if i % 2 == 0 else "assistant"
             content = f"Message {i + 1}" if role == "user" else f"Response {i + 1}"
-            messages.append({"role": role, "content": content})
+            if role == "user":
+                messages.append(user_message(content))
+            else:
+                messages.append(assistant_message(content))
 
         return self.create(messages=messages)
 
@@ -216,14 +220,13 @@ class ChatPromptFactory:
         """Create a prompt with multimodal (image) content."""
         return self.create(
             messages=[
-                {"role": "system", "content": "Analyze the image."},
-                {
-                    "role": "user",
-                    "content": [
+                system_message("Analyze the image."),
+                user_message(
+                    [
                         {"type": "text", "text": text},
                         {"type": "image_url", "image_url": {"url": image_url}},
-                    ],
-                },
+                    ]
+                ),
             ]
         )
 
