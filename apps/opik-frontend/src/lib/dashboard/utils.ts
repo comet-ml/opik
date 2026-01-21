@@ -2,6 +2,8 @@ import uniqid from "uniqid";
 import cloneDeep from "lodash/cloneDeep";
 import map from "lodash/map";
 import get from "lodash/get";
+import isEmpty from "lodash/isEmpty";
+import isString from "lodash/isString";
 import {
   BaseDashboardConfig,
   DashboardSection,
@@ -11,12 +13,17 @@ import {
   WIDGET_TYPE,
   WidgetResolver,
   TEMPLATE_TYPE,
+  EXPERIMENT_DATA_SOURCE,
 } from "@/types/dashboard";
 import { areLayoutsEqual } from "@/lib/dashboard/layout";
 import { isLooseEqual } from "@/lib/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 
-export const DASHBOARD_VERSION = 2;
+export const DASHBOARD_VERSION = 3;
+export const MIN_MAX_EXPERIMENTS = 1;
+export const MAX_MAX_EXPERIMENTS = 100;
+export const DEFAULT_MAX_EXPERIMENTS = 10;
+
 const DEFAULT_SECTION_NAME = "New section";
 
 const TEMPLATE_ID_PREFIX = "template:";
@@ -71,6 +78,9 @@ export const generateEmptyConfig = (): BaseDashboardConfig => ({
   dateRange: DEFAULT_DATE_PRESET,
   projectIds: [],
   experimentIds: [],
+  experimentDataSource: EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP,
+  experimentFilters: [],
+  maxExperimentsCount: DEFAULT_MAX_EXPERIMENTS,
 });
 
 export const generateEmptyDashboard = (): DashboardState => {
@@ -258,4 +268,25 @@ export const updateWidgetWithGeneratedTitle = (
     ...merged,
     generatedTitle,
   };
+};
+
+export const isValidIntegerInRange = (
+  value: string,
+  min: number,
+  max: number,
+): boolean => {
+  if (!isString(value) || isEmpty(value)) {
+    return false;
+  }
+  const trimmedValue = value.trim();
+  if (isEmpty(trimmedValue)) {
+    return false;
+  }
+  const numValue = Number(trimmedValue);
+  return (
+    Number.isInteger(numValue) &&
+    String(numValue) === trimmedValue &&
+    numValue >= min &&
+    numValue <= max
+  );
 };

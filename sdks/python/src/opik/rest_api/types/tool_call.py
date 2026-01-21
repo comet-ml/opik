@@ -5,12 +5,13 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .function_call import FunctionCall
+from .tool_call_type import ToolCallType
 
 
 class ToolCall(UniversalBaseModel):
     id: typing.Optional[str] = None
     index: typing.Optional[int] = None
-    type: typing.Optional[typing.Literal["function"]] = None
+    type: typing.Optional[ToolCallType] = None
     function: typing.Optional[FunctionCall] = None
 
     if IS_PYDANTIC_V2:

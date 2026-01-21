@@ -25,6 +25,7 @@ import { Filter } from "@/types/filters";
 export enum RESOURCE_TYPE {
   project,
   dataset,
+  datasetItem,
   prompt,
   experiment,
   optimization,
@@ -50,6 +51,14 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted dataset",
     label: "dataset",
+    color: "var(--color-yellow)",
+  },
+  [RESOURCE_TYPE.datasetItem]: {
+    url: "/$workspaceName/datasets/$datasetId/items",
+    icon: Database,
+    param: "datasetId",
+    deleted: "Deleted dataset item",
+    label: "dataset item",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.prompt]: {

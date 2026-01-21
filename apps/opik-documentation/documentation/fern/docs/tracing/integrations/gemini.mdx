@@ -157,6 +157,89 @@ The trace can now be viewed in the UI with hierarchical spans showing the relati
   <img src="/img/cookbook/gemini_trace_decorator_cookbook.png" />
 </Frame>
 
+## Multimodal Content Attachments
+
+The `track_genai` wrapper automatically logs multimodal content parts (images, audio, video) as attachments in your traces. When you send images or other media to Gemini models, they are captured and viewable directly in the Opik UI alongside your trace data.
+
+This makes it easy to:
+- Review the exact media content sent to the model
+- Debug multimodal prompts
+- Audit model inputs for compliance
+
+## Video Generation (Veo)
+
+The `track_genai` wrapper also supports Google's Veo video generation API. When you generate videos, Opik automatically tracks the video creation process and logs the generated video as an attachment when you save it.
+
+```python
+import os
+import time
+import opik
+from opik import track, opik_context
+from opik.integrations.genai import track_genai
+import google.genai as genai
+from google.genai.types import HttpOptions, GenerateVideosConfig
+
+os.environ["OPIK_PROJECT_NAME"] = "genai-video-demo"
+
+# Configure for VertexAI (required for Veo)
+client = genai.Client(
+    vertexai=True,
+    http_options=HttpOptions(api_version="v1"),
+)
+genai_client = track_genai(client)
+
+
+@track
+def generate_video(
+    prompt: str,
+    number_of_videos: int = 1,
+    duration_seconds: int = 4,
+    resolution: str = "720p",
+    generate_audio: bool = False,
+) -> dict:
+    """Generate a video using Google's Veo model."""
+    # Create video
+    operation = genai_client.models.generate_videos(
+        model="veo-3.1-fast-generate-preview",
+        prompt=prompt,
+        config=GenerateVideosConfig(
+            duration_seconds=duration_seconds,
+            resolution=resolution,
+            generate_audio=generate_audio,
+            number_of_videos=number_of_videos,
+        ),
+    )
+
+    # Wait for completion
+    with opik.start_as_current_span(name="wait_for_completion") as span:
+        while not operation.done:
+            time.sleep(10)
+            operation = genai_client.operations.get(operation)
+            result = {"name": operation.name, "done": operation.done}
+            opik_context.update_current_span(output=result)
+
+    # Download all videos if generation succeeded
+    if operation.response and operation.response.generated_videos:
+        output_paths = []
+        for i, generated_video in enumerate(operation.response.generated_videos):
+            output_path = f"output_video_{i}.mp4"
+            generated_video.video.save(output_path)
+            output_paths.append(output_path)
+        result["output_paths"] = output_paths
+
+    return result
+
+
+# Generate videos
+generate_video("A golden retriever playing in the snow", number_of_videos=2)
+```
+
+The trace will show the full video generation workflow including the video creation, polling, and the generated video as an attachment:
+
+<Frame>
+  <img src="/img/tracing/google_genai_veo_trace.png" />
+</Frame>
+
 ## Cost Tracking
 
 The `track_genai` wrapper automatically tracks token usage and cost for all supported Google AI models.

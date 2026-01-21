@@ -242,6 +242,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                     traceId={traceId}
                     activeSection={activeSection}
                     setActiveSection={setActiveSection}
+                    spans={spansData?.content}
                   />
                 )}
               </ResizablePanel>
