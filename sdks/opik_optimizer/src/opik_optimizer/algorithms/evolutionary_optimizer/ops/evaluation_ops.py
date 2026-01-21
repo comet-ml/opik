@@ -8,6 +8,7 @@ from .... import helpers
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
 import opik
+from .... import constants
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .. import evolutionary_optimizer  # noqa: F401
@@ -134,5 +135,6 @@ def evaluate_bundle(
         experiment_config=experiment_config,
         optimization_id=optimization_id,
         verbose=verbose,
+        use_evaluate_on_dict_items=constants.ENABLE_EVALUATE_ON_DICT_ITEMS,
     )
     return score

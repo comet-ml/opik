@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import random
 from typing import Any, TYPE_CHECKING, cast
 from collections.abc import Callable
 import json
@@ -17,6 +16,7 @@ except Exception as exc:  # pragma: no cover - exercised when DEAP is missing
 
 from ....core.state import OptimizationContext
 from ....utils import display as display_utils
+from ....utils import rng as rng_utils
 from .. import reporting
 from . import crossover_ops, mutation_ops, pareto_ops, population_ops, style_ops
 
@@ -238,6 +238,9 @@ def run_generation(
 ) -> tuple[list[Any], int]:
     _require_deap()
     best_gen_score = 0.0
+    gen_rng = optimizer._derive_rng("generation", generation_idx)
+    crossover_rng = rng_utils.derive_rng(gen_rng, "crossover")
+    mutation_rng = rng_utils.derive_rng(gen_rng, "mutation")
 
     offspring = pareto_ops.select_population(
         population=population,
@@ -253,7 +256,7 @@ def run_generation(
     for i in range(0, len(offspring), 2):
         if i + 1 < len(offspring):
             c1, c2 = offspring[i], offspring[i + 1]
-            if random.random() < optimizer.crossover_rate:
+            if gen_rng.random() < optimizer.crossover_rate:
                 if optimizer.enable_llm_crossover:
                     c1_new, c2_new = crossover_ops.llm_deap_crossover(
                         c1,
@@ -270,6 +273,7 @@ def run_generation(
                         c1,
                         c2,
                         verbose=optimizer.verbose,
+                        rng=crossover_rng,
                     )
                 offspring[i], offspring[i + 1] = c1_new, c2_new
                 del offspring[i].fitness.values, offspring[i + 1].fitness.values
@@ -283,7 +287,7 @@ def run_generation(
             optimizer._best_fitness_history.append(max(valid_scores))
     mut_rate = optimizer._get_adaptive_mutation_rate()
     for i, ind in enumerate(offspring):
-        if random.random() < mut_rate:
+        if gen_rng.random() < mut_rate:
             new_ind = mutation_ops.deap_mutation(
                 individual=ind,
                 current_population=optimizer._current_population,
@@ -295,6 +299,7 @@ def run_generation(
                 optimization_id=optimizer.current_optimization_id,
                 verbose=optimizer.verbose,
                 prompts=optimizer._prompts,
+                rng=mutation_rng,
             )
             offspring[i] = new_ind
             del offspring[i].fitness.values
