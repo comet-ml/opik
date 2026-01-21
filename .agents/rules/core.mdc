@@ -1,0 +1,40 @@
+---
+description: Core development standards
+globs:
+alwaysApply: true
+---
+# Core Standards
+
+## Git Workflow
+- Branch: `{username}/{TICKET}-{summary}` (e.g., `john/OPIK-123-add-feature`)
+- Commit: `[OPIK-123] [BE|FE|SDK|DOCS] Summary` or `Revision N: description`
+- PR title: `[OPIK-123] [BE] Summary` (use `.github/pull_request_template.md`)
+- Always rebase on main, never merge
+- Never commit secrets, customer names, PII, or internal URLs
+
+## Clean Code
+- Named constants over magic numbers
+- Self-documenting names; comments explain *why*, not *what*
+- Single responsibility per function
+- DRY: extract repeated code
+- Fix technical debt early
+
+## Testing
+- Add tests for: new features, bug fixes, API changes
+- Run only relevant tests: `mvn test -Dtest="ClassTest"`, `pytest path/test.py`, `npm test -- file.test.tsx`
+- Capture output: `mvn test 2>&1 | tee /tmp/opik-test-logs/test.log`
+- Search logs with `grep`, don't re-run tests to find errors
+- Mock external dependencies; never use `sleep()` for timing
+- Test names: `should_return_error_when_input_invalid`
+- Cover edge cases and error conditions
+
+## Code Quality
+- Java: `mvn spotless:apply`
+- Frontend: ESLint + Prettier
+- Python: `ruff check`
+- TypeScript SDK: `npm run lint`
+
+## Chat Session Hygiene
+- **Start a new chat** when switching to an unrelated topic (e.g., from backend code to frontend, or from coding to general questions)
+- Use `/clear` or `/summarize` to reset context if staying in the same chat
+- Long chats with mixed topics degrade response quality

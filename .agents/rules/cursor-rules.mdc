@@ -1,0 +1,52 @@
+---
+description: Guidelines for creating and maintaining Cursor rules
+globs: .cursor/rules/**/*.mdc
+alwaysApply: false
+---
+# Cursor Rules Meta Guidelines
+
+## Conciseness Principles
+
+When creating or updating `.mdc` rule files:
+
+1. **Bullet points over prose** - Use lists, not paragraphs
+2. **Tables for comparisons** - Patterns, options, mappings
+3. **Minimal code examples** - One example per pattern, 3-5 lines max
+4. **No redundancy** - Each concept appears once
+5. **Action-oriented** - What to do, not theory
+
+## Structure Template
+
+```markdown
+---
+description: One-line purpose
+globs: path/to/files/**/*
+alwaysApply: false
+---
+# Title
+
+## Section (use sparingly)
+- Bullet point rules
+- `code` for inline references
+
+## Code Pattern (if needed)
+\`\`\`language
+// Minimal example
+\`\`\`
+```
+
+## Token Budget
+
+| Scope | Target |
+|-------|--------|
+| Single file rule | <100 lines, <400 tokens |
+| Feature area (e.g., testing) | <150 lines, <600 tokens |
+| Root rules (alwaysApply) | <50 lines each |
+
+## Anti-Patterns
+
+- ❌ Long explanations of "why"
+- ❌ Multiple examples showing the same thing
+- ❌ Good/bad comparisons (one "do this" suffices)
+- ❌ Links to other rule files (creates dependencies)
+- ❌ Duplicating content from other rules

@@ -1,0 +1,32 @@
+---
+description: Testing patterns for the Opik TypeScript SDK (Vitest)
+globs: sdks/typescript/**/*
+alwaysApply: false
+---
+# TypeScript SDK Testing
+
+## Stack
+- Vitest (`npm test` in `sdks/typescript`)
+- Mock network (fetch) and timers for determinism
+
+## Patterns
+- Test public API, avoid `rest_api` internals
+- Assert persistence only after `await client.flush()`
+- Control debounce with small delays or disabled batching
+- Advance fake timers to trigger queue flushes
+- Assert no unintended `ERROR` logs
+
+## Integrations Testing
+- Mock provider clients
+- Assert spans/inputs/outputs recorded
+- Use `flush()` before assertions
+- Validate error propagation
+
+## Logging
+```typescript
+import { logger } from "@/utils/logger";
+logger.debug("Creating trace", { projectName });
+logger.error("Failed", { error });
+// Control: OPIK_LOG_LEVEL env or setLoggerLevel()
+// Levels: SILLY, TRACE, DEBUG, INFO (default), WARN, ERROR, FATAL
+```

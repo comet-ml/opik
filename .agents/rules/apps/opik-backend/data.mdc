@@ -1,0 +1,33 @@
+---
+description: Database and migrations
+globs: apps/opik-backend/**/*
+alwaysApply: false
+---
+# Database & Migrations
+
+## MySQL Transactions
+- Always use `TransactionTemplate` for MySQL operations
+- `READ_ONLY` for queries, `WRITE` for mutations
+- Keep transaction blocks focused on DB operations only
+- Import: `com.comet.opik.infrastructure.db.TransactionTemplateAsync.{READ_ONLY,WRITE}`
+
+## DAO Pattern
+```java
+@RegisterRowMapper(EntityRowMapper.class)
+public interface EntityDao {
+    @SqlQuery("SELECT * FROM entities WHERE id = :id")
+    Optional<Entity> findById(@Bind("id") String id);
+    
+    @SqlUpdate("INSERT INTO entities (...) VALUES (...)")
+    @GetGeneratedKeys
+    Entity create(@BindBean Entity entity);
+}
+```
+
+## Migrations (Liquibase)
+- MySQL: `src/main/resources/liquibase/db-app-state/migrations/`
+- ClickHouse: `src/main/resources/liquibase/db-app-analytics/migrations/`
+- Format: `--liquibase formatted sql` + `--changeset author:version_description`
+- ClickHouse: Always use `ON CLUSTER '{cluster}'`
+- Add indexes with explanatory comments
+- End scripts with blank line

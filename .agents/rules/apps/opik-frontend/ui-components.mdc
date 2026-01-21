@@ -1,0 +1,77 @@
+---
+description: Frontend UI component patterns and design system guidelines
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+# UI Components & Design System
+
+## Button Variants
+```typescript
+// Primary: <Button variant="default">Save</Button>
+// Secondary: <Button variant="secondary">Cancel</Button>
+// Destructive: <Button variant="destructive">Delete</Button>
+// Ghost: <Button variant="ghost">Link</Button>
+// Sizes: "3xs" | "2xs" | "sm" | "default" | "lg"
+// Icon: size="icon" | "icon-sm" | "icon-xs"
+```
+
+## DataTable
+```typescript
+const columns: ColumnDef<T>[] = useMemo(() => [
+  { id: "name", accessorKey: "name", header: "Name", meta: { type: COLUMN_TYPE.string } }
+], []);
+
+// Column types: string, number, time, duration, cost, list, dictionary, numberDictionary, category
+```
+
+## Color System (use CSS variables)
+```css
+/* Primary: */ bg-primary text-primary-foreground hover:bg-primary-hover
+/* Secondary: */ bg-secondary text-secondary-foreground
+/* Muted: */ bg-muted text-muted-foreground
+/* Destructive: */ bg-destructive text-destructive-foreground
+/* Background: */ bg-background bg-card bg-popover
+```
+
+## Typography
+```css
+/* Titles: */ .comet-title-xl, .comet-title-l, .comet-title-m, .comet-title-s
+/* Body: */ .comet-body, .comet-body-s, .comet-body-xs (-accented variants)
+/* Code: */ .comet-code
+/* Layout: */ .comet-header-height, .comet-sidebar-width, .comet-custom-scrollbar
+```
+
+## Component Placement
+- **Reusable**: `components/shared/` folder
+- **Page-specific**: Same folder as parent component
+- Check `components/ui/` and `components/shared/` before creating new
+
+## Dark Theme Support
+```typescript
+// ✅ Theme-aware
+<div className="bg-card text-card-foreground border-border">
+
+// ❌ Hard-coded colors
+<div className="bg-white text-black border-gray-200">
+```
+
+Add new colors to `main.css` with both light and dark variants:
+```css
+:root { --my-color: 210 100% 50%; }
+.dark { --my-color: 220 100% 60%; }
+```
+
+## Common Patterns
+```typescript
+// Page container
+<div className="size-full overflow-auto p-6">
+
+// Card
+<div className="rounded-lg border bg-card p-6">
+
+// Button group
+<div className="flex items-center gap-2">
+
+// Grid
+<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+```

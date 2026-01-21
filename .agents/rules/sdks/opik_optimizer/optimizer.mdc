@@ -1,0 +1,67 @@
+---
+description: Core architecture, code structure, and patterns for Opik Optimizer SDK
+globs: sdks/opik_optimizer/src/opik_optimizer/**/*
+alwaysApply: false
+---
+# Opik Optimizer SDK
+
+## Key Components
+- `BaseOptimizer`: Lifecycle hooks, LiteLLM cache, rate limiting, Opik tracking, history
+- `OptimizableAgent`: Wraps LiteLLM, throttles calls, pushes optimization ids to spans
+- `task_evaluator.evaluate`: Funnels through `opik.evaluation`, handles sampling/threading
+- `OptimizationResult`: Normalized result with prompt, score, metadata, history, counters
+
+## Package Layout
+```
+src/opik_optimizer/
+├── base_optimizer.py
+├── optimization_result.py
+├── optimizable_agent.py
+├── optimization_config/     # Prompt structures
+├── {optimizer}/             # Per-algorithm packages
+│   ├── {optimizer}.py       # Main class (subclass BaseOptimizer)
+│   ├── operators/           # mutation, selection, population, evaluation
+│   ├── prompts.py          
+│   └── reporting.py        
+├── utils/, metrics/, mcp_utils/, integrations/, datasets/
+```
+
+## Execution Flow
+1. `optimize_prompt` validates inputs, seeds counters, creates Opik optimization run
+2. Subclasses generate candidates via helper modules
+3. Scoring: `_evaluate_prompt` → `task_evaluator.evaluate` → Opik telemetry
+4. Progress via `reporting_utils`, history via `_add_to_history`
+5. Return `OptimizationResult`
+
+## API Contract
+```python
+def optimize_prompt(
+    self, prompt: ChatPrompt, dataset: Dataset,
+    metric: Callable, n_samples: int | None = None, ...
+) -> OptimizationResult
+```
+
+## Imports
+- Order: stdlib → third-party → opik_optimizer modules
+- Guard optional deps (`gepa`, `langgraph`) with try/except
+- Use absolute imports across packages, relative within
+
+## Dependencies
+- Core: `litellm`, `opik`, `optuna`, `deap`, `pydantic`, `pandas`, `rich`, `tqdm`
+- Python: `>=3.10,<3.14`
+- Optional extras in `extras_require["dev"]`
+- Run `make install-dev`, `make test`, `make precommit`
+
+## Error Handling
+- `_validate_optimization_inputs` raises `ValueError` early
+- Use `_throttle.rate_limited` for LiteLLM calls
+- Log failures with optimization_id context
+- Never log API keys or PII
+
+## Logging
+```python
+logger = logging.getLogger(__name__)
+# INFO: lifecycle events, DEBUG: candidate details, WARNING: recoverable, ERROR: abort
+```
+- Use `reporting_utils` for console output, not raw print
+- Include `optimization_id`, `iteration`, `best_score` in messages

@@ -1,0 +1,38 @@
+---
+description: Testing patterns for Opik Optimizer SDK
+globs: sdks/opik_optimizer/tests/**/*
+alwaysApply: false
+---
+# Optimizer Testing
+
+## Structure
+```
+tests/
+├── unit/                # Deterministic tests, use mocks
+├── e2e/optimizers/      # Per-optimizer with reduced iterations
+├── test_requirements.txt
+└── conftest.py
+```
+
+## Best Practices
+- **Seed randomness**: `random.seed(42)`, `numpy.random.seed(42)`
+- **Reset globals**: LiteLLM cache, logging, env vars via fixtures
+- **Tiny configs**: Small populations, low iterations, stub datasets
+- **Replace LiteLLM**: Fakes/patches for offline unit tests
+
+## Naming
+`test_evolutionary_optimizer__improves_score`
+
+## Assertions
+- Test both positive paths and failure handling
+- Use `OptimizationResult` fields for comparison
+- Use `caplog` for log-level assertions
+
+## E2E Tests
+- Require provider credentials (`OPENAI_API_KEY`)
+- Document env vars in docstrings
+- Skip gracefully when credentials missing
+
+## Datasets
+- Use `opik_optimizer.datasets.tiny_test()` for smoke coverage
+- Note suffixes: `_train`, `_validation`, `_test`, `_sample`

@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+If the developer changes topics dramatically in a chat session, recommend they start a new chat session or clear the context (e.g. /clear for Claude or /summarize for Cursor).

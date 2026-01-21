@@ -1,0 +1,37 @@
+---
+description: Testing patterns
+globs: apps/opik-backend/**/*
+alwaysApply: false
+---
+# Testing
+
+## Stack
+- JUnit 5, AssertJ, PODAM (`PodamFactoryUtils`), Testcontainers, WireMock
+
+## Test Data
+- Use `PodamFactoryUtils.newPodamFactory()` for random test data
+- Override only values needed for specific test case
+- Use `.toBuilder()` to modify generated objects
+
+## Naming
+- Happy path: `createUser()` or `createUserWhenValidRequestReturnsUser()`
+- Error path: `createUserWhenInvalidEmailThrowsBadRequestException()`
+
+## Assertions
+- Use AssertJ: `assertThat(result).isEqualTo(expected)`
+- For sorting: use `isSorted()` or compare against pre-sorted known data
+- Never: sort actual results then compare to themselves (tautology)
+
+## Parameterized Tests
+- Use `@ParameterizedTest` + `@MethodSource` for multiple scenarios
+- Cover ALL fields when testing sorting/filtering
+- Use `Comparator<T>` parameter for sorting tests
+
+## Async/Timing
+- Use Awaitility ONLY for truly async operations (Kafka, background jobs)
+- MySQL operations are synchronous - no Awaitility needed
+- Avoid `Thread.sleep()` - use timestamp manipulation instead
+
+## Test Execution
+- Run specific tests: `mvn test -Dtest="ClassTest#methodName"`
+- Capture output: `mvn test 2>&1 | tee /tmp/opik-test-logs/test.log`

@@ -1,0 +1,83 @@
+---
+description: Frontend code quality standards, TypeScript patterns, and naming conventions
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+# Code Quality Standards
+
+## TypeScript Patterns
+
+### Component Types
+```typescript
+interface ComponentProps {
+  title: string;
+  description?: string;
+  onAction: (id: string) => void;
+  children: React.ReactNode;
+}
+
+const Component: React.FunctionComponent<ComponentProps> = ({ title, ... }) => {
+  // ...
+};
+```
+
+### Type Definitions
+- Use `type` unions for simple cases: `type Variant = "default" | "outline" | "ghost"`
+- Use `enum` for complex cases with methods
+- Use `as const` for readonly arrays: `const STATUSES = ["pending", "approved"] as const`
+- Always provide return types for complex functions
+
+## Naming Conventions
+
+| Type | Convention | Example |
+|------|------------|---------|
+| Components | PascalCase | `DataTable.tsx` |
+| Utilities | camelCase | `dateUtils.ts` |
+| Hooks | camelCase with `use` | `useEntityList.ts` |
+| Constants | SCREAMING_SNAKE | `COLUMN_TYPE` |
+| Event handlers | Descriptive | `handleDeleteClick`, `handleUserSelect` |
+| CSS classes | `comet-` prefix | `comet-table-row-active` |
+
+## Component Composition
+
+### Favor Composition over Prop Drilling
+```typescript
+// ✅ Good: Children pattern
+<Dialog title="Edit User">
+  <UserForm user={selectedUser} onSave={handleSave} />
+</Dialog>
+
+// ❌ Avoid: Passing many props down
+<Dialog user={...} onSave={...} onCancel={...} title={...} ... />
+```
+
+### Extract Logic into Hooks
+```typescript
+const useEntityActions = (entityId: string) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+  // ... logic
+  return { deleteEntity, isDeleting };
+};
+```
+
+## Lodash Usage
+```typescript
+// ✅ Individual imports for tree-shaking
+import pick from "lodash/pick";
+import groupBy from "lodash/groupBy";
+import isString from "lodash/isString";
+
+// ❌ Never use default import (bad for bundle)
+import _ from "lodash";
+```
+
+## Functionality Isolation
+Isolate external dependencies for future replacement:
+```typescript
+// lib/dateService.ts
+export interface DateService {
+  format(date: Date, format: string): string;
+}
+export const dateService: DateService = new MomentDateService();
+// Easy to replace: export const dateService = new DayJsDateService();
+```

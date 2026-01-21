@@ -1,0 +1,55 @@
+---
+description: Authoritative architecture rules for the TypeScript SDK. Keep these aligned with real code.
+globs: sdks/typescript/src/**/*.ts
+alwaysApply: false
+---
+# TypeScript SDK Architecture
+
+## Overview
+Non-blocking by default. Data buffered and flushed async to backend. Node.js >= 18, ESM/CJS builds.
+
+## Layers
+1. **Public API** (`opik/index.ts`): Minimal surface - `Opik`, `track`, `flushAll`, types
+2. **Client** (`client/Client.ts`): Loads config, wires batch queues, high-level ops
+3. **Domain** (`tracer/Trace.ts`, `tracer/Span.ts`): Own `update`, `end`, `score`, child creation
+4. **Batching** (`client/BatchQueue.ts`): Debounced create/update/delete, ordering guarantees
+5. **REST** (`rest_api/`): Generated clients, serializers, HTTP runtime
+6. **Integrations** (`integrations/`): Thin adapters over public API
+
+## Data Flow
+```
+User → Opik (public) → OpikClient → Domain (Trace/Span) → BatchQueues → REST → Backend
+```
+
+## Batching Semantics
+- Debounce via `OpikConfig.batchDelayMs` (or 24h if `holdUntilFlush`)
+- Updates wait for creates; deletes wait for both
+- Only `flush()`/`flushAll()` should be awaited
+
+## Error Handling
+- REST throws `OpikApiError`/`OpikApiTimeoutError`
+- Client translates 404s → `DatasetNotFoundError`, `ExperimentNotFoundError`
+- Catch specific errors; never swallow
+
+## Config Precedence
+Explicit options → env vars (`OPIK_*`) → `~/.opik.config` → defaults
+
+## Directory Structure
+```
+opik/
+├── index.ts           # Public exports
+├── client/Client.ts   # Main client
+├── tracer/            # Trace.ts, Span.ts
+├── dataset/           # Dataset operations
+├── experiment/        # Experiment operations
+├── rest_api/          # Generated clients
+├── config/Config.ts   # Configuration
+├── utils/             # logger, flushAll, generateId, stream, url
+└── integrations/      # opik-openai, opik-langchain, vercel
+```
+
+## Key Rules
+- Domain objects enqueue via batch queues, never HTTP directly
+- Integrations wrap public API, don't import `rest_api`
+- Use `generateId.ts` for IDs, `url.ts` for UI links
+- Add methods on `OpikClient` or new domain class, expose via `opik/index.ts`

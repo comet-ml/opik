@@ -51,3 +51,30 @@
 **/tmp/
 **/*.log
 **/*.tmp
+
+# Lock files (large, low signal for context)
+**/package-lock.json
+**/uv.lock
+**/poetry.lock
+
+# Documentation build artifacts
+**/site/
+**/_build/
+**/.docusaurus/
+
+# Test artifacts
+**/__snapshots__/
+**/playwright-report/
+**/test-results/
+
+# SDK generated code (if auto-generated)
+**/fern/
+
+# Misc large/binary files
+**/*.min.js
+**/*.min.css
+**/*.map
+
+# Generated AI editor files (content in .ai/rules/)
+AGENTS.md
+CLAUDE.md

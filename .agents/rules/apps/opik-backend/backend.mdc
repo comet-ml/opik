@@ -1,0 +1,38 @@
+---
+description: Backend architecture and code style
+globs: apps/opik-backend/**/*
+alwaysApply: false
+---
+# Backend Guidelines
+
+## Architecture
+- Layered: Resources → Services → DAOs → Models
+- Resources: HTTP handling, validation, response formatting
+- Services: Business logic, orchestration, transactions
+- DAOs: JDBI3 interfaces with `@SqlQuery`/`@SqlUpdate`
+- Models: Immutable records with Lombok `@Builder`
+
+## File Locations
+- Resources: `com.comet.opik.api.resources.v1/`
+- Services/DAOs: `com.comet.opik.domain/`
+- Models/DTOs: `com.comet.opik.api/`
+
+## Dependency Injection
+- Use `@Singleton` + `@RequiredArgsConstructor(onConstructor_ = @Inject)`
+- Mark dependencies `@NonNull`
+- Use `@Slf4j` for logging
+
+## Code Style
+- Run `mvn spotless:apply` before commit
+- Files must end with blank line
+- Use `Map.of()`, `List.of()`, `Set.of()` for immutable collections
+- Use `getFirst()`/`getLast()` not `get(0)`/`get(size()-1)`
+- Use imports, not inline fully-qualified names
+- Use `StringUtils.isBlank()` for null-safe string checks
+- Use `JsonUtils` for JSON (not `new ObjectMapper()`)
+- Use `TemplateUtils.newST()` for StringTemplate (never `new ST()` - memory leak)
+
+## Before Making Changes
+1. Review 3 similar existing classes
+2. Follow established naming patterns
+3. Use existing utility classes

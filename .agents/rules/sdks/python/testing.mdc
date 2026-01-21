@@ -1,0 +1,85 @@
+---
+description: Testing patterns and organization for the Python SDK
+globs: sdks/python/tests/**/*
+alwaysApply: false
+---
+# Testing
+
+## Test Types
+```
+tests/
+├── unit/                 # Mirror src/opik structure, use mocks
+├── library_integration/  # Per-library (openai/, langchain/), use fake_backend
+├── e2e/                  # Full API workflows, use verifiers
+├── e2e_library_integration/  # Real external services
+└── testlib/              # TraceModel, SpanModel, assert_equal, ANY helpers
+```
+
+## Naming Convention
+`test_WHAT__CASE_DESCRIPTION__EXPECTED_RESULT` or `test_WHAT__happyflow`
+
+```python
+def test_tracked_function__error_inside__caught_in_top_level_span(): ...
+def test_optimization_lifecycle__happyflow(opik_client, dataset_name): ...
+```
+
+## Fake Backend Testing
+```python
+from tests.testlib import TraceModel, SpanModel, ANY_BUT_NONE, assert_equal
+
+def test_track__nested_function(fake_backend):
+    @tracker.track
+    def f_outer(x):
+        f_inner("inner")
+        return "outer"
+    
+    f_outer("input")
+    tracker.flush_tracker()  # Always flush!
+    
+    EXPECTED = TraceModel(
+        id=ANY_BUT_NONE,
+        name="f_outer",
+        input={"x": "input"},
+        output={"output": "outer"},
+        spans=[SpanModel(id=ANY_BUT_NONE, name="f_outer", ...)]
+    )
+    assert_equal(EXPECTED, fake_backend.trace_trees[0])
+```
+
+## Assertion Helpers
+- `ANY` - matches anything including None
+- `ANY_BUT_NONE` - must exist
+- `ANY_DICT`, `ANY_LIST`, `ANY_STRING`
+- `ANY_DICT.containing({"key": "value"})` - partial match
+
+## E2E Testing
+```python
+from tests.e2e import verifiers, synchronization
+
+def test_trace_creation(opik_client):
+    trace = opik_client.trace(name="test")
+    opik_client.flush()
+    
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name="test"
+    )
+```
+
+## Parameterized Tests
+```python
+@pytest.mark.parametrize("filter_string, expected", [
+    ('name = "test"', [{"field": "name", "operator": "="}]),
+    ("usage.total_tokens > 100", [...]),
+])
+def test_valid_oql_expressions(filter_string, expected): ...
+```
+
+## Best Practices
+- Test public API only, never violate privacy
+- Make tests fast - use mocks/stubs
+- `fake_backend` for integration tests creating traces/spans
+- `verifiers` for e2e tests with real API
+- Always `flush_tracker()` after creating traces/spans
+- Test both success and error cases
