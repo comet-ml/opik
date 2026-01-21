@@ -31,6 +31,14 @@ class _RequiredFieldModel(BaseModel):
     required_field: str
 
 
+def _assert_pydantic_model(
+    result: Any, model: type[BaseModel], expected: dict[str, Any]
+) -> None:
+    assert isinstance(result, model)
+    for key, value in expected.items():
+        assert getattr(result, key) == value
+
+
 def _role_of(message: Any) -> str | None:
     if isinstance(message, dict):
         value = message.get("role")
@@ -49,9 +57,7 @@ class TestParseResponse:
     def test_parses_structured_output_with_response_model(self) -> None:
         mock_response = make_mock_response('{"name": "test", "count": 42}')
         result = _parse_response(mock_response, response_model=_NameCountModel)
-        assert isinstance(result, _NameCountModel)
-        assert result.name == "test"
-        assert result.count == 42
+        _assert_pydantic_model(result, _NameCountModel, {"name": "test", "count": 42})
 
     def test_parses_structured_output_from_parsed_object(self) -> None:
         mock_response = make_mock_response(
@@ -59,9 +65,7 @@ class TestParseResponse:
             parsed={"name": "parsed", "count": 7},
         )
         result = _parse_response(mock_response, response_model=_NameCountModel)
-        assert isinstance(result, _NameCountModel)
-        assert result.name == "parsed"
-        assert result.count == 7
+        _assert_pydantic_model(result, _NameCountModel, {"name": "parsed", "count": 7})
 
     def test_parses_structured_output_from_parsed_model_instance(self) -> None:
         parsed_model = _NameCountModel(name="parsed", count=3)
@@ -75,9 +79,7 @@ class TestParseResponse:
             parsed={"name": "missing_count"},
         )
         result = _parse_response(mock_response, response_model=_NameCountModel)
-        assert isinstance(result, _NameCountModel)
-        assert result.name == "json"
-        assert result.count == 11
+        _assert_pydantic_model(result, _NameCountModel, {"name": "json", "count": 11})
 
     @pytest.mark.parametrize(
         "finish_reason,content",
@@ -123,8 +125,7 @@ class TestParseResponse:
     def test_fallback_parsing_with_python_repr(self) -> None:
         mock_response = make_mock_response("{'name': 'test'}")
         result = _parse_response(mock_response, response_model=_NameModel)
-        assert isinstance(result, _NameModel)
-        assert result.name == "test"
+        _assert_pydantic_model(result, _NameModel, {"name": "test"})
 
     def test_handles_none_finish_reason(self) -> None:
         mock_response = make_mock_response("Response content")

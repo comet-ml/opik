@@ -5,13 +5,27 @@ This module provides factory classes for generating test data
 with sensible defaults and customization options.
 """
 
-from typing import Any
+from typing import Any, Protocol, cast
 from dataclasses import dataclass, field
 from unittest.mock import MagicMock
 import random
 import string
 
 from opik_optimizer import ChatPrompt
+
+
+class _RandomLike(Protocol):
+    def random(self) -> float: ...
+
+    def uniform(self, a: float, b: float) -> float: ...
+
+    def choices(self, population: str, k: int) -> list[str]: ...
+
+
+def _rand(rng: random.Random | None) -> _RandomLike:
+    # Use the global random generator by default to preserve existing behavior,
+    # but allow callers to pass an explicit RNG for determinism.
+    return cast(_RandomLike, rng if rng is not None else random)
 
 
 @dataclass
@@ -249,10 +263,12 @@ class EvaluationResultFactory:
         reasons: list[str] | None = None,
         dataset_item_ids: list[str] | None = None,
         include_failures: bool = False,
+        rng: random.Random | None = None,
     ) -> MagicMock:
         """Create a mock EvaluationResult with the specified scores."""
         mock_result = MagicMock()
         test_results = []
+        rand = _rand(rng)
 
         for i, score in enumerate(scores):
             test_result = MagicMock()
@@ -270,7 +286,7 @@ class EvaluationResultFactory:
             score_result.name = self.metric_name
             score_result.value = score
             score_result.reason = reasons[i] if reasons else self.default_reason
-            score_result.scoring_failed = include_failures and random.random() < 0.1
+            score_result.scoring_failed = include_failures and rand.random() < 0.1
 
             test_result.score_results = [score_result]
             test_results.append(test_result)
@@ -284,17 +300,19 @@ class EvaluationResultFactory:
         *,
         success_rate: float = 0.7,
         include_reasons: bool = False,
+        rng: random.Random | None = None,
     ) -> MagicMock:
         """Create results with a mix of high and low scores."""
+        rand = _rand(rng)
         scores = []
         reasons: list[str] | None = [] if include_reasons else None
 
         for i in range(count):
-            if random.random() < success_rate:
-                score = random.uniform(0.7, 1.0)
+            if rand.random() < success_rate:
+                score = rand.uniform(0.7, 1.0)
                 reason = "Good response" if include_reasons else None
             else:
-                score = random.uniform(0.0, 0.4)
+                score = rand.uniform(0.0, 0.4)
                 reason = (
                     "Poor response - missing key information"
                     if include_reasons
@@ -316,11 +334,13 @@ class EvaluationResultFactory:
         return self.create([0.0] * count)
 
 
-def random_string(length: int = 10) -> str:
+def random_string(length: int = 10, *, rng: random.Random | None = None) -> str:
     """Generate a random string for testing."""
-    return "".join(random.choices(string.ascii_lowercase, k=length))
+    rand = _rand(rng)
+    return "".join(rand.choices(string.ascii_lowercase, k=length))
 
 
-def random_id() -> str:
+def random_id(*, rng: random.Random | None = None) -> str:
     """Generate a random ID string."""
-    return f"id-{''.join(random.choices(string.hexdigits.lower(), k=8))}"
+    rand = _rand(rng)
+    return f"id-{''.join(rand.choices(string.hexdigits.lower(), k=8))}"
