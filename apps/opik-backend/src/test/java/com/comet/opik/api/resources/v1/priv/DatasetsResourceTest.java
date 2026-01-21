@@ -3845,6 +3845,7 @@ class DatasetsResourceTest {
                         .datasetName(datasetName)
                         .items(batchItems)
                         .datasetId(null)
+                        .batchGroupId(null)
                         .build();
 
                 putAndAssert(batch, TEST_WORKSPACE, API_KEY);
