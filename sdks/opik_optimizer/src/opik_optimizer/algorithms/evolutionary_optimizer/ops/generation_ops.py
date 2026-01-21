@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from typing import Any, TYPE_CHECKING, cast
 from collections.abc import Callable
+import hashlib
 import json
 import logging
 
@@ -39,16 +40,31 @@ def build_deap_evaluator(
     context: OptimizationContext,
     experiment_config: dict[str, Any] | None,
 ) -> Callable[[Any], tuple[float, ...]]:
+    def _build_sampling_tag(individual: Any) -> str:
+        generation_idx = getattr(optimizer, "_current_generation_idx", None)
+        try:
+            payload = json.dumps(dict(individual), sort_keys=True, default=str)
+        except TypeError:
+            payload = json.dumps(str(individual))
+        candidate_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8]
+        return optimizer._build_sampling_tag(
+            scope="evolutionary",
+            round_index=generation_idx,
+            candidate_id=candidate_hash,
+        )
+
     if optimizer.enable_moo:
 
         def _evaluate(individual: Any) -> tuple[float, ...]:
             if optimizer._should_stop_context(context):
                 return (-float("inf"), float("inf"))
             prompts_bundle = optimizer._individual_to_prompts(individual)
+            sampling_tag = _build_sampling_tag(individual)
             primary_score = optimizer.evaluate(
                 context,
                 prompts_bundle,
                 experiment_config=(experiment_config or {}).copy(),
+                sampling_tag=sampling_tag,
             )
             prompt_length = float(len(str(json.dumps(dict(individual)))))
             return (primary_score, prompt_length)
@@ -59,10 +75,12 @@ def build_deap_evaluator(
             if optimizer._should_stop_context(context):
                 return (-float("inf"),)
             prompts_bundle = optimizer._individual_to_prompts(individual)
+            sampling_tag = _build_sampling_tag(individual)
             fitness_score = optimizer.evaluate(
                 context,
                 prompts_bundle,
                 experiment_config=(experiment_config or {}).copy(),
+                sampling_tag=sampling_tag,
             )
             return (fitness_score,)
 
@@ -142,6 +160,7 @@ def evaluate_initial_population(
     best_prompts_overall: dict[str, Any],
 ) -> tuple[float, dict[str, Any]]:
     _require_deap()
+    optimizer._current_generation_idx = 0
     logger.debug("Evaluating initial population")
     fitnesses: list[Any] = list(
         map(optimizer._deap_evaluate_individual_fitness, deap_population)
@@ -237,6 +256,7 @@ def run_generation(
     best_primary_score_overall: float,
 ) -> tuple[list[Any], int]:
     _require_deap()
+    optimizer._current_generation_idx = generation_idx
     best_gen_score = 0.0
     gen_rng = optimizer._derive_rng("generation", generation_idx)
     crossover_rng = rng_utils.derive_rng(gen_rng, "crossover")

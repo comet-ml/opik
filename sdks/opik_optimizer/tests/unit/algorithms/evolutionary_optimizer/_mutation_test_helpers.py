@@ -42,7 +42,7 @@ class _StubRng:
     def choice(self, seq: Sequence[Any]) -> Any:
         if self._choice_value is not None:
             return self._choice_value
-        return seq[0]
+        return list(seq)[0]
 
     def shuffle(self, seq: list[Any]) -> None:
         return None

@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import Any, Literal, TypeAlias, overload
+from typing import Any, Literal, overload
 from collections.abc import Callable
 
 import opik
@@ -17,11 +17,6 @@ try:
     from opik import evaluate_on_dict_items as _evaluate_on_dict_items
 except Exception:  # pragma: no cover - older Opik SDK fallback
     _evaluate_on_dict_items = None
-
-EvaluationResultType: TypeAlias = (
-    opik_evaluation_result.EvaluationResult
-    | opik_evaluation_result.EvaluationResultOnDictItems
-)
 
 
 def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
@@ -115,7 +110,10 @@ def evaluate(
     verbose: int = 1,
     return_evaluation_result: Literal[True] = True,
     use_evaluate_on_dict_items: bool = False,
-) -> EvaluationResultType: ...
+) -> (
+    opik_evaluation_result.EvaluationResult
+    | opik_evaluation_result.EvaluationResultOnDictItems
+): ...
 
 
 def evaluate(
@@ -131,7 +129,11 @@ def evaluate(
     verbose: int = 1,
     return_evaluation_result: bool = False,
     use_evaluate_on_dict_items: bool = False,
-) -> float | EvaluationResultType:
+) -> (
+    float
+    | opik_evaluation_result.EvaluationResult
+    | opik_evaluation_result.EvaluationResultOnDictItems
+):
     """
     Evaluate a task on a dataset.
 
@@ -188,7 +190,12 @@ def evaluate_with_result(
     experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
     use_evaluate_on_dict_items: bool = False,
-) -> tuple[float, EvaluationResultType | None]:
+) -> tuple[
+    float,
+    opik_evaluation_result.EvaluationResult
+    | opik_evaluation_result.EvaluationResultOnDictItems
+    | None,
+]:
     """
     Run evaluation and return both the aggregate score and the underlying Opik result.
     """
@@ -346,7 +353,12 @@ def _evaluate_internal(
     experiment_config: dict[str, Any] | None,
     verbose: int,
     use_evaluate_on_dict_items: bool,
-) -> tuple[float, EvaluationResultType | None]:
+) -> tuple[
+    float,
+    opik_evaluation_result.EvaluationResult
+    | opik_evaluation_result.EvaluationResultOnDictItems
+    | None,
+]:
     items = dataset.get_items(n_samples)
     if not items:
         logger.debug("Empty dataset; returning 0.0")

@@ -565,6 +565,7 @@ class BaseOptimizer(ABC):
         context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         experiment_config: dict[str, Any] | None = None,
+        sampling_tag: str | None = None,
     ) -> float:
         """
         Evaluate prompts and return the score.
@@ -584,6 +585,7 @@ class BaseOptimizer(ABC):
             prompts: Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}).
                      Single-prompt optimizations use a dict with one entry.
             experiment_config: Optional experiment configuration.
+            sampling_tag: Optional sampling tag for deterministic subsampling per candidate.
 
         Returns:
             The score (float).
@@ -616,6 +618,7 @@ class BaseOptimizer(ABC):
                     n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
+                    sampling_tag=sampling_tag,
                 )
         except Exception:
             context.finish_reason = "error"

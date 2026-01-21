@@ -248,7 +248,8 @@ class ParameterOptimizer(BaseOptimizer):
             experiment_config=experiment_config,
             n_samples=n_samples,
             n_samples_minibatch=n_samples_minibatch,
-            n_samples_strategy=n_samples_strategy or constants.DEFAULT_N_SAMPLES_STRATEGY,
+            n_samples_strategy=n_samples_strategy
+            or constants.DEFAULT_N_SAMPLES_STRATEGY,
             max_trials=max_trials or self.default_n_trials,
             project_name=project_name,
             allow_tool_use=True,

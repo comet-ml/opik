@@ -181,6 +181,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 verbose=verbose,
                 allow_tool_use=allow_tool_use,
                 use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+                sampling_tag=sampling_tag,
             )
 
         # Default behavior: delegate to parent
@@ -214,12 +215,20 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         verbose: int,
         allow_tool_use: bool | None,
         use_evaluate_on_dict_items: bool | None,
+        sampling_tag: str | None,
     ) -> float:
         n_threads = normalize_eval_threads(n_threads or self.n_threads)
         if self._custom_evaluated_task is None:
             raise ValueError("Custom evaluated task is not set.")
         if allow_tool_use is not None:
             self._custom_allow_tool_use = allow_tool_use
+        debug_log(
+            "evaluation_sampling",
+            sampling_tag=sampling_tag,
+            sampling_mode="custom",
+            n_samples=self._custom_eval_n_samples,
+            dataset_item_ids_count=len(self._custom_eval_item_ids or []),
+        )
         return task_evaluator.evaluate(
             dataset=dataset,
             evaluated_task=self._custom_evaluated_task,
@@ -678,7 +687,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 # - Trial counting (context.trials_completed)
                 # - Early stop checks (perfect score, max trials)
                 # - Progress display hooks
-                score = self.evaluate(context, prompts_with_examples, trial_config)
+                sampling_tag = self._build_sampling_tag(
+                    scope="fewshot",
+                    candidate_id=f"trial{trial.number}",
+                )
+                score = self.evaluate(
+                    context,
+                    prompts_with_examples,
+                    trial_config,
+                    sampling_tag=sampling_tag,
+                )
             finally:
                 # Clear custom task state
                 self._custom_evaluated_task = None

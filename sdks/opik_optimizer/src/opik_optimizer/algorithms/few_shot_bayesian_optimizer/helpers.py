@@ -5,19 +5,10 @@ Bayesian optimization helpers, and other utility functions.
 """
 
 from typing import Any
-import random
-
-from ...utils import rng as rng_utils
 
 # Constants for column value stringification
 MISSING_VALUE_SENTINEL = "<missing>"
 MAX_COLUMN_VALUE_LENGTH = 120
-
-
-# FIXME: Use a centralized RNG function with seed and sampler across all optimizers
-def make_rng(seed: int, *parts: object) -> random.Random:
-    """Create a deterministic RNG (wrapper for shared rng_utils)."""
-    return rng_utils.make_rng(seed, *parts)
 
 
 def stringify_column_value(
