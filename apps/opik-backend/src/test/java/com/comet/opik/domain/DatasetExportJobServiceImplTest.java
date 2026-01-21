@@ -78,8 +78,8 @@ class DatasetExportJobServiceImplTest {
         Duration ttl = Duration.ofHours(24);
         when(idGenerator.generateId()).thenReturn(JOB_ID);
 
-        // When
-        Mono<DatasetExportJob> result = service.createJob(DATASET_ID, ttl)
+        // When - pass null for versionId (legacy mode)
+        Mono<DatasetExportJob> result = service.createJob(DATASET_ID, ttl, null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -94,6 +94,38 @@ class DatasetExportJobServiceImplTest {
                     assertThat(job.createdAt()).isNotNull();
                     assertThat(job.lastUpdatedAt()).isNotNull();
                     assertThat(job.expiresAt()).isNotNull();
+                    assertThat(job.versionId()).isNull();
+                })
+                .verifyComplete();
+
+        // Verify DAO.save() was called
+        verify(exportJobDAO, times(1)).save(any(DatasetExportJob.class), eq(WORKSPACE_ID));
+    }
+
+    @Test
+    void createJob_shouldCreateNewJobWithVersionId() {
+        // Given
+        Duration ttl = Duration.ofHours(24);
+        UUID versionId = UUID.randomUUID();
+        when(idGenerator.generateId()).thenReturn(JOB_ID);
+
+        // When - pass a versionId (versioned mode)
+        Mono<DatasetExportJob> result = service.createJob(DATASET_ID, ttl, versionId)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
+                        .put(RequestContext.USER_NAME, USER_NAME));
+
+        // Then
+        StepVerifier.create(result)
+                .assertNext(job -> {
+                    assertThat(job.id()).isEqualTo(JOB_ID);
+                    assertThat(job.datasetId()).isEqualTo(DATASET_ID);
+                    assertThat(job.status()).isEqualTo(DatasetExportStatus.PENDING);
+                    assertThat(job.createdBy()).isEqualTo(USER_NAME);
+                    assertThat(job.createdAt()).isNotNull();
+                    assertThat(job.lastUpdatedAt()).isNotNull();
+                    assertThat(job.expiresAt()).isNotNull();
+                    assertThat(job.versionId()).isEqualTo(versionId);
                 })
                 .verifyComplete();
 

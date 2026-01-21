@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetExportJob;
 import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.domain.attachment.FileService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import io.dropwizard.util.Duration;
@@ -30,6 +31,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -54,6 +56,12 @@ class CsvDatasetExportServiceImplTest {
     @Mock
     private FileService fileService;
 
+    @Mock
+    private DatasetVersionService versionService;
+
+    @Mock
+    private FeatureFlags featureFlags;
+
     private CsvDatasetExportServiceImpl service;
 
     private static final String WORKSPACE_ID = "test-workspace";
@@ -64,7 +72,8 @@ class CsvDatasetExportServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new CsvDatasetExportServiceImpl(jobService, redisClient, exportConfig, lockService, fileService);
+        service = new CsvDatasetExportServiceImpl(jobService, redisClient, exportConfig, lockService, fileService,
+                versionService, featureFlags);
     }
 
     @Test
@@ -74,6 +83,9 @@ class CsvDatasetExportServiceImplTest {
 
         // Mock: export is enabled
         when(exportConfig.isEnabled()).thenReturn(true);
+
+        // Mock: versioning is disabled (uses legacy table)
+        when(featureFlags.isDatasetVersioningEnabled()).thenReturn(false);
 
         // Mock: no existing jobs
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of()));
@@ -88,8 +100,9 @@ class CsvDatasetExportServiceImplTest {
         // Mock: config returns default TTL
         when(exportConfig.getDefaultTtl()).thenReturn(DEFAULT_TTL);
 
-        // Mock: create new job
-        when(jobService.createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()))).thenReturn(Mono.just(newJob));
+        // Mock: create new job (versionId is null when versioning disabled)
+        when(jobService.createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()), isNull()))
+                .thenReturn(Mono.just(newJob));
 
         // Mock: Redis stream
         @SuppressWarnings("unchecked")
@@ -102,7 +115,7 @@ class CsvDatasetExportServiceImplTest {
         when(exportConfig.getStreamName()).thenReturn("dataset-export-events");
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -118,7 +131,7 @@ class CsvDatasetExportServiceImplTest {
 
         // Verify the flow
         verify(jobService, times(2)).findInProgressJobs(eq(DATASET_ID)); // Initial check + double-check in lock
-        verify(jobService, times(1)).createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()));
+        verify(jobService, times(1)).createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()), isNull());
 
         // Verify stream.add was called with correct message
         verify(mockStream, times(1)).add(any(StreamAddArgs.class));
@@ -130,10 +143,11 @@ class CsvDatasetExportServiceImplTest {
         // Given
         DatasetExportJob existingJob = createJob(JOB_ID, status);
         when(exportConfig.isEnabled()).thenReturn(true);
+        when(featureFlags.isDatasetVersioningEnabled()).thenReturn(false);
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -150,7 +164,7 @@ class CsvDatasetExportServiceImplTest {
         verify(jobService).findInProgressJobs(eq(DATASET_ID));
 
         // Verify no new job was created
-        verify(jobService, never()).createJob(any(), any());
+        verify(jobService, never()).createJob(any(), any(), any());
     }
 
     @Test
@@ -158,10 +172,11 @@ class CsvDatasetExportServiceImplTest {
         // Given
         DatasetExportJob existingJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
         when(exportConfig.isEnabled()).thenReturn(true);
+        when(featureFlags.isDatasetVersioningEnabled()).thenReturn(false);
         when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
-        service.startExport(DATASET_ID)
+        service.startExport(DATASET_ID, null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME))
@@ -178,7 +193,7 @@ class CsvDatasetExportServiceImplTest {
         when(exportConfig.isEnabled()).thenReturn(false);
 
         // When
-        Mono<DatasetExportJob> result = service.startExport(DATASET_ID)
+        Mono<DatasetExportJob> result = service.startExport(DATASET_ID, null)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                         .put(RequestContext.USER_NAME, USER_NAME));
@@ -191,7 +206,7 @@ class CsvDatasetExportServiceImplTest {
 
         // Verify no job service calls were made
         verify(jobService, never()).findInProgressJobs(any());
-        verify(jobService, never()).createJob(any(), any());
+        verify(jobService, never()).createJob(any(), any(), any());
     }
 
     @Test

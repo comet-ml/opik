@@ -4,6 +4,7 @@ import com.comet.opik.domain.CsvDatasetExportProcessor;
 import com.comet.opik.domain.DatasetExportJobService;
 import com.comet.opik.domain.DatasetExportMessage;
 import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -12,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
+
+import java.util.UUID;
 
 /**
  * Subscriber for dataset export jobs from Redis stream.
@@ -24,17 +27,20 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
     private final DatasetExportConfig config;
     private final DatasetExportJobService jobService;
     private final CsvDatasetExportProcessor csvProcessor;
+    private final FeatureFlags featureFlags;
 
     @Inject
     public DatasetExportJobSubscriber(
             @NonNull @Config("datasetExport") DatasetExportConfig config,
             @NonNull RedissonReactiveClient redisClient,
             @NonNull DatasetExportJobService jobService,
-            @NonNull CsvDatasetExportProcessor csvProcessor) {
+            @NonNull CsvDatasetExportProcessor csvProcessor,
+            @NonNull FeatureFlags featureFlags) {
         super(config, redisClient, DatasetExportConfig.PAYLOAD_FIELD, "opik", "dataset_export");
         this.config = config;
         this.jobService = jobService;
         this.csvProcessor = csvProcessor;
+        this.featureFlags = featureFlags;
     }
 
     @Override
@@ -64,12 +70,21 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
 
     @Override
     protected Mono<Void> processEvent(@NonNull DatasetExportMessage message) {
-        log.info("Processing dataset export job: jobId='{}', datasetId='{}', workspaceId='{}'",
-                message.jobId(), message.datasetId(), message.workspaceId());
+        log.info("Processing dataset export job: jobId='{}', datasetId='{}', workspaceId='{}', versionId='{}'",
+                message.jobId(), message.datasetId(), message.workspaceId(), message.versionId());
+
+        // Resolve versionId based on feature flag
+        // When versioning is disabled, always use null (legacy table)
+        UUID resolvedVersionId = featureFlags.isDatasetVersioningEnabled() ? message.versionId() : null;
+
+        if (!featureFlags.isDatasetVersioningEnabled() && message.versionId() != null) {
+            log.info("Dataset versioning is disabled, ignoring versionId '{}' and using legacy table",
+                    message.versionId());
+        }
 
         // Set reactive context for the processing
         return jobService.updateJobToProcessing(message.jobId()) // Set status to PROCESSING first
-                .then(csvProcessor.generateAndUploadCsv(message.datasetId()))
+                .then(csvProcessor.generateAndUploadCsv(message.datasetId(), resolvedVersionId))
                 .flatMap(result -> {
                     log.info("CSV generated successfully for job '{}', file path: '{}', expires at: '{}'",
                             message.jobId(), result.filePath(), result.expiresAt());

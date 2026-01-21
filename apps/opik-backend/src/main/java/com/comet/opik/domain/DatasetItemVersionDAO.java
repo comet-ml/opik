@@ -34,6 +34,7 @@ import reactor.core.publisher.Mono;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -73,6 +74,16 @@ public interface DatasetItemVersionDAO {
     Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId);
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
+
+    /**
+     * Gets column names and types for a specific dataset version.
+     * Returns a map where keys are column names and values are lists of types found for that column.
+     *
+     * @param datasetId The dataset ID
+     * @param versionId The version ID
+     * @return A Mono containing a map of column names to their types
+     */
+    Mono<Map<String, List<String>>> getColumns(UUID datasetId, UUID versionId);
 
     /**
      * Copies items from a source version to a new target version directly within dataset_item_versions.
@@ -1613,7 +1624,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             @NonNull UUID versionId) {
         return Mono.zip(
                 getCount(criteria, versionId),
-                getColumns(criteria.datasetId(), versionId)).flatMap(tuple -> {
+                getColumnsSet(criteria.datasetId(), versionId)).flatMap(tuple -> {
                     Long total = tuple.getT1();
                     Set<Column> columns = tuple.getT2();
 
@@ -1714,7 +1725,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .flatMap(DatasetItemResultMapper::mapItem)
                         .collectList()
                         .zipWith(getCountWithExperimentFilters(criteria, versionId))
-                        .zipWith(getColumns(criteria.datasetId(), versionId))
+                        .zipWith(getColumnsSet(criteria.datasetId(), versionId))
                         .map(tuple -> {
                             var itemsAndCount = tuple.getT1();
                             List<DatasetItem> items = itemsAndCount.getT1();
@@ -2415,7 +2426,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .build();
     }
 
-    private Mono<Set<Column>> getColumns(UUID datasetId, UUID versionId) {
+    private Mono<Set<Column>> getColumnsSet(UUID datasetId, UUID versionId) {
         log.debug("Getting columns for dataset '{}', version '{}'", datasetId, versionId);
 
         return asyncTemplate.nonTransaction(connection -> {
@@ -2432,6 +2443,40 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "data"))
                         .next()
                         .defaultIfEmpty(Set.of())
+                        .doFinally(signalType -> endSegment(segment));
+            });
+        });
+    }
+
+    @Override
+    public Mono<Map<String, List<String>>> getColumns(@NonNull UUID datasetId, @NonNull UUID versionId) {
+        log.debug("Getting columns map for dataset '{}', version '{}'", datasetId, versionId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_COLUMNS_BY_VERSION)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("versionId", versionId.toString());
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_columns_map_by_version");
+
+            return makeMonoContextAware((userName, workspaceId) -> {
+                statement.bind("workspace_id", workspaceId);
+
+                return Flux.from(statement.execute())
+                        .flatMap(result -> result.map((row, rowMetadata) -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, List<String>> columns = (Map<String, List<String>>) row.get("columns",
+                                    Map.class);
+
+                            // Use LinkedHashMap to preserve insertion order
+                            Map<String, List<String>> datasetColumns = columns != null
+                                    ? new LinkedHashMap<>(columns)
+                                    : new LinkedHashMap<>();
+
+                            return datasetColumns;
+                        }))
+                        .next()
+                        .defaultIfEmpty(new LinkedHashMap<>())
                         .doFinally(signalType -> endSegment(segment));
             });
         });

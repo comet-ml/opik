@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetExportJob;
 import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.NotFoundException;
@@ -31,9 +32,10 @@ public interface DatasetExportJobService {
      *
      * @param datasetId The dataset ID to export
      * @param ttl       Time-to-live duration for the export file
+     * @param versionId Optional version ID. If null, uses legacy table. If provided, uses versioned table.
      * @return Mono emitting the created export job
      */
-    Mono<DatasetExportJob> createJob(UUID datasetId, Duration ttl);
+    Mono<DatasetExportJob> createJob(UUID datasetId, Duration ttl, @Nullable UUID versionId);
 
     /**
      * Finds all in-progress (PENDING or PROCESSING) export jobs for a dataset.
@@ -160,7 +162,8 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
     private final @NonNull TransactionTemplate template;
 
     @Override
-    public Mono<DatasetExportJob> createJob(@NonNull UUID datasetId, @NonNull Duration ttl) {
+    public Mono<DatasetExportJob> createJob(@NonNull UUID datasetId, @NonNull Duration ttl,
+            @Nullable UUID versionId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -173,6 +176,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                 DatasetExportJob newJob = DatasetExportJob.builder()
                         .id(jobId)
                         .datasetId(datasetId)
+                        .versionId(versionId)
                         .status(DatasetExportStatus.PENDING)
                         .createdAt(now)
                         .lastUpdatedAt(now)
@@ -186,8 +190,8 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                     return null;
                 });
 
-                log.info("Created export job: '{}' for dataset: '{}' in workspace: '{}'", jobId, datasetId,
-                        workspaceId);
+                log.info("Created export job: '{}' for dataset: '{}' version: '{}' in workspace: '{}'", jobId,
+                        datasetId, versionId, workspaceId);
 
                 return newJob;
             }).subscribeOn(Schedulers.boundedElastic());

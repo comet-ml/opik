@@ -40,6 +40,9 @@ class CsvDatasetExportProcessorImplTest {
     private DatasetItemDAO datasetItemDao;
 
     @Mock
+    private DatasetItemVersionDAO datasetItemVersionDao;
+
+    @Mock
     private FileService fileService;
 
     private DatasetExportConfig exportConfig;
@@ -62,7 +65,7 @@ class CsvDatasetExportProcessorImplTest {
         lenient().when(fileService.uploadPart(any(), any(), anyInt(), any())).thenReturn("test-etag");
         lenient().when(fileService.completeMultipartUpload(any(), any(), any())).thenReturn(null);
 
-        processor = new CsvDatasetExportProcessorImpl(datasetItemDao, fileService, exportConfig);
+        processor = new CsvDatasetExportProcessorImpl(datasetItemDao, datasetItemVersionDao, fileService, exportConfig);
     }
 
     @Test
@@ -83,8 +86,8 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.just(columns));
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
-        // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        // When - pass null for versionId to use legacy table
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID, null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -115,8 +118,8 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.just(columns));
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.empty());
 
-        // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        // When - pass null for versionId to use legacy table
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID, null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -151,8 +154,8 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.just(columns));
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
-        // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        // When - pass null for versionId to use legacy table
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID, null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -184,8 +187,8 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.just(columns));
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
-        // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        // When - pass null for versionId to use legacy table
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID, null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -205,8 +208,8 @@ class CsvDatasetExportProcessorImplTest {
         // Given
         when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.error(new RuntimeException("DB error")));
 
-        // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        // When - pass null for versionId to use legacy table
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID, null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -235,8 +238,8 @@ class CsvDatasetExportProcessorImplTest {
         when(datasetItemDao.getColumns(DATASET_ID)).thenReturn(Mono.just(columns));
         when(datasetItemDao.getItems(eq(DATASET_ID), anyInt(), any())).thenReturn(Flux.fromIterable(items));
 
-        // When
-        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID)
+        // When - pass null for versionId to use legacy table
+        Mono<CsvDatasetExportProcessor.CsvExportResult> result = processor.generateAndUploadCsv(DATASET_ID, null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then

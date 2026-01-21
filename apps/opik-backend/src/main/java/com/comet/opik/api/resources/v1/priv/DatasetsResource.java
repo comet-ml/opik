@@ -55,6 +55,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
@@ -776,27 +777,30 @@ public class DatasetsResource {
 
     @POST
     @Path("/{id}/export")
-    @Operation(operationId = "startDatasetExport", summary = "Start dataset CSV export", description = "Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.", responses = {
+    @Operation(operationId = "startDatasetExport", summary = "Start dataset CSV export", description = "Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling. If versionId is not provided, uses the latest version. If no versions exist, uses the legacy dataset_items table.", responses = {
             @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
             @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = DatasetExportJob.class)))
     })
     @JsonView(DatasetExportJob.View.Public.class)
     @RateLimited
-    public Response startDatasetExport(@PathParam("id") @NotNull UUID datasetId) {
+    public Response startDatasetExport(
+            @PathParam("id") @NotNull UUID datasetId,
+            @QueryParam("versionId") @Nullable UUID versionId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Starting CSV export for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+        log.info("Starting CSV export for dataset '{}' versionId '{}' on workspaceId '{}'", datasetId, versionId,
+                workspaceId);
 
         // Verify dataset exists
         service.findById(datasetId);
 
-        DatasetExportJob job = csvExportService.startExport(datasetId)
+        DatasetExportJob job = csvExportService.startExport(datasetId, versionId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Export job '{}' created/found for dataset '{}' on workspaceId '{}'", job.id(), datasetId,
-                workspaceId);
+        log.info("Export job '{}' created/found for dataset '{}' versionId '{}' on workspaceId '{}'", job.id(),
+                datasetId, job.versionId(), workspaceId);
 
         // Return 202 if new job was created (PENDING status), 200 if existing job found
         var status = job.status() == DatasetExportStatus.PENDING
