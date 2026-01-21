@@ -6468,23 +6468,23 @@ class TracesResourceTest {
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
             // Create experiments with specific names for sorting
-            var experimentA = factory.manufacturePojo(com.comet.opik.api.Experiment.class).toBuilder()
+            var experimentA = factory.manufacturePojo(Experiment.class).toBuilder()
                     .name("A-experiment")
                     .datasetId(datasetId)
                     .build();
-            var experimentAId = experimentResourceClient.createExperiment(experimentA, API_KEY, workspaceName);
+            var experimentAId = experimentResourceClient.create(experimentA, API_KEY, workspaceName);
 
-            var experimentB = factory.manufacturePojo(com.comet.opik.api.Experiment.class).toBuilder()
+            var experimentB = factory.manufacturePojo(Experiment.class).toBuilder()
                     .name("B-experiment")
                     .datasetId(datasetId)
                     .build();
-            var experimentBId = experimentResourceClient.createExperiment(experimentB, API_KEY, workspaceName);
+            var experimentBId = experimentResourceClient.create(experimentB, API_KEY, workspaceName);
 
-            var experimentC = factory.manufacturePojo(com.comet.opik.api.Experiment.class).toBuilder()
+            var experimentC = factory.manufacturePojo(Experiment.class).toBuilder()
                     .name("C-experiment")
                     .datasetId(datasetId)
                     .build();
-            var experimentCId = experimentResourceClient.createExperiment(experimentC, API_KEY, workspaceName);
+            var experimentCId = experimentResourceClient.create(experimentC, API_KEY, workspaceName);
 
             // Create traces linked to experiments (in reverse alphabetical order)
             var traceC = factory.manufacturePojo(Trace.class).toBuilder()
@@ -6517,21 +6517,21 @@ class TracesResourceTest {
             traceResourceClient.batchCreateTraces(List.of(traceC, traceB, traceA), API_KEY, workspaceName);
 
             // Link traces to experiments
-            var experimentItemC = factory.manufacturePojo(com.comet.opik.api.ExperimentItem.class).toBuilder()
+            var experimentItemC = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentCId)
                     .traceId(traceC.id())
                     .feedbackScores(null)
                     .build();
             experimentResourceClient.createExperimentItem(Set.of(experimentItemC), API_KEY, workspaceName);
 
-            var experimentItemB = factory.manufacturePojo(com.comet.opik.api.ExperimentItem.class).toBuilder()
+            var experimentItemB = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentBId)
                     .traceId(traceB.id())
                     .feedbackScores(null)
                     .build();
             experimentResourceClient.createExperimentItem(Set.of(experimentItemB), API_KEY, workspaceName);
 
-            var experimentItemA = factory.manufacturePojo(com.comet.opik.api.ExperimentItem.class).toBuilder()
+            var experimentItemA = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentAId)
                     .traceId(traceA.id())
                     .feedbackScores(null)
@@ -6609,17 +6609,17 @@ class TracesResourceTest {
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
             // Create two experiments
-            var experiment1 = factory.manufacturePojo(com.comet.opik.api.Experiment.class).toBuilder()
+            var experiment1 = factory.manufacturePojo(Experiment.class).toBuilder()
                     .name("experiment-1")
                     .datasetId(datasetId)
                     .build();
-            var experiment1Id = experimentResourceClient.createExperiment(experiment1, API_KEY, workspaceName);
+            var experiment1Id = experimentResourceClient.create(experiment1, API_KEY, workspaceName);
 
-            var experiment2 = factory.manufacturePojo(com.comet.opik.api.Experiment.class).toBuilder()
+            var experiment2 = factory.manufacturePojo(Experiment.class).toBuilder()
                     .name("experiment-2")
                     .datasetId(datasetId)
                     .build();
-            var experiment2Id = experimentResourceClient.createExperiment(experiment2, API_KEY, workspaceName);
+            var experiment2Id = experimentResourceClient.create(experiment2, API_KEY, workspaceName);
 
             // Create traces
             var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
@@ -6652,21 +6652,21 @@ class TracesResourceTest {
             traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), API_KEY, workspaceName);
 
             // Link trace1 and trace2 to experiment1, trace3 to experiment2
-            var experimentItem1 = factory.manufacturePojo(com.comet.opik.api.ExperimentItem.class).toBuilder()
+            var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experiment1Id)
                     .traceId(trace1.id())
                     .feedbackScores(null)
                     .build();
             experimentResourceClient.createExperimentItem(Set.of(experimentItem1), API_KEY, workspaceName);
 
-            var experimentItem2 = factory.manufacturePojo(com.comet.opik.api.ExperimentItem.class).toBuilder()
+            var experimentItem2 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experiment1Id)
                     .traceId(trace2.id())
                     .feedbackScores(null)
                     .build();
             experimentResourceClient.createExperimentItem(Set.of(experimentItem2), API_KEY, workspaceName);
 
-            var experimentItem3 = factory.manufacturePojo(com.comet.opik.api.ExperimentItem.class).toBuilder()
+            var experimentItem3 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experiment2Id)
                     .traceId(trace3.id())
                     .feedbackScores(null)
