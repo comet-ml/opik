@@ -7,6 +7,7 @@ import { Filters } from "@/types/filters";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
+import { PlaygroundTraceContext } from "@/lib/playground/extractPlaygroundData";
 
 interface PlaygroundOutput {
   isLoading: boolean;
@@ -100,6 +101,8 @@ export type PlaygroundStore = {
   datasetSize: number;
   progressTotal: number;
   progressCompleted: number;
+  // Trace context for "Trace-Aware Playground Mode"
+  traceContext: PlaygroundTraceContext | null;
 
   setPromptMap: (
     promptIds: string[],
@@ -134,6 +137,8 @@ export type PlaygroundStore = {
   resetDatasetFilters: () => void;
   setProgress: (completed: number, total: number) => void;
   resetProgress: () => void;
+  setTraceContext: (context: PlaygroundTraceContext | null) => void;
+  clearTraceContext: () => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -152,6 +157,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       datasetSize: 100,
       progressTotal: 0,
       progressCompleted: 0,
+      traceContext: null,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -366,6 +372,22 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setTraceContext: (context) => {
+        set((state) => {
+          return {
+            ...state,
+            traceContext: context,
+          };
+        });
+      },
+      clearTraceContext: () => {
+        set((state) => {
+          return {
+            ...state,
+            traceContext: null,
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -535,5 +557,14 @@ export const useSetProgress = () =>
 
 export const useResetProgress = () =>
   usePlaygroundStore((state) => state.resetProgress);
+
+export const useTraceContext = () =>
+  usePlaygroundStore((state) => state.traceContext);
+
+export const useSetTraceContext = () =>
+  usePlaygroundStore((state) => state.setTraceContext);
+
+export const useClearTraceContext = () =>
+  usePlaygroundStore((state) => state.clearTraceContext);
 
 export default usePlaygroundStore;

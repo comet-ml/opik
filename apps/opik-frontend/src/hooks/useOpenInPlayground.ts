@@ -1,6 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
+import { usePromptMap } from "@/store/PlaygroundStore";
 import { Span, Trace } from "@/types/traces";
 import {
   extractPlaygroundData,
@@ -17,6 +18,18 @@ export const PLAYGROUND_PREFILL_KEY = "opik-playground-prefill";
 const useOpenInPlayground = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const promptMap = usePromptMap();
+
+  // Check if playground is empty (same logic as useLoadPlayground)
+  const isPlaygroundEmpty = useMemo(() => {
+    const keys = Object.keys(promptMap);
+
+    return (
+      keys.length === 1 &&
+      promptMap[keys[0]]?.messages?.length === 1 &&
+      promptMap[keys[0]]?.messages[0]?.content === ""
+    );
+  }, [promptMap]);
 
   const openInPlayground = useCallback(
     (data: Trace | Span, allData?: Array<Trace | Span>) => {
@@ -35,7 +48,7 @@ const useOpenInPlayground = () => {
     [navigate, workspaceName],
   );
 
-  return { openInPlayground };
+  return { openInPlayground, isPlaygroundEmpty };
 };
 
 /**

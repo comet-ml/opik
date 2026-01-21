@@ -4,7 +4,14 @@ import React, {
   useImperativeHandle,
   forwardRef,
 } from "react";
-import { ChevronDown, CopyPlus, GripHorizontal, Trash } from "lucide-react";
+import {
+  ChevronDown,
+  CopyPlus,
+  GripHorizontal,
+  Trash,
+  Info,
+  X,
+} from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { useSortable } from "@dnd-kit/sortable";
@@ -20,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
+import { LLM_MESSAGE_ROLE, LLMMessage, MessageSourceType } from "@/types/llm";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -58,6 +65,43 @@ const MESSAGE_TYPE_OPTIONS = [
     value: LLM_MESSAGE_ROLE.user,
   },
 ];
+
+// Source annotation label and color mapping
+const SOURCE_ANNOTATION_CONFIG: Record<
+  MessageSourceType,
+  { label: string; color: string; icon: string }
+> = {
+  system_config: {
+    label: "System",
+    color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    icon: "⚙️",
+  },
+  user_input: {
+    label: "User Input",
+    color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    icon: "👤",
+  },
+  tool_output: {
+    label: "Tool Output",
+    color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    icon: "🔧",
+  },
+  llm_response: {
+    label: "LLM Response",
+    color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    icon: "🤖",
+  },
+  merged: {
+    label: "Merged",
+    color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+    icon: "🔀",
+  },
+  trace_input: {
+    label: "Trace Input",
+    color: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
+    icon: "📍",
+  },
+};
 
 export interface LLMPromptMessageHandle {
   insertAtCursor: (text: string) => void;
@@ -115,7 +159,8 @@ const LLMPromptMessage = forwardRef<
   ) => {
     const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const { id, role, content } = message;
+    const [showSourceAnnotation, setShowSourceAnnotation] = useState(true);
+    const { id, role, content, sourceAnnotation } = message;
 
     const { active, attributes, listeners, setNodeRef, transform, transition } =
       useSortable({ id });
@@ -303,6 +348,48 @@ const LLMPromptMessage = forwardRef<
                     promptVariables={promptVariables}
                     disabled={disabled}
                   />
+                )}
+                {/* Source Annotation Badge */}
+                {sourceAnnotation && showSourceAnnotation && (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <TooltipWrapper
+                      content={
+                        sourceAnnotation.description ||
+                        `Source: ${sourceAnnotation.type}`
+                      }
+                      side="top"
+                    >
+                      <div
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          SOURCE_ANNOTATION_CONFIG[sourceAnnotation.type]
+                            ?.color || SOURCE_ANNOTATION_CONFIG.trace_input.color,
+                        )}
+                      >
+                        <span>
+                          {SOURCE_ANNOTATION_CONFIG[sourceAnnotation.type]
+                            ?.icon || "📍"}
+                        </span>
+                        <span>
+                          {sourceAnnotation.sourceSpanName
+                            ? `From: ${sourceAnnotation.sourceSpanName}`
+                            : SOURCE_ANNOTATION_CONFIG[sourceAnnotation.type]
+                                ?.label || "Trace Input"}
+                        </span>
+                        <Info className="size-3 opacity-60" />
+                      </div>
+                    </TooltipWrapper>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowSourceAnnotation(false);
+                      }}
+                      className="rounded p-0.5 text-muted-foreground opacity-60 transition-opacity hover:bg-muted hover:opacity-100"
+                      title="Hide source annotation"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
                 )}
               </>
             )}

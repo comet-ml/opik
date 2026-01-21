@@ -23,6 +23,9 @@ import {
   useSetSelectedRuleIds,
   useResetDatasetFilters,
   useSetDatasetVariables,
+  useTraceContext,
+  useSetTraceContext,
+  useClearTraceContext,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -31,6 +34,8 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { getAndClearPlaygroundPrefill } from "@/hooks/useOpenInPlayground";
 import { useToast } from "@/components/ui/use-toast";
 import { PlaygroundPromptType } from "@/types/playground";
+import TraceContextSidebar from "@/components/pages/PlaygroundPage/TraceContextSidebar";
+import { PlaygroundTraceContext } from "@/lib/playground/extractPlaygroundData";
 
 interface PlaygroundPromptsState {
   workspaceName: string;
@@ -55,9 +60,13 @@ const PlaygroundPrompts = ({
   const setIsRunning = useSetIsRunning();
   const resetDatasetFilters = useResetDatasetFilters();
   const setDatasetVariables = useSetDatasetVariables();
+  const traceContext = useTraceContext();
+  const setTraceContext = useSetTraceContext();
+  const clearTraceContext = useClearTraceContext();
   const resetKeyRef = useRef(0);
   const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const prefillCheckedRef = useRef(false);
   const { toast } = useToast();
 
@@ -100,6 +109,7 @@ const PlaygroundPrompts = ({
     setIsRunning(false);
     resetDatasetFilters();
     setDatasetVariables([]);
+    clearTraceContext(); // Clear trace context when resetting
     onResetHeight();
   }, [
     providerKeys,
@@ -113,11 +123,15 @@ const PlaygroundPrompts = ({
     setIsRunning,
     resetDatasetFilters,
     setDatasetVariables,
+    clearTraceContext,
     onResetHeight,
   ]);
 
   // Load prefill data from trace/span if available
-  const loadPrefillData = useCallback(() => {
+  const loadPrefillData = useCallback((): {
+    prompt: PlaygroundPromptType;
+    traceContext: PlaygroundTraceContext | null;
+  } | null => {
     const prefillData = getAndClearPlaygroundPrefill();
     if (!prefillData || prefillData.messages.length === 0) {
       return null;
@@ -158,17 +172,27 @@ const PlaygroundPrompts = ({
       provider = calculateModelProvider(model);
     }
 
+    // Generate prompt name based on trace context
+    const promptName = prefillData.traceContext?.sourceSpan
+      ? `From: ${prefillData.traceContext.sourceSpan.name}`
+      : prefillData.traceContext?.traceName
+        ? `From: ${prefillData.traceContext.traceName}`
+        : "Prompt from Trace";
+
     // Create the prompt with prefill data
     const newPrompt: PlaygroundPromptType = {
       id: `prefill-${Date.now()}`,
-      name: "Prompt from Trace",
+      name: promptName,
       messages: prefillData.messages,
       model,
       provider,
       configs: getDefaultConfigByProvider(provider, model),
     };
 
-    return newPrompt;
+    return {
+      prompt: newPrompt,
+      traceContext: prefillData.traceContext || null,
+    };
   }, [
     calculateDefaultModel,
     calculateModelProvider,
@@ -183,9 +207,12 @@ const PlaygroundPrompts = ({
     }
 
     prefillCheckedRef.current = true;
-    const prefillPrompt = loadPrefillData();
+    const prefillResult = loadPrefillData();
 
-    if (prefillPrompt) {
+    if (prefillResult) {
+      const { prompt: prefillPrompt, traceContext: newTraceContext } =
+        prefillResult;
+
       // Reset playground state, then set up with the prefilled prompt
       setPromptMap([prefillPrompt.id], { [prefillPrompt.id]: prefillPrompt });
       setDatasetId(null);
@@ -196,15 +223,27 @@ const PlaygroundPrompts = ({
       setDatasetVariables([]);
       onResetHeight();
 
+      // Set trace context if available
+      if (newTraceContext) {
+        setTraceContext(newTraceContext);
+        setSidebarCollapsed(false); // Show sidebar when loading from trace
+      }
+
       // Update last picked model if we have one
       if (prefillPrompt.model) {
         setLastPickedModel(prefillPrompt.model);
       }
 
+      // Build toast message with trace context info
+      const sourceName = newTraceContext?.sourceSpan?.name
+        ? `"${newTraceContext.sourceSpan.name}"`
+        : newTraceContext?.traceName
+          ? `trace "${newTraceContext.traceName}"`
+          : "your trace";
+
       toast({
         title: "Trace loaded in Playground",
-        description:
-          "The messages from your trace have been loaded. You can now modify and re-run them.",
+        description: `Messages from ${sourceName} have been loaded. You can now modify and re-run them.`,
       });
     }
   }, [
@@ -219,6 +258,7 @@ const PlaygroundPrompts = ({
     setDatasetVariables,
     onResetHeight,
     setLastPickedModel,
+    setTraceContext,
     toast,
   ]);
 
@@ -230,63 +270,79 @@ const PlaygroundPrompts = ({
   }, [promptCount, isPendingProviderKeys, resetPlayground]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-1">
-          <h1 className="comet-title-l">Playground</h1>
-          <ExplainerIcon
-            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_playground]}
-          />
-        </div>
+    <div className="flex h-full">
+      {/* Trace Context Sidebar */}
+      {traceContext && (
+        <TraceContextSidebar
+          traceContext={traceContext}
+          workspaceName={workspaceName}
+          onClose={clearTraceContext}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+      )}
 
-        <div className="sticky right-0 flex gap-2 ">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setOpen(true);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <RotateCcw className="mr-2 size-4" />
-            Reset playground
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={handleAddPrompt}>
-            <Plus className="mr-2 size-4" />
-            Add prompt
-          </Button>
-        </div>
-      </div>
-
+      {/* Main Playground Content */}
       <div
-        className={`flex size-full gap-[var(--item-gap)] ${
-          hasDataset ? "h-auto min-h-0 flex-1 overflow-x-auto" : ""
-        }`}
+        className={`flex min-w-0 flex-1 flex-col ${traceContext ? "pl-6" : ""}`}
       >
-        {promptIds.map((promptId, idx) => (
-          <PlaygroundPrompt
-            workspaceName={workspaceName}
-            promptId={promptId}
-            index={idx}
-            key={promptId}
-            providerKeys={providerKeys}
-            isPendingProviderKeys={isPendingProviderKeys}
-            providerResolver={calculateModelProvider}
-            modelResolver={calculateDefaultModel}
-            scrollToPromptRef={scrollToPromptRef}
-          />
-        ))}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-1">
+            <h1 className="comet-title-l">Playground</h1>
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_playground]}
+            />
+          </div>
+
+          <div className="sticky right-0 flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setOpen(true);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+            >
+              <RotateCcw className="mr-2 size-4" />
+              Reset playground
+            </Button>
+
+            <Button variant="outline" size="sm" onClick={handleAddPrompt}>
+              <Plus className="mr-2 size-4" />
+              Add prompt
+            </Button>
+          </div>
+        </div>
+
+        <div
+          className={`flex size-full gap-[var(--item-gap)] ${
+            hasDataset ? "h-auto min-h-0 flex-1 overflow-x-auto" : ""
+          }`}
+        >
+          {promptIds.map((promptId, idx) => (
+            <PlaygroundPrompt
+              workspaceName={workspaceName}
+              promptId={promptId}
+              index={idx}
+              key={promptId}
+              providerKeys={providerKeys}
+              isPendingProviderKeys={isPendingProviderKeys}
+              providerResolver={calculateModelProvider}
+              modelResolver={calculateDefaultModel}
+              scrollToPromptRef={scrollToPromptRef}
+            />
+          ))}
+        </div>
+        <ConfirmDialog
+          key={resetKeyRef.current}
+          open={Boolean(open)}
+          setOpen={setOpen}
+          onConfirm={resetPlayground}
+          title="Reset playground"
+          description="Resetting the Playground will discard all unsaved prompts. This action can't be undone. Are you sure you want to continue?"
+          confirmText="Reset playground"
+        />
       </div>
-      <ConfirmDialog
-        key={resetKeyRef.current}
-        open={Boolean(open)}
-        setOpen={setOpen}
-        onConfirm={resetPlayground}
-        title="Reset playground"
-        description="Resetting the Playground will discard all unsaved prompts. This action can't be undone. Are you sure you want to continue?"
-        confirmText="Reset playground"
-      />
     </div>
   );
 };
