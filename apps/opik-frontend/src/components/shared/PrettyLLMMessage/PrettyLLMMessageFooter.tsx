@@ -15,7 +15,7 @@ const PrettyLLMMessageFooter: React.FC<PrettyLLMMessageFooterProps> = ({
   return (
     <div
       className={cn(
-        "flex items-center gap-4 text-xs text-muted-foreground pt-2 mt-3",
+        "flex items-center gap-4 text-xs text-muted-foreground",
         className,
       )}
     >

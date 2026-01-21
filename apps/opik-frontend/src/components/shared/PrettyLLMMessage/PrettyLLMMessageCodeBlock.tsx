@@ -37,7 +37,7 @@ const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> = ({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-md border border-border bg-primary-foreground py-1",
+        "overflow-hidden rounded-md border border-border bg-primary-foreground",
         className,
       )}
     >

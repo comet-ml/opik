@@ -22,7 +22,7 @@ const PrettyLLMMessageTextBlock: React.FC<PrettyLLMMessageTextBlockProps> = ({
   const showButton = showMoreButton && shouldTruncate && isTruncated;
 
   return (
-    <div className={cn("space-y-2 py-1", className)}>
+    <div className={cn("space-y-2", className)}>
       <div
         ref={ref}
         className={cn(
