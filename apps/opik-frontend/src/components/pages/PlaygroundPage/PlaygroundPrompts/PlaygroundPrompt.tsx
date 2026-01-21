@@ -407,12 +407,7 @@ const PlaygroundPrompt = ({
 
   return (
     <div
-      className="h-[var(--prompt-height)] w-full min-w-[var(--min-prompt-width)]"
-      style={
-        {
-          "--prompt-height": "calc(100% - 64px)",
-        } as React.CSSProperties
-      }
+      className="h-[calc(100%-64px)] w-full min-w-[var(--min-prompt-width)]"
       ref={setRef}
     >
       <div className="mb-2 flex h-8 items-center justify-between">

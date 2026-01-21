@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useHotkeys } from "react-hotkeys-hook";
 import {
@@ -10,6 +10,7 @@ import {
   Hash,
   MessageSquareMore,
   PenLine,
+  Play,
   Tag,
   TriangleAlert,
 } from "lucide-react";
@@ -35,6 +36,10 @@ import TagsHoverCard from "@/components/shared/TagsHoverCard/TagsHoverCard";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
+import { SPAN_TYPE } from "@/types/traces";
+import { canOpenInPlayground } from "@/lib/playground/extractPlaygroundData";
+import useOpenInPlayground from "@/hooks/useOpenInPlayground";
+import OpenInPlaygroundDialog from "@/components/pages-shared/traces/OpenInPlaygroundDialog";
 
 const EXPAND_HOTKEYS = ["⏎"];
 const DETAILS_SECTION_COMPONENTS = [
@@ -61,8 +66,18 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
   rowId,
   onRowIdChange,
 }) => {
+  const [playgroundDialogOpen, setPlaygroundDialogOpen] = useState(false);
+  const [selectedNodeForPlayground, setSelectedNodeForPlayground] =
+    useState<TreeNode | null>(null);
+  const { openInPlayground, isPlaygroundEmpty } = useOpenInPlayground();
+
   const { flattenedTree, expandedTreeRows, toggleExpand } =
     useTreeDetailsStore();
+
+  // Extract all trace/span data from the flattened tree for playground
+  const allTreeData = useMemo(() => {
+    return flattenedTree.map((node) => node.data);
+  }, [flattenedTree]);
 
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
@@ -361,7 +376,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
             <div
               key={node.id}
               className={cn(
-                "absolute left-0 flex w-full flex-col gap-1.5 px-1.5 py-2 cursor-pointer rounded-md hover:bg-primary-foreground",
+                "group/row absolute left-0 flex w-full flex-col gap-1.5 px-1.5 py-2 cursor-pointer rounded-md hover:bg-primary-foreground",
                 {
                   "bg-primary-foreground": isFocused,
                   "opacity-50": isOutOfSearch,
@@ -414,6 +429,24 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
                         {name}
                       </span>
                     </TooltipWrapper>
+                    {/* Replay in Playground button for LLM spans */}
+                    {node.data.type === SPAN_TYPE.llm &&
+                      canOpenInPlayground(node.data) && (
+                        <TooltipWrapper content="Open in Playground">
+                          <Button
+                            variant="ghost"
+                            size="icon-3xs"
+                            className="opacity-0 transition-opacity group-hover/row:opacity-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedNodeForPlayground(node);
+                              setPlaygroundDialogOpen(true);
+                            }}
+                          >
+                            <Play className="size-3 text-primary" />
+                          </Button>
+                        </TooltipWrapper>
+                      )}
                     {node.data.hasError && (
                       <>
                         <div className="flex-auto" />
@@ -435,6 +468,20 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
           );
         })}
       </div>
+      {/* Open in Playground Dialog */}
+      <OpenInPlaygroundDialog
+        open={playgroundDialogOpen}
+        setOpen={setPlaygroundDialogOpen}
+        onConfirm={() => {
+          if (selectedNodeForPlayground) {
+            // Pass full tree data so extraction can find all messages and context
+            openInPlayground(selectedNodeForPlayground.data, allTreeData);
+          }
+        }}
+        selectedItem={selectedNodeForPlayground?.data}
+        treeData={allTreeData}
+        isPlaygroundEmpty={isPlaygroundEmpty}
+      />
     </div>
   );
 };
