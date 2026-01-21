@@ -2,10 +2,10 @@ import React, { useState, useMemo } from "react";
 import { Copy, Check, AlertCircle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { getJSONPaths, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
   JsonDynamicBuilder,
-  useJsonPathResult,
+  useJmesPathResult,
 } from "@/components/shared/JsonDynamicBuilder";
 
 const SAMPLE_JSON = {
@@ -25,26 +25,29 @@ const SAMPLE_JSON = {
   },
 };
 
-const OPERATOR_EXAMPLES = [
-  { query: "$.user.roles | first", description: "Get first role" },
-  { query: "$.user.roles | last", description: "Get last role" },
-  { query: "$.scores | every(2)", description: "Every 2nd score" },
-  { query: "$.scores | take(3)", description: "First 3 scores" },
-  { query: "$.scores | skip(2)", description: "Skip first 2 scores" },
-  { query: "$.scores | sum", description: "Sum of all scores" },
-  { query: "$.scores | avg", description: "Average score" },
-  { query: "$.scores | min", description: "Minimum score" },
-  { query: "$.scores | max", description: "Maximum score" },
-  { query: "$.metadata.tags | reverse", description: "Reverse tags" },
-  { query: "$.user | keys", description: "Get user object keys" },
-  { query: "$.scores | take(3) | sum", description: "Sum of first 3 scores" },
+// JMESPath examples - cross-platform compatible syntax!
+const JMESPATH_EXAMPLES = [
+  { query: "user.name", description: "Get user name" },
+  { query: "user.roles[0]", description: "Get first role" },
+  { query: "user.roles[-1]", description: "Get last role" },
+  { query: "scores[:3]", description: "First 3 scores" },
+  { query: "scores[2:]", description: "Skip first 2 scores" },
+  { query: "scores | sum(@)", description: "Sum of all scores" },
+  { query: "scores | avg(@)", description: "Average score" },
+  { query: "scores | min(@)", description: "Minimum score" },
+  { query: "scores | max(@)", description: "Maximum score" },
+  { query: "metadata.tags | reverse(@)", description: "Reverse tags" },
+  { query: "user | keys(@)", description: "Get user object keys" },
+  { query: "scores[:3] | sum(@)", description: "Sum of first 3 scores" },
+  { query: "scores | length(@)", description: "Count of scores" },
+  { query: "scores | sort(@)", description: "Sort scores" },
 ];
 
 const JsonPathExplorerPage: React.FC = () => {
   const [jsonInput, setJsonInput] = useState<string>(
     JSON.stringify(SAMPLE_JSON, null, 2),
   );
-  const [jsonPathQuery, setJsonPathQuery] = useState<string>("$.user.name");
+  const [jmesPathQuery, setJmesPathQuery] = useState<string>("user.name");
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
 
   const parsedJson = useMemo(() => {
@@ -55,13 +58,8 @@ const JsonPathExplorerPage: React.FC = () => {
     }
   }, [jsonInput]);
 
-  const availablePaths = useMemo(() => {
-    if (!parsedJson.data) return [];
-    return getJSONPaths(parsedJson.data, "$", [], true);
-  }, [parsedJson.data]);
-
-  // Use the shared hook for query results
-  const queryResult = useJsonPathResult(parsedJson.data, jsonPathQuery);
+  // Use JMESPath for query results
+  const queryResult = useJmesPathResult(parsedJson.data, jmesPathQuery);
 
   const handleCopyPath = (path: string) => {
     navigator.clipboard.writeText(path);
@@ -70,16 +68,24 @@ const JsonPathExplorerPage: React.FC = () => {
   };
 
   const handlePathClick = (path: string) => {
-    setJsonPathQuery(path);
+    setJmesPathQuery(path);
   };
 
   return (
     <div className="pt-6">
       <div className="mb-6">
-        <h1 className="comet-title-l">JSON Path Explorer</h1>
+        <h1 className="comet-title-l">JMESPath Explorer</h1>
         <p className="comet-body-s mt-2 text-muted-slate">
-          Explore JSON structures and test JSONPath expressions with operators.
-          Use pipe syntax for transformations: <code className="rounded bg-muted px-1">$.path | operator</code>
+          Explore JSON structures using JMESPath - a cross-platform query language.
+          Works with Java, Python, and JavaScript.{" "}
+          <a
+            href="https://jmespath.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline"
+          >
+            Learn more
+          </a>
         </p>
       </div>
 
@@ -109,18 +115,18 @@ const JsonPathExplorerPage: React.FC = () => {
 
           <div>
             <label className="comet-body-s-accented mb-2 block">
-              JSONPath Query (click to open tree view)
+              JMESPath Query (click to open tree view)
             </label>
             <JsonDynamicBuilder
               data={parsedJson.data}
-              value={jsonPathQuery}
-              onValueChange={setJsonPathQuery}
-              placeholder="Click to build query..."
+              value={jmesPathQuery}
+              onValueChange={setJmesPathQuery}
+              placeholder="Click to build JMESPath query..."
               showPreview={false}
             />
           </div>
 
-          {jsonPathQuery && (
+          {jmesPathQuery && (
             <div>
               <label className="comet-body-s-accented mb-2 block">
                 Query Result
@@ -145,16 +151,16 @@ const JsonPathExplorerPage: React.FC = () => {
           )}
         </div>
 
-        {/* Right Column - Available Paths & Operators */}
+        {/* Right Column - JMESPath Examples */}
         <div className="flex flex-col gap-4">
-          {/* Operator Examples */}
+          {/* JMESPath Examples */}
           <div>
             <label className="comet-body-s-accented mb-2 block">
-              Operator Examples
+              JMESPath Examples
             </label>
-            <div className="max-h-[200px] overflow-y-auto rounded-md border bg-background">
+            <div className="max-h-[480px] overflow-y-auto rounded-md border bg-background">
               <div className="divide-y">
-                {OPERATOR_EXAMPLES.map((example) => (
+                {JMESPATH_EXAMPLES.map((example) => (
                   <div
                     key={example.query}
                     className="group flex items-center justify-between gap-2 px-3 py-2 hover:bg-muted"
@@ -171,54 +177,21 @@ const JsonPathExplorerPage: React.FC = () => {
                         {example.description}
                       </span>
                     </button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => handleCopyPath(example.query)}
+                      className="opacity-0 group-hover:opacity-100"
+                    >
+                      {copiedPath === example.query ? (
+                        <Check className="size-3 text-success" />
+                      ) : (
+                        <Copy className="size-3" />
+                      )}
+                    </Button>
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-
-          {/* Available Paths */}
-          <div>
-            <label className="comet-body-s-accented mb-2 block">
-              Available Paths ({availablePaths.length})
-            </label>
-            <div className="max-h-[280px] overflow-y-auto rounded-md border bg-background">
-              {availablePaths.length === 0 ? (
-                <div className="p-4 text-center text-muted-slate">
-                  {parsedJson.error
-                    ? "Fix JSON errors to see available paths"
-                    : "No paths available"}
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {availablePaths.map((path) => (
-                    <div
-                      key={path}
-                      className="group flex items-center justify-between gap-2 px-3 py-2 hover:bg-muted"
-                    >
-                      <button
-                        onClick={() => handlePathClick(path)}
-                        className="flex-1 truncate text-left font-mono text-xs text-foreground hover:text-primary"
-                        title={`Click to use: ${path}`}
-                      >
-                        {path}
-                      </button>
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={() => handleCopyPath(path)}
-                        className="opacity-0 group-hover:opacity-100"
-                      >
-                        {copiedPath === path ? (
-                          <Check className="size-3 text-success" />
-                        ) : (
-                          <Copy className="size-3" />
-                        )}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>

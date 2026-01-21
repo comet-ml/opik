@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback, useState } from "react";
-import { JSONPath } from "jsonpath-plus";
-import { getJSONPaths, cn } from "@/lib/utils";
+import jmespath from "jmespath";
+import { cn } from "@/lib/utils";
 import {
   ChevronRight,
   ChevronDown,
@@ -26,461 +26,331 @@ import {
 import { Input } from "@/components/ui/input";
 
 /**
- * Available operators that can be applied to query results.
- * Use pipe syntax: $.path | operator or $.path | operator(arg)
+ * JMESPath built-in functions that we expose in the UI.
+ * These are native JMESPath functions - no custom implementation needed!
+ * @see https://jmespath.org/specification.html#built-in-functions
  */
-export const QUERY_OPERATORS = {
-  /** Get the first element of an array */
-  first: "first",
-  /** Get the last element of an array */
-  last: "last",
-  /** Get every nth element: every(n) */
-  every: "every",
-  /** Get the first n elements: take(n) */
-  take: "take",
-  /** Skip the first n elements: skip(n) */
-  skip: "skip",
-  /** Get element at specific index: at(n) */
-  at: "at",
-  /** Reverse the array */
-  reverse: "reverse",
-  /** Get unique values */
-  unique: "unique",
-  /** Flatten nested arrays */
-  flatten: "flatten",
-  /** Get array length or string length */
+export const JMESPATH_FUNCTIONS = {
+  /** Get array length */
   length: "length",
-  /** Get sum of numeric array */
-  sum: "sum",
-  /** Get average of numeric array */
-  avg: "avg",
+  /** Get first element */
+  first: "first",
+  /** Get last element */
+  last: "last",
+  /** Reverse array */
+  reverse: "reverse",
+  /** Sort array */
+  sort: "sort",
+  /** Get unique values (via sort) */
+  unique: "unique",
   /** Get minimum value */
   min: "min",
   /** Get maximum value */
   max: "max",
-  /** Get keys of an object */
+  /** Get sum of values */
+  sum: "sum",
+  /** Get average of values */
+  avg: "avg",
+  /** Get object keys */
   keys: "keys",
-  /** Get values of an object */
+  /** Get object values */
   values: "values",
+  /** Flatten nested arrays */
+  flatten: "flatten",
+  /** Convert to array */
+  toArray: "to_array",
+  /** Convert to string */
+  toString: "to_string",
+  /** Convert to number */
+  toNumber: "to_number",
 } as const;
 
-export type QueryOperator = (typeof QUERY_OPERATORS)[keyof typeof QUERY_OPERATORS];
+export type JmesPathFunction = (typeof JMESPATH_FUNCTIONS)[keyof typeof JMESPATH_FUNCTIONS];
 
 export type JsonDynamicBuilderProps = {
-  /** The JSON data object to extract paths from */
+  /** The JSON data object to query */
   data: object | null;
-  /** The current path/query value */
+  /** The current JMESPath query value */
   value: string;
-  /** Callback when the path/query changes */
+  /** Callback when the query changes */
   onValueChange: (value: string) => void;
   /** Placeholder text for the input */
   placeholder?: string;
-  /** Whether to show intermediate nodes (objects/arrays) in the path list */
-  includeIntermediateNodes?: boolean;
-  /** Root prefix for paths (default: "$") */
-  rootPrefix?: string;
-  /** Whether to exclude the root prefix from displayed paths */
-  excludeRoot?: boolean;
   /** Whether the input has an error state */
   hasError?: boolean;
   /** Additional CSS classes */
   className?: string;
   /** Whether to show the extracted result preview */
   showPreview?: boolean;
-  /** Custom empty message when no paths are found */
-  emptyMessage?: string;
 };
 
-export type JsonDynamicBuilderResult = {
-  /** The extracted value from the JSON using the current path */
+export type JmesPathResult = {
+  /** The extracted value from the JSON using JMESPath */
   result: unknown;
   /** Any error that occurred during extraction */
   error: string | null;
-  /** Whether the extraction was successful */
+  /** Whether the query was successful */
   isValid: boolean;
-  /** The parsed path (without operators) */
-  parsedPath: string;
-  /** The operators applied to the result */
-  operators: ParsedOperator[];
-};
-
-export type ParsedOperator = {
-  name: string;
-  args: (string | number)[];
 };
 
 /**
- * Parse a query string into path and operators
- * Example: "$.users | first | take(5)" -> { path: "$.users", operators: [{name: "first", args: []}, {name: "take", args: [5]}] }
+ * Hook to execute a JMESPath query against JSON data
  */
-export const parseQueryWithOperators = (
-  query: string,
-): { path: string; operators: ParsedOperator[] } => {
-  const parts = query.split("|").map((p) => p.trim());
-  const path = parts[0] || "";
-  const operators: ParsedOperator[] = [];
-
-  for (let i = 1; i < parts.length; i++) {
-    const operatorStr = parts[i];
-    const match = operatorStr.match(/^(\w+)(?:\(([^)]*)\))?$/);
-
-    if (match) {
-      const name = match[1];
-      const argsStr = match[2];
-      const args: (string | number)[] = [];
-
-      if (argsStr) {
-        argsStr.split(",").forEach((arg) => {
-          const trimmed = arg.trim();
-          const num = Number(trimmed);
-          args.push(isNaN(num) ? trimmed : num);
-        });
-      }
-
-      operators.push({ name, args });
-    }
-  }
-
-  return { path, operators };
-};
-
-/**
- * Apply an operator to a value
- */
-export const applyOperator = (
-  value: unknown,
-  operator: ParsedOperator,
-): unknown => {
-  const { name, args } = operator;
-
-  switch (name) {
-    case QUERY_OPERATORS.first:
-      if (Array.isArray(value)) return value[0];
-      if (typeof value === "string") return value[0];
-      return value;
-
-    case QUERY_OPERATORS.last:
-      if (Array.isArray(value)) return value[value.length - 1];
-      if (typeof value === "string") return value[value.length - 1];
-      return value;
-
-    case QUERY_OPERATORS.every: {
-      const n = typeof args[0] === "number" ? args[0] : 1;
-      if (n <= 0) return value;
-      if (Array.isArray(value)) {
-        return value.filter((_, index) => index % n === 0);
-      }
-      return value;
-    }
-
-    case QUERY_OPERATORS.take: {
-      const n = typeof args[0] === "number" ? args[0] : 1;
-      if (Array.isArray(value)) return value.slice(0, n);
-      if (typeof value === "string") return value.slice(0, n);
-      return value;
-    }
-
-    case QUERY_OPERATORS.skip: {
-      const n = typeof args[0] === "number" ? args[0] : 0;
-      if (Array.isArray(value)) return value.slice(n);
-      if (typeof value === "string") return value.slice(n);
-      return value;
-    }
-
-    case QUERY_OPERATORS.at: {
-      const index = typeof args[0] === "number" ? args[0] : 0;
-      if (Array.isArray(value)) return value[index];
-      if (typeof value === "string") return value[index];
-      return value;
-    }
-
-    case QUERY_OPERATORS.reverse:
-      if (Array.isArray(value)) return [...value].reverse();
-      if (typeof value === "string") return value.split("").reverse().join("");
-      return value;
-
-    case QUERY_OPERATORS.unique:
-      if (Array.isArray(value)) return [...new Set(value)];
-      return value;
-
-    case QUERY_OPERATORS.flatten:
-      if (Array.isArray(value)) return value.flat(Infinity);
-      return value;
-
-    case QUERY_OPERATORS.length:
-      if (Array.isArray(value)) return value.length;
-      if (typeof value === "string") return value.length;
-      if (typeof value === "object" && value !== null) {
-        return Object.keys(value).length;
-      }
-      return 0;
-
-    case QUERY_OPERATORS.sum:
-      if (Array.isArray(value)) {
-        return value.reduce((acc: number, v) => {
-          const num = Number(v);
-          return acc + (isNaN(num) ? 0 : num);
-        }, 0);
-      }
-      return value;
-
-    case QUERY_OPERATORS.avg:
-      if (Array.isArray(value) && value.length > 0) {
-        const sum = value.reduce((acc: number, v) => {
-          const num = Number(v);
-          return acc + (isNaN(num) ? 0 : num);
-        }, 0);
-        return sum / value.length;
-      }
-      return value;
-
-    case QUERY_OPERATORS.min:
-      if (Array.isArray(value)) {
-        const nums = value.map(Number).filter((n) => !isNaN(n));
-        return nums.length > 0 ? Math.min(...nums) : value;
-      }
-      return value;
-
-    case QUERY_OPERATORS.max:
-      if (Array.isArray(value)) {
-        const nums = value.map(Number).filter((n) => !isNaN(n));
-        return nums.length > 0 ? Math.max(...nums) : value;
-      }
-      return value;
-
-    case QUERY_OPERATORS.keys:
-      if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-        return Object.keys(value);
-      }
-      if (Array.isArray(value)) {
-        return value.map((_, i) => i);
-      }
-      return value;
-
-    case QUERY_OPERATORS.values:
-      if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-        return Object.values(value);
-      }
-      return value;
-
-    default:
-      return value;
-  }
-};
-
-/**
- * Apply multiple operators in sequence
- */
-export const applyOperators = (
-  value: unknown,
-  operators: ParsedOperator[],
-): unknown => {
-  return operators.reduce((acc, op) => applyOperator(acc, op), value);
-};
-
-/**
- * Hook to extract a value from JSON data using a JSONPath query with optional operators
- */
-export const useJsonPathResult = (
+export const useJmesPathResult = (
   data: object | null,
   query: string,
-): JsonDynamicBuilderResult => {
+): JmesPathResult => {
   return useMemo(() => {
     if (!data || !query.trim()) {
-      return {
-        result: null,
-        error: null,
-        isValid: false,
-        parsedPath: "",
-        operators: [],
-      };
+      return { result: null, error: null, isValid: false };
     }
 
     try {
-      const { path, operators } = parseQueryWithOperators(query);
-
-      if (!path.trim()) {
-        return {
-          result: null,
-          error: null,
-          isValid: false,
-          parsedPath: path,
-          operators,
-        };
-      }
-
-      // Ensure the path starts with $ for JSONPath
-      const jsonPath = path.startsWith("$") ? path : `$.${path}`;
-      const result = JSONPath({ path: jsonPath, json: data });
-
-      if (result.length === 0) {
-        return {
-          result: undefined,
-          error: null,
-          isValid: true,
-          parsedPath: path,
-          operators,
-        };
-      }
-
-      // Get the base result
-      let finalResult = result.length === 1 ? result[0] : result;
-
-      // Apply operators if any
-      if (operators.length > 0) {
-        finalResult = applyOperators(finalResult, operators);
-      }
-
-      return {
-        result: finalResult,
-        error: null,
-        isValid: true,
-        parsedPath: path,
-        operators,
-      };
+      const result = jmespath.search(data, query);
+      return { result, error: null, isValid: true };
     } catch (e) {
-      const { path, operators } = parseQueryWithOperators(query);
       return {
         result: null,
         error: (e as Error).message,
         isValid: false,
-        parsedPath: path,
-        operators,
       };
     }
   }, [data, query]);
 };
 
-/** Operator definitions with metadata */
-type OperatorDefinition = {
-  value: string;
+// Legacy exports for backward compatibility
+export type ParsedOperator = {
+  name: string;
+  args: (string | number)[];
+};
+
+export type JsonDynamicBuilderResult = JmesPathResult & {
+  parsedPath: string;
+  operators: ParsedOperator[];
+};
+
+/** @deprecated Use useJmesPathResult instead */
+export const useJsonPathResult = (
+  data: object | null,
+  query: string,
+): JsonDynamicBuilderResult => {
+  const result = useJmesPathResult(data, query);
+  return {
+    ...result,
+    parsedPath: query,
+    operators: [],
+  };
+};
+
+/** @deprecated JMESPath handles operators natively */
+export const QUERY_OPERATORS = JMESPATH_FUNCTIONS;
+
+/** @deprecated JMESPath handles operators natively */
+export const parseQueryWithOperators = (
+  query: string,
+): { path: string; operators: ParsedOperator[] } => {
+  return { path: query, operators: [] };
+};
+
+/** @deprecated JMESPath handles operators natively */
+export const applyOperator = (value: unknown): unknown => value;
+
+/** @deprecated JMESPath handles operators natively */
+export const applyOperators = (value: unknown): unknown => value;
+
+/** Function definitions with metadata for the UI */
+type FunctionDefinition = {
+  /** JMESPath function name */
+  name: string;
+  /** Display label */
   label: string;
+  /** Description */
   description: string;
+  /** Whether it takes an argument */
   hasArg: boolean;
+  /** Argument placeholder */
   argPlaceholder?: string;
+  /** JMESPath expression template. Use @ for current value, {n} for argument */
+  template: string;
+  /** Value types this function applies to */
   applicableTo: ("array" | "object" | "string" | "number" | "any")[];
 };
 
-const OPERATOR_DEFINITIONS: OperatorDefinition[] = [
+const FUNCTION_DEFINITIONS: FunctionDefinition[] = [
+  // Array indexing (JMESPath native)
   {
-    value: "first",
+    name: "first",
     label: "First",
     description: "Get first element",
     hasArg: false,
-    applicableTo: ["array", "string"],
-  },
-  {
-    value: "last",
-    label: "Last",
-    description: "Get last element",
-    hasArg: false,
-    applicableTo: ["array", "string"],
-  },
-  {
-    value: "every",
-    label: "Every N",
-    description: "Get every nth element",
-    hasArg: true,
-    argPlaceholder: "n",
+    template: "[0]",
     applicableTo: ["array"],
   },
   {
-    value: "take",
-    label: "Take N",
-    description: "Get first n elements",
-    hasArg: true,
-    argPlaceholder: "n",
-    applicableTo: ["array", "string"],
+    name: "last",
+    label: "Last",
+    description: "Get last element",
+    hasArg: false,
+    template: "[-1]",
+    applicableTo: ["array"],
   },
   {
-    value: "skip",
-    label: "Skip N",
-    description: "Skip first n elements",
-    hasArg: true,
-    argPlaceholder: "n",
-    applicableTo: ["array", "string"],
-  },
-  {
-    value: "at",
+    name: "at",
     label: "At Index",
     description: "Get element at index",
     hasArg: true,
     argPlaceholder: "index",
-    applicableTo: ["array", "string"],
+    template: "[{n}]",
+    applicableTo: ["array"],
   },
+  // Slicing (JMESPath native)
   {
-    value: "reverse",
-    label: "Reverse",
-    description: "Reverse order",
-    hasArg: false,
-    applicableTo: ["array", "string"],
-  },
-  {
-    value: "unique",
-    label: "Unique",
-    description: "Get unique values",
-    hasArg: false,
+    name: "take",
+    label: "Take N",
+    description: "Get first n elements",
+    hasArg: true,
+    argPlaceholder: "n",
+    template: "[:{n}]",
     applicableTo: ["array"],
   },
   {
-    value: "flatten",
-    label: "Flatten",
-    description: "Flatten nested arrays",
-    hasArg: false,
+    name: "skip",
+    label: "Skip N",
+    description: "Skip first n elements",
+    hasArg: true,
+    argPlaceholder: "n",
+    template: "[{n}:]",
     applicableTo: ["array"],
   },
   {
-    value: "length",
+    name: "slice",
+    label: "Slice",
+    description: "Get elements from start to end",
+    hasArg: true,
+    argPlaceholder: "start:end",
+    template: "[{n}]",
+    applicableTo: ["array"],
+  },
+  {
+    name: "every",
+    label: "Every N",
+    description: "Get every nth element",
+    hasArg: true,
+    argPlaceholder: "n",
+    template: "[::${n}]",
+    applicableTo: ["array"],
+  },
+  // Built-in functions
+  {
+    name: "length",
     label: "Length",
     description: "Get length/count",
     hasArg: false,
+    template: "length(@)",
     applicableTo: ["array", "string", "object"],
   },
   {
-    value: "sum",
+    name: "reverse",
+    label: "Reverse",
+    description: "Reverse array order",
+    hasArg: false,
+    template: "reverse(@)",
+    applicableTo: ["array"],
+  },
+  {
+    name: "sort",
+    label: "Sort",
+    description: "Sort array",
+    hasArg: false,
+    template: "sort(@)",
+    applicableTo: ["array"],
+  },
+  {
+    name: "sum",
     label: "Sum",
-    description: "Sum of values",
+    description: "Sum of numeric values",
     hasArg: false,
+    template: "sum(@)",
     applicableTo: ["array"],
   },
   {
-    value: "avg",
+    name: "avg",
     label: "Average",
-    description: "Average of values",
+    description: "Average of numeric values",
     hasArg: false,
+    template: "avg(@)",
     applicableTo: ["array"],
   },
   {
-    value: "min",
+    name: "min",
     label: "Min",
     description: "Minimum value",
     hasArg: false,
+    template: "min(@)",
     applicableTo: ["array"],
   },
   {
-    value: "max",
+    name: "max",
     label: "Max",
     description: "Maximum value",
     hasArg: false,
+    template: "max(@)",
     applicableTo: ["array"],
   },
   {
-    value: "keys",
+    name: "keys",
     label: "Keys",
     description: "Get object keys",
     hasArg: false,
-    applicableTo: ["object", "array"],
+    template: "keys(@)",
+    applicableTo: ["object"],
   },
   {
-    value: "values",
+    name: "values",
     label: "Values",
     description: "Get object values",
     hasArg: false,
+    template: "values(@)",
     applicableTo: ["object"],
+  },
+  {
+    name: "flatten",
+    label: "Flatten",
+    description: "Flatten nested arrays",
+    hasArg: false,
+    template: "[]",
+    applicableTo: ["array"],
+  },
+  // Projection
+  {
+    name: "pluck",
+    label: "Pluck",
+    description: "Extract field from all items",
+    hasArg: true,
+    argPlaceholder: "field",
+    template: "[*].{n}",
+    applicableTo: ["array"],
+  },
+  // Type conversion
+  {
+    name: "toString",
+    label: "To String",
+    description: "Convert to string",
+    hasArg: false,
+    template: "to_string(@)",
+    applicableTo: ["any"],
+  },
+  {
+    name: "toNumber",
+    label: "To Number",
+    description: "Convert to number",
+    hasArg: false,
+    template: "to_number(@)",
+    applicableTo: ["string", "number"],
   },
 ];
 
-/** Get the type of a value for operator filtering */
+/** Get the type of a value for function filtering */
 const getValueType = (
   value: unknown,
 ): "array" | "object" | "string" | "number" | "any" => {
@@ -501,12 +371,60 @@ const getTypeIcon = (value: unknown) => {
   return Circle;
 };
 
-/** Get applicable operators for a value type */
-const getApplicableOperators = (value: unknown): OperatorDefinition[] => {
+/** Get applicable functions for a value type */
+const getApplicableFunctions = (value: unknown): FunctionDefinition[] => {
   const valueType = getValueType(value);
-  return OPERATOR_DEFINITIONS.filter(
-    (op) => op.applicableTo.includes(valueType) || op.applicableTo.includes("any"),
+  return FUNCTION_DEFINITIONS.filter(
+    (fn) =>
+      fn.applicableTo.includes(valueType) || fn.applicableTo.includes("any"),
   );
+};
+
+/**
+ * Convert a tree path to JMESPath syntax
+ * e.g., "$.user.scores" -> "user.scores"
+ *       "$.users[0].name" -> "users[0].name"
+ */
+const toJmesPath = (treePath: string): string => {
+  // Remove leading $ or $.
+  let path = treePath;
+  if (path.startsWith("$.")) {
+    path = path.substring(2);
+  } else if (path === "$") {
+    path = "@"; // Root reference in JMESPath
+  } else if (path.startsWith("$")) {
+    path = path.substring(1);
+  }
+  return path;
+};
+
+/**
+ * Build JMESPath expression by applying a function to a path
+ */
+const buildJmesPathExpression = (
+  path: string,
+  fn: FunctionDefinition,
+  arg?: string,
+): string => {
+  const jmesPath = toJmesPath(path);
+  let template = fn.template;
+
+  // Replace {n} with the argument
+  if (fn.hasArg && arg) {
+    template = template.replace("{n}", arg);
+  }
+
+  // If template uses @, wrap the path
+  if (template.includes("@")) {
+    // For functions like length(@), sum(@), etc.
+    if (jmesPath === "@") {
+      return template;
+    }
+    return `${jmesPath} | ${template}`;
+  }
+
+  // For array operations like [0], [:3], etc.
+  return `${jmesPath}${template}`;
 };
 
 /** Tree node component props */
@@ -515,7 +433,7 @@ type JsonTreeNodeProps = {
   value: unknown;
   path: string;
   depth: number;
-  onSelect: (path: string, operator?: string) => void;
+  onSelect: (jmesPath: string) => void;
   expandedPaths: Set<string>;
   onToggleExpand: (path: string) => void;
 };
@@ -530,12 +448,12 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
   expandedPaths,
   onToggleExpand,
 }) => {
-  const [operatorArg, setOperatorArg] = useState<string>("");
+  const [functionArg, setFunctionArg] = useState<string>("");
   const isExpandable =
     (typeof value === "object" && value !== null) || Array.isArray(value);
   const isExpanded = expandedPaths.has(path);
   const TypeIcon = getTypeIcon(value);
-  const applicableOperators = getApplicableOperators(value);
+  const applicableFunctions = getApplicableFunctions(value);
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -545,17 +463,14 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
   };
 
   const handleSelect = () => {
-    onSelect(path);
+    onSelect(toJmesPath(path));
   };
 
-  const handleOperatorClick = (op: OperatorDefinition, e: React.MouseEvent) => {
+  const handleFunctionClick = (fn: FunctionDefinition, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (op.hasArg) {
-      const arg = operatorArg || "1";
-      onSelect(path, `${op.value}(${arg})`);
-    } else {
-      onSelect(path, op.value);
-    }
+    const arg = fn.hasArg ? functionArg || "0" : undefined;
+    const expression = buildJmesPathExpression(path, fn, arg);
+    onSelect(expression);
   };
 
   const getPreviewValue = () => {
@@ -566,7 +481,9 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
       return `{${Object.keys(value).length}}`;
     }
     if (typeof value === "string") {
-      return value.length > 20 ? `"${value.substring(0, 20)}..."` : `"${value}"`;
+      return value.length > 20
+        ? `"${value.substring(0, 20)}..."`
+        : `"${value}"`;
     }
     return String(value);
   };
@@ -602,7 +519,7 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
         <button
           onClick={handleSelect}
           className="flex-1 truncate text-left font-mono text-xs hover:text-primary"
-          title={`Select: ${path}`}
+          title={`Select: ${toJmesPath(path)}`}
         >
           {keyName}
         </button>
@@ -612,8 +529,8 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
           {getPreviewValue()}
         </span>
 
-        {/* Operators popover */}
-        {applicableOperators.length > 0 && (
+        {/* Functions popover */}
+        {applicableFunctions.length > 0 && (
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -626,47 +543,51 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
               </Button>
             </PopoverTrigger>
             <PopoverContent
-              className="w-56 p-2"
+              className="w-64 p-2"
               align="end"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="mb-2 text-xs font-medium text-muted-slate">
-                Apply operator to: <code className="text-foreground">{keyName}</code>
+                Apply function to:{" "}
+                <code className="text-foreground">{keyName}</code>
               </div>
 
-              {/* Argument input for operators that need it */}
+              {/* Argument input for functions that need it */}
               <div className="mb-2">
                 <Input
-                  type="number"
-                  placeholder="Argument (n)"
-                  value={operatorArg}
-                  onChange={(e) => setOperatorArg(e.target.value)}
+                  type="text"
+                  placeholder="Argument (n, field, start:end)"
+                  value={functionArg}
+                  onChange={(e) => setFunctionArg(e.target.value)}
                   className="h-7 text-xs"
                   onClick={(e) => e.stopPropagation()}
                 />
               </div>
 
               <div className="flex flex-wrap gap-1">
-                {applicableOperators.map((op) => (
-                  <TooltipProvider key={op.value}>
+                {applicableFunctions.map((fn) => (
+                  <TooltipProvider key={fn.name}>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
                           variant="outline"
                           size="sm"
                           className="h-6 px-2 text-xs"
-                          onClick={(e) => handleOperatorClick(op, e)}
+                          onClick={(e) => handleFunctionClick(fn, e)}
                         >
-                          {op.label}
-                          {op.hasArg && (
+                          {fn.label}
+                          {fn.hasArg && (
                             <span className="ml-0.5 text-muted-slate">
-                              ({operatorArg || op.argPlaceholder})
+                              ({functionArg || fn.argPlaceholder})
                             </span>
                           )}
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom">
-                        <p>{op.description}</p>
+                        <p>{fn.description}</p>
+                        <code className="mt-1 block text-xs text-muted-foreground">
+                          {fn.template}
+                        </code>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -712,23 +633,27 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
 };
 
 /**
- * A component for building dynamic JSON path queries with a tree view.
- * Shows a hierarchical tree of the JSON data with operators available
- * for each node based on its type.
+ * A component for building JMESPath queries with a tree view.
+ * Shows a hierarchical tree of the JSON data with JMESPath functions
+ * available for each node based on its type.
  *
- * Supports operators via pipe syntax:
- * - $.path | first - Get first element
- * - $.path | last - Get last element
- * - $.path | every(2) - Get every 2nd element
- * - $.path | take(5) - Get first 5 elements
- * - $.path | skip(2) - Skip first 2 elements
- * - $.path | first | take(3) - Chain multiple operators
+ * Uses JMESPath syntax (cross-platform compatible with Java/Python):
+ * - user.name - Access nested property
+ * - users[0] - First element
+ * - users[-1] - Last element
+ * - users[:3] - First 3 elements
+ * - users[2:] - Skip first 2
+ * - users | length(@) - Get length
+ * - users | sum(@) - Sum values
+ * - users[*].name - Extract field from all items
+ *
+ * @see https://jmespath.org/
  */
 const JsonDynamicBuilder: React.FC<JsonDynamicBuilderProps> = ({
   data,
   value,
   onValueChange,
-  placeholder = "Click to build query...",
+  placeholder = "Click to build JMESPath query...",
   hasError,
   className,
   showPreview = false,
@@ -738,8 +663,8 @@ const JsonDynamicBuilder: React.FC<JsonDynamicBuilderProps> = ({
     () => new Set(["$"]),
   );
 
-  // Get the result of the current path query
-  const queryResult = useJsonPathResult(data, value);
+  // Get the result of the current query
+  const queryResult = useJmesPathResult(data, value);
 
   const handleToggleExpand = useCallback((path: string) => {
     setExpandedPaths((prev) => {
@@ -754,12 +679,9 @@ const JsonDynamicBuilder: React.FC<JsonDynamicBuilderProps> = ({
   }, []);
 
   const handleSelect = useCallback(
-    (path: string, operator?: string) => {
-      const newValue = operator ? `${path} | ${operator}` : path;
-      onValueChange(newValue);
-      if (!operator) {
-        setIsOpen(false);
-      }
+    (jmesPath: string) => {
+      onValueChange(jmesPath);
+      setIsOpen(false);
     },
     [onValueChange],
   );
@@ -781,9 +703,11 @@ const JsonDynamicBuilder: React.FC<JsonDynamicBuilderProps> = ({
               onChange={handleInputChange}
               placeholder={placeholder}
               className={cn(
-                "cursor-pointer font-mono text-sm",
+                "cursor-pointer font-mono text-sm pr-10",
                 hasError && "border-destructive",
-                !queryResult.isValid && value.trim() !== "" && "border-destructive",
+                !queryResult.isValid &&
+                  value.trim() !== "" &&
+                  "border-destructive",
               )}
             />
             <Button
@@ -804,15 +728,17 @@ const JsonDynamicBuilder: React.FC<JsonDynamicBuilderProps> = ({
           align="start"
         >
           <div className="mb-2 flex items-center justify-between border-b pb-2">
-            <span className="text-xs font-medium">Select a path</span>
+            <span className="text-xs font-medium">
+              Select a path (JMESPath)
+            </span>
             <span className="text-xs text-muted-slate">
-              Click <span className="font-bold">fx</span> for operators
+              Click <span className="font-bold">fx</span> for functions
             </span>
           </div>
 
           {data ? (
             <JsonTreeNode
-              keyName="$"
+              keyName="@"
               value={data}
               path="$"
               depth={0}
@@ -844,7 +770,7 @@ const JsonDynamicBuilder: React.FC<JsonDynamicBuilderProps> = ({
                 : String(queryResult.result)}
             </pre>
           ) : (
-            <span className="text-muted-slate">No match</span>
+            <span className="text-muted-slate">null</span>
           )}
         </div>
       )}
