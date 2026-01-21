@@ -551,3 +551,105 @@ def test_genai_client__generate_videos__error_handling(fake_backend):
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
+
+
+@pytest.mark.skipif(
+    SKIP_EXPENSIVE_TESTS,
+    reason="Expensive tests disabled. Set OPIK_TEST_EXPENSIVE=1 to enable.",
+)
+@retry_on_rate_limit
+def test_genai_client__generate_videos_with_upload_videos_disabled__no_attachment(
+    fake_backend,
+):
+    """
+    Test that when upload_videos=False, video.save span is created but no attachment is logged.
+
+    This test verifies:
+    1. Video generation and save workflow works normally
+    2. video.save span is created with correct input/output
+    3. No attachment is logged on the span when upload_videos=False
+    """
+    client = genai.Client(
+        vertexai=True,
+        http_options=HttpOptions(api_version="v1"),
+    )
+    client = track_genai(
+        client, project_name="genai-video-test-no-upload", upload_videos=False
+    )
+
+    prompt = "A green triangle spinning"
+
+    # 1. Create video
+    operation = client.models.generate_videos(
+        model=VIDEO_MODEL,
+        prompt=prompt,
+        config=VIDEO_CONFIG,
+    )
+
+    # 2. Wait for completion
+    max_wait_time = 300  # 5 minutes
+    start_time = time.time()
+    while not operation.done:
+        if time.time() - start_time > max_wait_time:
+            pytest.fail("Video generation timed out")
+        time.sleep(10)
+        operation = client.operations.get(operation)
+
+    assert operation.error is None, f"Video generation failed: {operation.error}"
+    assert operation.response is not None
+    assert operation.response.generated_videos
+
+    # 3. Save video
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_path = os.path.join(temp_dir, "test_video_no_upload.mp4")
+        video = operation.response.generated_videos[0].video
+        video.save(output_path)
+
+        # Verify file was created
+        assert os.path.exists(output_path)
+
+    opik.flush_tracker()
+
+    # Find the video.save trace
+    save_trace = next(
+        (t for t in fake_backend.trace_trees if t.name == "video.save"), None
+    )
+    assert save_trace is not None, "video.save trace not found"
+
+    # Expected trace WITHOUT attachments
+    EXPECTED_SAVE_TRACE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="video.save",
+        input={"file": ANY_BUT_NONE},
+        output=None,
+        tags=["genai"],
+        metadata=ANY_DICT,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name="genai-video-test-no-upload",
+        attachments=[],  # No attachments when upload_videos=False
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="general",
+                name="video.save",
+                input={"file": ANY_BUT_NONE},
+                output=None,
+                tags=["genai"],
+                metadata=ANY_DICT.containing(
+                    {
+                        "created_from": "genai",
+                        "type": "genai_videos",
+                    }
+                ),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name="genai-video-test-no-upload",
+                spans=[],
+                attachments=[],  # No attachments when upload_videos=False
+            )
+        ],
+    )
+
+    assert_equal(EXPECTED_SAVE_TRACE, save_trace)
