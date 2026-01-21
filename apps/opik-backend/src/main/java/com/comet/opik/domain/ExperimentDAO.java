@@ -166,7 +166,7 @@ class ExperimentDAO {
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
-                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                ORDER BY (workspace_id, dataset_id, id) DESC
                 <if(limit &&
                 !feedback_scores_filters &&
                 !feedback_scores_empty_filters &&
