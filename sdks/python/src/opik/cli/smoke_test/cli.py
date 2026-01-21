@@ -29,9 +29,10 @@ def create_opik_logo_image() -> Path:
     """
     from .opik_logo import OPIK_LOGO_PNG
 
-    out = Path(tempfile.gettempdir()) / "opik_logo.png"
-    out.write_bytes(OPIK_LOGO_PNG)
-    return out
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+        tmp.write(OPIK_LOGO_PNG)
+        temp_path = Path(tmp.name)
+    return temp_path
 
 
 @click.command(name="smoke-test")
