@@ -80,9 +80,7 @@ public class SortingQueryBuilder {
         // Fields without bindKeyParam use literal keys in field mappings (e.g., JSONExtractRaw)
         return sorting.stream()
                 .filter(SortingField::isDynamic)
-                .filter(field -> field.bindKeyParam() != null)
-                .findAny()
-                .isPresent();
+                .anyMatch(field -> field.bindKeyParam() != null);
     }
 
     public Statement bindDynamicKeys(Statement statement, List<SortingField> sorting) {
