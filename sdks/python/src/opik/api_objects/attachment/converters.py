@@ -33,8 +33,12 @@ def attachment_to_message(
     # Create a temporary copy if requested
     should_delete_after_upload = delete_after_upload
     if attachment_data.create_temp_copy:
-        file_path = _create_temp_copy(file_path)
-        should_delete_after_upload = True
+        tmp_file_path = _create_temp_copy(file_path)
+        if tmp_file_path is not None:
+            file_path = tmp_file_path
+            should_delete_after_upload = True
+        else:
+            should_delete_after_upload = False
 
     return messages.CreateAttachmentMessage(
         file_path=file_path,
@@ -48,7 +52,7 @@ def attachment_to_message(
     )
 
 
-def _create_temp_copy(file_path: str) -> str:
+def _create_temp_copy(file_path: str) -> Optional[str]:
     """
     Create a temporary copy of a file.
 
@@ -77,7 +81,8 @@ def _create_temp_copy(file_path: str) -> str:
         return temp_file.name
     except Exception:
         temp_file.close()
-        raise
+        LOGGER.error("Failed to create temporary copy of attachment: %s. Opik will try to use the original file.", file_path, exc_info=True)
+        return None
 
 
 def guess_attachment_type(attachment_data: attachment.Attachment) -> Optional[str]:
