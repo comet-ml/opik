@@ -153,7 +153,7 @@ class ExperimentDAO {
             WITH experiments_final AS (
                 SELECT
                     *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
-                FROM experiments
+                FROM experiments FINAL
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(optimization_id)> AND optimization_id = :optimization_id <endif>
@@ -167,7 +167,6 @@ class ExperimentDAO {
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
                 <if(limit &&
                 !feedback_scores_filters &&
                 !feedback_scores_empty_filters &&
@@ -982,7 +981,7 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                <if(tags)> :tags <else> tags <endif> as tags,
+                <if(tags)><if(merge_tags)> arrayDistinct(arrayConcat(tags, :tags)) <else> :tags <endif> <else> tags <endif> as tags,
                 created_by,
                 :user_name as last_updated_by,
                 prompt_version_id,
@@ -995,10 +994,10 @@ class ExperimentDAO {
                 created_at,
                 now64(9) as last_updated_at
             FROM experiments
-            WHERE id = :id
+            WHERE id IN (:ids)
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-            LIMIT 1
+            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1660,20 +1659,31 @@ class ExperimentDAO {
     Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
         log.info("Updating experiment with id '{}'", id);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> updateWithInsert(id, experimentUpdate, connection))
+                .flatMapMany(connection -> updateWithInsert(Set.of(id), experimentUpdate, false, "update_experiment",
+                        connection))
                 .then();
     }
 
-    private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
-            Connection connection) {
+    Mono<Void> update(@NonNull Set<UUID> ids, @NonNull ExperimentUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "experiment IDs must not be empty");
+        log.info("Updating batch of '{}' experiments", ids.size());
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(
+                        connection -> updateWithInsert(ids, update, mergeTags, "bulk_update_experiments", connection))
+                .then();
+    }
+
+    private Publisher<? extends Result> updateWithInsert(@NonNull Set<UUID> ids,
+            @NonNull ExperimentUpdate experimentUpdate,
+            boolean mergeTags, String queryName, Connection connection) {
 
         return makeFluxContextAware((userName, workspaceId) -> {
-            var template = buildUpdateTemplate(experimentUpdate, UPDATE, "update_experiment", workspaceId);
+            var template = buildUpdateTemplate(experimentUpdate, mergeTags, queryName, workspaceId);
             String sql = template.render();
 
             Statement statement = connection.createStatement(sql);
             bindUpdateParams(experimentUpdate, statement);
-            statement.bind("id", id)
+            statement.bind("ids", ids.toArray(UUID[]::new))
                     .bind("workspace_id", workspaceId)
                     .bind("user_name", userName);
 
@@ -1681,9 +1691,9 @@ class ExperimentDAO {
         });
     }
 
-    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update, String queryName,
+    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, boolean mergeTags, String queryName,
             String workspaceId) {
-        var template = getSTWithLogComment(update, queryName, workspaceId, "");
+        var template = getSTWithLogComment(UPDATE, queryName, workspaceId, "");
 
         if (StringUtils.isNotBlank(experimentUpdate.name())) {
             template.add("name", experimentUpdate.name());
@@ -1697,6 +1707,7 @@ class ExperimentDAO {
         // because an EMPTY set is a valid value here, and it is used to remove tags
         if (experimentUpdate.tags() != null) {
             template.add("tags", true);
+            template.add("merge_tags", mergeTags);
         }
 
         if (experimentUpdate.type() != null) {

@@ -656,7 +656,12 @@ const ExperimentsPage: React.FC = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <ExperimentsActionsPanel experiments={selectedRows} />
+          <ExperimentsActionsPanel
+            experiments={selectedRows}
+            onTagsAdded={() => {
+              setRowSelection({});
+            }}
+          />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content="Refresh experiments list">
             <Button
