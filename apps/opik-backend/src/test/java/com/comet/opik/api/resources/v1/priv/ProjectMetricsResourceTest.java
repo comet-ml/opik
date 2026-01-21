@@ -2807,7 +2807,8 @@ class ProjectMetricsResourceTest {
             var durationOtherSpans = Map.of(
                     ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsOtherSpans.get(0),
                     ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsOtherSpans.get(1),
-                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsOtherSpans.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99,
+                    durationsOtherSpans.getLast());
             var durationAllSpans = Map.of(
                     ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsAllSpans.get(0),
                     ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsAllSpans.get(1),
