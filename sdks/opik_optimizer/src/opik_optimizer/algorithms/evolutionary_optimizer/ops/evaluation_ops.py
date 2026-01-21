@@ -69,9 +69,7 @@ def evaluate_bundle(
         strategy=getattr(optimizer, "n_sample_strategy", None),
     )
     resolved_ids = sampling_plan.dataset_item_ids
-    effective_n_samples = (
-        None if resolved_ids is not None else sampling_plan.nb_samples
-    )
+    effective_n_samples = None if resolved_ids is not None else sampling_plan.nb_samples
 
     configuration_updates = helpers.drop_none(
         {
