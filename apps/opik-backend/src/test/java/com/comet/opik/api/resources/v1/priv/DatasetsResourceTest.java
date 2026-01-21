@@ -4674,6 +4674,10 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
+            // Get the dataset ID from one of the created items
+            var firstItem = datasetResourceClient.getDatasetItem(items.get(0).id(), API_KEY, TEST_WORKSPACE);
+            var datasetId = firstItem.datasetId();
+
             var deleteRequest = DatasetItemsDelete.builder()
                     .itemIds(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
                     .build();
@@ -4689,18 +4693,15 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            for (var item : items) {
-                var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                        .path("items")
-                        .path(item.id().toString())
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                        .get();
+            // Fetch all items from the dataset and verify deleted items are not present
+            var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1000), API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                assertThat(actualResponse.hasEntity()).isTrue();
-            }
+            // Verify that none of the deleted item IDs are in the current dataset version
+            var deletedItemIds = items.stream().map(DatasetItem::id).collect(Collectors.toSet());
+            var currentItemIds = allItems.content().stream().map(DatasetItem::id).collect(Collectors.toSet());
+
+            assertThat(currentItemIds).doesNotContainSequence(deletedItemIds);
         }
 
         @Test
