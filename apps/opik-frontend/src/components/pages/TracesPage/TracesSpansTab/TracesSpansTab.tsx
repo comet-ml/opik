@@ -29,6 +29,7 @@ import useTracesOrSpansList, {
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
   COLUMN_COMMENTS_ID,
+  COLUMN_EXPERIMENT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_SPAN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAIL_STATISTIC_ID,
@@ -429,7 +430,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   placeholder: "Select span score",
                 },
               },
-              experiment_id: {
+              [COLUMN_EXPERIMENT_ID]: {
                 keyComponent: ExperimentsSelectBox,
                 keyComponentProps: {
                   className: "w-full min-w-72",
@@ -855,7 +856,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
             },
             {
-              id: "experiment_id",
+              id: COLUMN_EXPERIMENT_ID,
               label: "Experiment",
               type: COLUMN_TYPE.string,
               cell: ResourceCell as never,
@@ -933,7 +934,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               type: COLUMN_TYPE.string,
             },
             {
-              id: "experiment_id",
+              id: COLUMN_EXPERIMENT_ID,
               label: "Experiment",
               type: COLUMN_TYPE.string,
             },
