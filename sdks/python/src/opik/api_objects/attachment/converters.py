@@ -30,10 +30,10 @@ def attachment_to_message(
     if file_name is None:
         file_name = os.path.basename(file_path)
 
-    # Create a temporary copy if requested
+    # Try to create a temporary copy if requested
     should_delete_after_upload = delete_after_upload
     if attachment_data.create_temp_copy:
-        tmp_file_path = _create_temp_copy(file_path)
+        tmp_file_path = _try_create_temp_copy(file_path)
         if tmp_file_path is not None:
             file_path = tmp_file_path
             should_delete_after_upload = True
@@ -52,7 +52,7 @@ def attachment_to_message(
     )
 
 
-def _create_temp_copy(file_path: str) -> Optional[str]:
+def _try_create_temp_copy(file_path: str) -> Optional[str]:
     """
     Create a temporary copy of a file.
 
