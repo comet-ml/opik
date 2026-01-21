@@ -64,7 +64,7 @@ class CancellationMonitor:
         ))
         self._initialized = True
         
-        logger.info(f"CancellationMonitor initialized (poll interval: {self._poll_interval}s)")
+        logger.debug(f"CancellationMonitor initialized (poll interval: {self._poll_interval}s)")
     
     def register(self, optimization_id: str, on_cancelled: Callable[[], None]) -> None:
         """
@@ -103,7 +103,7 @@ class CancellationMonitor:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._monitor_loop, daemon=True, name="CancellationMonitor")
         self._thread.start()
-        logger.info("CancellationMonitor thread started")
+        logger.debug("CancellationMonitor thread started")
     
     def _stop_monitor(self) -> None:
         """Stop the background monitoring thread."""
@@ -113,7 +113,7 @@ class CancellationMonitor:
             if self._thread.is_alive():
                 logger.warning("CancellationMonitor thread did not stop gracefully")
             self._thread = None
-        logger.info("CancellationMonitor thread stopped")
+        logger.debug("CancellationMonitor thread stopped")
     
     def _monitor_loop(self) -> None:
         """Main monitoring loop - checks all registered optimizations via MGET."""
