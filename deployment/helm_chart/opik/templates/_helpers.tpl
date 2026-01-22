@@ -98,3 +98,19 @@ Create the name of the service account to use
 {{- default "default" .serviceAccount.name }}
 {{- end }}
 {{- end }}
+{{/*
+Generate Content-Security-Policy header value from CSP configuration
+Usage: {{ include "opik.cspHeaderValue" .Values.component.frontend.staticSite.contentSecurityPolicy }}
+Returns: "default-src 'self'; script-src 'self' 'unsafe-inline'"
+*/}}
+{{- define "opik.cspHeaderValue" -}}
+{{- if . -}}
+{{-   $cspParts := list -}}
+{{-   range $directive, $sources := . -}}
+{{-     $cspParts = append $cspParts (printf "%s %s" $directive (join " " $sources)) -}}
+{{-   end -}}
+{{-   if $cspParts -}}
+{{-     join "; " $cspParts -}}
+{{-   end -}}
+{{- end -}}
+{{- end -}}

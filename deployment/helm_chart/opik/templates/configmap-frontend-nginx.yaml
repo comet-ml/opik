@@ -55,6 +55,10 @@ data:
       {{- end}}
     }
     {{- end }}
+    map $uri $cache_control_header {
+      "/index.html" "no-cache";
+      default       "public, max-age=31536000";
+    }
 
     {{- range $name,$limit := .Values.component.frontend.throttling }}
     limit_req_zone {{ $limit.variable }} zone={{ $limit.zone | default $name }}:{{ $limit.size | default "1m" }} rate={{ $limit.rate | default "10r/m" }};
@@ -80,8 +84,9 @@ data:
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Frame-Options "DENY" always;
         add_header X-XSS-Protection "0" always;
-        {{- if .Values.component.frontend.csp.enabled }}
-        add_header Content-Security-Policy "default-src 'self'; script-src {{ .Values.component.frontend.csp.scriptSrc | join " " }}; style-src {{ .Values.component.frontend.csp.styleSrc | join " " }}; img-src {{ .Values.component.frontend.csp.imgSrc | join " " }}; media-src {{ .Values.component.frontend.csp.mediaSrc | join " " }}; font-src {{ .Values.component.frontend.csp.fontSrc | join " " }}; connect-src {{ .Values.component.frontend.csp.connectSrc | join " " }}; object-src 'none'; base-uri 'self'; frame-ancestors {{ .Values.component.frontend.csp.frameAncestors | join " " }};" always;
+        add_header Cache-Control $cache_control_header always;
+        {{- with .Values.component.frontend.contentSecurityPolicy }}
+        add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" . }};" always;
         {{- end }}
         {{- if .Values.component.frontend.hstsEnabled }}
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
@@ -156,9 +161,6 @@ data:
 
             try_files $uri $uri/ {{ $rootPath }}/index.html;
 
-            if ($uri = {{ $rootPath }}/index.html) {
-                add_header Cache-Control "no-cache";
-            }
             {{- end }}
         }
     {{- range $k, $v := .Values.component.frontend.throttling }}
