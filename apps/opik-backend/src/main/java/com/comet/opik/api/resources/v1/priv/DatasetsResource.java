@@ -916,9 +916,9 @@ public class DatasetsResource {
 
     @DELETE
     @Path("/export-jobs/{jobId}")
-    @Operation(operationId = "deleteDatasetExportJob", summary = "Delete dataset export job", description = "Deletes a completed dataset export job and its associated file from storage. Only COMPLETED jobs can be deleted.", responses = {
+    @Operation(operationId = "deleteDatasetExportJob", summary = "Delete dataset export job", description = "Deletes a completed or failed dataset export job and its associated file from storage. Only COMPLETED and FAILED jobs can be deleted. This operation is idempotent.", responses = {
             @ApiResponse(responseCode = "204", description = "Export job and file deleted successfully"),
-            @ApiResponse(responseCode = "400", description = "Export job is not in COMPLETED status")
+            @ApiResponse(responseCode = "400", description = "Export job is not in COMPLETED or FAILED status")
     })
     @RateLimited
     public Response deleteDatasetExportJob(@PathParam("jobId") @NotNull UUID jobId) {
@@ -931,7 +931,7 @@ public class DatasetsResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted export job '{}' and its file on workspaceId '{}'", jobId, workspaceId);
+        log.info("Deleted export job '{}' on workspaceId '{}'", jobId, workspaceId);
 
         return Response.noContent().build();
     }

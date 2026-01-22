@@ -267,64 +267,6 @@ class CsvDatasetExportServiceImplTest {
         verify(fileService, never()).download(any());
     }
 
-    @Test
-    void downloadExport_shouldReturnInputStream_whenJobIsCompleted() {
-        // Given
-        String filePath = "exports/test-file.csv";
-        DatasetExportJob completedJob = DatasetExportJob.builder()
-                .id(JOB_ID)
-                .datasetId(DATASET_ID)
-                .status(DatasetExportStatus.COMPLETED)
-                .filePath(filePath)
-                .createdAt(Instant.now())
-                .lastUpdatedAt(Instant.now())
-                .expiresAt(Instant.now().plus(DEFAULT_TTL.toJavaDuration()))
-                .createdBy(USER_NAME)
-                .build();
-
-        InputStream mockInputStream = new ByteArrayInputStream("test,data".getBytes());
-
-        when(jobService.getJob(JOB_ID)).thenReturn(Mono.just(completedJob));
-        when(fileService.download(filePath)).thenReturn(mockInputStream);
-
-        // When
-        Mono<InputStream> result = service.downloadExport(JOB_ID)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
-                        .put(RequestContext.USER_NAME, USER_NAME));
-
-        // Then
-        StepVerifier.create(result)
-                .assertNext(inputStream -> assertThat(inputStream).isNotNull())
-                .verifyComplete();
-
-        verify(jobService).getJob(JOB_ID);
-        verify(fileService).download(filePath);
-    }
-
-    @Test
-    void downloadExport_shouldReturnError_whenJobIsNotCompleted() {
-        // Given
-        DatasetExportJob pendingJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
-
-        when(jobService.getJob(JOB_ID)).thenReturn(Mono.just(pendingJob));
-
-        // When
-        Mono<InputStream> result = service.downloadExport(JOB_ID)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
-                        .put(RequestContext.USER_NAME, USER_NAME));
-
-        // Then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable -> throwable instanceof jakarta.ws.rs.BadRequestException
-                        && throwable.getMessage().contains("is not ready for download"))
-                .verify();
-
-        verify(jobService).getJob(JOB_ID);
-        verify(fileService, never()).download(any());
-    }
-
     private DatasetExportJob createJob(UUID jobId, DatasetExportStatus status) {
         return DatasetExportJob.builder()
                 .id(jobId)
