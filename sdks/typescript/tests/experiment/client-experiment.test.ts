@@ -541,8 +541,10 @@ describe("Opik experiment operations", () => {
       });
 
       expect(spies.updateExperiment).toHaveBeenCalledWith(experimentId, {
-        name: "updated-name",
-        metadata: { k: "v" },
+        body: {
+          name: "updated-name",
+          metadata: { k: "v" },
+        },
       });
     });
 
@@ -557,8 +559,8 @@ describe("Opik experiment operations", () => {
 
       const callArgs = spies.updateExperiment.mock.calls[0];
       expect(callArgs[0]).toBe(experimentId);
-      expect(callArgs[1]).toEqual({ name: "new-name-only" });
-      expect(callArgs[1]).not.toHaveProperty("metadata");
+      expect(callArgs[1]).toEqual({ body: { name: "new-name-only" } });
+      expect(callArgs[1].body).not.toHaveProperty("metadata");
     });
 
     it<ExperimentTestContext>("should update only the configuration when name is not provided", async ({
@@ -575,8 +577,8 @@ describe("Opik experiment operations", () => {
 
       const callArgs = spies.updateExperiment.mock.calls[0];
       expect(callArgs[0]).toBe(experimentId);
-      expect(callArgs[1]).toEqual({ metadata: newConfig });
-      expect(callArgs[1]).not.toHaveProperty("name");
+      expect(callArgs[1]).toEqual({ body: { metadata: newConfig } });
+      expect(callArgs[1].body).not.toHaveProperty("name");
     });
 
     it<ExperimentTestContext>("should throw error when id is empty string", async ({
@@ -618,8 +620,10 @@ describe("Opik experiment operations", () => {
       ).rejects.toThrow("Failed to update experiment");
 
       expect(spies.updateExperiment).toHaveBeenCalledWith(experimentId, {
-        name: "bad-name",
-        metadata: {},
+        body: {
+          name: "bad-name",
+          metadata: {},
+        },
       });
     });
   });

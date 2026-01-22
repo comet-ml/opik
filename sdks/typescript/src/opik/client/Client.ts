@@ -384,7 +384,7 @@ export class OpikClient {
         }
 
         try {
-            await this.api.experiments.updateExperiment(id, request);
+            await this.api.experiments.updateExperiment(id, { body: request });
         } catch (error) {
             logger.error(`Failed to update experiment with ID "${id}"`, { error });
             throw error;
