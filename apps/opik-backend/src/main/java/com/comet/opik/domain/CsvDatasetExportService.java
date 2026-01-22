@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetExportJob;
 import com.comet.opik.api.DatasetExportStatus;
+import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.domain.attachment.FileService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
@@ -144,19 +145,70 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            // Resolve versionId based on feature flag and provided value
             // If versioning is disabled, use null directly without going through reactive chain
             if (!featureFlags.isDatasetVersioningEnabled()) {
                 log.info("Dataset versioning is disabled, using legacy table for export");
-                UUID resolvedVersionId = null;
-                return processExportWithVersionId(datasetId, resolvedVersionId, workspaceId);
+                return processExportWithVersionId(datasetId, null, workspaceId);
             }
 
             // Versioning is enabled - resolve versionId reactively
             return resolveVersionId(datasetId, versionId, workspaceId)
-                    .flatMap(
-                            resolvedVersionId -> processExportWithVersionId(datasetId, resolvedVersionId, workspaceId));
+                    .flatMap(resolvedVersionId -> processExportWithVersionId(datasetId, resolvedVersionId, workspaceId))
+                    .switchIfEmpty(Mono.defer(() -> processExportWithVersionId(datasetId, null, workspaceId)));
         });
+    }
+
+    /**
+     * Resolves the version ID based on feature flags and the provided version ID.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the provided version ID (may be null)
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the resolved version ID, or empty if no version should be used
+     */
+    private Mono<UUID> resolveVersionId(UUID datasetId, @Nullable UUID versionId, String workspaceId) {
+        // If versionId is provided, validate it belongs to the dataset
+        if (versionId != null) {
+            return validateVersionId(datasetId, versionId, workspaceId);
+        }
+
+        // No versionId provided - get latest version
+        return getLatestVersionId(datasetId, workspaceId);
+    }
+
+    /**
+     * Validates that the provided version ID belongs to the dataset.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID to validate
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the validated version ID
+     * @throws BadRequestException if the version does not belong to the dataset
+     */
+    private Mono<UUID> validateVersionId(UUID datasetId, UUID versionId, String workspaceId) {
+        return Mono.fromCallable(() -> {
+            var version = versionService.getVersionById(workspaceId, datasetId, versionId);
+            if (!version.datasetId().equals(datasetId)) {
+                throw new BadRequestException(
+                        "Provided versionId '%s' does not belong to dataset '%s'"
+                                .formatted(versionId, datasetId));
+            }
+            return versionId;
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    /**
+     * Gets the latest version ID for the dataset.
+     *
+     * @param datasetId the dataset ID
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the latest version ID, or empty if no version exists
+     */
+    private Mono<UUID> getLatestVersionId(UUID datasetId, String workspaceId) {
+        return Mono.fromCallable(() -> versionService.getLatestVersion(datasetId, workspaceId)
+                .map(DatasetVersion::id)
+                .orElse(null))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     /**
@@ -185,41 +237,12 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                 });
     }
 
-    /**
-     * Resolves the versionId based on feature flag and provided value.
-     * This method is only called when versioning is enabled.
-     *
-     * @param datasetId the dataset ID
-     * @param versionId the provided versionId (may be null)
-     * @param workspaceId the workspace ID
-     * @return Mono emitting the resolved versionId
-     */
-    private Mono<UUID> resolveVersionId(UUID datasetId, @Nullable UUID versionId, String workspaceId) {
-        if (versionId != null) {
-            // Versioning enabled and versionId provided - validate it belongs to the dataset
-            return Mono.fromCallable(() -> {
-                var version = versionService.getVersionById(workspaceId, datasetId, versionId);
-                if (!version.datasetId().equals(datasetId)) {
-                    throw new BadRequestException(
-                            "Provided versionId '%s' does not belong to dataset '%s'"
-                                    .formatted(versionId, datasetId));
-                }
-                return versionId;
-            })
-                    .subscribeOn(Schedulers.boundedElastic());
-        }
-
-        // Versioning enabled but no versionId provided - get latest version
-        return Mono.fromCallable(() -> versionService.getLatestVersion(datasetId, workspaceId)
-                .map(v -> v.id())
-                .orElse(null))
-                .subscribeOn(Schedulers.boundedElastic());
-    }
-
     private Mono<DatasetExportJob> executeWithLock(String lockKey, String workspaceId, UUID datasetId,
             UUID versionId) {
+
         Mono<DatasetExportJob> action = Mono.defer(() -> jobService.findInProgressJobs(datasetId, versionId)
                 .flatMap(existingJobs -> {
+
                     // Double-check after acquiring lock
                     if (!existingJobs.isEmpty()) {
                         DatasetExportJob existingJob = existingJobs.getFirst();
@@ -230,8 +253,8 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                     // Create new export job and publish to Redis stream
                     // TTL is taken from config (defaultTtl)
                     return jobService.createJob(datasetId, exportConfig.getDefaultTtl().toJavaDuration(), versionId)
-                            .flatMap(job -> publishToRedisStream(job, workspaceId)
-                                    .thenReturn(job));
+                            .doOnNext(job -> log.info("Created export job: '{}'", job.id()))
+                            .flatMap(job -> publishToRedisStream(job, workspaceId).thenReturn(job));
                 }));
 
         return lockService.executeWithLock(new LockService.Lock(lockKey), action);

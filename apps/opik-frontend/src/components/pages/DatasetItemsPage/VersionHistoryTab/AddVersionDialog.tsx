@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
-import { Blocks, Code2, Loader2 } from "lucide-react";
+import React from "react";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,12 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useToast } from "@/components/ui/use-toast";
-import { ToastAction } from "@/components/ui/toast";
 import { LATEST_VERSION_TAG } from "@/constants/datasets";
-import useCommitDatasetVersionMutation from "@/api/datasets/useCommitDatasetVersionMutation";
-import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
-import useLoadPlayground from "@/hooks/useLoadPlayground";
 import VersionForm, { VersionFormData } from "./VersionForm";
 
 const ADD_VERSION_FORM_ID = "add-version-form";
@@ -22,89 +17,18 @@ const ADD_VERSION_FORM_ID = "add-version-form";
 type AddVersionDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  datasetId: string;
-  datasetName?: string;
   onConfirm?: (tags?: string[], changeDescription?: string) => void;
+  isSubmitting?: boolean;
 };
 
 const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
   open,
   setOpen,
-  datasetId,
-  datasetName,
   onConfirm,
+  isSubmitting,
 }) => {
-  const commitVersionMutation = useCommitDatasetVersionMutation();
-  const { toast } = useToast();
-  const { navigate: navigateToExperiment } = useNavigateToExperiment();
-  const { loadPlayground } = useLoadPlayground();
-
-  const showSuccessToast = useCallback(
-    (versionId?: string) => {
-      toast({
-        title: "New version created",
-        description:
-          "Your dataset changes have been saved as a new version. You can now use it to run experiments in the SDK or the Playground.",
-        actions: [
-          <ToastAction
-            variant="link"
-            size="sm"
-            className="comet-body-s-accented gap-1.5 px-0"
-            altText="Run experiment in the SDK"
-            key="sdk"
-            onClick={() =>
-              navigateToExperiment({
-                newExperiment: true,
-                datasetName,
-              })
-            }
-          >
-            <Code2 className="size-4" />
-            Run experiment in the SDK
-          </ToastAction>,
-          <ToastAction
-            variant="link"
-            size="sm"
-            className="comet-body-s-accented gap-1.5 px-0"
-            altText="Run experiment in the Playground"
-            key="playground"
-            onClick={() =>
-              loadPlayground({
-                datasetId,
-                datasetVersionId: versionId,
-              })
-            }
-          >
-            <Blocks className="size-4" />
-            Run experiment in the Playground
-          </ToastAction>,
-        ],
-      });
-    },
-    [toast, navigateToExperiment, datasetName, loadPlayground, datasetId],
-  );
-
   const handleSubmit = (data: VersionFormData) => {
-    // If onConfirm is provided, use it (draft mode)
-    if (onConfirm) {
-      onConfirm(data.tags, data.versionNote);
-      return;
-    }
-
-    // Otherwise, use the legacy commit mutation
-    commitVersionMutation.mutate(
-      {
-        datasetId,
-        changeDescription: data.versionNote,
-        tags: data.tags,
-      },
-      {
-        onSuccess: (version) => {
-          showSuccessToast(version.id);
-          setOpen(false);
-        },
-      },
-    );
+    onConfirm?.(data.tags, data.versionNote);
   };
 
   const handleCancel = () => {
@@ -112,11 +36,8 @@ const AddVersionDialog: React.FC<AddVersionDialogProps> = ({
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    if (commitVersionMutation.isPending) return;
     setOpen(newOpen);
   };
-
-  const isSubmitting = commitVersionMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
