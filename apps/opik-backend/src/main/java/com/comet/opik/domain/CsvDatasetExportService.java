@@ -4,9 +4,11 @@ import com.comet.opik.api.DatasetExportJob;
 import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.domain.attachment.FileService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
+import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.google.inject.ImplementedBy;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BadRequestException;
@@ -22,6 +24,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @ImplementedBy(CsvDatasetExportServiceImpl.class)
@@ -32,11 +35,20 @@ public interface CsvDatasetExportService {
      * If an export job is already in progress for this dataset, returns the existing job.
      * The export is processed asynchronously via a Redis stream.
      *
+     * When dataset versioning is enabled:
+     * - If versionId is provided, exports that specific version
+     * - If versionId is null, exports the latest version
+     *
+     * When dataset versioning is disabled:
+     * - Always uses the legacy dataset_items table (versionId is ignored)
+     *
      * @param datasetId The dataset ID to export
+     * @param versionId Optional version ID. If null and versioning is enabled, uses latest version.
+     *                  Ignored when versioning is disabled.
      * @return Mono emitting the created or existing export job
      * @throws IllegalStateException if dataset export feature is disabled
      */
-    Mono<DatasetExportJob> startExport(UUID datasetId);
+    Mono<DatasetExportJob> startExport(UUID datasetId, @Nullable UUID versionId);
 
     /**
      * Retrieves an export job by its ID.
@@ -75,6 +87,17 @@ public interface CsvDatasetExportService {
      * @throws IllegalStateException if job is not in COMPLETED status
      */
     Mono<InputStream> downloadExport(UUID jobId);
+
+    /**
+     * Deletes a completed or failed export job and its associated file from storage.
+     * Only COMPLETED and FAILED jobs can be deleted by users.
+     * This operation is idempotent - if the job doesn't exist, it's considered already deleted.
+     *
+     * @param jobId The job ID to delete
+     * @return Mono completing when the job and file are deleted
+     * @throws IllegalStateException if job is not in COMPLETED or FAILED status, or dataset export feature is disabled
+     */
+    Mono<Void> deleteExport(UUID jobId);
 }
 
 @Slf4j
@@ -88,6 +111,8 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
     private final DatasetExportConfig exportConfig;
     private final LockService lockService;
     private final FileService fileService;
+    private final DatasetVersionService versionService;
+    private final FeatureFlags featureFlags;
 
     @Inject
     public CsvDatasetExportServiceImpl(
@@ -95,44 +120,105 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
             @NonNull RedissonReactiveClient redisClient,
             @NonNull @Config("datasetExport") DatasetExportConfig exportConfig,
             @NonNull LockService lockService,
-            @NonNull FileService fileService) {
+            @NonNull FileService fileService,
+            @NonNull DatasetVersionService versionService,
+            @NonNull FeatureFlags featureFlags) {
         this.jobService = jobService;
         this.redisClient = redisClient;
         this.exportConfig = exportConfig;
         this.lockService = lockService;
         this.fileService = fileService;
+        this.versionService = versionService;
+        this.featureFlags = featureFlags;
     }
 
     @Override
-    public Mono<DatasetExportJob> startExport(@NonNull UUID datasetId) {
+    public Mono<DatasetExportJob> startExport(@NonNull UUID datasetId, @Nullable UUID versionId) {
         if (!exportConfig.isEnabled()) {
             log.warn("CSV dataset export is disabled; skipping export for dataset: '{}'", datasetId);
             return Mono.error(new IllegalStateException("Dataset export is disabled"));
         }
 
-        log.info("Starting CSV export for dataset: '{}'", datasetId);
+        log.info("Starting CSV export for dataset: '{}', versionId: '{}'", datasetId, versionId);
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            // Check for existing in-progress jobs first (without lock)
-            return jobService.findInProgressJobs(datasetId)
-                    .flatMap(existingJobs -> {
-                        if (!existingJobs.isEmpty()) {
-                            DatasetExportJob existingJob = existingJobs.getFirst();
-                            log.info("Found existing in-progress export job: '{}'", existingJob.id());
-                            return Mono.just(existingJob);
-                        }
+            // Resolve versionId based on feature flag and provided value
+            // If versioning is disabled, use null directly without going through reactive chain
+            if (!featureFlags.isDatasetVersioningEnabled()) {
+                log.info("Dataset versioning is disabled, using legacy table for export");
+                UUID resolvedVersionId = null;
+                return processExportWithVersionId(datasetId, resolvedVersionId, workspaceId);
+            }
 
-                        // No existing job, acquire lock and create new one
-                        String lockKey = formatLockKey(workspaceId, datasetId);
-                        return executeWithLock(lockKey, workspaceId, datasetId);
-                    });
+            // Versioning is enabled - resolve versionId reactively
+            return resolveVersionId(datasetId, versionId, workspaceId)
+                    .flatMap(
+                            resolvedVersionId -> processExportWithVersionId(datasetId, resolvedVersionId, workspaceId));
         });
     }
 
-    private Mono<DatasetExportJob> executeWithLock(String lockKey, String workspaceId, UUID datasetId) {
-        Mono<DatasetExportJob> action = Mono.defer(() -> jobService.findInProgressJobs(datasetId)
+    /**
+     * Processes the export with the resolved version ID.
+     *
+     * @param datasetId the dataset ID
+     * @param resolvedVersionId the resolved version ID (may be null)
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the export job
+     */
+    private Mono<DatasetExportJob> processExportWithVersionId(UUID datasetId, @Nullable UUID resolvedVersionId,
+            String workspaceId) {
+        // Check for existing in-progress jobs first (without lock)
+        // Pass the resolved version ID to dedupe by (dataset, version) combination
+        return jobService.findInProgressJobs(datasetId, resolvedVersionId)
+                .flatMap(existingJobs -> {
+                    if (!existingJobs.isEmpty()) {
+                        DatasetExportJob existingJob = existingJobs.getFirst();
+                        log.info("Found existing in-progress export job: '{}'", existingJob.id());
+                        return Mono.just(existingJob);
+                    }
+
+                    // No existing job, acquire lock and create new one
+                    String lockKey = formatLockKey(workspaceId, datasetId);
+                    return executeWithLock(lockKey, workspaceId, datasetId, resolvedVersionId);
+                });
+    }
+
+    /**
+     * Resolves the versionId based on feature flag and provided value.
+     * This method is only called when versioning is enabled.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the provided versionId (may be null)
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the resolved versionId
+     */
+    private Mono<UUID> resolveVersionId(UUID datasetId, @Nullable UUID versionId, String workspaceId) {
+        if (versionId != null) {
+            // Versioning enabled and versionId provided - validate it belongs to the dataset
+            return Mono.fromCallable(() -> {
+                var version = versionService.getVersionById(workspaceId, datasetId, versionId);
+                if (!version.datasetId().equals(datasetId)) {
+                    throw new BadRequestException(
+                            "Provided versionId '%s' does not belong to dataset '%s'"
+                                    .formatted(versionId, datasetId));
+                }
+                return versionId;
+            })
+                    .subscribeOn(Schedulers.boundedElastic());
+        }
+
+        // Versioning enabled but no versionId provided - get latest version
+        return Mono.fromCallable(() -> versionService.getLatestVersion(datasetId, workspaceId)
+                .map(v -> v.id())
+                .orElse(null))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Mono<DatasetExportJob> executeWithLock(String lockKey, String workspaceId, UUID datasetId,
+            UUID versionId) {
+        Mono<DatasetExportJob> action = Mono.defer(() -> jobService.findInProgressJobs(datasetId, versionId)
                 .flatMap(existingJobs -> {
                     // Double-check after acquiring lock
                     if (!existingJobs.isEmpty()) {
@@ -143,7 +229,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
 
                     // Create new export job and publish to Redis stream
                     // TTL is taken from config (defaultTtl)
-                    return jobService.createJob(datasetId, exportConfig.getDefaultTtl().toJavaDuration())
+                    return jobService.createJob(datasetId, exportConfig.getDefaultTtl().toJavaDuration(), versionId)
                             .flatMap(job -> publishToRedisStream(job, workspaceId)
                                     .thenReturn(job));
                 }));
@@ -158,6 +244,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                 .jobId(job.id())
                 .datasetId(job.datasetId())
                 .workspaceId(workspaceId)
+                .versionId(job.datasetVersionId())
                 .build();
 
         RStreamReactive<String, DatasetExportMessage> stream = redisClient.getStream(
@@ -219,5 +306,59 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                     return Mono.fromCallable(() -> fileService.download(job.filePath()))
                             .subscribeOn(Schedulers.boundedElastic());
                 });
+    }
+
+    @Override
+    public Mono<Void> deleteExport(@NonNull UUID jobId) {
+        if (!exportConfig.isEnabled()) {
+            log.warn("CSV dataset export is disabled; cannot delete export job: '{}'", jobId);
+            return Mono.error(new IllegalStateException("Dataset export is disabled"));
+        }
+
+        log.info("Deleting export job: '{}'", jobId);
+
+        return jobService.getJob(jobId)
+                .flatMap(job -> {
+                    // Only allow deletion of completed or failed jobs
+                    if (job.status() != DatasetExportStatus.COMPLETED
+                            && job.status() != DatasetExportStatus.FAILED) {
+                        log.warn("Cannot delete export job '{}' with status '{}'", jobId, job.status());
+                        return Mono.error(new BadRequestException(
+                                "Cannot delete export job '%s'. Only completed or failed jobs can be deleted."
+                                        .formatted(jobId)));
+                    }
+
+                    // Delete file from storage first (if file path exists)
+                    return Mono.fromRunnable(() -> deleteFileIfExists(job.filePath()))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            // Then delete job from database
+                            .then(jobService.deleteJob(jobId));
+                })
+                // Idempotent: if job not found, consider it already deleted
+                .onErrorResume(NotFoundException.class, e -> {
+                    log.info("Export job '{}' not found, already deleted (idempotent)", jobId);
+                    return Mono.empty();
+                });
+    }
+
+    /**
+     * Safely deletes a file from storage if the file path is not null.
+     * Handles errors gracefully if the file doesn't exist.
+     *
+     * @param filePath The file path to delete (may be null)
+     */
+    private void deleteFileIfExists(@Nullable String filePath) {
+        if (filePath == null) {
+            log.debug("No file path to delete");
+            return;
+        }
+
+        try {
+            fileService.deleteObjects(Set.of(filePath));
+            log.info("Deleted export file: '{}'", filePath);
+        } catch (Exception e) {
+            // Log warning but don't fail - file might already be deleted or never existed
+            log.warn("Failed to delete export file '{}': {}", filePath, e.getMessage());
+        }
     }
 }

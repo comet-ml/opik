@@ -12,10 +12,11 @@ import {
   useIsHydrated,
 } from "@/store/DatasetExportStore";
 import useDatasetExportJobs from "@/api/datasets/useDatasetExportJobs";
+import useDeleteDatasetExportJobMutation from "@/api/datasets/useDeleteDatasetExportJobMutation";
 import { DATASET_EXPORT_STATUS } from "@/types/datasets";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExportJobItem from "./ExportJobItem";
-import { isJobLoading } from "./utils";
+import { isJobLoading, isJobCompleted, isJobFailed } from "./utils";
 
 const DatasetExportPanel: React.FC = () => {
   const activeJobs = useActiveExportJobs();
@@ -26,6 +27,7 @@ const DatasetExportPanel: React.FC = () => {
   const hydrateFromApi = useHydrateFromApi();
   const isHydrated = useIsHydrated();
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const { mutate: deleteExportJob } = useDeleteDatasetExportJobMutation();
 
   // Fetch all export jobs on mount to restore state after page refresh
   const { data: apiJobs } = useDatasetExportJobs({
@@ -51,34 +53,54 @@ const DatasetExportPanel: React.FC = () => {
 
   const pendingCount = pendingJobs.length;
   const completedCount = completedJobs.length;
-  const hasOnlyCompleted = pendingCount === 0 && completedCount > 0;
   const hasPendingJobs = pendingCount > 0;
 
+  // Count how many completed jobs are downloaded vs ready
+  const downloadedCount = completedJobs.filter((j) => j.isDownloaded).length;
+  const readyCount = completedCount - downloadedCount;
+  const allDownloaded =
+    completedCount > 0 &&
+    downloadedCount === completedCount &&
+    pendingCount === 0;
+
   const getStatusText = () => {
-    if (pendingCount > 0) {
+    // If at least one is being prepared: "Preparing download"
+    if (hasPendingJobs) {
       return "Preparing download";
     }
-    if (completedCount > 0) {
+    // If all in downloaded state: "Downloaded"
+    if (allDownloaded) {
+      return "Downloaded";
+    }
+    // If none being prepared and at least one Ready: "Download ready"
+    if (readyCount > 0) {
       return "Download ready";
     }
-    // Fallback for failed-only or mixed states
+    // Fallback (shouldn't happen, but handle edge cases)
     return "Preparing download";
   };
 
   const removeAllJobs = () => {
     // Remove all jobs when closing panel
     // Use slice() to create a defensive copy to avoid skipping items during iteration
-    activeJobs.slice().forEach((jobInfo) => removeJob(jobInfo.job.id));
+    activeJobs.slice().forEach((jobInfo) => {
+      const { job } = jobInfo;
+
+      // For completed/failed jobs, call delete API to permanently dismiss them
+      // This ensures they won't reappear after page refresh
+      if (isJobCompleted(job.status) || isJobFailed(job.status)) {
+        deleteExportJob({ jobId: job.id });
+      }
+
+      // Always remove from local store
+      removeJob(job.id);
+    });
   };
 
   const handleClosePanel = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (hasPendingJobs) {
-      // Show confirmation dialog if there are pending exports
-      setShowCloseConfirm(true);
-    } else {
-      removeAllJobs();
-    }
+    // Always show confirmation dialog when closing the panel to clear all jobs
+    setShowCloseConfirm(true);
   };
 
   const handleConfirmClose = () => {
@@ -87,13 +109,13 @@ const DatasetExportPanel: React.FC = () => {
   };
 
   return (
-    <Card className="fixed bottom-0 right-4 z-40 w-72 shadow-lg transition-all duration-200 ease-in-out">
+    <Card className="fixed bottom-0 right-4 z-[110] w-72 shadow-lg transition-all duration-200 ease-in-out">
       <CardHeader
         className="flex cursor-pointer flex-row items-center justify-between border-b px-3 py-2.5"
         onClick={togglePanelExpanded}
       >
         <div className="flex items-center gap-2">
-          {hasOnlyCompleted && (
+          {readyCount > 0 && !hasPendingJobs && (
             <CheckCircle2 className="size-4 text-green-600" />
           )}
           <CardTitle className="text-sm font-medium">
@@ -121,8 +143,14 @@ const DatasetExportPanel: React.FC = () => {
 
       {/* Always render ExportJobItem components for polling, but only show when expanded */}
       <div className={isPanelExpanded ? "" : "hidden"}>
-        <CardContent className="px-3 pb-2 pt-0">
-          <div className="max-h-48 overflow-y-auto">
+        <CardContent className="p-0">
+          <div
+            className={
+              activeJobs.length > 6
+                ? "max-h-64 overflow-y-auto"
+                : "overflow-visible"
+            }
+          >
             {activeJobs.map((jobInfo) => (
               <ExportJobItem key={jobInfo.job.id} jobInfo={jobInfo} />
             ))}
@@ -134,10 +162,11 @@ const DatasetExportPanel: React.FC = () => {
         open={showCloseConfirm}
         setOpen={setShowCloseConfirm}
         onConfirm={handleConfirmClose}
-        title="Close export panel?"
-        description="You have exports that are still being prepared. Closing this panel will hide the progress and you won't be notified when they complete."
-        confirmText="Close anyway"
-        cancelText="Keep open"
+        title="Delete export files?"
+        description="This will permanently remove all generated export files. You will need to generate new files for download..."
+        confirmText="Delete"
+        confirmButtonVariant="destructive"
+        cancelText="Cancel"
       />
     </Card>
   );

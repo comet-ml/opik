@@ -204,6 +204,8 @@ export interface DatasetExportJob {
   id: string;
   dataset_id: string;
   dataset_name?: string;
+  dataset_version_id?: string;
+  version_name?: string;
   status: DATASET_EXPORT_STATUS;
   file_path?: string;
   download_url?: string;
