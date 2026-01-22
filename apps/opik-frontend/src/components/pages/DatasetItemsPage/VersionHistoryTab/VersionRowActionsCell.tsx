@@ -67,7 +67,8 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
     if (hasInProgressJob) {
       toast({
         title: "Export already in progress",
-        description: "An export for this version is already being prepared. Please wait for it to complete.",
+        description:
+          "An export for this version is already being prepared. Please wait for it to complete.",
         variant: "default",
       });
       return;

@@ -259,7 +259,9 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
           {renderStatusIndicator()}
           <span className="min-w-0 flex-1 truncate text-sm">{datasetName}</span>
           <div className="shrink-0">
-            {isFailed && <span className="text-xs text-destructive">Failed</span>}
+            {isFailed && (
+              <span className="text-xs text-destructive">Failed</span>
+            )}
             {isCompleted && isDownloaded && (
               <span className="text-xs text-muted-foreground">Downloaded</span>
             )}

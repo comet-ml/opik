@@ -54,7 +54,8 @@ export const DatasetRowActionsCell: React.FunctionComponent<
     if (hasInProgressJob) {
       toast({
         title: "Export already in progress",
-        description: "An export for this dataset is already being prepared. Please wait for it to complete.",
+        description:
+          "An export for this dataset is already being prepared. Please wait for it to complete.",
         variant: "default",
       });
       return;
@@ -85,7 +86,6 @@ export const DatasetRowActionsCell: React.FunctionComponent<
     dataset.id,
     dataset.name,
     dataset.latest_version?.version_name,
-    dataset.latest_version?.id,
     hasInProgressJob,
     startExport,
     addExportJob,
