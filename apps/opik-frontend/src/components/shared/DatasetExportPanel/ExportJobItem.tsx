@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { Download, Loader2, X, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  Download,
+  Loader2,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  ExternalLink,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import useAppStore from "@/store/AppStore";
 import {
   useRemoveExportJob,
   useUpdateExportJob,
@@ -9,7 +17,9 @@ import {
 } from "@/store/DatasetExportStore";
 import useDatasetExportJob from "@/api/datasets/useDatasetExportJob";
 import useMarkExportJobViewedMutation from "@/api/datasets/useMarkExportJobViewedMutation";
+import useDeleteDatasetExportJobMutation from "@/api/datasets/useDeleteDatasetExportJobMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useToast } from "@/components/ui/use-toast";
 import {
   isJobLoading,
@@ -28,6 +38,7 @@ interface ExportJobItemProps {
 
 const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   const { job, datasetName } = jobInfo;
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const removeJob = useRemoveExportJob();
   const updateJob = useUpdateExportJob();
   const [isHovered, setIsHovered] = useState(false);
@@ -158,11 +169,26 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     return null;
   };
 
+  const handleGoToDataset = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.location.href = `/${workspaceName}/datasets/${job.dataset_id}/items`;
+  };
+
   // Render action button (shown on hover for completed, always for failed)
   const renderActionButton = () => {
     if (isCompleted && isHovered) {
       return (
         <div className="flex items-center gap-0.5">
+          <TooltipWrapper content="Go to dataset">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-5"
+              onClick={handleGoToDataset}
+            >
+              <ExternalLink className="size-4 text-foreground-secondary" />
+            </Button>
+          </TooltipWrapper>
           <TooltipWrapper content="Download">
             <Button
               variant="ghost"
@@ -213,7 +239,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     <>
       <div
         className={cn(
-          "flex items-center gap-2 py-2 border-b last:border-b-0",
+          "-mx-3 flex items-center gap-2 border-b px-3 py-2 last:border-b-0",
           isCompleted && "cursor-pointer hover:bg-muted/50",
         )}
         onMouseEnter={() => setIsHovered(true)}
