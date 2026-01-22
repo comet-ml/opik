@@ -34,23 +34,41 @@ const TraceSessionFeedback: React.FC<TraceSessionFeedbackProps> = ({
 
   const updateFeedback = useCallback(
     (value: SESSION_FEEDBACK_VALUE) => {
+      const previousValue = state; // Capture current state for rollback
       // Immediately update parent state for instant UI response
       onOptimisticUpdate?.(value);
-      updateMutation({
-        traceId,
-        value,
-      });
+      updateMutation(
+        {
+          traceId,
+          value,
+        },
+        {
+          onError: () => {
+            // Rollback to previous state on error
+            onOptimisticUpdate?.(previousValue ?? null);
+          },
+        },
+      );
     },
-    [traceId, updateMutation, onOptimisticUpdate],
+    [traceId, updateMutation, onOptimisticUpdate, state],
   );
 
   const deleteFeedback = useCallback(() => {
+    const previousValue = state; // Capture current state for rollback
     // Immediately update parent state for instant UI response
     onOptimisticUpdate?.(null);
-    deleteMutation({
-      traceId,
-    });
-  }, [traceId, deleteMutation, onOptimisticUpdate]);
+    deleteMutation(
+      {
+        traceId,
+      },
+      {
+        onError: () => {
+          // Rollback to previous state on error
+          onOptimisticUpdate?.(previousValue ?? null);
+        },
+      },
+    );
+  }, [traceId, deleteMutation, onOptimisticUpdate, state]);
 
   // If feedback is already given, show only the selected button
   if (state !== undefined) {

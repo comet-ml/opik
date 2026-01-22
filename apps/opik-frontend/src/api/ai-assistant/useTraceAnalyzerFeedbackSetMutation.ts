@@ -31,11 +31,9 @@ const useTraceAnalyzerFeedbackSetMutation = () => {
       return data;
     },
     onError: (error) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        get(error, ["response", "data", "message"], error.message) ||
+        "Failed to update feedback. Please try again.";
 
       toast({
         title: "Error",
