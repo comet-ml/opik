@@ -21,8 +21,13 @@ const LogsTab: React.FC<LogsTabProps> = ({
     updateType: "replaceIn",
   });
 
+  // Normalize type to valid LOGS_TYPE, fallback to defaultLogsType
+  const validType = Object.values(LOGS_TYPE).includes(type as LOGS_TYPE)
+    ? (type as LOGS_TYPE)
+    : defaultLogsType;
+
   const renderContent = () => {
-    switch (type) {
+    switch (validType) {
       case LOGS_TYPE.threads:
         return <ThreadsTab projectId={projectId} projectName={projectName} />;
       case LOGS_TYPE.traces:
@@ -43,15 +48,6 @@ const LogsTab: React.FC<LogsTabProps> = ({
             projectName={projectName}
           />
         );
-      default:
-        return (
-          <TracesSpansTab
-            key="traces-default"
-            type={TRACE_DATA_TYPE.traces}
-            projectId={projectId}
-            projectName={projectName}
-          />
-        );
     }
   };
 
@@ -64,7 +60,7 @@ const LogsTab: React.FC<LogsTabProps> = ({
       >
         <ToggleGroup
           type="single"
-          value={type as string}
+          value={validType}
           onValueChange={(val) => val && setType(val as LOGS_TYPE)}
           variant="ghost"
           className="w-fit"
