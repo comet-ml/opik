@@ -1,1 +1,1 @@
-export { list } from "./list";
+export { list } from "./list.js";

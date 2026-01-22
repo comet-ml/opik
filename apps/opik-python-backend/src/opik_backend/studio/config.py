@@ -16,11 +16,11 @@ LLM_API_KEYS = {
 DEFAULT_REFERENCE_KEY = "answer"
 DEFAULT_CASE_SENSITIVE = False
 
-# Execution timeout for optimization jobs (default: 2 hours)
-OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTSTUDIO_EXECUTION_TIMEOUT", "7200"))
+# Execution timeout for optimization jobs (default: 24 hours)
+OPTIMIZATION_TIMEOUT_SECS = int(os.getenv("OPTSTUDIO_EXECUTION_TIMEOUT", "86400"))
 
 # Dataset sampling (limits items used during optimization to prevent OOM)
-DATASET_SAMPLES = int(os.getenv("OPTSTUDIO_DATASET_SAMPLES", "20"))
+DATASET_SAMPLES = int(os.getenv("OPTSTUDIO_DATASET_SAMPLES", "1000"))
 
 # Optimization Runtime Parameters
 # These are passed to optimizer.optimize_prompt() for all optimizer types

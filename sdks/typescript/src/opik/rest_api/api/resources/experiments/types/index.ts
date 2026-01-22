@@ -1,4 +1,2 @@
-export * from "./ExperimentWriteType";
-export * from "./ExperimentWriteStatus";
-export * from "./ExperimentUpdateType";
-export * from "./ExperimentUpdateStatus";
+export * from "./ExperimentWriteStatus.js";
+export * from "./ExperimentWriteType.js";

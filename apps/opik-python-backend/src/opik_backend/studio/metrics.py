@@ -170,9 +170,9 @@ class MetricFactory:
                 f"Available metrics: {available}"
             )
         
-        logger.info(f"Building metric: {metric_type} with params: {metric_params}")
+        logger.debug(f"Building metric: {metric_type} with params: {metric_params}")
         metric_fn = cls._BUILDERS[metric_type](metric_params, model)
-        logger.info(f"Created metric function: {metric_fn.__name__}")
+        logger.debug(f"Created metric function: {metric_fn.__name__}")
         return metric_fn
 
 
