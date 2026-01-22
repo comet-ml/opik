@@ -15,9 +15,9 @@ import java.util.UUID;
 
 @ImplementedBy(WorkspaceMetadataDAOImpl.class)
 interface WorkspaceMetadataDAO {
-    Mono<ScopeMetadata> getWorkspaceMetadata(String workspaceId);
-
     Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId);
+
+    Mono<ExperimentScopeMetadata> getExperimentMetadata(String workspaceId, UUID datasetId);
 }
 
 @Singleton
@@ -36,7 +36,7 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                                 OCTET_LENGTH(toJSONString(usage)) as query_size
                         FROM spans
                         WHERE workspace_id = :workspace_id
-                        <if(project_id)>AND project_id = :project_id<endif>
+                        AND project_id = :project_id
                         ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC
                         LIMIT 1000
                     )
@@ -46,7 +46,7 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
             			    count(distinct id) as total_count
             			FROM spans
             			WHERE workspace_id = :workspace_id
-            			<if(project_id)>AND project_id = :project_id<endif>
+            			AND project_id = :project_id
             	),
                 table_size AS (
                     SELECT
@@ -66,6 +66,16 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
             FROM query_result, table_size, total_spans;
             """;
 
+    private static final String CALCULATE_EXPERIMENT_METADATA = """
+            SELECT count(DISTINCT ei.id) as experiment_items_count
+            FROM experiment_items ei
+            <if(dataset_id)>
+            INNER JOIN experiments e ON ei.experiment_id = e.id AND ei.workspace_id = e.workspace_id
+            <endif>
+            WHERE ei.workspace_id = :workspace_id
+            <if(dataset_id)>AND e.dataset_id = :dataset_id<endif>
+            """;
+
     private final ConnectionFactory connectionFactory;
     private final String databaseName;
     private final WorkspaceSettings workspaceSettings;
@@ -80,33 +90,14 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
         this.workspaceSettings = workspaceSettings;
     }
 
-    public Mono<ScopeMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
-        return getMetadata(workspaceId, null)
-                .map(metadata -> metadata.toBuilder()
-                        .limitSizeGb(workspaceSettings.maxSizeToAllowSorting())
-                        .build());
-    }
-
+    @Override
     public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, @NonNull UUID projectId) {
-        return getMetadata(workspaceId, projectId)
-                .map(metadata -> metadata.toBuilder()
-                        .limitSizeGb(workspaceSettings.maxProjectSizeToAllowSorting())
-                        .build());
-    }
-
-    private Mono<ScopeMetadata> getMetadata(String workspaceId, UUID projectId) {
-        var template = TemplateUtils.newST(CALCULATE_METADATA);
-        if (projectId != null) {
-            template.add("project_id", projectId);
-        }
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> {
-                    var statement = connection.createStatement(template.render())
+                    var statement = connection.createStatement(CALCULATE_METADATA)
                             .bind("workspace_id", workspaceId)
-                            .bind("database_name", databaseName);
-                    if (projectId != null) {
-                        statement.bind("project_id", projectId);
-                    }
+                            .bind("database_name", databaseName)
+                            .bind("project_id", projectId);
                     return statement.execute();
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> ScopeMetadata.builder()
@@ -114,7 +105,36 @@ class WorkspaceMetadataDAOImpl implements WorkspaceMetadataDAO {
                         .totalTableSizeGb(Optional.ofNullable(row.get("total_table_size_gb", Double.class)).orElse(0.0))
                         .percentageOfTable(
                                 Optional.ofNullable(row.get("percentage_of_table", Double.class)).orElse(0.0))
+                        .limitSizeGb(workspaceSettings.maxProjectSizeToAllowSorting())
                         .build()))
-                .single(ScopeMetadata.builder().build());
+                .single(ScopeMetadata.builder()
+                        .limitSizeGb(workspaceSettings.maxProjectSizeToAllowSorting())
+                        .build());
+    }
+
+    @Override
+    public Mono<ExperimentScopeMetadata> getExperimentMetadata(@NonNull String workspaceId, UUID datasetId) {
+        var template = TemplateUtils.newST(CALCULATE_EXPERIMENT_METADATA);
+        if (datasetId != null) {
+            template.add("dataset_id", datasetId);
+        }
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    var statement = connection.createStatement(template.render())
+                            .bind("workspace_id", workspaceId);
+                    if (datasetId != null) {
+                        statement.bind("dataset_id", datasetId);
+                    }
+                    return statement.execute();
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> ExperimentScopeMetadata.builder()
+                        .experimentItemsCount(Optional.ofNullable(row.get("experiment_items_count", Long.class))
+                                .orElse(0L))
+                        .limitCount(workspaceSettings.maxExperimentItemsToAllowSorting())
+                        .build()))
+                .single(ExperimentScopeMetadata.builder()
+                        .experimentItemsCount(0L)
+                        .limitCount(workspaceSettings.maxExperimentItemsToAllowSorting())
+                        .build());
     }
 }

@@ -17,12 +17,17 @@ public interface WorkspaceMetadataService {
     /**
      *  Workspace ID could have been resolved from context, but required as a parameter to make caching work properly
      */
-    Mono<ScopeMetadata> getWorkspaceMetadata(String workspaceId);
+    Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId, String projectName);
 
     /**
-     *  Workspace ID could have been resolved from context, but required as a parameter to make caching work properly
+     * Get experiment related metadata for to determine if dynamic sorting is allowed.
+     * An optional dataset ID can be provided to scope the count
+     *
+     * @param workspaceId the workspace ID
+     * @param datasetId the dataset ID to scope the count (if null, workspace-level count is used)
+     * @return the experiment scope metadata
      */
-    Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId, String projectName);
+    Mono<ExperimentScopeMetadata> getExperimentMetadata(String workspaceId, UUID datasetId);
 }
 
 @Singleton
@@ -31,12 +36,6 @@ class WorkspaceMetadataServiceImpl implements WorkspaceMetadataService {
 
     private final @NonNull WorkspaceMetadataDAO workspaceMetadataDAO;
     private final @NonNull ProjectService projectService;
-
-    @Override
-    @Cacheable(name = "workspace_metadata", key = "'-'+ $workspaceId", returnType = ScopeMetadata.class)
-    public Mono<ScopeMetadata> getWorkspaceMetadata(@NonNull String workspaceId) {
-        return workspaceMetadataDAO.getWorkspaceMetadata(workspaceId);
-    }
 
     @Override
     public Mono<ScopeMetadata> getProjectMetadata(@NonNull String workspaceId, UUID projectId, String projectName) {
@@ -48,5 +47,11 @@ class WorkspaceMetadataServiceImpl implements WorkspaceMetadataService {
     @Cacheable(name = "project_metadata", key = "'-'+ $workspaceId + '-' + $projectId", returnType = ScopeMetadata.class)
     private Mono<ScopeMetadata> getProjectMetadata(String workspaceId, UUID projectId) {
         return workspaceMetadataDAO.getProjectMetadata(workspaceId, projectId);
+    }
+
+    @Override
+    @Cacheable(name = "experiment_metadata", key = "'-'+ $workspaceId + '-' + $datasetId", returnType = ExperimentScopeMetadata.class)
+    public Mono<ExperimentScopeMetadata> getExperimentMetadata(@NonNull String workspaceId, UUID datasetId) {
+        return workspaceMetadataDAO.getExperimentMetadata(workspaceId, datasetId);
     }
 }

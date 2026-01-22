@@ -5,5 +5,6 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 public record WorkspaceSettings(
         double maxSizeToAllowSorting,
-        double maxProjectSizeToAllowSorting) {
+        double maxProjectSizeToAllowSorting,
+        long maxExperimentItemsToAllowSorting) {
 }
