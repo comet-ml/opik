@@ -162,12 +162,8 @@ const DatasetExportPanel: React.FC = () => {
         open={showCloseConfirm}
         setOpen={setShowCloseConfirm}
         onConfirm={handleConfirmClose}
-        title="Delete export file?"
-        description={
-          hasPendingJobs
-            ? "You have exports that are still being prepared. This will permanently remove all generated export files. You'll need to generate new exports to download them again. This action cannot be undone."
-            : "This will permanently remove all generated export files. You'll need to generate new exports to download them again. This action cannot be undone."
-        }
+        title="Delete export files?"
+        description="This will permanently remove all generated export files. You will need to generate new files for download..."
         confirmText="Delete"
         confirmButtonVariant="destructive"
         cancelText="Cancel"

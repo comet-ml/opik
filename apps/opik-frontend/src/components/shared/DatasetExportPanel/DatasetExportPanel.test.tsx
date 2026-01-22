@@ -94,6 +94,7 @@ vi.mock("@/store/DatasetExportStore", () => ({
     newJobs.set(job.id, { ...existing, job });
     mockStore.setState({ activeJobs: newJobs });
   },
+  useMarkJobAsDownloaded: () => vi.fn(),
   useHydrateFromApi: () => vi.fn(),
   useIsHydrated: () => mockStore.getState().isHydrated,
   ExportJobInfo: {},

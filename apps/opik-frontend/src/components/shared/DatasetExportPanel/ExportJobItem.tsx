@@ -20,7 +20,6 @@ import useDatasetExportJob from "@/api/datasets/useDatasetExportJob";
 import useMarkExportJobViewedMutation from "@/api/datasets/useMarkExportJobViewedMutation";
 import useDeleteDatasetExportJobMutation from "@/api/datasets/useDeleteDatasetExportJobMutation";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useToast } from "@/components/ui/use-toast";
 import {
   isJobLoading,
@@ -44,7 +43,6 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   const updateJob = useUpdateExportJob();
   const markJobAsDownloaded = useMarkJobAsDownloaded();
   const [isHovered, setIsHovered] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { toast } = useToast();
 
   // Poll for job status updates (every 5 seconds for PENDING/PROCESSING jobs)
@@ -131,10 +129,6 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setShowDeleteConfirm(true);
-  };
-
-  const handleConfirmDelete = () => {
     deleteExportJob(
       { jobId: job.id },
       {
@@ -151,7 +145,6 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
         },
       },
     );
-    setShowDeleteConfirm(false);
   };
 
   // Render status indicator icon
@@ -245,47 +238,33 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
   };
 
   return (
-    <>
-      <div
-        className={cn(
-          "flex w-full items-center gap-2 border-b px-3 py-2 last:border-b-0 transition-colors",
-          isCompleted && "cursor-pointer hover:bg-muted/50",
-        )}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        onClick={isCompleted ? handleDownload : undefined}
-      >
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          {renderStatusIndicator()}
-          <span className="min-w-0 flex-1 truncate text-sm">{datasetName}</span>
-          <div className="shrink-0">
-            {isFailed && <span className="text-xs text-destructive">Failed</span>}
-            {isCompleted && isDownloaded && (
-              <span className="text-xs text-muted-foreground">Downloaded</span>
-            )}
-            {isCompleted && !isDownloaded && (
-              <span className="text-xs text-green-600">Ready</span>
-            )}
-            {isLoading && (
-              <span className="text-xs text-muted-foreground">
-                Exporting...
-              </span>
-            )}
-          </div>
+    <div
+      className={cn(
+        "flex w-full items-center gap-2 border-b px-3 py-2 last:border-b-0 transition-colors",
+        isCompleted && "cursor-pointer hover:bg-muted/50",
+      )}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={isCompleted ? handleDownload : undefined}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {renderStatusIndicator()}
+        <span className="min-w-0 flex-1 truncate text-sm">{datasetName}</span>
+        <div className="shrink-0">
+          {isFailed && <span className="text-xs text-destructive">Failed</span>}
+          {isCompleted && isDownloaded && (
+            <span className="text-xs text-muted-foreground">Downloaded</span>
+          )}
+          {isCompleted && !isDownloaded && (
+            <span className="text-xs text-green-600">Ready</span>
+          )}
+          {isLoading && (
+            <span className="text-xs text-muted-foreground">Exporting...</span>
+          )}
         </div>
-        <div className="flex shrink-0 items-center">{renderActionButton()}</div>
       </div>
-      <ConfirmDialog
-        open={showDeleteConfirm}
-        setOpen={setShowDeleteConfirm}
-        onConfirm={handleConfirmDelete}
-        title="Delete export file?"
-        description="This will permanently remove the generated export file. You'll need to generate a new export to download it again. This action cannot be undone."
-        confirmText="Delete"
-        confirmButtonVariant="destructive"
-        cancelText="Cancel"
-      />
-    </>
+      <div className="flex shrink-0 items-center">{renderActionButton()}</div>
+    </div>
   );
 };
 
