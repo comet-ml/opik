@@ -68,6 +68,7 @@ export interface BaseTraceData {
   total_estimated_cost?: number;
   error_info?: BaseTraceDataErrorInfo;
   guardrails_validations?: GuardrailValidation[];
+  attachment_count?: number;
 }
 
 export interface Trace extends BaseTraceData {

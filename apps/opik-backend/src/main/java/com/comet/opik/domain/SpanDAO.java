@@ -502,7 +502,16 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_IDS = """
-            WITH feedback_scores_combined_raw AS (
+            WITH attachment_counts AS (
+                SELECT
+                    entity_id,
+                    COUNT(*) AS attachment_count
+                FROM attachments
+                WHERE workspace_id = :workspace_id
+                AND entity_id IN :ids
+                AND entity_type = 'span'
+                GROUP BY entity_id
+            ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -617,7 +626,8 @@ class SpanDAO {
                 s.*,
                 s.project_id as project_id,
                 groupArray(tuple(c.*)) AS comments,
-                any(fs.feedback_scores) as feedback_scores_list
+                any(fs.feedback_scores) as feedback_scores_list,
+                coalesce(a.attachment_count, 0) as attachment_count
             FROM (
                 SELECT
                     *,
@@ -666,8 +676,9 @@ class SpanDAO {
                 FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
             ) AS fs ON s.id = fs.entity_id
+            LEFT JOIN attachment_counts a ON s.id = a.entity_id
             GROUP BY
-                s.*
+                s.*, a.attachment_count
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -718,7 +729,18 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH comments_final AS (
+            WITH attachment_counts AS (
+                SELECT
+                    entity_id,
+                    COUNT(*) AS attachment_count
+                FROM attachments
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                AND entity_type = 'span'
+                GROUP BY entity_id
+            ), comments_final AS (
               SELECT
                    entity_id,
                    groupArray(tuple(
@@ -957,9 +979,11 @@ class SpanDAO {
                 , fsa.feedback_scores as feedback_scores
                 <endif>
                 <if(!exclude_comments)>, c.comments AS comments <endif>
+                , coalesce(a.attachment_count, 0) as attachment_count
             FROM spans_final s
             LEFT JOIN comments_final c ON s.id = c.entity_id
             LEFT JOIN feedback_scores_agg fsa ON fsa.entity_id = s.id
+            LEFT JOIN attachment_counts a ON s.id = a.entity_id
             <if(stream)>
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             <else>
@@ -1916,6 +1940,8 @@ class SpanDAO {
                 .lastUpdatedBy(
                         getValue(exclude, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
                 .duration(getValue(exclude, SpanField.DURATION, row, "duration", Double.class))
+                .attachmentCount(
+                        getValue(exclude, SpanField.ATTACHMENT_COUNT, row, "attachment_count", Integer.class))
                 .build();
     }
 
