@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -79,18 +79,9 @@ const TracesPage = () => {
   });
 
   // Determine which main tab is active based on the type value
-  const activeTab = useMemo(() => {
-    if (Object.values(LOGS_TYPE).includes(type as LOGS_TYPE)) {
-      return PROJECT_TAB.logs;
-    }
-
-    if (Object.values(PROJECT_TAB).includes(type as PROJECT_TAB)) {
-      return type as PROJECT_TAB;
-    }
-
-    // Fallback to logs for invalid values
-    return PROJECT_TAB.logs;
-  }, [type]);
+  const activeTab = Object.values(PROJECT_TAB).includes(type as PROJECT_TAB)
+    ? (type as PROJECT_TAB)
+    : PROJECT_TAB.logs;
 
   // Correct invalid type values in URL
   useEffect(() => {
@@ -101,8 +92,8 @@ const TracesPage = () => {
       type as PROJECT_TAB,
     );
 
+    // If type is not a valid LOGS_TYPE or PROJECT_TAB, correct it
     if (!isValidLogsType && !isValidProjectTab) {
-      // Invalid type, correct it to defaultLogsType
       setType(defaultLogsType);
     }
   }, [type, defaultLogsType, setType]);
