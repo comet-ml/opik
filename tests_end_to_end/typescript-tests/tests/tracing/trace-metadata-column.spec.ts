@@ -40,7 +40,6 @@ This test ensures the metadata column is available in the UI and prevents accide
       await test.step('Verify Metadata column exists in Columns menu', async () => {
         // Open Columns menu
         await page.getByRole('button', { name: 'Columns' }).click();
-        await page.waitForTimeout(250);
 
         // Verify Metadata checkbox exists
         const metadataButton = page.getByRole('button', { name: 'Metadata' });
@@ -59,12 +58,11 @@ This test ensures the metadata column is available in the UI and prevents accide
         const isChecked = await metadataCheckbox.isChecked();
         if (isChecked) {
           await metadataButton.click();
-          await page.waitForTimeout(250);
+          await expect(metadataCheckbox).not.toBeChecked();
         }
 
         // Close columns menu
         await page.keyboard.press('Escape');
-        await page.waitForTimeout(250);
 
         // Verify Metadata column header is not visible in table
         const metadataHeader = page.getByRole('columnheader', { name: 'Metadata' });
@@ -74,12 +72,10 @@ This test ensures the metadata column is available in the UI and prevents accide
       await test.step('Toggle metadata column on and verify it is visible', async () => {
         // Open Columns menu again
         await page.getByRole('button', { name: 'Columns' }).click();
-        await page.waitForTimeout(250);
 
         // Click to toggle on
         const metadataButton = page.getByRole('button', { name: 'Metadata' });
         await metadataButton.click();
-        await page.waitForTimeout(250);
 
         // Verify checkbox is now checked
         const metadataCheckbox = metadataButton.getByRole('checkbox');
@@ -87,7 +83,6 @@ This test ensures the metadata column is available in the UI and prevents accide
 
         // Close columns menu
         await page.keyboard.press('Escape');
-        await page.waitForTimeout(250);
 
         // Verify Metadata column header is visible in table
         const metadataHeader = page.getByRole('columnheader', { name: 'Metadata' });
@@ -134,19 +129,17 @@ This test ensures the metadata column is available for filtering.`
       await test.step('Open Filters panel and add new filter', async () => {
         // Click Filters button
         await page.getByRole('button', { name: 'Filters' }).click();
-        await page.waitForTimeout(250);
 
         // Click "Add filter" button (look for the + icon or "Add filter" text)
         const addFilterButton = page.getByRole('button', { name: /add filter/i }).first();
+        await expect(addFilterButton).toBeVisible();
         await addFilterButton.click();
-        await page.waitForTimeout(250);
       });
 
       await test.step('Verify Metadata option exists in column dropdown', async () => {
         // Find and click the column dropdown (first combobox in the filter row)
         const columnDropdown = page.getByRole('combobox').first();
         await columnDropdown.click();
-        await page.waitForTimeout(250);
 
         // Verify "Metadata" option exists
         const metadataOption = page.getByRole('option', { name: 'Metadata' });
@@ -154,7 +147,6 @@ This test ensures the metadata column is available for filtering.`
 
         // Select the Metadata option
         await metadataOption.click();
-        await page.waitForTimeout(250);
       });
     });
 
@@ -202,21 +194,19 @@ This test ensures metadata filtering works correctly with autocomplete.`
       await test.step('Open Filters and select Metadata column', async () => {
         // Click Filters button
         await page.getByRole('button', { name: 'Filters' }).click();
-        await page.waitForTimeout(250);
 
         // Click "Add filter" button
         const addFilterButton = page.getByRole('button', { name: /add filter/i }).first();
+        await expect(addFilterButton).toBeVisible();
         await addFilterButton.click();
-        await page.waitForTimeout(250);
 
         // Select Metadata from column dropdown
         const columnDropdown = page.getByRole('combobox').first();
         await columnDropdown.click();
-        await page.waitForTimeout(250);
 
         const metadataOption = page.getByRole('option', { name: 'Metadata' });
+        await expect(metadataOption).toBeVisible();
         await metadataOption.click();
-        await page.waitForTimeout(500);
       });
 
       await test.step('Enter metadata key using autocomplete', async () => {
@@ -227,14 +217,12 @@ This test ensures metadata filtering works correctly with autocomplete.`
 
         // Type a metadata key that exists in the test data
         await keyInput.fill('c-md1');
-        await page.waitForTimeout(500);
 
         // The autocomplete should show suggestions
         // Select the first suggestion if available, or just proceed
         const suggestion = page.getByRole('option', { name: /c-md1/i }).first();
         if (await suggestion.isVisible({ timeout: 1000 }).catch(() => false)) {
           await suggestion.click();
-          await page.waitForTimeout(250);
         }
       });
 
@@ -245,18 +233,18 @@ This test ensures metadata filtering works correctly with autocomplete.`
 
         // Enter the value that matches our test data
         await valueInput.fill('val1');
-        await page.waitForTimeout(250);
 
         // Close the filters panel
         await page.keyboard.press('Escape');
-        await page.waitForTimeout(500);
       });
 
       await test.step('Verify filtered results', async () => {
         // After filtering by metadata.c-md1 = val1, we should still see all traces
         // because all traces in the fixture have this metadata
         const tracesPage = new TracesPage(page);
-        await page.waitForTimeout(1000); // Wait for filter to apply
+        
+        // Wait for the traces to be visible after filter is applied
+        await tracesPage.waitForTracesToBeVisible();
 
         const visibleTraces = await tracesPage.getAllTraceNamesOnPage();
         
