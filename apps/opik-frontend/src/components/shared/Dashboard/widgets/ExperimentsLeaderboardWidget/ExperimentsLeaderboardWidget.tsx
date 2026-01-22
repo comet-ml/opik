@@ -185,6 +185,7 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
       size: isSelectExperimentsMode(dataSource)
         ? MAX_MAX_EXPERIMENTS
         : maxRowsValue,
+      forceSorting: true,
     },
     {
       placeholderData: keepPreviousData,
@@ -206,6 +207,7 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
       page: 1,
       size: MAX_MAX_EXPERIMENTS,
       queryKey: "experiments-ranking",
+      forceSorting: true,
     },
     {
       placeholderData: keepPreviousData,
