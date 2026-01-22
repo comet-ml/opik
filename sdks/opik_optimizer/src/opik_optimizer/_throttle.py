@@ -47,7 +47,16 @@ class RateLimiter:
 
         async_acquire_attr = getattr(self.limiter, "try_acquire_async", None)
         if async_acquire_attr is not None:
-            self._async_try_acquire = async_acquire_attr
+            try:
+                async_sig = inspect.signature(async_acquire_attr)
+            except (ValueError, TypeError):
+                async_sig = None
+            if async_sig and "blocking" in async_sig.parameters:
+                self._async_try_acquire = lambda: async_acquire_attr(
+                    self.bucket_key, blocking=False
+                )
+            else:
+                self._async_try_acquire = lambda: async_acquire_attr(self.bucket_key)
 
         if self._sync_try_acquire is None and self._async_try_acquire is None:
             logger.warning(
@@ -64,7 +73,7 @@ class RateLimiter:
 
     async def acquire_async(self) -> None:
         if self._async_try_acquire is not None:
-            while not await self._async_try_acquire(self.bucket_key, blocking=False):
+            while not await self._async_try_acquire():
                 await asyncio.sleep(0.01)
             return
         if self._sync_try_acquire is not None:
