@@ -61,7 +61,14 @@ def healthcheck(
 
         opik healthcheck --smoke-test my-workspace --project-name my-test-project
     """
-    if smoke_test:
+    if smoke_test is not None:
+        # Validate that workspace is not empty
+        if smoke_test == "":
+            raise click.BadParameter(
+                "--smoke-test requires a non-empty workspace name",
+                param_hint="--smoke-test",
+            )
+
         # Get API key and debug flag from context
         api_key = ctx.obj.get("api_key") if ctx.obj else None
         debug = ctx.obj.get("debug", False) if ctx.obj else False

@@ -93,9 +93,12 @@ def run_smoke_test(
         debug: Whether to print debug information on errors.
 
     Raises:
-        click.ClickException: If the smoke test fails.
+        click.ClickException: If the smoke test failed.
     """
     temp_image_path: Optional[Path] = None
+    client: Optional[opik.Opik] = None
+    original_exception: Optional[Exception] = None
+
     try:
         console.print("[green]Starting Opik smoke test...[/green]")
 
@@ -153,11 +156,6 @@ def run_smoke_test(
 
             console.print("[green]✓[/green] Ended trace")
 
-        # Flush and end the explicit client (which was used by the trace)
-        client.flush()
-        client.end()
-        console.print("[green]✓[/green] Flushed data to Opik")
-
         console.print("\n[bold green]Smoke test completed successfully![/bold green]")
         console.print(
             f"[dim]Check your Opik dashboard at workspace '{workspace}' "
@@ -168,10 +166,31 @@ def run_smoke_test(
         # available during async upload. The OS will clean it up automatically.
 
     except Exception as e:
+        original_exception = e
         console.print(f"[red]Error during smoke test:[/red] {e}")
         if debug:
             import traceback
 
             console.print("[red]Traceback:[/red]")
             console.print(traceback.format_exc())
-        raise click.ClickException(f"Smoke test failed: {e}")
+    finally:
+        # Ensure client cleanup always runs, even if an exception occurred
+        if client is not None:
+            try:
+                client.flush()
+                client.end()
+                if original_exception is None:
+                    console.print("[green]✓[/green] Flushed data to Opik")
+            except Exception as cleanup_error:
+                if debug:
+                    console.print(
+                        f"[yellow]Warning: Error during client cleanup:[/yellow] {cleanup_error}"
+                    )
+                    import traceback
+
+                    console.print("[yellow]Cleanup traceback:[/yellow]")
+                    console.print(traceback.format_exc())
+
+    # Re-raise the original exception if one occurred
+    if original_exception is not None:
+        raise click.ClickException(f"Smoke test failed: {original_exception}")
