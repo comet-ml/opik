@@ -19,3 +19,17 @@ export const flattenObject = <T extends object>(
   }
   return result;
 };
+
+export const filterNumericValues = (
+  obj: Record<string, unknown>
+): Record<string, number> => {
+  const result: Record<string, number> = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      if (typeof obj[key] === "number") {
+        result[key] = obj[key] as number;
+      }
+    }
+  }
+  return result;
+};
