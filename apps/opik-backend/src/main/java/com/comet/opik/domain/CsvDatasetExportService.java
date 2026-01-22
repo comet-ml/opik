@@ -148,7 +148,8 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
             UUID resolvedVersionId = resolveVersionId(datasetId, versionId, workspaceId);
 
             // Check for existing in-progress jobs first (without lock)
-            return jobService.findInProgressJobs(datasetId)
+            // Pass the resolved version ID to dedupe by (dataset, version) combination
+            return jobService.findInProgressJobs(datasetId, resolvedVersionId)
                     .flatMap(existingJobs -> {
                         if (!existingJobs.isEmpty()) {
                             DatasetExportJob existingJob = existingJobs.getFirst();
@@ -191,7 +192,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
 
     private Mono<DatasetExportJob> executeWithLock(String lockKey, String workspaceId, UUID datasetId,
             UUID versionId) {
-        Mono<DatasetExportJob> action = Mono.defer(() -> jobService.findInProgressJobs(datasetId)
+        Mono<DatasetExportJob> action = Mono.defer(() -> jobService.findInProgressJobs(datasetId, versionId)
                 .flatMap(existingJobs -> {
                     // Double-check after acquiring lock
                     if (!existingJobs.isEmpty()) {

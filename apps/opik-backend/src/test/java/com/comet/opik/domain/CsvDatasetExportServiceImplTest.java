@@ -87,8 +87,8 @@ class CsvDatasetExportServiceImplTest {
         // Mock: versioning is disabled (uses legacy table)
         when(featureFlags.isDatasetVersioningEnabled()).thenReturn(false);
 
-        // Mock: no existing jobs
-        when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of()));
+        // Mock: no existing jobs (null versionId when versioning disabled)
+        when(jobService.findInProgressJobs(eq(DATASET_ID), isNull())).thenReturn(Mono.just(List.of()));
 
         // Mock: lock service executes the action
         when(lockService.executeWithLock(any(LockService.Lock.class), any(Mono.class)))
@@ -130,7 +130,7 @@ class CsvDatasetExportServiceImplTest {
                 .verifyComplete();
 
         // Verify the flow
-        verify(jobService, times(2)).findInProgressJobs(eq(DATASET_ID)); // Initial check + double-check in lock
+        verify(jobService, times(2)).findInProgressJobs(eq(DATASET_ID), isNull()); // Initial check + double-check in lock
         verify(jobService, times(1)).createJob(eq(DATASET_ID), eq(DEFAULT_TTL.toJavaDuration()), isNull());
 
         // Verify stream.add was called with correct message
@@ -144,7 +144,7 @@ class CsvDatasetExportServiceImplTest {
         DatasetExportJob existingJob = createJob(JOB_ID, status);
         when(exportConfig.isEnabled()).thenReturn(true);
         when(featureFlags.isDatasetVersioningEnabled()).thenReturn(false);
-        when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
+        when(jobService.findInProgressJobs(eq(DATASET_ID), isNull())).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
         Mono<DatasetExportJob> result = service.startExport(DATASET_ID, null)
@@ -161,7 +161,7 @@ class CsvDatasetExportServiceImplTest {
                 .verifyComplete();
 
         // Verify jobService was called to check existing jobs
-        verify(jobService).findInProgressJobs(eq(DATASET_ID));
+        verify(jobService).findInProgressJobs(eq(DATASET_ID), isNull());
 
         // Verify no new job was created
         verify(jobService, never()).createJob(any(), any(), any());
@@ -173,7 +173,7 @@ class CsvDatasetExportServiceImplTest {
         DatasetExportJob existingJob = createJob(JOB_ID, DatasetExportStatus.PENDING);
         when(exportConfig.isEnabled()).thenReturn(true);
         when(featureFlags.isDatasetVersioningEnabled()).thenReturn(false);
-        when(jobService.findInProgressJobs(DATASET_ID)).thenReturn(Mono.just(List.of(existingJob)));
+        when(jobService.findInProgressJobs(eq(DATASET_ID), isNull())).thenReturn(Mono.just(List.of(existingJob)));
 
         // When
         service.startExport(DATASET_ID, null)
@@ -182,9 +182,9 @@ class CsvDatasetExportServiceImplTest {
                         .put(RequestContext.USER_NAME, USER_NAME))
                 .block();
 
-        // Then - verify that findInProgressJobs is called with DATASET_ID
+        // Then - verify that findInProgressJobs is called with DATASET_ID and null versionId
         // The Set<DatasetExportStatus> is created inside the service, so we just verify the call
-        verify(jobService).findInProgressJobs(eq(DATASET_ID));
+        verify(jobService).findInProgressJobs(eq(DATASET_ID), isNull());
     }
 
     @Test
@@ -205,7 +205,7 @@ class CsvDatasetExportServiceImplTest {
                 .verify();
 
         // Verify no job service calls were made
-        verify(jobService, never()).findInProgressJobs(any());
+        verify(jobService, never()).findInProgressJobs(any(), any());
         verify(jobService, never()).createJob(any(), any(), any());
     }
 

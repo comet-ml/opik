@@ -27,6 +27,7 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -136,10 +137,10 @@ class DatasetExportJobServiceImplTest {
     @Test
     void findInProgressJobs_shouldReturnEmptyList_whenNoJobsFound() {
         // Given
-        when(exportJobDAO.findInProgressByDataset(any(), any(), any())).thenReturn(List.of());
+        when(exportJobDAO.findInProgressByDatasetAndVersion(any(), any(), any(), any())).thenReturn(List.of());
 
         // When
-        Mono<List<DatasetExportJob>> result = service.findInProgressJobs(DATASET_ID)
+        Mono<List<DatasetExportJob>> result = service.findInProgressJobs(DATASET_ID, null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -147,8 +148,9 @@ class DatasetExportJobServiceImplTest {
                 .assertNext(jobs -> assertThat(jobs).isEmpty())
                 .verifyComplete();
 
-        // Verify DAO.findInProgressByDataset() was called
-        verify(exportJobDAO, times(1)).findInProgressByDataset(eq(WORKSPACE_ID), eq(DATASET_ID), any());
+        // Verify DAO.findInProgressByDatasetAndVersion() was called
+        verify(exportJobDAO, times(1)).findInProgressByDatasetAndVersion(eq(WORKSPACE_ID), eq(DATASET_ID), isNull(),
+                any());
     }
 
     @Test
@@ -174,10 +176,11 @@ class DatasetExportJobServiceImplTest {
                 .createdBy(USER_NAME)
                 .build();
 
-        when(exportJobDAO.findInProgressByDataset(any(), any(), any())).thenReturn(List.of(job1, job2));
+        when(exportJobDAO.findInProgressByDatasetAndVersion(any(), any(), any(), any()))
+                .thenReturn(List.of(job1, job2));
 
         // When
-        Mono<List<DatasetExportJob>> result = service.findInProgressJobs(DATASET_ID)
+        Mono<List<DatasetExportJob>> result = service.findInProgressJobs(DATASET_ID, null)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, WORKSPACE_ID));
 
         // Then
@@ -188,8 +191,9 @@ class DatasetExportJobServiceImplTest {
                 })
                 .verifyComplete();
 
-        // Verify DAO.findInProgressByDataset() was called
-        verify(exportJobDAO, times(1)).findInProgressByDataset(eq(WORKSPACE_ID), eq(DATASET_ID), any());
+        // Verify DAO.findInProgressByDatasetAndVersion() was called
+        verify(exportJobDAO, times(1)).findInProgressByDatasetAndVersion(eq(WORKSPACE_ID), eq(DATASET_ID), isNull(),
+                any());
     }
 
     @Test

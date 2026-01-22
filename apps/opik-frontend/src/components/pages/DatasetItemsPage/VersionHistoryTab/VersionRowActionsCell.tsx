@@ -15,7 +15,7 @@ import { isLatestVersionTag } from "@/constants/datasets";
 import useRestoreDatasetVersionMutation from "@/api/datasets/useRestoreDatasetVersionMutation";
 import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportMutation";
 import {
-  buildExportDisplayName,
+  handleExportSuccess,
   useAddExportJob,
   useSetPanelExpanded,
 } from "@/store/DatasetExportStore";
@@ -67,13 +67,14 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
       { datasetId, datasetVersionId: version.id },
       {
         onSuccess: (job) => {
-          const exportName = buildExportDisplayName(
+          handleExportSuccess({
+            job,
             datasetName,
-            version.id,
-            version.version_name,
-          );
-          addExportJob(job, exportName);
-          setPanelExpanded(true);
+            versionId: version.id,
+            versionName: version.version_name,
+            addExportJob,
+            setPanelExpanded,
+          });
         },
         onError: () => {
           toast({

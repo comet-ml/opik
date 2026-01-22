@@ -18,6 +18,39 @@ export const buildExportDisplayName = (
   return `${baseName}${versionSuffix}`;
 };
 
+/**
+ * Parameters for the handleExportSuccess helper function.
+ */
+export interface HandleExportSuccessParams {
+  job: DatasetExportJob;
+  datasetName: string | undefined;
+  versionId: string | undefined;
+  versionName: string | undefined;
+  addExportJob: (job: DatasetExportJob, displayName: string) => void;
+  setPanelExpanded: (expanded: boolean) => void;
+}
+
+/**
+ * Shared helper for handling successful export job creation.
+ * Builds the display name, adds the job to the store, and expands the panel.
+ */
+export const handleExportSuccess = ({
+  job,
+  datasetName,
+  versionId,
+  versionName,
+  addExportJob,
+  setPanelExpanded,
+}: HandleExportSuccessParams): void => {
+  const exportName = buildExportDisplayName(
+    datasetName,
+    versionId,
+    versionName,
+  );
+  addExportJob(job, exportName);
+  setPanelExpanded(true);
+};
+
 export interface ExportJobInfo {
   job: DatasetExportJob;
   datasetName: string;

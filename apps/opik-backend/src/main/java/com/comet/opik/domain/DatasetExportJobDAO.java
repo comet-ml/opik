@@ -165,6 +165,21 @@ public interface DatasetExportJobDAO {
             """)
     Optional<DatasetExportJob> findById(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id);
 
+    /**
+     * Finds in-progress export jobs for a dataset and optional version.
+     * <p>
+     * Deduplication logic:
+     * <ul>
+     *   <li>If datasetVersionId is null: returns jobs where version is also null</li>
+     *   <li>If datasetVersionId is provided: returns jobs for that specific version</li>
+     * </ul>
+     *
+     * @param workspaceId      The workspace ID for security
+     * @param datasetId        The dataset ID to filter by
+     * @param datasetVersionId Optional version ID. If null, finds jobs where version is also null.
+     * @param statuses         The set of statuses to filter by (typically PENDING, PROCESSING)
+     * @return List of matching in-progress export jobs
+     */
     @SqlQuery("""
             WITH version_sequences AS (
                 SELECT
@@ -195,10 +210,15 @@ public interface DatasetExportJobDAO {
             WHERE j.workspace_id = :workspaceId
                 AND j.dataset_id = :datasetId
                 AND j.status IN (<statuses>)
+                AND (
+                    (:datasetVersionId IS NULL AND j.dataset_version_id IS NULL)
+                    OR j.dataset_version_id = :datasetVersionId
+                )
             """)
-    List<DatasetExportJob> findInProgressByDataset(
+    List<DatasetExportJob> findInProgressByDatasetAndVersion(
             @Bind("workspaceId") String workspaceId,
             @Bind("datasetId") UUID datasetId,
+            @Bind("datasetVersionId") UUID datasetVersionId,
             @BindList("statuses") Set<DatasetExportStatus> statuses);
 
     /**

@@ -38,13 +38,20 @@ public interface DatasetExportJobService {
     Mono<DatasetExportJob> createJob(UUID datasetId, Duration ttl, @Nullable UUID versionId);
 
     /**
-     * Finds all in-progress (PENDING or PROCESSING) export jobs for a dataset.
+     * Finds all in-progress (PENDING or PROCESSING) export jobs for a dataset and optional version.
      * Used to check for existing jobs before creating a new one.
      *
-     * @param datasetId The dataset ID to check
+     * <p>Deduplication logic:</p>
+     * <ul>
+     *   <li>If datasetVersionId is null: returns jobs for the dataset where version is also null</li>
+     *   <li>If datasetVersionId is provided: returns jobs for that specific dataset + version combination</li>
+     * </ul>
+     *
+     * @param datasetId        The dataset ID to check
+     * @param datasetVersionId Optional version ID. If null, finds jobs where version is also null.
      * @return Mono emitting list of in-progress export jobs
      */
-    Mono<List<DatasetExportJob>> findInProgressJobs(UUID datasetId);
+    Mono<List<DatasetExportJob>> findInProgressJobs(UUID datasetId, @Nullable UUID datasetVersionId);
 
     /**
      * Finds all export jobs for the current workspace.
@@ -215,17 +222,19 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
     }
 
     @Override
-    public Mono<List<DatasetExportJob>> findInProgressJobs(@NonNull UUID datasetId) {
+    public Mono<List<DatasetExportJob>> findInProgressJobs(@NonNull UUID datasetId,
+            @Nullable UUID datasetVersionId) {
         return Mono.deferContextual(ctx -> {
             var workspaceId = getWorkspaceId(ctx);
 
             return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
                 var existingJobs = handle.attach(DatasetExportJobDAO.class)
-                        .findInProgressByDataset(workspaceId, datasetId, IN_PROGRESS_STATUSES);
+                        .findInProgressByDatasetAndVersion(workspaceId, datasetId, datasetVersionId,
+                                IN_PROGRESS_STATUSES);
 
                 if (!existingJobs.isEmpty()) {
-                    log.info("Found '{}' existing in-progress export job(s) for dataset: '{}'",
-                            existingJobs.size(), datasetId);
+                    log.info("Found '{}' existing in-progress export job(s) for dataset: '{}', version: '{}'",
+                            existingJobs.size(), datasetId, datasetVersionId);
                 }
 
                 return existingJobs;

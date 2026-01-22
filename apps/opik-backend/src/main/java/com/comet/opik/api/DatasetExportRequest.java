@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 
 import java.util.UUID;
@@ -13,5 +13,5 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DatasetExportRequest(
-        @NotNull @Schema(description = "Dataset version ID to export") UUID datasetVersionId) {
+        @Nullable @Schema(description = "Dataset version ID to export. If not provided, the latest version will be used.") UUID datasetVersionId) {
 }

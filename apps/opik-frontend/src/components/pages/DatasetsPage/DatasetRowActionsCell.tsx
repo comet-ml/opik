@@ -14,7 +14,7 @@ import { Dataset } from "@/types/datasets";
 import useDatasetDeleteMutation from "@/api/datasets/useDatasetDeleteMutation";
 import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportMutation";
 import {
-  buildExportDisplayName,
+  handleExportSuccess,
   useAddExportJob,
   useSetPanelExpanded,
 } from "@/store/DatasetExportStore";
@@ -51,13 +51,14 @@ export const DatasetRowActionsCell: React.FunctionComponent<
       { datasetId: dataset.id },
       {
         onSuccess: (job) => {
-          const exportName = buildExportDisplayName(
-            dataset.name,
-            job.dataset_version_id,
-            dataset.latest_version?.version_name,
-          );
-          addExportJob(job, exportName);
-          setPanelExpanded(true);
+          handleExportSuccess({
+            job,
+            datasetName: dataset.name,
+            versionId: job.dataset_version_id,
+            versionName: dataset.latest_version?.version_name,
+            addExportJob,
+            setPanelExpanded,
+          });
         },
         onError: () => {
           toast({
