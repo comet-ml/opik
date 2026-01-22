@@ -22,6 +22,7 @@ import {
   formatFeedbackScoreValue,
 } from "./metrics";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
+import useProjectById from "@/api/projects/useProjectById";
 
 const renderMetricDisplay = (label: string, value: string) => (
   <div className="flex h-full flex-col items-stretch justify-center">
@@ -75,21 +76,29 @@ const ProjectStatsCardWidget: React.FunctionComponent<
     | boolean
     | undefined;
 
-  const { projectId, infoMessage, intervalStart, intervalEnd } = useMemo(() => {
+  const { data: projectData } = useProjectById(
+    { projectId: widgetProjectId! },
+    { enabled: overrideDefaults && !!widgetProjectId },
+  );
+
+  const { projectId, messages, intervalStart, intervalEnd } = useMemo(() => {
     const { projectId: resolvedProjectId, infoMessage } =
       resolveProjectIdFromConfig(
         widgetProjectId,
         globalConfig.projectId,
         overrideDefaults,
+        projectData?.name,
       );
 
     const { intervalStart, intervalEnd } = calculateIntervalConfig(
       globalConfig.dateRange,
     );
 
+    const messages = [infoMessage].filter(Boolean) as string[];
+
     return {
       projectId: resolvedProjectId,
-      infoMessage,
+      messages,
       intervalStart,
       intervalEnd,
     };
@@ -98,6 +107,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
     globalConfig.projectId,
     globalConfig.dateRange,
     overrideDefaults,
+    projectData?.name,
   ]);
 
   const source = widget?.config?.source as TRACE_DATA_TYPE | undefined;
@@ -238,12 +248,12 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
+        <DashboardWidget.PreviewHeader messages={messages} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
           subtitle={widget.subtitle}
-          infoMessage={infoMessage}
+          messages={messages}
           actions={
             <DashboardWidget.ActionsMenu
               sectionId={sectionId!}

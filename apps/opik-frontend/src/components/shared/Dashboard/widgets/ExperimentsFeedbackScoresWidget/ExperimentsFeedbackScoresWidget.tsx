@@ -32,7 +32,6 @@ import BarChart from "@/components/shared/Charts/BarChart/BarChart";
 import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
 import { MAX_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
 
-const MAX_EXPERIMENTS_LIMIT = 100;
 const MAX_SELECTED_EXPERIMENTS = 10;
 
 type DataRecord = {
@@ -273,10 +272,6 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   const isSelectExperimentsMode =
     dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
 
-  const infoMessage = overrideDefaults
-    ? "This widget uses custom experiments instead of the dashboard default."
-    : undefined;
-
   // Limit to first 10 experiments
   const limitedExperimentIds = useMemo(
     () => experimentIds.slice(0, MAX_SELECTED_EXPERIMENTS),
@@ -290,12 +285,13 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     experimentsIds: isSelectExperimentsMode ? limitedExperimentIds : [],
   });
 
-  const experimentsListSize = useMemo(() => {
-    if (maxExperimentsCount && maxExperimentsCount > 0) {
-      return Math.min(maxExperimentsCount, MAX_EXPERIMENTS_LIMIT);
-    }
-    return MAX_EXPERIMENTS_LIMIT;
-  }, [maxExperimentsCount]);
+  const experimentsListSize = useMemo(
+    () =>
+      maxExperimentsCount > 0
+        ? Math.min(maxExperimentsCount, MAX_MAX_EXPERIMENTS)
+        : MAX_MAX_EXPERIMENTS,
+    [maxExperimentsCount],
+  );
 
   const { data: experimentsData, isPending: isExperimentsPending } =
     useExperimentsList(
@@ -380,11 +376,15 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     !isSelectExperimentsMode &&
     totalExperiments > experimentsListSize;
 
-  const warningMessage = hasMoreThanLimit
-    ? `Showing first ${experimentsListSize} of ${totalExperiments} experiments`
-    : isSelectExperimentsMode && hasMoreThanMaxSelected
-      ? `Showing first ${MAX_SELECTED_EXPERIMENTS} of ${experimentIds.length} selected experiments`
-      : undefined;
+  const messages = [
+    overrideDefaults &&
+      "This widget uses custom experiments instead of the dashboard default.",
+    hasMoreThanLimit &&
+      `Showing first ${experimentsListSize} of ${totalExperiments} experiments`,
+    isSelectExperimentsMode &&
+      hasMoreThanMaxSelected &&
+      `Showing first ${MAX_SELECTED_EXPERIMENTS} of ${experimentIds.length} selected experiments`,
+  ].filter(Boolean) as string[];
 
   const { transformedData, chartConfig } = useMemo(() => {
     if (chartType === CHART_TYPE.radar || chartType === CHART_TYPE.bar) {
@@ -524,13 +524,12 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
+        <DashboardWidget.PreviewHeader messages={messages} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
           subtitle={widget.subtitle}
-          warningMessage={warningMessage}
-          infoMessage={infoMessage}
+          messages={messages}
           actions={
             <DashboardWidget.ActionsMenu
               sectionId={sectionId!}

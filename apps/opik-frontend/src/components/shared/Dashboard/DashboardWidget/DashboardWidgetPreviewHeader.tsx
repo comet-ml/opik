@@ -1,22 +1,21 @@
 import React from "react";
-import { Info } from "lucide-react";
 import {
   useDashboardStore,
   selectPreviewWidget,
   selectUpdatePreviewWidget,
 } from "@/store/DashboardStore";
 import InlineEditableText from "@/components/shared/InlineEditableText/InlineEditableText";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type DashboardWidgetPreviewHeaderProps = {
   className?: string;
-  infoMessage?: string;
+  messages?: (string | React.ReactNode)[];
 };
 
 const DashboardWidgetPreviewHeader: React.FunctionComponent<
   DashboardWidgetPreviewHeaderProps
-> = ({ className, infoMessage }) => {
+> = ({ className, messages }) => {
   const previewWidget = useDashboardStore(selectPreviewWidget);
   const updatePreviewWidget = useDashboardStore(selectUpdatePreviewWidget);
 
@@ -36,6 +35,17 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
     updatePreviewWidget({ subtitle: newSubtitle });
   };
 
+  const renderMessages = () => {
+    if (!messages || messages.length === 0) return null;
+
+    return messages.map((msg, index) => (
+      <React.Fragment key={index}>
+        {index > 0 && <span className="mx-1">·</span>}
+        {msg}
+      </React.Fragment>
+    ));
+  };
+
   return (
     <div className={cn("flex flex-col gap-0.5 pt-1", className)}>
       <InlineEditableText
@@ -44,13 +54,6 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
         defaultValue={generatedTitle}
         onChange={handleTitleChange}
         isTitle
-        rightIcon={
-          infoMessage ? (
-            <TooltipWrapper content={infoMessage}>
-              <Info className="size-3 shrink-0 text-light-slate" />
-            </TooltipWrapper>
-          ) : undefined
-        }
       />
       <InlineEditableText
         value={subtitle || ""}
@@ -58,6 +61,13 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
         defaultValue=""
         onChange={handleSubtitleChange}
       />
+      {messages && messages.length > 0 && (
+        <TooltipWrapper content={<div>{renderMessages()}</div>}>
+          <div className="line-clamp-2 px-2 text-xs font-normal text-muted-slate">
+            {renderMessages()}
+          </div>
+        </TooltipWrapper>
+      )}
     </div>
   );
 };
