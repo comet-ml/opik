@@ -52,11 +52,19 @@ This test ensures the metadata column is available in the UI and prevents accide
 
       await test.step('Toggle metadata column off and verify it is hidden', async () => {
         // The Columns menu should still be open from the previous step
-        // Click to toggle off (if it's checked)
+        // But let's verify the metadata button is visible first
         const metadataButton = page.getByRole('button', { name: 'Metadata' });
-        const metadataCheckbox = metadataButton.getByRole('checkbox');
         
-        // Ensure the checkbox is visible before checking its state
+        // If the menu closed, we need to reopen it
+        try {
+          await expect(metadataButton).toBeVisible({ timeout: 1000 });
+        } catch {
+          // Menu closed, reopen it
+          await page.getByRole('button', { name: 'Columns' }).click();
+          await expect(metadataButton).toBeVisible();
+        }
+        
+        const metadataCheckbox = metadataButton.getByRole('checkbox');
         await expect(metadataCheckbox).toBeVisible();
         
         const isChecked = await metadataCheckbox.isChecked();
@@ -232,11 +240,13 @@ This test ensures metadata filtering works correctly with autocomplete.`
         // Type a metadata key that exists in the test data
         await keyInput.fill('c-md1');
 
-        // The autocomplete should show suggestions
-        // Select the first suggestion if available, or just proceed
+        // Wait for autocomplete dropdown to appear and select suggestion if available
         const suggestion = page.getByRole('option', { name: /c-md1/i }).first();
-        if (await suggestion.isVisible({ timeout: 1000 }).catch(() => false)) {
+        try {
+          await expect(suggestion).toBeVisible({ timeout: 2000 });
           await suggestion.click();
+        } catch {
+          // If no autocomplete appears, that's okay - the value is already filled
         }
       });
 
@@ -256,6 +266,10 @@ This test ensures metadata filtering works correctly with autocomplete.`
         // After filtering by metadata.c-md1 = val1, we should still see all traces
         // because all traces in the fixture have this metadata
         const tracesPage = new TracesPage(page);
+        
+        // Wait for the table to reload with filtered results
+        // Give it a moment for the filter to be applied
+        await page.waitForLoadState('networkidle');
         
         // Wait for the traces to be visible after filter is applied
         await tracesPage.waitForTracesToBeVisible();
