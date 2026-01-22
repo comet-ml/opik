@@ -258,6 +258,7 @@ def llm_deap_crossover(
     prompts: PromptLibrary,
     use_semantic: bool = False,
     verbose: int = 1,
+    rng: random.Random | None = None,
 ) -> tuple[Any, Any]:
     """Perform crossover by asking an LLM to blend two parent prompts.
 
@@ -272,6 +273,8 @@ def llm_deap_crossover(
     # Individuals are dicts mapping prompt_name -> messages
     child1_data: dict[str, list[dict[str, Any]]] = {}
     child2_data: dict[str, list[dict[str, Any]]] = {}
+
+    rng = rng or random.Random()
 
     try:
         # Apply LLM crossover to each prompt in the dict
@@ -327,7 +330,7 @@ def llm_deap_crossover(
                         f"LLM crossover failed for prompt '{prompt_name}': {e}. Using DEAP crossover."
                     )
                     child1_messages, child2_messages = _crossover_messages(
-                        messages_1, messages_2, random.Random()
+                        messages_1, messages_2, rng
                     )
                     child1_data[prompt_name] = child1_messages
                     child2_data[prompt_name] = child2_messages

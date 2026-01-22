@@ -287,6 +287,7 @@ def run_generation(
                         use_semantic=optimizer.enable_semantic_crossover,
                         verbose=optimizer.verbose,
                         prompts=optimizer._prompts,
+                        rng=crossover_rng,
                     )
                 else:
                     c1_new, c2_new = crossover_ops.deap_crossover(

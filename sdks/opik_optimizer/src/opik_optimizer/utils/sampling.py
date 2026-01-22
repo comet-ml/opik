@@ -90,7 +90,7 @@ def resolve_sampling(
     except Exception:
         dataset_size = None
 
-    if dataset_item_ids:
+    if dataset_item_ids is not None:
         return SamplingPlan(
             nb_samples=len(dataset_item_ids),
             dataset_item_ids=list(dataset_item_ids),
