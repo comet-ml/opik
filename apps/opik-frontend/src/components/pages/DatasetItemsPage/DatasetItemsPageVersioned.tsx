@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
-import { X, Check, GitCommitVertical } from "lucide-react";
+import { X, Check, GitCommitVertical, Blocks, Code2 } from "lucide-react";
 
 import Loader from "@/components/shared/Loader/Loader";
 import { useDatasetIdFromURL } from "@/hooks/useDatasetIdFromURL";
@@ -17,7 +17,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
 import { Separator } from "@/components/ui/separator";
-import { DATASET_STATUS } from "@/types/datasets";
+import { DATASET_STATUS, DatasetVersion } from "@/types/datasets";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import {
   useIsDraftMode,
@@ -28,6 +28,10 @@ import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import OverrideVersionDialog from "@/components/pages/DatasetItemsPage/OverrideVersionDialog";
 import useDatasetItemChangesMutation from "@/api/datasets/useDatasetItemChangesMutation";
 import { AxiosError } from "axios";
+import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import useLoadPlayground from "@/hooks/useLoadPlayground";
+import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 
 const POLLING_INTERVAL_MS = 3000;
 
@@ -45,6 +49,9 @@ const DatasetItemsPageVersioned = () => {
   const hasDraft = useIsDraftMode();
   const clearDraft = useClearDraft();
   const getChangesPayload = useGetChangesPayload();
+  const { toast } = useToast();
+  const { navigate: navigateToExperiment } = useNavigateToExperiment();
+  const { loadPlayground } = useLoadPlayground();
 
   const { data: dataset, isPending } = useDatasetById(
     {
@@ -77,6 +84,48 @@ const DatasetItemsPageVersioned = () => {
     cancelText: "Stay",
   });
 
+  const showSuccessToast = (versionId?: string) => {
+    toast({
+      title: "New version created",
+      description:
+        "Your dataset changes have been saved as a new version. You can now use it to run experiments in the SDK or the Playground.",
+      actions: [
+        <ToastAction
+          variant="link"
+          size="sm"
+          className="comet-body-s-accented gap-1.5 px-0"
+          altText="Run experiment in the SDK"
+          key="sdk"
+          onClick={() =>
+            navigateToExperiment({
+              newExperiment: true,
+              datasetName: dataset?.name,
+            })
+          }
+        >
+          <Code2 className="size-4" />
+          Run experiment in the SDK
+        </ToastAction>,
+        <ToastAction
+          variant="link"
+          size="sm"
+          className="comet-body-s-accented gap-1.5 px-0"
+          altText="Run experiment in the Playground"
+          key="playground"
+          onClick={() =>
+            loadPlayground({
+              datasetId,
+              datasetVersionId: versionId,
+            })
+          }
+        >
+          <Blocks className="size-4" />
+          Run experiment in the Playground
+        </ToastAction>,
+      ],
+    });
+  };
+
   const changesMutation = useDatasetItemChangesMutation({
     onConflict: () => {
       setOverrideDialogOpen(true);
@@ -84,6 +133,8 @@ const DatasetItemsPageVersioned = () => {
   });
 
   const handleSaveChanges = (tags?: string[], changeDescription?: string) => {
+    if (changesMutation.isPending) return;
+
     const changes = getChangesPayload();
     const baseVersion = dataset?.latest_version?.id || "";
 
@@ -101,9 +152,10 @@ const DatasetItemsPageVersioned = () => {
         override: false,
       },
       {
-        onSuccess: () => {
+        onSuccess: (version: DatasetVersion) => {
           clearDraft();
           setAddVersionDialogOpen(false);
+          showSuccessToast(version.id);
         },
         onError: (error) => {
           // If 409, store the version data for retry
@@ -135,11 +187,12 @@ const DatasetItemsPageVersioned = () => {
         override: true,
       },
       {
-        onSuccess: () => {
+        onSuccess: (version: DatasetVersion) => {
           clearDraft();
           setAddVersionDialogOpen(false);
           setOverrideDialogOpen(false);
           setPendingVersionData(null);
+          showSuccessToast(version.id);
         },
       },
     );
@@ -159,9 +212,8 @@ const DatasetItemsPageVersioned = () => {
       <AddVersionDialog
         open={addVersionDialogOpen}
         setOpen={setAddVersionDialogOpen}
-        datasetId={datasetId}
-        datasetName={dataset?.name}
         onConfirm={handleSaveChanges}
+        isSubmitting={changesMutation.isPending}
       />
       <ConfirmDialog
         open={discardDialogOpen}

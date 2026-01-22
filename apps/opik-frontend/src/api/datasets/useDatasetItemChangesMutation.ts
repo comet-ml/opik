@@ -47,12 +47,6 @@ const useDatasetItemChangesMutation = (
       );
       return data;
     },
-    onSuccess: () => {
-      toast({
-        title: "Changes saved",
-        description: "Dataset version created successfully.",
-      });
-    },
     onError: (error: AxiosError) => {
       // Check for 409 Conflict
       if (error.response?.status === 409) {
