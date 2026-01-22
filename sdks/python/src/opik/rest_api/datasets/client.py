@@ -5,6 +5,7 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.dataset_expansion_response import DatasetExpansionResponse
+from ..types.dataset_export_job_public import DatasetExportJobPublic
 from ..types.dataset_item_changes_public import DatasetItemChangesPublic
 from ..types.dataset_item_filter import DatasetItemFilter
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
@@ -606,6 +607,33 @@ class DatasetsClient:
         _response = self._raw_client.delete_datasets_batch(ids=ids, request_options=request_options)
         return _response.data
 
+    def download_dataset_export(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Iterator[bytes]:
+        """
+        Downloads the exported CSV file for a completed export job. This endpoint proxies the file download to avoid exposing internal storage URLs.
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.Iterator[bytes]
+            CSV file content
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.download_dataset_export(job_id='jobId', )
+        """
+        with self._raw_client.download_dataset_export(job_id, request_options=request_options) as r:
+            yield from r.data
+
     def expand_dataset(
         self,
         id: str,
@@ -792,6 +820,58 @@ class DatasetsClient:
         )
         return _response.data
 
+    def get_dataset_export_job(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetExportJobPublic:
+        """
+        Retrieves the current status of a dataset export job
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetExportJobPublic
+            Export job details
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.get_dataset_export_job(job_id='jobId', )
+        """
+        _response = self._raw_client.get_dataset_export_job(job_id, request_options=request_options)
+        return _response.data
+
+    def get_dataset_export_jobs(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.List[DatasetExportJobPublic]:
+        """
+        Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.List[DatasetExportJobPublic]
+            List of export jobs
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.get_dataset_export_jobs()
+        """
+        _response = self._raw_client.get_dataset_export_jobs(request_options=request_options)
+        return _response.data
+
     def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> DatasetItemPublic:
@@ -962,6 +1042,59 @@ class DatasetsClient:
         _response = self._raw_client.get_dataset_items_output_columns(
             id, experiment_ids=experiment_ids, request_options=request_options
         )
+        return _response.data
+
+    def mark_dataset_export_job_viewed(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.mark_dataset_export_job_viewed(job_id='jobId', )
+        """
+        _response = self._raw_client.mark_dataset_export_job_viewed(job_id, request_options=request_options)
+        return _response.data
+
+    def start_dataset_export(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetExportJobPublic:
+        """
+        Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetExportJobPublic
+            Existing export job in progress
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.start_dataset_export(id='id', )
+        """
+        _response = self._raw_client.start_dataset_export(id, request_options=request_options)
         return _response.data
 
     def stream_dataset_items(
@@ -1827,6 +1960,37 @@ class AsyncDatasetsClient:
         _response = await self._raw_client.delete_datasets_batch(ids=ids, request_options=request_options)
         return _response.data
 
+    async def download_dataset_export(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.AsyncIterator[bytes]:
+        """
+        Downloads the exported CSV file for a completed export job. This endpoint proxies the file download to avoid exposing internal storage URLs.
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.AsyncIterator[bytes]
+            CSV file content
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.download_dataset_export(job_id='jobId', )
+        asyncio.run(main())
+        """
+        async with self._raw_client.download_dataset_export(job_id, request_options=request_options) as r:
+            async for data in r.data:
+                yield data
+
     async def expand_dataset(
         self,
         id: str,
@@ -2025,6 +2189,64 @@ class AsyncDatasetsClient:
         )
         return _response.data
 
+    async def get_dataset_export_job(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetExportJobPublic:
+        """
+        Retrieves the current status of a dataset export job
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetExportJobPublic
+            Export job details
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.get_dataset_export_job(job_id='jobId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_dataset_export_job(job_id, request_options=request_options)
+        return _response.data
+
+    async def get_dataset_export_jobs(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.List[DatasetExportJobPublic]:
+        """
+        Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        typing.List[DatasetExportJobPublic]
+            List of export jobs
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.get_dataset_export_jobs()
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.get_dataset_export_jobs(request_options=request_options)
+        return _response.data
+
     async def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> DatasetItemPublic:
@@ -2207,6 +2429,65 @@ class AsyncDatasetsClient:
         _response = await self._raw_client.get_dataset_items_output_columns(
             id, experiment_ids=experiment_ids, request_options=request_options
         )
+        return _response.data
+
+    async def mark_dataset_export_job_viewed(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.mark_dataset_export_job_viewed(job_id='jobId', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.mark_dataset_export_job_viewed(job_id, request_options=request_options)
+        return _response.data
+
+    async def start_dataset_export(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetExportJobPublic:
+        """
+        Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetExportJobPublic
+            Existing export job in progress
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.start_dataset_export(id='id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.start_dataset_export(id, request_options=request_options)
         return _response.data
 
     async def stream_dataset_items(

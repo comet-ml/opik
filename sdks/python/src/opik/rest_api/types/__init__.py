@@ -195,6 +195,8 @@ from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
 from .dataset_expansion import DatasetExpansion
 from .dataset_expansion_response import DatasetExpansionResponse
+from .dataset_export_job_public import DatasetExportJobPublic
+from .dataset_export_job_public_status import DatasetExportJobPublicStatus
 from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
 from .dataset_item_changes_public import DatasetItemChangesPublic
@@ -260,6 +262,9 @@ from .experiment_score_public import ExperimentScorePublic
 from .experiment_score_write import ExperimentScoreWrite
 from .experiment_status import ExperimentStatus
 from .experiment_type import ExperimentType
+from .experiment_update import ExperimentUpdate
+from .experiment_update_status import ExperimentUpdateStatus
+from .experiment_update_type import ExperimentUpdateType
 from .export_trace_service_request import ExportTraceServiceRequest
 from .feedback import Feedback, Feedback_Boolean, Feedback_Categorical, Feedback_Numerical
 from .feedback_create import (
@@ -714,6 +719,8 @@ __all__ = [
     "Dataset",
     "DatasetExpansion",
     "DatasetExpansionResponse",
+    "DatasetExportJobPublic",
+    "DatasetExportJobPublicStatus",
     "DatasetItem",
     "DatasetItemBatch",
     "DatasetItemChangesPublic",
@@ -777,6 +784,9 @@ __all__ = [
     "ExperimentScoreWrite",
     "ExperimentStatus",
     "ExperimentType",
+    "ExperimentUpdate",
+    "ExperimentUpdateStatus",
+    "ExperimentUpdateType",
     "ExportTraceServiceRequest",
     "Feedback",
     "FeedbackCreate",

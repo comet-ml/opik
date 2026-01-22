@@ -20,6 +20,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     exportEnabled: core.serialization.boolean(),
     optimizationStudioEnabled: core.serialization.boolean(),
     datasetVersioningEnabled: core.serialization.boolean(),
+    datasetExportEnabled: core.serialization.boolean(),
     openaiProviderEnabled: core.serialization.boolean(),
     anthropicProviderEnabled: core.serialization.boolean(),
     geminiProviderEnabled: core.serialization.boolean(),
@@ -44,6 +45,7 @@ export declare namespace ServiceTogglesConfig {
         exportEnabled: boolean;
         optimizationStudioEnabled: boolean;
         datasetVersioningEnabled: boolean;
+        datasetExportEnabled: boolean;
         openaiProviderEnabled: boolean;
         anthropicProviderEnabled: boolean;
         geminiProviderEnabled: boolean;

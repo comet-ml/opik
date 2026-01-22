@@ -15,12 +15,13 @@ from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
 from ..types.experiment_score import ExperimentScore
 from ..types.experiment_score_write import ExperimentScoreWrite
+from ..types.experiment_update import ExperimentUpdate
+from ..types.experiment_update_status import ExperimentUpdateStatus
+from ..types.experiment_update_type import ExperimentUpdateType
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
 from .raw_client import AsyncRawExperimentsClient, RawExperimentsClient
-from .types.experiment_update_status import ExperimentUpdateStatus
-from .types.experiment_update_type import ExperimentUpdateType
 from .types.experiment_write_status import ExperimentWriteStatus
 from .types.experiment_write_type import ExperimentWriteType
 
@@ -42,6 +43,46 @@ class ExperimentsClient:
         RawExperimentsClient
         """
         return self._raw_client
+
+    def batch_update_experiments(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: ExperimentUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple experiments
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of experiment IDs to update (max 1000)
+
+        update : ExperimentUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import ExperimentUpdate
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.experiments.batch_update_experiments(ids=['ids'], update=ExperimentUpdate(), )
+        """
+        _response = self._raw_client.batch_update_experiments(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+        )
+        return _response.data
 
     def find_experiments(
         self,
@@ -658,6 +699,49 @@ class AsyncExperimentsClient:
         AsyncRawExperimentsClient
         """
         return self._raw_client
+
+    async def batch_update_experiments(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: ExperimentUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple experiments
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of experiment IDs to update (max 1000)
+
+        update : ExperimentUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import ExperimentUpdate
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.experiments.batch_update_experiments(ids=['ids'], update=ExperimentUpdate(), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.batch_update_experiments(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+        )
+        return _response.data
 
     async def find_experiments(
         self,

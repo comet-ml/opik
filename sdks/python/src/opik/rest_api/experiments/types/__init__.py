@@ -2,9 +2,7 @@
 
 # isort: skip_file
 
-from .experiment_update_status import ExperimentUpdateStatus
-from .experiment_update_type import ExperimentUpdateType
 from .experiment_write_status import ExperimentWriteStatus
 from .experiment_write_type import ExperimentWriteType
 
-__all__ = ["ExperimentUpdateStatus", "ExperimentUpdateType", "ExperimentWriteStatus", "ExperimentWriteType"]
+__all__ = ["ExperimentWriteStatus", "ExperimentWriteType"]

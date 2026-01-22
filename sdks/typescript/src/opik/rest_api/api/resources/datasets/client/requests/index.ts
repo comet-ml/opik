@@ -17,12 +17,16 @@ export type { DatasetVersionUpdatePublic } from "./DatasetVersionUpdatePublic.js
 export type { DatasetWrite } from "./DatasetWrite.js";
 export type { DeleteDatasetRequest } from "./DeleteDatasetRequest.js";
 export type { DeleteVersionTagRequest } from "./DeleteVersionTagRequest.js";
+export type { DownloadDatasetExportRequest } from "./DownloadDatasetExportRequest.js";
 export type { FindDatasetItemsWithExperimentItemsRequest } from "./FindDatasetItemsWithExperimentItemsRequest.js";
 export type { FindDatasetsRequest } from "./FindDatasetsRequest.js";
 export type { GetDatasetByIdRequest } from "./GetDatasetByIdRequest.js";
 export type { GetDatasetExperimentItemsStatsRequest } from "./GetDatasetExperimentItemsStatsRequest.js";
+export type { GetDatasetExportJobRequest } from "./GetDatasetExportJobRequest.js";
 export type { GetDatasetItemByIdRequest } from "./GetDatasetItemByIdRequest.js";
 export type { GetDatasetItemsOutputColumnsRequest } from "./GetDatasetItemsOutputColumnsRequest.js";
 export type { GetDatasetItemsRequest } from "./GetDatasetItemsRequest.js";
 export type { ListDatasetVersionsRequest } from "./ListDatasetVersionsRequest.js";
+export type { MarkDatasetExportJobViewedRequest } from "./MarkDatasetExportJobViewedRequest.js";
 export type { PatchDatasetItemRequest } from "./PatchDatasetItemRequest.js";
+export type { StartDatasetExportRequest } from "./StartDatasetExportRequest.js";

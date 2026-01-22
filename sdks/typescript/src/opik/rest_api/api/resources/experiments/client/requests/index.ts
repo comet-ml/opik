@@ -1,9 +1,9 @@
+export type { ExperimentBatchUpdate } from "./ExperimentBatchUpdate.js";
 export type { ExperimentItemBulkUploadExperimentItemBulkWriteView } from "./ExperimentItemBulkUploadExperimentItemBulkWriteView.js";
 export type { ExperimentItemStreamRequest } from "./ExperimentItemStreamRequest.js";
 export type { ExperimentItemsBatch } from "./ExperimentItemsBatch.js";
 export type { ExperimentItemsDelete } from "./ExperimentItemsDelete.js";
 export type { ExperimentStreamRequestPublic } from "./ExperimentStreamRequestPublic.js";
-export type { ExperimentUpdate } from "./ExperimentUpdate.js";
 export type { ExperimentWrite } from "./ExperimentWrite.js";
 export type { FindExperimentGroupsAggregationsRequest } from "./FindExperimentGroupsAggregationsRequest.js";
 export type { FindExperimentGroupsRequest } from "./FindExperimentGroupsRequest.js";
@@ -11,3 +11,4 @@ export type { FindExperimentsRequest } from "./FindExperimentsRequest.js";
 export type { FindFeedbackScoreNamesRequest } from "./FindFeedbackScoreNamesRequest.js";
 export type { GetExperimentByIdRequest } from "./GetExperimentByIdRequest.js";
 export type { GetExperimentItemByIdRequest } from "./GetExperimentItemByIdRequest.js";
+export type { UpdateExperimentRequest } from "./UpdateExperimentRequest.js";
