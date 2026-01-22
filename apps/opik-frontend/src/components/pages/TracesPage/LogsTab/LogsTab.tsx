@@ -6,15 +6,18 @@ import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
 
-const DEFAULT_TYPE = LOGS_TYPE.traces; // TODO: Prefer thread if threadCount > 0, otherwise traces
-
 type LogsTabProps = {
   projectId: string;
   projectName: string;
+  defaultLogsType: LOGS_TYPE;
 };
 
-const LogsTab: React.FC<LogsTabProps> = ({ projectId, projectName }) => {
-  const [type = DEFAULT_TYPE, setType] = useQueryParam("type", StringParam, {
+const LogsTab: React.FC<LogsTabProps> = ({
+  projectId,
+  projectName,
+  defaultLogsType,
+}) => {
+  const [type = defaultLogsType, setType] = useQueryParam("type", StringParam, {
     updateType: "replaceIn",
   });
 
