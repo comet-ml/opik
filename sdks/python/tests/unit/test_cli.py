@@ -88,38 +88,41 @@ class TestUploadCommand:
 
 
 class TestSmokeTestCommand:
-    """Test the smoke-test CLI command."""
+    """Test the smoke-test functionality via healthcheck command."""
 
     def test_smoke_test_help(self):
-        """Test that the smoke-test command shows help."""
+        """Test that the healthcheck --smoke-test command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["smoke-test", "--help"])
+        result = runner.invoke(cli, ["healthcheck", "--smoke-test", "--help"])
         assert result.exit_code == 0
-        assert "smoke-test" in result.output
+        assert "--smoke-test" in result.output
         assert "--project-name" in result.output
         assert "Project name for the smoke test" in result.output
-        assert "WORKSPACE" in result.output
+        assert "--workspace" in result.output
         assert "Run a smoke test to verify Opik integration" in result.output
 
     def test_smoke_test_minimal_args_parsing(self):
-        """Test that smoke-test command parses minimal required arguments correctly."""
+        """Test that healthcheck --smoke-test command requires workspace."""
         runner = CliRunner()
         # Test that help shows workspace is required
-        result = runner.invoke(cli, ["smoke-test", "--help"])
+        result = runner.invoke(cli, ["healthcheck", "--smoke-test", "--help"])
         assert result.exit_code == 0
-        assert "WORKSPACE" in result.output
+        assert "--workspace" in result.output
         # Test that missing workspace causes error
-        result = runner.invoke(cli, ["smoke-test"])
+        result = runner.invoke(cli, ["healthcheck", "--smoke-test"])
         assert result.exit_code != 0
-        assert "Missing argument" in result.output or "Error" in result.output
+        assert (
+            "required when --smoke-test is used" in result.output
+            or "Error" in result.output
+        )
 
     @patch("opik.api_objects.opik_client.get_client_cached")
-    @patch("opik.cli.smoke_test.cli.opik.Opik")
-    @patch("opik.cli.smoke_test.cli.opik.start_as_current_trace")
-    @patch("opik.cli.smoke_test.cli.opik_context.update_current_trace")
-    @patch("opik.cli.smoke_test.cli.opik_context.update_current_span")
-    @patch("opik.cli.smoke_test.cli.create_opik_logo_image")
-    @patch("opik.cli.smoke_test.cli.track")
+    @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
+    @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
+    @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_trace")
+    @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_span")
+    @patch("opik.cli.healthcheck.smoke_test.create_opik_logo_image")
+    @patch("opik.cli.healthcheck.smoke_test.track")
     def test_smoke_test_with_workspace_and_project_name(
         self,
         mock_track,
@@ -130,7 +133,7 @@ class TestSmokeTestCommand:
         mock_opik_class,
         mock_get_client_cached,
     ):
-        """Test smoke-test command with workspace and --project-name arguments."""
+        """Test healthcheck --smoke-test command with workspace and --project-name arguments."""
         # Setup mocks
         mock_client = MagicMock()
         mock_opik_class.return_value = mock_client
@@ -162,7 +165,14 @@ class TestSmokeTestCommand:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["smoke-test", "test-workspace", "--project-name", "test-project"],
+            [
+                "healthcheck",
+                "--smoke-test",
+                "--workspace",
+                "test-workspace",
+                "--project-name",
+                "test-project",
+            ],
             catch_exceptions=False,
         )
 
@@ -185,12 +195,12 @@ class TestSmokeTestCommand:
         mock_client.end.assert_called_once()
 
     @patch("opik.api_objects.opik_client.get_client_cached")
-    @patch("opik.cli.smoke_test.cli.opik.Opik")
-    @patch("opik.cli.smoke_test.cli.opik.start_as_current_trace")
-    @patch("opik.cli.smoke_test.cli.opik_context.update_current_trace")
-    @patch("opik.cli.smoke_test.cli.opik_context.update_current_span")
-    @patch("opik.cli.smoke_test.cli.create_opik_logo_image")
-    @patch("opik.cli.smoke_test.cli.track")
+    @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
+    @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
+    @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_trace")
+    @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_span")
+    @patch("opik.cli.healthcheck.smoke_test.create_opik_logo_image")
+    @patch("opik.cli.healthcheck.smoke_test.track")
     def test_smoke_test_with_default_project_name(
         self,
         mock_track,
@@ -201,7 +211,7 @@ class TestSmokeTestCommand:
         mock_opik_class,
         mock_get_client_cached,
     ):
-        """Test smoke-test command with workspace only (uses default project name)."""
+        """Test healthcheck --smoke-test command with workspace only (uses default project name)."""
         # Setup mocks
         mock_client = MagicMock()
         mock_opik_class.return_value = mock_client
@@ -233,7 +243,7 @@ class TestSmokeTestCommand:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["smoke-test", "test-workspace"],
+            ["healthcheck", "--smoke-test", "--workspace", "test-workspace"],
             catch_exceptions=False,
         )
 

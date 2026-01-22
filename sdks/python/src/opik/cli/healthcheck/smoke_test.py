@@ -1,12 +1,12 @@
-"""Smoke test command for Opik CLI."""
+"""Smoke test functionality for Opik CLI."""
 
+import os
 import random
 import string
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
-import os
 from unittest.mock import patch
 
 import click
@@ -15,6 +15,7 @@ from rich.console import Console
 import opik
 from opik import Attachment, opik_context, track
 
+from .opik_logo import OPIK_LOGO_PNG
 
 console = Console()
 
@@ -29,8 +30,6 @@ def create_opik_logo_image() -> Path:
     Create the Opik logo image from embedded byte array.
     Returns a Path to the temporary image file.
     """
-    from .opik_logo import OPIK_LOGO_PNG
-
     with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
         tmp.write(OPIK_LOGO_PNG)
         temp_path = Path(tmp.name)
@@ -68,46 +67,32 @@ def _temporary_client_context(client: opik.Opik) -> Iterator[None]:
             pass
 
 
-@click.command(name="smoke-test")
-@click.argument("workspace", type=str)
-@click.option(
-    "--project-name",
-    type=str,
-    default="smoke-test-project",
-    help="Project name for the smoke test. Defaults to 'smoke-test-project'.",
-)
-@click.pass_context
-def smoke_test(
-    ctx: click.Context,
+def run_smoke_test(
     workspace: str,
-    project_name: str,
+    project_name: str = "smoke-test-project",
+    api_key: Optional[str] = None,
+    debug: bool = False,
 ) -> None:
     """
     Run a smoke test to verify Opik integration is working correctly.
 
-    This command performs a basic sanity test by:
+    This function performs a basic sanity test by:
     - Creating a trace with random data
     - Adding a tracked LLM completion span
     - Attaching a dynamically generated test image
     - Verifying data is sent to Opik
 
-    WORKSPACE: The workspace name to use for the smoke test.
+    Args:
+        workspace: The workspace name to use for the smoke test.
+        project_name: Project name for the smoke test. Defaults to 'smoke-test-project'.
+        api_key: Optional API key. If not provided, will use environment variable or configuration.
+        debug: Whether to print debug information on errors.
 
-    Examples:
-
-      Run smoke test with default project name:
-
-        opik smoke-test my-workspace
-
-      Run smoke test with custom project name:
-
-        opik smoke-test my-workspace --project-name my-test-project
+    Raises:
+        click.ClickException: If the smoke test fails.
     """
     temp_image_path: Optional[Path] = None
     try:
-        # Get API key from context
-        api_key = ctx.obj.get("api_key") if ctx.obj else None
-
         console.print("[green]Starting Opik smoke test...[/green]")
 
         # Create Opik client
@@ -180,7 +165,7 @@ def smoke_test(
 
     except Exception as e:
         console.print(f"[red]Error during smoke test:[/red] {e}")
-        if ctx.obj and ctx.obj.get("debug", False):
+        if debug:
             import traceback
 
             console.print("[red]Traceback:[/red]")
