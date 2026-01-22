@@ -113,7 +113,7 @@ class TestSmokeTestCommand:
         assert result.exit_code != 0
         assert "Missing argument" in result.output or "Error" in result.output
 
-    @patch("opik.cli.smoke_test.cli.opik_client.get_client_cached")
+    @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.smoke_test.cli.opik.Opik")
     @patch("opik.cli.smoke_test.cli.opik.start_as_current_trace")
     @patch("opik.cli.smoke_test.cli.opik_context.update_current_trace")
@@ -179,7 +179,7 @@ class TestSmokeTestCommand:
         mock_client.flush.assert_called_once()
         mock_client.end.assert_called_once()
 
-    @patch("opik.cli.smoke_test.cli.opik_client.get_client_cached")
+    @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.smoke_test.cli.opik.Opik")
     @patch("opik.cli.smoke_test.cli.opik.start_as_current_trace")
     @patch("opik.cli.smoke_test.cli.opik_context.update_current_trace")
