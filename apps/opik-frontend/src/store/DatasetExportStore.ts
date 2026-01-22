@@ -114,7 +114,7 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
         activeJobs: newJobs,
         isHydrated: true,
         // Expand panel if there are jobs to show
-        isPanelExpanded: newJobs.size > 0 ? true : state.isPanelExpanded,
+        isPanelExpanded: newJobs.size > 0 || state.isPanelExpanded,
       };
     }),
 }));

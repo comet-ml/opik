@@ -3,7 +3,6 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.domain.CsvDatasetExportProcessor;
 import com.comet.opik.domain.DatasetExportJobService;
 import com.comet.opik.infrastructure.DatasetExportConfig;
-import com.comet.opik.infrastructure.FeatureFlags;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -35,16 +34,13 @@ class DatasetExportJobSubscriberTest {
     @Mock
     private CsvDatasetExportProcessor csvProcessor;
 
-    @Mock
-    private FeatureFlags featureFlags;
-
     private DatasetExportJobSubscriber subscriber;
 
     @Test
     void start_shouldSkipStartup_whenDisabled() {
         // Given
         when(config.isEnabled()).thenReturn(false);
-        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient, jobService, csvProcessor, featureFlags));
+        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient, jobService, csvProcessor));
 
         // When
         subscriber.start();
@@ -57,7 +53,7 @@ class DatasetExportJobSubscriberTest {
     void stop_shouldSkipShutdown_whenDisabled() {
         // Given
         when(config.isEnabled()).thenReturn(false);
-        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient, jobService, csvProcessor, featureFlags));
+        subscriber = spy(new DatasetExportJobSubscriber(config, redisClient, jobService, csvProcessor));
 
         // When
         subscriber.stop();

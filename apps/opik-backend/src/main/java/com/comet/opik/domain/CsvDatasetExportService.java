@@ -296,7 +296,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                     if (job.status() != DatasetExportStatus.COMPLETED
                             && job.status() != DatasetExportStatus.FAILED) {
                         log.warn("Cannot delete export job '{}' with status '{}'", jobId, job.status());
-                        return Mono.error(new IllegalStateException(
+                        return Mono.error(new BadRequestException(
                                 "Cannot delete export job '%s'. Only completed or failed jobs can be deleted."
                                         .formatted(jobId)));
                     }
