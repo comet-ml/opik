@@ -393,7 +393,7 @@ class BaseOptimizer(ABC):
         dataset: Dataset,
         metric: MetricFunction,
         agent: OptimizableAgent | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         n_samples_minibatch: int | None = None,
         n_samples_strategy: str | None = None,
         experiment_config: dict[str, Any] | None = None,
@@ -424,7 +424,7 @@ class BaseOptimizer(ABC):
         total_items = len(evaluation_dataset.get_items())
         if total_items == 0:
             raise ValueError("dataset is empty")
-        if n_samples is not None and n_samples > total_items:
+        if isinstance(n_samples, int) and n_samples > total_items:
             logger.warning(
                 "Requested n_samples (%s) is larger than evaluation dataset size (%s). "
                 "Using full evaluation dataset.",
@@ -658,7 +658,7 @@ class BaseOptimizer(ABC):
         experiment_config: dict[str, Any] | None = None,
         *,
         empty_score: float | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         n_samples_strategy: str | None = None,
         sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems]:
@@ -906,7 +906,7 @@ class BaseOptimizer(ABC):
     def _prepare_sampling_plan(
         self,
         dataset: Dataset,
-        n_samples: int | str | None,
+        n_samples: int | float | str | None,
         dataset_item_ids: list[str] | None = None,
         *,
         phase: str = "eval",
@@ -935,7 +935,7 @@ class BaseOptimizer(ABC):
     def _prepare_minibatch_plan(
         self,
         dataset: Dataset,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
         n_samples_minibatch: int | None,
         *,
         dataset_item_ids: list[str] | None = None,
@@ -1166,7 +1166,7 @@ class BaseOptimizer(ABC):
         metric: MetricFunction,
         agent: OptimizableAgent | None,
         experiment_config: dict | None,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
         n_samples_minibatch: int | None,
         n_samples_strategy: str | None,
         auto_continue: bool,
@@ -1292,7 +1292,7 @@ class BaseOptimizer(ABC):
         metric: MetricFunction,
         agent: OptimizableAgent | None,
         experiment_config: dict | None,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
         n_samples_minibatch: int | None,
         n_samples_strategy: str | None,
         auto_continue: bool,
@@ -1380,7 +1380,7 @@ class BaseOptimizer(ABC):
         metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         n_samples_minibatch: int | None = None,
         n_samples_strategy: str | None = None,
         auto_continue: bool = False,
@@ -1656,7 +1656,7 @@ class BaseOptimizer(ABC):
         verbose: int = 1,
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: Literal[True] = True,
@@ -1676,7 +1676,7 @@ class BaseOptimizer(ABC):
         verbose: int = 1,
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: Literal[False] = False,
@@ -1695,7 +1695,7 @@ class BaseOptimizer(ABC):
         verbose: int = 1,
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,

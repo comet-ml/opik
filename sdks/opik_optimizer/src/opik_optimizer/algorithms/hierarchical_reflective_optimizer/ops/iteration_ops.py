@@ -30,7 +30,7 @@ def run_root_cause_analysis(
     dataset: opik.Dataset,
     metric: MetricFunction,
     agent: Any,
-    n_samples: int | None,
+    n_samples: int | float | str | None,
     sampling_tag: str | None = None,
 ) -> HierarchicalRootCauseAnalysis:
     with reporting.display_root_cause_analysis(
@@ -88,7 +88,7 @@ def improve_over_failure_modes(
     validation_dataset: opik.Dataset | None,
     metric: MetricFunction,
     agent: Any,
-    n_samples: int | None,
+    n_samples: int | float | str | None,
     max_retries: int,
     max_trials: int,
     optimization_id: str | None,

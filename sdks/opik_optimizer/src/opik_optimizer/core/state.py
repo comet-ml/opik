@@ -61,7 +61,7 @@ class OptimizationContext:
     optimization: optimization.Optimization | None
     optimization_id: str | None
     experiment_config: dict[str, Any] | None
-    n_samples: int | None
+    n_samples: int | float | str | None
     max_trials: int
     project_name: str
     n_samples_minibatch: int | None = None

@@ -49,7 +49,7 @@ def build_optuna_objective(
     metric: MetricFunction,
     agent: OptimizableAgent | None,
     experiment_config: dict[str, Any] | None,
-    n_samples: int | None,
+    n_samples: int | float | str | None,
     n_samples_strategy: str | None,
     total_trials: int,
 ) -> Callable[[Trial], float]:

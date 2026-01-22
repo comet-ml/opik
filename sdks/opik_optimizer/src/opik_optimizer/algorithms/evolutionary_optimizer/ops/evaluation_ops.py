@@ -20,7 +20,7 @@ def evaluate_bundle(
     prompts_metadata: dict[str, dict[str, Any]],
     dataset: opik.Dataset,
     metric: MetricFunction,
-    n_samples: int | None = None,
+    n_samples: int | float | str | None = None,
     dataset_item_ids: list[str] | None = None,
     experiment_config: dict | None = None,
     optimization_id: str | None = None,

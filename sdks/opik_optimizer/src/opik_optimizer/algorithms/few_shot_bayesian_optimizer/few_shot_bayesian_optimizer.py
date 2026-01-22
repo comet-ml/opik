@@ -156,7 +156,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         verbose: int = 1,
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
@@ -514,7 +514,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_trials: int = 10,
         optimization_id: str | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         is_single_prompt_optimization: bool = False,
     ) -> AlgorithmResult:
         if agent is None:
