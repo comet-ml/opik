@@ -43,7 +43,9 @@ public record CommonMetric(
 
             @Schema(description = "Parameter description from docstring") String description,
 
-            @Schema(description = "Whether the parameter is required") boolean required) {
+            @Schema(description = "Whether the parameter is required") boolean required,
+
+            @Schema(description = "Whether this parameter should be mapped to trace/span fields in the UI. If false, it should be treated like an init parameter.") boolean mappable) {
     }
 
     /**

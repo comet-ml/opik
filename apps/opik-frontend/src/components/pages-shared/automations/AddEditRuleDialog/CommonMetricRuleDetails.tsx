@@ -27,6 +27,7 @@ import {
   CommonMetric,
   EVALUATORS_RULE_SCOPE,
   InitParameter,
+  ScoreParameter,
 } from "@/types/automations";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -67,10 +68,11 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
   useEffect(() => {
     if (selectedMetric) {
       // Set up arguments based on metric score_parameters (only for non-thread scope)
+      // Only include mappable parameters in the arguments
       if (!isThreadScope) {
         const newArguments: Record<string, string> = {};
         selectedMetric.score_parameters
-          .filter((p) => p.required)
+          .filter((p) => p.mappable && p.required)
           .forEach((param) => {
             // Try to preserve existing argument values
             const currentArguments = form.getValues(
@@ -84,10 +86,13 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
       }
 
       // Set up init config with default values
+      // Include both init_parameters and non-mappable score_parameters
       const newInitConfig: Record<
         string,
         string | boolean | number | null
       > = {};
+      
+      // Add init parameters
       selectedMetric.init_parameters?.forEach((param) => {
         // Try to preserve existing config values
         const currentConfig = form.getValues("commonMetricDetails.initConfig");
@@ -101,6 +106,20 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
           );
         }
       });
+      
+      // Add non-mappable score parameters as config
+      selectedMetric.score_parameters
+        .filter((p) => !p.mappable)
+        .forEach((param) => {
+          const currentConfig = form.getValues("commonMetricDetails.initConfig");
+          if (currentConfig?.[param.name] !== undefined) {
+            newInitConfig[param.name] = currentConfig[param.name];
+          } else {
+            // Non-mappable score parameters don't have default values, set to null
+            newInitConfig[param.name] = null;
+          }
+        });
+      
       form.setValue("commonMetricDetails.initConfig", newInitConfig);
     }
   }, [selectedMetric, form, isThreadScope]);
@@ -194,63 +213,75 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
             </p>
           </div>
 
-          {/* Init Parameters (Configuration) */}
-          {selectedMetric.init_parameters &&
-            selectedMetric.init_parameters.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-1">
-                  <Label className="text-sm font-medium">Configuration</Label>
-                  <TooltipWrapper content="These settings configure how the metric behaves. They are set once when the rule is created.">
-                    <button
-                      type="button"
-                      className="inline-flex cursor-help"
-                      tabIndex={0}
-                    >
-                      <Info className="size-4 text-muted-foreground" />
-                    </button>
-                  </TooltipWrapper>
-                </div>
-                <div className="grid gap-4">
-                  {selectedMetric.init_parameters.map((param: InitParameter) => (
-                    <InitParameterInput
+          {/* Configuration Parameters (Init Parameters + Non-mappable Score Parameters) */}
+          {(selectedMetric.init_parameters.length > 0 ||
+            selectedMetric.score_parameters.some((p) => !p.mappable)) && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-1">
+                <Label className="text-sm font-medium">Configuration</Label>
+                <TooltipWrapper content="These settings configure how the metric behaves. They are set once when the rule is created.">
+                  <button
+                    type="button"
+                    className="inline-flex cursor-help"
+                    tabIndex={0}
+                  >
+                    <Info className="size-4 text-muted-foreground" />
+                  </button>
+                </TooltipWrapper>
+              </div>
+              <div className="grid gap-4">
+                {/* Render init parameters */}
+                {selectedMetric.init_parameters.map((param: InitParameter) => (
+                  <InitParameterInput
+                    key={param.name}
+                    param={param}
+                    form={form}
+                  />
+                ))}
+                {/* Render non-mappable score parameters as config inputs */}
+                {selectedMetric.score_parameters
+                  .filter((p) => !p.mappable)
+                  .map((param) => (
+                    <ScoreParameterConfigInput
                       key={param.name}
                       param={param}
                       form={form}
                     />
                   ))}
-                </div>
               </div>
-            )}
-
-          {/* Variable Mappings (score method parameters) */}
-          {!isThreadScope && selectedMetric.score_parameters.length > 0 && (
-            <FormField
-              control={form.control}
-              name="pythonCodeDetails.arguments"
-              render={({ field, formState }) => {
-                const validationErrors = get(formState.errors, [
-                  "pythonCodeDetails",
-                  "arguments",
-                ]);
-
-                return (
-                  <LLMPromptMessagesVariables
-                    parsingError={false}
-                    validationErrors={validationErrors}
-                    projectId={form.watch("projectIds")[0] || ""}
-                    variables={field.value}
-                    onChange={field.onChange}
-                    description="Map the metric parameters to trace/span fields. Required parameters are extracted from the selected metric's score method."
-                    errorText=""
-                    projectName={projectName}
-                    datasetColumnNames={datasetColumnNames}
-                    type={autocompleteType}
-                    includeIntermediateNodes
-                  />
-                );
-              }}
-            />
+            </div>
           )}
+
+          {/* Variable Mappings (mappable score method parameters only) */}
+          {!isThreadScope &&
+            selectedMetric.score_parameters.some((p) => p.mappable) && (
+              <FormField
+                control={form.control}
+                name="pythonCodeDetails.arguments"
+                render={({ field, formState }) => {
+                  const validationErrors = get(formState.errors, [
+                    "pythonCodeDetails",
+                    "arguments",
+                  ]);
+
+                  return (
+                    <LLMPromptMessagesVariables
+                      parsingError={false}
+                      validationErrors={validationErrors}
+                      projectId={form.watch("projectIds")[0] || ""}
+                      variables={field.value}
+                      onChange={field.onChange}
+                      description="Map the metric parameters to trace/span fields. Required parameters are extracted from the selected metric's score method."
+                      errorText=""
+                      projectName={projectName}
+                      datasetColumnNames={datasetColumnNames}
+                      type={autocompleteType}
+                      includeIntermediateNodes
+                    />
+                  );
+                }}
+              />
+            )}
         </>
       )}
     </>
@@ -321,6 +352,98 @@ const InitParameterInput: React.FC<InitParameterInputProps> = ({
           }
         }}
         placeholder={param.default_value ?? `Enter ${param.name}`}
+      />
+    );
+  };
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center gap-1">
+        <Label className="text-sm">
+          {param.name}
+          {param.required && <span className="text-destructive">*</span>}
+        </Label>
+        {param.description && (
+          <TooltipWrapper content={param.description}>
+            <button
+              type="button"
+              className="inline-flex cursor-help"
+              tabIndex={0}
+            >
+              <Info className="size-3.5 text-muted-foreground" />
+            </button>
+          </TooltipWrapper>
+        )}
+      </div>
+      {renderInput()}
+    </div>
+  );
+};
+
+// Sub-component for rendering non-mappable score parameters as config inputs
+type ScoreParameterConfigInputProps = {
+  param: ScoreParameter;
+  form: UseFormReturn<EvaluationRuleFormType>;
+};
+
+const ScoreParameterConfigInput: React.FC<ScoreParameterConfigInputProps> = ({
+  param,
+  form,
+}) => {
+  const lowerType = param.type.toLowerCase();
+  const isBool = lowerType === "bool" || lowerType === "boolean";
+
+  // Watch the entire initConfig object and extract the specific value
+  const initConfig = form.watch("commonMetricDetails.initConfig");
+  const currentValue = initConfig?.[param.name];
+
+  const handleChange = (value: string | boolean | number | null) => {
+    const currentConfig =
+      form.getValues("commonMetricDetails.initConfig") || {};
+    form.setValue(
+      "commonMetricDetails.initConfig",
+      {
+        ...currentConfig,
+        [param.name]: value,
+      },
+      { shouldDirty: true },
+    );
+  };
+
+  const renderInput = () => {
+    if (isBool) {
+      return (
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={currentValue === true}
+            onCheckedChange={(checked) => handleChange(checked)}
+          />
+          <span className="text-sm text-muted-foreground">
+            {currentValue === true ? "True" : "False"}
+          </span>
+        </div>
+      );
+    }
+
+    // For string/other types
+    return (
+      <Input
+        value={currentValue?.toString() ?? ""}
+        onChange={(e) => {
+          const val = e.target.value;
+          // Try to parse as number if the type suggests it
+          if (
+            lowerType === "int" ||
+            lowerType === "float" ||
+            lowerType === "number"
+          ) {
+            const num = parseFloat(val);
+            handleChange(isNaN(num) ? val : num);
+          } else {
+            handleChange(val || null);
+          }
+        }}
+        placeholder={`Enter ${param.name}`}
       />
     );
   };

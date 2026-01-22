@@ -35,10 +35,11 @@ public final class AutomationRuleEvaluatorSpanUserDefinedMetricPython
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record SpanUserDefinedMetricPythonCode(
-            @JsonView({View.Public.class, View.Write.class}) String metric,
+            @JsonView( {
+                    View.Public.class, View.Write.class}) String metric,
             @JsonView({View.Public.class, View.Write.class}) Map<String, String> arguments,
             @JsonView({View.Public.class, View.Write.class}) String commonMetricId,
-            @JsonView({View.Public.class, View.Write.class}) Map<String, Object> initConfig) {
+            @JsonView({View.Public.class, View.Write.class}) Map<String, Object> initConfig){
 
         /**
          * Returns true if this is a common metric (from the SDK) rather than custom Python code.

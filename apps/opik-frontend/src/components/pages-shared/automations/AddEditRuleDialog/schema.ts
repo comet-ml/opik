@@ -347,6 +347,9 @@ export const BasePythonCodeFormSchema = z.object({
       required_error: "Code is required",
     })
     .min(1, { message: "Code is required" }),
+  // Common metric fields (optional - only present for common metrics)
+  common_metric_id: z.string().optional(),
+  init_config: z.record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()])).optional(),
 });
 
 export const CommonMetricDetailsSchema = z.object({

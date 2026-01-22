@@ -129,6 +129,7 @@ export interface ScoreParameter {
   type: string;
   description: string;
   required: boolean;
+  mappable: boolean;
 }
 
 export interface InitParameter {

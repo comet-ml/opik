@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * Registry of common metrics available for online evaluation.
  * These are simple heuristic metrics from the Python SDK that don't require LLM calls.
- * 
+ *
  * For now, this is a static list. In the future, we may dynamically parse these from the SDK.
  */
 @Slf4j
@@ -32,12 +32,14 @@ public class CommonMetricsRegistry {
                                     .type("str")
                                     .description("The output string to check.")
                                     .required(true)
+                                    .mappable(true)
                                     .build(),
                             ScoreParameter.builder()
                                     .name("reference")
                                     .type("str")
                                     .description("The reference string to compare against.")
                                     .required(true)
+                                    .mappable(false)
                                     .build()))
                     .initParameters(List.of(
                             InitParameter.builder()
@@ -61,6 +63,7 @@ public class CommonMetricsRegistry {
                                     .type("str")
                                     .description("The output string to check.")
                                     .required(true)
+                                    .mappable(true)
                                     .build(),
                             ScoreParameter.builder()
                                     .name("reference")
@@ -68,6 +71,7 @@ public class CommonMetricsRegistry {
                                     .description("The reference string to look for in the output. " +
                                             "If not provided, falls back to the default reference set at initialization.")
                                     .required(false)
+                                    .mappable(false)
                                     .build()))
                     .initParameters(List.of(
                             InitParameter.builder()
@@ -99,12 +103,14 @@ public class CommonMetricsRegistry {
                                     .type("str")
                                     .description("The output string to compare.")
                                     .required(true)
+                                    .mappable(true)
                                     .build(),
                             ScoreParameter.builder()
                                     .name("reference")
                                     .type("str")
                                     .description("The reference string to compare against.")
                                     .required(true)
+                                    .mappable(false)
                                     .build()))
                     .initParameters(List.of(
                             InitParameter.builder()
@@ -120,14 +126,16 @@ public class CommonMetricsRegistry {
             CommonMetric.builder()
                     .id("regex_match")
                     .name("RegexMatch")
-                    .description("A metric that checks if an output string matches a given regular expression pattern. " +
-                            "Returns 1.0 if the output matches the pattern, 0.0 otherwise.")
+                    .description(
+                            "A metric that checks if an output string matches a given regular expression pattern. " +
+                                    "Returns 1.0 if the output matches the pattern, 0.0 otherwise.")
                     .scoreParameters(List.of(
                             ScoreParameter.builder()
                                     .name("output")
                                     .type("str")
                                     .description("The output string to check against the regex pattern.")
                                     .required(true)
+                                    .mappable(true)
                                     .build()))
                     .initParameters(List.of(
                             InitParameter.builder()
@@ -151,6 +159,7 @@ public class CommonMetricsRegistry {
                                     .type("str")
                                     .description("The output string to check for JSON validity.")
                                     .required(true)
+                                    .mappable(true)
                                     .build()))
                     .initParameters(List.of())
                     .build());
