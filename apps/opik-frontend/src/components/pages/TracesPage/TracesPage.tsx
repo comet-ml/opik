@@ -73,6 +73,9 @@ const TracesPage = () => {
   const defaultLogsType =
     threadCount > 0 ? LOGS_TYPE.threads : LOGS_TYPE.traces;
 
+  // Remember the last selected LOGS_TYPE to preserve user selection across tab switches
+  const [lastLogsType, setLastLogsType] = useState<LOGS_TYPE | null>(null);
+
   const [type = defaultLogsType, setType] = useQueryParam("type", StringParam, {
     updateType: "replaceIn",
   });
@@ -82,11 +85,16 @@ const TracesPage = () => {
     ? (type as PROJECT_TAB)
     : PROJECT_TAB.logs;
 
-  // Handle tab change - when switching to Logs tab, default based on thread count
+  // Handle tab change - preserve user's last selected logs type when returning to Logs tab
   const handleTabChange = (newTab: string) => {
     if (newTab === PROJECT_TAB.logs) {
-      setType(defaultLogsType);
+      // Use remembered value if available, otherwise use default
+      setType(lastLogsType ?? defaultLogsType);
     } else {
+      // Remember current logs type before switching away
+      if (Object.values(LOGS_TYPE).includes(type as LOGS_TYPE)) {
+        setLastLogsType(type as LOGS_TYPE);
+      }
       setType(newTab);
     }
   };
