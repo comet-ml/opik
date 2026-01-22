@@ -377,8 +377,11 @@ def _evaluate_internal(
             raise RuntimeError(
                 "opik.evaluate_on_dict_items is not available in this SDK version."
             )
+        dict_items = [
+            {key: value for key, value in item.items() if key != "id"} for item in items
+        ]
         evaluation_result = _evaluate_on_dict_items(
-            items=items,
+            items=dict_items,
             task=evaluated_task,
             scoring_metrics=eval_metrics,
             project_name=project_name,

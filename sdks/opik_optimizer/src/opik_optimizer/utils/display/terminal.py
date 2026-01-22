@@ -29,7 +29,7 @@ from ...constants import DEFAULT_PANEL_WIDTH, DEFAULT_DISPLAY_PREFIX
 PARAMETER_DESCRIPTIONS: dict[str, str] = {
     "n_samples": "max dataset items evaluated per trial",
     "n_samples_minibatch": "dataset items per minibatch evaluation",
-    "n_samples_strategy": "sampling strategy (default random_sorted)",
+    "n_samples_strategy": "sampling strategy",
 }
 
 
