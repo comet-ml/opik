@@ -364,22 +364,38 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   }));
 
   const handleMetricTypeChange = (value: string) => {
-    // Check if current breakdown field is compatible with the new metric type
-    const newCompatibleFields = getCompatibleBreakdownFields(value);
-    const currentBreakdownField = breakdown.field;
+    // Determine if this is a duration or token usage metric for defaults
+    const isDuration =
+      value === METRIC_NAME_TYPE.TRACE_DURATION ||
+      value === METRIC_NAME_TYPE.THREAD_DURATION ||
+      value === METRIC_NAME_TYPE.SPAN_DURATION;
+    const isUsage =
+      value === METRIC_NAME_TYPE.TOKEN_USAGE ||
+      value === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
-    // Reset breakdown if current field is not compatible with new metric type
-    const shouldResetBreakdown =
-      currentBreakdownField !== BREAKDOWN_FIELD.NONE &&
-      !newCompatibleFields.includes(currentBreakdownField);
+    // Clear all filters, group by, and sub-metric selections when metric type changes
+    // Also set defaults for duration and token usage metrics
+    setShowGroupRow(false);
+    form.setValue("breakdown.field", BREAKDOWN_FIELD.NONE);
+    form.setValue("breakdown.metadataKey", undefined);
+    form.setValue("traceFilters", []);
+    form.setValue("threadFilters", []);
+    form.setValue("spanFilters", []);
+    form.setValue("feedbackScores", []);
+    form.setValue("durationMetrics", isDuration ? ["p50"] : []);
+    form.setValue("usageMetrics", isUsage ? ["total_tokens"] : []);
 
     updatePreviewWidget({
       config: {
         ...config,
         metricType: value,
-        ...(shouldResetBreakdown && {
-          breakdown: { field: BREAKDOWN_FIELD.NONE },
-        }),
+        traceFilters: [],
+        threadFilters: [],
+        spanFilters: [],
+        feedbackScores: [],
+        durationMetrics: isDuration ? ["p50"] : [],
+        usageMetrics: isUsage ? ["total_tokens"] : [],
+        breakdown: { field: BREAKDOWN_FIELD.NONE },
       },
     });
   };
