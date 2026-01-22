@@ -5,6 +5,7 @@ import {
   OptimizerParameters,
   MetricParameters,
 } from "@/types/optimizations";
+import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
   DEFAULT_GEPA_OPTIMIZER_CONFIGS,
   DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS,
@@ -32,6 +33,10 @@ import { Filters } from "@/types/filters";
 
 export const getOptimizerLabel = (type: string): string => {
   return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
+};
+
+export const extractMetricNameFromCode = (code: string): string => {
+  return extractMetricNameFromPythonCode(code) || "code";
 };
 
 export const IN_PROGRESS_OPTIMIZATION_STATUSES: OPTIMIZATION_STATUS[] = [

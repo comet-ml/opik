@@ -159,9 +159,9 @@ def test_optimization_with_code_metric() -> None:
             f"Initial score {result.initial_score} out of valid range"
         )
 
-        # Metric name should match our code metric
-        assert result.metric_name == "code", (
-            f"Expected metric_name 'code', got '{result.metric_name}'"
+        # Metric name should match our code metric (intent_accuracy from the demo template)
+        assert result.metric_name == "intent_accuracy", (
+            f"Expected metric_name 'intent_accuracy', got '{result.metric_name}'"
         )
 
         # Final score should be at least as good as initial (optimization shouldn't make it worse)

@@ -87,16 +87,21 @@ export const DEFAULT_LEVENSHTEIN_METRIC_CONFIGS = {
 };
 
 export const DEFAULT_CODE_METRIC_CONFIGS = {
-  CODE: `def evaluation_metric(dataset_item, llm_output):
-    # Add your evaluation logic here
-    # dataset_item: dict with input data and expected values
-    # llm_output: string with the LLM response
+  CODE: `from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MyMetric(BaseMetric):
+    def __init__(self, name: str = "my_metric"):
+        super().__init__(name=name)
     
-    return ScoreResult(
-        name="my_metric",
-        value=1.0,  # Score between 0.0 and 1.0
-        reason="Evaluation reason"
-    )`,
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        # output: the LLM response
+        # kwargs: contains dataset_item fields (e.g., kwargs.get("expected_value"))
+        return ScoreResult(
+            name=self.name,
+            value=1.0,  # Score between 0.0 and 1.0
+            reason="Evaluation reason"
+        )`,
 };
 
 export const OPTIMIZATION_MESSAGE_TYPE_OPTIONS = [
@@ -418,52 +423,60 @@ Output valid JSON only.`,
           {
             type: METRIC_TYPE.CODE,
             parameters: {
-              code: `def evaluation_metric(dataset_item, llm_output):
-    try:
-        # Parse the LLM output
-        output = llm_output.strip()
-        if output.startswith("${"```"}"):
-            output = output.split("${"```"}")[1]
-            if output.startswith("json"):
-                output = output[4:]
-        result = json.loads(output)
+              code: `import json
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
 
-        # Extract predictions
-        predicted_intent = result.get("intent", {}).get("primary", "").lower()
-        predicted_urgency = result.get("urgency", "").lower()
+class IntentAccuracyMetric(BaseMetric):
+    def __init__(self, name: str = "intent_accuracy"):
+        super().__init__(name=name)
+    
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        try:
+            # Parse the LLM output
+            llm_output = output.strip()
+            if llm_output.startswith("${"```"}"):
+                llm_output = llm_output.split("${"```"}")[1]
+                if llm_output.startswith("json"):
+                    llm_output = llm_output[4:]
+            result = json.loads(llm_output)
 
-        # Get expected values
-        expected_intent = dataset_item.get("expected_intent", "").lower()
-        expected_urgency = dataset_item.get("expected_urgency", "").lower()
+            # Extract predictions
+            predicted_intent = result.get("intent", {}).get("primary", "").lower()
+            predicted_urgency = result.get("urgency", "").lower()
 
-        # Score: 0.6 for intent, 0.4 for urgency
-        score = 0.0
-        reasons = []
+            # Get expected values from kwargs (dataset_item fields)
+            expected_intent = kwargs.get("expected_intent", "").lower()
+            expected_urgency = kwargs.get("expected_urgency", "").lower()
 
-        if predicted_intent == expected_intent:
-            score += 0.6
-            reasons.append(f"Intent correct: {predicted_intent}")
-        else:
-            reasons.append(f"Intent wrong: expected '{expected_intent}', got '{predicted_intent}'")
+            # Score: 0.6 for intent, 0.4 for urgency
+            score = 0.0
+            reasons = []
 
-        if predicted_urgency == expected_urgency:
-            score += 0.4
-            reasons.append(f"Urgency correct: {predicted_urgency}")
-        else:
-            reasons.append(f"Urgency wrong: expected '{expected_urgency}', got '{predicted_urgency}'")
+            if predicted_intent == expected_intent:
+                score += 0.6
+                reasons.append(f"Intent correct: {predicted_intent}")
+            else:
+                reasons.append(f"Intent wrong: expected '{expected_intent}', got '{predicted_intent}'")
 
-        return ScoreResult(
-            name="intent_accuracy",
-            value=score,
-            reason="; ".join(reasons)
-        )
+            if predicted_urgency == expected_urgency:
+                score += 0.4
+                reasons.append(f"Urgency correct: {predicted_urgency}")
+            else:
+                reasons.append(f"Urgency wrong: expected '{expected_urgency}', got '{predicted_urgency}'")
 
-    except Exception as e:
-        return ScoreResult(
-            name="intent_accuracy",
-            value=0.0,
-            reason=f"Failed to parse output: {str(e)}"
-        )`,
+            return ScoreResult(
+                name=self.name,
+                value=score,
+                reason="; ".join(reasons)
+            )
+
+        except Exception as e:
+            return ScoreResult(
+                name=self.name,
+                value=0.0,
+                reason=f"Failed to parse output: {str(e)}"
+            )`,
             },
           },
         ],

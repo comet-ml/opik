@@ -13,14 +13,21 @@ interface CodeMetricConfigsProps {
   onChange: (configs: Partial<CodeMetricParameters>) => void;
 }
 
-const DEFAULT_CODE = `def evaluation_metric(dataset_item, llm_output):
-    # Your evaluation logic here
-    # Return a ScoreResult with name, value (0-1), and reason
-    return ScoreResult(
-        name="my_metric",
-        value=1.0,
-        reason="Evaluation passed"
-    )`;
+const DEFAULT_CODE = `from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MyMetric(BaseMetric):
+    def __init__(self, name: str = "my_metric"):
+        super().__init__(name=name)
+    
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        # output: the LLM response
+        # kwargs: contains dataset_item fields
+        return ScoreResult(
+            name=self.name,
+            value=1.0,
+            reason="Evaluation passed"
+        )`;
 
 // Static CodeMirror configuration - defined at module level to avoid recreation on every render
 const CODEMIRROR_EXTENSIONS: Extension[] = [python(), EditorView.lineWrapping];
@@ -60,8 +67,10 @@ const CodeMetricConfigs = ({ configs, onChange }: CodeMetricConfigsProps) => {
           />
         </div>
         <p className="text-xs text-muted-slate">
-          Define a function that takes <code>dataset_item</code> and{" "}
-          <code>llm_output</code> and returns a <code>ScoreResult</code>.
+          Define a class that extends <code>BaseMetric</code> with a{" "}
+          <code>score</code> method that takes <code>output</code> (the LLM
+          response) and <code>**kwargs</code> (dataset fields), returning a{" "}
+          <code>ScoreResult</code>.
         </p>
       </div>
     </div>

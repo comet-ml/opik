@@ -197,23 +197,11 @@ class TestMetricReasons:
 class TestCodeMetric:
     """Tests for code metric functionality.
     
-    Code metrics follow the same pattern as automations (evaluation metrics),
-    with code executed in a subprocess for process isolation.
+    Code metrics use the same executor infrastructure as automations (evaluation metrics),
+    executed via ProcessExecutor or DockerExecutor based on PYTHON_CODE_EXECUTOR_STRATEGY.
+    
+    Only BaseMetric class pattern is supported (same as automations).
     """
-
-    def test_code_metric_basic_function_works(self):
-        """Test that a basic function metric works."""
-        code = '''
-from opik.evaluation.metrics.score_result import ScoreResult
-
-def my_metric(dataset_item, llm_output):
-    return ScoreResult(name="test", value=1.0, reason="OK")
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        
-        result = metric_fn({}, "test output")
-        assert result.value == 1.0
-        assert result.name == "test"
 
     def test_code_metric_basic_class_works(self):
         """Test that a basic class metric works."""
@@ -222,23 +210,32 @@ from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
 class MyMetric(BaseMetric):
+    def __init__(self, name: str = "test"):
+        super().__init__(name=name)
+    
     def score(self, output, **kwargs):
-        return ScoreResult(name="test", value=0.5, reason="Class metric")
+        return ScoreResult(name=self.name, value=0.5, reason="Class metric")
 '''
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
         
         result = metric_fn({}, "test output")
         assert result.value == 0.5
+        assert result.name == "test"
 
     def test_code_metric_uses_json(self):
         """Test that json module can be used."""
         code = '''
 import json
+from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
-def my_metric(dataset_item, llm_output):
-    data = json.loads(llm_output) if llm_output.startswith("{") else {}
-    return ScoreResult(name="test", value=1.0, reason="Used json")
+class JsonMetric(BaseMetric):
+    def __init__(self, name: str = "json_test"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        data = json.loads(output) if output.startswith("{") else {}
+        return ScoreResult(name=self.name, value=1.0, reason="Used json")
 '''
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
         result = metric_fn({}, '{"key": "value"}')
@@ -248,11 +245,16 @@ def my_metric(dataset_item, llm_output):
         """Test that re module can be used."""
         code = '''
 import re
+from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
-def my_metric(dataset_item, llm_output):
-    match = re.search(r"\\d+", llm_output)
-    return ScoreResult(name="test", value=1.0 if match else 0.0, reason="Used re")
+class RegexMetric(BaseMetric):
+    def __init__(self, name: str = "regex_test"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        match = re.search(r"\\d+", output)
+        return ScoreResult(name=self.name, value=1.0 if match else 0.0, reason="Used re")
 '''
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
         result = metric_fn({}, "test 123")
@@ -262,27 +264,62 @@ def my_metric(dataset_item, llm_output):
         """Test that math module can be used."""
         code = '''
 import math
+from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
-def my_metric(dataset_item, llm_output):
-    return ScoreResult(name="test", value=math.sqrt(0.25), reason="Used math")
+class MathMetric(BaseMetric):
+    def __init__(self, name: str = "math_test"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=math.sqrt(0.25), reason="Used math")
 '''
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
         result = metric_fn({}, "test")
         assert result.value == 0.5
 
-    def test_code_metric_uses_opik_imports(self):
-        """Test that opik.* imports can be used."""
+    def test_code_metric_receives_dataset_fields_as_kwargs(self):
+        """Test that dataset_item fields are passed as kwargs to score method."""
         code = '''
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
-def my_metric(dataset_item, llm_output):
-    return ScoreResult(name="test", value=1.0, reason="Opik imports work")
+class KwargsMetric(BaseMetric):
+    def __init__(self, name: str = "kwargs_test"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        expected = kwargs.get("expected_value", "")
+        score = 1.0 if output == expected else 0.0
+        return ScoreResult(name=self.name, value=score, reason=f"Expected: {expected}")
 '''
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test")
+        
+        # Test with matching expected_value
+        result = metric_fn({"expected_value": "correct"}, "correct")
         assert result.value == 1.0
+        
+        # Test with non-matching expected_value
+        result = metric_fn({"expected_value": "correct"}, "wrong")
+        assert result.value == 0.0
+
+    def test_code_metric_preserves_custom_name(self):
+        """Test that the metric name defined by user is preserved."""
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class CustomNamedMetric(BaseMetric):
+    def __init__(self, name: str = "my_custom_metric_name"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=1.0, reason="Test")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert result.name == "my_custom_metric_name"
 
     def test_code_metric_missing_code_raises_error(self):
         """Test that missing code parameter raises error."""
@@ -301,22 +338,23 @@ def my_metric(dataset_item, llm_output):
     def test_code_metric_invalid_syntax_raises_error(self):
         """Test that invalid Python syntax raises error."""
         code = '''
-def my_metric(dataset_item, llm_output)
-    return ScoreResult(name="test", value=1.0, reason="OK")
+class MyMetric(BaseMetric)
+    def score(self, output, **kwargs):
+        return ScoreResult(name="test", value=1.0, reason="OK")
 '''
         with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("code", {"code": code}, "model")
         
         assert "Invalid Python code" in str(exc_info.value)
 
-    def test_code_metric_no_metric_function_returns_zero_score(self):
-        """Test that code without a valid metric function returns zero score.
+    def test_code_metric_no_basemetric_class_returns_zero_score(self):
+        """Test that code without a BaseMetric subclass returns zero score.
         
-        With process isolation, runtime errors return ScoreResult(value=0.0)
-        instead of raising exceptions, to avoid crashing the optimization.
+        With executor infrastructure, code must define a BaseMetric subclass.
+        Runtime errors return ScoreResult(value=0.0) to avoid crashing optimization.
         """
         code = '''
-# Just a comment, no function
+# Just a comment, no BaseMetric class
 x = 1
 '''
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
@@ -324,218 +362,25 @@ x = 1
         
         # Should return zero score with error reason
         assert result.value == 0.0
-        assert "No metric function" in result.reason or "error" in result.reason.lower()
+        assert "error" in result.reason.lower() or "BaseMetric" in result.reason
 
-
-class TestCodeMetricDeterministicSelection:
-    """Tests for deterministic function selection in code metrics.
-    
-    These tests verify that:
-    1. Function selection is deterministic (uses definition order, not set iteration)
-    2. Preferred function names are selected over arbitrary names
-    3. Multiple candidates raise an error unless a preferred name is used
-    """
-
-    def test_prefers_evaluation_metric_name(self):
-        """Test that 'evaluation_metric' is preferred over other function names."""
-        code = '''
-def helper_function(dataset_item, llm_output):
-    return ScoreResult(name="helper", value=0.5, reason="Helper")
-
-def evaluation_metric(dataset_item, llm_output):
-    return ScoreResult(name="eval", value=1.0, reason="Preferred")
-
-def another_helper(dataset_item, llm_output):
-    return ScoreResult(name="another", value=0.3, reason="Another")
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
+    def test_code_metric_function_only_returns_zero_score(self):
+        """Test that function-only code (no BaseMetric class) returns zero score.
         
-        # Should select evaluation_metric, not helper_function
-        assert result.name == "eval"
-        assert result.value == 1.0
-
-    def test_prefers_score_name(self):
-        """Test that 'score' is preferred when 'evaluation_metric' is not present."""
-        code = '''
-def helper(dataset_item, llm_output):
-    return ScoreResult(name="helper", value=0.5, reason="Helper")
-
-def score(dataset_item, llm_output):
-    return ScoreResult(name="score_fn", value=1.0, reason="Preferred")
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        assert result.name == "score_fn"
-        assert result.value == 1.0
-
-    def test_single_candidate_selected(self):
-        """Test that a single candidate function is selected without preferred name."""
-        code = '''
-def my_custom_metric(dataset_item, llm_output):
-    return ScoreResult(name="custom", value=0.8, reason="Only candidate")
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        assert result.name == "custom"
-        assert result.value == 0.8
-
-    def test_multiple_candidates_without_preferred_name_returns_zero_score(self):
-        """Test that multiple candidates without a preferred name return zero score.
-        
-        With process isolation, runtime errors return ScoreResult(value=0.0)
-        instead of raising exceptions, to avoid crashing the optimization.
+        Function-based metrics are not supported - only BaseMetric class pattern.
         """
         code = '''
-def my_metric_one(dataset_item, llm_output):
-    return ScoreResult(name="one", value=0.5, reason="First")
+from opik.evaluation.metrics.score_result import ScoreResult
 
-def my_metric_two(dataset_item, llm_output):
-    return ScoreResult(name="two", value=0.5, reason="Second")
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="Function")
 '''
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
         result = metric_fn({}, "test output")
         
-        # Should return zero score with error reason about multiple functions
+        # Should return zero score since functions are not supported
         assert result.value == 0.0
-        assert "Multiple" in result.reason or "error" in result.reason.lower()
-
-    def test_private_functions_ignored(self):
-        """Test that functions starting with underscore are ignored."""
-        code = '''
-def _private_helper(dataset_item, llm_output):
-    return ScoreResult(name="private", value=0.0, reason="Should be ignored")
-
-def evaluation_metric(dataset_item, llm_output):
-    return ScoreResult(name="public", value=1.0, reason="Should be selected")
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        assert result.name == "public"
-
-    def test_class_preferred_over_function(self):
-        """Test that BaseMetric class is preferred over functions."""
-        code = '''
-def evaluation_metric(dataset_item, llm_output):
-    return ScoreResult(name="function", value=0.5, reason="Function")
-
-class MyMetric(BaseMetric):
-    def score(self, output, **kwargs):
-        return ScoreResult(name="class", value=1.0, reason="Class preferred")
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        # Class should be preferred
-        assert result.name == "class"
-
-
-class TestCodeMetricReturnValueCoercion:
-    """Tests for code metric return value coercion to ScoreResult."""
-
-    def test_returns_score_result_unchanged(self):
-        """Test that ScoreResult is returned unchanged."""
-        code = '''
-def evaluation_metric(dataset_item, llm_output):
-    return ScoreResult(name="my_metric", value=0.75, reason="Test")
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        assert isinstance(result, ScoreResult)
-        assert result.name == "my_metric"
-        assert result.value == 0.75
-        assert result.reason == "Test"
-
-    def test_coerces_float_to_score_result(self):
-        """Test that float return value is coerced to ScoreResult."""
-        code = '''
-def evaluation_metric(dataset_item, llm_output):
-    return 0.85
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        assert isinstance(result, ScoreResult)
-        assert result.name == "code"
-        assert result.value == 0.85
-
-    def test_coerces_int_to_score_result(self):
-        """Test that int return value is coerced to ScoreResult."""
-        code = '''
-def evaluation_metric(dataset_item, llm_output):
-    return 1
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        assert isinstance(result, ScoreResult)
-        assert result.name == "code"
-        assert result.value == 1.0
-
-    def test_coerces_dict_with_value_to_score_result(self):
-        """Test that dict with 'value' key is coerced to ScoreResult."""
-        code = '''
-def evaluation_metric(dataset_item, llm_output):
-    return {"value": 0.9, "name": "custom_name", "reason": "Custom reason"}
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        assert isinstance(result, ScoreResult)
-        assert result.name == "custom_name"
-        assert result.value == 0.9
-        assert result.reason == "Custom reason"
-
-    def test_coerces_dict_with_only_value_to_score_result(self):
-        """Test that dict with only 'value' key uses defaults."""
-        code = '''
-def evaluation_metric(dataset_item, llm_output):
-    return {"value": 0.5}
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        assert isinstance(result, ScoreResult)
-        assert result.name == "code"
-        assert result.value == 0.5
-
-    def test_invalid_return_type_returns_zero_score(self):
-        """Test that invalid return types return zero score.
-        
-        With process isolation, runtime errors return ScoreResult(value=0.0)
-        instead of raising exceptions, to avoid crashing the optimization.
-        """
-        code = '''
-def evaluation_metric(dataset_item, llm_output):
-    return "invalid string"
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        # Should return zero score with error in reason
-        assert result.value == 0.0
-        assert "unsupported type" in result.reason.lower() or "error" in result.reason.lower()
-
-    def test_dict_without_value_key_returns_zero_score(self):
-        """Test that dict without 'value' key returns zero score.
-        
-        With process isolation, runtime errors return ScoreResult(value=0.0)
-        instead of raising exceptions, to avoid crashing the optimization.
-        """
-        code = '''
-def evaluation_metric(dataset_item, llm_output):
-    return {"name": "test", "reason": "no value key"}
-'''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
-        
-        # Should return zero score with error in reason
-        assert result.value == 0.0
-        assert "unsupported type" in result.reason.lower() or "error" in result.reason.lower()
+        assert "error" in result.reason.lower() or "BaseMetric" in result.reason
 
 
 class TestTemplateSyntaxConversion:
