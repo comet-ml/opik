@@ -1,5 +1,7 @@
 from typing import Iterator, Optional, Union, AsyncIterator
 
+import google
+import pytest
 from google.adk import (
     agents as adk_agents,
     runners as adk_runners,
@@ -7,8 +9,15 @@ from google.adk import (
     events as adk_events,
 )
 
+from opik import semantic_version
 from opik.integrations.adk import OpikTracer
 from .constants import APP_NAME, USER_ID, SESSION_ID, MODEL_NAME
+
+
+pytest_skip_for_adk_older_than_1_3_0 = pytest.mark.skipif(
+    semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
+    reason="Test only applies to ADK versions >= 1.3.0",
+)
 
 
 def build_sync_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:

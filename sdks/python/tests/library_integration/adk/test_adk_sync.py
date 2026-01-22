@@ -16,6 +16,7 @@ from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
 from opik.integrations.adk import helpers as opik_adk_helpers
 from opik.integrations.adk import opik_tracer, legacy_opik_tracer
 from . import agent_tools
+from . import constants, helpers
 from .constants import (
     APP_NAME,
     USER_ID,
@@ -23,7 +24,6 @@ from .constants import (
     MODEL_NAME,
     EXPECTED_USAGE_KEYS_GOOGLE,
 )
-from . import constants, helpers
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -32,11 +32,6 @@ from ...testlib import (
     TraceModel,
     assert_dict_has_keys,
     assert_equal,
-)
-
-pytest_skip_for_adk_older_than_1_3_0 = pytest.mark.skipif(
-    semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
-    reason="Test only applies to ADK versions >= 1.3.0",
 )
 
 # Maximum reasonable time-to-first-token in seconds for test assertions
@@ -52,7 +47,7 @@ def test_adk__public_name_OpikTracer_is_legacy_implementation_for_old_adk_versio
     assert OpikTracer is legacy_opik_tracer.LegacyOpikTracer
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__public_name_OpikTracer_is_new_implementation_for_new_adk_versions():
     """Test that OpikTracer maps to OpikTracer for ADK versions >= 1.3.0"""
     assert OpikTracer is opik_tracer.OpikTracer
@@ -1419,7 +1414,7 @@ def test_adk__agent_with_response_schema__happyflow(
     assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
     opik_tracer = OpikTracer(
         project_name="adk-test",
@@ -1522,7 +1517,7 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
     opik_tracer = OpikTracer(
         project_name="adk-test",
@@ -1817,7 +1812,7 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
     assert len(fake_backend.span_trees) == 0
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
     """Test that time-to-first-token is tracked and stored in LLM span metadata."""
     opik_tracer = OpikTracer(
@@ -1880,7 +1875,7 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
         ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
     fake_backend,
 ):
@@ -1946,7 +1941,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
         ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
     fake_backend,
 ):
@@ -2020,7 +2015,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
     ), "Expected at least two distinct TTFT values for multiple LLM calls"
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_backend):
     """Test that time-to-first-token is not tracked when response has no content."""
     opik_tracer = OpikTracer(
@@ -2093,7 +2088,7 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
             )
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_backend):
     """Test that time-to-first-token is tracked for each LLM call in sequential agents."""
     opik_tracer = OpikTracer()

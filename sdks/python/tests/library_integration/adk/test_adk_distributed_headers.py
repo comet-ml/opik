@@ -24,6 +24,7 @@ from ...testlib import (
 )
 
 
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
     fake_backend,
 ):
@@ -164,6 +165,7 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
     assert_dict_has_keys(summarizer_span.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 @pytest.mark.asyncio
 async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow_async(
     fake_backend,
