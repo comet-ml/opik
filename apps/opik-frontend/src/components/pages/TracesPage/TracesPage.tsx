@@ -1,10 +1,9 @@
 import React, { useMemo } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
-import { useWorkspaceNameFromURL } from "@/hooks/useWorkspaceNameFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
-import useProjectStatisticsList from "@/api/projects/useProjectStatisticList";
+import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import LogsTab from "@/components/pages/TracesPage/LogsTab/LogsTab";
@@ -23,6 +22,7 @@ import ViewSelector, {
   VIEW_TYPE,
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import { LOGS_TYPE } from "@/constants/traces";
+import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 enum PROJECT_TAB {
   logs = "logs",
@@ -33,7 +33,6 @@ enum PROJECT_TAB {
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
-  const workspaceName = useWorkspaceNameFromURL();
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
@@ -51,21 +50,27 @@ const TracesPage = () => {
 
   const projectName = project?.name || projectId;
 
-  // Fetch project statistics (lightweight) to get thread count
-  const { data: projectStats } = useProjectStatisticsList(
+  // Fetch thread statistics to get thread count for determining default logs type
+  const { data: threadsStats } = useThreadsStatistic(
     {
-      workspaceName: workspaceName || "",
-      search: projectName,
-      page: 1,
-      size: 1,
+      projectId,
     },
     {
-      enabled: !!projectName && !!workspaceName,
+      enabled: !!projectId,
       refetchOnMount: false,
     },
   );
 
-  const threadCount = projectStats?.content?.[0]?.thread_count ?? 0;
+  // Extract thread count from statistics
+  const threadCountStat = threadsStats?.stats?.find(
+    (stat) =>
+      stat.name === "thread_count" &&
+      stat.type === STATISTIC_AGGREGATION_TYPE.COUNT,
+  );
+  const threadCount =
+    (threadCountStat?.type === STATISTIC_AGGREGATION_TYPE.COUNT
+      ? threadCountStat.value
+      : 0) ?? 0;
   const defaultLogsType =
     threadCount > 0 ? LOGS_TYPE.threads : LOGS_TYPE.traces;
 
@@ -78,7 +83,13 @@ const TracesPage = () => {
     if (Object.values(LOGS_TYPE).includes(type as LOGS_TYPE)) {
       return PROJECT_TAB.logs;
     }
-    return type as PROJECT_TAB;
+
+    if (Object.values(PROJECT_TAB).includes(type as PROJECT_TAB)) {
+      return type as PROJECT_TAB;
+    }
+
+    // Fallback to logs for invalid values
+    return PROJECT_TAB.logs;
   }, [type]);
 
   // Handle tab change - when switching to Logs tab, default based on thread count
