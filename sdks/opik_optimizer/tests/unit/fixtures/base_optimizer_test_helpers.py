@@ -40,7 +40,7 @@ class ConcreteOptimizer(BaseOptimizer):
         metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict[str, Any] | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         n_samples_minibatch: int | None = None,
         n_samples_strategy: str | None = None,
         auto_continue: bool = False,

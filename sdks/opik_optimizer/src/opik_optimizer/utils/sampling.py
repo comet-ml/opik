@@ -1,9 +1,17 @@
-"""Sampling helpers to keep dataset selection consistent across optimizers."""
+"""Sampling helpers to keep dataset selection consistent across optimizers.
+
+`n_samples` accepts:
+- integer counts (e.g., 50)
+- fractions between 0 and 1 (e.g., 0.1 = 10%)
+- percent strings (e.g., "10%")
+- the strings "all"/"full" or None for the full dataset
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+import math
 import random
 
 from .. import constants
@@ -16,7 +24,13 @@ __all__ = ["SamplingPlan", "resolve_sampling", "DEFAULT_STRATEGY"]
 
 @dataclass(frozen=True)
 class SamplingPlan:
-    """Normalized sampling parameters for a dataset."""
+    """Normalized sampling parameters for a dataset evaluation phase.
+
+    - nb_samples: number of items to evaluate (None means full dataset).
+    - dataset_item_ids: explicit item IDs to evaluate (mutually exclusive with nb_samples).
+    - mode: string describing the sampling mode (e.g. "eval:full", "eval:epoch_shuffled").
+    - dataset_size: total dataset size when available.
+    """
 
     nb_samples: int | None
     dataset_item_ids: list[str] | None
@@ -24,16 +38,47 @@ class SamplingPlan:
     dataset_size: int | None
 
 
-def _normalize_n_samples(n_samples: int | str | None) -> int | None:
+def _normalize_n_samples(n_samples: int | float | str | None) -> int | float | None:
+    """Normalize user-provided n_samples into an integer count or fraction.
+
+    Accepts:
+    - int > 0: evaluate exactly that many items.
+    - float in (0, 1]: fraction of dataset to evaluate (e.g., 0.1 = 10%).
+    - percent strings like "10%".
+    - "all" / "full" (case-insensitive) or None: evaluate the full dataset.
+    """
     if isinstance(n_samples, str):
-        if n_samples.lower() in {"full", "all"}:
+        value = n_samples.strip()
+        if value.lower() in {"full", "all"}:
             return None
+        if value.endswith("%"):
+            raw = value[:-1].strip()
+            try:
+                percent = float(raw)
+            except ValueError as exc:
+                raise ValueError(
+                    "n_samples percent must be a number like '10%'"
+                ) from exc
+            if not math.isfinite(percent) or percent <= 0:
+                raise ValueError("n_samples percent must be > 0")
+            if percent > 100:
+                raise ValueError("n_samples percent must be <= 100")
+            return percent / 100.0
         try:
-            parsed = int(n_samples)
-        except ValueError as exc:
-            raise ValueError(
-                "n_samples must be an int, 'full', 'all', or None"
-            ) from exc
+            parsed = int(value)
+        except ValueError:
+            try:
+                fraction = float(value)
+            except ValueError as exc:
+                raise ValueError(
+                    "n_samples must be an int, a fraction, a percent string, "
+                    "'full', 'all', or None"
+                ) from exc
+            if not math.isfinite(fraction) or fraction <= 0:
+                raise ValueError("n_samples fraction must be > 0")
+            if fraction > 1:
+                raise ValueError("n_samples fraction must be <= 1")
+            return fraction
         if parsed <= 0:
             raise ValueError("n_samples must be > 0 when provided as int")
         return parsed
@@ -42,11 +87,18 @@ def _normalize_n_samples(n_samples: int | str | None) -> int | None:
         if n_samples <= 0:
             raise ValueError("n_samples must be > 0 when provided as int")
         return n_samples
+    if isinstance(n_samples, float):
+        if not math.isfinite(n_samples) or n_samples <= 0:
+            raise ValueError("n_samples fraction must be > 0")
+        if n_samples > 1:
+            raise ValueError("n_samples fraction must be <= 1")
+        return n_samples
 
     return None
 
 
 def _extract_ids(dataset: Any) -> list[str]:
+    """Extract dataset item IDs as strings, returning an empty list on failure."""
     try:
         items = dataset.get_items()
     except Exception:
@@ -65,6 +117,7 @@ def _random_sorted_ids(
     nb_samples: int,
     rng: random.Random,
 ) -> list[str]:
+    """Deterministically shuffle item IDs and return the first nb_samples IDs."""
     ids = _extract_ids(dataset)
     if not ids:
         return []
@@ -75,14 +128,21 @@ def _random_sorted_ids(
 
 def resolve_sampling(
     dataset: Any,
-    n_samples: int | str | None,
+    n_samples: int | float | str | None,
     *,
     dataset_item_ids: list[str] | None = None,
     strategy: str = DEFAULT_STRATEGY,
     phase: str = "train",
     seed: int | None = None,
 ) -> SamplingPlan:
-    """Normalize sampling inputs into a single plan."""
+    """Normalize sampling inputs into a single plan.
+
+    Dataset item IDs take precedence over n_samples. For n_samples, only the
+    default strategy ("epoch_shuffled") is supported today.
+
+    Fractional n_samples values are converted to a count using
+    ceil(dataset_size * fraction), with a minimum of 1 when the dataset is non-empty.
+    """
     normalized = _normalize_n_samples(n_samples)
     dataset_size: int | None = None
     try:
@@ -105,6 +165,21 @@ def resolve_sampling(
             mode=f"{phase}:full",
             dataset_size=dataset_size,
         )
+    if isinstance(normalized, float):
+        if normalized >= 1.0:
+            return SamplingPlan(
+                nb_samples=None,
+                dataset_item_ids=None,
+                mode=f"{phase}:full",
+                dataset_size=dataset_size,
+            )
+        if dataset_size is None:
+            raise ValueError("n_samples fraction requires dataset size")
+        if dataset_size <= 0:
+            effective = 0
+        else:
+            effective = max(1, math.ceil(dataset_size * normalized))
+        normalized = effective
 
     effective = normalized
     if dataset_size is not None and effective > dataset_size:
