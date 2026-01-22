@@ -34,7 +34,7 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
       e.stopPropagation();
       onSelect(path, value);
     },
-    [path, value, onSelect]
+    [path, value, onSelect],
   );
 
   const handleToggle = useCallback(
@@ -42,7 +42,7 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
       e.stopPropagation();
       onToggleExpand(path);
     },
-    [path, onToggleExpand]
+    [path, onToggleExpand],
   );
 
   const handleMouseEnter = useCallback(() => {
@@ -113,14 +113,14 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
         className={cn(
           "flex items-center gap-1 py-1 px-2 rounded cursor-pointer",
           "hover:bg-muted transition-colors font-mono",
-          isFocused && "bg-muted"
+          isFocused && "bg-muted",
         )}
         style={{ paddingLeft: indent + 4 }}
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
       >
         {isExpandable ? (
-          <button onClick={handleToggle} className="p-0.5 shrink-0">
+          <button onClick={handleToggle} className="shrink-0 p-0.5">
             {isExpanded ? (
               <ChevronDown className="size-4 text-muted-foreground" />
             ) : (

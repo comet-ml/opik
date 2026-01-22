@@ -45,4 +45,9 @@ export interface JsonTreePopoverProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   contentClassName?: string;
+  /** Search query to filter and auto-expand matching paths */
+  searchQuery?: string;
+  /** Whether to capture keyboard events globally (default: true).
+   * Set to false when used inside an input/editor to avoid conflicts. */
+  captureKeyboard?: boolean;
 }

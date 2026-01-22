@@ -48,7 +48,7 @@ export const getValuePreview = (value: JsonValue): string => {
 export const getVisiblePaths = (
   data: JsonObject | JsonValue[],
   expandedPaths: Set<string>,
-  parentPath: string = ""
+  parentPath: string = "",
 ): Array<{ path: string; value: JsonValue }> => {
   const result: Array<{ path: string; value: JsonValue }> = [];
 
@@ -74,7 +74,7 @@ export const getVisiblePaths = (
       const children = getVisiblePaths(
         value as JsonObject | JsonValue[],
         expandedPaths,
-        path
+        path,
       );
       result.push(...children);
     }
