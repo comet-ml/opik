@@ -1,9 +1,7 @@
 import React from "react";
 import { StringParam, useQueryParam } from "use-query-params";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesSpansTab";
 import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
-import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
 
 type LogsTabProps = {
@@ -26,10 +24,21 @@ const LogsTab: React.FC<LogsTabProps> = ({
     ? (type as LOGS_TYPE)
     : defaultLogsType;
 
+  const handleLogsTypeChange = (newType: LOGS_TYPE) => {
+    setType(newType);
+  };
+
   const renderContent = () => {
     switch (validType) {
       case LOGS_TYPE.threads:
-        return <ThreadsTab projectId={projectId} projectName={projectName} />;
+        return (
+          <ThreadsTab
+            projectId={projectId}
+            projectName={projectName}
+            logsType={validType}
+            onLogsTypeChange={handleLogsTypeChange}
+          />
+        );
       case LOGS_TYPE.traces:
         return (
           <TracesSpansTab
@@ -37,6 +46,8 @@ const LogsTab: React.FC<LogsTabProps> = ({
             type={TRACE_DATA_TYPE.traces}
             projectId={projectId}
             projectName={projectName}
+            logsType={validType}
+            onLogsTypeChange={handleLogsTypeChange}
           />
         );
       case LOGS_TYPE.spans:
@@ -46,39 +57,14 @@ const LogsTab: React.FC<LogsTabProps> = ({
             type={TRACE_DATA_TYPE.spans}
             projectId={projectId}
             projectName={projectName}
+            logsType={validType}
+            onLogsTypeChange={handleLogsTypeChange}
           />
         );
     }
   };
 
-  return (
-    <>
-      <PageBodyStickyContainer
-        className="mb-4 flex items-center"
-        direction="horizontal"
-        limitWidth
-      >
-        <ToggleGroup
-          type="single"
-          value={validType}
-          onValueChange={(val) => val && setType(val as LOGS_TYPE)}
-          variant="ghost"
-          className="w-fit"
-        >
-          <ToggleGroupItem value={LOGS_TYPE.threads} size="sm">
-            Threads
-          </ToggleGroupItem>
-          <ToggleGroupItem value={LOGS_TYPE.traces} size="sm">
-            Traces
-          </ToggleGroupItem>
-          <ToggleGroupItem value={LOGS_TYPE.spans} size="sm">
-            Spans
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </PageBodyStickyContainer>
-      {renderContent()}
-    </>
-  );
+  return <>{renderContent()}</>;
 };
 
 export default LogsTab;
