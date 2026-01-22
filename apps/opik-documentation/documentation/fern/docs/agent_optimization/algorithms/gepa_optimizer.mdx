@@ -116,7 +116,7 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="dataset" type="Dataset">Opik Dataset to optimize on</ParamField>
 <ParamField path="metric" type="Callable">Metric function to evaluate on</ParamField>
 <ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment</ParamField>
-<ParamField path="n_samples" type="int | str | None" optional={true}>Number of dataset items to use per evaluation (use "all" or "full" for full dataset).</ParamField>
+<ParamField path="n_samples" type="int | float | str | None" optional={true}>Number of dataset items to use per evaluation. Use counts (e.g., `50`), fractions (e.g., `0.1`), percentages (e.g., "10%"), or "all"/"full"/None for the full dataset.</ParamField>
 <ParamField path="n_samples_minibatch" type="int | None" optional={true}>Optional number of samples for inner-loop minibatches (defaults to n_samples).</ParamField>
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy for subsampling (default: "random_sorted").</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
