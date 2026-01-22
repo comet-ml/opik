@@ -1,8 +1,10 @@
 import React, { useMemo } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+import { useWorkspaceNameFromURL } from "@/hooks/useWorkspaceNameFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
+import useProjectStatisticsList from "@/api/projects/useProjectStatisticList";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import LogsTab from "@/components/pages/TracesPage/LogsTab/LogsTab";
@@ -31,43 +33,11 @@ enum PROJECT_TAB {
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
+  const workspaceName = useWorkspaceNameFromURL();
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
-  );
-
-  const [type = LOGS_TYPE.traces, setType] = useQueryParam(
-    "type",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
-  // Determine which main tab is active based on the type value
-  const activeTab = useMemo(() => {
-    if (Object.values(LOGS_TYPE).includes(type as LOGS_TYPE)) {
-      return PROJECT_TAB.logs;
-    }
-    return type as PROJECT_TAB;
-  }, [type]);
-
-  // Handle tab change - when switching to Logs tab, default to traces
-  const handleTabChange = (newTab: string) => {
-    if (newTab === PROJECT_TAB.logs) {
-      setType(LOGS_TYPE.traces); // TODO: Prefer thread if threadCount > 0, otherwise traces
-    } else {
-      setType(newTab);
-    }
-  };
-
-  const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
-    "view",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
   );
 
   const { data: project } = useProjectById(
@@ -80,6 +50,53 @@ const TracesPage = () => {
   );
 
   const projectName = project?.name || projectId;
+
+  // Fetch project statistics (lightweight) to get thread count
+  const { data: projectStats } = useProjectStatisticsList(
+    {
+      workspaceName: workspaceName || "",
+      search: projectName,
+      page: 1,
+      size: 1,
+    },
+    {
+      enabled: !!projectName && !!workspaceName,
+      refetchOnMount: false,
+    },
+  );
+
+  const threadCount = projectStats?.content?.[0]?.thread_count ?? 0;
+  const defaultLogsType =
+    threadCount > 0 ? LOGS_TYPE.threads : LOGS_TYPE.traces;
+
+  const [type = defaultLogsType, setType] = useQueryParam("type", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  // Determine which main tab is active based on the type value
+  const activeTab = useMemo(() => {
+    if (Object.values(LOGS_TYPE).includes(type as LOGS_TYPE)) {
+      return PROJECT_TAB.logs;
+    }
+    return type as PROJECT_TAB;
+  }, [type]);
+
+  // Handle tab change - when switching to Logs tab, default based on thread count
+  const handleTabChange = (newTab: string) => {
+    if (newTab === PROJECT_TAB.logs) {
+      setType(defaultLogsType);
+    } else {
+      setType(newTab);
+    }
+  };
+
+  const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
+    "view",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
 
@@ -112,7 +129,11 @@ const TracesPage = () => {
             </TabsList>
           </PageBodyStickyContainer>
           <TabsContent value={PROJECT_TAB.logs}>
-            <LogsTab projectId={projectId} projectName={projectName} />
+            <LogsTab
+              projectId={projectId}
+              projectName={projectName}
+              defaultLogsType={defaultLogsType}
+            />
           </TabsContent>
           <TabsContent value={PROJECT_TAB.metrics}>
             <MetricsTab projectId={projectId} />
