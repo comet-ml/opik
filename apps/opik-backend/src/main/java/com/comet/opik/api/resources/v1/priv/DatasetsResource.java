@@ -8,6 +8,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetExportJob;
+import com.comet.opik.api.DatasetExportRequest;
 import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
@@ -55,6 +56,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
@@ -776,27 +778,31 @@ public class DatasetsResource {
 
     @POST
     @Path("/{id}/export")
-    @Operation(operationId = "startDatasetExport", summary = "Start dataset CSV export", description = "Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.", responses = {
+    @Operation(operationId = "startDatasetExport", summary = "Start dataset CSV export", description = "Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling. If request body is not provided, exports the latest version. If no versions exist, uses the legacy dataset_items table.", responses = {
             @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
             @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = DatasetExportJob.class)))
     })
     @JsonView(DatasetExportJob.View.Public.class)
     @RateLimited
-    public Response startDatasetExport(@PathParam("id") @NotNull UUID datasetId) {
+    public Response startDatasetExport(
+            @PathParam("id") @NotNull UUID datasetId,
+            @Nullable @Valid DatasetExportRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        UUID datasetVersionId = request != null ? request.datasetVersionId() : null;
 
-        log.info("Starting CSV export for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+        log.info("Starting CSV export for dataset '{}' datasetVersionId '{}' on workspaceId '{}'", datasetId,
+                datasetVersionId, workspaceId);
 
         // Verify dataset exists
         service.findById(datasetId);
 
-        DatasetExportJob job = csvExportService.startExport(datasetId)
+        DatasetExportJob job = csvExportService.startExport(datasetId, datasetVersionId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Export job '{}' created/found for dataset '{}' on workspaceId '{}'", job.id(), datasetId,
-                workspaceId);
+        log.info("Export job '{}' created/found for dataset '{}' datasetVersionId '{}' on workspaceId '{}'", job.id(),
+                datasetId, job.datasetVersionId(), workspaceId);
 
         // Return 202 if new job was created (PENDING status), 200 if existing job found
         var status = job.status() == DatasetExportStatus.PENDING
@@ -834,6 +840,7 @@ public class DatasetsResource {
             @ApiResponse(responseCode = "204", description = "Job marked as viewed"),
             @ApiResponse(responseCode = "404", description = "Export job not found")
     })
+    @RateLimited
     public Response markDatasetExportJobViewed(@PathParam("jobId") @NotNull UUID jobId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -907,5 +914,27 @@ public class DatasetsResource {
                 .header("Content-Disposition", contentDisposition.toString())
                 .header("Content-Type", "text/csv")
                 .build();
+    }
+
+    @DELETE
+    @Path("/export-jobs/{jobId}")
+    @Operation(operationId = "deleteDatasetExportJob", summary = "Delete dataset export job", description = "Deletes a completed or failed dataset export job and its associated file from storage. Only COMPLETED and FAILED jobs can be deleted. This operation is idempotent.", responses = {
+            @ApiResponse(responseCode = "204", description = "Export job and file deleted successfully"),
+            @ApiResponse(responseCode = "400", description = "Export job is not in COMPLETED or FAILED status")
+    })
+    @RateLimited
+    public Response deleteDatasetExportJob(@PathParam("jobId") @NotNull UUID jobId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting export job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        csvExportService.deleteExport(jobId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Deleted export job '{}' on workspaceId '{}'", jobId, workspaceId);
+
+        return Response.noContent().build();
     }
 }

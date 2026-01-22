@@ -14,8 +14,9 @@ import { Dataset } from "@/types/datasets";
 import useDatasetDeleteMutation from "@/api/datasets/useDatasetDeleteMutation";
 import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportMutation";
 import {
+  handleExportSuccess,
   useAddExportJob,
-  useSetPanelExpanded,
+  useHasInProgressJob,
 } from "@/store/DatasetExportStore";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { useToast } from "@/components/ui/use-toast";
@@ -33,7 +34,10 @@ export const DatasetRowActionsCell: React.FunctionComponent<
   const { mutate: startExport, isPending: isExportStarting } =
     useStartDatasetExportMutation();
   const addExportJob = useAddExportJob();
-  const setPanelExpanded = useSetPanelExpanded();
+  const hasInProgressJob = useHasInProgressJob(
+    dataset.id,
+    dataset.latest_version?.id,
+  );
   const { toast } = useToast();
   const isDatasetExportEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.DATASET_EXPORT_ENABLED,
@@ -46,12 +50,27 @@ export const DatasetRowActionsCell: React.FunctionComponent<
   }, [dataset.id, deleteDataset]);
 
   const downloadDatasetHandler = useCallback(() => {
+    // Prevent duplicate exports if one is already in progress
+    if (hasInProgressJob) {
+      toast({
+        title: "Export already in progress",
+        description: "An export for this dataset is already being prepared. Please wait for it to complete.",
+        variant: "default",
+      });
+      return;
+    }
+
     startExport(
       { datasetId: dataset.id },
       {
         onSuccess: (job) => {
-          addExportJob(job, dataset.name);
-          setPanelExpanded(true);
+          handleExportSuccess({
+            job,
+            datasetName: dataset.name,
+            versionId: job.dataset_version_id,
+            versionName: dataset.latest_version?.version_name,
+            addExportJob,
+          });
         },
         onError: () => {
           toast({
@@ -65,9 +84,11 @@ export const DatasetRowActionsCell: React.FunctionComponent<
   }, [
     dataset.id,
     dataset.name,
+    dataset.latest_version?.version_name,
+    dataset.latest_version?.id,
+    hasInProgressJob,
     startExport,
     addExportJob,
-    setPanelExpanded,
     toast,
   ]);
 

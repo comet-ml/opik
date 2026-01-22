@@ -1,6 +1,6 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, RotateCcw } from "lucide-react";
+import { Download, MoreHorizontal, Pencil, RotateCcw } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,10 +13,20 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { DatasetVersion } from "@/types/datasets";
 import { isLatestVersionTag } from "@/constants/datasets";
 import useRestoreDatasetVersionMutation from "@/api/datasets/useRestoreDatasetVersionMutation";
+import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportMutation";
+import {
+  handleExportSuccess,
+  useAddExportJob,
+  useHasInProgressJob,
+} from "@/store/DatasetExportStore";
+import { useToast } from "@/components/ui/use-toast";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import EditVersionDialog from "./EditVersionDialog";
 
 type CustomMeta = {
   datasetId: string;
+  datasetName?: string;
 };
 
 const EDIT_KEY = 1;
@@ -30,9 +40,17 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
   const [open, setOpen] = useState<boolean | number>(false);
 
   const { custom } = context.column.columnDef.meta ?? {};
-  const { datasetId } = (custom ?? {}) as CustomMeta;
+  const { datasetId, datasetName } = (custom ?? {}) as CustomMeta;
 
   const restoreMutation = useRestoreDatasetVersionMutation();
+  const { mutate: startExport, isPending: isExportStarting } =
+    useStartDatasetExportMutation();
+  const addExportJob = useAddExportJob();
+  const hasInProgressJob = useHasInProgressJob(datasetId, version.id);
+  const { toast } = useToast();
+  const isDatasetExportEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DATASET_EXPORT_ENABLED,
+  );
 
   const isLatestVersion = version.tags?.some(isLatestVersionTag) ?? false;
 
@@ -43,6 +61,49 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
     });
     setOpen(false);
   };
+
+  const downloadVersionHandler = useCallback(() => {
+    // Prevent duplicate exports if one is already in progress
+    if (hasInProgressJob) {
+      toast({
+        title: "Export already in progress",
+        description: "An export for this version is already being prepared. Please wait for it to complete.",
+        variant: "default",
+      });
+      return;
+    }
+
+    startExport(
+      { datasetId, datasetVersionId: version.id },
+      {
+        onSuccess: (job) => {
+          handleExportSuccess({
+            job,
+            datasetName,
+            versionId: version.id,
+            versionName: version.version_name,
+            addExportJob,
+          });
+        },
+        onError: () => {
+          toast({
+            title: "Export failed",
+            description: "Failed to start dataset export. Please try again.",
+            variant: "destructive",
+          });
+        },
+      },
+    );
+  }, [
+    datasetId,
+    datasetName,
+    version.id,
+    version.version_name,
+    hasInProgressJob,
+    startExport,
+    addExportJob,
+    toast,
+  ]);
 
   return (
     <CellWrapper
@@ -86,6 +147,15 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
+          {isDatasetExportEnabled && (
+            <DropdownMenuItem
+              onClick={downloadVersionHandler}
+              disabled={isExportStarting}
+            >
+              <Download className="mr-2 size-4" />
+              Download
+            </DropdownMenuItem>
+          )}
           {!isLatestVersion && (
             <DropdownMenuItem
               onClick={() => {
