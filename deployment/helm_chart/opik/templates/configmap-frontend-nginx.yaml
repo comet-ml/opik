@@ -55,6 +55,10 @@ data:
       {{- end}}
     }
     {{- end }}
+    map $uri $cache_control_header {
+      "/index.html" "no-cache";
+      default       "public, max-age=31536000";
+    }
 
     {{- range $name,$limit := .Values.component.frontend.throttling }}
     limit_req_zone {{ $limit.variable }} zone={{ $limit.zone | default $name }}:{{ $limit.size | default "1m" }} rate={{ $limit.rate | default "10r/m" }};
@@ -80,6 +84,7 @@ data:
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Frame-Options "DENY" always;
         add_header X-XSS-Protection "0" always;
+        add_header Cache-Control $cache_control_header always;
         {{- with .Values.component.frontend.contentSecurityPolicy }}
         add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" . }};" always;
         {{- end }}
@@ -156,9 +161,6 @@ data:
 
             try_files $uri $uri/ {{ $rootPath }}/index.html;
 
-            if ($uri = {{ $rootPath }}/index.html) {
-                add_header Cache-Control "no-cache";
-            }
             {{- end }}
         }
     {{- range $k, $v := .Values.component.frontend.throttling }}
