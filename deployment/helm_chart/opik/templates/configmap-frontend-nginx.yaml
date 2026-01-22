@@ -56,7 +56,7 @@ data:
     }
     {{- end }}
     map $uri $cache_control_header {
-      default                              "no-cache, must-revalidate"";
+      default                              "no-cache, must-revalidate";
       # JavaScript and CSS - 7 days cache (frequent deployments with versioned/hashed filenames)
       "~assets/.*\.(js|css)$"              "public, max-age=604800, immutable";
       # Images - 30 days cache (static assets, but may update)
