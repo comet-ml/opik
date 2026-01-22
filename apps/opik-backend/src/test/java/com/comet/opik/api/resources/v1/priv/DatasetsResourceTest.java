@@ -290,41 +290,6 @@ class DatasetsResourceTest {
                 USER);
     }
 
-    /**
-     * Maps DatasetItemSource Java enum to ClickHouse Enum8 integer values.
-     * ClickHouse schema: Enum8('unknown' = 0, 'sdk' = 1, 'manual' = 2, 'span' = 3, 'trace' = 4)
-     */
-    private static int getClickHouseEnumValue(DatasetItemSource source) {
-        if (source == null) {
-            return 0; // unknown
-        }
-        return switch (source) {
-            case SDK -> 1;
-            case MANUAL -> 2;
-            case SPAN -> 3;
-            case TRACE -> 4;
-        };
-    }
-
-    /**
-     * Comparator that sorts DatasetItems using the same order as the ClickHouse query:
-     * ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC
-     *
-     * This matches the primary key ordering used in DatasetItemDAO.SELECT_DATASET_ITEMS
-     */
-    private static final Comparator<DatasetItem> DATASET_ITEM_PRIMARY_KEY_COMPARATOR = Comparator
-            // workspace_id and dataset_id are the same for all items in a dataset, so we skip them
-            // ClickHouse stores enum values based on schema definition, not Java ordinals
-            .comparing((DatasetItem item) -> getClickHouseEnumValue(item.source()),
-                    Comparator.reverseOrder())
-            // ClickHouse ORDER BY DESC treats NULL as largest (comes first), so we use nullsFirst with reverseOrder
-            .thenComparing(item -> item.traceId() != null ? item.traceId().toString() : null,
-                    Comparator.nullsFirst(Comparator.reverseOrder()))
-            .thenComparing(item -> item.spanId() != null ? item.spanId().toString() : null,
-                    Comparator.nullsFirst(Comparator.reverseOrder()))
-            .thenComparing(item -> item.id() != null ? item.id().toString() : null,
-                    Comparator.nullsFirst(Comparator.reverseOrder()));
-
     private UUID createAndAssert(Dataset dataset) {
         return createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
     }
@@ -5086,8 +5051,7 @@ class DatasetsResourceTest {
 
             var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
 
-            assertDatasetItemPage(actualEntity, items.stream().sorted(DATASET_ITEM_PRIMARY_KEY_COMPARATOR).toList(),
-                    columns, 1);
+            assertDatasetItemPage(actualEntity, items.reversed(), columns, 1);
         }
 
         @Test
@@ -5117,8 +5081,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1), API_KEY,
                     TEST_WORKSPACE);
 
-            var sortedItems = items.stream().sorted(DATASET_ITEM_PRIMARY_KEY_COMPARATOR).toList();
-            List<DatasetItem> expectedContent = List.of(sortedItems.getFirst());
+            List<DatasetItem> expectedContent = List.of(items.reversed().getFirst());
 
             assertDatasetItemPage(actualEntity, expectedContent, 5, columns, 1);
         }
@@ -5164,8 +5127,7 @@ class DatasetsResourceTest {
 
             var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
 
-            assertDatasetItemPage(actualEntity,
-                    updatedItems.stream().sorted(DATASET_ITEM_PRIMARY_KEY_COMPARATOR).toList(), columns, 1);
+            assertDatasetItemPage(actualEntity, updatedItems.reversed(), columns, 1);
         }
 
         @Test
@@ -5212,8 +5174,7 @@ class DatasetsResourceTest {
 
             var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of(), API_KEY, TEST_WORKSPACE);
 
-            assertDatasetItemPage(actualEntity,
-                    batch.items().stream().sorted(DATASET_ITEM_PRIMARY_KEY_COMPARATOR).toList(), columns, 1);
+            assertDatasetItemPage(actualEntity, batch.items().reversed(), columns, 1);
 
         }
 
@@ -5245,8 +5206,7 @@ class DatasetsResourceTest {
 
             var expectedDatasetItems = items.stream()
                     .map(item -> item.toBuilder().data(ImmutableMap.of("image", expected)).build())
-                    .sorted(DATASET_ITEM_PRIMARY_KEY_COMPARATOR)
-                    .toList();
+                    .toList().reversed();
 
             var actualEntity = datasetResourceClient.getDatasetItems(datasetId, Map.of("truncate", truncate), API_KEY,
                     TEST_WORKSPACE);
@@ -5483,10 +5443,7 @@ class DatasetsResourceTest {
             var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
                     Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
 
-            List<DatasetItem> expectedContent = List.of(item2, item1)
-                    .stream()
-                    .sorted(DATASET_ITEM_PRIMARY_KEY_COMPARATOR)
-                    .toList();
+            List<DatasetItem> expectedContent = List.of(item2, item1); // reversed order
 
             assertThat(actualEntity.content()).hasSize(2);
             assertThat(actualEntity.total()).isEqualTo(2);

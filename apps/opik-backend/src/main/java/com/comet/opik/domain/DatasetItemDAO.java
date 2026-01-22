@@ -179,7 +179,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC
+            ORDER BY (workspace_id, dataset_id, id) DESC
             LIMIT :limit OFFSET :offset
             SETTINGS log_comment = '<log_comment>'
             ;
