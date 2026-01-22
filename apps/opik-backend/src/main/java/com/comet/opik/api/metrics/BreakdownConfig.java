@@ -24,7 +24,6 @@ public record BreakdownConfig(
     // Fixed defaults - not configurable
     public static final int LIMIT = 10;
     public static final String OTHERS_GROUP_NAME = "__others__";
-    public static final String OTHERS_DISPLAY_NAME = "Others";
     public static final String UNKNOWN_GROUP_NAME = "Unknown";
 
     /**

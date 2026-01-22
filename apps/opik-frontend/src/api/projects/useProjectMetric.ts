@@ -42,7 +42,6 @@ type UseProjectMetricsParams = {
 
 export interface ProjectMetricResult {
   name: string;
-  display_name?: string;
   data: Array<{
     time: string;
     value: number;
@@ -53,9 +52,6 @@ export interface ProjectMetricsResponse {
   project_id: string;
   metric_type: METRIC_NAME_TYPE;
   interval: INTERVAL_TYPE;
-  breakdown_field?: BREAKDOWN_FIELD;
-  total_groups?: number;
-  groups_shown?: number;
   results: ProjectMetricTrace[];
 }
 

@@ -15,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,12 +29,6 @@ public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
-
-    record ProcessedBreakdownEntries(
-            int totalGroups,
-            int groupsShown,
-            List<ProjectMetricResponse.Results<Number>> results) {
-    }
 }
 
 @Slf4j
@@ -150,12 +143,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .interval(request.interval());
 
         if (request.hasBreakdown()) {
-            var processedEntries = processBreakdownEntries(entries);
-
-            builder.breakdownField(request.breakdown().field())
-                    .totalGroups(processedEntries.totalGroups())
-                    .groupsShown(processedEntries.groupsShown())
-                    .results(processedEntries.results());
+            builder.results(processBreakdownEntries(entries));
         } else {
             builder.results(entriesToResults(entries));
         }
@@ -163,17 +151,15 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
         return builder.build();
     }
 
-    private ProcessedBreakdownEntries processBreakdownEntries(List<ProjectMetricsDAO.Entry> entries) {
+    private List<ProjectMetricResponse.Results<Number>> processBreakdownEntries(List<ProjectMetricsDAO.Entry> entries) {
         if (entries.isEmpty()) {
-            return new ProcessedBreakdownEntries(0, 0, List.of());
+            return List.of();
         }
 
         // Group entries by their breakdown group name
         Map<String, List<ProjectMetricsDAO.Entry>> entriesByGroup = entries.stream()
                 .collect(Collectors.groupingBy(
                         entry -> entry.groupName() != null ? entry.groupName() : BreakdownConfig.UNKNOWN_GROUP_NAME));
-
-        int totalGroups = entriesByGroup.size();
 
         // Calculate aggregate value for each group for sorting (always by value descending)
         Map<String, Double> groupAggregates = entriesByGroup.entrySet().stream()
@@ -199,7 +185,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
             resultGroups.put(group, entriesByGroup.get(group));
         }
 
-        // Always add "Others" group if there are remaining groups
+        // Add "Others" group if there are remaining groups beyond the limit
         if (!otherGroups.isEmpty()) {
             List<ProjectMetricsDAO.Entry> othersEntries = otherGroups.stream()
                     .flatMap(group -> entriesByGroup.get(group).stream())
@@ -213,51 +199,18 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
             resultGroups.put(BreakdownConfig.OTHERS_GROUP_NAME, othersEntries);
         }
 
-        // Convert to response format
-        List<ProjectMetricResponse.Results<Number>> results = resultGroups.entrySet().stream()
-                .map(entry -> {
-                    String groupName = entry.getKey();
-                    String displayName = groupName.equals(BreakdownConfig.OTHERS_GROUP_NAME)
-                            ? BreakdownConfig.OTHERS_DISPLAY_NAME
-                            : null;
-
-                    // Group by metric name within each breakdown group
-                    Map<String, List<DataPoint<Number>>> dataByMetric = entry.getValue().stream()
-                            .collect(Collectors.groupingBy(
-                                    ProjectMetricsDAO.Entry::name,
-                                    Collectors.mapping(
-                                            e -> DataPoint.<Number>builder()
-                                                    .time(e.time())
-                                                    .value(e.value())
-                                                    .build(),
-                                            Collectors.toList())));
-
-                    // For breakdown, we combine the group name with metric name
-                    // If there's only one metric type, use just the group name
-                    if (dataByMetric.size() == 1) {
-                        return ProjectMetricResponse.Results.<Number>builder()
-                                .name(groupName)
-                                .displayName(displayName)
-                                .data(dataByMetric.values().iterator().next())
-                                .build();
-                    } else {
-                        // Multiple metrics - flatten into single result per group
-                        List<DataPoint<Number>> allData = dataByMetric.values().stream()
-                                .flatMap(List::stream)
-                                .sorted(Comparator.comparing(DataPoint::time))
-                                .toList();
-                        return ProjectMetricResponse.Results.<Number>builder()
-                                .name(groupName)
-                                .displayName(displayName)
-                                .data(allData)
-                                .build();
-                    }
-                })
+        // Convert to response format - with breakdown, each group has exactly one metric type
+        return resultGroups.entrySet().stream()
+                .map(entry -> ProjectMetricResponse.Results.<Number>builder()
+                        .name(entry.getKey())
+                        .data(entry.getValue().stream()
+                                .map(e -> DataPoint.<Number>builder()
+                                        .time(e.time())
+                                        .value(e.value())
+                                        .build())
+                                .toList())
+                        .build())
                 .toList();
-
-        int groupsShown = !otherGroups.isEmpty() ? topGroups.size() + 1 : topGroups.size();
-
-        return new ProcessedBreakdownEntries(totalGroups, groupsShown, results);
     }
 
     private List<ProjectMetricResponse.Results<Number>> entriesToResults(List<ProjectMetricsDAO.Entry> entries) {

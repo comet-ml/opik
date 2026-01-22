@@ -19,9 +19,6 @@ public record ProjectMetricResponse<T extends Number>(
         UUID projectId,
         MetricType metricType,
         TimeInterval interval,
-        BreakdownField breakdownField,
-        Integer totalGroups,
-        Integer groupsShown,
         List<Results<T>> results) {
 
     public static final ProjectMetricResponse<Number> EMPTY = ProjectMetricResponse.builder()
@@ -34,7 +31,6 @@ public record ProjectMetricResponse<T extends Number>(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Results<T extends Number>(
             String name,
-            String displayName,
             List<DataPoint<T>> data) {
 
         /**

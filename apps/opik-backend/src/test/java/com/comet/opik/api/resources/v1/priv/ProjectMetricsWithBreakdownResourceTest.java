@@ -263,7 +263,6 @@ class ProjectMetricsWithBreakdownResourceTest {
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.TRACE_COUNT);
             assertThat(response.results()).isNotEmpty();
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -345,7 +344,6 @@ class ProjectMetricsWithBreakdownResourceTest {
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.DURATION);
             assertThat(response.results()).isNotEmpty();
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -431,7 +429,6 @@ class ProjectMetricsWithBreakdownResourceTest {
 
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.TOKEN_USAGE);
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -511,7 +508,6 @@ class ProjectMetricsWithBreakdownResourceTest {
 
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.COST);
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -594,7 +590,6 @@ class ProjectMetricsWithBreakdownResourceTest {
 
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.FEEDBACK_SCORES);
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -674,7 +669,6 @@ class ProjectMetricsWithBreakdownResourceTest {
 
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.GUARDRAILS_FAILED_COUNT);
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -747,7 +741,6 @@ class ProjectMetricsWithBreakdownResourceTest {
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.THREAD_COUNT);
             assertThat(response.results()).isNotEmpty();
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -821,7 +814,6 @@ class ProjectMetricsWithBreakdownResourceTest {
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.THREAD_DURATION);
             assertThat(response.results()).isNotEmpty();
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -899,7 +891,6 @@ class ProjectMetricsWithBreakdownResourceTest {
 
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.THREAD_FEEDBACK_SCORES);
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -982,7 +973,6 @@ class ProjectMetricsWithBreakdownResourceTest {
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.SPAN_COUNT);
             assertThat(response.results()).isNotEmpty();
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -1065,7 +1055,6 @@ class ProjectMetricsWithBreakdownResourceTest {
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.SPAN_DURATION);
             assertThat(response.results()).isNotEmpty();
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -1151,7 +1140,6 @@ class ProjectMetricsWithBreakdownResourceTest {
 
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.SPAN_TOKEN_USAGE);
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
@@ -1238,7 +1226,6 @@ class ProjectMetricsWithBreakdownResourceTest {
 
             assertThat(response.projectId()).isEqualTo(projectId);
             assertThat(response.metricType()).isEqualTo(MetricType.SPAN_FEEDBACK_SCORES);
-            assertThat(response.breakdownField()).isEqualTo(breakdownField);
         }
 
         @ParameterizedTest
