@@ -16,6 +16,7 @@ import {
   SparklesIcon,
   UserPen,
   ChartLine,
+  Braces,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -180,6 +181,19 @@ const MENU_ITEMS: MenuItemGroup[] = [
         label: "Alerts",
         count: "alerts",
         featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
+      },
+    ],
+  },
+  {
+    id: "development",
+    label: "Development",
+    items: [
+      {
+        id: "json_builder",
+        path: "/$workspaceName/json-builder",
+        type: MENU_ITEM_TYPE.router,
+        icon: Braces,
+        label: "JSON Builder",
       },
     ],
   },
