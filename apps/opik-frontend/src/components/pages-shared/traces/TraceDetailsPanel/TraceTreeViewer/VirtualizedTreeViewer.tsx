@@ -9,6 +9,7 @@ import {
   Coins,
   Hash,
   MessageSquareMore,
+  Paperclip,
   PenLine,
   Tag,
   TriangleAlert,
@@ -45,6 +46,7 @@ const DETAILS_SECTION_COMPONENTS = [
   TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES,
   TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS,
   TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS,
+  TREE_DATABLOCK_TYPE.NUMBER_OF_ATTACHMENTS,
   TREE_DATABLOCK_TYPE.MODEL,
 ];
 
@@ -203,6 +205,7 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
       tokens,
       comments,
       tags,
+      attachments_count: attachmentsCount,
       model,
       provider,
       feedback_scores: feedbackScores,
@@ -325,6 +328,16 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
                 <Tag className="size-3 shrink-0" /> {tags.length}
               </div>
             </TagsHoverCard>
+          )}
+        {config[TREE_DATABLOCK_TYPE.NUMBER_OF_ATTACHMENTS] &&
+          Boolean(attachmentsCount) && (
+            <TooltipWrapper
+              content={`${attachmentsCount} attachment${attachmentsCount > 1 ? "s" : ""}`}
+            >
+              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+                <Paperclip className="size-3 shrink-0" /> {attachmentsCount}
+              </div>
+            </TooltipWrapper>
           )}
         {config[TREE_DATABLOCK_TYPE.MODEL] && (model || provider) && (
           <TooltipWrapper

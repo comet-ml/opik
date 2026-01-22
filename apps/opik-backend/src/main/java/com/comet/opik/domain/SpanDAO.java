@@ -749,6 +749,18 @@ class SpanDAO {
                 LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
+            ), attachments_agg AS (
+                SELECT
+                    entity_id,
+                    COUNT(*) AS attachments_count
+                FROM attachments
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND entity_type = 'span'
+                AND deleted_at IS NULL
+                <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                GROUP BY workspace_id, project_id, entity_id
             ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
@@ -957,9 +969,11 @@ class SpanDAO {
                 , fsa.feedback_scores as feedback_scores
                 <endif>
                 <if(!exclude_comments)>, c.comments AS comments <endif>
+                <if(!exclude_attachments_count)>, a.attachments_count AS attachments_count<endif>
             FROM spans_final s
             LEFT JOIN comments_final c ON s.id = c.entity_id
             LEFT JOIN feedback_scores_agg fsa ON fsa.entity_id = s.id
+            LEFT JOIN attachments_agg a ON s.id = a.entity_id
             <if(stream)>
             ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
             <else>
@@ -1916,6 +1930,8 @@ class SpanDAO {
                 .lastUpdatedBy(
                         getValue(exclude, SpanField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
                 .duration(getValue(exclude, SpanField.DURATION, row, "duration", Double.class))
+                .attachmentsCount(
+                        getValue(exclude, SpanField.ATTACHMENTS_COUNT, row, "attachments_count", Integer.class))
                 .build();
     }
 
@@ -2062,6 +2078,8 @@ class SpanDAO {
                         template.add("exclude_output", fields.contains(SpanField.OUTPUT.getValue()));
                         template.add("exclude_metadata", fields.contains(SpanField.METADATA.getValue()));
                         template.add("exclude_comments", fields.contains(SpanField.COMMENTS.getValue()));
+                        template.add("exclude_attachments_count",
+                                fields.contains(SpanField.ATTACHMENTS_COUNT.getValue()));
                     }
                 });
     }

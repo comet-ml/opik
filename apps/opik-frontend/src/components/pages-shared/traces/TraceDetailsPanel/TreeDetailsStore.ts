@@ -33,6 +33,7 @@ export enum TREE_DATABLOCK_TYPE {
   NUMBER_OF_SCORES = "numberOfScores",
   NUMBER_OF_COMMENTS = "numberOfComments",
   NUMBER_OF_TAGS = "numberOfTags",
+  NUMBER_OF_ATTACHMENTS = "numberOfAttachments",
   MODEL = "model",
   DURATION_TIMELINE = "durationTimeline",
 }
