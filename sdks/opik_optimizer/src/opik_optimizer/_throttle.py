@@ -64,7 +64,7 @@ class RateLimiter:
 
     async def acquire_async(self) -> None:
         if self._async_try_acquire is not None:
-            while not await self._async_try_acquire():
+            while not await self._async_try_acquire(self.bucket_key, blocking=False):
                 await asyncio.sleep(0.01)
             return
         if self._sync_try_acquire is not None:
