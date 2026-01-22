@@ -51,18 +51,27 @@ This test ensures the metadata column is available in the UI and prevents accide
       });
 
       await test.step('Toggle metadata column off and verify it is hidden', async () => {
+        // The Columns menu should still be open from the previous step
         // Click to toggle off (if it's checked)
         const metadataButton = page.getByRole('button', { name: 'Metadata' });
         const metadataCheckbox = metadataButton.getByRole('checkbox');
         
+        // Ensure the checkbox is visible before checking its state
+        await expect(metadataCheckbox).toBeVisible();
+        
         const isChecked = await metadataCheckbox.isChecked();
         if (isChecked) {
           await metadataButton.click();
+          // Wait for the UI to update
           await expect(metadataCheckbox).not.toBeChecked();
         }
 
         // Close columns menu
         await page.keyboard.press('Escape');
+
+        // Wait for the columns menu to close and table to update
+        const columnsButton = page.getByRole('button', { name: 'Columns' });
+        await expect(columnsButton).toBeVisible();
 
         // Verify Metadata column header is not visible in table
         const metadataHeader = page.getByRole('columnheader', { name: 'Metadata' });
@@ -73,8 +82,9 @@ This test ensures the metadata column is available in the UI and prevents accide
         // Open Columns menu again
         await page.getByRole('button', { name: 'Columns' }).click();
 
-        // Click to toggle on
+        // Wait for menu to be visible and click to toggle on
         const metadataButton = page.getByRole('button', { name: 'Metadata' });
+        await expect(metadataButton).toBeVisible();
         await metadataButton.click();
 
         // Verify checkbox is now checked
@@ -83,6 +93,10 @@ This test ensures the metadata column is available in the UI and prevents accide
 
         // Close columns menu
         await page.keyboard.press('Escape');
+
+        // Wait for the columns menu to close and table to update
+        const columnsButton = page.getByRole('button', { name: 'Columns' });
+        await expect(columnsButton).toBeVisible();
 
         // Verify Metadata column header is visible in table
         const metadataHeader = page.getByRole('columnheader', { name: 'Metadata' });
