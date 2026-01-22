@@ -1010,6 +1010,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
     assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_tracked(
     fake_backend,
 ):
