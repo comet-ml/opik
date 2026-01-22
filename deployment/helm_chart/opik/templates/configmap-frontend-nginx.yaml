@@ -56,8 +56,15 @@ data:
     }
     {{- end }}
     map $uri $cache_control_header {
-      "/index.html" "no-cache";
-      default       "public, max-age=31536000";
+      default                              "no-cache, must-revalidate"";
+      # JavaScript and CSS - 7 days cache (frequent deployments with versioned/hashed filenames)
+      "~assets/.*\.(js|css)$"              "public, max-age=604800, immutable";
+      # Images - 30 days cache (static assets, but may update)
+      "~(images/.*|assets/.*)\.(jpg|jpeg|png|gif|svg|webp|ico)$" "public, max-age=2592000";
+      # Fonts - 30 days cache (rarely change, but shorter for frequent updates)
+      "~assets/.*\.(woff|woff2|ttf|eot)$"  "public, max-age=2592000";
+      # JSON/data files - 1 day cache (may update frequently)
+      "~assets/.*\.json$"                  "public, max-age=86400";
     }
 
     {{- range $name,$limit := .Values.component.frontend.throttling }}
