@@ -117,12 +117,14 @@ class TestSmokeTestCommand:
     @patch("opik.cli.smoke_test.cli.opik.Opik")
     @patch("opik.cli.smoke_test.cli.opik.start_as_current_trace")
     @patch("opik.cli.smoke_test.cli.opik_context.update_current_trace")
+    @patch("opik.cli.smoke_test.cli.opik_context.update_current_span")
     @patch("opik.cli.smoke_test.cli.create_opik_logo_image")
     @patch("opik.cli.smoke_test.cli.track")
     def test_smoke_test_with_workspace_and_project_name(
         self,
         mock_track,
         mock_create_logo,
+        mock_update_span,
         mock_update_trace,
         mock_start_trace,
         mock_opik_class,
@@ -173,9 +175,9 @@ class TestSmokeTestCommand:
         assert call_kwargs["project_name"] == "test-project"
         # Verify trace was started
         mock_start_trace.assert_called_once()
-        # Verify cached client was flushed
-        mock_cached_client.flush.assert_called_once()
         # Verify explicit client was flushed and ended
+        # Note: _temporary_client_context patches get_client_cached to return mock_client,
+        # so when start_as_current_trace calls get_client_cached().flush(), it flushes mock_client
         mock_client.flush.assert_called_once()
         mock_client.end.assert_called_once()
 
@@ -183,12 +185,14 @@ class TestSmokeTestCommand:
     @patch("opik.cli.smoke_test.cli.opik.Opik")
     @patch("opik.cli.smoke_test.cli.opik.start_as_current_trace")
     @patch("opik.cli.smoke_test.cli.opik_context.update_current_trace")
+    @patch("opik.cli.smoke_test.cli.opik_context.update_current_span")
     @patch("opik.cli.smoke_test.cli.create_opik_logo_image")
     @patch("opik.cli.smoke_test.cli.track")
     def test_smoke_test_with_default_project_name(
         self,
         mock_track,
         mock_create_logo,
+        mock_update_span,
         mock_update_trace,
         mock_start_trace,
         mock_opik_class,
