@@ -1,6 +1,23 @@
 import { create } from "zustand";
 import { DatasetExportJob } from "@/types/datasets";
 
+/**
+ * Constructs a display name for an export job, including version info if available.
+ * @param datasetName - The base dataset name
+ * @param versionId - The version ID (if present, version name will be included)
+ * @param versionName - The version name to display
+ * @returns Formatted display name like "Dataset Name" or "Dataset Name (v2)"
+ */
+export const buildExportDisplayName = (
+  datasetName: string | undefined,
+  versionId: string | undefined,
+  versionName: string | undefined,
+): string => {
+  const baseName = datasetName || "Unknown Dataset";
+  const versionSuffix = versionId && versionName ? ` (${versionName})` : "";
+  return `${baseName}${versionSuffix}`;
+};
+
 export interface ExportJobInfo {
   job: DatasetExportJob;
   datasetName: string;
@@ -77,7 +94,11 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
       for (const job of jobs) {
         newJobs.set(job.id, {
           job,
-          datasetName: job.dataset_name || "Unknown Dataset",
+          datasetName: buildExportDisplayName(
+            job.dataset_name,
+            job.dataset_version_id,
+            job.version_name,
+          ),
         });
       }
 
@@ -93,7 +114,7 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
         activeJobs: newJobs,
         isHydrated: true,
         // Expand panel if there are jobs to show
-        isPanelExpanded: newJobs.size > 0 ? true : state.isPanelExpanded,
+        isPanelExpanded: newJobs.size > 0 || state.isPanelExpanded,
       };
     }),
 }));

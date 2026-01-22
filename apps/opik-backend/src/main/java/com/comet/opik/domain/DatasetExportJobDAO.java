@@ -27,6 +27,7 @@ public interface DatasetExportJobDAO {
                 id,
                 workspace_id,
                 dataset_id,
+                dataset_version_id,
                 status,
                 file_path,
                 error_message,
@@ -39,6 +40,7 @@ public interface DatasetExportJobDAO {
                 :job.id,
                 :workspaceId,
                 :job.datasetId,
+                :job.datasetVersionId,
                 :job.status,
                 :job.filePath,
                 :job.errorMessage,
@@ -132,10 +134,20 @@ public interface DatasetExportJobDAO {
             @Bind("lastUpdatedBy") String lastUpdatedBy);
 
     @SqlQuery("""
+            WITH version_sequences AS (
+                SELECT
+                    id,
+                    dataset_id,
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                FROM dataset_versions
+                WHERE workspace_id = :workspaceId
+            )
             SELECT
                 j.id,
                 j.dataset_id,
                 d.name AS dataset_name,
+                j.dataset_version_id,
+                CONCAT('v', vs.seq_num) AS version_name,
                 j.status,
                 j.file_path,
                 j.error_message,
@@ -147,16 +159,27 @@ public interface DatasetExportJobDAO {
                 j.last_updated_by
             FROM dataset_export_jobs j
             LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            LEFT JOIN version_sequences vs ON j.dataset_version_id = vs.id
             WHERE j.id = :id
             AND j.workspace_id = :workspaceId
             """)
     Optional<DatasetExportJob> findById(@Bind("workspaceId") String workspaceId, @Bind("id") UUID id);
 
     @SqlQuery("""
+            WITH version_sequences AS (
+                SELECT
+                    id,
+                    dataset_id,
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                FROM dataset_versions
+                WHERE workspace_id = :workspaceId
+            )
             SELECT
                 j.id,
                 j.dataset_id,
                 d.name AS dataset_name,
+                j.dataset_version_id,
+                CONCAT('v', vs.seq_num) AS version_name,
                 j.status,
                 j.file_path,
                 j.error_message,
@@ -168,6 +191,7 @@ public interface DatasetExportJobDAO {
                 j.last_updated_by
             FROM dataset_export_jobs j
             LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            LEFT JOIN version_sequences vs ON j.dataset_version_id = vs.id
             WHERE j.workspace_id = :workspaceId
                 AND j.dataset_id = :datasetId
                 AND j.status IN (<statuses>)
@@ -186,10 +210,20 @@ public interface DatasetExportJobDAO {
      * @return List of all export jobs for the workspace with dataset names
      */
     @SqlQuery("""
+            WITH version_sequences AS (
+                SELECT
+                    id,
+                    dataset_id,
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                FROM dataset_versions
+                WHERE workspace_id = :workspaceId
+            )
             SELECT
                 j.id,
                 j.dataset_id,
                 d.name AS dataset_name,
+                j.dataset_version_id,
+                CONCAT('v', vs.seq_num) AS version_name,
                 j.status,
                 j.file_path,
                 j.error_message,
@@ -201,6 +235,7 @@ public interface DatasetExportJobDAO {
                 j.last_updated_by
             FROM dataset_export_jobs j
             LEFT JOIN datasets d ON j.dataset_id = d.id AND j.workspace_id = d.workspace_id
+            LEFT JOIN version_sequences vs ON j.dataset_version_id = vs.id
             WHERE j.workspace_id = :workspaceId
             ORDER BY j.id DESC
             """)
@@ -236,6 +271,7 @@ public interface DatasetExportJobDAO {
                 id,
                 workspace_id,
                 dataset_id,
+                dataset_version_id,
                 status,
                 file_path,
                 error_message,
@@ -273,6 +309,7 @@ public interface DatasetExportJobDAO {
                 id,
                 workspace_id,
                 dataset_id,
+                dataset_version_id,
                 status,
                 file_path,
                 error_message,

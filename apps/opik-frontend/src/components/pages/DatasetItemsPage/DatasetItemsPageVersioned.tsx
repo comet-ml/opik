@@ -277,7 +277,10 @@ const DatasetItemsPageVersioned = () => {
           />
         </TabsContent>
         <TabsContent value="version-history">
-          <VersionHistoryTab datasetId={datasetId} />
+          <VersionHistoryTab
+            datasetId={datasetId}
+            datasetName={dataset?.name}
+          />
         </TabsContent>
       </Tabs>
     </div>

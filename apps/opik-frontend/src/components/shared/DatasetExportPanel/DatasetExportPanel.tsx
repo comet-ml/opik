@@ -12,10 +12,11 @@ import {
   useIsHydrated,
 } from "@/store/DatasetExportStore";
 import useDatasetExportJobs from "@/api/datasets/useDatasetExportJobs";
+import useDeleteDatasetExportJobMutation from "@/api/datasets/useDeleteDatasetExportJobMutation";
 import { DATASET_EXPORT_STATUS } from "@/types/datasets";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExportJobItem from "./ExportJobItem";
-import { isJobLoading } from "./utils";
+import { isJobLoading, isJobCompleted, isJobFailed } from "./utils";
 
 const DatasetExportPanel: React.FC = () => {
   const activeJobs = useActiveExportJobs();
@@ -26,6 +27,7 @@ const DatasetExportPanel: React.FC = () => {
   const hydrateFromApi = useHydrateFromApi();
   const isHydrated = useIsHydrated();
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const { mutate: deleteExportJob } = useDeleteDatasetExportJobMutation();
 
   // Fetch all export jobs on mount to restore state after page refresh
   const { data: apiJobs } = useDatasetExportJobs({
@@ -68,7 +70,18 @@ const DatasetExportPanel: React.FC = () => {
   const removeAllJobs = () => {
     // Remove all jobs when closing panel
     // Use slice() to create a defensive copy to avoid skipping items during iteration
-    activeJobs.slice().forEach((jobInfo) => removeJob(jobInfo.job.id));
+    activeJobs.slice().forEach((jobInfo) => {
+      const { job } = jobInfo;
+
+      // For completed/failed jobs, call delete API to permanently dismiss them
+      // This ensures they won't reappear after page refresh
+      if (isJobCompleted(job.status) || isJobFailed(job.status)) {
+        deleteExportJob({ jobId: job.id });
+      }
+
+      // Always remove from local store
+      removeJob(job.id);
+    });
   };
 
   const handleClosePanel = (e: React.MouseEvent) => {
@@ -121,8 +134,8 @@ const DatasetExportPanel: React.FC = () => {
 
       {/* Always render ExportJobItem components for polling, but only show when expanded */}
       <div className={isPanelExpanded ? "" : "hidden"}>
-        <CardContent className="px-3 pb-2 pt-0">
-          <div className="max-h-48 overflow-y-auto">
+        <CardContent className="p-0">
+          <div className="max-h-48 overflow-y-auto px-3 pb-2">
             {activeJobs.map((jobInfo) => (
               <ExportJobItem key={jobInfo.job.id} jobInfo={jobInfo} />
             ))}
