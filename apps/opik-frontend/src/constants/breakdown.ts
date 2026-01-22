@@ -27,7 +27,7 @@ export enum BREAKDOWN_FIELD {
 export const BREAKDOWN_FIELD_LABELS: Record<BREAKDOWN_FIELD, string> = {
   [BREAKDOWN_FIELD.NONE]: "No grouping",
   [BREAKDOWN_FIELD.TAGS]: "Tags",
-  [BREAKDOWN_FIELD.METADATA]: "Configuration",
+  [BREAKDOWN_FIELD.METADATA]: "Metadata",
   [BREAKDOWN_FIELD.NAME]: "Name",
   [BREAKDOWN_FIELD.ERROR_INFO]: "Has Error",
   [BREAKDOWN_FIELD.MODEL]: "Model",
