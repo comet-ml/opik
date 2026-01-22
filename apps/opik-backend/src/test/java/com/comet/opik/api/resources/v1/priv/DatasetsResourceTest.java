@@ -317,9 +317,13 @@ class DatasetsResourceTest {
             // ClickHouse stores enum values based on schema definition, not Java ordinals
             .comparing((DatasetItem item) -> getClickHouseEnumValue(item.source()),
                     Comparator.reverseOrder())
-            .thenComparing(item -> item.traceId() != null ? item.traceId().toString() : "", Comparator.reverseOrder())
-            .thenComparing(item -> item.spanId() != null ? item.spanId().toString() : "", Comparator.reverseOrder())
-            .thenComparing(item -> item.id() != null ? item.id().toString() : "", Comparator.reverseOrder());
+            // ClickHouse ORDER BY DESC treats NULL as largest (comes first), so we use nullsFirst with reverseOrder
+            .thenComparing(item -> item.traceId() != null ? item.traceId().toString() : null,
+                    Comparator.nullsFirst(Comparator.reverseOrder()))
+            .thenComparing(item -> item.spanId() != null ? item.spanId().toString() : null,
+                    Comparator.nullsFirst(Comparator.reverseOrder()))
+            .thenComparing(item -> item.id() != null ? item.id().toString() : null,
+                    Comparator.nullsFirst(Comparator.reverseOrder()));
 
     private UUID createAndAssert(Dataset dataset) {
         return createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
