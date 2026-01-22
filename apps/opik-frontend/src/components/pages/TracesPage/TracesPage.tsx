@@ -127,7 +127,7 @@ const TracesPage = () => {
                 Metrics
               </TabsTrigger>
               <TabsTrigger variant="underline" value={PROJECT_TAB.evaluators}>
-                Evaluators
+                Online evaluation
               </TabsTrigger>
               <TabsTrigger
                 variant="underline"
