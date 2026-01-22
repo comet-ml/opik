@@ -1992,7 +1992,7 @@ class TraceDAOImpl implements TraceDAO {
                   AND project_id IN :project_ids
                   AND entity_id IN (
                     SELECT id
-                    FROM spans FINAL
+                    FROM spans
                     WHERE workspace_id = :workspace_id
                       AND project_id IN :project_ids
                       <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
@@ -2018,7 +2018,7 @@ class TraceDAOImpl implements TraceDAO {
                   AND project_id IN :project_ids
                   AND entity_id IN (
                     SELECT id
-                    FROM spans FINAL
+                    FROM spans
                     WHERE workspace_id = :workspace_id
                       AND project_id IN :project_ids
                       <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
