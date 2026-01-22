@@ -84,8 +84,8 @@ def _normalize_n_samples(n_samples: int | float | str | None) -> int | float | N
         return parsed
 
     if isinstance(n_samples, int):
-        if n_samples <= 0:
-            raise ValueError("n_samples must be > 0 when provided as int")
+        if n_samples < 0:
+            raise ValueError("n_samples must be >= 0 when provided as int")
         return n_samples
     if isinstance(n_samples, float):
         if not math.isfinite(n_samples) or n_samples <= 0:
