@@ -1,13 +1,10 @@
 import pickle
-from typing import Optional, Iterator, Dict
+from typing import Dict
 
 import google.adk
 import pydantic
 import pytest
 from google.adk import agents as adk_agents
-from google.adk import events as adk_events
-from google.adk import runners as adk_runners
-from google.adk import sessions as adk_sessions
 from google.adk.agents import run_config
 from google.adk.models import lite_llm as adk_lite_llm
 from google.adk.tools import agent_tool as adk_agent_tool
@@ -26,6 +23,7 @@ from .constants import (
     MODEL_NAME,
     EXPECTED_USAGE_KEYS_GOOGLE,
 )
+from .helpers import build_sync_runner, extract_final_response_text
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -43,39 +41,6 @@ pytest_skip_for_adk_older_than_1_3_0 = pytest.mark.skipif(
 
 # Maximum reasonable time-to-first-token in seconds for test assertions
 MAX_REASONABLE_TTFT_SECONDS = 60
-
-
-def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
-    session_service = adk_sessions.InMemorySessionService()
-    _ = session_service.create_session_sync(
-        app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID
-    )
-    runner = adk_runners.Runner(
-        agent=root_agent, app_name=APP_NAME, session_service=session_service
-    )
-    return runner
-
-
-def _extract_final_response_text(
-    events_generator: Iterator[adk_events.Event],
-) -> Optional[str]:
-    """
-    Exhausts the iterator of ADK events and returns the response text
-    from the last event (presumably the final root agent response).
-    """
-    events_generator = list(events_generator)
-    if len(events_generator) == 0:
-        # As the error might occur in the background, we raise an exception here
-        raise Exception("Agent failed to execute.")
-
-    last_event: adk_events.Event = events_generator[-1]
-    # Don't use only event.is_final_response() because it may be true for nested agents as well!
-    assert (
-        last_event.is_final_response()
-        and last_event.content
-        and last_event.content.parts
-    )
-    return last_event.content.parts[0].text
 
 
 @pytest.mark.skipif(
@@ -118,7 +83,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -128,7 +93,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -239,7 +204,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -249,7 +214,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    weather_question_response = _extract_final_response_text(events_generator)
+    weather_question_response = extract_final_response_text(events_generator)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -258,7 +223,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             role="user", parts=[genai_types.Part(text="What is the time in New York?")]
         ),
     )
-    time_question_response = _extract_final_response_text(events_generator)
+    time_question_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -447,11 +412,9 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
         description="Runs translator to english then summarizer, in order.",
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
-        # before_model_callback=opik_tracer.before_model_callback,
-        # after_model_callback=opik_tracer.after_model_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     INPUT_GERMAN_TEXT = (
         "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
@@ -474,7 +437,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
             role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -605,7 +568,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -615,7 +578,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -735,7 +698,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -745,7 +708,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -865,7 +828,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -876,7 +839,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -993,7 +956,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
 
     track_adk_agent_recursive(root_agent, opik_tracer)
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     INPUT_GERMAN_TEXT = (
         "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
@@ -1016,7 +979,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
             role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -1126,7 +1089,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
 
     track_adk_agent_recursive(root_agent, opik_tracer)
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     INPUT_GERMAN_TEXT = "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
 
@@ -1137,7 +1100,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
             role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -1340,7 +1303,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1350,7 +1313,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1454,7 +1417,7 @@ def test_adk__agent_with_response_schema__happyflow(
         output_schema=SummaryResult,
     )
 
-    runner = _build_runner(summarizer)
+    runner = build_sync_runner(summarizer)
 
     INPUT_GERMAN_TEXT = (
         "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
@@ -1477,7 +1440,7 @@ def test_adk__agent_with_response_schema__happyflow(
             role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -1552,7 +1515,7 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1568,7 +1531,7 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
         # `_extract_final_response_text` will raise an exception because it is
         # programmed to do so when there are no events (we still have to try to exhaust the generator though,
         # because it is necessary for agent to actuallyexecute)
-        _ = _extract_final_response_text(events_generator)
+        _ = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1659,7 +1622,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1675,7 +1638,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
         # `_extract_final_response_text` will raise an exception because it is
         # programmed to do so when there are no events (we still have to try to exhaust the generator though,
         # because it is necessary for agent to actuallyexecute)
-        _ = _extract_final_response_text(events_generator)
+        _ = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1780,7 +1743,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
         after_model_callback=opik_tracer.after_model_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     INPUT_GERMAN_TEXT = (
         "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
@@ -1803,7 +1766,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
             role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1917,7 +1880,7 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1927,7 +1890,7 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1962,7 +1925,7 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1972,7 +1935,7 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -2027,7 +1990,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -2038,7 +2001,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -2093,7 +2056,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -2103,7 +2066,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -2165,7 +2128,7 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     # Use a simple query that should generate a response
     events_generator = runner.run(
@@ -2176,7 +2139,7 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
             parts=[genai_types.Part(text="Hello")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -2244,7 +2207,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_b
         after_agent_callback=opik_tracer.after_agent_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = build_sync_runner(root_agent)
 
     INPUT_GERMAN_TEXT = (
         "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
@@ -2258,7 +2221,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_b
             role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
