@@ -195,6 +195,8 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
         align={align}
         side={side}
         onOpenAutoFocus={(e) => e.preventDefault()}
+        collisionPadding={16}
+        sideOffset={4}
       >
         <div className="px-4 py-3 border-b">
           <h4 className="comet-body-xs-accented">Explore available paths</h4>
@@ -209,7 +211,7 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
 
         <div className="px-4 py-3 border-t">
           <p className="comet-body-xs text-light-slate">
-            Press <KeyboardBadge>Tab</KeyboardBadge> to navigate,{" "}
+            Press <KeyboardBadge>Tab</KeyboardBadge> or <KeyboardBadge>←↑→↓</KeyboardBadge> to navigate,{" "}
             <KeyboardBadge>Enter</KeyboardBadge> to select, and{" "}
             <KeyboardBadge>Esc</KeyboardBadge> to close.
           </p>

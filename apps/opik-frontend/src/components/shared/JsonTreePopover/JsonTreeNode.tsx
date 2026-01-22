@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useRef, useEffect } from "react";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { JsonTreeNodeProps, JsonValue } from "./types";
@@ -20,6 +20,7 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
   focusedPath,
   onFocusPath,
 }) => {
+  const nodeRef = useRef<HTMLDivElement>(null);
   const indent = depth * 16;
   const isExpanded = expandedPaths.has(path);
   const isFocused = focusedPath === path;
@@ -47,6 +48,15 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
   const handleMouseEnter = useCallback(() => {
     onFocusPath?.(path);
   }, [path, onFocusPath]);
+
+  useEffect(() => {
+    if (isFocused && nodeRef.current) {
+      nodeRef.current.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [isFocused]);
 
   const renderChildren = () => {
     if (!isExpanded || !isExpandable) return null;
@@ -99,6 +109,7 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
   return (
     <div>
       <div
+        ref={nodeRef}
         className={cn(
           "flex items-center gap-1 py-1 px-2 rounded cursor-pointer",
           "hover:bg-muted transition-colors font-mono",
