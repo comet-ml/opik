@@ -175,6 +175,9 @@ class TestSmokeTestCommand:
         assert call_kwargs["project_name"] == "test-project"
         # Verify trace was started
         mock_start_trace.assert_called_once()
+        # Verify cached client is NOT flushed (since _temporary_client_context patches
+        # get_client_cached to return mock_client, not mock_cached_client)
+        mock_cached_client.flush.assert_not_called()
         # Verify explicit client was flushed and ended
         # Note: _temporary_client_context patches get_client_cached to return mock_client,
         # so when start_as_current_trace calls get_client_cached().flush(), it flushes mock_client
