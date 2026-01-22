@@ -10,6 +10,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
+import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -110,5 +111,30 @@ class ExperimentsResourceCustomConfigurationTest {
         assertThat(actualPage.content().getFirst().id()).isEqualTo(experimentId);
         // SortableBy is empty because sorting was disabled
         assertThat(actualPage.sortableBy()).isEmpty();
+    }
+
+    @Test
+    void findExperimentsWithForceSortingBypassesLimit() {
+        var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = "apiKey-" + UUID.randomUUID();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+        var experimentId = experimentResourceClient.create(apiKey, workspaceName);
+        // Create an experiment item to exceed the limit
+        var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .build();
+        experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+        var actualPage = experimentResourceClient.findExperiments(
+                1, 10, true, apiKey, workspaceName);
+
+        assertThat(actualPage.page()).isEqualTo(1);
+        assertThat(actualPage.size()).isEqualTo(1);
+        assertThat(actualPage.total()).isEqualTo(1);
+        assertThat(actualPage.content()).hasSize(1);
+        assertThat(actualPage.content().getFirst().id()).isEqualTo(experimentId);
+        assertThat(actualPage.sortableBy())
+                .containsExactlyElementsOf(ExperimentSortingFactory.EXPERIMENT_SORTABLE_FIELDS);
     }
 }

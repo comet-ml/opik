@@ -123,14 +123,15 @@ public class ExperimentsResource {
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters,
-            @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIds) {
+            @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIds,
+            @QueryParam("force_sorting") @DefaultValue("false") @Schema(description = "Force sorting even when exceeding the endpoint result set limit. May result in slower queries") boolean forceSorting) {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
         var metadata = workspaceMetadataService.getExperimentMetadata(
                 requestContext.get().getWorkspaceId(), datasetId)
                 .block();
-        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
+        if (!forceSorting && !sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -161,7 +162,7 @@ public class ExperimentsResource {
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)
                 .map(experimentPage -> {
-                    if (metadata.cannotUseDynamicSorting()) {
+                    if (!forceSorting && metadata.cannotUseDynamicSorting()) {
                         return experimentPage.toBuilder().sortableBy(List.of()).build();
                     }
                     return experimentPage;
