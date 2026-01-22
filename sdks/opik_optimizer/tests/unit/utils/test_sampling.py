@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from opik_optimizer.utils import sampling
 from tests.unit.fixtures.builders import make_mock_dataset
 
@@ -75,3 +77,79 @@ def test_resolve_sampling_clamps_to_dataset_size() -> None:
     assert plan.nb_samples == 3
     assert plan.dataset_item_ids is not None
     assert len(plan.dataset_item_ids) == 3
+
+
+def test_resolve_sampling_accepts_fractional_samples() -> None:
+    dataset = _make_sequential_dataset(10)
+    plan = sampling.resolve_sampling(
+        dataset=dataset,
+        n_samples=0.1,
+        phase="eval",
+        seed=1,
+    )
+
+    assert plan.nb_samples == 1
+    assert plan.dataset_item_ids is not None
+    assert len(plan.dataset_item_ids) == 1
+
+
+def test_resolve_sampling_accepts_percent_string() -> None:
+    dataset = _make_sequential_dataset(20)
+    plan = sampling.resolve_sampling(
+        dataset=dataset,
+        n_samples="25%",
+        phase="eval",
+        seed=2,
+    )
+
+    assert plan.nb_samples == 5
+    assert plan.dataset_item_ids is not None
+    assert len(plan.dataset_item_ids) == 5
+
+
+def test_resolve_sampling_fractional_full_dataset() -> None:
+    dataset = _make_sequential_dataset(8)
+
+    plan_fraction = sampling.resolve_sampling(
+        dataset=dataset,
+        n_samples=1.0,
+        phase="eval",
+        seed=3,
+    )
+    plan_percent = sampling.resolve_sampling(
+        dataset=dataset,
+        n_samples="100%",
+        phase="eval",
+        seed=3,
+    )
+
+    assert plan_fraction.nb_samples is None
+    assert plan_fraction.dataset_item_ids is None
+    assert plan_fraction.mode.endswith(":full")
+    assert plan_percent.nb_samples is None
+    assert plan_percent.dataset_item_ids is None
+    assert plan_percent.mode.endswith(":full")
+
+
+@pytest.mark.parametrize("value", [0.0, -0.1, 1.1])
+def test_resolve_sampling_rejects_invalid_fractions(value: float) -> None:
+    dataset = _make_sequential_dataset(5)
+    with pytest.raises(ValueError):
+        sampling.resolve_sampling(
+            dataset=dataset,
+            n_samples=value,
+            phase="eval",
+            seed=4,
+        )
+
+
+@pytest.mark.parametrize("value", ["0%", "120%", "abc%"])
+def test_resolve_sampling_rejects_invalid_percent_strings(value: str) -> None:
+    dataset = _make_sequential_dataset(5)
+    with pytest.raises(ValueError):
+        sampling.resolve_sampling(
+            dataset=dataset,
+            n_samples=value,
+            phase="eval",
+            seed=5,
+        )

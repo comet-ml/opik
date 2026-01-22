@@ -108,7 +108,10 @@ class TestSetupOptimizationDatasetsAndSamples:
             (None, 3, None),
             (2, 3, 2),
             (5, 3, None),  # clamped to full dataset by setting to None
-            (0, 3, 0),
+            (0.1, 10, 0.1),
+            ("10%", 10, "10%"),
+            ("full", 3, "full"),
+            ("all", 3, "all"),
         ],
     )
     def test_n_samples_normalization_against_evaluation_dataset_size(
@@ -117,9 +120,9 @@ class TestSetupOptimizationDatasetsAndSamples:
         simple_chat_prompt,
         mock_opik_client,
         mock_metric: MetricFunction,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
         total_items: int,
-        expected: int | None,
+        expected: int | float | str | None,
     ) -> None:
         """n_samples should be validated against evaluation dataset size (and clamped when too large)."""
         mock_opik_client()
