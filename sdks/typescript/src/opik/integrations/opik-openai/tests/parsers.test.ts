@@ -1,4 +1,4 @@
-import { parseCompletionOutput, parseUsage } from "../../../../src/opik/integrations/opik-openai/src/parsers";
+import { parseCompletionOutput, parseUsage } from "../src/parsers";
 
 describe("OpenAI Parsers", () => {
   describe("parseCompletionOutput", () => {
@@ -312,4 +312,3 @@ describe("OpenAI Parsers", () => {
     });
   });
 });
-
