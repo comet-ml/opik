@@ -20,7 +20,11 @@ class RateLimiter:
         self.max_calls_per_second = max_calls_per_second
         rate = pyrate_limiter.Rate(max_calls_per_second, pyrate_limiter.Duration.SECOND)
 
-        self.limiter = pyrate_limiter.Limiter(rate, raise_when_fail=False)
+        try:
+            self.limiter = pyrate_limiter.Limiter(rate, raise_when_fail=False)
+        except TypeError:
+            # Newer pyrate_limiter versions dropped the flag; fall back to default.
+            self.limiter = pyrate_limiter.Limiter(rate)
         self.bucket_key = "global_rate_limit"
 
     def acquire(self) -> None:
