@@ -27,5 +27,6 @@ schedule==1.2.1
 tiktoken==0.9.0
 redis==6.4.0
 rq==2.6.0
-opik-optimizer==2.3.11
+opik-optimizer==3.0.0rc5
 gepa==0.0.17
+pyrate-limiter>=3.0.0,<4.0.0
