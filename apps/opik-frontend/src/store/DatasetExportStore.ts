@@ -1,9 +1,59 @@
 import { create } from "zustand";
-import { DatasetExportJob } from "@/types/datasets";
+import { DatasetExportJob, DATASET_EXPORT_STATUS } from "@/types/datasets";
+
+/**
+ * Constructs a display name for an export job, including version info if available.
+ * @param datasetName - The base dataset name
+ * @param versionId - The version ID (if present, version name will be included)
+ * @param versionName - The version name to display
+ * @returns Formatted display name like "Dataset Name" or "Dataset Name (v2)"
+ */
+export const buildExportDisplayName = (
+  datasetName: string | undefined,
+  versionId: string | undefined,
+  versionName: string | undefined,
+): string => {
+  const baseName = datasetName || "Unknown Dataset";
+  const versionSuffix = versionId && versionName ? ` (${versionName})` : "";
+  return `${baseName}${versionSuffix}`;
+};
+
+/**
+ * Parameters for the handleExportSuccess helper function.
+ */
+export interface HandleExportSuccessParams {
+  job: DatasetExportJob;
+  datasetName: string | undefined;
+  versionId: string | undefined;
+  versionName: string | undefined;
+  addExportJob: (job: DatasetExportJob, displayName: string) => void;
+}
+
+/**
+ * Shared helper for handling successful export job creation.
+ * Builds the display name and adds the job to the store.
+ * Note: Does NOT auto-expand the panel - the panel shows collapsed with job count.
+ */
+export const handleExportSuccess = ({
+  job,
+  datasetName,
+  versionId,
+  versionName,
+  addExportJob,
+}: HandleExportSuccessParams): void => {
+  const exportName = buildExportDisplayName(
+    datasetName,
+    versionId,
+    versionName,
+  );
+  addExportJob(job, exportName);
+};
 
 export interface ExportJobInfo {
   job: DatasetExportJob;
   datasetName: string;
+  /** Whether the user has downloaded this export file */
+  isDownloaded?: boolean;
 }
 
 interface DatasetExportState {
@@ -18,6 +68,7 @@ interface DatasetExportState {
   addJob: (job: DatasetExportJob, datasetName: string) => void;
   updateJob: (job: DatasetExportJob) => void;
   removeJob: (jobId: string) => void;
+  markJobAsDownloaded: (jobId: string) => void;
   togglePanelExpanded: () => void;
   setPanelExpanded: (expanded: boolean) => void;
   hydrateFromApi: (jobs: DatasetExportJob[]) => void;
@@ -32,14 +83,15 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
     set((state) => {
       // Create new Map with the new job first (most recent at top)
       const newJobs = new Map<string, ExportJobInfo>();
-      newJobs.set(job.id, { job, datasetName });
+      newJobs.set(job.id, { job, datasetName, isDownloaded: false });
       // Then add existing jobs
       for (const [id, jobInfo] of state.activeJobs) {
         if (id !== job.id) {
           newJobs.set(id, jobInfo);
         }
       }
-      return { activeJobs: newJobs, isPanelExpanded: true };
+      // Don't auto-expand panel when adding new jobs - let user control it
+      return { activeJobs: newJobs };
     }),
 
   updateJob: (job) =>
@@ -56,6 +108,16 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
     set((state) => {
       const newJobs = new Map(state.activeJobs);
       newJobs.delete(jobId);
+      return { activeJobs: newJobs };
+    }),
+
+  markJobAsDownloaded: (jobId) =>
+    set((state) => {
+      const existing = state.activeJobs.get(jobId);
+      if (!existing) return state;
+
+      const newJobs = new Map(state.activeJobs);
+      newJobs.set(jobId, { ...existing, isDownloaded: true });
       return { activeJobs: newJobs };
     }),
 
@@ -77,7 +139,11 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
       for (const job of jobs) {
         newJobs.set(job.id, {
           job,
-          datasetName: job.dataset_name || "Unknown Dataset",
+          datasetName: buildExportDisplayName(
+            job.dataset_name,
+            job.dataset_version_id,
+            job.version_name,
+          ),
         });
       }
 
@@ -92,8 +158,7 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
       return {
         activeJobs: newJobs,
         isHydrated: true,
-        // Expand panel if there are jobs to show
-        isPanelExpanded: newJobs.size > 0 ? true : state.isPanelExpanded,
+        // Don't auto-expand panel on hydration - let user control it
       };
     }),
 }));
@@ -117,6 +182,9 @@ export const useUpdateExportJob = () =>
 export const useRemoveExportJob = () =>
   useDatasetExportStore((state) => state.removeJob);
 
+export const useMarkJobAsDownloaded = () =>
+  useDatasetExportStore((state) => state.markJobAsDownloaded);
+
 export const useTogglePanelExpanded = () =>
   useDatasetExportStore((state) => state.togglePanelExpanded);
 
@@ -128,5 +196,37 @@ export const useHydrateFromApi = () =>
 
 export const useIsHydrated = () =>
   useDatasetExportStore((state) => state.isHydrated);
+
+/**
+ * Checks if there's already an in-progress export job for the given dataset and version.
+ * @param datasetId - The dataset ID to check
+ * @param datasetVersionId - Optional version ID to check
+ * @returns true if there's an in-progress job, false otherwise
+ */
+export const useHasInProgressJob = (
+  datasetId: string,
+  datasetVersionId?: string,
+) => {
+  return useDatasetExportStore((state) => {
+    for (const jobInfo of state.activeJobs.values()) {
+      const job = jobInfo.job;
+      // Check if it's the same dataset
+      if (job.dataset_id !== datasetId) continue;
+
+      // Check version match (both null or both same)
+      const jobVersionId = job.dataset_version_id;
+      if (jobVersionId !== datasetVersionId) continue;
+
+      // Check if job is in progress (PENDING or PROCESSING)
+      if (
+        job.status === DATASET_EXPORT_STATUS.PENDING ||
+        job.status === DATASET_EXPORT_STATUS.PROCESSING
+      ) {
+        return true;
+      }
+    }
+    return false;
+  });
+};
 
 export default useDatasetExportStore;
