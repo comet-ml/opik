@@ -57,10 +57,6 @@ const LLMMessagesSection: React.FC<LLMMessagesSectionProps> = ({
     [],
   );
 
-  const handleMessageFocus = useCallback((messageId: string) => {
-    setFocusedMessageId(messageId);
-  }, []);
-
   // Extract variable names from JSON for display
   const jsonVariables = useMemo(() => {
     if (!jsonData) return [];
@@ -88,7 +84,6 @@ const LLMMessagesSection: React.FC<LLMMessagesSectionProps> = ({
             onChangeMessage={(changes) =>
               handleChangeMessage(message.id, changes)
             }
-            onFocus={() => handleMessageFocus(message.id)}
             promptVariables={jsonVariables}
             jsonTreeData={jsonData}
             onJsonPathSelect={onPathSelect}
