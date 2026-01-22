@@ -92,8 +92,12 @@ const TracesPage = () => {
       type as PROJECT_TAB,
     );
 
+    // If type is "logs" (the tab itself), correct it to the default logs type
+    if (type === PROJECT_TAB.logs) {
+      setType(defaultLogsType);
+    }
     // If type is not a valid LOGS_TYPE or PROJECT_TAB, correct it
-    if (!isValidLogsType && !isValidProjectTab) {
+    else if (!isValidLogsType && !isValidProjectTab) {
       setType(defaultLogsType);
     }
   }, [type, defaultLogsType, setType]);
