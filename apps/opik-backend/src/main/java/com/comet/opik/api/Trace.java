@@ -72,7 +72,9 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) boolean hasToolSpans,
         @JsonView({
-                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "List of unique provider names from all spans in this trace, sorted alphabetically") List<String> providers){
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "List of unique provider names from all spans in this trace, sorted alphabetically") List<String> providers,
+        @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of attachments associated with this trace") int attachmentCount){
 
     @Builder(toBuilder = true)
     public record TracePage(
@@ -115,6 +117,7 @@ public record Trace(
         THREAD_ID("thread_id"),
         VISIBILITY_MODE("visibility_mode"),
         PROVIDERS("providers"),
+        ATTACHMENT_COUNT("attachment_count"),
         ;
 
         @JsonValue

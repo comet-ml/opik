@@ -1070,6 +1070,17 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY id
                 )
                 GROUP BY workspace_id, project_id, entity_id
+            ), attachments_agg AS (
+                SELECT
+                    entity_id,
+                    COUNT(*) as attachment_count
+                FROM attachments
+                WHERE workspace_id = :workspace_id
+                AND entity_type = 'trace'
+                AND deleted_at = toDateTime64(0, 9)
+                <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                GROUP BY workspace_id, entity_type, entity_id
             ), trace_annotation_queue_ids AS (
                  SELECT trace_id,
                         groupArray(id) AS annotation_queue_ids
@@ -1224,12 +1235,14 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
+                  <if(!exclude_attachment_count)>, COALESCE(att.attachment_count, 0) AS attachment_count<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
+             LEFT JOIN attachments_agg att ON att.entity_id = t.id
              ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2794,6 +2807,10 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
+                .attachmentCount(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.ATTACHMENT_COUNT, row, "attachment_count",
+                                Integer.class))
+                        .orElse(0))
                 .build();
     }
 
@@ -2964,6 +2981,8 @@ class TraceDAOImpl implements TraceDAO {
                                 fields.contains(Trace.TraceField.LLM_SPAN_COUNT.getValue()));
                         template.add("exclude_has_tool_spans",
                                 fields.contains(Trace.TraceField.HAS_TOOL_SPANS.getValue()));
+                        template.add("exclude_attachment_count",
+                                fields.contains(Trace.TraceField.ATTACHMENT_COUNT.getValue()));
                     }
                 });
     }

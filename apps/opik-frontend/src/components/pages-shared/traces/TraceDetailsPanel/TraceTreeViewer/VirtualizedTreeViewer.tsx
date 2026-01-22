@@ -9,6 +9,7 @@ import {
   Coins,
   Hash,
   MessageSquareMore,
+  Paperclip,
   PenLine,
   Tag,
   TriangleAlert,
@@ -414,6 +415,13 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
                         {name}
                       </span>
                     </TooltipWrapper>
+                    {node.data.attachment_count > 0 && (
+                      <TooltipWrapper
+                        content={`Has ${node.data.attachment_count} attachment${node.data.attachment_count > 1 ? "s" : ""}`}
+                      >
+                        <Paperclip className="size-3 shrink-0 text-muted-slate" />
+                      </TooltipWrapper>
+                    )}
                     {node.data.hasError && (
                       <>
                         <div className="flex-auto" />
