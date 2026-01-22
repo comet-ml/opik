@@ -17,7 +17,7 @@ export class ThreadsPage {
     this.page = page;
     this.searchInput = page.getByTestId('search-input');
     this.logsTab = page.getByRole('tab', { name: 'Logs' });
-    this.threadsToggle = page.getByRole('button', { name: 'Threads' });
+    this.threadsToggle = page.getByRole('radio', { name: 'Threads' });
     this.threadRow = page.locator('tbody tr');
     this.threadContainer = page.getByTestId('thread');
     this.threadContainerDeleteButton = page
