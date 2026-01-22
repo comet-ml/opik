@@ -20,6 +20,7 @@ export enum EVALUATORS_RULE_SCOPE {
 export enum UI_EVALUATORS_RULE_TYPE {
   llm_judge = "llm_judge",
   python_code = "python_code",
+  common_metric = "common_metric",
 }
 
 export interface LLMJudgeModel {
@@ -111,4 +112,33 @@ export interface EvaluatorRuleLogItem {
 
 export interface EvaluatorRuleLogItemWithId extends EvaluatorRuleLogItem {
   id: string;
+}
+
+// Common Metrics types
+export interface ScoreParameter {
+  name: string;
+  type: string;
+  description: string;
+  required: boolean;
+}
+
+export interface InitParameter {
+  name: string;
+  type: string;
+  description: string;
+  default_value: string | null;
+  required: boolean;
+}
+
+export interface CommonMetric {
+  id: string;
+  name: string;
+  description: string;
+  code: string;
+  parameters: ScoreParameter[];
+  init_parameters: InitParameter[];
+}
+
+export interface CommonMetricList {
+  content: CommonMetric[];
 }

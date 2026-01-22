@@ -38,16 +38,24 @@ export const getBackendRuleType = (
     [EVALUATORS_RULE_SCOPE.trace]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]: EVALUATORS_RULE_TYPE.llm_judge,
       [UI_EVALUATORS_RULE_TYPE.python_code]: EVALUATORS_RULE_TYPE.python_code,
+      // Common metrics use the same backend type as Python code
+      [UI_EVALUATORS_RULE_TYPE.common_metric]: EVALUATORS_RULE_TYPE.python_code,
     },
     [EVALUATORS_RULE_SCOPE.thread]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]:
         EVALUATORS_RULE_TYPE.thread_llm_judge,
       [UI_EVALUATORS_RULE_TYPE.python_code]:
         EVALUATORS_RULE_TYPE.thread_python_code,
+      // Common metrics use the same backend type as Python code
+      [UI_EVALUATORS_RULE_TYPE.common_metric]:
+        EVALUATORS_RULE_TYPE.thread_python_code,
     },
     [EVALUATORS_RULE_SCOPE.span]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]: EVALUATORS_RULE_TYPE.span_llm_judge,
       [UI_EVALUATORS_RULE_TYPE.python_code]:
+        EVALUATORS_RULE_TYPE.span_python_code,
+      // Common metrics use the same backend type as Python code
+      [UI_EVALUATORS_RULE_TYPE.common_metric]:
         EVALUATORS_RULE_TYPE.span_python_code,
     },
   })[scope][uiType];

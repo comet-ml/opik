@@ -6,12 +6,14 @@ import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.evaluators.CommonMetric;
 import com.comet.opik.api.filter.AutomationRuleEvaluatorFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorSearchCriteria;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
+import com.comet.opik.domain.evaluators.python.CommonMetricsRegistry;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -71,6 +73,7 @@ public class AutomationRuleEvaluatorsResource {
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull AutomationRuleEvaluatorSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull CommonMetricsRegistry commonMetricsRegistry;
 
     @GET
     @Operation(operationId = "findEvaluators", summary = "Find project Evaluators", description = "Find project Evaluators", responses = {
@@ -111,6 +114,18 @@ public class AutomationRuleEvaluatorsResource {
         return Response.ok()
                 .entity(evaluatorPage)
                 .build();
+    }
+
+    @GET
+    @Path("/common-metrics")
+    @Operation(operationId = "getCommonMetrics", summary = "Get available common metrics", description = "Get the list of pre-defined common metrics from the Python SDK that can be used for Online Evaluation rules", responses = {
+            @ApiResponse(responseCode = "200", description = "List of common metrics", content = @Content(schema = @Schema(implementation = CommonMetric.CommonMetricList.class)))
+    })
+    public Response getCommonMetrics() {
+        log.info("Getting common metrics list");
+        CommonMetric.CommonMetricList metrics = commonMetricsRegistry.getAll();
+        log.info("Returning '{}' common metrics", metrics.content().size());
+        return Response.ok(metrics).build();
     }
 
     @GET

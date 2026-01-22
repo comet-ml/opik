@@ -349,6 +349,16 @@ export const BasePythonCodeFormSchema = z.object({
     .min(1, { message: "Code is required" }),
 });
 
+export const CommonMetricDetailsSchema = z.object({
+  metricId: z
+    .string({
+      required_error: "Metric is required",
+    })
+    .min(1, { message: "Please select a metric" }),
+  // Configuration parameters from __init__ (e.g., case_sensitive, reference)
+  initConfig: z.record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()])).optional(),
+});
+
 export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
   {
     arguments: z.record(
@@ -387,6 +397,7 @@ export const BaseEvaluationRuleFormSchema = z.object({
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
   enabled: z.boolean().default(true),
   filters: FiltersSchema.default([]),
+  commonMetricDetails: CommonMetricDetailsSchema.optional(),
 });
 
 export const LLMJudgeTraceEvaluationRuleFormSchema =
