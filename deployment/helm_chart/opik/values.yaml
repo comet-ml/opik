@@ -348,7 +348,40 @@ component:
     # use internal aws resolvr on vpc
     awsResolver: false
     # Enable HSTS header (only enable when running behind HTTPS termination)
+    # DEPRECATED: Use extraServerHeaders instead for more flexibility
     hstsEnabled: false
+    # Cache control configuration for static assets
+    # Defines max-age values for different file types based on deployment frequency
+    # Key is the nginx map pattern (regex), value is the Cache-Control header value
+    # Patterns are evaluated in order, first match wins
+    # Use 'default' as the key for the default/fallback value
+    cacheControl:
+      # HTML files - always revalidate to get fresh content
+      default: "no-cache, must-revalidate"
+      # JavaScript and CSS - 7 days cache (frequent deployments with versioned/hashed filenames)
+      "~assets/.*\\.(js|css)$": "public, max-age=604800, immutable"
+      # Images - 30 days cache (static assets, but may update)
+      "~(images/.*|assets/.*)\\.(jpg|jpeg|png|gif|svg|webp|ico)$": "public, max-age=2592000"
+      # Fonts - 30 days cache (rarely change, but shorter for frequent updates)
+      "~assets/.*\\.(woff|woff2|ttf|eot)$": "public, max-age=2592000"
+      # JSON/data files - 1 day cache (may update frequently)
+      "~assets/.*\\.json$": "public, max-age=86400"
+    # Extra server-level headers to add to all responses
+    # Use this to add custom security headers or override defaults
+    # Key is the header name, value can be a string or list of strings
+    # If list, multiple add_header directives will be generated
+    extraServerHeaders:
+      # OWASP recommended security headers (defaults)
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "DENY"
+      X-XSS-Protection: "0"
+      # Add custom headers or override defaults:
+      # X-Custom-Header: "custom-value"
+      # Strict-Transport-Security: "max-age=31536000; includeSubDomains; preload"
+      # Multiple values example (list):
+      # Link:
+      #   - "</style.css>; rel=preload; as=style"
+      #   - "</script.js>; rel=preload; as=script"
     # Content Security Policy (CSP) configuration
     # Customize these lists to allow additional external services (analytics, CDNs, etc.)
     contentSecurityPolicy:

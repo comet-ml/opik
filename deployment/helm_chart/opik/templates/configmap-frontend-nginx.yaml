@@ -55,17 +55,22 @@ data:
       {{- end}}
     }
     {{- end }}
+    {{- with .Values.component.frontend.cacheControl }}
+    map $uri $cache_control_header {
+      {{- range $pattern, $value := . }}
+      {{ $pattern }} {{ $value | squote }};
+      {{- end }}
+    }
+    {{- else }}
+    {{- /* Fallback to hardcoded defaults if cacheControl is not defined (backward compatibility) */ -}}
     map $uri $cache_control_header {
       default                              "no-cache, must-revalidate";
-      # JavaScript and CSS - 7 days cache (frequent deployments with versioned/hashed filenames)
       "~assets/.*\.(js|css)$"              "public, max-age=604800, immutable";
-      # Images - 30 days cache (static assets, but may update)
       "~(images/.*|assets/.*)\.(jpg|jpeg|png|gif|svg|webp|ico)$" "public, max-age=2592000";
-      # Fonts - 30 days cache (rarely change, but shorter for frequent updates)
       "~assets/.*\.(woff|woff2|ttf|eot)$"  "public, max-age=2592000";
-      # JSON/data files - 1 day cache (may update frequently)
       "~assets/.*\.json$"                  "public, max-age=86400";
     }
+    {{- end }}
 
     {{- range $name,$limit := .Values.component.frontend.throttling }}
     limit_req_zone {{ $limit.variable }} zone={{ $limit.zone | default $name }}:{{ $limit.size | default "1m" }} rate={{ $limit.rate | default "10r/m" }};
@@ -86,17 +91,25 @@ data:
         add_header X-Opik-Nginx "frontend" always;
         # Add trace ID header for OpenTelemetry
         add_header X-Trace-ID $otel_trace_id always;
-        
-        # Security headers (OWASP recommendations)
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-Frame-Options "DENY" always;
-        add_header X-XSS-Protection "0" always;
+        # Cache control header (from map variable)
         add_header Cache-Control $cache_control_header always;
         {{- with .Values.component.frontend.contentSecurityPolicy }}
+        # Content Security Policy (CSP)
         add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" . }};" always;
         {{- end }}
+        {{- /* Backward compatibility: support deprecated hstsEnabled flag */ -}}
         {{- if .Values.component.frontend.hstsEnabled }}
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+        {{- end }}
+        {{- /* Extra server headers (includes OWASP security headers by default) */ -}}
+        {{- range $name, $value := .Values.component.frontend.extraServerHeaders }}
+        {{- if kindIs "slice" $value }}
+        {{- range $value }}
+        add_header {{ $name }} {{ . | squote }} always;
+        {{- end }}
+        {{- else }}
+        add_header {{ $name }} {{ $value | squote }} always;
+        {{- end }}
         {{- end }}
         
         {{- $rootPath := ternary "" "/opik" .Values.standalone }}
