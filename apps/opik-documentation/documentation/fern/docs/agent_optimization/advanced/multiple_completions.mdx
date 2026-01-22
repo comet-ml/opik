@@ -1,100 +1,12 @@
 ---
-title: "Sampling controls"
-subtitle: "Balance dataset subsampling and multi-completion evaluation"
-description: "Use n_samples, n_samples_minibatch, and the n parameter to trade cost for stability and exploration."
+title: "Multiple Completions (n parameter)"
+subtitle: "Introduce variety at each trial with pass@k evaluation"
+description: "Learn how to use the n parameter to generate multiple candidate outputs per evaluation, reducing variance and improving optimization results through best-of-k selection."
 ---
 
-When optimizing prompts, there are two independent sampling layers you can control:
+When optimizing prompts, single-sample evaluation can be noisy - a good prompt might fail on a particular trial due to LLM stochasticity. The `n` parameter lets you generate **multiple candidate outputs per evaluation** and select the best one, introducing variety and reducing evaluation variance.
 
-- **Dataset subsampling**: choose which dataset rows are evaluated (`n_samples`, `n_samples_minibatch`, `n_samples_strategy`).
-- **Model sampling**: request multiple completions per row (`n` in `model_parameters`).
-
-Use both to balance cost, stability, and exploration.
-
-## Dataset subsampling (n_samples)
-
-`n_samples` limits how many dataset rows are evaluated per trial. It applies to the **evaluation dataset** (the
-`validation_dataset` if provided, otherwise `dataset`).
-
-```python
-result = optimizer.optimize_prompt(
-    prompt=prompt,
-    dataset=dataset,
-    metric=metric,
-    n_samples=50,
-)
-```
-
-Notes:
-- `n_samples` accepts an integer or the strings `"all"` / `"full"` (same as `None`).
-- If `n_samples` is larger than the evaluation dataset size, the optimizer falls back to the full dataset and logs a warning.
-
-## Deterministic subsampling (n_samples_strategy)
-
-`n_samples_strategy` controls *how* dataset rows are selected when `n_samples` is set. The default strategy is
-`"epoch_shuffled"`, which:
-
-1. Sorts dataset item IDs.
-2. Shuffles them deterministically using the optimizer seed and evaluation phase.
-3. Takes the first `n_samples` IDs.
-
-If your dataset items do not include IDs, the optimizer falls back to the dataset order.
-
-```python
-result = optimizer.optimize_prompt(
-    prompt=prompt,
-    dataset=dataset,
-    metric=metric,
-    n_samples=50,
-    n_samples_strategy="epoch_shuffled",
-)
-```
-
-<Info>
-  Only `"epoch_shuffled"` is supported today. Passing another strategy will raise a `ValueError`.
-</Info>
-
-## Minibatch sampling (n_samples_minibatch)
-
-Some optimizers run *inner-loop* evaluations (for example, HRPO and GEPA). Use `n_samples_minibatch` to cap
-those inner evaluations without reducing the outer evaluation size.
-
-```python
-result = optimizer.optimize_prompt(
-    prompt=prompt,
-    dataset=dataset,
-    metric=metric,
-    n_samples=200,
-    n_samples_minibatch=25,
-)
-```
-
-If `n_samples_minibatch` is not set, it defaults to `n_samples`.
-
-## Explicit item selection (dataset_item_ids)
-
-For fully deterministic evaluations, you can pass an explicit list of dataset item IDs to `evaluate_prompt`.
-This bypasses the sampling strategy and is **mutually exclusive** with `n_samples`.
-
-```python
-score = optimizer.evaluate_prompt(
-    prompt=prompt,
-    dataset=dataset,
-    metric=metric,
-    dataset_item_ids=["item-1", "item-2", "item-3"],
-)
-```
-
-<Info>
-  When debug logging is enabled, evaluation logs include the sampling mode and resolved dataset size.
-</Info>
-
-## Multiple completions per example (n parameter)
-
-Single-sample evaluation can be noisy. The `n` parameter lets you generate **multiple candidate outputs per
-example** and select the best one, introducing variety and reducing evaluation variance.
-
-### How It Works
+## How It Works
 
 When you set `n > 1` in your prompt's `model_parameters`, the optimizer:
 
@@ -129,7 +41,7 @@ sequenceDiagram
     E->>T: Log scores & chosen_index
 ```
 
-### Configuration
+## Configuration
 
 Set the `n` parameter in your `ChatPrompt.model_parameters`:
 
@@ -160,7 +72,7 @@ prompt = ChatPrompt(
   so you only need `return_all` when calling those helpers directly.
 </Info>
 
-### Use Cases
+## Use Cases
 
 <AccordionGroup>
   <Accordion title="Reducing Evaluation Variance">
@@ -286,3 +198,78 @@ The trace metadata includes:
 |---------|---------------|-------------------|
 | 1 | 1x | Baseline |
 | 3 | ~3x | Significant |
+| 5 | ~5x | High |
+| 10 | ~10x | Very high |
+
+**Recommendations:**
+- Start with `n=3` for most use cases
+- Use `n=5-10` only for high-variance tasks
+- Consider the total optimization budget when choosing N
+
+## Limitations
+
+<AccordionGroup>
+  <Accordion title="Tool-calling forces n=1">
+    When `allow_tool_use=True` and tools are defined, the optimizer forces `n=1`. This is because tool-calling requires maintaining a coherent message thread, which isn't compatible with multiple independent completions.
+
+    ```python
+    # Tool-calling prompt - n will be forced to 1
+    prompt = ChatPrompt(
+        model="gpt-4o-mini",
+        messages=[...],
+        tools=[...],
+        model_parameters={"n": 3},  # Ignored when tools are used
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="Some optimizers ignore n">
+    Prompt synthesis steps that expect a single structured response (such as few-shot and parameter optimizers) ignore `n` to avoid returning multiple conflicting templates.
+  </Accordion>
+
+  <Accordion title="Not all providers support n">
+    Some LLM providers don't support the `n` parameter. Check your provider's documentation. LiteLLM will drop unsupported parameters automatically.
+  </Accordion>
+</AccordionGroup>
+
+## Full Example
+
+```python
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+from opik.evaluation.metrics import LevenshteinRatio
+
+# Create prompt with n=3 for variety
+prompt = ChatPrompt(
+    model="gpt-4o-mini",
+    messages=[
+        {"role": "system", "content": "Extract the key entities from the text."},
+        {"role": "user", "content": "{text}"},
+    ],
+    model_parameters={
+        "n": 3,  # Generate 3 candidates
+        "temperature": 0.7,  # Moderate variety
+    },
+)
+
+# Define metric
+def extraction_accuracy(dataset_item, llm_output):
+    expected = dataset_item["expected_entities"]
+    return LevenshteinRatio().score(expected, llm_output)
+
+# Optimize - each trial evaluates 3 candidates, picks best
+optimizer = MetaPromptOptimizer(model="gpt-4o")
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=my_dataset,
+    metric=extraction_accuracy,
+)
+
+print(f"Best prompt score: {result.score}")
+```
+
+## Related
+
+- [Optimize prompts](/agent_optimization/optimization/optimize_prompts) - Core optimization guide
+- [Define metrics](/agent_optimization/optimization/define_metrics) - Create custom metrics
+- [Custom metrics](/agent_optimization/advanced/custom_metrics) - Advanced metric patterns
+- [API Reference](/agent_optimization/advanced/api_reference) - Full parameter documentation
