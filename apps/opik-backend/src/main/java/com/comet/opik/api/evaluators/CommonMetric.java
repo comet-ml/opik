@@ -24,9 +24,7 @@ public record CommonMetric(
 
         @Schema(description = "Description of the metric extracted from the docstring") String description,
 
-        @Schema(description = "Full Python code for the metric class") String code,
-
-        @Schema(description = "Parameters for the score() method - these are mapped to trace/span fields") List<ScoreParameter> parameters,
+        @Schema(description = "Parameters for the score() method - these are mapped to trace/span fields") List<ScoreParameter> scoreParameters,
 
         @Schema(description = "Configuration parameters from __init__() - these are static values set by the user") List<InitParameter> initParameters) {
 

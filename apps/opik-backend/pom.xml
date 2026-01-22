@@ -474,31 +474,6 @@
             </plugins>
         </pluginManagement>
         <plugins>
-            <!-- Copy Python SDK heuristics for common metrics parsing -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-resources-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>copy-python-metrics</id>
-                        <phase>generate-resources</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.outputDirectory}/python-metrics/heuristics</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>${project.basedir}/../../sdks/python/src/opik/evaluation/metrics/heuristics</directory>
-                                    <includes>
-                                        <include>*.py</include>
-                                    </includes>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>

@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useForm, FormProvider } from "react-hook-form";
+import { useForm, FormProvider, UseFormReturn } from "react-hook-form";
 import CommonMetricRuleDetails from "./CommonMetricRuleDetails";
 import {
   EVALUATORS_RULE_SCOPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
+import { EvaluationRuleFormType } from "./schema";
 
 // Mock the API hook
 vi.mock("@/api/automations/useCommonMetricsQuery", () => ({
@@ -18,8 +19,7 @@ vi.mock("@/api/automations/useCommonMetricsQuery", () => ({
           id: "equals",
           name: "Equals",
           description: "Checks if output exactly matches reference",
-          code: "class Equals(BaseMetric): pass",
-          parameters: [
+          score_parameters: [
             {
               name: "output",
               type: "str",
@@ -33,13 +33,13 @@ vi.mock("@/api/automations/useCommonMetricsQuery", () => ({
               required: true,
             },
           ],
+          init_parameters: [],
         },
         {
           id: "contains",
           name: "Contains",
           description: "Checks if reference is contained in output",
-          code: "class Contains(BaseMetric): pass",
-          parameters: [
+          score_parameters: [
             {
               name: "output",
               type: "str",
@@ -50,6 +50,15 @@ vi.mock("@/api/automations/useCommonMetricsQuery", () => ({
               name: "reference",
               type: "str",
               description: "The reference to find",
+              required: false,
+            },
+          ],
+          init_parameters: [
+            {
+              name: "case_sensitive",
+              type: "bool",
+              description: "Whether comparison is case-sensitive",
+              default_value: "False",
               required: false,
             },
           ],
@@ -111,7 +120,7 @@ const TestWrapper = () => {
 
     return (
       <FormProvider {...form}>
-        <CommonMetricRuleDetails form={form} />
+        <CommonMetricRuleDetails form={form as unknown as UseFormReturn<EvaluationRuleFormType>} />
       </FormProvider>
     );
   };
@@ -149,7 +158,7 @@ describe("CommonMetricRuleDetails", () => {
       isPending: true,
       isSuccess: false,
       status: "pending",
-    } as ReturnType<typeof useCommonMetricsQuery.default>);
+    } as unknown as ReturnType<typeof useCommonMetricsQuery.default>);
 
     render(<TestWrapper />);
 
@@ -169,7 +178,7 @@ describe("CommonMetricRuleDetails", () => {
       isPending: false,
       isSuccess: false,
       status: "error",
-    } as ReturnType<typeof useCommonMetricsQuery.default>);
+    } as unknown as ReturnType<typeof useCommonMetricsQuery.default>);
 
     render(<TestWrapper />);
 

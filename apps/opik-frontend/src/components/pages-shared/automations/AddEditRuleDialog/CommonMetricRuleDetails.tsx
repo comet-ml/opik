@@ -66,13 +66,10 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
   // Update form values when metric changes
   useEffect(() => {
     if (selectedMetric) {
-      // Set the Python code
-      form.setValue("pythonCodeDetails.metric", selectedMetric.code);
-
-      // Set up arguments based on metric parameters (only for non-thread scope)
+      // Set up arguments based on metric score_parameters (only for non-thread scope)
       if (!isThreadScope) {
         const newArguments: Record<string, string> = {};
-        selectedMetric.parameters
+        selectedMetric.score_parameters
           .filter((p) => p.required)
           .forEach((param) => {
             // Try to preserve existing argument values
@@ -110,10 +107,11 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
 
   // Helper to parse default values from Python strings
   const parseDefaultValue = (
-    defaultValue: string | null,
+    defaultValue: string | null | undefined,
     type: string,
   ): string | boolean | number | null => {
-    if (defaultValue === null || defaultValue === "None") {
+    // Handle null, undefined, or "None" string
+    if (defaultValue === null || defaultValue === undefined || defaultValue === "None") {
       return null;
     }
     const lowerType = type.toLowerCase();
@@ -225,7 +223,7 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
             )}
 
           {/* Variable Mappings (score method parameters) */}
-          {!isThreadScope && selectedMetric.parameters.length > 0 && (
+          {!isThreadScope && selectedMetric.score_parameters.length > 0 && (
             <FormField
               control={form.control}
               name="pythonCodeDetails.arguments"

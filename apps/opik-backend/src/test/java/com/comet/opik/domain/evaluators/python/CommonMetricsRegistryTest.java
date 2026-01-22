@@ -3,6 +3,7 @@ package com.comet.opik.domain.evaluators.python;
 import com.comet.opik.api.evaluators.CommonMetric;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,100 +18,163 @@ class CommonMetricsRegistryTest {
         registry = new CommonMetricsRegistry();
     }
 
-    @Test
-    @DisplayName("should load metrics from bundled Python files")
-    void getAll__shouldReturnLoadedMetrics() {
-        // When
-        CommonMetric.CommonMetricList result = registry.getAll();
+    @Nested
+    @DisplayName("getAll")
+    class GetAll {
 
-        // Then
-        assertThat(result).isNotNull();
-        assertThat(result.content()).isNotEmpty();
+        @Test
+        @DisplayName("should return all predefined metrics")
+        void shouldReturnAllPredefinedMetrics() {
+            // When
+            CommonMetric.CommonMetricList result = registry.getAll();
 
-        // Verify some expected metrics are present
-        assertThat(result.content())
-                .extracting(CommonMetric::name)
-                .contains("Equals", "Contains", "IsJson", "LevenshteinRatio");
-    }
+            // Then
+            assertThat(result).isNotNull();
+            assertThat(result.content()).isNotEmpty();
+            assertThat(result.content()).hasSizeGreaterThanOrEqualTo(5);
+        }
 
-    @Test
-    @DisplayName("should return metrics sorted alphabetically")
-    void getAll__shouldReturnSortedMetrics() {
-        // When
-        CommonMetric.CommonMetricList result = registry.getAll();
+        @Test
+        @DisplayName("should return metrics with correct structure")
+        void shouldReturnMetricsWithCorrectStructure() {
+            // When
+            CommonMetric.CommonMetricList result = registry.getAll();
 
-        // Then
-        assertThat(result.content())
-                .extracting(CommonMetric::name)
-                .isSorted();
-    }
+            // Then
+            for (CommonMetric metric : result.content()) {
+                assertThat(metric.id()).isNotBlank();
+                assertThat(metric.name()).isNotBlank();
+                assertThat(metric.description()).isNotBlank();
+                assertThat(metric.scoreParameters()).isNotNull();
+                assertThat(metric.initParameters()).isNotNull();
+            }
+        }
 
-    @Test
-    @DisplayName("should find metric by ID")
-    void findById__whenMetricExists__shouldReturnMetric() {
-        // When
-        CommonMetric metric = registry.findById("equals");
+        @Test
+        @DisplayName("should include equals metric")
+        void shouldIncludeEqualsMetric() {
+            // When
+            CommonMetric.CommonMetricList result = registry.getAll();
 
-        // Then
-        assertThat(metric).isNotNull();
-        assertThat(metric.name()).isEqualTo("Equals");
-        assertThat(metric.description()).isNotBlank();
-        assertThat(metric.code()).contains("class Equals");
-        assertThat(metric.parameters()).isNotEmpty();
-    }
+            // Then
+            CommonMetric equalsMetric = result.content().stream()
+                    .filter(m -> m.id().equals("equals"))
+                    .findFirst()
+                    .orElse(null);
 
-    @Test
-    @DisplayName("should return null for non-existent metric ID")
-    void findById__whenMetricNotExists__shouldReturnNull() {
-        // When
-        CommonMetric metric = registry.findById("non_existent_metric");
+            assertThat(equalsMetric).isNotNull();
+            assertThat(equalsMetric.name()).isEqualTo("Equals");
+            assertThat(equalsMetric.scoreParameters()).hasSize(2);
+            assertThat(equalsMetric.initParameters()).hasSize(1);
+        }
 
-        // Then
-        assertThat(metric).isNull();
-    }
+        @Test
+        @DisplayName("should include contains metric with init parameters")
+        void shouldIncludeContainsMetricWithInitParameters() {
+            // When
+            CommonMetric.CommonMetricList result = registry.getAll();
 
-    @Test
-    @DisplayName("should load metrics with valid parameters")
-    void getAll__shouldLoadMetricsWithValidParameters() {
-        // When
-        CommonMetric.CommonMetricList result = registry.getAll();
+            // Then
+            CommonMetric containsMetric = result.content().stream()
+                    .filter(m -> m.id().equals("contains"))
+                    .findFirst()
+                    .orElse(null);
 
-        // Then - all loaded metrics should have at least one required parameter
-        for (CommonMetric metric : result.content()) {
-            assertThat(metric.parameters())
-                    .as("Metric '%s' should have parameters", metric.name())
-                    .isNotEmpty();
+            assertThat(containsMetric).isNotNull();
+            assertThat(containsMetric.name()).isEqualTo("Contains");
+            assertThat(containsMetric.initParameters()).hasSize(2);
 
-            boolean hasRequiredParam = metric.parameters().stream()
-                    .anyMatch(CommonMetric.ScoreParameter::required);
-            assertThat(hasRequiredParam)
-                    .as("Metric '%s' should have at least one required parameter", metric.name())
-                    .isTrue();
+            // Check case_sensitive init parameter
+            CommonMetric.InitParameter caseSensitiveParam = containsMetric.initParameters().stream()
+                    .filter(p -> p.name().equals("case_sensitive"))
+                    .findFirst()
+                    .orElse(null);
+
+            assertThat(caseSensitiveParam).isNotNull();
+            assertThat(caseSensitiveParam.type()).isEqualTo("bool");
+            assertThat(caseSensitiveParam.defaultValue()).isEqualTo("False");
+            assertThat(caseSensitiveParam.required()).isFalse();
+        }
+
+        @Test
+        @DisplayName("should include regex_match metric with required init parameter")
+        void shouldIncludeRegexMatchMetricWithRequiredInitParameter() {
+            // When
+            CommonMetric.CommonMetricList result = registry.getAll();
+
+            // Then
+            CommonMetric regexMetric = result.content().stream()
+                    .filter(m -> m.id().equals("regex_match"))
+                    .findFirst()
+                    .orElse(null);
+
+            assertThat(regexMetric).isNotNull();
+            assertThat(regexMetric.name()).isEqualTo("RegexMatch");
+
+            // Check regex init parameter is required
+            CommonMetric.InitParameter regexParam = regexMetric.initParameters().stream()
+                    .filter(p -> p.name().equals("regex"))
+                    .findFirst()
+                    .orElse(null);
+
+            assertThat(regexParam).isNotNull();
+            assertThat(regexParam.required()).isTrue();
+        }
+
+        @Test
+        @DisplayName("should include is_json metric without init parameters")
+        void shouldIncludeIsJsonMetricWithoutInitParameters() {
+            // When
+            CommonMetric.CommonMetricList result = registry.getAll();
+
+            // Then
+            CommonMetric isJsonMetric = result.content().stream()
+                    .filter(m -> m.id().equals("is_json"))
+                    .findFirst()
+                    .orElse(null);
+
+            assertThat(isJsonMetric).isNotNull();
+            assertThat(isJsonMetric.name()).isEqualTo("IsJson");
+            assertThat(isJsonMetric.initParameters()).isEmpty();
+            assertThat(isJsonMetric.scoreParameters()).hasSize(1);
         }
     }
 
-    @Test
-    @DisplayName("should load metrics with code containing the class definition")
-    void getAll__shouldLoadMetricsWithCode() {
-        // When
-        CommonMetric.CommonMetricList result = registry.getAll();
+    @Nested
+    @DisplayName("findById")
+    class FindById {
 
-        // Then
-        for (CommonMetric metric : result.content()) {
-            assertThat(metric.code())
-                    .as("Metric '%s' should have code", metric.name())
-                    .isNotBlank()
-                    .contains("class " + metric.name());
+        @Test
+        @DisplayName("should return metric when found")
+        void shouldReturnMetricWhenFound() {
+            // When
+            CommonMetric metric = registry.findById("equals");
+
+            // Then
+            assertThat(metric).isNotNull();
+            assertThat(metric.id()).isEqualTo("equals");
+            assertThat(metric.name()).isEqualTo("Equals");
         }
-    }
 
-    @Test
-    @DisplayName("should return immutable list")
-    void getMetrics__shouldReturnImmutableList() {
-        // When
-        var metrics = registry.getMetrics();
+        @Test
+        @DisplayName("should return null when metric not found")
+        void shouldReturnNullWhenMetricNotFound() {
+            // When
+            CommonMetric metric = registry.findById("non_existent_metric");
 
-        // Then
-        assertThat(metrics).isUnmodifiable();
+            // Then
+            assertThat(metric).isNull();
+        }
+
+        @Test
+        @DisplayName("should find levenshtein_ratio metric")
+        void shouldFindLevenshteinRatioMetric() {
+            // When
+            CommonMetric metric = registry.findById("levenshtein_ratio");
+
+            // Then
+            assertThat(metric).isNotNull();
+            assertThat(metric.name()).isEqualTo("LevenshteinRatio");
+        }
     }
 }

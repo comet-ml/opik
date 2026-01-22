@@ -25,6 +25,7 @@ import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluator
 public class PythonEvaluatorService {
 
     private static final String URL_TEMPLATE = "%s/v1/private/evaluators/python";
+    private static final String COMMON_METRIC_URL_TEMPLATE = "%s/v1/private/evaluators/common-metrics/%s/score";
 
     private final @NonNull RetriableHttpClient client;
     private final @NonNull OpikConfiguration config;
@@ -37,6 +38,68 @@ public class PythonEvaluatorService {
                 .build();
 
         return executeWithRetry(Entity.json(request));
+    }
+
+    /**
+     * Evaluates a common metric from the SDK by its ID.
+     *
+     * @param metricId   The ID of the common metric (e.g., "contains", "equals")
+     * @param initConfig Configuration parameters for the metric's __init__ method
+     * @param data       Data to pass to the metric's score method
+     * @return List of score results
+     */
+    public List<PythonScoreResult> evaluateCommonMetric(
+            @NonNull String metricId,
+            Map<String, Object> initConfig,
+            Map<String, String> data) {
+        Preconditions.checkArgument(MapUtils.isNotEmpty(data), "Argument 'data' must not be empty");
+
+        var request = CommonMetricEvaluatorRequest.builder()
+                .initConfig(initConfig)
+                .data(data)
+                .build();
+
+        String url = COMMON_METRIC_URL_TEMPLATE.formatted(config.getPythonEvaluator().getUrl(), metricId);
+        log.info("Evaluating common metric '{}' at '{}'", metricId, url);
+
+        return RetriableHttpClient.newPost(c -> c.target(url))
+                .withRetryPolicy(RetryUtils.handleHttpErrors(config.getPythonEvaluator().getMaxRetryAttempts(),
+                        config.getPythonEvaluator().getMinRetryDelay().toJavaDuration(),
+                        config.getPythonEvaluator().getMaxRetryDelay().toJavaDuration()))
+                .withRequestBody(Entity.json(request))
+                .withResponse(this::processResponse)
+                .execute(client);
+    }
+
+    /**
+     * Evaluates a common metric for thread scope (no arguments, just context).
+     *
+     * @param metricId   The ID of the common metric
+     * @param initConfig Configuration parameters for the metric's __init__ method
+     * @param context    The conversation context
+     * @return List of score results
+     */
+    public List<PythonScoreResult> evaluateCommonMetricThread(
+            @NonNull String metricId,
+            Map<String, Object> initConfig,
+            List<ChatMessage> context) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(context), "Argument 'context' must not be empty");
+
+        var request = CommonMetricThreadEvaluatorRequest.builder()
+                .initConfig(initConfig)
+                .data(context)
+                .build();
+
+        String url = COMMON_METRIC_URL_TEMPLATE.formatted(config.getPythonEvaluator().getUrl(), metricId);
+        log.debug("Evaluating common metric '{}' for thread at '{}'", metricId, url);
+
+        return RetriableHttpClient.newPost(c -> c.target(url))
+                .withRetryPolicy(RetryUtils.handleHttpErrors(config.getPythonEvaluator().getMaxRetryAttempts(),
+                        config.getPythonEvaluator().getMinRetryDelay().toJavaDuration(),
+                        config.getPythonEvaluator().getMaxRetryDelay().toJavaDuration()))
+                .withRequestBody(Entity.json(request))
+                .withResponse(this::processResponse)
+                .execute(client);
     }
 
     public List<PythonScoreResult> evaluateThread(@NonNull String code, List<ChatMessage> context) {

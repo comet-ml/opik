@@ -87,7 +87,18 @@ public class OnlineScoringUserDefinedMetricPythonScorer
 
             List<PythonScoreResult> scoreResults;
             try {
-                scoreResults = pythonEvaluatorService.evaluate(message.code().metric(), data);
+                if (message.code().isCommonMetric()) {
+                    // Use the common metric endpoint
+                    userFacingLogger.info("Using common metric '{}' for traceId '{}'",
+                            message.code().commonMetricId(), trace.id());
+                    scoreResults = pythonEvaluatorService.evaluateCommonMetric(
+                            message.code().commonMetricId(),
+                            message.code().initConfig(),
+                            data);
+                } else {
+                    // Use the custom Python code endpoint
+                    scoreResults = pythonEvaluatorService.evaluate(message.code().metric(), data);
+                }
                 userFacingLogger.info("Received response for traceId '{}':\n\n{}", trace.id(), scoreResults);
             } catch (Exception exception) {
                 userFacingLogger.error("Unexpected error while scoring traceId '{}' with rule '{}': \n\n{}",

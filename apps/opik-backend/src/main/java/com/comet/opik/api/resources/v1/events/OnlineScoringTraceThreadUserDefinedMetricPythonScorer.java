@@ -180,7 +180,18 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
 
         List<PythonScoreResult> scoreResults;
         try {
-            scoreResults = pythonEvaluatorService.evaluateThread(message.code().metric(), context);
+            if (message.code().isCommonMetric()) {
+                // Use the common metric endpoint for thread context
+                userFacingLogger.info("Using common metric '{}' for threadId: '{}'",
+                        message.code().commonMetricId(), threadId);
+                scoreResults = pythonEvaluatorService.evaluateCommonMetricThread(
+                        message.code().commonMetricId(),
+                        message.code().initConfig(),
+                        context);
+            } else {
+                // Use the custom Python code endpoint
+                scoreResults = pythonEvaluatorService.evaluateThread(message.code().metric(), context);
+            }
             userFacingLogger.info("Received response for threadId: '{}':\n\n{}", threadId, scoreResults);
         } catch (Exception exception) {
             userFacingLogger.error("Unexpected error while scoring traceId: '{}' with ruleName: '{}': \n\n{}",

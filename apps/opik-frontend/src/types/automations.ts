@@ -49,16 +49,25 @@ export interface PythonCodeDetailsTraceForm {
   metric: string;
   arguments: Record<string, string>;
   parsingArgumentsError?: boolean;
+  // Common metric fields (optional - only present for common metrics)
+  common_metric_id?: string;
+  init_config?: Record<string, string | boolean | number | null>;
 }
 
 export interface PythonCodeDetailsThreadForm {
   metric: string;
+  // Common metric fields (optional - only present for common metrics)
+  common_metric_id?: string;
+  init_config?: Record<string, string | boolean | number | null>;
 }
 
 export interface PythonCodeDetailsSpanForm {
   metric: string;
   arguments: Record<string, string>;
   parsingArgumentsError?: boolean;
+  // Common metric fields (optional - only present for common metrics)
+  common_metric_id?: string;
+  init_config?: Record<string, string | boolean | number | null>;
 }
 
 export type PythonCodeObject =
@@ -134,8 +143,7 @@ export interface CommonMetric {
   id: string;
   name: string;
   description: string;
-  code: string;
-  parameters: ScoreParameter[];
+  score_parameters: ScoreParameter[];
   init_parameters: InitParameter[];
 }
 

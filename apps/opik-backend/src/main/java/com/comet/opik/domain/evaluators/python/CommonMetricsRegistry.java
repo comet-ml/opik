@@ -1,73 +1,167 @@
 package com.comet.opik.domain.evaluators.python;
 
 import com.comet.opik.api.evaluators.CommonMetric;
-import lombok.Getter;
+import com.comet.opik.api.evaluators.CommonMetric.InitParameter;
+import com.comet.opik.api.evaluators.CommonMetric.ScoreParameter;
+import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
- * Registry of common metrics parsed from Python SDK heuristic files.
- * This registry is loaded at application startup and provides access to
- * pre-defined metrics that users can select for Online Evaluation rules.
+ * Registry of common metrics available for online evaluation.
+ * These are simple heuristic metrics from the Python SDK that don't require LLM calls.
+ * 
+ * For now, this is a static list. In the future, we may dynamically parse these from the SDK.
  */
 @Slf4j
+@Singleton
 public class CommonMetricsRegistry {
 
-    private static final String HEURISTICS_RESOURCE_PATH = "/python-metrics/heuristics/";
+    private static final List<CommonMetric> COMMON_METRICS = List.of(
+            // Equals metric
+            CommonMetric.builder()
+                    .id("equals")
+                    .name("Equals")
+                    .description("A metric that checks if an output string exactly matches a reference string. " +
+                            "Returns 1.0 if the strings match exactly, and 0.0 otherwise.")
+                    .scoreParameters(List.of(
+                            ScoreParameter.builder()
+                                    .name("output")
+                                    .type("str")
+                                    .description("The output string to check.")
+                                    .required(true)
+                                    .build(),
+                            ScoreParameter.builder()
+                                    .name("reference")
+                                    .type("str")
+                                    .description("The reference string to compare against.")
+                                    .required(true)
+                                    .build()))
+                    .initParameters(List.of(
+                            InitParameter.builder()
+                                    .name("case_sensitive")
+                                    .type("bool")
+                                    .description("Whether the comparison should be case-sensitive.")
+                                    .defaultValue("False")
+                                    .required(false)
+                                    .build()))
+                    .build(),
 
-    /**
-     * List of heuristic metric files to parse.
-     * These files are bundled as resources in the backend JAR.
-     */
-    private static final List<String> HEURISTIC_FILES = List.of(
-            "equals.py",
-            "contains.py",
-            "is_json.py",
-            "regex_match.py",
-            "levenshtein_ratio.py",
-            "bleu.py",
-            "gleu.py",
-            "chrf.py",
-            "meteor.py",
-            "rouge.py",
-            "sentiment.py",
-            "vader_sentiment.py",
-            "tone.py",
-            "readability.py",
-            "bertscore.py",
-            "spearman.py",
-            "prompt_injection.py",
-            "language_adherence.py",
-            "distribution_metrics.py");
+            // Contains metric
+            CommonMetric.builder()
+                    .id("contains")
+                    .name("Contains")
+                    .description("A metric that checks if a reference string is contained within an output string. " +
+                            "Returns 1.0 if the reference is found in the output, 0.0 otherwise.")
+                    .scoreParameters(List.of(
+                            ScoreParameter.builder()
+                                    .name("output")
+                                    .type("str")
+                                    .description("The output string to check.")
+                                    .required(true)
+                                    .build(),
+                            ScoreParameter.builder()
+                                    .name("reference")
+                                    .type("str")
+                                    .description("The reference string to look for in the output. " +
+                                            "If not provided, falls back to the default reference set at initialization.")
+                                    .required(false)
+                                    .build()))
+                    .initParameters(List.of(
+                            InitParameter.builder()
+                                    .name("case_sensitive")
+                                    .type("bool")
+                                    .description("Whether the comparison should be case-sensitive.")
+                                    .defaultValue("False")
+                                    .required(false)
+                                    .build(),
+                            InitParameter.builder()
+                                    .name("reference")
+                                    .type("str")
+                                    .description("Optional default reference string. If provided, it will be used " +
+                                            "unless a reference is explicitly passed to score().")
+                                    .defaultValue(null)
+                                    .required(false)
+                                    .build()))
+                    .build(),
 
-    @Getter
-    private final List<CommonMetric> metrics;
+            // LevenshteinRatio metric
+            CommonMetric.builder()
+                    .id("levenshtein_ratio")
+                    .name("LevenshteinRatio")
+                    .description("A metric that calculates the Levenshtein ratio between two strings. " +
+                            "Returns a score between 0.0 and 1.0, where 1.0 indicates identical strings.")
+                    .scoreParameters(List.of(
+                            ScoreParameter.builder()
+                                    .name("output")
+                                    .type("str")
+                                    .description("The output string to compare.")
+                                    .required(true)
+                                    .build(),
+                            ScoreParameter.builder()
+                                    .name("reference")
+                                    .type("str")
+                                    .description("The reference string to compare against.")
+                                    .required(true)
+                                    .build()))
+                    .initParameters(List.of(
+                            InitParameter.builder()
+                                    .name("case_sensitive")
+                                    .type("bool")
+                                    .description("Whether the comparison should be case-sensitive.")
+                                    .defaultValue("False")
+                                    .required(false)
+                                    .build()))
+                    .build(),
 
-    /**
-     * Creates a new CommonMetricsRegistry by parsing all heuristic files.
-     */
-    public CommonMetricsRegistry() {
-        this.metrics = Collections.unmodifiableList(loadMetrics());
-        log.info("Loaded '{}' common metrics from Python SDK heuristics", this.metrics.size());
-    }
+            // RegexMatch metric
+            CommonMetric.builder()
+                    .id("regex_match")
+                    .name("RegexMatch")
+                    .description("A metric that checks if an output string matches a given regular expression pattern. " +
+                            "Returns 1.0 if the output matches the pattern, 0.0 otherwise.")
+                    .scoreParameters(List.of(
+                            ScoreParameter.builder()
+                                    .name("output")
+                                    .type("str")
+                                    .description("The output string to check against the regex pattern.")
+                                    .required(true)
+                                    .build()))
+                    .initParameters(List.of(
+                            InitParameter.builder()
+                                    .name("regex")
+                                    .type("str")
+                                    .description("The regular expression pattern to match against.")
+                                    .defaultValue(null)
+                                    .required(true)
+                                    .build()))
+                    .build(),
+
+            // IsJson metric
+            CommonMetric.builder()
+                    .id("is_json")
+                    .name("IsJson")
+                    .description("A metric that checks if a given output string is valid JSON. " +
+                            "Returns 1.0 if the output can be parsed as JSON, 0.0 otherwise.")
+                    .scoreParameters(List.of(
+                            ScoreParameter.builder()
+                                    .name("output")
+                                    .type("str")
+                                    .description("The output string to check for JSON validity.")
+                                    .required(true)
+                                    .build()))
+                    .initParameters(List.of())
+                    .build());
 
     /**
      * Returns all available common metrics.
      */
     public CommonMetric.CommonMetricList getAll() {
+        log.debug("Returning '{}' common metrics", COMMON_METRICS.size());
         return CommonMetric.CommonMetricList.builder()
-                .content(metrics)
+                .content(COMMON_METRICS)
                 .build();
     }
 
@@ -75,64 +169,9 @@ public class CommonMetricsRegistry {
      * Finds a metric by its ID.
      */
     public CommonMetric findById(@NonNull String id) {
-        return metrics.stream()
+        return COMMON_METRICS.stream()
                 .filter(m -> m.id().equals(id))
                 .findFirst()
                 .orElse(null);
-    }
-
-    /**
-     * Loads all metrics from the bundled Python files.
-     */
-    private List<CommonMetric> loadMetrics() {
-        List<CommonMetric> allMetrics = new ArrayList<>();
-
-        for (String fileName : HEURISTIC_FILES) {
-            try {
-                String resourcePath = HEURISTICS_RESOURCE_PATH + fileName;
-                String pythonCode = loadResource(resourcePath);
-
-                if (pythonCode != null && !pythonCode.isEmpty()) {
-                    List<CommonMetric> parsedMetrics = PythonMetricParser.parse(pythonCode, fileName);
-
-                    // Filter to only include metrics valid for online evaluation
-                    List<CommonMetric> validMetrics = parsedMetrics.stream()
-                            .filter(PythonMetricParser::isValidForOnlineEvaluation)
-                            .toList();
-
-                    allMetrics.addAll(validMetrics);
-                    log.debug("Loaded '{}' metrics from '{}'", validMetrics.size(), fileName);
-                } else {
-                    log.warn("Empty or missing resource: '{}'", resourcePath);
-                }
-            } catch (Exception e) {
-                log.error("Failed to load metrics from '{}': '{}'", fileName, e.getMessage());
-            }
-        }
-
-        // Sort metrics alphabetically by name for consistent ordering
-        allMetrics.sort(Comparator.comparing(CommonMetric::name));
-
-        return allMetrics;
-    }
-
-    /**
-     * Loads a resource file as a string.
-     */
-    private String loadResource(String resourcePath) {
-        try (InputStream inputStream = getClass().getResourceAsStream(resourcePath)) {
-            if (inputStream == null) {
-                log.warn("Resource not found: '{}'", resourcePath);
-                return null;
-            }
-
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-                return reader.lines().collect(Collectors.joining("\n"));
-            }
-        } catch (IOException e) {
-            log.error("Error reading resource '{}': '{}'", resourcePath, e.getMessage());
-            return null;
-        }
     }
 }

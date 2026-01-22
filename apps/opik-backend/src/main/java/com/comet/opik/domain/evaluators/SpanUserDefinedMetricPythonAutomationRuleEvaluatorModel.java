@@ -2,6 +2,9 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.ProjectReference;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 import org.jdbi.v3.json.Json;
 
@@ -48,6 +51,19 @@ public record SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel(
         return toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
     }
 
-    public record SpanUserDefinedMetricPythonCode(String metric, Map<String, String> arguments) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record SpanUserDefinedMetricPythonCode(
+            String metric,
+            Map<String, String> arguments,
+            String commonMetricId,
+            Map<String, Object> initConfig) {
+
+        /**
+         * Returns true if this is a common metric (from the SDK) rather than custom Python code.
+         */
+        public boolean isCommonMetric() {
+            return commonMetricId != null && !commonMetricId.isBlank();
+        }
     }
 }
