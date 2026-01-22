@@ -145,7 +145,7 @@ def smoke_test(
                 def my_llm_agent(input_text: str) -> str:
                     """A simple LLM agent function for testing."""
                     # Add the dynamically created image as attachment
-                    opik_context.update_current_trace(
+                    opik_context.update_current_span(
                         attachments=[
                             Attachment(
                                 data=str(temp_image_path),
