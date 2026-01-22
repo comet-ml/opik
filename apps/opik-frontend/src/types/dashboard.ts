@@ -205,6 +205,8 @@ export interface WidgetMetadata {
   disabled?: boolean;
 }
 
+export type EditorLayoutProportion = "preview-small" | "preview-large";
+
 export interface WidgetComponents {
   Widget: React.ComponentType<DashboardWidgetComponentProps>;
   Editor: WidgetEditorComponent | null;

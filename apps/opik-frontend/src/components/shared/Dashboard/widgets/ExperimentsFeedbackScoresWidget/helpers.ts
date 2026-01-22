@@ -116,7 +116,7 @@ export const widgetHelpers = {
     dataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
     filters: [],
     groups: [],
-    chartType: CHART_TYPE.line,
+    chartType: CHART_TYPE.bar,
   }),
   calculateTitle: calculateExperimentsFeedbackScoresTitle,
 };
