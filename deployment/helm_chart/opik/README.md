@@ -280,6 +280,11 @@ Call opik api on http://localhost:5173/api
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
+| component.frontend.cacheControl."~(images/.*|assets/.*)\.(jpg|jpeg|png|gif|svg|webp|ico)$" | string | `"public, max-age=2592000"` |  |
+| component.frontend.cacheControl."~assets/.*\.(js|css)$" | string | `"public, max-age=604800, immutable"` |  |
+| component.frontend.cacheControl."~assets/.*\.(woff|woff2|ttf|eot)$" | string | `"public, max-age=2592000"` |  |
+| component.frontend.cacheControl."~assets/.*\.json$" | string | `"public, max-age=86400"` |  |
+| component.frontend.cacheControl.default | string | `"no-cache, must-revalidate"` |  |
 | component.frontend.contentSecurityPolicy.base-uri[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.child-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.connect-src[0] | string | `"'self'"` |  |
@@ -311,6 +316,9 @@ Call opik api on http://localhost:5173/api
 | component.frontend.contentSecurityPolicy.worker-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.worker-src[1] | string | `"blob:"` |  |
 | component.frontend.enabled | bool | `true` |  |
+| component.frontend.extraServerHeaders.X-Content-Type-Options | string | `"nosniff"` |  |
+| component.frontend.extraServerHeaders.X-Frame-Options | string | `"DENY"` |  |
+| component.frontend.extraServerHeaders.X-XSS-Protection | string | `"0"` |  |
 | component.frontend.hstsEnabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
