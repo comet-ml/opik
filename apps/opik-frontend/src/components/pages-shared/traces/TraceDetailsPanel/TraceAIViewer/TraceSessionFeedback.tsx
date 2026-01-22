@@ -70,11 +70,10 @@ const TraceSessionFeedback: React.FC<TraceSessionFeedbackProps> = ({
     );
   }, [traceId, deleteMutation, onOptimisticUpdate, state]);
 
-  // If feedback is already given, show only the selected button
-  if (state !== undefined) {
-    const isLike = state === SESSION_FEEDBACK_VALUE.like;
-    return (
-      <TooltipProvider>
+  return (
+    <TooltipProvider>
+      {state !== undefined ? (
+        // If feedback is already given, show only the selected button
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -83,10 +82,12 @@ const TraceSessionFeedback: React.FC<TraceSessionFeedbackProps> = ({
               disabled={isPending}
               onClick={deleteFeedback}
               aria-label={
-                isLike ? "Remove positive feedback" : "Remove negative feedback"
+                state === SESSION_FEEDBACK_VALUE.like
+                  ? "Remove positive feedback"
+                  : "Remove negative feedback"
               }
             >
-              {isLike ? (
+              {state === SESSION_FEEDBACK_VALUE.like ? (
                 <ThumbUpFilled className="text-muted-slate" />
               ) : (
                 <ThumbDownFilled className="text-muted-slate" />
@@ -95,44 +96,40 @@ const TraceSessionFeedback: React.FC<TraceSessionFeedbackProps> = ({
           </TooltipTrigger>
           <TooltipContent>Click to remove feedback</TooltipContent>
         </Tooltip>
-      </TooltipProvider>
-    );
-  }
+      ) : (
+        // If no feedback given yet, show both buttons
+        <div className="flex flex-nowrap items-center gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-2xs"
+                disabled={isPending}
+                onClick={() => updateFeedback(SESSION_FEEDBACK_VALUE.like)}
+                aria-label="Rate conversation positively"
+              >
+                <ThumbsUp />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Rate conversation positively</TooltipContent>
+          </Tooltip>
 
-  // If no feedback given yet, show both buttons
-  return (
-    <TooltipProvider>
-      <div className="flex flex-nowrap items-center gap-0.5">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-2xs"
-              disabled={isPending}
-              onClick={() => updateFeedback(SESSION_FEEDBACK_VALUE.like)}
-              aria-label="Rate conversation positively"
-            >
-              <ThumbsUp />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Rate conversation positively</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-2xs"
-              disabled={isPending}
-              onClick={() => updateFeedback(SESSION_FEEDBACK_VALUE.dislike)}
-              aria-label="Rate conversation negatively"
-            >
-              <ThumbsDown />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Rate conversation negatively</TooltipContent>
-        </Tooltip>
-      </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-2xs"
+                disabled={isPending}
+                onClick={() => updateFeedback(SESSION_FEEDBACK_VALUE.dislike)}
+                aria-label="Rate conversation negatively"
+              >
+                <ThumbsDown />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Rate conversation negatively</TooltipContent>
+          </Tooltip>
+        </div>
+      )}
     </TooltipProvider>
   );
 };
