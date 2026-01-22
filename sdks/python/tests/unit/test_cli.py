@@ -93,28 +93,25 @@ class TestSmokeTestCommand:
     def test_smoke_test_help(self):
         """Test that the healthcheck --smoke-test command shows help."""
         runner = CliRunner()
-        result = runner.invoke(cli, ["healthcheck", "--smoke-test", "--help"])
+        result = runner.invoke(cli, ["healthcheck", "--help"])
         assert result.exit_code == 0
         assert "--smoke-test" in result.output
         assert "--project-name" in result.output
         assert "Project name for the smoke test" in result.output
-        assert "--workspace" in result.output
+        assert "WORKSPACE" in result.output
         assert "Run a smoke test to verify Opik integration" in result.output
 
     def test_smoke_test_minimal_args_parsing(self):
-        """Test that healthcheck --smoke-test command requires workspace."""
+        """Test that healthcheck --smoke-test command requires workspace value."""
         runner = CliRunner()
         # Test that help shows workspace is required
-        result = runner.invoke(cli, ["healthcheck", "--smoke-test", "--help"])
+        result = runner.invoke(cli, ["healthcheck", "--help"])
         assert result.exit_code == 0
-        assert "--workspace" in result.output
-        # Test that missing workspace causes error
+        assert "WORKSPACE" in result.output
+        # Test that missing workspace value causes error
         result = runner.invoke(cli, ["healthcheck", "--smoke-test"])
         assert result.exit_code != 0
-        assert (
-            "required when --smoke-test is used" in result.output
-            or "Error" in result.output
-        )
+        assert "Error" in result.output or "Missing" in result.output
 
     @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
@@ -168,7 +165,6 @@ class TestSmokeTestCommand:
             [
                 "healthcheck",
                 "--smoke-test",
-                "--workspace",
                 "test-workspace",
                 "--project-name",
                 "test-project",
@@ -243,7 +239,7 @@ class TestSmokeTestCommand:
         runner = CliRunner()
         result = runner.invoke(
             cli,
-            ["healthcheck", "--smoke-test", "--workspace", "test-workspace"],
+            ["healthcheck", "--smoke-test", "test-workspace"],
             catch_exceptions=False,
         )
 

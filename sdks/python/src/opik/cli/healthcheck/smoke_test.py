@@ -50,10 +50,14 @@ def _temporary_client_context(client: opik.Opik) -> Iterator[None]:
     Yields:
         None
     """
+    import opik.api_objects.opik_client as opik_client_module
 
     # Create a function that always returns our client
     def get_client_cached_replacement() -> opik.Opik:
         return client
+
+    # Clear the lru_cache to ensure we get a fresh client
+    opik_client_module.get_client_cached.cache_clear()
 
     # Patch get_client_cached in the opik.api_objects.opik_client module
     # This will affect all modules that import get_client_cached from there

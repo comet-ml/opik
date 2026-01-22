@@ -17,14 +17,10 @@ from opik.cli.healthcheck.smoke_test import run_smoke_test
 )
 @click.option(
     "--smoke-test",
-    is_flag=True,
-    default=False,
-    help="Run a smoke test to verify Opik integration is working correctly.",
-)
-@click.option(
-    "--workspace",
     type=str,
-    help="Workspace name to use for the smoke test (required when --smoke-test is used).",
+    default=None,
+    help="Run a smoke test to verify Opik integration is working correctly. Requires WORKSPACE value.",
+    metavar="WORKSPACE",
 )
 @click.option(
     "--project-name",
@@ -36,8 +32,7 @@ from opik.cli.healthcheck.smoke_test import run_smoke_test
 def healthcheck(
     ctx: click.Context,
     show_installed_packages: bool,
-    smoke_test: bool,
-    workspace: Optional[str],
+    smoke_test: Optional[str],
     project_name: str,
 ) -> None:
     """
@@ -60,23 +55,19 @@ def healthcheck(
 
       Run healthcheck with smoke test:
 
-        opik healthcheck --smoke-test --workspace my-workspace
+        opik healthcheck --smoke-test my-workspace
 
       Run smoke test with custom project name:
 
-        opik healthcheck --smoke-test --workspace my-workspace --project-name my-test-project
+        opik healthcheck --smoke-test my-workspace --project-name my-test-project
     """
     if smoke_test:
-        if not workspace:
-            raise click.ClickException(
-                "--workspace is required when --smoke-test is used"
-            )
         # Get API key and debug flag from context
         api_key = ctx.obj.get("api_key") if ctx.obj else None
         debug = ctx.obj.get("debug", False) if ctx.obj else False
 
         run_smoke_test(
-            workspace=workspace,
+            workspace=smoke_test,
             project_name=project_name,
             api_key=api_key,
             debug=debug,
