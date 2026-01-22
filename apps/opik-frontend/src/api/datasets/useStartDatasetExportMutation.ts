@@ -4,22 +4,17 @@ import { DatasetExportJob } from "@/types/datasets";
 
 type UseStartDatasetExportMutationParams = {
   datasetId: string;
-  versionId?: string;
+  datasetVersionId?: string;
 };
 
 const startDatasetExport = async ({
   datasetId,
-  versionId,
+  datasetVersionId,
 }: UseStartDatasetExportMutationParams): Promise<DatasetExportJob> => {
-  const url = new URL(
+  const { data } = await api.post<DatasetExportJob>(
     `${DATASETS_REST_ENDPOINT}${datasetId}/export`,
-    window.location.origin,
+    datasetVersionId ? { dataset_version_id: datasetVersionId } : undefined,
   );
-  if (versionId) {
-    url.searchParams.set("versionId", versionId);
-  }
-
-  const { data } = await api.post<DatasetExportJob>(url.pathname + url.search);
 
   return data;
 };

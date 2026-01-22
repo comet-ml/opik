@@ -8,6 +8,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
 import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetExportJob;
+import com.comet.opik.api.DatasetExportRequest;
 import com.comet.opik.api.DatasetExportStatus;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
@@ -777,7 +778,7 @@ public class DatasetsResource {
 
     @POST
     @Path("/{id}/export")
-    @Operation(operationId = "startDatasetExport", summary = "Start dataset CSV export", description = "Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling. If versionId is not provided, uses the latest version. If no versions exist, uses the legacy dataset_items table.", responses = {
+    @Operation(operationId = "startDatasetExport", summary = "Start dataset CSV export", description = "Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling. If request body is not provided, exports the latest version. If no versions exist, uses the legacy dataset_items table.", responses = {
             @ApiResponse(responseCode = "202", description = "Export job created", content = @Content(schema = @Schema(implementation = DatasetExportJob.class))),
             @ApiResponse(responseCode = "200", description = "Existing export job in progress", content = @Content(schema = @Schema(implementation = DatasetExportJob.class)))
     })
@@ -785,22 +786,23 @@ public class DatasetsResource {
     @RateLimited
     public Response startDatasetExport(
             @PathParam("id") @NotNull UUID datasetId,
-            @QueryParam("versionId") @Nullable UUID versionId) {
+            @Nullable @Valid DatasetExportRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
+        UUID datasetVersionId = request != null ? request.datasetVersionId() : null;
 
-        log.info("Starting CSV export for dataset '{}' versionId '{}' on workspaceId '{}'", datasetId, versionId,
-                workspaceId);
+        log.info("Starting CSV export for dataset '{}' datasetVersionId '{}' on workspaceId '{}'", datasetId,
+                datasetVersionId, workspaceId);
 
         // Verify dataset exists
         service.findById(datasetId);
 
-        DatasetExportJob job = csvExportService.startExport(datasetId, versionId)
+        DatasetExportJob job = csvExportService.startExport(datasetId, datasetVersionId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Export job '{}' created/found for dataset '{}' versionId '{}' on workspaceId '{}'", job.id(),
-                datasetId, job.versionId(), workspaceId);
+        log.info("Export job '{}' created/found for dataset '{}' datasetVersionId '{}' on workspaceId '{}'", job.id(),
+                datasetId, job.datasetVersionId(), workspaceId);
 
         // Return 202 if new job was created (PENDING status), 200 if existing job found
         var status = job.status() == DatasetExportStatus.PENDING

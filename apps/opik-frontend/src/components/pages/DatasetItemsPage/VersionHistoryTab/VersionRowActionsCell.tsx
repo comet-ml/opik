@@ -64,7 +64,7 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
 
   const downloadVersionHandler = useCallback(() => {
     startExport(
-      { datasetId, versionId: version.id },
+      { datasetId, datasetVersionId: version.id },
       {
         onSuccess: (job) => {
           const exportName = buildExportDisplayName(
