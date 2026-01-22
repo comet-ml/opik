@@ -80,6 +80,8 @@ import {
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import LogsTypeToggle from "@/components/pages/TracesPage/LogsTab/LogsTypeToggle";
+import { LOGS_TYPE } from "@/constants/traces";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -261,11 +263,15 @@ const ROW_HEIGHT_KEY = "threads-row-height";
 type ThreadsTabProps = {
   projectId: string;
   projectName: string;
+  logsType: LOGS_TYPE;
+  onLogsTypeChange: (type: LOGS_TYPE) => void;
 };
 
 export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   projectId,
   projectName,
+  logsType,
+  onLogsTypeChange,
 }) => {
   const truncationEnabled = useTruncationEnabled();
 
@@ -655,6 +661,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         limitWidth
       >
         <div className="flex items-center gap-2">
+          <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
