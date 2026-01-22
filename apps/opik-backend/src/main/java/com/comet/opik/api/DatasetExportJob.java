@@ -22,7 +22,7 @@ public record DatasetExportJob(
         @Nullable @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String datasetName,
         @Nullable @JsonView({
-                DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID versionId,
+                DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetVersionId,
         @Nullable @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String versionName,
         @JsonView({

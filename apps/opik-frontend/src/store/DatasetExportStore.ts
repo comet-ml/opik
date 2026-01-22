@@ -96,7 +96,7 @@ const useDatasetExportStore = create<DatasetExportState>((set) => ({
           job,
           datasetName: buildExportDisplayName(
             job.dataset_name,
-            job.version_id,
+            job.dataset_version_id,
             job.version_name,
           ),
         });

@@ -53,7 +53,7 @@ export const DatasetRowActionsCell: React.FunctionComponent<
         onSuccess: (job) => {
           const exportName = buildExportDisplayName(
             dataset.name,
-            job.version_id,
+            job.dataset_version_id,
             dataset.latest_version?.version_name,
           );
           addExportJob(job, exportName);

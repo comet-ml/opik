@@ -217,7 +217,7 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
                 .jobId(job.id())
                 .datasetId(job.datasetId())
                 .workspaceId(workspaceId)
-                .versionId(job.versionId())
+                .versionId(job.datasetVersionId())
                 .build();
 
         RStreamReactive<String, DatasetExportMessage> stream = redisClient.getStream(

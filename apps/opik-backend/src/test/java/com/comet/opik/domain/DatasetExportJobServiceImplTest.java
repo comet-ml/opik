@@ -94,7 +94,7 @@ class DatasetExportJobServiceImplTest {
                     assertThat(job.createdAt()).isNotNull();
                     assertThat(job.lastUpdatedAt()).isNotNull();
                     assertThat(job.expiresAt()).isNotNull();
-                    assertThat(job.versionId()).isNull();
+                    assertThat(job.datasetVersionId()).isNull();
                 })
                 .verifyComplete();
 
@@ -125,7 +125,7 @@ class DatasetExportJobServiceImplTest {
                     assertThat(job.createdAt()).isNotNull();
                     assertThat(job.lastUpdatedAt()).isNotNull();
                     assertThat(job.expiresAt()).isNotNull();
-                    assertThat(job.versionId()).isEqualTo(versionId);
+                    assertThat(job.datasetVersionId()).isEqualTo(versionId);
                 })
                 .verifyComplete();
 

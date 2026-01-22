@@ -193,7 +193,7 @@ class DatasetExportJobServiceImpl implements DatasetExportJobService {
                 var newJob = DatasetExportJob.builder()
                         .id(jobId)
                         .datasetId(datasetId)
-                        .versionId(versionId)
+                        .datasetVersionId(versionId)
                         .status(DatasetExportStatus.PENDING)
                         .createdAt(now)
                         .lastUpdatedAt(now)
