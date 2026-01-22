@@ -15,6 +15,7 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..types.dataset_expansion_response import DatasetExpansionResponse
+from ..types.dataset_export_job_public import DatasetExportJobPublic
 from ..types.dataset_item_changes_public import DatasetItemChangesPublic
 from ..types.dataset_item_filter import DatasetItemFilter
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
@@ -833,6 +834,70 @@ class RawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    @contextlib.contextmanager
+    def download_dataset_export(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
+        """
+        Downloads the exported CSV file for a completed export job. This endpoint proxies the file download to avoid exposing internal storage URLs.
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.Iterator[HttpResponse[typing.Iterator[bytes]]]
+            CSV file content
+        """
+        with self._client_wrapper.httpx_client.stream(
+            f"v1/private/datasets/export-jobs/{jsonable_encoder(job_id)}/download",
+            method="GET",
+            request_options=request_options,
+        ) as _response:
+
+            def stream() -> HttpResponse[typing.Iterator[bytes]]:
+                try:
+                    if 200 <= _response.status_code < 300:
+                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        return HttpResponse(
+                            response=_response, data=(_chunk for _chunk in _response.iter_bytes(chunk_size=_chunk_size))
+                        )
+                    _response.read()
+                    if _response.status_code == 400:
+                        raise BadRequestError(
+                            headers=dict(_response.headers),
+                            body=typing.cast(
+                                typing.Optional[typing.Any],
+                                parse_obj_as(
+                                    type_=typing.Optional[typing.Any],  # type: ignore
+                                    object_=_response.json(),
+                                ),
+                            ),
+                        )
+                    if _response.status_code == 404:
+                        raise NotFoundError(
+                            headers=dict(_response.headers),
+                            body=typing.cast(
+                                typing.Optional[typing.Any],
+                                parse_obj_as(
+                                    type_=typing.Optional[typing.Any],  # type: ignore
+                                    object_=_response.json(),
+                                ),
+                            ),
+                        )
+                    _response_json = _response.json()
+                except JSONDecodeError:
+                    raise ApiError(
+                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                    )
+                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+            yield stream()
+
     def expand_dataset(
         self,
         id: str,
@@ -1072,6 +1137,91 @@ class RawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def get_dataset_export_job(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[DatasetExportJobPublic]:
+        """
+        Retrieves the current status of a dataset export job
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DatasetExportJobPublic]
+            Export job details
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/export-jobs/{jsonable_encoder(job_id)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetExportJobPublic,
+                    parse_obj_as(
+                        type_=DatasetExportJobPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_dataset_export_jobs(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[typing.List[DatasetExportJobPublic]]:
+        """
+        Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[typing.List[DatasetExportJobPublic]]
+            List of export jobs
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/datasets/export-jobs",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    typing.List[DatasetExportJobPublic],
+                    parse_obj_as(
+                        type_=typing.List[DatasetExportJobPublic],  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[DatasetItemPublic]:
@@ -1285,6 +1435,85 @@ class RawDatasetsClient:
                     PageColumns,
                     parse_obj_as(
                         type_=PageColumns,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def mark_dataset_export_job_viewed(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/export-jobs/{jsonable_encoder(job_id)}/mark-viewed",
+            method="PUT",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def start_dataset_export(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[DatasetExportJobPublic]:
+        """
+        Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DatasetExportJobPublic]
+            Existing export job in progress
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/export",
+            method="POST",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetExportJobPublic,
+                    parse_obj_as(
+                        type_=DatasetExportJobPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -2525,6 +2754,71 @@ class AsyncRawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    @contextlib.asynccontextmanager
+    async def download_dataset_export(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
+        """
+        Downloads the exported CSV file for a completed export job. This endpoint proxies the file download to avoid exposing internal storage URLs.
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
+
+        Returns
+        -------
+        typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]
+            CSV file content
+        """
+        async with self._client_wrapper.httpx_client.stream(
+            f"v1/private/datasets/export-jobs/{jsonable_encoder(job_id)}/download",
+            method="GET",
+            request_options=request_options,
+        ) as _response:
+
+            async def stream() -> AsyncHttpResponse[typing.AsyncIterator[bytes]]:
+                try:
+                    if 200 <= _response.status_code < 300:
+                        _chunk_size = request_options.get("chunk_size", None) if request_options is not None else None
+                        return AsyncHttpResponse(
+                            response=_response,
+                            data=(_chunk async for _chunk in _response.aiter_bytes(chunk_size=_chunk_size)),
+                        )
+                    await _response.aread()
+                    if _response.status_code == 400:
+                        raise BadRequestError(
+                            headers=dict(_response.headers),
+                            body=typing.cast(
+                                typing.Optional[typing.Any],
+                                parse_obj_as(
+                                    type_=typing.Optional[typing.Any],  # type: ignore
+                                    object_=_response.json(),
+                                ),
+                            ),
+                        )
+                    if _response.status_code == 404:
+                        raise NotFoundError(
+                            headers=dict(_response.headers),
+                            body=typing.cast(
+                                typing.Optional[typing.Any],
+                                parse_obj_as(
+                                    type_=typing.Optional[typing.Any],  # type: ignore
+                                    object_=_response.json(),
+                                ),
+                            ),
+                        )
+                    _response_json = _response.json()
+                except JSONDecodeError:
+                    raise ApiError(
+                        status_code=_response.status_code, headers=dict(_response.headers), body=_response.text
+                    )
+                raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+            yield await stream()
+
     async def expand_dataset(
         self,
         id: str,
@@ -2764,6 +3058,91 @@ class AsyncRawDatasetsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def get_dataset_export_job(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[DatasetExportJobPublic]:
+        """
+        Retrieves the current status of a dataset export job
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DatasetExportJobPublic]
+            Export job details
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/export-jobs/{jsonable_encoder(job_id)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetExportJobPublic,
+                    parse_obj_as(
+                        type_=DatasetExportJobPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_dataset_export_jobs(
+        self, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[typing.List[DatasetExportJobPublic]]:
+        """
+        Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.
+
+        Parameters
+        ----------
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[typing.List[DatasetExportJobPublic]]
+            List of export jobs
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/datasets/export-jobs",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    typing.List[DatasetExportJobPublic],
+                    parse_obj_as(
+                        type_=typing.List[DatasetExportJobPublic],  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_dataset_item_by_id(
         self, item_id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[DatasetItemPublic]:
@@ -2977,6 +3356,85 @@ class AsyncRawDatasetsClient:
                     PageColumns,
                     parse_obj_as(
                         type_=PageColumns,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def mark_dataset_export_job_viewed(
+        self, job_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.
+
+        Parameters
+        ----------
+        job_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/export-jobs/{jsonable_encoder(job_id)}/mark-viewed",
+            method="PUT",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def start_dataset_export(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[DatasetExportJobPublic]:
+        """
+        Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DatasetExportJobPublic]
+            Existing export job in progress
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/export",
+            method="POST",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetExportJobPublic,
+                    parse_obj_as(
+                        type_=DatasetExportJobPublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
