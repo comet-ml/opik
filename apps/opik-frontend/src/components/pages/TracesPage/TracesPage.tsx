@@ -1,4 +1,3 @@
-import React, { useEffect } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -82,25 +81,6 @@ const TracesPage = () => {
   const activeTab = Object.values(PROJECT_TAB).includes(type as PROJECT_TAB)
     ? (type as PROJECT_TAB)
     : PROJECT_TAB.logs;
-
-  // Correct invalid type values in URL
-  useEffect(() => {
-    const isValidLogsType = Object.values(LOGS_TYPE).includes(
-      type as LOGS_TYPE,
-    );
-    const isValidProjectTab = Object.values(PROJECT_TAB).includes(
-      type as PROJECT_TAB,
-    );
-
-    // If type is "logs" (the tab itself), correct it to the default logs type
-    if (type === PROJECT_TAB.logs) {
-      setType(defaultLogsType);
-    }
-    // If type is not a valid LOGS_TYPE or PROJECT_TAB, correct it
-    else if (!isValidLogsType && !isValidProjectTab) {
-      setType(defaultLogsType);
-    }
-  }, [type, defaultLogsType, setType]);
 
   // Handle tab change - when switching to Logs tab, default based on thread count
   const handleTabChange = (newTab: string) => {
