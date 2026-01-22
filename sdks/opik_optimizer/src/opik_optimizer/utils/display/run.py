@@ -91,12 +91,12 @@ class OptimizationRunDisplay:
             context.validation_dataset is not None
             and context.evaluation_dataset is context.validation_dataset
         )
-        selection_summary = summarize_selection_policy(context.prompts)
+        evaluation_settings = self._format_evaluation_settings(context)
         return display_terminal.display_evaluation(
             verbose=self._verbose,
             dataset_name=dataset_name,
             is_validation=is_validation,
-            selection_summary=selection_summary,
+            selection_summary=evaluation_settings,
         )
 
     def evaluation_progress(
@@ -152,8 +152,29 @@ class OptimizationRunDisplay:
         return {
             "dataset_name": dataset_name,
             "dataset_type": dataset_type,
-            "evaluation_settings": None,
+            "evaluation_settings": self._format_evaluation_settings(context),
         }
+
+    def _format_evaluation_settings(self, context: OptimizationContext) -> str:
+        selection_summary = summarize_selection_policy(context.prompts)
+        if selection_summary.startswith("n=1") and "policy=" in selection_summary:
+            selection_summary = "n=1"
+
+        sample_parts: list[str] = []
+        if context.n_samples is not None:
+            sample_parts.append(f"n_samples={context.n_samples}")
+        else:
+            sample_parts.append("n_samples=all")
+
+        if context.n_samples_minibatch is not None:
+            sample_parts.append(f"minibatch_samples={context.n_samples_minibatch}")
+
+        if context.n_samples_strategy:
+            sample_parts.append(f"strategy={context.n_samples_strategy}")
+
+        if sample_parts:
+            return selection_summary + " | " + ", ".join(sample_parts)
+        return selection_summary
 
     def show_final_result(
         self,

@@ -1414,7 +1414,7 @@ class BaseOptimizer(ABC):
            experiment_config: Optional configuration for the experiment
            n_samples: Number of samples to use for evaluation
            n_samples_minibatch: Optional number of samples for inner-loop minibatches
-           n_samples_strategy: Sampling strategy name (default "epoch_shuffled")
+           n_samples_strategy: Sampling strategy name (default "random_sorted")
                TODO: keep internal until the strategy set is stabilized.
            auto_continue: Whether to continue optimization automatically
            project_name: Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")
@@ -1836,7 +1836,7 @@ class BaseOptimizer(ABC):
         debug_log(
             "evaluation_sampling",
             sampling_tag=sampling_tag,
-            sampling_mode=sampling_plan.mode,
+            sampling_plan_mode=sampling_plan.mode,
             n_samples=n_samples,
             resolved_n_samples=resolved_n_samples,
             dataset_item_ids_count=len(resolved_ids) if resolved_ids else 0,

@@ -26,6 +26,12 @@ from ..multimodal import format_message_content
 from ..reporting import convert_tqdm_to_rich, get_console, suppress_opik_logs
 from ...constants import DEFAULT_PANEL_WIDTH, DEFAULT_DISPLAY_PREFIX
 
+PARAMETER_DESCRIPTIONS: dict[str, str] = {
+    "n_samples": "max dataset items evaluated per trial",
+    "n_samples_minibatch": "dataset items per minibatch evaluation",
+    "n_samples_strategy": "sampling strategy (default random_sorted)",
+}
+
 
 def _format_message_content(content: str | list[dict[str, Any]]) -> rich.text.Text:
     return format_message_content(content)
@@ -352,6 +358,9 @@ def display_configuration(
             rich.text.Text(f"  - {key}: ", style="dim"),
             rich.text.Text(str(value), style="cyan"),
         )
+        description = PARAMETER_DESCRIPTIONS.get(key)
+        if description:
+            parameter_text.append(rich.text.Text(f" ({description})", style="dim"))
         console.print(parameter_text)
 
     display_text_block("\n")

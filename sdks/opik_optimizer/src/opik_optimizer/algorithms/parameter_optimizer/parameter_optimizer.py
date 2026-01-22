@@ -473,7 +473,7 @@ class ParameterOptimizer(BaseOptimizer):
             max_trials: Total number of trials (if None, uses default_n_trials)
             n_samples: Number of dataset samples to evaluate per trial (None for all)
             n_samples_minibatch: Optional number of samples for inner-loop minibatches
-            n_samples_strategy: Sampling strategy name (default "epoch_shuffled")
+            n_samples_strategy: Sampling strategy name (default "random_sorted")
             agent: Optional custom agent instance to execute evaluations
             project_name: Opik project name for logging traces (default: "Optimization")
             sampler: Optuna sampler to use (default: TPESampler with seed)

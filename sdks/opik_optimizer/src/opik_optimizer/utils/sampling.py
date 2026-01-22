@@ -59,7 +59,7 @@ def _extract_ids(dataset: Any) -> list[str]:
     return ids
 
 
-def _epoch_shuffled_ids(
+def _random_sorted_ids(
     *,
     dataset: Any,
     nb_samples: int,
@@ -114,7 +114,7 @@ def resolve_sampling(
     if strategy != DEFAULT_STRATEGY:
         raise ValueError(f"Unsupported sampling strategy: {strategy}")
 
-    sampled_ids = _epoch_shuffled_ids(dataset=dataset, nb_samples=effective, rng=rng)
+    sampled_ids = _random_sorted_ids(dataset=dataset, nb_samples=effective, rng=rng)
     if sampled_ids:
         return SamplingPlan(
             nb_samples=len(sampled_ids),
