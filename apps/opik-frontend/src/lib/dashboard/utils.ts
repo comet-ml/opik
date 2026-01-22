@@ -28,13 +28,11 @@ const DEFAULT_SECTION_NAME = "New section";
 
 const TEMPLATE_ID_PREFIX = "template:";
 
-export const CUSTOM_PROJECT_CONFIG_MESSAGE =
-  "This widget uses a custom project instead of the dashboard default.";
-
 export const resolveProjectIdFromConfig = (
   widgetProjectId: string | undefined,
   globalProjectId: string | undefined,
   overrideDefaults?: boolean,
+  projectName?: string,
 ): {
   projectId: string | undefined;
   infoMessage: string | undefined;
@@ -43,9 +41,11 @@ export const resolveProjectIdFromConfig = (
   // Otherwise, always use global projectId
   const projectId = overrideDefaults ? widgetProjectId : globalProjectId;
 
-  const infoMessage = overrideDefaults
-    ? CUSTOM_PROJECT_CONFIG_MESSAGE
-    : undefined;
+  let infoMessage: string | undefined;
+  if (overrideDefaults) {
+    const name = projectName || "custom project";
+    infoMessage = `This widget uses ${name} instead of the dashboard default.`;
+  }
 
   return {
     projectId,

@@ -23,6 +23,7 @@ import {
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
+import useProjectById from "@/api/projects/useProjectById";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
@@ -63,22 +64,30 @@ const ProjectMetricsWidget: React.FunctionComponent<
     | boolean
     | undefined;
 
-  const { projectId, infoMessage, interval, intervalStart, intervalEnd } =
+  const { data: projectData } = useProjectById(
+    { projectId: widgetProjectId! },
+    { enabled: overrideDefaults && !!widgetProjectId },
+  );
+
+  const { projectId, messages, interval, intervalStart, intervalEnd } =
     useMemo(() => {
       const { projectId: resolvedProjectId, infoMessage } =
         resolveProjectIdFromConfig(
           widgetProjectId,
           globalConfig.projectId,
           overrideDefaults,
+          projectData?.name,
         );
 
       const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
         globalConfig.dateRange,
       );
 
+      const messages = [infoMessage].filter(Boolean) as string[];
+
       return {
         projectId: resolvedProjectId,
-        infoMessage,
+        messages,
         interval,
         intervalStart,
         intervalEnd,
@@ -88,6 +97,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       globalConfig.projectId,
       globalConfig.dateRange,
       overrideDefaults,
+      projectData?.name,
     ]);
 
   const metricType = widget?.config?.metricType as string | undefined;
@@ -208,12 +218,12 @@ const ProjectMetricsWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
+        <DashboardWidget.PreviewHeader messages={messages} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
           subtitle={widget.subtitle}
-          infoMessage={infoMessage}
+          messages={messages}
           actions={
             <DashboardWidget.ActionsMenu
               sectionId={sectionId!}
