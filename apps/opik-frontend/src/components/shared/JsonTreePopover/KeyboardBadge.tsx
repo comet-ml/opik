@@ -5,7 +5,7 @@ interface KeyboardBadgeProps {
 }
 
 const KeyboardBadge: React.FC<KeyboardBadgeProps> = ({ children }) => (
-  <kbd className="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-medium bg-muted border rounded">
+  <kbd className="inline-flex items-center justify-center rounded border px-1.5 py-0.5 text-xs font-medium">
     {children}
   </kbd>
 );

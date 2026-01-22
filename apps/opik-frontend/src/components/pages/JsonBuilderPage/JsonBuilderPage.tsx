@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from "react";
-import { Braces, X } from "lucide-react";
+import React, { useState, useCallback, useMemo, useRef } from "react";
+import { Braces } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -7,12 +7,104 @@ import {
   JsonObject,
   JsonValue,
 } from "@/components/shared/JsonTreePopover";
+import LLMPromptMessage, {
+  LLMPromptMessageHandle,
+} from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessage";
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
+import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 
-// Type for selected items
-interface SelectedItem {
-  path: string;
-  value: JsonValue;
+// LLM Messages Section with JsonTreePopover integration
+interface LLMMessagesSectionProps {
+  jsonData: JsonObject | null;
+  onPathSelect?: (path: string, value: JsonValue) => void;
 }
+
+const LLMMessagesSection: React.FC<LLMMessagesSectionProps> = ({
+  jsonData,
+  onPathSelect,
+}) => {
+  const [messages, setMessages] = useState<LLMMessage[]>(() => [
+    generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.system }),
+    generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
+  ]);
+  const messageRefsMap = useRef<Map<string, LLMPromptMessageHandle>>(new Map());
+
+  const handleChangeMessage = useCallback(
+    (messageId: string, changes: Partial<LLMMessage>) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id !== messageId ? m : { ...m, ...changes })),
+      );
+    },
+    [],
+  );
+
+  const handleRemoveMessage = useCallback((messageId: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+  }, []);
+
+  const handleDuplicateMessage = useCallback(
+    (message: LLMMessage, position: number) => {
+      const newMessage = generateDefaultLLMPromptMessage({
+        role: message.role,
+        content: message.content,
+      });
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        newMessages.splice(position, 0, newMessage);
+        return newMessages;
+      });
+    },
+    [],
+  );
+
+  const handleMessageFocus = useCallback((messageId: string) => {
+    setFocusedMessageId(messageId);
+  }, []);
+
+  // Extract variable names from JSON for display
+  const jsonVariables = useMemo(() => {
+    if (!jsonData) return [];
+    return Object.keys(jsonData);
+  }, [jsonData]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Messages */}
+      <div className="flex flex-col gap-2">
+        {messages.map((message, idx) => (
+          <LLMPromptMessage
+            key={message.id}
+            ref={(handle) =>
+              handle
+                ? messageRefsMap.current.set(message.id, handle)
+                : messageRefsMap.current.delete(message.id)
+            }
+            message={message}
+            hideRemoveButton={messages.length === 1}
+            hideDragButton={true}
+            hidePromptActions={true}
+            onRemoveMessage={() => handleRemoveMessage(message.id)}
+            onDuplicateMessage={() => handleDuplicateMessage(message, idx + 1)}
+            onChangeMessage={(changes) =>
+              handleChangeMessage(message.id, changes)
+            }
+            onFocus={() => handleMessageFocus(message.id)}
+            promptVariables={jsonVariables}
+            jsonTreeData={jsonData}
+            onJsonPathSelect={onPathSelect}
+          />
+        ))}
+      </div>
+
+      {/* Help text */}
+      <p className="text-xs text-muted-foreground">
+        Type <code className="rounded bg-muted px-1">{"{{"}</code> to open the
+        variable picker, or click &quot;Insert Variable&quot; to browse JSON
+        paths.
+      </p>
+    </div>
+  );
+};
 
 // Example JSON objects
 const JSON_EXAMPLES = [
@@ -250,7 +342,6 @@ const JSON_EXAMPLES = [
 // Main JSON Builder component
 const JsonBuilderPage: React.FC = () => {
   const [jsonInput, setJsonInput] = useState<string>(JSON_EXAMPLES[0].json);
-  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   // Parse JSON input
@@ -269,26 +360,12 @@ const JsonBuilderPage: React.FC = () => {
     }
   }, [jsonInput]);
 
-  const handlePathSelect = useCallback((path: string, value: JsonValue) => {
-    setSelectedItems((prev) => {
-      // Don't add duplicates
-      if (prev.some((item) => item.path === path)) {
-        return prev;
-      }
-      return [...prev, { path, value }];
-    });
-  }, []);
-
-  const handleRemoveItem = useCallback((path: string) => {
-    setSelectedItems((prev) => prev.filter((item) => item.path !== path));
-  }, []);
-
-  const handleClearAll = useCallback(() => {
-    setSelectedItems([]);
+  const handlePathSelect = useCallback(() => {
+    // Path selected - can be used for tracking or other purposes
   }, []);
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-4xl mx-auto">
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
       <div>
         <h1 className="comet-title-l mb-2">JsonTreePopover Demo</h1>
         <p className="text-muted-foreground">
@@ -311,7 +388,6 @@ const JsonBuilderPage: React.FC = () => {
                 size="sm"
                 onClick={() => {
                   setJsonInput(example.json);
-                  setSelectedItems([]);
                 }}
               >
                 {example.name}
@@ -330,12 +406,26 @@ const JsonBuilderPage: React.FC = () => {
           <textarea
             value={jsonInput}
             onChange={(e) => setJsonInput(e.target.value)}
-            className="w-full h-64 p-3 border rounded-md bg-background font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-64 w-full resize-none rounded-md border bg-background p-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             placeholder="Enter your JSON object here..."
           />
           {jsonError && (
-            <p className="text-destructive text-sm mt-2">{jsonError}</p>
+            <p className="mt-2 text-sm text-destructive">{jsonError}</p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* LLM Messages Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>LLM Messages</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Build your prompt messages below. Use the &quot;Insert
+            Variable&quot; button to add JSON paths as template variables.
+          </p>
+          <LLMMessagesSection jsonData={parsedJson} />
         </CardContent>
       </Card>
 
@@ -350,62 +440,11 @@ const JsonBuilderPage: React.FC = () => {
             onSelect={handlePathSelect}
             trigger={
               <Button disabled={!parsedJson}>
-                <Braces className="size-4 mr-2" />
+                <Braces className="mr-2 size-4" />
                 Open JSON Tree
               </Button>
             }
           />
-        </CardContent>
-      </Card>
-
-      {/* Selected Items */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Selected Paths ({selectedItems.length})</CardTitle>
-          {selectedItems.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={handleClearAll}>
-              Clear all
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          {selectedItems.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Click on items in the JSON tree to select them
-            </p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {selectedItems.map((item) => (
-                <div
-                  key={item.path}
-                  className="flex items-start gap-3 p-3 border rounded-md bg-muted/30"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <code className="font-mono text-sm text-[var(--color-green)]">
-                        {`{{${item.path}}}`}
-                      </code>
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      Value:{" "}
-                      <span className="font-mono">
-                        {typeof item.value === "object"
-                          ? JSON.stringify(item.value)
-                          : String(item.value)}
-                      </span>
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={() => handleRemoveItem(item.path)}
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

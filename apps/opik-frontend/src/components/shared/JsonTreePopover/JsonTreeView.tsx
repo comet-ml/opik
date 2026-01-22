@@ -13,7 +13,7 @@ export const JsonTreeView: React.FC<JsonTreeViewProps> = ({
   onFocusPath,
 }) => {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
-    () => new Set(defaultExpandedPaths)
+    () => new Set(defaultExpandedPaths),
   );
 
   const handleToggleExpand = useCallback((path: string) => {
