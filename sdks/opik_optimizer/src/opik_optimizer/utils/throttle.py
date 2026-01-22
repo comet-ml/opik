@@ -2,7 +2,7 @@ import asyncio
 import functools
 import time
 from collections.abc import Awaitable, Callable
-from typing import ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 import opik.config
 import pyrate_limiter
@@ -19,12 +19,11 @@ class RateLimiter:
     def __init__(self, max_calls_per_second: int):
         self.max_calls_per_second = max_calls_per_second
         rate = pyrate_limiter.Rate(max_calls_per_second, pyrate_limiter.Duration.SECOND)
-
+        limiter_cls: Any = pyrate_limiter.Limiter
         try:
-            self.limiter = pyrate_limiter.Limiter(rate, raise_when_fail=False)
+            self.limiter = limiter_cls(rate, raise_when_fail=False)
         except TypeError:
-            # Newer pyrate_limiter versions dropped the flag; fall back to default.
-            self.limiter = pyrate_limiter.Limiter(rate)
+            self.limiter = limiter_cls(rate)
         self.bucket_key = "global_rate_limit"
 
     def acquire(self) -> None:
@@ -34,7 +33,6 @@ class RateLimiter:
     async def acquire_async(self) -> None:
         while not self.limiter.try_acquire(self.bucket_key):
             await asyncio.sleep(0.01)
-
 
 def rate_limited(limiter: RateLimiter) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator to rate limit a function using the provided limiter"""
