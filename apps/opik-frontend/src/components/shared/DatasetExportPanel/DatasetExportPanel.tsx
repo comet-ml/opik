@@ -53,17 +53,30 @@ const DatasetExportPanel: React.FC = () => {
 
   const pendingCount = pendingJobs.length;
   const completedCount = completedJobs.length;
-  const hasOnlyCompleted = pendingCount === 0 && completedCount > 0;
   const hasPendingJobs = pendingCount > 0;
 
+  // Count how many completed jobs are downloaded vs ready
+  const downloadedCount = completedJobs.filter((j) => j.isDownloaded).length;
+  const readyCount = completedCount - downloadedCount;
+  const allDownloaded =
+    completedCount > 0 &&
+    downloadedCount === completedCount &&
+    pendingCount === 0;
+
   const getStatusText = () => {
-    if (pendingCount > 0) {
+    // If at least one is being prepared: "Preparing download"
+    if (hasPendingJobs) {
       return "Preparing download";
     }
-    if (completedCount > 0) {
+    // If all in downloaded state: "Downloaded"
+    if (allDownloaded) {
+      return "Downloaded";
+    }
+    // If none being prepared and at least one Ready: "Download ready"
+    if (readyCount > 0) {
       return "Download ready";
     }
-    // Fallback for failed-only or mixed states
+    // Fallback (shouldn't happen, but handle edge cases)
     return "Preparing download";
   };
 
@@ -86,12 +99,8 @@ const DatasetExportPanel: React.FC = () => {
 
   const handleClosePanel = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (hasPendingJobs) {
-      // Show confirmation dialog if there are pending exports
-      setShowCloseConfirm(true);
-    } else {
-      removeAllJobs();
-    }
+    // Always show confirmation dialog when closing the panel to clear all jobs
+    setShowCloseConfirm(true);
   };
 
   const handleConfirmClose = () => {
@@ -100,13 +109,13 @@ const DatasetExportPanel: React.FC = () => {
   };
 
   return (
-    <Card className="fixed bottom-0 right-4 z-40 w-72 shadow-lg transition-all duration-200 ease-in-out">
+    <Card className="fixed bottom-0 right-4 z-[110] w-72 shadow-lg transition-all duration-200 ease-in-out">
       <CardHeader
         className="flex cursor-pointer flex-row items-center justify-between border-b px-3 py-2.5"
         onClick={togglePanelExpanded}
       >
         <div className="flex items-center gap-2">
-          {hasOnlyCompleted && (
+          {readyCount > 0 && !hasPendingJobs && (
             <CheckCircle2 className="size-4 text-green-600" />
           )}
           <CardTitle className="text-sm font-medium">
@@ -135,7 +144,13 @@ const DatasetExportPanel: React.FC = () => {
       {/* Always render ExportJobItem components for polling, but only show when expanded */}
       <div className={isPanelExpanded ? "" : "hidden"}>
         <CardContent className="p-0">
-          <div className="max-h-48 overflow-y-auto px-3 pb-2">
+          <div
+            className={
+              activeJobs.length > 6
+                ? "max-h-64 overflow-y-auto"
+                : "overflow-visible"
+            }
+          >
             {activeJobs.map((jobInfo) => (
               <ExportJobItem key={jobInfo.job.id} jobInfo={jobInfo} />
             ))}
@@ -147,10 +162,15 @@ const DatasetExportPanel: React.FC = () => {
         open={showCloseConfirm}
         setOpen={setShowCloseConfirm}
         onConfirm={handleConfirmClose}
-        title="Close export panel?"
-        description="You have exports that are still being prepared. Closing this panel will hide the progress and you won't be notified when they complete."
-        confirmText="Close anyway"
-        cancelText="Keep open"
+        title="Delete export file?"
+        description={
+          hasPendingJobs
+            ? "You have exports that are still being prepared. This will permanently remove all generated export files. You'll need to generate new exports to download them again. This action cannot be undone."
+            : "This will permanently remove all generated export files. You'll need to generate new exports to download them again. This action cannot be undone."
+        }
+        confirmText="Delete"
+        confirmButtonVariant="destructive"
+        cancelText="Cancel"
       />
     </Card>
   );

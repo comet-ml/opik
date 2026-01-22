@@ -17,7 +17,7 @@ import useStartDatasetExportMutation from "@/api/datasets/useStartDatasetExportM
 import {
   handleExportSuccess,
   useAddExportJob,
-  useSetPanelExpanded,
+  useHasInProgressJob,
 } from "@/store/DatasetExportStore";
 import { useToast } from "@/components/ui/use-toast";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -46,7 +46,7 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
   const { mutate: startExport, isPending: isExportStarting } =
     useStartDatasetExportMutation();
   const addExportJob = useAddExportJob();
-  const setPanelExpanded = useSetPanelExpanded();
+  const hasInProgressJob = useHasInProgressJob(datasetId, version.id);
   const { toast } = useToast();
   const isDatasetExportEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.DATASET_EXPORT_ENABLED,
@@ -63,6 +63,16 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
   };
 
   const downloadVersionHandler = useCallback(() => {
+    // Prevent duplicate exports if one is already in progress
+    if (hasInProgressJob) {
+      toast({
+        title: "Export already in progress",
+        description: "An export for this version is already being prepared. Please wait for it to complete.",
+        variant: "default",
+      });
+      return;
+    }
+
     startExport(
       { datasetId, datasetVersionId: version.id },
       {
@@ -73,7 +83,6 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
             versionId: version.id,
             versionName: version.version_name,
             addExportJob,
-            setPanelExpanded,
           });
         },
         onError: () => {
@@ -90,9 +99,9 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
     datasetName,
     version.id,
     version.version_name,
+    hasInProgressJob,
     startExport,
     addExportJob,
-    setPanelExpanded,
     toast,
   ]);
 

@@ -13,6 +13,7 @@ import useAppStore from "@/store/AppStore";
 import {
   useRemoveExportJob,
   useUpdateExportJob,
+  useMarkJobAsDownloaded,
   ExportJobInfo,
 } from "@/store/DatasetExportStore";
 import useDatasetExportJob from "@/api/datasets/useDatasetExportJob";
@@ -37,10 +38,11 @@ interface ExportJobItemProps {
 }
 
 const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
-  const { job, datasetName } = jobInfo;
+  const { job, datasetName, isDownloaded } = jobInfo;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const removeJob = useRemoveExportJob();
   const updateJob = useUpdateExportJob();
+  const markJobAsDownloaded = useMarkJobAsDownloaded();
   const [isHovered, setIsHovered] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { toast } = useToast();
@@ -118,6 +120,8 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     // Use the proxy download endpoint instead of direct MinIO URL
     const downloadUrl = getExportJobDownloadUrl(job.id);
     window.open(downloadUrl, "_blank");
+    // Mark as downloaded in the store
+    markJobAsDownloaded(job.id);
   };
 
   const handleDismiss = (e: React.MouseEvent) => {
@@ -136,10 +140,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
       {
         onSuccess: () => {
           removeJob(job.id);
-          toast({
-            title: "Export deleted",
-            description: `The export file for "${datasetName}" has been removed.`,
-          });
+          // Don't show success notification for delete
         },
         onError: () => {
           toast({
@@ -161,7 +162,15 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
       );
     }
     if (isCompleted) {
-      return <CheckCircle2 className="size-4 shrink-0 text-green-600" />;
+      // Grey checkmark if downloaded, green if ready but not downloaded
+      return (
+        <CheckCircle2
+          className={cn(
+            "size-4 shrink-0",
+            isDownloaded ? "text-muted-foreground" : "text-green-600",
+          )}
+        />
+      );
     }
     if (isFailed) {
       return <AlertCircle className="size-4 shrink-0 text-destructive" />;
@@ -239,7 +248,7 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
     <>
       <div
         className={cn(
-          "-mx-3 flex items-center gap-2 border-b px-3 py-2 last:border-b-0",
+          "flex w-full items-center gap-2 border-b px-3 py-2 last:border-b-0 transition-colors",
           isCompleted && "cursor-pointer hover:bg-muted/50",
         )}
         onMouseEnter={() => setIsHovered(true)}
@@ -248,22 +257,24 @@ const ExportJobItem: React.FC<ExportJobItemProps> = ({ jobInfo }) => {
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {renderStatusIndicator()}
-          <span className="truncate text-sm">{datasetName}</span>
-          {isFailed && (
-            <span className="shrink-0 text-xs text-destructive">Failed</span>
-          )}
-          {isCompleted && (
-            <span className="shrink-0 text-xs text-green-600">Ready</span>
-          )}
-          {isLoading && (
-            <span className="shrink-0 text-xs text-muted-foreground">
-              Exporting...
-            </span>
-          )}
+          <span className="min-w-0 flex-1 truncate text-sm">{datasetName}</span>
+          <div className="shrink-0">
+            {isFailed && <span className="text-xs text-destructive">Failed</span>}
+            {isCompleted && isDownloaded && (
+              <span className="text-xs text-muted-foreground">Downloaded</span>
+            )}
+            {isCompleted && !isDownloaded && (
+              <span className="text-xs text-green-600">Ready</span>
+            )}
+            {isLoading && (
+              <span className="text-xs text-muted-foreground">
+                Exporting...
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 items-center">{renderActionButton()}</div>
       </div>
-
       <ConfirmDialog
         open={showDeleteConfirm}
         setOpen={setShowDeleteConfirm}
