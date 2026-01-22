@@ -16,7 +16,7 @@ export class RulesPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.onlineEvaluationTab = page.getByRole('tab', { name: 'Online evaluation' });
+    this.onlineEvaluationTab = page.getByRole('tab', { name: 'Evaluators' });
     this.createRuleButton = page.getByRole('button', { name: /Create.*rule/i });
     this.ruleNameInput = page.getByPlaceholder('Rule name');
     this.modelCombobox = page.getByRole('combobox').filter({ hasText: 'Select an LLM model' });
