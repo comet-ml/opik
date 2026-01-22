@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -91,6 +91,21 @@ const TracesPage = () => {
     // Fallback to logs for invalid values
     return PROJECT_TAB.logs;
   }, [type]);
+
+  // Correct invalid type values in URL
+  useEffect(() => {
+    const isValidLogsType = Object.values(LOGS_TYPE).includes(
+      type as LOGS_TYPE,
+    );
+    const isValidProjectTab = Object.values(PROJECT_TAB).includes(
+      type as PROJECT_TAB,
+    );
+
+    if (!isValidLogsType && !isValidProjectTab) {
+      // Invalid type, correct it to defaultLogsType
+      setType(defaultLogsType);
+    }
+  }, [type, defaultLogsType, setType]);
 
   // Handle tab change - when switching to Logs tab, default based on thread count
   const handleTabChange = (newTab: string) => {
