@@ -1,4 +1,4 @@
-import { parseCompletionOutput, parseUsage } from "../src/parsers";
+import { parseCompletionOutput, parseUsage } from "../../../../src/opik/integrations/opik-openai/src/parsers";
 
 describe("OpenAI Parsers", () => {
   describe("parseCompletionOutput", () => {
@@ -258,6 +258,56 @@ describe("OpenAI Parsers", () => {
       it("should return undefined for empty object", () => {
         const result = parseUsage({});
         expect(result).toBeUndefined();
+      });
+
+      it("should filter out non-numeric fields from OpenRouter responses", () => {
+        const openRouterResponse = {
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            is_byok: false,
+            cost_details: {
+              upstream_inference_cost: null,
+            },
+          },
+        };
+
+        const result = parseUsage(openRouterResponse);
+
+        expect(result).toBeDefined();
+        expect(result?.prompt_tokens).toBe(100);
+        expect(result?.completion_tokens).toBe(50);
+        expect(result?.total_tokens).toBe(150);
+        expect(result?.["original_usage.prompt_tokens"]).toBe(100);
+        expect(result?.["original_usage.completion_tokens"]).toBe(50);
+        expect(result?.["original_usage.total_tokens"]).toBe(150);
+        // Non-numeric fields should be filtered out
+        expect(result?.["original_usage.is_byok"]).toBeUndefined();
+        expect(result?.["original_usage.cost_details.upstream_inference_cost"]).toBeUndefined();
+      });
+
+      it("should include numeric fields from nested objects", () => {
+        const responseWithNestedNumericFields = {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            completion_tokens_details: {
+              reasoning_tokens: 5,
+              accepted_prediction_tokens: 3,
+            },
+          },
+        };
+
+        const result = parseUsage(responseWithNestedNumericFields);
+
+        expect(result).toBeDefined();
+        expect(result?.prompt_tokens).toBe(10);
+        expect(result?.completion_tokens).toBe(20);
+        expect(result?.total_tokens).toBe(30);
+        expect(result?.["original_usage.completion_tokens_details.reasoning_tokens"]).toBe(5);
+        expect(result?.["original_usage.completion_tokens_details.accepted_prediction_tokens"]).toBe(3);
       });
     });
   });
