@@ -347,27 +347,27 @@ class MyMetric(BaseMetric)
         
         assert "Invalid Python code" in str(exc_info.value)
 
-    def test_code_metric_no_basemetric_class_returns_zero_score(self):
-        """Test that code without a BaseMetric subclass returns zero score.
+    def test_code_metric_no_basemetric_class_raises_error(self):
+        """Test that code without a BaseMetric subclass raises error at build time.
         
         With executor infrastructure, code must define a BaseMetric subclass.
-        Runtime errors return ScoreResult(value=0.0) to avoid crashing optimization.
+        Validation at build time provides fail-fast behavior.
         """
         code = '''
 # Just a comment, no BaseMetric class
 x = 1
 '''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
+        # Should raise InvalidMetricError during build (validation step)
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
         
-        # Should return zero score with error reason
-        assert result.value == 0.0
-        assert "error" in result.reason.lower() or "BaseMetric" in result.reason
+        assert "BaseMetric" in str(exc_info.value)
 
-    def test_code_metric_function_only_returns_zero_score(self):
-        """Test that function-only code (no BaseMetric class) returns zero score.
+    def test_code_metric_function_only_raises_error(self):
+        """Test that function-only code (no BaseMetric class) raises error at build time.
         
         Function-based metrics are not supported - only BaseMetric class pattern.
+        Validation at build time provides fail-fast behavior.
         """
         code = '''
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -375,12 +375,11 @@ from opik.evaluation.metrics.score_result import ScoreResult
 def my_metric(dataset_item, llm_output):
     return ScoreResult(name="test", value=1.0, reason="Function")
 '''
-        metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        result = metric_fn({}, "test output")
+        # Should raise InvalidMetricError during build (validation step)
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
         
-        # Should return zero score since functions are not supported
-        assert result.value == 0.0
-        assert "error" in result.reason.lower() or "BaseMetric" in result.reason
+        assert "BaseMetric" in str(exc_info.value)
 
 
 class TestTemplateSyntaxConversion:
