@@ -213,9 +213,10 @@ export const useHasInProgressJob = (
       // Check if it's the same dataset
       if (job.dataset_id !== datasetId) continue;
 
-      // Check version match (both null or both same)
-      const jobVersionId = job.dataset_version_id;
-      if (jobVersionId !== datasetVersionId) continue;
+      // Check version match (normalize null and undefined to undefined for comparison)
+      const jobVersionId = job.dataset_version_id ?? undefined;
+      const normalizedVersionId = datasetVersionId ?? undefined;
+      if (jobVersionId !== normalizedVersionId) continue;
 
       // Check if job is in progress (PENDING or PROCESSING)
       if (

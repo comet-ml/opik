@@ -145,49 +145,75 @@ class CsvDatasetExportServiceImpl implements CsvDatasetExportService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             // Resolve versionId based on feature flag and provided value
-            UUID resolvedVersionId = resolveVersionId(datasetId, versionId, workspaceId);
+            // If versioning is disabled, use null directly without going through reactive chain
+            if (!featureFlags.isDatasetVersioningEnabled()) {
+                log.info("Dataset versioning is disabled, using legacy table for export");
+                UUID resolvedVersionId = null;
+                return processExportWithVersionId(datasetId, resolvedVersionId, workspaceId);
+            }
 
-            // Check for existing in-progress jobs first (without lock)
-            // Pass the resolved version ID to dedupe by (dataset, version) combination
-            return jobService.findInProgressJobs(datasetId, resolvedVersionId)
-                    .flatMap(existingJobs -> {
-                        if (!existingJobs.isEmpty()) {
-                            DatasetExportJob existingJob = existingJobs.getFirst();
-                            log.info("Found existing in-progress export job: '{}'", existingJob.id());
-                            return Mono.just(existingJob);
-                        }
-
-                        // No existing job, acquire lock and create new one
-                        String lockKey = formatLockKey(workspaceId, datasetId);
-                        return executeWithLock(lockKey, workspaceId, datasetId, resolvedVersionId);
-                    });
+            // Versioning is enabled - resolve versionId reactively
+            return resolveVersionId(datasetId, versionId, workspaceId)
+                    .flatMap(
+                            resolvedVersionId -> processExportWithVersionId(datasetId, resolvedVersionId, workspaceId));
         });
     }
 
     /**
+     * Processes the export with the resolved version ID.
+     *
+     * @param datasetId the dataset ID
+     * @param resolvedVersionId the resolved version ID (may be null)
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the export job
+     */
+    private Mono<DatasetExportJob> processExportWithVersionId(UUID datasetId, @Nullable UUID resolvedVersionId,
+            String workspaceId) {
+        // Check for existing in-progress jobs first (without lock)
+        // Pass the resolved version ID to dedupe by (dataset, version) combination
+        return jobService.findInProgressJobs(datasetId, resolvedVersionId)
+                .flatMap(existingJobs -> {
+                    if (!existingJobs.isEmpty()) {
+                        DatasetExportJob existingJob = existingJobs.getFirst();
+                        log.info("Found existing in-progress export job: '{}'", existingJob.id());
+                        return Mono.just(existingJob);
+                    }
+
+                    // No existing job, acquire lock and create new one
+                    String lockKey = formatLockKey(workspaceId, datasetId);
+                    return executeWithLock(lockKey, workspaceId, datasetId, resolvedVersionId);
+                });
+    }
+
+    /**
      * Resolves the versionId based on feature flag and provided value.
+     * This method is only called when versioning is enabled.
      *
      * @param datasetId the dataset ID
      * @param versionId the provided versionId (may be null)
      * @param workspaceId the workspace ID
-     * @return the resolved versionId, or null if using legacy table
+     * @return Mono emitting the resolved versionId
      */
-    private UUID resolveVersionId(UUID datasetId, @Nullable UUID versionId, String workspaceId) {
-        if (!featureFlags.isDatasetVersioningEnabled()) {
-            // When versioning is disabled, always use null (legacy table)
-            log.info("Dataset versioning is disabled, using legacy table for export");
-            return null;
-        }
-
+    private Mono<UUID> resolveVersionId(UUID datasetId, @Nullable UUID versionId, String workspaceId) {
         if (versionId != null) {
-            // Versioning enabled and versionId provided - use it
-            return versionId;
+            // Versioning enabled and versionId provided - validate it belongs to the dataset
+            return Mono.fromCallable(() -> {
+                var version = versionService.getVersionById(workspaceId, datasetId, versionId);
+                if (!version.datasetId().equals(datasetId)) {
+                    throw new BadRequestException(
+                            "Provided versionId '%s' does not belong to dataset '%s'"
+                                    .formatted(versionId, datasetId));
+                }
+                return versionId;
+            })
+                    .subscribeOn(Schedulers.boundedElastic());
         }
 
         // Versioning enabled but no versionId provided - get latest version
-        return versionService.getLatestVersion(datasetId, workspaceId)
+        return Mono.fromCallable(() -> versionService.getLatestVersion(datasetId, workspaceId)
                 .map(v -> v.id())
-                .orElse(null);
+                .orElse(null))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private Mono<DatasetExportJob> executeWithLock(String lockKey, String workspaceId, UUID datasetId,
