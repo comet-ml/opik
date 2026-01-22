@@ -48,6 +48,8 @@ result = optimizer.optimize_prompt(
 - Set `project_name` on the optimizer to group runs by team or initiative.
 - Start with `max_trials` = 3–5. Increase once you confirm the metric is reliable.
 - Use `n_samples` to limit cost during early exploration; rerun on the full dataset before promoting a prompt.
+- For optimizers with inner-loop evaluations (HRPO, GEPA), set `n_samples_minibatch` to keep those steps lightweight.
+- Use `n_samples_strategy` to keep subsampling deterministic (default: `"random_sorted"`).
 
 ### Optimize multiple prompts together
 

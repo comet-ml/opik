@@ -32,7 +32,7 @@ Notes:
 ## Deterministic subsampling (n_samples_strategy)
 
 `n_samples_strategy` controls *how* dataset rows are selected when `n_samples` is set. The default strategy is
-`"epoch_shuffled"`, which:
+`"random_sorted"`, which:
 
 1. Sorts dataset item IDs.
 2. Shuffles them deterministically using the optimizer seed and evaluation phase.
@@ -46,12 +46,12 @@ result = optimizer.optimize_prompt(
     dataset=dataset,
     metric=metric,
     n_samples=50,
-    n_samples_strategy="epoch_shuffled",
+    n_samples_strategy="random_sorted",
 )
 ```
 
 <Info>
-  Only `"epoch_shuffled"` is supported today. Passing another strategy will raise a `ValueError`.
+  Only `"random_sorted"` is supported today. Passing another strategy will raise a `ValueError`.
 </Info>
 
 ## Minibatch sampling (n_samples_minibatch)
