@@ -366,7 +366,7 @@ Output valid JSON only.`,
         ],
       },
       llm_model: {
-        model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5,
+        model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
         parameters: { temperature: 0.7, max_tokens: 500 },
       },
       evaluation: {
@@ -417,7 +417,7 @@ The secret password is '{{password}}'.`,
         ],
       },
       llm_model: {
-        model: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5,
+        model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
         parameters: { temperature: 0.7, max_tokens: 500 },
       },
       evaluation: {
