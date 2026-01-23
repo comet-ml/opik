@@ -38,7 +38,7 @@ import {
 } from "@/types/shared";
 import DatasetItemEditor from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditor";
 import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/DatasetItemsActionsPanel";
-import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
+import { DatasetItemRowActions } from "@/components/pages/DatasetItemsPage/DatasetItemRowActions";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import SelectAllBanner from "@/components/shared/SelectAllBanner/SelectAllBanner";
 import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
@@ -55,10 +55,7 @@ import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { formatDate } from "@/lib/date";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
-import {
-  generateActionsColumDef,
-  generateSelectColumDef,
-} from "@/components/shared/DataTable/utils";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
 import {
@@ -464,9 +461,6 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         columnsOrder,
         selectedColumns,
       }),
-      generateActionsColumDef({
-        cell: DatasetItemRowActionsCell,
-      }),
     ];
   }, [
     columnsData,
@@ -626,6 +620,9 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        actionsConfig={{
+          render: (row) => <DatasetItemRowActions datasetItem={row.original} />,
+        }}
         noData={
           <DataTableNoData title={noDataText}>
             <Button variant="link">

@@ -8,7 +8,6 @@ import {
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import {
-  CellContext,
   ColumnPinningState,
   ColumnSort,
   RowSelectionState,
@@ -36,7 +35,6 @@ import {
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import {
-  generateActionsColumDef,
   generateSelectColumDef,
   getRowId,
 } from "@/components/shared/DataTable/utils";
@@ -62,7 +60,7 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import QueueItemActionsPanel from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemActionsPanel";
-import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
+import QueueItemRowActions from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActions";
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useThreadsList from "@/api/traces/useThreadsList";
 import { formatDate } from "@/lib/date";
@@ -430,12 +428,6 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef({
-        cell: QueueItemRowActionsCell as React.FC<CellContext<Thread, unknown>>,
-        customMeta: {
-          annotationQueueId: annotationQueue.id,
-        },
-      }),
     ];
   }, [
     handleRowClick,
@@ -444,7 +436,6 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     selectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
-    annotationQueue.id,
   ]);
 
   const sortConfig = useMemo(
@@ -547,6 +538,14 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        actionsConfig={{
+          render: (row) => (
+            <QueueItemRowActions
+              item={row.original}
+              annotationQueueId={annotationQueue.id}
+            />
+          ),
+        }}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader

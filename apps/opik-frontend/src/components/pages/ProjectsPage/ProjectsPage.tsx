@@ -24,7 +24,7 @@ import { ProjectWithStatistic } from "@/types/projects";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProjectDialog";
 import ProjectsActionsPanel from "@/components/pages/ProjectsPage/ProjectsActionsPanel";
-import { ProjectRowActionsCell } from "@/components/pages/ProjectsPage/ProjectRowActionsCell";
+import { ProjectRowActions } from "@/components/pages/ProjectsPage/ProjectRowActions";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
@@ -43,10 +43,7 @@ import {
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
-import {
-  generateActionsColumDef,
-  generateSelectColumDef,
-} from "@/components/shared/DataTable/utils";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -356,9 +353,6 @@ const ProjectsPage: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
-      generateActionsColumDef({
-        cell: ProjectRowActionsCell,
-      }),
     ];
   }, [selectedColumns, columnsOrder, columnsDef]);
 
@@ -429,6 +423,9 @@ const ProjectsPage: React.FunctionComponent = () => {
         columns={columns}
         data={projects}
         onRowClick={handleRowClick}
+        actionsConfig={{
+          render: (row) => <ProjectRowActions project={row.original} />,
+        }}
         sortConfig={{
           enabled: true,
           sorting: sortedColumns,

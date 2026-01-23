@@ -42,7 +42,7 @@ import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
-import ExperimentRowActionsCell from "@/components/pages/ExperimentsPage/ExperimentRowActionsCell";
+import ExperimentRowActions from "@/components/pages/ExperimentsPage/ExperimentRowActions";
 import FeedbackScoresChartsWrapper from "@/components/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -395,7 +395,6 @@ const ExperimentsPage: React.FC = () => {
     dynamicScoresColumns,
     experiments,
     rowSelection,
-    actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
   });
@@ -708,6 +707,9 @@ const ExperimentsPage: React.FC = () => {
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
+        actionsConfig={{
+          render: (row) => <ExperimentRowActions experiment={row.original} />,
+        }}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
