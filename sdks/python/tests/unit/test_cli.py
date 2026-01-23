@@ -1,5 +1,9 @@
 """Tests for CLI commands."""
 
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+from contextlib import contextmanager
+
 from click.testing import CliRunner
 
 from opik.cli import cli
@@ -81,3 +85,186 @@ class TestUploadCommand:
             "Import experiments from workspace/experiments directory" in result.output
         )
         assert "--dry-run" in result.output
+
+
+class TestSmokeTestCommand:
+    """Test the smoke-test functionality via healthcheck command."""
+
+    def test_smoke_test_help(self):
+        """Test that the healthcheck --smoke-test command shows help."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["healthcheck", "--help"])
+        assert result.exit_code == 0
+        assert "--smoke-test" in result.output
+        assert "--project-name" in result.output
+        assert "Project name for the smoke test" in result.output
+        assert "WORKSPACE" in result.output
+        assert "Run a smoke test to verify Opik integration" in result.output
+
+    def test_smoke_test_minimal_args_parsing(self):
+        """Test that healthcheck --smoke-test command requires workspace value."""
+        runner = CliRunner()
+        # Test that help shows workspace is required
+        result = runner.invoke(cli, ["healthcheck", "--help"])
+        assert result.exit_code == 0
+        assert "WORKSPACE" in result.output
+        # Test that missing workspace value causes error
+        result = runner.invoke(cli, ["healthcheck", "--smoke-test"])
+        assert result.exit_code != 0
+        assert "Error" in result.output or "Missing" in result.output
+
+    @patch("opik.cli.healthcheck.cli.opik_healthcheck.run")
+    @patch("opik.api_objects.opik_client.get_client_cached")
+    @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
+    @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
+    @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_trace")
+    @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_span")
+    @patch("opik.cli.healthcheck.smoke_test.create_opik_logo_image")
+    @patch("opik.cli.healthcheck.smoke_test.track")
+    def test_smoke_test_with_workspace_and_project_name(
+        self,
+        mock_track,
+        mock_create_logo,
+        mock_update_span,
+        mock_update_trace,
+        mock_start_trace,
+        mock_opik_class,
+        mock_get_client_cached,
+        mock_healthcheck_run,
+    ):
+        """Test healthcheck --smoke-test command with workspace and --project-name arguments."""
+        # Setup mocks
+        mock_client = MagicMock()
+        # Mock search_traces to raise an exception immediately to skip verification polling
+        # This prevents the verification from running and triggering real client creation
+        mock_client.search_traces = MagicMock(
+            side_effect=AttributeError("Mock client - search_traces not available")
+        )
+        mock_opik_class.return_value = mock_client
+
+        mock_cached_client = MagicMock()
+        mock_get_client_cached.return_value = mock_cached_client
+
+        # Mock the context manager for start_as_current_trace
+        @contextmanager
+        def mock_trace_context(*args, **kwargs):
+            yield MagicMock()
+
+        mock_start_trace.return_value = mock_trace_context()
+
+        # Mock create_opik_logo_image to return a fake path
+        mock_logo_path = Path("/tmp/fake_logo.png")
+        mock_create_logo.return_value = mock_logo_path
+
+        # Mock the track decorator to return the function unchanged
+        def track_decorator(*args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        mock_track.side_effect = track_decorator
+
+        # Run the command
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "healthcheck",
+                "--smoke-test",
+                "test-workspace",
+                "--project-name",
+                "test-project",
+            ],
+            catch_exceptions=False,
+        )
+
+        # Assertions
+        assert result.exit_code == 0
+        # Verify client was created with correct arguments
+        mock_opik_class.assert_called_once()
+        call_kwargs = mock_opik_class.call_args[1]
+        assert call_kwargs["workspace"] == "test-workspace"
+        assert call_kwargs["project_name"] == "test-project"
+        # Verify trace was started
+        mock_start_trace.assert_called_once()
+        # Verify cached client is NOT flushed (since _temporary_client_context patches
+        # get_client_cached to return mock_client, not mock_cached_client)
+        mock_cached_client.flush.assert_not_called()
+        # Verify explicit client was flushed and ended
+        # Note: _temporary_client_context patches get_client_cached to return mock_client,
+        # so when start_as_current_trace calls get_client_cached().flush(), it flushes mock_client
+        mock_client.flush.assert_called_once()
+        mock_client.end.assert_called_once()
+
+    @patch("opik.cli.healthcheck.cli.opik_healthcheck.run")
+    @patch("opik.api_objects.opik_client.get_client_cached")
+    @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
+    @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
+    @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_trace")
+    @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_span")
+    @patch("opik.cli.healthcheck.smoke_test.create_opik_logo_image")
+    @patch("opik.cli.healthcheck.smoke_test.track")
+    def test_smoke_test_with_default_project_name(
+        self,
+        mock_track,
+        mock_create_logo,
+        mock_update_span,
+        mock_update_trace,
+        mock_start_trace,
+        mock_opik_class,
+        mock_get_client_cached,
+        mock_healthcheck_run,
+    ):
+        """Test healthcheck --smoke-test command with workspace only (uses default project name)."""
+        # Setup mocks
+        mock_client = MagicMock()
+        # Mock search_traces to raise an exception immediately to skip verification polling
+        # This prevents the verification from running and triggering real client creation
+        mock_client.search_traces = MagicMock(
+            side_effect=AttributeError("Mock client - search_traces not available")
+        )
+        mock_opik_class.return_value = mock_client
+
+        mock_cached_client = MagicMock()
+        mock_get_client_cached.return_value = mock_cached_client
+
+        # Mock the context manager for start_as_current_trace
+        @contextmanager
+        def mock_trace_context(*args, **kwargs):
+            yield MagicMock()
+
+        mock_start_trace.return_value = mock_trace_context()
+
+        # Mock create_opik_logo_image to return a fake path
+        mock_logo_path = Path("/tmp/fake_logo.png")
+        mock_create_logo.return_value = mock_logo_path
+
+        # Mock the track decorator to return the function unchanged
+        def track_decorator(*args, **kwargs):
+            def decorator(func):
+                return func
+
+            return decorator
+
+        mock_track.side_effect = track_decorator
+
+        # Run the command without --project-name (should use default)
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["healthcheck", "--smoke-test", "test-workspace"],
+            catch_exceptions=False,
+        )
+
+        # Assertions
+        assert result.exit_code == 0
+        # Verify client was created with default project name
+        mock_opik_class.assert_called_once()
+        call_kwargs = mock_opik_class.call_args[1]
+        assert call_kwargs["workspace"] == "test-workspace"
+        assert call_kwargs["project_name"] == "smoke-test-project"  # Default value
+        # Verify trace was started with default project name
+        mock_start_trace.assert_called_once()
+        trace_call_kwargs = mock_start_trace.call_args[1]
+        assert trace_call_kwargs["project_name"] == "smoke-test-project"
