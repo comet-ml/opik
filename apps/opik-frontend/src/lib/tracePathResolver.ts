@@ -1,43 +1,43 @@
 import get from "lodash/get";
-import { Trace } from "@/types/traces";
+import { ContextData } from "@/types/custom-view";
 
 /**
- * Resolve a path in a trace object using dot notation and array indexing.
+ * Resolve a path in a data object (trace or thread) using dot notation and array indexing.
  * Supports nested paths like 'input.messages[0].content'
  *
- * @param trace - The trace object to resolve the path in
+ * @param data - The data object (trace or thread) to resolve the path in
  * @param path - Dot notation path (e.g., 'input.messages[0].content')
  * @returns The resolved value or undefined if path doesn't exist
  */
 export const resolveTracePath = (
-  trace: Trace | null | undefined,
+  data: ContextData | null | undefined,
   path: string,
 ): unknown => {
-  if (!trace || !path) {
+  if (!data || !path) {
     return undefined;
   }
 
   try {
     // lodash/get handles both dot notation and array indexing
-    return get(trace, path);
+    return get(data, path);
   } catch (error) {
-    console.warn(`Failed to resolve path "${path}" in trace:`, error);
+    console.warn(`Failed to resolve path "${path}" in data:`, error);
     return undefined;
   }
 };
 
 /**
- * Check if a path exists in the trace object
+ * Check if a path exists in the data object
  *
- * @param trace - The trace object to check
+ * @param data - The data object (trace or thread) to check
  * @param path - Dot notation path
  * @returns true if the path exists and has a value
  */
 export const tracePathExists = (
-  trace: Trace | null | undefined,
+  data: ContextData | null | undefined,
   path: string,
 ): boolean => {
-  const value = resolveTracePath(trace, path);
+  const value = resolveTracePath(data, path);
   return value !== undefined && value !== null;
 };
 

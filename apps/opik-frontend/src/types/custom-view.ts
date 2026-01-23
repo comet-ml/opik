@@ -1,4 +1,15 @@
 import { z } from "zod";
+import { Trace, Thread } from "./traces";
+
+/**
+ * Context type for custom view - determines what data is being visualized
+ */
+export type ContextType = "trace" | "thread";
+
+/**
+ * Union type for context data - can be either Trace or Thread
+ */
+export type ContextData = Trace | Thread;
 
 /**
  * Supported widget types for custom trace visualization

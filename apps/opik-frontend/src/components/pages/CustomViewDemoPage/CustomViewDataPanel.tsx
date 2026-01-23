@@ -1,40 +1,39 @@
 import React, { useState, useEffect } from "react";
 import { AlertCircle, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Trace } from "@/types/traces";
-import { CustomViewSchema, WidgetSize } from "@/types/custom-view";
+import { CustomViewSchema, WidgetSize, ContextData } from "@/types/custom-view";
 import { resolveTracePath } from "@/lib/tracePathResolver";
 import WidgetRenderer from "./widgets/WidgetRenderer";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 interface CustomViewDataPanelProps {
-  trace: Trace | null | undefined;
+  data: ContextData | null | undefined;
   viewSchema: CustomViewSchema | null;
-  isTraceLoading: boolean;
-  isTraceError: boolean;
+  isDataLoading: boolean;
+  isDataError: boolean;
   isAIGenerating: boolean;
   isAPIError: boolean;
   apiError: string | null;
 }
 
 const CustomViewDataPanel: React.FC<CustomViewDataPanelProps> = ({
-  trace,
+  data,
   viewSchema,
-  isTraceLoading,
-  isTraceError,
+  isDataLoading,
+  isDataError,
   isAIGenerating,
   isAPIError,
   apiError,
 }) => {
   // Determine the current state
   const getState = () => {
-    if (!trace && !isTraceLoading) return "idle";
-    if (isTraceError) return "trace-error";
-    if (isTraceLoading) return "loading";
+    if (!data && !isDataLoading) return "idle";
+    if (isDataError) return "data-error";
+    if (isDataLoading) return "loading";
     if (isAPIError && !isAIGenerating) return "api-error";
     if (isAIGenerating) return "generating";
-    if (trace && !viewSchema) return "awaiting-generation";
-    if (trace && viewSchema) return "ready";
+    if (data && !viewSchema) return "awaiting-generation";
+    if (data && viewSchema) return "ready";
     return "idle";
   };
 
@@ -54,9 +53,9 @@ const CustomViewDataPanel: React.FC<CustomViewDataPanelProps> = ({
         {state === "idle" && <IdleState />}
         {state === "awaiting-generation" && <AwaitingGenerationState />}
         {state === "ready" && (
-          <ReadyState trace={trace!} viewSchema={viewSchema!} />
+          <ReadyState data={data!} viewSchema={viewSchema!} />
         )}
-        {state === "trace-error" && <TraceErrorState />}
+        {state === "data-error" && <DataErrorState />}
         {state === "api-error" && <APIErrorState error={apiError} />}
       </div>
     </div>
@@ -67,10 +66,10 @@ const IdleState = () => (
   <div className="flex h-full items-center justify-center text-center">
     <div>
       <div className="comet-title-m mb-2 text-muted-slate">
-        No Trace Selected
+        No Context Selected
       </div>
       <div className="comet-body-s text-muted-slate">
-        Select a trace and ask AI to generate a custom view
+        Select a trace or thread and ask AI to generate a custom view
       </div>
     </div>
   </div>
@@ -80,14 +79,14 @@ const AwaitingGenerationState = () => (
   <div className="flex h-full items-center justify-center text-center">
     <div className="max-w-md">
       <Sparkles className="mx-auto mb-4 size-12 text-primary" />
-      <div className="comet-title-m mb-2">Trace Selected</div>
+      <div className="comet-title-m mb-2">Context Selected</div>
       <div className="comet-body-s text-muted-slate">
-        Ask AI to analyze the trace and generate a custom visualization. Try
+        Ask AI to analyze the data and generate a custom visualization. Try
         prompts like:
       </div>
       <div className="mt-4 space-y-2 text-left">
         <div className="rounded-md bg-muted/30 p-3 text-sm">
-          &ldquo;Show me the most important fields in this trace&rdquo;
+          &ldquo;Show me the most important fields in this data&rdquo;
         </div>
         <div className="rounded-md bg-muted/30 p-3 text-sm">
           &ldquo;Create a view focusing on the conversation messages&rdquo;
@@ -106,7 +105,7 @@ const LoadingOverlay = () => {
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="size-8 animate-spin text-primary" />
         <div className="flex flex-col items-center gap-1">
-          <span className="comet-body-s-accented">Loading trace data...</span>
+          <span className="comet-body-s-accented">Loading data...</span>
         </div>
       </div>
     </div>
@@ -116,7 +115,7 @@ const LoadingOverlay = () => {
 const GeneratingOverlay = () => {
   const magicMessages = [
     "✨ AI magic in progress",
-    "🔮 Analyzing trace data",
+    "🔮 Analyzing data",
     "🎨 Creating custom view",
     "⚡ Preparing visualization",
   ];
@@ -147,10 +146,10 @@ const GeneratingOverlay = () => {
 };
 
 const ReadyState = ({
-  trace,
+  data,
   viewSchema,
 }: {
-  trace: Trace;
+  data: ContextData;
   viewSchema: CustomViewSchema;
 }) => {
   if (!viewSchema.widgets || viewSchema.widgets.length === 0) {
@@ -185,7 +184,7 @@ const ReadyState = ({
   return (
     <div className="grid grid-cols-6 gap-6">
       {viewSchema.widgets.map((widget, index) => {
-        const value = resolveTracePath(trace, widget.path);
+        const value = resolveTracePath(data, widget.path);
         const columnSpanClass = getColumnSpanClass(widget.size);
 
         return (
@@ -205,15 +204,15 @@ const ReadyState = ({
   );
 };
 
-const TraceErrorState = () => (
+const DataErrorState = () => (
   <div className="flex h-full items-center justify-center text-center">
     <div className="max-w-md">
       <AlertCircle className="mx-auto mb-4 size-12 text-destructive" />
       <div className="comet-title-m mb-2 text-destructive">
-        Error Loading Trace
+        Error Loading Data
       </div>
       <div className="comet-body-s mb-4 text-muted-slate">
-        An error occurred while loading the trace data. The trace may not exist
+        An error occurred while loading the data. The item may not exist
         or you may not have permission to view it.
       </div>
       <Button variant="outline" onClick={() => window.location.reload()}>
@@ -231,7 +230,7 @@ const APIErrorState = ({ error }: { error: string | null }) => (
         AI Generation Failed
       </div>
       <div className="comet-body-s mb-4 text-muted-slate">
-        The AI couldn&apos;t generate a custom view for this trace.
+        The AI couldn&apos;t generate a custom view for this data.
         {error && (
           <div className="mt-2 rounded-md bg-destructive/10 p-3 text-left text-sm text-destructive">
             {error}

@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { StringParam, useQueryParam } from "use-query-params";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import useAppStore from "@/store/AppStore";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -10,13 +9,13 @@ import {
 } from "@/components/ui/resizable";
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
-import TraceSelectionSection from "./TraceSelectionSection";
+import ContextSelectionSection from "./ContextSelectionSection";
 import CustomViewChatPanel from "./CustomViewChatPanel";
 import CustomViewDataPanel from "./CustomViewDataPanel";
-import useStructuredCompletion from "@/api/playground/useStructuredCompletion";
+import useConversationalAI from "@/api/custom-view/useConversationalAI";
+import useSchemaGenerationAI from "@/api/custom-view/useSchemaGenerationAI";
 import { useChatScroll } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/useChatScroll";
 import { ChatDisplayMessage } from "@/types/structured-completion";
-import { safelyParseJSON } from "@/lib/utils";
 import {
   PROVIDER_MODEL_TYPE,
   COMPOSED_PROVIDER_TYPE,
@@ -25,99 +24,63 @@ import {
 import { STRUCTURED_OUTPUT_SUPPORTED_MODELS } from "@/constants/llm";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import {
-  customViewZodSchema,
-  CustomViewSchema,
-  ViewSource,
-} from "@/types/custom-view";
-import useTraceById from "@/api/traces/useTraceById";
+  ProposalState,
+  SCHEMA_PROPOSAL_TOOL,
+  ProposeSchemaToolArguments,
+} from "@/types/schema-proposal";
 import { customViewStorage } from "@/lib/customViewStorage";
 import { useToast } from "@/components/ui/use-toast";
+import { Button } from "@/components/ui/button";
 import SaveViewButton from "./SaveViewButton";
 import { Save, X, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CustomViewProvider, useCustomViewContext } from "./CustomViewContext";
 
-// System prompt to guide AI in generating custom view schemas
-const SYSTEM_PROMPT = `You are an AI assistant that analyzes LLM trace data and creates custom visualization schemas.
+// System prompt for conversational AI
+const CHAT_SYSTEM_PROMPT = `You are an AI assistant that helps users understand and visualize LLM data (traces and threads).
 
-Your task is to examine the trace data structure and identify the most important and relevant fields to display to the user.
+Your role is to:
+1. Answer questions about the data structure and content
+2. Help users understand what fields are available
+3. Suggest what might be interesting to visualize
+4. When the user wants to create or update a view, use the propose_schema_generation tool
 
-## Available Widget Types:
-- **text**: Plain text values (strings, general content)
-- **number**: Numeric values (counts, metrics, scores)
-- **boolean**: True/false values
-- **code**: Code snippets, JSON objects, formatted data
-- **link**: URLs that should be clickable
-- **image**: Image URLs (jpg, png, gif, webp, svg)
-- **video**: Video URLs (mp4, webm, mov)
-- **audio**: Audio URLs (mp3, wav, m4a)
-- **pdf**: PDF file URLs
-- **file**: Generic file attachments
+The data structure is provided in the context. Be conversational and helpful.`;
 
-## Widget Sizes (REQUIRED):
-Each widget MUST have a \`size\` field to control its layout width:
-- **small**: For compact data (numbers, booleans, short text ≤50 chars, links)
-  - Takes 1/3 width on desktop, allowing 3 widgets per row
-- **medium**: For standard content (text, images, audio)
-  - Takes 1/2 width on desktop, allowing 2 widgets per row
-- **large**: For rich content (code blocks, JSON, video, PDFs)
-  - Takes 2/3 width on desktop, allowing 1.5 widgets per row
-- **full**: For special cases requiring full width
-  - Takes full width on all screen sizes
-
-## Path Format:
-- Use dot notation for nested objects: \`input.messages\`, \`output.result\`
-- Use array indexing for array items: \`messages[0].content\`, \`messages[1].content\`
-- **IMPORTANT**: For arrays, list each item separately with its index, not the array itself
-  - ✅ GOOD: \`messages[0].content\`, \`messages[1].content\`, \`messages[2].content\`
-  - ❌ BAD: \`messages\` (don't reference the array directly)
-
-## Guidelines:
-1. Identify the 4-8 most important fields in the trace
-2. Choose the appropriate widget type AND size for each field
-3. **Sort widgets by size**: Place small widgets first, then medium, then large/full
-   - This creates better layouts with less empty space
-   - Small widgets fill gaps efficiently
-4. Provide clear, descriptive labels
-5. For arrays, create separate widgets for each item (up to 5 items)
-6. Prioritize user-facing content (inputs, outputs, messages) over metadata
-7. Include key metrics if available (usage, cost, duration)
-8. Group related fields together when possible
-
-## Size Selection Examples:
-- \`usage.total_tokens\` → number widget, size: "small"
-- \`input.messages[0].content\` → text widget, size: "medium"
-- \`output.result\` → code widget, size: "large"
-- \`metadata.image_url\` → image widget, size: "medium"
-- \`is_successful\` → boolean widget, size: "small"
-
-## Response Format:
-Return a JSON object with:
-- \`responseSummary\`: A brief explanation of what you've identified
-- \`widgets\`: An array of widget configurations (sorted by size: small → medium → large → full)
-
-The full trace data is provided below:
-{{trace}}`;
-
-const CustomViewDemoPage: React.FC = () => {
+const CustomViewDemoPageContent: React.FC = () => {
   const projectId = useProjectIdFromURL();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const [selectedTraceId, setSelectedTraceId] = useQueryParam(
-    "traceId",
-    StringParam,
-  );
-  const [model, setModel] = useQueryParam("model", StringParam);
-  const [provider, setProvider] = useQueryParam("provider", StringParam);
+  // Get state from context
+  const {
+    contextType,
+    setContextType,
+    selectedTraceId,
+    selectedThreadId,
+    setSelectedTraceId,
+    setSelectedThreadId,
+    contextData,
+    isContextLoading,
+    isContextError,
+    model,
+    provider,
+    setModel,
+    setProvider,
+    viewSchema,
+    viewSource,
+    setViewSchema,
+    setViewSource,
+  } = useCustomViewContext();
 
   // Chat input state
   const [inputValue, setInputValue] = useState("");
 
-  // View schema state - persists across trace changes
-  const [viewSchema, setViewSchema] = useState<CustomViewSchema | null>(null);
-
-  // View source tracking
-  const [viewSource, setViewSource] = useState<ViewSource>("empty");
+  // View saving state
   const [isSaving, setIsSaving] = useState(false);
+
+  // Proposal state machine
+  const [proposalState, setProposalState] = useState<ProposalState>({
+    status: "idle",
+  });
 
   // Toast for notifications
   const { toast } = useToast();
@@ -128,16 +91,6 @@ const CustomViewDemoPage: React.FC = () => {
       (provider as COMPOSED_PROVIDER_TYPE) || "",
       (model as PROVIDER_MODEL_TYPE) || "",
     ),
-  );
-
-  // Fetch trace data
-  const {
-    data: traceData,
-    isPending: isTraceLoading,
-    isError: isTraceError,
-  } = useTraceById(
-    { traceId: selectedTraceId || "", stripAttachments: false },
-    { enabled: Boolean(selectedTraceId) },
   );
 
   // Update configs when model or provider changes
@@ -152,72 +105,28 @@ const CustomViewDemoPage: React.FC = () => {
     }
   }, [provider, model]);
 
-  // Load saved schema on mount or when projectId changes
-  useEffect(() => {
-    if (!projectId) return;
+  // Initialize conversational AI hook (Chat AI with tools)
+  const conversationalAI = useConversationalAI({
+    workspaceName,
+  });
 
-    const savedSchema = customViewStorage.load(projectId);
-    if (savedSchema) {
-      setViewSchema(savedSchema);
-      setViewSource("saved");
-    } else {
-      // Reset to empty when switching to project without saved view
-      if (viewSource !== "ai") {
-        setViewSchema(null);
-        setViewSource("empty");
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]); // Only depend on projectId
+  // Initialize schema generation AI hook
+  const schemaGenerationAI = useSchemaGenerationAI({
+    workspaceName,
+  });
 
-  // Initialize structured completion hook with custom view schema
-  const { messages, isLoading, generate, result, error } =
-    useStructuredCompletion({
-      schema: customViewZodSchema,
-      workspaceName,
-    });
-
-  // Store last request parameters for retry functionality
-  const [lastRequestParams, setLastRequestParams] = useState<{
-    model: string;
-    userMessage: string;
-    systemPrompt: string;
-    context: { trace: unknown };
-    configs: Partial<LLMPromptConfigsType>;
-  } | null>(null);
-
-  // Update view schema when AI generates a new result
-  useEffect(() => {
-    if (result) {
-      setViewSchema(result as CustomViewSchema);
-      setViewSource("ai"); // Mark as AI-generated
-    }
-  }, [result]);
-
-  // Transform structured completion messages to display messages
+  // Transform conversational AI messages to display messages
   const displayMessages = useMemo<ChatDisplayMessage[]>(() => {
-    return messages.map((msg, index) => {
-      if (msg.role === "user") {
-        return {
-          id: `msg-${index}`,
-          role: "user" as const,
-          content: msg.content,
-        };
-      }
-      // Assistant messages contain JSON string - extract responseSummary
-      const parsed = safelyParseJSON(msg.content);
-      return {
-        id: `msg-${index}`,
-        role: "assistant" as const,
-        content: parsed?.responseSummary || msg.content,
-        isError: !parsed?.responseSummary,
-      };
-    });
-  }, [messages]);
+    return conversationalAI.messages.map((msg, index) => ({
+      id: `msg-${index}`,
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+    }));
+  }, [conversationalAI.messages]);
 
   // Add loading message if currently loading
   const displayMessagesWithLoading = useMemo<ChatDisplayMessage[]>(() => {
-    if (isLoading && displayMessages.length > 0) {
+    if (conversationalAI.isLoading && displayMessages.length > 0) {
       // Check if last message is from user (waiting for response)
       const lastMessage = displayMessages[displayMessages.length - 1];
       if (lastMessage.role === "user") {
@@ -233,7 +142,7 @@ const CustomViewDemoPage: React.FC = () => {
       }
     }
     return displayMessages;
-  }, [displayMessages, isLoading]);
+  }, [displayMessages, conversationalAI.isLoading]);
 
   // Calculate total content length for auto-scroll
   const totalContentLength = useMemo(
@@ -248,7 +157,7 @@ const CustomViewDemoPage: React.FC = () => {
   // Setup chat scroll behavior
   const { scrollContainerRef } = useChatScroll({
     contentLength: totalContentLength,
-    isStreaming: isLoading,
+    isStreaming: conversationalAI.isLoading,
   });
 
   // Handle config change
@@ -261,35 +170,116 @@ const CustomViewDemoPage: React.FC = () => {
 
   // Handle sending a message
   const handleSend = useCallback(async () => {
-    if (!inputValue.trim() || !model || !selectedTraceId || !traceData) return;
+    if (!inputValue.trim() || !model || !contextData) return;
 
     const userMessage = inputValue;
     setInputValue("");
 
-    const requestParams = {
+    const response = await conversationalAI.generate({
       model: model || "",
       userMessage,
-      systemPrompt: SYSTEM_PROMPT,
-      context: {
-        trace: traceData,
-      },
+      systemPrompt: CHAT_SYSTEM_PROMPT,
       configs,
-    };
+      tools: [SCHEMA_PROPOSAL_TOOL],
+    });
 
-    setLastRequestParams(requestParams);
-    await generate(requestParams);
-  }, [inputValue, model, selectedTraceId, traceData, configs, generate]);
+    // Check if AI returned a tool call (schema proposal)
+    if (response?.toolCalls && response.toolCalls.length > 0) {
+      const toolCall = response.toolCalls[0];
+      if (toolCall.function.name === "propose_schema_generation") {
+        try {
+          const args = JSON.parse(
+            toolCall.function.arguments,
+          ) as ProposeSchemaToolArguments;
+          setProposalState({
+            status: "pending",
+            proposal: {
+              id: toolCall.id,
+              intentSummary: args.intent_summary,
+              action: args.action,
+            },
+          });
+        } catch (error) {
+          console.error("Failed to parse tool call arguments:", error);
+        }
+      }
+    }
+  }, [inputValue, model, contextData, configs, conversationalAI]);
 
   // Handle retry - resend the last failed request
   const handleRetry = useCallback(async () => {
-    if (!lastRequestParams) return;
-    await generate(lastRequestParams);
-  }, [lastRequestParams, generate]);
+    // Retry not implemented for conversational AI yet
+    conversationalAI.reset();
+  }, [conversationalAI]);
 
   // Handle input change
   const handleInputChange = useCallback((value: string) => {
     setInputValue(value);
   }, []);
+
+  // Handle accepting a proposal
+  const handleAcceptProposal = useCallback(async () => {
+    if (proposalState.status !== "pending") return;
+    if (!model || !contextData) return;
+
+    // Set to generating state
+    setProposalState({
+      status: "generating",
+      proposal: proposalState.proposal,
+    });
+
+    // Generate schema using Schema Generation AI
+    const schema = await schemaGenerationAI.generateSchema({
+      model: model || "",
+      context: {
+        intentSummary: proposalState.proposal.intentSummary,
+        action: proposalState.proposal.action,
+        data: contextData,
+        dataType: contextType,
+        model: model || "",
+        currentSchema: viewSchema,
+      },
+    });
+
+    if (schema) {
+      setViewSchema(schema);
+      setViewSource("ai");
+      toast({
+        title: "Schema generated",
+        description: "Custom view has been created successfully",
+      });
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Failed to generate schema",
+        description: schemaGenerationAI.error || "Unknown error",
+      });
+    }
+
+    // Reset to idle
+    setProposalState({ status: "idle" });
+  }, [
+    proposalState,
+    model,
+    contextData,
+    contextType,
+    viewSchema,
+    schemaGenerationAI,
+    toast,
+    setViewSchema,
+    setViewSource,
+  ]);
+
+  // Handle rejecting a proposal
+  const handleRejectProposal = useCallback(() => {
+    if (proposalState.status !== "pending") return;
+
+    setProposalState({ status: "idle" });
+    toast({
+      title: "Proposal rejected",
+      description: "You can continue chatting",
+    });
+  }, [proposalState, toast]);
 
   // Handle saving view schema to localStorage
   const handleSaveView = useCallback(() => {
@@ -313,7 +303,7 @@ const CustomViewDemoPage: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
-  }, [viewSchema, projectId, toast]);
+  }, [viewSchema, projectId, toast, setViewSource]);
 
   // Handle clearing saved view
   const handleClearSaved = useCallback(() => {
@@ -324,9 +314,9 @@ const CustomViewDemoPage: React.FC = () => {
     setViewSource("empty");
     toast({
       title: "Saved view cleared",
-      description: "Saved view removed. Generate a new one or switch traces.",
+      description: "Saved view removed. Generate a new one or switch context.",
     });
-  }, [projectId, toast]);
+  }, [projectId, toast, setViewSchema, setViewSource]);
 
   return (
     <div className="flex h-[calc(100vh-var(--header-height)-var(--banner-height))] flex-col">
@@ -356,10 +346,14 @@ const CustomViewDemoPage: React.FC = () => {
               </div>
             </div>
 
-            <TraceSelectionSection
+            <ContextSelectionSection
               projectId={projectId}
-              selectedTraceId={selectedTraceId}
+              contextType={contextType}
+              selectedTraceId={selectedTraceId || null}
+              selectedThreadId={selectedThreadId || null}
+              onContextTypeChange={setContextType}
               onSelectTrace={setSelectedTraceId}
+              onSelectThread={setSelectedThreadId}
             />
 
             <PromptModelConfigs
@@ -430,14 +424,17 @@ const CustomViewDemoPage: React.FC = () => {
             <CustomViewChatPanel
               messages={displayMessagesWithLoading}
               inputValue={inputValue}
-              isLoading={isLoading}
-              error={error}
+              isLoading={conversationalAI.isLoading}
+              error={conversationalAI.error}
               onInputChange={handleInputChange}
               onSend={handleSend}
               onRetry={handleRetry}
               scrollContainerRef={scrollContainerRef}
               model={model}
-              traceId={selectedTraceId}
+              traceId={selectedTraceId || selectedThreadId}
+              proposalState={proposalState}
+              onAcceptProposal={handleAcceptProposal}
+              onRejectProposal={handleRejectProposal}
             />
           </ResizablePanel>
 
@@ -445,18 +442,29 @@ const CustomViewDemoPage: React.FC = () => {
 
           <ResizablePanel id="data" defaultSize={60} minSize={30}>
             <CustomViewDataPanel
-              trace={traceData}
+              data={contextData}
               viewSchema={viewSchema}
-              isTraceLoading={isTraceLoading && Boolean(selectedTraceId)}
-              isTraceError={isTraceError}
-              isAIGenerating={isLoading}
-              isAPIError={Boolean(error)}
-              apiError={error}
+              isDataLoading={isContextLoading}
+              isDataError={isContextError}
+              isAIGenerating={proposalState.status === "generating"}
+              isAPIError={Boolean(conversationalAI.error)}
+              apiError={conversationalAI.error}
             />
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
     </div>
+  );
+};
+
+// Wrapper component that provides context
+const CustomViewDemoPage: React.FC = () => {
+  const projectId = useProjectIdFromURL();
+
+  return (
+    <CustomViewProvider projectId={projectId}>
+      <CustomViewDemoPageContent />
+    </CustomViewProvider>
   );
 };
 

@@ -5,6 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import { ChatDisplayMessage } from "@/types/structured-completion";
+import { ProposalState } from "@/types/schema-proposal";
+import SchemaProposalCard from "./SchemaProposalCard";
 import { cn } from "@/lib/utils";
 
 interface CustomViewChatPanelProps {
@@ -18,6 +20,9 @@ interface CustomViewChatPanelProps {
   scrollContainerRef: RefObject<HTMLDivElement>;
   model: string | null | undefined;
   traceId: string | null | undefined;
+  proposalState: ProposalState;
+  onAcceptProposal: () => void;
+  onRejectProposal: () => void;
 }
 
 const CustomViewChatPanel: React.FC<CustomViewChatPanelProps> = ({
@@ -31,8 +36,16 @@ const CustomViewChatPanel: React.FC<CustomViewChatPanelProps> = ({
   scrollContainerRef,
   model,
   traceId,
+  proposalState,
+  onAcceptProposal,
+  onRejectProposal,
 }) => {
-  const canSend = Boolean(model && traceId && inputValue.trim() && !isLoading);
+  // Block input when proposal is pending or generating
+  const isInputBlocked =
+    proposalState.status === "pending" || proposalState.status === "generating";
+  const canSend = Boolean(
+    model && traceId && inputValue.trim() && !isLoading && !isInputBlocked,
+  );
 
   const handleSend = () => {
     if (!canSend) return;
@@ -112,6 +125,16 @@ const CustomViewChatPanel: React.FC<CustomViewChatPanelProps> = ({
                 </div>
               );
             })}
+            {/* Render proposal card if there's a pending or generating proposal */}
+            {(proposalState.status === "pending" ||
+              proposalState.status === "generating") && (
+              <SchemaProposalCard
+                proposal={proposalState.proposal}
+                status={proposalState.status}
+                onAccept={onAcceptProposal}
+                onReject={onRejectProposal}
+              />
+            )}
             {error && !isLoading && (
               <div className="mb-2 flex justify-start">
                 <div className="relative min-w-[20%] max-w-[85%] rounded-lg border border-destructive bg-destructive/10 px-4 py-3">
@@ -152,11 +175,13 @@ const CustomViewChatPanel: React.FC<CustomViewChatPanelProps> = ({
             placeholder={
               !model || !traceId
                 ? "Select a model and trace to start chatting..."
-                : isLoading
-                  ? "Waiting for response..."
-                  : "Type your message..."
+                : isInputBlocked
+                  ? "Please accept or reject the proposal first..."
+                  : isLoading
+                    ? "Waiting for response..."
+                    : "Type your message..."
             }
-            disabled={!model || !traceId || isLoading}
+            disabled={!model || !traceId || isLoading || isInputBlocked}
             className="max-h-[200px] min-h-[60px] resize-none"
           />
           <Button
