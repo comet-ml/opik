@@ -24,6 +24,7 @@ export type UseExperimentsListParams = {
   size: number;
   queryKey?: string;
   experimentIds?: string[];
+  forceSorting?: boolean;
 };
 
 export type UseExperimentsListResponse = {
@@ -48,6 +49,7 @@ export const getExperimentsList = async (
     size,
     page,
     experimentIds,
+    forceSorting,
   }: UseExperimentsListParams,
 ) => {
   const { data } = await api.get(EXPERIMENTS_REST_ENDPOINT, {
@@ -63,6 +65,7 @@ export const getExperimentsList = async (
       ...(optimizationId && { optimization_id: optimizationId }),
       ...(types && { types: JSON.stringify(types) }),
       ...(experimentIds && { experiment_ids: JSON.stringify(experimentIds) }),
+      ...(forceSorting && { force_sorting: true }),
       size,
       page,
     },

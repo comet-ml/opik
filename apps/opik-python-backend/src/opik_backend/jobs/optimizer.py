@@ -109,7 +109,7 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         span.set_attribute("workspace_id", context.workspace_id)
         span.set_attribute("workspace_name", context.workspace_name)
         
-        logger.info(
+        logger.debug(
             f"Processing Optimization Studio job: {context.optimization_id} "
             f"for workspace: {context.workspace_name}"
         )
@@ -153,7 +153,7 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         with CancellationHandle(str(context.optimization_id), on_cancelled=on_cancelled) as cancellation_handle:
             
             try:
-                logger.info(f"Starting optimization subprocess for optimization {context.optimization_id}")
+                logger.debug(f"Starting optimization subprocess for optimization {context.optimization_id}")
                 
                 # Execute optimization in isolated subprocess
                 result = executor.execute(

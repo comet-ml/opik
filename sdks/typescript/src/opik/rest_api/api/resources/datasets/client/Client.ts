@@ -1102,6 +1102,76 @@ export class DatasetsClient {
     }
 
     /**
+     * Downloads the exported CSV file for a completed export job. This endpoint proxies the file download to avoid exposing internal storage URLs.
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.NotFoundError}
+     */
+    public downloadDatasetExport(
+        jobId: string,
+        request: OpikApi.DownloadDatasetExportRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): core.HttpResponsePromise<ReadableStream<Uint8Array>> {
+        return core.HttpResponsePromise.fromPromise(this.__downloadDatasetExport(jobId, request, requestOptions));
+    }
+
+    private async __downloadDatasetExport(
+        jobId: string,
+        _request: OpikApi.DownloadDatasetExportRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<ReadableStream<Uint8Array>>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher<ReadableStream<Uint8Array>>({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/export-jobs/${core.url.encodePathParam(jobId)}/download`,
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            responseType: "streaming",
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: _response.body, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/datasets/export-jobs/{jobId}/download",
+        );
+    }
+
+    /**
      * Generate synthetic dataset samples using LLM based on existing data patterns
      *
      * @param {string} id
@@ -1440,6 +1510,159 @@ export class DatasetsClient {
     }
 
     /**
+     * Retrieves the current status of a dataset export job
+     *
+     * @param {string} jobId
+     * @param {OpikApi.GetDatasetExportJobRequest} request
+     * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.datasets.getDatasetExportJob("jobId")
+     */
+    public getDatasetExportJob(
+        jobId: string,
+        request: OpikApi.GetDatasetExportJobRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetExportJobPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getDatasetExportJob(jobId, request, requestOptions));
+    }
+
+    private async __getDatasetExportJob(
+        jobId: string,
+        _request: OpikApi.GetDatasetExportJobRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetExportJobPublic>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/export-jobs/${core.url.encodePathParam(jobId)}`,
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DatasetExportJobPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/datasets/export-jobs/{jobId}",
+        );
+    }
+
+    /**
+     * Retrieves all export jobs for the workspace. This is used to restore the export panel state after page refresh.
+     *
+     * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.getDatasetExportJobs()
+     */
+    public getDatasetExportJobs(
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetExportJobPublic[]> {
+        return core.HttpResponsePromise.fromPromise(this.__getDatasetExportJobs(requestOptions));
+    }
+
+    private async __getDatasetExportJobs(
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetExportJobPublic[]>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/datasets/export-jobs",
+            ),
+            method: "GET",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.datasets.getDatasetExportJobs.Response.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "GET",
+            "/v1/private/datasets/export-jobs",
+        );
+    }
+
+    /**
      * Get dataset item by id
      *
      * @param {string} itemId
@@ -1764,6 +1987,156 @@ export class DatasetsClient {
             _response.rawResponse,
             "GET",
             "/v1/private/datasets/{id}/items/experiments/items/output/columns",
+        );
+    }
+
+    /**
+     * Marks a dataset export job as viewed by setting the viewed_at timestamp. This is used to track that a user has seen a failed job's error message. This operation is idempotent.
+     *
+     * @param {string} jobId
+     * @param {OpikApi.MarkDatasetExportJobViewedRequest} request
+     * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.datasets.markDatasetExportJobViewed("jobId")
+     */
+    public markDatasetExportJobViewed(
+        jobId: string,
+        request: OpikApi.MarkDatasetExportJobViewedRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__markDatasetExportJobViewed(jobId, request, requestOptions));
+    }
+
+    private async __markDatasetExportJobViewed(
+        jobId: string,
+        _request: OpikApi.MarkDatasetExportJobViewedRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/export-jobs/${core.url.encodePathParam(jobId)}/mark-viewed`,
+            ),
+            method: "PUT",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "PUT",
+            "/v1/private/datasets/export-jobs/{jobId}/mark-viewed",
+        );
+    }
+
+    /**
+     * Initiates an asynchronous CSV export job for the dataset. Returns immediately with job details for polling.
+     *
+     * @param {string} id
+     * @param {OpikApi.StartDatasetExportRequest} request
+     * @param {DatasetsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.datasets.startDatasetExport("id")
+     */
+    public startDatasetExport(
+        id: string,
+        request: OpikApi.StartDatasetExportRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetExportJobPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__startDatasetExport(id, request, requestOptions));
+    }
+
+    private async __startDatasetExport(
+        id: string,
+        _request: OpikApi.StartDatasetExportRequest = {},
+        requestOptions?: DatasetsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetExportJobPublic>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${core.url.encodePathParam(id)}/export`,
+            ),
+            method: "POST",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DatasetExportJobPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/datasets/{id}/export",
         );
     }
 

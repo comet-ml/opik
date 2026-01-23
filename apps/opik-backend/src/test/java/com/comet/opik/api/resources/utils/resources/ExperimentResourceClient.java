@@ -300,9 +300,24 @@ public class ExperimentResourceClient {
     }
 
     public Experiment.ExperimentPage findExperiments(
-            int page, int size, String name, String apiKey, String workspaceName) {
-        return findExperiments(page, size, null, null, null, name, false, null, null, null, null, false, apiKey,
-                workspaceName, HttpStatus.SC_OK);
+            int page, int size, boolean forceSorting, String apiKey, String workspaceName) {
+        return findExperiments(
+                page,
+                size,
+                null,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                forceSorting,
+                null,
+                null,
+                false,
+                apiKey,
+                workspaceName,
+                HttpStatus.SC_OK);
     }
 
     public Experiment.ExperimentPage findExperiments(
@@ -310,13 +325,14 @@ public class ExperimentResourceClient {
             boolean datasetDeleted, UUID promptId, String sorting, List<? extends ExperimentFilter> filters,
             String apiKey, String workspaceName, int expectedStatus) {
         return findExperiments(page, size, datasetId, optimizationId, types, name, datasetDeleted, promptId, sorting,
-                filters, null, false, apiKey, workspaceName, expectedStatus);
+                false, filters, null, false, apiKey, workspaceName, expectedStatus);
     }
 
     public Experiment.ExperimentPage findExperiments(
             int page, int size, UUID datasetId, UUID optimizationId, Set<ExperimentType> types, String name,
-            boolean datasetDeleted, UUID promptId, String sorting, List<? extends ExperimentFilter> filters,
-            UUID projectId, boolean projectDeleted, String apiKey, String workspaceName, int expectedStatus) {
+            boolean datasetDeleted, UUID promptId, String sorting, boolean forceSorting,
+            List<? extends ExperimentFilter> filters, UUID projectId, boolean projectDeleted,
+            String apiKey, String workspaceName, int expectedStatus) {
 
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
@@ -335,7 +351,7 @@ public class ExperimentResourceClient {
             webTarget = webTarget.queryParam("name", name);
         }
         if (datasetDeleted) {
-            webTarget = webTarget.queryParam("dataset_deleted", datasetDeleted);
+            webTarget = webTarget.queryParam("dataset_deleted", true);
         }
         if (promptId != null) {
             webTarget = webTarget.queryParam("prompt_id", promptId);
@@ -351,6 +367,9 @@ public class ExperimentResourceClient {
         }
         if (projectDeleted) {
             webTarget = webTarget.queryParam("project_deleted", projectDeleted);
+        }
+        if (forceSorting) {
+            webTarget = webTarget.queryParam("force_sorting", true);
         }
 
         try (Response response = webTarget

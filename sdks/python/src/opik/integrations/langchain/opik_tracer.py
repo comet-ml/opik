@@ -421,7 +421,6 @@ class OpikTracer(BaseTracer):
     ) -> TrackRootRunResult:
         run_metadata = _get_run_metadata(run_dict)
         root_metadata = dict_utils.deepmerge(self._trace_default_metadata, run_metadata)
-        self._update_thread_id_from_metadata(run_dict)
 
         # Track the parent span ID for LangGraph cleanup later
         current_span_data = self._opik_context_storage.top_span_data()
@@ -431,6 +430,8 @@ class OpikTracer(BaseTracer):
         self._root_run_external_parent_span_id.set(
             parent_span_id_when_langgraph_started
         )
+        detected_thread_id = run_metadata.get("thread_id")
+        thread_id = self._thread_id or detected_thread_id
 
         start_span_arguments = arguments_helpers.StartSpanParameters(
             name=run_dict["name"],
@@ -439,7 +440,7 @@ class OpikTracer(BaseTracer):
             tags=self._trace_default_tags,
             metadata=root_metadata,
             project_name=self._project_name,
-            thread_id=self._thread_id,
+            thread_id=thread_id,
         )
 
         span_creation_result = span_creation_handler.create_span_respecting_context(
@@ -814,14 +815,6 @@ class OpikTracer(BaseTracer):
                     span_id=span_data.id
                 )
                 self._opik_context_storage.pop_span_data(ensure_id=span_data.id)
-
-    def _update_thread_id_from_metadata(self, run_dict: Dict[str, Any]) -> None:
-        if not self._thread_id:
-            # We want to default to any manually set thread_id, so only update if self._thread_id is not already set
-            thread_id = _get_run_metadata(run_dict).get("thread_id")
-
-            if thread_id:
-                self._thread_id = thread_id
 
     def _save_span_trace_data_to_local_maps(
         self,

@@ -60,6 +60,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.v1.events.TraceDeletedListener;
 import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetEventInfoHolder;
@@ -3785,6 +3786,8 @@ class ExperimentsResourceTest {
             assertThat(actualPage.page()).isEqualTo(page);
             assertThat(actualPage.size()).isEqualTo(expectedExperiments.size());
             assertThat(actualPage.total()).isEqualTo(expectedTotal);
+            assertThat(actualPage.sortableBy())
+                    .containsExactlyElementsOf(ExperimentSortingFactory.EXPERIMENT_SORTABLE_FIELDS);
             assertExperiments(
                     datasetId,
                     expectedExperiments,
