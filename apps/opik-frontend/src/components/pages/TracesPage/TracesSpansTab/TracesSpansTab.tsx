@@ -435,6 +435,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 keyComponent: ExperimentsSelectBox,
                 keyComponentProps: {
                   className: "w-full min-w-72",
+                  projectId,
                 },
                 defaultOperator: "=" as FilterOperator,
                 operators: [{ label: "=", value: "=" as FilterOperator }],
