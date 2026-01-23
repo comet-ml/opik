@@ -188,8 +188,6 @@ class ExperimentDAO {
                     HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
                 )
                 <endif>
-                ORDER BY (workspace_id, dataset_id, id) DESC
-                LIMIT 1 BY id
                 <if(limit &&
                 !feedback_scores_filters &&
                 !feedback_scores_empty_filters &&
