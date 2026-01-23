@@ -65,6 +65,9 @@ def test_rate_limiter_falls_back_when_argument_removed(
                 raise TypeError("unsupported argument")
             captured["rate"] = rate
 
+        def try_acquire(self, key: Any, *, blocking: bool = True) -> bool:
+            return True
+
     monkeypatch.setattr(
         "opik_optimizer.utils.throttle.pyrate_limiter.Limiter",
         DummyLimiter,

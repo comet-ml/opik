@@ -3,6 +3,8 @@ import math
 from typing import Any, Literal, overload
 from collections.abc import Callable
 
+import inspect
+
 import opik
 from ..api_objects.types import MetricFunction
 from ..utils.reporting import suppress_experiment_reporting
@@ -14,9 +16,15 @@ from ..metrics.multi_metric_objective import MultiMetricObjective
 logger = logging.getLogger(__name__)
 
 try:
-    from opik import evaluate_on_dict_items as _evaluate_on_dict_items
+    from opik import evaluate_on_dict_items as _opik_evaluate_on_dict_items
 except Exception:  # pragma: no cover - older Opik SDK fallback
-    _evaluate_on_dict_items = None
+    _opik_evaluate_on_dict_items = None
+
+_EVALUATE_ON_DICT_ITEMS_ACCEPTS_EXPERIMENT_CONFIG = (
+    _opik_evaluate_on_dict_items is not None
+    and "experiment_config"
+    in inspect.signature(_opik_evaluate_on_dict_items).parameters
+)
 
 
 def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
@@ -268,6 +276,34 @@ def _filter_items_by_ids(
     return filtered_items, dataset_item_ids
 
 
+def _evaluate_on_dict_items(
+    *,
+    items: list[dict[str, Any]],
+    task: Callable[[dict[str, Any]], dict[str, Any]],
+    scoring_metrics: list[base_metric.BaseMetric],
+    project_name: str | None,
+    verbose: int,
+    scoring_threads: int,
+    experiment_config: dict[str, Any] | None,
+) -> opik_evaluation_result.EvaluationResultOnDictItems:
+    if _opik_evaluate_on_dict_items is None:
+        raise RuntimeError(
+            "opik.evaluate_on_dict_items is not available in this SDK version."
+        )
+
+    call_kwargs: dict[str, Any] = {
+        "items": items,
+        "task": task,
+        "scoring_metrics": scoring_metrics,
+        "project_name": project_name,
+        "verbose": verbose,
+        "scoring_threads": scoring_threads,
+    }
+    if _EVALUATE_ON_DICT_ITEMS_ACCEPTS_EXPERIMENT_CONFIG:
+        call_kwargs["experiment_config"] = experiment_config
+    return _opik_evaluate_on_dict_items(**call_kwargs)
+
+
 def _run_evaluator(
     *,
     optimization_id: str | None,
@@ -387,6 +423,7 @@ def _evaluate_internal(
             project_name=project_name,
             verbose=verbose,
             scoring_threads=num_threads,
+            experiment_config=experiment_config,
         )
     else:
         evaluation_result = _run_evaluator(
