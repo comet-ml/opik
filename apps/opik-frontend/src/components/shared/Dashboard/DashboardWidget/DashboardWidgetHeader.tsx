@@ -1,13 +1,10 @@
 import React, { useState } from "react";
-import { TriangleAlert, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type DashboardWidgetHeaderProps = {
   title: string;
   subtitle?: string;
-  warningMessage?: string;
-  infoMessage?: string;
   actions?: React.ReactElement<{ onOpenChange?: (open: boolean) => void }>;
   dragHandle?: React.ReactNode;
   className?: string;
@@ -16,16 +13,7 @@ type DashboardWidgetHeaderProps = {
 
 const DashboardWidgetHeader: React.FunctionComponent<
   DashboardWidgetHeaderProps
-> = ({
-  title,
-  subtitle,
-  warningMessage,
-  infoMessage,
-  actions,
-  dragHandle,
-  className,
-  preview = false,
-}) => {
+> = ({ title, subtitle, actions, dragHandle, className, preview = false }) => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const actionsWithHandler =
@@ -57,25 +45,15 @@ const DashboardWidgetHeader: React.FunctionComponent<
       )}
       <div className="flex items-start gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="flex items-center gap-1.5">
-            {warningMessage && (
-              <TooltipWrapper content={warningMessage}>
-                <TriangleAlert className="size-3 shrink-0 text-amber-500" />
-              </TooltipWrapper>
-            )}
-            <div className="truncate text-xs font-medium text-foreground">
-              {title}
-            </div>
-            {infoMessage && (
-              <TooltipWrapper content={infoMessage}>
-                <Info className="size-3 shrink-0 text-light-slate" />
-              </TooltipWrapper>
-            )}
+          <div className="truncate text-xs font-medium text-foreground">
+            {title}
           </div>
           {subtitle && (
-            <div className="truncate text-xs font-normal text-muted-slate">
-              {subtitle}
-            </div>
+            <TooltipWrapper content={subtitle}>
+              <div className="line-clamp-3 text-xs font-normal text-muted-slate">
+                {subtitle}
+              </div>
+            </TooltipWrapper>
           )}
         </div>
         {actionsWithHandler && (

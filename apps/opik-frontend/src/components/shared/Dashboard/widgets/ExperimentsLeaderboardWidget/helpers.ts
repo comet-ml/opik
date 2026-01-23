@@ -149,11 +149,7 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
   },
 ];
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  COLUMN_DATASET_ID,
-  "created_at",
-  "duration.p50",
-];
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["created_at"];
 
 export const getDefaultConfig = () => ({
   overrideDefaults: false,

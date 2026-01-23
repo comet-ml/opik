@@ -307,7 +307,7 @@ const ExperimentsLeaderboardWidgetEditor = forwardRef<WidgetEditorHandle>(
 
     return (
       <Form {...form}>
-        <WidgetEditorBaseLayout>
+        <WidgetEditorBaseLayout proportion="preview-large">
           <div className="space-y-4">
             <div className="flex items-start justify-between">
               <div className="flex-1 pr-4">

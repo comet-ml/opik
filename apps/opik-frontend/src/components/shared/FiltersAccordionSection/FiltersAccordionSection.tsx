@@ -68,7 +68,12 @@ const FiltersAccordionSection = <TColumnData,>({
     });
 
   return (
-    <Accordion type="single" collapsible className={cn("w-full", className)}>
+    <Accordion
+      type="single"
+      collapsible
+      className={cn("w-full", className)}
+      defaultValue="filters"
+    >
       <AccordionItem value="filters" className={hideBorder ? "" : "border-t"}>
         <AccordionTrigger
           className={cn(

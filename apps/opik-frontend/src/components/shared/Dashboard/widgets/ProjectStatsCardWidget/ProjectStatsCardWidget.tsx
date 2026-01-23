@@ -22,6 +22,7 @@ import {
   formatFeedbackScoreValue,
 } from "./metrics";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
+import useProjectById from "@/api/projects/useProjectById";
 
 const renderMetricDisplay = (label: string, value: string) => (
   <div className="flex h-full flex-col items-stretch justify-center">
@@ -75,30 +76,40 @@ const ProjectStatsCardWidget: React.FunctionComponent<
     | boolean
     | undefined;
 
-  const { projectId, infoMessage, intervalStart, intervalEnd } = useMemo(() => {
-    const { projectId: resolvedProjectId, infoMessage } =
-      resolveProjectIdFromConfig(
-        widgetProjectId,
-        globalConfig.projectId,
-        overrideDefaults,
+  const { data: projectData } = useProjectById(
+    { projectId: widgetProjectId! },
+    { enabled: overrideDefaults && !!widgetProjectId },
+  );
+
+  const { projectId, generatedSubtitle, intervalStart, intervalEnd } =
+    useMemo(() => {
+      const { projectId: resolvedProjectId, infoMessage } =
+        resolveProjectIdFromConfig(
+          widgetProjectId,
+          globalConfig.projectId,
+          overrideDefaults,
+          projectData?.name,
+        );
+
+      const { intervalStart, intervalEnd } = calculateIntervalConfig(
+        globalConfig.dateRange,
       );
 
-    const { intervalStart, intervalEnd } = calculateIntervalConfig(
-      globalConfig.dateRange,
-    );
+      const generatedSubtitle = infoMessage || "";
 
-    return {
-      projectId: resolvedProjectId,
-      infoMessage,
-      intervalStart,
-      intervalEnd,
-    };
-  }, [
-    widgetProjectId,
-    globalConfig.projectId,
-    globalConfig.dateRange,
-    overrideDefaults,
-  ]);
+      return {
+        projectId: resolvedProjectId,
+        generatedSubtitle,
+        intervalStart,
+        intervalEnd,
+      };
+    }, [
+      widgetProjectId,
+      globalConfig.projectId,
+      globalConfig.dateRange,
+      overrideDefaults,
+      projectData?.name,
+    ]);
 
   const source = widget?.config?.source as TRACE_DATA_TYPE | undefined;
   const metric = widget?.config?.metric as string | undefined;
@@ -238,12 +249,11 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader infoMessage={infoMessage} />
+        <DashboardWidget.PreviewHeader generatedSubtitle={generatedSubtitle} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
-          subtitle={widget.subtitle}
-          infoMessage={infoMessage}
+          subtitle={widget.subtitle || generatedSubtitle || ""}
           actions={
             <DashboardWidget.ActionsMenu
               sectionId={sectionId!}
