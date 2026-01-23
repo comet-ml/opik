@@ -8,6 +8,7 @@ from .... import helpers
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
 import opik
+from .... import constants
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .. import evolutionary_optimizer  # noqa: F401
@@ -19,7 +20,7 @@ def evaluate_bundle(
     prompts_metadata: dict[str, dict[str, Any]],
     dataset: opik.Dataset,
     metric: MetricFunction,
-    n_samples: int | None = None,
+    n_samples: int | float | str | None = None,
     dataset_item_ids: list[str] | None = None,
     experiment_config: dict | None = None,
     optimization_id: str | None = None,
@@ -60,19 +61,31 @@ def evaluate_bundle(
             model_parameters=metadata.get("model_kwargs"),
         )
 
+    sampling_plan = optimizer._prepare_sampling_plan(
+        dataset=dataset,
+        n_samples=n_samples,
+        dataset_item_ids=dataset_item_ids,
+        phase="trial",
+        seed_override=optimizer.seed,
+        strategy=getattr(optimizer, "n_samples_strategy", None),
+    )
+    resolved_ids = sampling_plan.dataset_item_ids
+    effective_n_samples = None if resolved_ids is not None else sampling_plan.nb_samples
+
     configuration_updates = helpers.drop_none(
         {
             "n_samples_for_eval": (
-                len(dataset_item_ids) if dataset_item_ids is not None else n_samples
+                len(resolved_ids) if resolved_ids is not None else effective_n_samples
             ),
             "total_dataset_items": total_items,
             "bundle_mode": True,
             "num_prompts_in_bundle": len(prompts_bundle),
+            "sampling_mode": sampling_plan.mode,
         }
     )
     evaluation_details = helpers.drop_none(
         {
-            "dataset_item_ids": dataset_item_ids,
+            "dataset_item_ids": resolved_ids,
             "optimization_id": optimization_id,
         }
     )
@@ -113,14 +126,15 @@ def evaluate_bundle(
 
     score = task_evaluator.evaluate(
         dataset=dataset,
-        dataset_item_ids=dataset_item_ids,
+        dataset_item_ids=resolved_ids,
         metric=metric,
         evaluated_task=llm_task,
         num_threads=optimizer.n_threads,
         project_name=optimizer.project_name,
-        n_samples=n_samples if dataset_item_ids is None else None,
+        n_samples=effective_n_samples,
         experiment_config=experiment_config,
         optimization_id=optimization_id,
         verbose=verbose,
+        use_evaluate_on_dict_items=constants.ENABLE_EVALUATE_ON_DICT_ITEMS,
     )
     return score

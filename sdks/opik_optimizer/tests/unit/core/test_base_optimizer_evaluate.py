@@ -10,9 +10,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from opik.evaluation.metrics import base_metric
 from opik_optimizer.base_optimizer import BaseOptimizer
 from opik_optimizer.constants import MAX_EVAL_THREADS, MIN_EVAL_THREADS
 from opik_optimizer.api_objects import chat_prompt
+from opik.evaluation.metrics import score_result
 from tests.unit.fixtures.base_optimizer_test_helpers import (
     ConcreteOptimizer,
     _DisplaySpy,
@@ -247,6 +249,119 @@ def test_on_trial_handles_non_finite_scores(
 
     assert captured["style"] == "yellow"
     assert captured["score_text"] == "non-finite score"
+
+
+def test_evaluate_prompt_on_dict_items_strips_ids(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    dataset = make_mock_dataset(
+        [
+            {"id": "item-1", "input": "a"},
+            {"id": "item-2", "input": "b"},
+        ]
+    )
+    metric = MagicMock()
+    metric.__name__ = "custom_metric"
+
+    captured_items: list[list[dict[str, Any]]] = []
+
+    class DummyResult:
+        def __init__(self) -> None:
+            score = score_result.ScoreResult(
+                name="custom_metric",
+                value=1.0,
+                reason="ok",
+            )
+            test_result = MagicMock()
+            test_result.score_results = [score]
+            self.test_results = [test_result]
+
+    def fake_evaluate_on_dict_items(*, items: list[dict[str, Any]], **kwargs: Any):
+        _ = kwargs
+        captured_items.append(items)
+        return DummyResult()
+
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation._evaluate_on_dict_items",
+        fake_evaluate_on_dict_items,
+    )
+
+    result = optimizer.evaluate_prompt(
+        prompt=simple_chat_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=MagicMock(),
+        n_threads=1,
+        verbose=0,
+        use_evaluate_on_dict_items=True,
+        return_evaluation_result=True,
+    )
+
+    assert isinstance(result, DummyResult)
+    assert captured_items
+    assert all("id" not in item for item in captured_items[0])
+
+
+def test_evaluate_prompt_on_dict_items_forwards_experiment_config(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    dataset = make_mock_dataset(
+        [{"id": "item-1", "input": "a"}],
+    )
+    metric = MagicMock()
+    metric.__name__ = "custom_metric"
+    captured: dict[str, Any] = {}
+
+    class DummyResult:
+        def __init__(self) -> None:
+            score = score_result.ScoreResult(
+                name="custom_metric",
+                value=0.5,
+                reason="ok",
+            )
+            test_result = MagicMock()
+            test_result.score_results = [score]
+            self.test_results = [test_result]
+
+    def fake_evaluate_on_dict_items(
+        *,
+        items: list[dict[str, Any]],
+        task: Callable[[dict[str, Any]], dict[str, Any]],
+        scoring_metrics: list[base_metric.BaseMetric],
+        project_name: str | None,
+        verbose: int,
+        scoring_threads: int,
+        experiment_config: dict[str, Any] | None = None,
+    ) -> DummyResult:
+        _ = items, task, scoring_metrics, project_name, verbose, scoring_threads
+        captured["experiment_config"] = experiment_config
+        return DummyResult()
+
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation._opik_evaluate_on_dict_items",
+        fake_evaluate_on_dict_items,
+    )
+    monkeypatch.setattr(
+        "opik_optimizer.core.evaluation._EVALUATE_ON_DICT_ITEMS_ACCEPTS_EXPERIMENT_CONFIG",
+        True,
+    )
+
+    result = optimizer.evaluate_prompt(
+        prompt=simple_chat_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=MagicMock(),
+        n_threads=1,
+        verbose=0,
+        experiment_config={"foo": "bar"},
+        use_evaluate_on_dict_items=True,
+        return_evaluation_result=True,
+    )
+
+    assert isinstance(result, DummyResult)
+    assert captured["experiment_config"]["foo"] == "bar"
 
 
 def test_optimize_prompt_uses_injected_display(

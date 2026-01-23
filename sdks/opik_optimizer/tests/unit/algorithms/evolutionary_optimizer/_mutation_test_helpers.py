@@ -3,12 +3,49 @@
 from __future__ import annotations
 
 from typing import Any
+from collections.abc import Sequence
 
 import pytest
 
 _MUTATION_OPS_MODULE = (
     "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops"
 )
+
+
+class _StubRng:
+    def __init__(
+        self,
+        *,
+        random_value: float,
+        randint_value: int | None = None,
+        sample_value: list[int] | None = None,
+        choice_value: Any | None = None,
+    ) -> None:
+        self._random_value = random_value
+        self._randint_value = randint_value
+        self._sample_value = sample_value
+        self._choice_value = choice_value
+
+    def random(self) -> float:
+        return self._random_value
+
+    def randint(self, a: int, b: int) -> int:
+        if self._randint_value is None:
+            return a
+        return max(a, min(self._randint_value, b))
+
+    def sample(self, seq: Sequence[Any], k: int) -> list[Any]:
+        if self._sample_value is not None:
+            return list(self._sample_value)
+        return list(seq)[:k]
+
+    def choice(self, seq: Sequence[Any]) -> Any:
+        if self._choice_value is not None:
+            return self._choice_value
+        return list(seq)[0]
+
+    def shuffle(self, seq: list[Any]) -> None:
+        return None
 
 
 def force_random(
@@ -18,23 +55,14 @@ def force_random(
     randint_value: int | None = None,
     sample_value: list[int] | None = None,
     choice_value: Any | None = None,
-) -> None:
-    monkeypatch.setattr(f"{_MUTATION_OPS_MODULE}.random.random", lambda: random_value)
-    if randint_value is not None:
-        monkeypatch.setattr(
-            f"{_MUTATION_OPS_MODULE}.random.randint",
-            lambda _a, _b: randint_value,
-        )
-    if sample_value is not None:
-        monkeypatch.setattr(
-            f"{_MUTATION_OPS_MODULE}.random.sample",
-            lambda _seq, _k: sample_value,
-        )
-    if choice_value is not None:
-        monkeypatch.setattr(
-            f"{_MUTATION_OPS_MODULE}.random.choice",
-            lambda _seq: choice_value,
-        )
+) -> _StubRng:
+    _ = monkeypatch  # preserve signature for existing tests
+    return _StubRng(
+        random_value=random_value,
+        randint_value=randint_value,
+        sample_value=sample_value,
+        choice_value=choice_value,
+    )
 
 
 def patch_get_synonym(monkeypatch: pytest.MonkeyPatch, *, return_value: str) -> None:

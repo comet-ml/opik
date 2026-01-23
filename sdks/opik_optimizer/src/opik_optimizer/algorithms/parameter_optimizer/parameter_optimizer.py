@@ -109,7 +109,9 @@ class ParameterOptimizer(BaseOptimizer):
         metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_minibatch: int | None = None,
+        n_samples_strategy: str | None = None,
         auto_continue: bool = False,
         project_name: str | None = None,
         optimization_id: str | None = None,
@@ -150,7 +152,9 @@ class ParameterOptimizer(BaseOptimizer):
         parameter_space: ParameterSearchSpace | Mapping[str, Any],
         validation_dataset: Dataset | None,
         experiment_config: dict | None,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
+        n_samples_minibatch: int | None,
+        n_samples_strategy: str | None,
         agent: OptimizableAgent | None,
         project_name: str,
         optimization_id: str | None,
@@ -243,6 +247,9 @@ class ParameterOptimizer(BaseOptimizer):
             optimization_id=self.current_optimization_id,
             experiment_config=experiment_config,
             n_samples=n_samples,
+            n_samples_minibatch=n_samples_minibatch,
+            n_samples_strategy=n_samples_strategy
+            or constants.DEFAULT_N_SAMPLES_STRATEGY,
             max_trials=max_trials or self.default_n_trials,
             project_name=project_name,
             allow_tool_use=True,
@@ -268,7 +275,8 @@ class ParameterOptimizer(BaseOptimizer):
         evaluation_dataset: Dataset,
         metric: MetricFunction,
         experiment_config: dict | None,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
+        n_samples_strategy: str | None = None,
     ) -> float:
         with reporting.display_evaluation(
             verbose=self.verbose,
@@ -284,6 +292,7 @@ class ParameterOptimizer(BaseOptimizer):
                 verbose=self.verbose,
                 experiment_config=experiment_config,
                 n_samples=n_samples,
+                n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
             )
             baseline_reporter.set_score(baseline_score)
         return baseline_score
@@ -410,7 +419,9 @@ class ParameterOptimizer(BaseOptimizer):
         validation_dataset: Dataset | None = None,
         experiment_config: dict | None = None,
         max_trials: int | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_minibatch: int | None = None,
+        n_samples_strategy: str | None = None,
         agent: OptimizableAgent | None = None,
         project_name: str = "Optimization",
         sampler: optuna.samplers.BaseSampler | None = None,
@@ -461,6 +472,8 @@ class ParameterOptimizer(BaseOptimizer):
             experiment_config: Optional experiment metadata
             max_trials: Total number of trials (if None, uses default_n_trials)
             n_samples: Number of dataset samples to evaluate per trial (None for all)
+            n_samples_minibatch: Optional number of samples for inner-loop minibatches
+            n_samples_strategy: Sampling strategy name (default "random_sorted")
             agent: Optional custom agent instance to execute evaluations
             project_name: Opik project name for logging traces (default: "Optimization")
             sampler: Optuna sampler to use (default: TPESampler with seed)
@@ -490,6 +503,8 @@ class ParameterOptimizer(BaseOptimizer):
             validation_dataset=validation_dataset,
             experiment_config=experiment_config,
             n_samples=n_samples,
+            n_samples_minibatch=n_samples_minibatch,
+            n_samples_strategy=n_samples_strategy,
             agent=agent,
             project_name=project_name,
             optimization_id=optimization_id,
@@ -507,6 +522,7 @@ class ParameterOptimizer(BaseOptimizer):
             metric=metric,
             experiment_config=experiment_config,
             n_samples=n_samples,
+            n_samples_strategy=n_samples_strategy,
         )
 
         if self._should_skip_optimization(baseline_score):
@@ -583,6 +599,7 @@ class ParameterOptimizer(BaseOptimizer):
             agent=agent,
             experiment_config=experiment_config,
             n_samples=n_samples,
+            n_samples_strategy=n_samples_strategy,
             total_trials=total_trials,
         )
 

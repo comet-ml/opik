@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Protocol
 
 import copy
 import logging
@@ -29,15 +29,21 @@ sys.modules[_reporting_module.__name__] = _reporting_module
 reporting = _reporting_module
 
 
+class RandomLike(Protocol):
+    def randint(self, a: int, b: int) -> int: ...
+
+    def shuffle(self, seq: list[Any]) -> None: ...
+
+
 def _deap_crossover_chunking_strategy(
-    messages_1_str: str, messages_2_str: str
+    messages_1_str: str, messages_2_str: str, rng: RandomLike
 ) -> tuple[str, str]:
     chunks1 = [chunk.strip() for chunk in messages_1_str.split(".") if chunk.strip()]
     chunks2 = [chunk.strip() for chunk in messages_2_str.split(".") if chunk.strip()]
 
     if len(chunks1) >= 2 and len(chunks2) >= 2:
         min_num_chunks = min(len(chunks1), len(chunks2))
-        point = random.randint(1, min_num_chunks - 1)
+        point = rng.randint(1, min_num_chunks - 1)
         child1_chunks = chunks1[:point] + chunks2[point:]
         child2_chunks = chunks2[:point] + chunks1[point:]
         child1_str = ". ".join(child1_chunks) + ("." if child1_chunks else "")
@@ -48,7 +54,7 @@ def _deap_crossover_chunking_strategy(
 
 
 def _deap_crossover_word_level(
-    messages_1_str: str, messages_2_str: str
+    messages_1_str: str, messages_2_str: str, rng: RandomLike
 ) -> tuple[str, str]:
     words1 = messages_1_str.split()
     words2 = messages_2_str.split()
@@ -57,14 +63,16 @@ def _deap_crossover_word_level(
     min_word_len = min(len(words1), len(words2))
     if min_word_len < 2:
         return messages_1_str, messages_2_str
-    point = random.randint(1, min_word_len - 1)
+    point = rng.randint(1, min_word_len - 1)
     child1_words = words1[:point] + words2[point:]
     child2_words = words2[:point] + words1[point:]
     return " ".join(child1_words), " ".join(child2_words)
 
 
 def _crossover_messages(
-    messages_1: list[dict[str, Any]], messages_2: list[dict[str, Any]]
+    messages_1: list[dict[str, Any]],
+    messages_2: list[dict[str, Any]],
+    rng: RandomLike,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply crossover to a single prompt's messages.
 
@@ -86,10 +94,12 @@ def _crossover_messages(
 
             try:
                 child1_text, child2_text = _deap_crossover_chunking_strategy(
-                    text_1, text_2
+                    text_1, text_2, rng
                 )
             except ValueError:
-                child1_text, child2_text = _deap_crossover_word_level(text_1, text_2)
+                child1_text, child2_text = _deap_crossover_word_level(
+                    text_1, text_2, rng
+                )
 
             # Rebuild content preserving non-text parts (images/video)
             messages_1_result[i]["content"] = rebuild_content_with_new_text(
@@ -102,7 +112,9 @@ def _crossover_messages(
     return messages_1_result, messages_2_result
 
 
-def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
+def deap_crossover(
+    ind1: Any, ind2: Any, verbose: int = 1, rng: random.Random | None = None
+) -> tuple[Any, Any]:
     """Crossover operation that preserves semantic meaning.
 
     Operates on dict-based individuals (prompt_name -> messages).
@@ -114,6 +126,8 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
         verbose=verbose,
     )
 
+    rng = rng or random.Random()
+
     # Individuals are dicts mapping prompt_name -> messages
     child1_data: dict[str, list[dict[str, Any]]] = {}
     child2_data: dict[str, list[dict[str, Any]]] = {}
@@ -124,7 +138,7 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
             messages_1 = ind1[prompt_name]
             messages_2 = ind2[prompt_name]
             child1_messages, child2_messages = _crossover_messages(
-                messages_1, messages_2
+                messages_1, messages_2, rng
             )
             child1_data[prompt_name] = child1_messages
             child2_data[prompt_name] = child2_messages
@@ -244,6 +258,7 @@ def llm_deap_crossover(
     prompts: PromptLibrary,
     use_semantic: bool = False,
     verbose: int = 1,
+    rng: random.Random | None = None,
 ) -> tuple[Any, Any]:
     """Perform crossover by asking an LLM to blend two parent prompts.
 
@@ -258,6 +273,8 @@ def llm_deap_crossover(
     # Individuals are dicts mapping prompt_name -> messages
     child1_data: dict[str, list[dict[str, Any]]] = {}
     child2_data: dict[str, list[dict[str, Any]]] = {}
+
+    rng = rng or random.Random()
 
     try:
         # Apply LLM crossover to each prompt in the dict
@@ -313,7 +330,7 @@ def llm_deap_crossover(
                         f"LLM crossover failed for prompt '{prompt_name}': {e}. Using DEAP crossover."
                     )
                     child1_messages, child2_messages = _crossover_messages(
-                        messages_1, messages_2
+                        messages_1, messages_2, rng
                     )
                     child1_data[prompt_name] = child1_messages
                     child2_data[prompt_name] = child2_messages

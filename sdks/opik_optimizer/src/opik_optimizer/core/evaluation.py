@@ -1,7 +1,9 @@
 import logging
 import math
-from typing import Any, overload, Literal
+from typing import Any, Literal, overload
 from collections.abc import Callable
+
+import inspect
 
 import opik
 from ..api_objects.types import MetricFunction
@@ -12,6 +14,17 @@ from opik.evaluation.metrics import base_metric, score_result
 from ..metrics.multi_metric_objective import MultiMetricObjective
 
 logger = logging.getLogger(__name__)
+
+try:
+    from opik import evaluate_on_dict_items as _opik_evaluate_on_dict_items
+except Exception:  # pragma: no cover - older Opik SDK fallback
+    _opik_evaluate_on_dict_items = None
+
+_EVALUATE_ON_DICT_ITEMS_ACCEPTS_EXPERIMENT_CONFIG = (
+    _opik_evaluate_on_dict_items is not None
+    and "experiment_config"
+    in inspect.signature(_opik_evaluate_on_dict_items).parameters
+)
 
 
 def _create_metric_class(metric: MetricFunction) -> base_metric.BaseMetric:
@@ -87,6 +100,7 @@ def evaluate(
     experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
     return_evaluation_result: Literal[False] = False,
+    use_evaluate_on_dict_items: bool = False,
 ) -> float: ...
 
 
@@ -103,7 +117,11 @@ def evaluate(
     experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
     return_evaluation_result: Literal[True] = True,
-) -> opik_evaluation_result.EvaluationResult: ...
+    use_evaluate_on_dict_items: bool = False,
+) -> (
+    opik_evaluation_result.EvaluationResult
+    | opik_evaluation_result.EvaluationResultOnDictItems
+): ...
 
 
 def evaluate(
@@ -118,7 +136,12 @@ def evaluate(
     experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
     return_evaluation_result: bool = False,
-) -> float | opik_evaluation_result.EvaluationResult:
+    use_evaluate_on_dict_items: bool = False,
+) -> (
+    float
+    | opik_evaluation_result.EvaluationResult
+    | opik_evaluation_result.EvaluationResultOnDictItems
+):
     """
     Evaluate a task on a dataset.
 
@@ -153,6 +176,7 @@ def evaluate(
         n_samples=n_samples,
         experiment_config=experiment_config,
         verbose=verbose,
+        use_evaluate_on_dict_items=use_evaluate_on_dict_items,
     )
 
     if return_evaluation_result:
@@ -173,7 +197,13 @@ def evaluate_with_result(
     n_samples: int | None = None,
     experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
-) -> tuple[float, opik_evaluation_result.EvaluationResult | None]:
+    use_evaluate_on_dict_items: bool = False,
+) -> tuple[
+    float,
+    opik_evaluation_result.EvaluationResult
+    | opik_evaluation_result.EvaluationResultOnDictItems
+    | None,
+]:
     """
     Run evaluation and return both the aggregate score and the underlying Opik result.
     """
@@ -188,6 +218,7 @@ def evaluate_with_result(
         n_samples=n_samples,
         experiment_config=experiment_config,
         verbose=verbose,
+        use_evaluate_on_dict_items=use_evaluate_on_dict_items,
     )
 
 
@@ -243,6 +274,34 @@ def _filter_items_by_ids(
         len(filtered_items),
     )
     return filtered_items, dataset_item_ids
+
+
+def _evaluate_on_dict_items(
+    *,
+    items: list[dict[str, Any]],
+    task: Callable[[dict[str, Any]], dict[str, Any]],
+    scoring_metrics: list[base_metric.BaseMetric],
+    project_name: str | None,
+    verbose: int,
+    scoring_threads: int,
+    experiment_config: dict[str, Any] | None,
+) -> opik_evaluation_result.EvaluationResultOnDictItems:
+    if _opik_evaluate_on_dict_items is None:
+        raise RuntimeError(
+            "opik.evaluate_on_dict_items is not available in this SDK version."
+        )
+
+    call_kwargs: dict[str, Any] = {
+        "items": items,
+        "task": task,
+        "scoring_metrics": scoring_metrics,
+        "project_name": project_name,
+        "verbose": verbose,
+        "scoring_threads": scoring_threads,
+    }
+    if _EVALUATE_ON_DICT_ITEMS_ACCEPTS_EXPERIMENT_CONFIG:
+        call_kwargs["experiment_config"] = experiment_config
+    return _opik_evaluate_on_dict_items(**call_kwargs)
 
 
 def _run_evaluator(
@@ -329,7 +388,13 @@ def _evaluate_internal(
     n_samples: int | None,
     experiment_config: dict[str, Any] | None,
     verbose: int,
-) -> tuple[float, opik_evaluation_result.EvaluationResult | None]:
+    use_evaluate_on_dict_items: bool,
+) -> tuple[
+    float,
+    opik_evaluation_result.EvaluationResult
+    | opik_evaluation_result.EvaluationResultOnDictItems
+    | None,
+]:
     items = dataset.get_items(n_samples)
     if not items:
         logger.debug("Empty dataset; returning 0.0")
@@ -342,19 +407,37 @@ def _evaluate_internal(
     )
 
     eval_metrics = [_create_metric_class(metric)]
-
-    evaluation_result = _run_evaluator(
-        optimization_id=optimization_id,
-        dataset=dataset,
-        evaluated_task=evaluated_task,
-        project_name=project_name,
-        dataset_item_ids=dataset_item_ids,
-        scoring_metrics=eval_metrics,
-        num_threads=num_threads,
-        n_samples=n_samples,
-        experiment_config=experiment_config,
-        verbose=verbose,
-    )
+    if use_evaluate_on_dict_items:
+        # TODO(opik-sdk): remove this branch once dict-item evaluation is the default.
+        if _evaluate_on_dict_items is None:
+            raise RuntimeError(
+                "opik.evaluate_on_dict_items is not available in this SDK version."
+            )
+        dict_items = [
+            {key: value for key, value in item.items() if key != "id"} for item in items
+        ]
+        evaluation_result = _evaluate_on_dict_items(
+            items=dict_items,
+            task=evaluated_task,
+            scoring_metrics=eval_metrics,
+            project_name=project_name,
+            verbose=verbose,
+            scoring_threads=num_threads,
+            experiment_config=experiment_config,
+        )
+    else:
+        evaluation_result = _run_evaluator(
+            optimization_id=optimization_id,
+            dataset=dataset,
+            evaluated_task=evaluated_task,
+            project_name=project_name,
+            dataset_item_ids=dataset_item_ids,
+            scoring_metrics=eval_metrics,
+            num_threads=num_threads,
+            n_samples=n_samples,
+            experiment_config=experiment_config,
+            verbose=verbose,
+        )
 
     if not evaluation_result.test_results:
         return 0.0, evaluation_result

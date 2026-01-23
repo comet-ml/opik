@@ -133,7 +133,9 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="dataset" type="Dataset">Opik dataset name, or Opik dataset</ParamField>
 <ParamField path="metric" type="Callable">A metric function, this function should have two arguments:</ParamField>
 <ParamField path="experiment_config" type="dict | None" optional={true} />
-<ParamField path="n_samples" type="int | None" optional={true} />
+<ParamField path="n_samples" type="int | float | str | None" optional={true}>Number of dataset items to use per evaluation. Use counts (e.g., `50`), fractions (e.g., `0.1`), percentages (e.g., "10%"), or "all"/"full"/None for the full dataset.</ParamField>
+<ParamField path="n_samples_minibatch" type="int | None" optional={true}>Optional number of samples for inner-loop minibatches (defaults to n_samples).</ParamField>
+<ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy for subsampling (default: "random_sorted").</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
 <ParamField path="project_name" type="str" optional={true} defaultValue="Optimization" />

@@ -129,7 +129,10 @@ clean:
 	@find . -type d -name ".litellm_cache" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@find . -type f -name "*.pyo" -delete 2>/dev/null || true
-	@find . -type f -name ".coverage" -delete 2>/dev/null || true
+	@find . -type f -name ".coverage*" -delete 2>/dev/null || true
+	@rm -rf .hf_home
+	@rm -rf .hf_datasets
+	@rm -rf .hf_cache
 	@rm -rf htmlcov coverage.xml
 	@rm -rf $(VENV)
 	@echo "Clean complete."

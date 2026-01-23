@@ -5,12 +5,20 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
 from opik_optimizer.api_objects.types import MetricFunction
 from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
-from tests.unit.test_helpers import make_mock_dataset
+from tests.unit.fixtures.builders import make_mock_dataset
+
+
+def _make_sequential_dataset(
+    count: int, *, name: str = "sampling-dataset", dataset_id: str = "sampling-ds"
+) -> MagicMock:
+    items = [{"id": str(i), "value": i} for i in range(count)]
+    return make_mock_dataset(items, name=name, dataset_id=dataset_id)
 
 
 @pytest.fixture
@@ -100,7 +108,10 @@ class TestSetupOptimizationDatasetsAndSamples:
             (None, 3, None),
             (2, 3, 2),
             (5, 3, None),  # clamped to full dataset by setting to None
-            (0, 3, 0),
+            (0.1, 10, 0.1),
+            ("10%", 10, "10%"),
+            ("full", 3, "full"),
+            ("all", 3, "all"),
         ],
     )
     def test_n_samples_normalization_against_evaluation_dataset_size(
@@ -109,9 +120,9 @@ class TestSetupOptimizationDatasetsAndSamples:
         simple_chat_prompt,
         mock_opik_client,
         mock_metric: MetricFunction,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
         total_items: int,
-        expected: int | None,
+        expected: int | float | str | None,
     ) -> None:
         """n_samples should be validated against evaluation dataset size (and clamped when too large)."""
         mock_opik_client()
@@ -180,3 +191,52 @@ class TestSetupOptimizationDatasetsAndSamples:
                 metric=mock_metric,
                 compute_baseline=False,
             )
+
+    def test_prepare_sampling_plan_respects_full_alias(
+        self,
+        optimizer: ConcreteOptimizer,
+    ) -> None:
+        dataset = _make_sequential_dataset(4)
+
+        plan = optimizer._prepare_sampling_plan(
+            dataset=dataset,
+            n_samples="full",
+            phase="eval",
+        )
+
+        assert plan.nb_samples is None
+        assert plan.dataset_item_ids is None
+        assert plan.mode.endswith(":full")
+
+    def test_prepare_minibatch_plan_prefers_minibatch_count(
+        self, optimizer: ConcreteOptimizer
+    ) -> None:
+        dataset = _make_sequential_dataset(10)
+
+        plan = optimizer._prepare_minibatch_plan(
+            dataset=dataset,
+            n_samples=2,
+            n_samples_minibatch=4,
+            phase="minibatch",
+        )
+
+        assert plan.nb_samples == 4
+        assert plan.mode.startswith("minibatch")
+        assert plan.dataset_item_ids is not None
+        assert len(plan.dataset_item_ids) == 4
+
+    def test_prepare_minibatch_plan_clamps_to_dataset_size(
+        self, optimizer: ConcreteOptimizer
+    ) -> None:
+        dataset = _make_sequential_dataset(3)
+
+        plan = optimizer._prepare_minibatch_plan(
+            dataset=dataset,
+            n_samples=1,
+            n_samples_minibatch=10,
+            phase="minibatch",
+        )
+
+        assert plan.nb_samples == 3
+        assert plan.dataset_item_ids is not None
+        assert len(plan.dataset_item_ids) == 3

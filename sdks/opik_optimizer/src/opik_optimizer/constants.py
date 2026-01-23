@@ -35,6 +35,12 @@ DEFAULT_PERFECT_SCORE = 0.95
 DEFAULT_SKIP_PERFECT_SCORE = True
 DEFAULT_ENABLE_CONTEXT_LEARNING = True
 DEFAULT_TOOL_CALL_MAX_ITERATIONS = 5
+DEFAULT_N_SAMPLES_STRATEGY = "random_sorted"
+DEFAULT_N_SAMPLES_MINIBATCH = None
+
+# Feature flags
+# TODO(opik-sdk): remove this flag once evaluate_on_dict_items is the default path.
+ENABLE_EVALUATE_ON_DICT_ITEMS = False
 
 # MetaPromptOptimizer defaults.
 META_PROMPT_DEFAULT_PROMPTS_PER_ROUND = 4

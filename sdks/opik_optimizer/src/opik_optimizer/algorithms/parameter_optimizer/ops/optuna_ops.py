@@ -49,7 +49,8 @@ def build_optuna_objective(
     metric: MetricFunction,
     agent: OptimizableAgent | None,
     experiment_config: dict[str, Any] | None,
-    n_samples: int | None,
+    n_samples: int | float | str | None,
+    n_samples_strategy: str | None,
     total_trials: int,
 ) -> Callable[[Trial], float]:
     def objective(trial: Trial) -> float:
@@ -88,6 +89,10 @@ def build_optuna_objective(
                 global_trials=stage_ref.get("global_trials"),
             )
             optimizer.pre_trial(context, tuned_prompts, round_handle=round_handle)
+            sampling_tag = optimizer._build_sampling_tag(
+                scope="parameter_trial",
+                candidate_id=str(trial.number),
+            )
             score = optimizer.evaluate_prompt(
                 prompt=tuned_prompts,
                 agent=agent,
@@ -97,6 +102,8 @@ def build_optuna_objective(
                 verbose=optimizer.verbose,
                 experiment_config=experiment_config,
                 n_samples=n_samples,
+                n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
+                sampling_tag=sampling_tag,
             )
 
             prev_best_score = best_state["score"]

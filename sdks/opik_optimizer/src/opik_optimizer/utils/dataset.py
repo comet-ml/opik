@@ -14,6 +14,13 @@ from functools import lru_cache
 from importlib import resources
 from typing import Any
 
+import httpx  # type: ignore[import-not-found]
+
+try:
+    import httpcore  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover
+    httpcore = None  # type: ignore[assignment]
+
 import opik
 from datasets import load_dataset
 
@@ -525,14 +532,26 @@ def load_hf_dataset_slice(
         resolved_seed,
     )
 
-    records = fetch_records_for_slice(
-        slice_request=slice_request,
-        load_kwargs_resolver=load_kwargs_resolver,
-        seed=resolved_seed,
-        custom_loader=custom_loader,
-        filter_by=filter_by,
-        load_fn=load_fn,
-    )
+    try:
+        records = fetch_records_for_slice(
+            slice_request=slice_request,
+            load_kwargs_resolver=load_kwargs_resolver,
+            seed=resolved_seed,
+            custom_loader=custom_loader,
+            filter_by=filter_by,
+            load_fn=load_fn,
+        )
+    except Exception as exc:
+        if isinstance(exc, httpx.RemoteProtocolError) or (
+            httpcore is not None and isinstance(exc, httpcore.RemoteProtocolError)
+        ):
+            message = (
+                f"Dataset download interrupted for {resolved_dataset_name} "
+                f"(split={slice_request.source_split}); please retry."
+            )
+            logger.error(message, exc_info=exc)
+            raise RuntimeError(message) from exc
+        raise
 
     slice_size = len(records)
     expected_items = effective_test_count if test_mode else slice_size

@@ -35,7 +35,9 @@ def rescore_candidates(
         with convert_tqdm_to_rich(verbose=0):
             round_handle = optimizer.pre_round(context, candidate_id="gepa_candidates")
             best_score = None
+            dataset_name = getattr(dataset, "name", None)
             for idx, (_, candidate) in enumerate(filtered_indexed_candidates):
+                candidate_id = candidate.get("id") or f"gepa_candidate_{idx}"
                 prompt_variants = candidate_ops.rebuild_prompts_from_candidate(
                     base_prompts=optimizable_prompts,
                     candidate=candidate,
@@ -43,7 +45,15 @@ def rescore_candidates(
 
                 try:
                     context.evaluation_dataset = dataset
-                    score = optimizer.evaluate(context, prompt_variants)
+                    sampling_tag = optimizer._build_sampling_tag(
+                        scope="gepa",
+                        candidate_id=candidate_id,
+                    )
+                    score = optimizer.evaluate(
+                        context,
+                        prompt_variants,
+                        sampling_tag=sampling_tag,
+                    )
                     score = float(score)
                 except Exception:
                     logger.debug(
@@ -56,7 +66,6 @@ def rescore_candidates(
                 optimizer._gepa_filtered_val_scores = filtered_val_scores
                 best_score = score if best_score is None else max(best_score, score)
 
-                candidate_id = candidate.get("id") or f"gepa_candidate_{idx}"
                 history_ops.record_candidate_round(
                     optimizer=optimizer,
                     context=context,
@@ -72,6 +81,7 @@ def rescore_candidates(
                         else None
                     ),
                     selection_policy=selection_policy,
+                    dataset_name=dataset_name,
                 )
             optimizer.set_selection_meta(
                 {

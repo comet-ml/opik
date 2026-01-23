@@ -1,11 +1,15 @@
 import asyncio
 import functools
+import inspect
+import logging
 import time
 from collections.abc import Awaitable, Callable
-from typing import ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 import opik.config
 import pyrate_limiter
+
+logger = logging.getLogger(__name__)
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -19,16 +23,65 @@ class RateLimiter:
     def __init__(self, max_calls_per_second: int):
         self.max_calls_per_second = max_calls_per_second
         rate = pyrate_limiter.Rate(max_calls_per_second, pyrate_limiter.Duration.SECOND)
-
-        self.limiter = pyrate_limiter.Limiter(rate, raise_when_fail=False)
+        limiter_cls: Any = pyrate_limiter.Limiter
+        try:
+            self.limiter = limiter_cls(rate, raise_when_fail=False)
+        except TypeError:
+            self.limiter = limiter_cls(rate)
         self.bucket_key = "global_rate_limit"
+        self._sync_try_acquire: Callable[[], bool] | None = None
+        self._async_try_acquire: Callable[[], Awaitable[bool]] | None = None
+        self._blocking_acquire: Callable[[], bool] = lambda: self.limiter.try_acquire(
+            self.bucket_key
+        )
+
+        try:
+            sig = inspect.signature(self.limiter.try_acquire)
+        except (ValueError, TypeError):
+            sig = None
+        if sig and "blocking" in sig.parameters:
+
+            def _nonblocking_try() -> bool:
+                return self.limiter.try_acquire(self.bucket_key, blocking=False)
+
+            self._sync_try_acquire = _nonblocking_try
+
+        async_acquire_attr = getattr(self.limiter, "try_acquire_async", None)
+        if async_acquire_attr is not None:
+            try:
+                async_sig = inspect.signature(async_acquire_attr)
+            except (TypeError, ValueError):
+                async_sig = None
+            if async_sig and "blocking" in async_sig.parameters:
+                self._async_try_acquire = lambda: async_acquire_attr(
+                    self.bucket_key, blocking=False
+                )
+            else:
+                self._async_try_acquire = lambda: async_acquire_attr(self.bucket_key)
+
+        if self._sync_try_acquire is None and self._async_try_acquire is None:
+            logger.warning(
+                "pyrate_limiter.Limiter does not expose non-blocking acquire; falling back to blocking behavior."
+            )
 
     def acquire(self) -> None:
-        while not self.limiter.try_acquire(self.bucket_key):
+        if self._sync_try_acquire is not None:
+            while not self._sync_try_acquire():
+                time.sleep(0.01)
+            return
+        while not self._blocking_acquire():
             time.sleep(0.01)
 
     async def acquire_async(self) -> None:
-        while not self.limiter.try_acquire(self.bucket_key):
+        if self._async_try_acquire is not None:
+            while not await self._async_try_acquire():
+                await asyncio.sleep(0.01)
+            return
+        if self._sync_try_acquire is not None:
+            while not self._sync_try_acquire():
+                await asyncio.sleep(0.01)
+            return
+        while not self._blocking_acquire():
             await asyncio.sleep(0.01)
 
 

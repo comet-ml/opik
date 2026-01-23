@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 
 import pytest
 
@@ -50,3 +51,28 @@ async def test_rate_limited_async_decorator_invokes_acquire_async() -> None:
     assert result == "async-ok"
     assert called == ["async-ok"]
     assert limiter.acquire_async_called
+
+
+def test_rate_limiter_falls_back_when_argument_removed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class DummyLimiter:
+        def __init__(self, rate: Any, **kwargs: Any) -> None:
+            if "raise_when_fail" in kwargs:
+                captured["raised"] = True
+                raise TypeError("unsupported argument")
+            captured["rate"] = rate
+
+        def try_acquire(self, key: Any, *, blocking: bool = True) -> bool:  # noqa: ARG002
+            return True
+
+    monkeypatch.setattr(
+        "opik_optimizer.utils.throttle.pyrate_limiter.Limiter",
+        DummyLimiter,
+    )
+
+    limiter = throttle.RateLimiter(max_calls_per_second=5)
+    assert captured["raised"] is True
+    assert limiter.max_calls_per_second == 5

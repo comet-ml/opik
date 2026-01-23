@@ -11,6 +11,9 @@ import opik_optimizer
 from opik_optimizer import ChatPrompt
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import mutation_ops
 from tests.unit.fixtures import system_message, user_message
+from tests.unit.algorithms.evolutionary_optimizer._mutation_test_helpers import (
+    force_random,
+)
 from tests.unit.test_helpers import make_fake_llm_call
 
 pytestmark = pytest.mark.usefixtures("suppress_expected_optimizer_warnings")
@@ -101,10 +104,7 @@ class TestSemanticMutation:
     def test_triggers_radical_innovation_randomly(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.05,
-        )
+        rng = force_random(monkeypatch, random_value=0.05)
 
         def fake_radical_innovation(**kwargs: Any) -> ChatPrompt:
             _ = kwargs
@@ -125,6 +125,7 @@ class TestSemanticMutation:
             verbose=0,
             output_style_guidance="Be concise",
             prompts=evo_prompts,
+            rng=rng,
         )
 
         assert isinstance(result, ChatPrompt)
@@ -132,14 +133,7 @@ class TestSemanticMutation:
     def test_returns_original_on_error(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
     ) -> None:
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-            lambda: 0.5,
-        )
-        monkeypatch.setattr(
-            "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.choice",
-            lambda seq: "rephrase",
-        )
+        rng = force_random(monkeypatch, random_value=0.5, choice_value="rephrase")
 
         monkeypatch.setattr(
             "opik_optimizer.core.llm_calls.call_model",
@@ -167,6 +161,7 @@ class TestSemanticMutation:
             verbose=1,
             output_style_guidance="Be concise",
             prompts=evo_prompts,
+            rng=rng,
         )
 
         assert result is prompt
@@ -197,17 +192,10 @@ def test_semantic_mutation_invalid_json_response(
 
     monkeypatch.setattr("opik_optimizer.core.llm_calls.call_model", fake_call_model)
 
-    monkeypatch.setattr(
-        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.random",
-        lambda: 0.5,
-    )
+    rng = force_random(monkeypatch, random_value=0.5)
     monkeypatch.setattr(
         "opik_optimizer.algorithms.evolutionary_optimizer.helpers.get_task_description_for_llm",
         lambda initial_prompt: "Summarize task",
-    )
-    monkeypatch.setattr(
-        "opik_optimizer.algorithms.evolutionary_optimizer.ops.mutation_ops.random.choice",
-        lambda seq: seq[0],
     )
 
     captured: dict[str, object] = {}
@@ -236,6 +224,7 @@ def test_semantic_mutation_invalid_json_response(
         model_parameters={},
         verbose=1,
         prompts=evo_prompts,
+        rng=rng,
     )
 
     assert result is not original_prompt

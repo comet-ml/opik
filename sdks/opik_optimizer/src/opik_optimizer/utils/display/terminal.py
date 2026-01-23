@@ -26,6 +26,12 @@ from ..multimodal import format_message_content
 from ..reporting import convert_tqdm_to_rich, get_console, suppress_opik_logs
 from ...constants import DEFAULT_PANEL_WIDTH, DEFAULT_DISPLAY_PREFIX
 
+PARAMETER_DESCRIPTIONS: dict[str, str] = {
+    "n_samples": "max dataset items evaluated per trial",
+    "n_samples_minibatch": "dataset items per minibatch evaluation",
+    "n_samples_strategy": "sampling strategy",
+}
+
 
 def _format_message_content(content: str | list[dict[str, Any]]) -> rich.text.Text:
     return format_message_content(content)
@@ -352,6 +358,9 @@ def display_configuration(
             rich.text.Text(f"  - {key}: ", style="dim"),
             rich.text.Text(str(value), style="cyan"),
         )
+        description = PARAMETER_DESCRIPTIONS.get(key)
+        if description:
+            parameter_text.append(rich.text.Text(f" ({description})", style="dim"))
         console.print(parameter_text)
 
     display_text_block("\n")
@@ -661,6 +670,8 @@ def _build_result_overview_table(result: Any) -> rich.table.Table:
     table.add_column()
 
     table.add_row("Optimizer:", f"[bold]{result.optimizer}[/bold]")
+    if getattr(result, "dataset_id", None):
+        table.add_row("Dataset ID:", str(result.dataset_id))
     table.add_row("Model Used:", f"{model_name}")
     table.add_row("Metric Evaluated:", f"[bold]{result.metric_name}[/bold]")
     table.add_row("Initial Score:", initial_score_str)

@@ -11,7 +11,7 @@ class TestCrossoverMessages:
             _crossover_messages,
         )
 
-        random.seed(42)
+        rng = random.Random(42)
 
         messages1 = [
             system_message("First sentence. Second sentence."),
@@ -22,7 +22,7 @@ class TestCrossoverMessages:
             user_message("Query one. Query two."),
         ]
 
-        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
+        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2, rng)
 
         assert len(child1_msgs) == 2
         assert len(child2_msgs) == 2
@@ -34,7 +34,7 @@ class TestCrossoverMessages:
             _crossover_messages,
         )
 
-        random.seed(42)
+        rng = random.Random(42)
 
         messages1 = [
             user_message(
@@ -59,7 +59,7 @@ class TestCrossoverMessages:
             )
         ]
 
-        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
+        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2, rng)
 
         assert len(child1_msgs) == 1
         assert isinstance(child1_msgs[0]["content"], list)
@@ -69,12 +69,12 @@ class TestCrossoverMessages:
             _crossover_messages,
         )
 
-        random.seed(42)
+        rng = random.Random(42)
 
         messages1 = [system_message("System content. More content.")]
         messages2 = [user_message("User content. More user content.")]
 
-        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
+        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2, rng)
 
         assert len(child1_msgs) == 1
         assert child1_msgs[0]["role"] == "system"
@@ -84,7 +84,7 @@ class TestCrossoverMessages:
             _crossover_messages,
         )
 
-        random.seed(42)
+        rng = random.Random(42)
 
         messages1 = [
             system_message("System content. More content."),
@@ -93,7 +93,7 @@ class TestCrossoverMessages:
         ]
         messages2 = [system_message("Alpha system. Beta system.")]
 
-        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2)
+        child1_msgs, child2_msgs = _crossover_messages(messages1, messages2, rng)
 
         assert len(child1_msgs) == 3
         assert len(child2_msgs) == 1

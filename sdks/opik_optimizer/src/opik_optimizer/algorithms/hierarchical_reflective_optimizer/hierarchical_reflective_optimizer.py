@@ -184,9 +184,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         dataset: opik.Dataset,
         metric: MetricFunction,
         agent: OptimizableAgent | None,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
         context: OptimizationContext,
         empty_score: float | None = None,
+        sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult]:
         """Evaluate prompts, update trial state, and return score + result."""
         return self.evaluate_with_result(
@@ -194,6 +195,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             prompts=prompts,
             experiment_config=context.experiment_config,
             empty_score=empty_score,
+            n_samples=n_samples,
+            n_samples_strategy=context.n_samples_strategy,
+            sampling_tag=sampling_tag,
         )
 
     def _improve_prompt(
@@ -285,7 +289,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         metric: MetricFunction,
         agent: OptimizableAgent | None,
         optimization_id: str | None,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
         attempt: int,
         max_attempts: int,
         context: OptimizationContext,
@@ -368,6 +372,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         )
 
         if not improved_chat_prompts_candidates:
+            fallback_id = f"trial{context.trials_completed}_fallback"
             fallback_score, fallback_result = self._evaluate_prompts_with_result(
                 prompts=best_prompts,
                 dataset=evaluation_dataset,
@@ -376,19 +381,21 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 n_samples=n_samples,
                 context=context,
                 empty_score=best_score,
+                sampling_tag=fallback_id,
             )
             runtime.record_and_post_trial(
                 optimizer=self,
                 context=context,
                 prompt_or_payload=best_prompts,
                 score=fallback_score,
-                candidate_id=f"trial{context.trials_completed}_fallback",
+                candidate_id=fallback_id,
                 round_handle=round_handle,
                 post_extras=None,
                 post_metrics=None,
             )
             return best_prompts, fallback_score, fallback_result
 
+        best_candidate_id = f"trial{context.trials_completed}_best0"
         best_prompt_bundle = improved_chat_prompts_candidates[0]
         best_score_local, best_result = self._evaluate_prompts_with_result(
             prompts=best_prompt_bundle,
@@ -397,13 +404,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             agent=agent,
             n_samples=n_samples,
             context=context,
+            sampling_tag=best_candidate_id,
         )
         runtime.record_and_post_trial(
             optimizer=self,
             context=context,
             prompt_or_payload=best_prompt_bundle,
             score=best_score_local,
-            candidate_id=f"trial{context.trials_completed}_best0",
+            candidate_id=best_candidate_id,
             round_handle=round_handle,
             post_extras=None,
             post_metrics=None,
@@ -413,6 +421,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         for idx, improved_chat_prompts in enumerate(
             improved_chat_prompts_candidates[1:], start=1
         ):
+            candidate_id = f"trial{context.trials_completed}_cand{idx}"
             improved_score, improved_experiment_result = (
                 self._evaluate_prompts_with_result(
                     prompts=improved_chat_prompts,
@@ -421,6 +430,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     agent=agent,
                     n_samples=n_samples,
                     context=context,
+                    sampling_tag=candidate_id,
                 )
             )
             runtime.record_and_post_trial(
@@ -428,7 +438,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 context=context,
                 prompt_or_payload=improved_chat_prompts,
                 score=improved_score,
-                candidate_id=f"trial{context.trials_completed}_cand{idx}",
+                candidate_id=candidate_id,
                 round_handle=round_handle,
                 post_extras=None,
                 post_metrics=None,
@@ -479,6 +489,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         metric = context.metric
         agent = context.agent
         n_samples = context.n_samples
+        minibatch_samples = (
+            context.n_samples_minibatch
+            if context.n_samples_minibatch is not None
+            else n_samples
+        )
         max_trials = context.max_trials
         max_retries = context.extra_params.get("max_retries", 2)
         optimization = context.optimization
@@ -512,6 +527,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 break
             round_handle = self.pre_round(context)
 
+            sampling_tag = self._build_sampling_tag(
+                scope="hro_root_cause",
+                round_index=iteration,
+            )
             hierarchical_analysis = iteration_ops.run_root_cause_analysis(
                 optimizer=self,
                 context=context,
@@ -519,7 +538,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 dataset=dataset,
                 metric=metric,
                 agent=agent,
-                n_samples=n_samples,
+                n_samples=minibatch_samples,
+                sampling_tag=sampling_tag,
             )
 
             # Display synthesis results
@@ -546,7 +566,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 validation_dataset=validation_dataset,
                 metric=metric,
                 agent=agent,
-                n_samples=n_samples,
+                n_samples=minibatch_samples,
                 max_retries=max_retries,
                 max_trials=max_trials,
                 optimization_id=optimization.id if optimization else None,

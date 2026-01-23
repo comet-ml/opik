@@ -14,7 +14,10 @@ import litellm
 from opik.rest_api.core import ApiError
 from opik.api_objects import optimization
 from opik import Dataset, opik_context
-from opik.evaluation.evaluation_result import EvaluationResult
+from opik.evaluation.evaluation_result import (
+    EvaluationResult,
+    EvaluationResultOnDictItems,
+)
 
 from .core import evaluation as task_evaluator
 from .core import runtime
@@ -28,6 +31,7 @@ from .constants import (
     resolve_project_name,
     normalize_eval_threads,
 )
+from . import constants
 from .core.results import (
     OptimizationHistoryState,
     OptimizationResult,
@@ -43,6 +47,8 @@ from .core.state import (
 from .utils.logging import debug_log
 from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
+from .utils import rng as rng_utils
+from .utils import sampling
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -115,6 +121,7 @@ class BaseOptimizer(ABC):
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = resolve_project_name()
         self.n_threads: int = normalize_eval_threads(None)  # Safe default thread count
+        self._rng = rng_utils.make_rng(seed)
 
         # Counters, history and counters for usage.
         self._history_builder: OptimizationHistoryState = OptimizationHistoryState()
@@ -386,7 +393,9 @@ class BaseOptimizer(ABC):
         dataset: Dataset,
         metric: MetricFunction,
         agent: OptimizableAgent | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_minibatch: int | None = None,
+        n_samples_strategy: str | None = None,
         experiment_config: dict[str, Any] | None = None,
         validation_dataset: Dataset | None = None,
         project_name: str | None = None,
@@ -415,7 +424,7 @@ class BaseOptimizer(ABC):
         total_items = len(evaluation_dataset.get_items())
         if total_items == 0:
             raise ValueError("dataset is empty")
-        if n_samples is not None and n_samples > total_items:
+        if isinstance(n_samples, int) and n_samples > total_items:
             logger.warning(
                 "Requested n_samples (%s) is larger than evaluation dataset size (%s). "
                 "Using full evaluation dataset.",
@@ -462,6 +471,12 @@ class BaseOptimizer(ABC):
         # Create initial prompts
         initial_prompts = {name: p.copy() for name, p in optimizable_prompts.items()}
 
+        resolved_strategy = n_samples_strategy or getattr(
+            self, "n_samples_strategy", None
+        )
+        if not isinstance(resolved_strategy, str) or not resolved_strategy:
+            resolved_strategy = constants.DEFAULT_N_SAMPLES_STRATEGY
+
         # Return optimization context
         context = OptimizationContext(
             prompts=optimizable_prompts,
@@ -476,6 +491,8 @@ class BaseOptimizer(ABC):
             optimization_id=self.current_optimization_id,
             experiment_config=experiment_config,
             n_samples=n_samples,
+            n_samples_minibatch=n_samples_minibatch,
+            n_samples_strategy=resolved_strategy,
             max_trials=max_trials,
             project_name=project_name,
             allow_tool_use=bool(extra_params.get("allow_tool_use", True)),
@@ -486,6 +503,7 @@ class BaseOptimizer(ABC):
 
         # Keep history default split aligned with evaluation dataset.
         self.set_default_dataset_split(dataset_split)
+        self.n_samples_strategy = resolved_strategy
         return context
 
     def _calculate_baseline(self, context: OptimizationContext) -> float:
@@ -547,6 +565,7 @@ class BaseOptimizer(ABC):
         context: OptimizationContext,
         prompts: dict[str, chat_prompt.ChatPrompt],
         experiment_config: dict[str, Any] | None = None,
+        sampling_tag: str | None = None,
     ) -> float:
         """
         Evaluate prompts and return the score.
@@ -566,6 +585,7 @@ class BaseOptimizer(ABC):
             prompts: Dict of named prompts to evaluate (e.g., {"main": ChatPrompt(...)}).
                      Single-prompt optimizations use a dict with one entry.
             experiment_config: Optional experiment configuration.
+            sampling_tag: Optional sampling tag for deterministic subsampling per candidate.
 
         Returns:
             The score (float).
@@ -594,9 +614,11 @@ class BaseOptimizer(ABC):
                     agent=context.agent,
                     experiment_config=experiment_config,
                     n_samples=context.n_samples,
+                    n_samples_strategy=context.n_samples_strategy,
                     n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
+                    sampling_tag=sampling_tag,
                 )
         except Exception:
             context.finish_reason = "error"
@@ -613,7 +635,7 @@ class BaseOptimizer(ABC):
 
     def _score_from_evaluation_result(
         self,
-        evaluation_result: EvaluationResult,
+        evaluation_result: EvaluationResult | EvaluationResultOnDictItems,
         *,
         metric_name: str,
         empty_score: float | None = None,
@@ -636,7 +658,10 @@ class BaseOptimizer(ABC):
         experiment_config: dict[str, Any] | None = None,
         *,
         empty_score: float | None = None,
-    ) -> tuple[float, EvaluationResult]:
+        n_samples: int | float | str | None = None,
+        n_samples_strategy: str | None = None,
+        sampling_tag: str | None = None,
+    ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems]:
         """Evaluate prompts and return both the score and EvaluationResult."""
         self.pre_trial(context, prompts)
         try:
@@ -655,10 +680,12 @@ class BaseOptimizer(ABC):
                     metric=context.metric,
                     agent=context.agent,
                     experiment_config=experiment_config,
-                    n_samples=context.n_samples,
+                    n_samples=context.n_samples if n_samples is None else n_samples,
+                    n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
                     n_threads=normalize_eval_threads(getattr(self, "n_threads", None)),
                     verbose=self.verbose,
                     allow_tool_use=context.allow_tool_use,
+                    sampling_tag=sampling_tag,
                     return_evaluation_result=True,
                 )
         except Exception:
@@ -666,7 +693,9 @@ class BaseOptimizer(ABC):
             context.should_stop = True
             logger.exception("Evaluation failed; stopping optimization.")
             raise
-        if not isinstance(evaluation_result, EvaluationResult):
+        if not isinstance(
+            evaluation_result, (EvaluationResult, EvaluationResultOnDictItems)
+        ):
             raise TypeError("Expected EvaluationResult from evaluate_prompt.")
         score = self._score_from_evaluation_result(
             evaluation_result,
@@ -863,6 +892,91 @@ class BaseOptimizer(ABC):
         return runtime.extract_tool_prompts(tools)
 
     # ------------------------------------------------------------------
+    # Sampling helpers
+    # ------------------------------------------------------------------
+
+    def _get_root_rng(self) -> random.Random:
+        """Return the optimizer-scoped RNG."""
+        return self._rng
+
+    def _derive_rng(self, *tags: object) -> random.Random:
+        """Derive a deterministic RNG for a sub-phase."""
+        return rng_utils.derive_rng(self._get_root_rng(), *tags)
+
+    def _prepare_sampling_plan(
+        self,
+        dataset: Dataset,
+        n_samples: int | float | str | None,
+        dataset_item_ids: list[str] | None = None,
+        *,
+        phase: str = "eval",
+        seed_override: int | None = None,
+        strategy: str | None = None,
+    ) -> sampling.SamplingPlan:
+        """Build a sampling plan for a dataset phase."""
+        if dataset_item_ids is not None and n_samples is not None:
+            raise ValueError("Can't use n_samples and dataset_item_ids together.")
+
+        resolved_strategy = (
+            strategy
+            or getattr(self, "n_samples_strategy", None)
+            or sampling.DEFAULT_STRATEGY
+        )
+        resolved_seed = seed_override if seed_override is not None else self.seed
+        return sampling.resolve_sampling(
+            dataset=dataset,
+            n_samples=n_samples,
+            dataset_item_ids=dataset_item_ids,
+            phase=phase,
+            seed=resolved_seed,
+            strategy=resolved_strategy,
+        )
+
+    def _prepare_minibatch_plan(
+        self,
+        dataset: Dataset,
+        n_samples: int | float | str | None,
+        n_samples_minibatch: int | None,
+        *,
+        dataset_item_ids: list[str] | None = None,
+        phase: str = "minibatch",
+        seed_override: int | None = None,
+        strategy: str | None = None,
+    ) -> sampling.SamplingPlan:
+        """Build a sampling plan for an inner-loop minibatch."""
+        effective_n_samples = (
+            n_samples_minibatch if n_samples_minibatch is not None else n_samples
+        )
+        return self._prepare_sampling_plan(
+            dataset=dataset,
+            n_samples=effective_n_samples,
+            dataset_item_ids=dataset_item_ids,
+            phase=phase,
+            seed_override=seed_override,
+            strategy=strategy,
+        )
+
+    @staticmethod
+    def _build_sampling_tag(
+        *,
+        scope: str,
+        round_index: int | None = None,
+        candidate_id: str | None = None,
+        batch_index: int | None = None,
+        attempt: int | None = None,
+    ) -> str:
+        parts = [scope]
+        if round_index is not None:
+            parts.append(f"round:{round_index}")
+        if candidate_id is not None:
+            parts.append(f"candidate:{candidate_id}")
+        if batch_index is not None:
+            parts.append(f"batch:{batch_index}")
+        if attempt is not None:
+            parts.append(f"attempt:{attempt}")
+        return ":".join(parts)
+
+    # ------------------------------------------------------------------
     # Hooks (subclass extension points)
     # ------------------------------------------------------------------
 
@@ -1052,7 +1166,9 @@ class BaseOptimizer(ABC):
         metric: MetricFunction,
         agent: OptimizableAgent | None,
         experiment_config: dict | None,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
+        n_samples_minibatch: int | None,
+        n_samples_strategy: str | None,
         auto_continue: bool,
         project_name: str | None,
         optimization_id: str | None,
@@ -1071,6 +1187,8 @@ class BaseOptimizer(ABC):
             metric=metric,
             agent=agent,
             n_samples=n_samples,
+            n_samples_minibatch=n_samples_minibatch,
+            n_samples_strategy=n_samples_strategy,
             experiment_config=experiment_config,
             validation_dataset=validation_dataset,
             project_name=project_name,
@@ -1086,6 +1204,8 @@ class BaseOptimizer(ABC):
             dataset=getattr(dataset, "name", None),
             max_trials=max_trials,
             n_samples=n_samples,
+            n_samples_minibatch=n_samples_minibatch,
+            n_samples_strategy=context.n_samples_strategy,
             n_threads=getattr(self, "n_threads", None),
         )
 
@@ -1172,7 +1292,9 @@ class BaseOptimizer(ABC):
         metric: MetricFunction,
         agent: OptimizableAgent | None,
         experiment_config: dict | None,
-        n_samples: int | None,
+        n_samples: int | float | str | None,
+        n_samples_minibatch: int | None,
+        n_samples_strategy: str | None,
         auto_continue: bool,
         project_name: str | None,
         optimization_id: str | None,
@@ -1188,6 +1310,8 @@ class BaseOptimizer(ABC):
             "agent": agent,
             "experiment_config": experiment_config,
             "n_samples": n_samples,
+            "n_samples_minibatch": n_samples_minibatch,
+            "n_samples_strategy": n_samples_strategy,
             "auto_continue": auto_continue,
             "project_name": project_name,
             "optimization_id": optimization_id,
@@ -1256,7 +1380,9 @@ class BaseOptimizer(ABC):
         metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_minibatch: int | None = None,
+        n_samples_strategy: str | None = None,
         auto_continue: bool = False,
         project_name: str | None = None,
         optimization_id: str | None = None,
@@ -1287,6 +1413,9 @@ class BaseOptimizer(ABC):
            agent: Optional agent for prompt execution (defaults to LiteLLMAgent)
            experiment_config: Optional configuration for the experiment
            n_samples: Number of samples to use for evaluation
+           n_samples_minibatch: Optional number of samples for inner-loop minibatches
+           n_samples_strategy: Sampling strategy name (default "random_sorted")
+               TODO: keep internal until the strategy set is stabilized.
            auto_continue: Whether to continue optimization automatically
            project_name: Opik project name for logging traces (defaults to OPIK_PROJECT_NAME env or "Optimization")
            optimization_id: Optional ID to use when creating the Opik optimization run
@@ -1306,6 +1435,8 @@ class BaseOptimizer(ABC):
                 agent=agent,
                 experiment_config=experiment_config,
                 n_samples=n_samples,
+                n_samples_minibatch=n_samples_minibatch,
+                n_samples_strategy=n_samples_strategy,
                 auto_continue=auto_continue,
                 project_name=project_name,
                 optimization_id=optimization_id,
@@ -1525,11 +1656,14 @@ class BaseOptimizer(ABC):
         verbose: int = 1,
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: Literal[True] = True,
         allow_tool_use: bool | None = None,
-    ) -> EvaluationResult: ...
+        use_evaluate_on_dict_items: bool | None = None,
+        sampling_tag: str | None = None,
+    ) -> EvaluationResult | EvaluationResultOnDictItems: ...
 
     @overload
     def evaluate_prompt(
@@ -1542,10 +1676,13 @@ class BaseOptimizer(ABC):
         verbose: int = 1,
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: Literal[False] = False,
         allow_tool_use: bool | None = None,
+        use_evaluate_on_dict_items: bool | None = None,
+        sampling_tag: str | None = None,
     ) -> float: ...
 
     def evaluate_prompt(
@@ -1558,15 +1695,24 @@ class BaseOptimizer(ABC):
         verbose: int = 1,
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
         allow_tool_use: bool | None = None,
-    ) -> float | EvaluationResult:
-        random.seed(seed)
+        use_evaluate_on_dict_items: bool | None = None,
+        sampling_tag: str | None = None,
+    ) -> float | EvaluationResult | EvaluationResultOnDictItems:
+        sampling_seed = seed if seed is not None else self.seed
         n_threads = normalize_eval_threads(n_threads)
         if allow_tool_use is None:
             allow_tool_use = True
+        if use_evaluate_on_dict_items is None:
+            # TODO(opik-sdk): remove this flag once evaluate_on_dict_items is the default path.
+            use_evaluate_on_dict_items = constants.ENABLE_EVALUATE_ON_DICT_ITEMS
+        selection_rng = rng_utils.make_rng(
+            sampling_seed, "candidate_selection", sampling_tag or ""
+        )
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
@@ -1619,7 +1765,7 @@ class BaseOptimizer(ABC):
                         candidate_logprobs=getattr(
                             agent, "_last_candidate_logprobs", None
                         ),
-                        rng=random,
+                        rng=selection_rng,
                     )
                     cleaned_model_output = selection_result.output.strip()
                     if logger.isEnabledFor(logging.DEBUG):
@@ -1674,24 +1820,40 @@ class BaseOptimizer(ABC):
             build_optimizer_version=_OPTIMIZER_VERSION,
         )
 
-        if n_samples is not None:
-            if dataset_item_ids is not None:
-                raise Exception("Can't use n_samples and dataset_item_ids")
-
-            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
-            n_samples = min(n_samples, len(all_ids))
-            dataset_item_ids = random.sample(all_ids, n_samples)
+        phase = "eval" if sampling_tag is None else f"eval:{sampling_tag}"
+        sampling_plan = self._prepare_sampling_plan(
+            dataset=dataset,
+            n_samples=n_samples,
+            dataset_item_ids=dataset_item_ids,
+            phase=phase,
+            seed_override=sampling_seed,
+            strategy=n_samples_strategy,
+        )
+        resolved_ids = sampling_plan.dataset_item_ids
+        resolved_n_samples = (
+            None if resolved_ids is not None else sampling_plan.nb_samples
+        )
+        debug_log(
+            "evaluation_sampling",
+            sampling_tag=sampling_tag,
+            sampling_plan_mode=sampling_plan.mode,
+            n_samples=n_samples,
+            resolved_n_samples=resolved_n_samples,
+            dataset_item_ids_count=len(resolved_ids) if resolved_ids else 0,
+        )
 
         result = task_evaluator.evaluate(
             dataset=dataset,
             evaluated_task=llm_task,
             metric=metric,
             num_threads=n_threads,
-            dataset_item_ids=dataset_item_ids,
+            dataset_item_ids=resolved_ids,
             project_name=self.project_name,
             experiment_config=experiment_config,
             optimization_id=self.current_optimization_id,
             verbose=verbose,
             return_evaluation_result=return_evaluation_result,  # type: ignore[call-overload]
+            n_samples=resolved_n_samples,
+            use_evaluate_on_dict_items=use_evaluate_on_dict_items,
         )
         return result

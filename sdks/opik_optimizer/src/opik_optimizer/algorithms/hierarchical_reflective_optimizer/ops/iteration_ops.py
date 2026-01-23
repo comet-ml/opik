@@ -30,7 +30,8 @@ def run_root_cause_analysis(
     dataset: opik.Dataset,
     metric: MetricFunction,
     agent: Any,
-    n_samples: int | None,
+    n_samples: int | float | str | None,
+    sampling_tag: str | None = None,
 ) -> HierarchicalRootCauseAnalysis:
     with reporting.display_root_cause_analysis(
         verbose=optimizer.verbose
@@ -53,12 +54,14 @@ def run_root_cause_analysis(
                     metric=metric,
                     agent=agent,
                     n_samples=n_samples,
+                    n_samples_strategy=context.n_samples_strategy,
                     n_threads=normalize_eval_threads(
                         getattr(optimizer, "n_threads", None)
                     ),
                     experiment_config=context.experiment_config,
                     return_evaluation_result=True,
                     allow_tool_use=context.allow_tool_use,
+                    sampling_tag=sampling_tag,
                 )
             hierarchical_analysis = optimizer._hierarchical_root_cause_analysis(
                 train_dataset_experiment_result
@@ -85,7 +88,7 @@ def improve_over_failure_modes(
     validation_dataset: opik.Dataset | None,
     metric: MetricFunction,
     agent: Any,
-    n_samples: int | None,
+    n_samples: int | float | str | None,
     max_retries: int,
     max_trials: int,
     optimization_id: str | None,

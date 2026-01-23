@@ -2,6 +2,7 @@ from typing import Any, cast
 
 import copy
 import json
+import re
 import logging
 import warnings
 from datetime import datetime
@@ -35,7 +36,7 @@ from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
 from ...utils.logging import debug_log
 from ...constants import normalize_eval_threads
-from . import helpers, types
+from . import types
 from . import prompts as few_shot_prompts
 from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
 from collections.abc import Callable
@@ -130,6 +131,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # Instance state for custom evaluation (used by overridden evaluate_prompt)
         self._custom_evaluated_task: Callable[..., dict[str, Any]] | None = None
         self._custom_eval_item_ids: list[str] | None = None
+        self._custom_eval_n_samples: int | None = None
         self._custom_allow_tool_use: bool | None = None
 
         logger.debug(f"Initialized FewShotBayesianOptimizer with model: {model}")
@@ -154,10 +156,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         verbose: int = 1,
         dataset_item_ids: list[str] | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
+        n_samples_strategy: str | None = None,
         seed: int | None = None,
         return_evaluation_result: bool = False,
         allow_tool_use: bool = False,
+        use_evaluate_on_dict_items: bool | None = None,
+        sampling_tag: str | None = None,
     ) -> float:
         """
         Override evaluate_prompt to support custom evaluated_task.
@@ -175,6 +180,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 experiment_config=experiment_config,
                 verbose=verbose,
                 allow_tool_use=allow_tool_use,
+                use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+                sampling_tag=sampling_tag,
             )
 
         # Default behavior: delegate to parent
@@ -190,9 +197,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             dataset_item_ids=dataset_item_ids,
             experiment_config=experiment_config,
             n_samples=n_samples,
+            n_samples_strategy=n_samples_strategy,
             seed=seed,
             return_evaluation_result=False,
             allow_tool_use=allow_tool_use,
+            use_evaluate_on_dict_items=use_evaluate_on_dict_items,
+            sampling_tag=sampling_tag,
         )
 
     def _evaluate_custom_task(
@@ -204,12 +214,21 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         experiment_config: dict | None,
         verbose: int,
         allow_tool_use: bool | None,
+        use_evaluate_on_dict_items: bool | None,
+        sampling_tag: str | None,
     ) -> float:
         n_threads = normalize_eval_threads(n_threads or self.n_threads)
         if self._custom_evaluated_task is None:
             raise ValueError("Custom evaluated task is not set.")
         if allow_tool_use is not None:
             self._custom_allow_tool_use = allow_tool_use
+        debug_log(
+            "evaluation_sampling",
+            sampling_tag=sampling_tag,
+            sampling_mode="custom",
+            n_samples=self._custom_eval_n_samples,
+            dataset_item_ids_count=len(self._custom_eval_item_ids or []),
+        )
         return task_evaluator.evaluate(
             dataset=dataset,
             evaluated_task=self._custom_evaluated_task,
@@ -220,6 +239,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             experiment_config=experiment_config,
             optimization_id=self.current_optimization_id,
             verbose=verbose,
+            n_samples=self._custom_eval_n_samples,
+            use_evaluate_on_dict_items=bool(use_evaluate_on_dict_items),
         )
 
     def get_config(self, context: OptimizationContext) -> dict[str, Any]:
@@ -263,12 +284,33 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         if not dataset:
             return [], []
 
-        rng = helpers.make_rng(self.seed, "split_dataset", train_ratio)
+        rng = self._derive_rng("split_dataset", train_ratio)
         dataset_copy = dataset.copy()
         rng.shuffle(dataset_copy)
 
         split_idx = int(len(dataset_copy) * train_ratio)
         return dataset_copy[:split_idx], dataset_copy[split_idx:]
+
+    def _sanitize_prompt_field_names(
+        self, prompt_names: list[str]
+    ) -> tuple[list[str], dict[str, str]]:
+        """Normalize prompt names to valid identifiers for dynamic models."""
+        sanitized_names: list[str] = []
+        original_to_sanitized: dict[str, str] = {}
+        seen: dict[str, str] = {}
+        for name in prompt_names:
+            sanitized = re.sub(r"\W", "_", name).strip("_")
+            if not sanitized or sanitized[0].isdigit():
+                sanitized = f"prompt_{sanitized}"
+            if sanitized in seen and seen[sanitized] != name:
+                raise ValueError(
+                    "Prompt name collision after sanitization: "
+                    f"{seen[sanitized]!r} and {name!r} -> {sanitized!r}"
+                )
+            seen[sanitized] = name
+            sanitized_names.append(sanitized)
+            original_to_sanitized[name] = sanitized
+        return sanitized_names, original_to_sanitized
 
     def _create_few_shot_prompt_template(
         self,
@@ -311,9 +353,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             {"role": "user", "content": json.dumps(user_message)},
         ]
 
+        sanitized_names, original_to_sanitized = self._sanitize_prompt_field_names(
+            list(prompts.keys())
+        )
         # Create dynamic response model with explicit fields for each prompt
         DynamicFewShotPromptMessages = types.create_few_shot_response_model(
-            prompt_names=list(prompts.keys())
+            prompt_names=sanitized_names
         )
 
         logger.debug(f"few_shot_prompt_template - Calling LLM with: {messages}")
@@ -363,7 +408,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 # Access field using getattr since field names are dynamic
                 messages = [
                     x.model_dump(mode="json")
-                    for x in getattr(response_content, prompt_name)
+                    for x in getattr(
+                        response_content, original_to_sanitized[prompt_name]
+                    )
                 ]
                 new_prompt = prompts[prompt_name].copy()
                 new_prompt.set_messages(messages)
@@ -467,7 +514,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_trials: int = 10,
         optimization_id: str | None = None,
         experiment_config: dict | None = None,
-        n_samples: int | None = None,
+        n_samples: int | float | str | None = None,
         is_single_prompt_optimization: bool = False,
     ) -> AlgorithmResult:
         if agent is None:
@@ -493,16 +540,26 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 columnar_search_space.columns,
             )
 
-        eval_dataset_items = evaluation_dataset.get_items()
-        eval_dataset_item_ids = [item["id"] for item in eval_dataset_items]
-        if n_samples is not None and n_samples < len(dataset_items):
-            rng = helpers.make_rng(self.seed, "optimization_eval_ids", n_samples)
-            eval_dataset_item_ids = rng.sample(eval_dataset_item_ids, n_samples)
+        sampling_plan = self._prepare_sampling_plan(
+            dataset=evaluation_dataset,
+            n_samples=n_samples,
+            phase="optimization_eval",
+            seed_override=self.seed,
+            strategy=context.n_samples_strategy,
+        )
+        eval_dataset_item_ids = sampling_plan.dataset_item_ids
+        effective_n_samples = (
+            None if eval_dataset_item_ids is not None else sampling_plan.nb_samples
+        )
 
         configuration_updates = parent_helpers.drop_none(
             {
                 "n_trials": n_trials,
-                "n_samples": n_samples,
+                "n_samples": (
+                    len(eval_dataset_item_ids)
+                    if eval_dataset_item_ids is not None
+                    else effective_n_samples
+                ),
                 "baseline_score": baseline_score,
             }
         )
@@ -624,16 +681,27 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             # Set custom task for evaluate_prompt override
             self._custom_evaluated_task = llm_task
             self._custom_eval_item_ids = eval_dataset_item_ids
+            self._custom_eval_n_samples = effective_n_samples
             try:
                 # Use base optimizer's evaluate() which handles:
                 # - Trial counting (context.trials_completed)
                 # - Early stop checks (perfect score, max trials)
                 # - Progress display hooks
-                score = self.evaluate(context, prompts_with_examples, trial_config)
+                sampling_tag = self._build_sampling_tag(
+                    scope="fewshot",
+                    candidate_id=f"trial{trial.number}",
+                )
+                score = self.evaluate(
+                    context,
+                    prompts_with_examples,
+                    trial_config,
+                    sampling_tag=sampling_tag,
+                )
             finally:
                 # Clear custom task state
                 self._custom_evaluated_task = None
                 self._custom_eval_item_ids = None
+                self._custom_eval_n_samples = None
                 self._custom_allow_tool_use = None
 
             logger.debug(f"Trial {trial.number} score: {score:.4f}")

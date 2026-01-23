@@ -64,7 +64,16 @@ def score_candidate_prompts(
             reporter.set_generated_prompts(candidate_count, candidate)
             context.extra_params["suppress_evaluation_progress"] = True
             try:
-                prompt_score = optimizer.evaluate(context, candidate)
+                sampling_tag = optimizer._build_sampling_tag(
+                    scope="meta_prompt",
+                    round_index=getattr(optimizer, "_current_round", None),
+                    candidate_id=f"cand{candidate_count}",
+                )
+                prompt_score = optimizer.evaluate(
+                    context,
+                    candidate,
+                    sampling_tag=sampling_tag,
+                )
             finally:
                 context.extra_params.pop("suppress_evaluation_progress", None)
             reporter.set_final_score(current_round_best_score, prompt_score)

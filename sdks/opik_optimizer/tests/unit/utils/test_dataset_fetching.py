@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import pytest
+
+import httpx  # type: ignore[import-not-found]
 
 from opik_optimizer.utils import dataset as dataset_utils
 
@@ -124,3 +127,23 @@ def test_fetch_records_for_slice_falls_back_to_download(
 
     assert records == [{"downloaded": True}]
     assert download_called
+
+
+def test_load_hf_dataset_slice_handles_stream_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_fetch(*_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
+        raise httpx.RemoteProtocolError("boom")
+
+    monkeypatch.setattr(dataset_utils, "fetch_records_for_slice", fake_fetch)
+
+    with pytest.raises(RuntimeError, match="Dataset download interrupted"):
+        dataset_utils.load_hf_dataset_slice(
+            base_name="test",
+            requested_split="train",
+            presets={},
+            default_source_split="train",
+            load_kwargs_resolver=lambda split: {"path": "dummy", "split": split},
+            start=0,
+            count=1,
+        )

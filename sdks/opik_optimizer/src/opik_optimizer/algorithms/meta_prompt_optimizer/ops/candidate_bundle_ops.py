@@ -4,7 +4,6 @@ Agent-bundle candidate generation for the Meta-Prompt Optimizer.
 
 import json
 import logging
-import random
 from typing import Any
 from collections.abc import Callable, Sequence
 
@@ -70,8 +69,12 @@ def generate_agent_bundle_candidates(
             source=current_prompts,
         )
 
+        candidate_rng = optimizer._derive_rng("candidate_generation", round_num)
         pattern_guidance = ""
-        if winning_patterns and random.random() < optimizer.pattern_injection_rate:
+        if (
+            winning_patterns
+            and candidate_rng.random() < optimizer.pattern_injection_rate
+        ):
             pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
             pattern_guidance += (
                 "The following patterns have been successful in high-scoring prompts:\n"

@@ -258,6 +258,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._best_primary_score_history: list[float] = []
         self._gens_since_pop_improvement: int = 0
         self._reporter: Any = None
+        self._current_generation_idx: int | None = None
         self._deap_evaluate_individual_fitness: Callable[[Any], tuple[float, ...]] = (
             lambda _ind: (0.0,)
         )
