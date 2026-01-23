@@ -30,7 +30,6 @@ const RuleRowActions: React.FC<RuleRowActionsProps> = ({
 
   const handleDelete = () => {
     mutate({ ids: [rule.id] });
-    close();
   };
 
   const handleEdit = () => {

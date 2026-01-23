@@ -18,7 +18,6 @@ export const PromptRowActions: React.FC<PromptRowActionsProps> = ({
 
   const handleDelete = () => {
     promptDeleteMutation.mutate({ promptId: prompt.id });
-    close();
   };
 
   return (

@@ -37,7 +37,6 @@ const AnnotationQueueRowActions: React.FC<AnnotationQueueRowActionsProps> = ({
 
   const handleDelete = () => {
     mutate({ ids: [queue.id] });
-    close();
   };
 
   return (

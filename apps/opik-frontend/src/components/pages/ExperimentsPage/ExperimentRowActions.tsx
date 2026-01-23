@@ -20,7 +20,6 @@ const ExperimentRowActions: React.FC<ExperimentRowActionsProps> = ({
 
   const handleDelete = () => {
     experimentBatchDeleteMutation.mutate({ ids: [experiment.id] });
-    close();
   };
 
   const handleUpdate = (name: string, configuration: object) => {

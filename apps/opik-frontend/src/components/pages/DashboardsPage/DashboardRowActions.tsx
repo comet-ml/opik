@@ -18,7 +18,6 @@ export const DashboardRowActions: React.FC<DashboardRowActionsProps> = ({
 
   const handleDelete = () => {
     deleteDashboardMutate({ ids: [dashboard.id] });
-    close();
   };
 
   return (

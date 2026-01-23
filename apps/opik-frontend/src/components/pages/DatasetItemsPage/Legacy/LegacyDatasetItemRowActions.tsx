@@ -25,7 +25,6 @@ export const LegacyDatasetItemRowActions: React.FC<
       datasetItemId: datasetItem.id,
       workspaceName,
     });
-    close();
   };
 
   return (

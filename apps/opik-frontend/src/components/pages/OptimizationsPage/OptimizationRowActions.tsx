@@ -17,7 +17,6 @@ const OptimizationRowActions: React.FC<OptimizationRowActionsProps> = ({
 
   const handleDelete = () => {
     mutate({ ids: [optimization.id] });
-    close();
   };
 
   return (

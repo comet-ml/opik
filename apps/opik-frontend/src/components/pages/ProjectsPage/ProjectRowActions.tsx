@@ -18,7 +18,6 @@ export const ProjectRowActions: React.FC<ProjectRowActionsProps> = ({
 
   const handleDelete = () => {
     mutate({ projectId: project.id });
-    close();
   };
 
   return (

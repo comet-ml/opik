@@ -23,7 +23,6 @@ const AIProvidersRowActions: React.FC<AIProvidersRowActionsProps> = ({
     deleteProviderKey({
       providerId: providerKey.id,
     });
-    close();
   };
 
   if (isReadOnly) {

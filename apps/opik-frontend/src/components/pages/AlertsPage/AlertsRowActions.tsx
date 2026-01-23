@@ -33,7 +33,6 @@ const AlertsRowActions: React.FC<AlertsRowActionsProps> = ({ row }) => {
   const handleDelete = () => {
     if (!alert.id) return;
     mutate({ ids: [alert.id] });
-    close();
   };
 
   return (
