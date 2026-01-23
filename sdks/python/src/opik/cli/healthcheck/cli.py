@@ -79,5 +79,6 @@ def healthcheck(
             api_key=api_key,
             debug=debug,
         )
-    else:
-        opik_healthcheck.run(show_installed_packages)
+
+    # Always run the standard healthcheck
+    opik_healthcheck.run(show_installed_packages)

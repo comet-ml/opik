@@ -156,12 +156,6 @@ def run_smoke_test(
 
             console.print("[green]✓[/green] Ended trace")
 
-        console.print("\n[bold green]Smoke test completed successfully![/bold green]")
-        console.print(
-            f"[dim]Check your Opik dashboard at workspace '{workspace}' "
-            f"and project '{project_name}' to verify the trace was created.[/dim]"
-        )
-
         # Note: Temporary image file is not deleted here to ensure it remains
         # available during async upload. The OS will clean it up automatically.
 
@@ -179,9 +173,23 @@ def run_smoke_test(
             try:
                 client.flush()
                 client.end()
+                # Only print success messages after flush/end complete successfully
                 if original_exception is None:
                     console.print("[green]✓[/green] Flushed data to Opik")
+                    console.print(
+                        "\n[bold green]Smoke test completed successfully![/bold green]"
+                    )
+                    console.print(
+                        f"[dim]Check your Opik dashboard at workspace '{workspace}' "
+                        f"and project '{project_name}' to verify the trace was created.[/dim]"
+                    )
             except Exception as cleanup_error:
+                # Treat flush/end failures as test failures
+                if original_exception is None:
+                    original_exception = cleanup_error
+                console.print(
+                    f"[red]Error flushing data to Opik:[/red] {cleanup_error}"
+                )
                 if debug:
                     console.print(
                         f"[yellow]Warning: Error during client cleanup:[/yellow] {cleanup_error}"
