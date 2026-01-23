@@ -322,8 +322,8 @@ public class ExperimentResourceClient {
 
     public Experiment.ExperimentPage findExperiments(
             int page, int size, String name, String apiKey, String workspaceName) {
-        return findExperiments(page, size, null, null, null, name, false, null, null, null, null, false, apiKey,
-                workspaceName, HttpStatus.SC_OK);
+        return findExperiments(page, size, null, null, null, name, false, null, null, null, apiKey, workspaceName,
+                HttpStatus.SC_OK);
     }
 
     public Experiment.ExperimentPage findExperiments(
