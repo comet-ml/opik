@@ -1,0 +1,38 @@
+---
+description: Project structure and tech overview
+globs:
+alwaysApply: true
+---
+# Project Overview
+
+## Structure
+```
+apps/
+  opik-backend/       # Java 21, Dropwizard, MySQL, ClickHouse
+  opik-frontend/      # React, TypeScript, Vite, Tailwind
+  opik-documentation/ # Fern docs
+sdks/
+  python/             # Python 3.8+, Pydantic, httpx
+  typescript/         # Node 18+, TypeScript, Zod
+  opik_optimizer/     # Python optimization SDK
+deployment/           # Docker Compose, Helm charts
+tests_end_to_end/     # Playwright E2E tests
+```
+
+## Quick Commands
+| Task | Command |
+|------|---------|
+| Start dev | `./scripts/dev-runner.sh --restart` |
+| Start (no rebuild) | `./scripts/dev-runner.sh --start` |
+| Stop | `./scripts/dev-runner.sh --stop` |
+| Build BE | `./scripts/dev-runner.sh --build-be` |
+| Build FE | `./scripts/dev-runner.sh --build-fe` |
+| Docker full | `./opik.sh --build --port-mapping` |
+
+## URLs (dev mode)
+- Frontend: `http://localhost:5174`
+- Backend: `http://localhost:8080`
+- Swagger: `http://localhost:8080/swagger`
+
+## Component Rules
+Detailed rules in `.cursor/rules/apps/` and `.cursor/rules/sdks/` subdirectories.

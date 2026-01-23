@@ -1,0 +1,85 @@
+---
+description: Guidelines for responsive design - when to use Tailwind CSS breakpoints vs useIsPhone hook
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+# Responsive Design
+
+## ⚠️ When to Add Mobile Support
+
+**Phone responsiveness is NOT required by default.** Only add when:
+1. Explicitly requested in Jira ticket
+2. Explicitly requested by user
+3. Working on onboarding features
+4. Component already has phone support
+
+## Tailwind is Mobile-First
+
+| Tailwind | useIsPhone equivalent | Applies to |
+|----------|----------------------|------------|
+| No prefix (base) | `isPhonePortrait === true` | Phone/mobile |
+| `md:` | `isPhonePortrait === false` | Tablet and desktop |
+
+```typescript
+// Equivalent approaches:
+<div className="w-full px-4 md:w-[468px] md:px-0">
+<div className={isPhonePortrait ? "w-full px-4" : "w-[468px] px-0"}>
+```
+
+## Decision Framework
+
+### Use Tailwind CSS When:
+- Styling-only changes (width, padding, margins)
+- Layout direction (`flex-col` → `md:flex-row`)
+- Visibility (`hidden md:block`)
+- Typography (`text-lg md:text-2xl`)
+
+```typescript
+// ✅ Good
+<div className="flex flex-col gap-4 md:flex-row md:gap-6">
+<div className="hidden md:block">Desktop only</div>
+```
+
+### Use useIsPhone Hook When:
+- Different components (Select on mobile vs Tabs on desktop)
+- Conditional wrappers
+- Different props based on device
+- Structural DOM changes
+
+```typescript
+const { isPhonePortrait } = useIsPhone();
+
+if (isPhonePortrait) {
+  return <Select>...</Select>;
+}
+return <Tabs>...</Tabs>;
+
+// Or different props
+<DialogContent side={isPhonePortrait ? "bottom" : "right"}>
+```
+
+## Available Hooks
+```typescript
+import { useIsPhone } from "@/hooks/useIsPhone";
+const { isPhone, isPhonePortrait, isPhoneLandscape } = useIsPhone();
+
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+const isTablet = useMediaQuery("(min-width: 768px) and (max-width: 1023px)");
+```
+
+## Breakpoints
+| Prefix | Min Width |
+|--------|-----------|
+| `sm:` | 640px |
+| `md:` | 768px |
+| `lg:` | 1024px |
+| `xl:` | 1280px |
+| `2xl:` | 1536px |
+
+## Why Prefer Tailwind
+- No JavaScript execution
+- No React re-renders
+- Better initial paint (SSR friendly)
+- Simpler code
+
+Only use `useIsPhone` when CSS cannot achieve the result.

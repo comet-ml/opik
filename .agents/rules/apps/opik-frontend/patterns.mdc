@@ -1,0 +1,112 @@
+---
+description: Frontend patterns for forms, state management, and API data fetching
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+# Frontend Patterns
+
+## Forms (React Hook Form + Zod)
+
+### Basic Setup
+```typescript
+const formSchema = z.object({
+  name: z.string().min(1, "Required"),
+  email: z.string().email("Invalid email"),
+});
+type FormData = z.infer<typeof formSchema>;
+
+const form = useForm<FormData>({
+  resolver: zodResolver(formSchema),
+  defaultValues: { name: "", email: "" },
+});
+```
+
+### Form JSX
+```typescript
+<Form {...form}>
+  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <FormField control={form.control} name="name"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Name</FormLabel>
+          <FormControl><Input {...field} /></FormControl>
+          <FormMessage />
+        </FormItem>
+      )} />
+    <Button type="submit" disabled={form.formState.isSubmitting}>Submit</Button>
+  </form>
+</Form>
+```
+
+### Dynamic Fields
+Use `useFieldArray` for arrays: `const { fields, append, remove } = useFieldArray({ control, name: "items" })`
+
+## State Management (Zustand)
+
+### Store Pattern
+```typescript
+type EntityStore = EntityState & EntityActions;
+
+const useEntityStore = create<EntityStore>((set) => ({
+  selectedEntity: null,
+  setSelectedEntity: (entity) => set({ selectedEntity: entity }),
+}));
+
+// Export selectors for performance
+export const useSelectedEntity = () => useEntityStore((s) => s.selectedEntity);
+```
+
+### Local Storage
+```typescript
+import useLocalStorageState from "use-local-storage-state";
+const [prefs, setPrefs] = useLocalStorageState<Prefs>("key", { defaultValue: {...} });
+```
+
+### URL State
+```typescript
+const { page, search } = useSearch({ strict: false });
+const navigate = useNavigate();
+const updateUrl = (updates) => navigate({ search: (prev) => ({ ...prev, ...updates }) });
+```
+
+## API & Data Fetching (TanStack Query)
+
+### Query Pattern
+```typescript
+export default function useEntityList(params: Params) {
+  return useQuery({
+    queryKey: [ENTITY_KEY, params],
+    queryFn: (ctx) => getEntityList(ctx, params),
+  });
+}
+```
+
+### Mutation Pattern
+```typescript
+const mutation = useMutation({
+  mutationFn: deleteEntity,
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: [ENTITIES_KEY] });
+    toast({ description: "Deleted" });
+  },
+  onError: () => toast({ description: "Failed", variant: "destructive" }),
+});
+```
+
+### Optimistic Updates
+```typescript
+onMutate: async (newData) => {
+  await queryClient.cancelQueries({ queryKey });
+  const previous = queryClient.getQueryData(queryKey);
+  queryClient.setQueryData(queryKey, (old) => /* update */);
+  return { previous };
+},
+onError: (err, data, ctx) => queryClient.setQueryData(queryKey, ctx?.previous),
+onSettled: () => queryClient.invalidateQueries({ queryKey }),
+```
+
+### Loading/Error States
+```typescript
+if (isLoading) return <Loader />;
+if (error) return <ErrorComponent message={error.message} />;
+```

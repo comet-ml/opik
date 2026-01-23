@@ -1,0 +1,25 @@
+---
+description: Error handling and logging
+globs: apps/opik-backend/**/*
+alwaysApply: false
+---
+# Errors & Logging
+
+## Exceptions
+- Catch specific exceptions, not `Exception`/`Throwable`
+- Use Jakarta exceptions: `BadRequestException`, `NotFoundException`, `ConflictException`, `ForbiddenException`, `InternalServerErrorException`
+- Use `io.dropwizard.jersey.errors.ErrorMessage` for responses
+- Use `com.comet.opik.api.error.ErrorMessage` for complex errors with details
+- Do NOT create new exception or error message classes
+
+## Logging
+- Use `@Slf4j` annotation
+- Surround values with quotes: `log.info("Created user: '{}'", id)`
+- Log levels: ERROR (failures), WARN (recoverable), INFO (business events), DEBUG (details)
+- Always pass exception as last param: `log.error("Failed", exception)`
+
+## Never Log (PII/Secrets)
+- Email, phone, names, passwords, API keys, tokens, credentials
+
+## Safe to Log
+- IDs, operation names, error codes, timestamps, durations

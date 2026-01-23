@@ -1,0 +1,32 @@
+---
+description: API design and business logic
+globs: apps/opik-backend/**/*
+alwaysApply: false
+---
+# API & Business Logic
+
+## REST Endpoints
+- Use proper HTTP methods: GET/POST/PUT/PATCH/DELETE
+- URL pattern: `/api/v1/resources`, `/api/v1/resources/{id}`
+- Status codes: 200 OK, 201 Created, 204 No Content, 400/401/403/404/409/500
+- Use `@Valid` on request bodies
+- Use `@QueryParam` with `@Min`/`@DefaultValue` for pagination
+- Document with Swagger `@Operation`, `@ApiResponse`, `@Schema`
+
+## DTOs
+- Naming: `EntityName`, `EntityNameCreateRequest`, `EntityNameUpdateRequest`, `EntityNameResponse`
+- Use Jakarta validation: `@NotBlank`, `@NotNull`, `@Size`, `@Email`
+- Use `@JsonView` for serialization control
+
+## Services
+- Wrap MySQL operations in `transactionTemplate.inTransaction(WRITE/READ_ONLY, handle -> ...)`
+- Use `handle.attach(DaoClass.class)` inside transaction
+- Use `IdGenerator.generate()` for UUID v7
+- Throw Jakarta exceptions: `BadRequestException`, `NotFoundException`, `ConflictException`
+
+## ID Generation
+```java
+import com.comet.opik.domain.IdGenerator;
+private final @NonNull IdGenerator idGenerator;
+String id = idGenerator.generate(); // UUID v7
+```

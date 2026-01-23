@@ -1,0 +1,73 @@
+---
+description: Error handling, logging, and dependencies for the Python SDK
+globs: sdks/python/src/opik/**/*
+alwaysApply: false
+---
+# Errors, Logging & Dependencies
+
+## Exception Hierarchy
+```python
+OpikException              # Base exception
+├── ConfigurationError     # Invalid config
+├── MetricComputationError # Metric failures (raise, don't mask)
+├── GuardrailValidationFailed  # Guardrail failures
+└── ScoreMethodMissingArguments  # Missing score args
+```
+
+## Error Handling
+- Use specific exceptions, not generic `Exception`
+- Include structured data in exceptions
+- Handle 409 (conflict) silently for retries
+- Handle 429 (rate limit) with retry logic
+- Log errors with context, never sensitive data
+
+```python
+except rest_api_core.ApiError as e:
+    if e.status_code == 409:
+        return  # Duplicate, ignore
+    elif e.status_code == 429:
+        # Handle rate limiting
+    LOGGER.error("Failed: %s", e, extra={"error_tracking_extra": ...})
+```
+
+## Logging
+```python
+import logging
+LOGGER = logging.getLogger(__name__)
+
+# Levels
+LOGGER.error("System failures", exc_info=True)
+LOGGER.warning("Recoverable issues")  
+LOGGER.info("Business events")
+LOGGER.debug("Details")
+```
+
+### Never Log (PII/Secrets)
+API keys, tokens, emails, names, credentials
+
+### Safe to Log
+Request IDs, status codes, error types, timing data
+
+## Dependencies
+
+### Core (`setup.py`)
+`httpx`, `pydantic>=2.0`, `litellm`, `openai`, `tenacity`, `rich`, `tqdm`
+
+### Python Support
+`>=3.8` (3.8, 3.9, 3.10, 3.11, 3.12)
+
+### Conditional Imports
+```python
+def lazy_import_OpikLogger():
+    try:
+        from litellm.integrations.opik.opik import OpikLogger
+        return OpikLogger
+    except ImportError:
+        return None
+```
+
+### Adding Dependencies
+1. Is it necessary? Can existing deps cover it?
+2. Actively maintained? License compatible?
+3. Add with version bounds: `"pydantic>=2.0.0,<3.0.0"`
+4. Guard optional imports with try/except

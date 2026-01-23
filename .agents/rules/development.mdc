@@ -1,0 +1,40 @@
+---
+description: Local development workflow
+globs:
+alwaysApply: false
+---
+# Development Workflow
+
+## First Time Setup
+```bash
+./hooks-install.sh                 # Install pre-commit hook
+./scripts/dev-runner.sh --restart  # Build and start all services
+```
+
+## Dev Runner (Recommended)
+```bash
+./scripts/dev-runner.sh --restart      # Full rebuild + start
+./scripts/dev-runner.sh --start        # Start without rebuild
+./scripts/dev-runner.sh --stop         # Stop all
+./scripts/dev-runner.sh --verify       # Check status
+./scripts/dev-runner.sh --be-only-restart  # Backend process + Docker frontend
+```
+
+## SDK Development
+**Python:** `cd sdks/python && pip install -e . && pytest`
+**TypeScript:** `cd sdks/typescript && npm install && npm test`
+
+Configure for local: `export OPIK_URL_OVERRIDE='http://localhost:8080'`
+
+## Docker (E2E testing)
+```bash
+./opik.sh --build --port-mapping   # Full stack
+./opik.sh --infra --port-mapping   # Infrastructure only
+./opik.sh --clean                  # Reset (DATA LOSS)
+```
+
+## Troubleshooting
+- Logs: `tail -f /tmp/opik-backend.log` or `/tmp/opik-frontend.log`
+- Port conflicts: `lsof -i :8080` or `:5174`
+- Reset: `./scripts/dev-runner.sh --stop && ./scripts/dev-runner.sh --restart`
+- Hard reset: `./opik.sh --clean` (removes all data)

@@ -1,0 +1,85 @@
+---
+description: Code structure, imports, naming, and design principles for the Python SDK
+globs: sdks/python/src/opik/**/*
+alwaysApply: false
+---
+# Code Quality
+
+## Import Organization
+```python
+# Standard library
+import logging
+from typing import Any, Dict, List, Optional
+
+# Third-party
+import httpx
+
+# Local modules (import modules, not names)
+from opik.api_objects import opik_client
+from opik import config, exceptions
+from opik.message_processing import messages
+
+LOGGER = logging.getLogger(__name__)
+```
+
+- Import modules, not names (except `typing`)
+- Use `TYPE_CHECKING` for circular import avoidance
+- Group: stdlib → third-party → local
+
+## Access Control
+- `_method()` for internal/protected methods
+- `_CONSTANT` for module-internal constants
+- Review visibility: "Is this called from outside the class?"
+
+## Naming Conventions
+- `PascalCase`: Classes (`OpikConfigurator`)
+- `snake_case`: Functions, methods, variables
+- `UPPER_SNAKE`: Constants (`OPIK_BASE_URL_CLOUD`)
+- Meaningful names: `OpikMessageProcessor` not `Processor`
+
+## SOLID Principles
+- **Single Responsibility**: One module, one purpose
+- **Open/Closed**: Use factory patterns for extension
+- **Dependency Inversion**: Inject dependencies, use builders
+
+## API Design
+- `opik.Opik` is the main entry point
+- Consistent patterns: `create_*`, `get_*`, `search_*`, `delete_*`
+- Consistent parameter ordering across similar methods
+- High-level API with defaults, low-level without
+
+## Type Hints
+```python
+def search_spans(
+    self,
+    project_name: Optional[str] = None,
+    max_results: int = 1000,
+) -> List[span_public.SpanPublic]: ...
+```
+
+## Docstrings
+```python
+def create_prompt(self, name: str, prompt: str) -> Prompt:
+    """
+    Creates a new prompt with the given name and template.
+    
+    Args:
+        name: The name of the prompt.
+        prompt: The template content.
+    
+    Returns:
+        A Prompt object.
+    
+    Raises:
+        ApiError: If creation fails.
+    """
+```
+
+## Module Organization
+```
+opik/
+├── api_objects/      # API layer
+├── integrations/     # External library integrations
+├── evaluation/       # Metrics and evaluation
+└── message_processing/  # Background processing
+```

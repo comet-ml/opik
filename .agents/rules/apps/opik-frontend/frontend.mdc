@@ -1,0 +1,64 @@
+---
+description: Frontend technology stack and project structure guidelines
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+# Frontend Development
+
+## Tech Stack
+- **React 18** + **TypeScript** + **Vite**
+- **TanStack Router** + **TanStack Query** for routing/data
+- **Zustand** for state, **use-local-storage-state** for persistence
+- **React Hook Form** + **Zod** for forms
+- **shadcn/ui** + **Radix UI** + **Tailwind CSS** for UI
+- **CodeMirror 6** for code editing, **Recharts** for charts
+- **Lodash** (individual imports for tree-shaking)
+- **Vitest** + **@testing-library/react** for testing
+
+## Project Structure
+```
+src/
+├── api/           # React Query hooks
+├── components/
+│   ├── ui/        # shadcn/ui base components
+│   ├── shared/    # Reusable business components
+│   ├── layout/    # Layout components
+│   ├── pages/     # Page-specific components
+│   └── pages-shared/  # Cross-page components
+├── hooks/         # Custom React hooks
+├── lib/           # Utilities (use cn() from utils)
+├── store/         # Zustand stores
+├── types/         # TypeScript definitions
+├── constants/     # App constants
+└── icons/         # SVG icons
+```
+
+## Component Structure
+```typescript
+const Component: React.FunctionComponent<Props> = ({ ...props }) => {
+  // 1. State hooks
+  // 2. Queries/mutations
+  // 3. useMemo (only for complex computations)
+  // 4. useCallback (only if passed to children)
+  // 5. Event handlers
+  
+  if (isLoading) return <Loader />;
+  
+  return <div>{/* JSX */}</div>;
+};
+
+export default Component;
+```
+
+## Import Order
+1. React and external libraries
+2. UI components (grouped by source)
+3. Shared components
+4. Hooks and utilities
+5. Lodash (individual: `import pick from "lodash/pick"`)
+6. Types and constants
+
+## Performance Rules
+- **useMemo**: Only for complex computations, large data transformations
+- **useCallback**: Only for functions passed to children or in useEffect deps
+- Simple fallbacks don't need memoization: `const items = data?.content ?? []`

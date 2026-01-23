@@ -1,0 +1,99 @@
+---
+description: Frontend testing patterns for unit tests and accessibility
+globs: apps/opik-frontend/**/*
+alwaysApply: false
+---
+# Testing Guidelines
+
+## Stack
+- **Vitest** + **@testing-library/react** + **happy-dom**
+- Co-locate tests: `Component.tsx` → `Component.test.tsx`
+
+## When to Test
+- **Always**: Complex utilities, data processing, filter/search logic, business logic
+- **Consider**: Custom hooks with state, components with conditional rendering
+- **Don't**: Simple UI components, third-party integrations, trivial getters
+
+## Test Structure (AAA Pattern)
+```typescript
+describe("ComponentName", () => {
+  describe("feature group", () => {
+    it("should do X when Y", () => {
+      // Arrange
+      const input = createTestData();
+      // Act
+      const result = functionUnderTest(input);
+      // Assert
+      expect(result).toEqual(expected);
+    });
+  });
+});
+```
+
+## Testing Patterns
+```typescript
+// Component testing
+const { getByText, getByRole } = render(<Component />);
+await userEvent.click(screen.getByRole('button', { name: /save/i }));
+await waitFor(() => expect(onSave).toHaveBeenCalled());
+
+// Hook testing
+const { result } = renderHook(() => useCustomHook());
+expect(result.current.value).toBe(expected);
+```
+
+## Edge Cases (Always Test)
+- Empty input: `processData([])`
+- Null/undefined: `processData(null)`
+- Large datasets: `Array(1000).fill().map(...)`
+- Malformed data
+
+## Commands
+```bash
+npm test                    # Run all
+npm run test:ui             # Watch mode
+npm test -- file.test.ts    # Specific file
+npm test -- --coverage      # With coverage
+```
+
+---
+
+## Accessibility
+
+### Semantic HTML
+```typescript
+// ✅ <header>, <nav>, <main>, <section>, <article>
+// ❌ <div> for everything
+```
+
+### ARIA
+```typescript
+<Button aria-label="Delete item"><TrashIcon /></Button>
+<Input aria-describedby="email-help" />
+<Button aria-expanded={isOpen} aria-controls="menu">Options</Button>
+```
+
+### Keyboard Navigation
+```typescript
+const handleKeyDown = (e: React.KeyboardEvent) => {
+  if (e.key === 'Enter' || e.key === ' ') handleAction();
+  if (e.key === 'Escape') handleClose();
+};
+<div role="button" tabIndex={0} onKeyDown={handleKeyDown} onClick={handleAction} />
+```
+
+### Focus & Headings
+- Use `focus:ring-2` for visible focus indicators
+- Use `FocusTrap` in modals
+- Maintain heading hierarchy: `h1` → `h2` → `h3` (no skipping)
+
+### Loading/Error States
+```typescript
+<div role="status" aria-live="polite">Loading...</div>
+<Alert role="alert" variant="destructive">{error}</Alert>
+```
+
+## Test Best Practices
+1. Test behavior, not implementation: `getByRole("button")` > `getByTestId`
+2. Test accessibility features
+3. Test error scenarios

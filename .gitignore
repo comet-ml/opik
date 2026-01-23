@@ -79,8 +79,11 @@ pip-log.txt
 # VS Code
 .vscode
 
-# Claude Code
+# AI editor generated files (source of truth: .ai/)
+.cursor
 .claude/
+CLAUDE.md
+AGENTS.md
 
 # charts
 deployment/helm_chart/opik/charts

@@ -1,0 +1,37 @@
+---
+description: Documentation standards
+globs: apps/opik-documentation/**/*
+alwaysApply: false
+---
+# Documentation Standards
+
+## Integration Types
+| Type | When to Use |
+|------|-------------|
+| Code | Users install Opik Python SDK, use `track_*()` wrappers |
+| LiteLLM | LLM provider via OpikLogger callback |
+| OpenTelemetry | Config-only via OTEL env vars, NO SDK features |
+
+**Critical:** OTEL integrations NEVER include `@track`, evaluation, or `opik.configure()`.
+
+## Page Frontmatter
+```yaml
+title: Observability for [Name] with Opik
+description: Start here to integrate Opik into your [NAME]-based app...
+```
+- Include language spec `(Python)` in title ONLY when multiple language versions exist
+- Navigation and overview cards: NO language specs (context from section)
+
+## Integration Docs
+Location: `apps/opik-documentation/documentation/fern/docs/tracing/integrations/`
+Navigation: `docs.yml` under `integrations` tab, organized by language
+
+## When Adding Integrations
+Update ALL of:
+1. README.md (and translations: readme_CN/JP/KO.md)
+2. `docs/tracing/integrations/overview.mdx`
+3. `docs.yml` navigation
+4. Integration page itself
+
+## Cursor Rules
+Place in `.cursor/rules/*.mdc` with kebab-case names. Use frontmatter: `description`, `globs`, `alwaysApply`.
