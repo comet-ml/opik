@@ -25,15 +25,15 @@ from opik.cli.healthcheck.smoke_test import run_smoke_test
 @click.option(
     "--project-name",
     type=str,
-    default="smoke-test-project",
-    help="Project name for the smoke test. Defaults to 'smoke-test-project'.",
+    default=None,
+    help="Project name for the smoke test (only used when --smoke-test is provided). Defaults to 'smoke-test-project'.",
 )
 @click.pass_context
 def healthcheck(
     ctx: click.Context,
     show_installed_packages: bool,
     smoke_test: Optional[str],
-    project_name: str,
+    project_name: Optional[str],
 ) -> None:
     """
     Performs a health check of the application, including validation of configuration,
@@ -61,7 +61,18 @@ def healthcheck(
 
         opik healthcheck --smoke-test my-workspace --project-name my-test-project
     """
+    # Validate that --project-name is only used with --smoke-test
+    if project_name is not None and smoke_test is None:
+        raise click.BadParameter(
+            "--project-name can only be used with --smoke-test",
+            param_hint="--project-name",
+        )
+
     if smoke_test is not None:
+        # Use default project name if smoke_test is provided but project_name is not
+        if project_name is None:
+            project_name = "smoke-test-project"
+
         # Validate that workspace is not empty
         if smoke_test == "":
             raise click.BadParameter(
