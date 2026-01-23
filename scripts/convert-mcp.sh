@@ -9,7 +9,8 @@
 #    - Remove -e VARNAME pairs (where VARNAME has no =)
 #    - Remove the envFile property
 # 3. For non-docker commands with envFile:
-#    - Just clean the path
+#    - Parse the env file and merge into .env map
+#    - Remove the envFile property
 
 set -euo pipefail
 
@@ -26,7 +27,41 @@ if ! command -v jq &> /dev/null; then
     exit 1
 fi
 
-jq '
+# Helper function to parse env file into JSON object
+parse_env_file() {
+    local file="$1"
+    if [[ -f "$file" ]]; then
+        # Read file, strip comments and blank lines, parse KEY=VALUE into JSON
+        grep -v '^\s*#' "$file" 2>/dev/null | grep -v '^\s*$' | grep '=' | while IFS= read -r line; do
+            # Split on first = only (value may contain =)
+            key="${line%%=*}"
+            value="${line#*=}"
+            # Remove leading/trailing whitespace from key
+            key="${key#"${key%%[![:space:]]*}"}"
+            key="${key%"${key##*[![:space:]]}"}"
+            # Clean ${workspaceFolder}/ from value
+            value="${value//\$\{workspaceFolder\}\//}"
+            # Output as JSON key-value (escape quotes in value)
+            value="${value//\\/\\\\}"
+            value="${value//\"/\\\"}"
+            printf '%s\n' "\"$key\": \"$value\""
+        done | paste -sd',' - | sed 's/^/{/; s/$/}/'
+    else
+        echo "{}"
+    fi
+}
+
+# Pre-parse env files for non-docker commands
+# Build a JSON object mapping cleaned envFile path -> parsed env vars
+env_data="{}"
+while IFS= read -r env_path; do
+    [[ -z "$env_path" ]] && continue
+    parsed=$(parse_env_file "$env_path")
+    [[ "$parsed" == "{}" ]] && continue
+    env_data=$(echo "$env_data" | jq --arg path "$env_path" --argjson vars "$parsed" '. + {($path): $vars}')
+done < <(jq -r '.mcpServers | to_entries[] | select(.value.envFile and .value.command != "docker") | .value.envFile | gsub("\\$\\{workspaceFolder\\}/"; "")' "$input" 2>/dev/null | sort -u)
+
+jq --argjson envData "$env_data" '
 # Helper: clean ${workspaceFolder}/ from paths
 def clean_path:
   if type == "string" then gsub("\\$\\{workspaceFolder\\}/"; "") else . end;
@@ -64,8 +99,11 @@ def insert_env_file($path):
       .args = (.args | remove_standalone_env_vars | insert_env_file($envPath)) |
       del(.envFile)
     elif $envPath then
-      # Non-docker: just clean the envFile path
-      .envFile = $envPath
+      # Non-docker: parse envFile and merge into .env map
+      # (Claude CLI only expands envFile for docker commands)
+      ($envData[$envPath] // {}) as $parsedEnv |
+      .env = ((.env // {}) + $parsedEnv) |
+      del(.envFile)
     else
       .
     end |
