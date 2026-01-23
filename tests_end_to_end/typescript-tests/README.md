@@ -290,6 +290,8 @@ git commit -m "[OPIK-1234] [FE] Add analytics dashboard + E2E test"
 
 ### Configuration
 
+> **Note:** The `.cursor/` directory is a symlink to `.agents/`. Run `make cursor` from the repository root to set it up.
+
 **Seed Test:** `tests/seed-for-planner.spec.ts`
 - Provides a ready-to-use browser context
 - Accesses all fixtures and configuration

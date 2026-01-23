@@ -615,6 +615,46 @@ pytest tests/
    ./opik.sh --verify
    ```
 
+## IDE Configuration
+
+Opik provides AI coding rules and configurations for editors like Cursor and Claude Code. These are stored in `.agents/` and can be synced to your editor of choice using Makefile.
+
+### Setup
+
+```bash
+# For Cursor users - creates .cursor symlink to .agents/
+make cursor
+
+# For Claude Code users - syncs rules to .claude/ and generates .mcp.json
+make claude
+```
+
+### Directory Structure
+
+```
+.agents/
+├── rules/                    # AI coding rules (.mdc files)
+│   ├── *.mdc                 # Root-level rules (git, clean-code, etc.)
+│   ├── apps/                 # App-specific rules
+│   │   ├── opik-backend/     # Java backend rules
+│   │   └── opik-frontend/    # React frontend rules
+│   └── sdks/                 # SDK-specific rules
+├── commands/                 # Slash commands
+└── mcp.json                  # MCP server configuration
+```
+
+### Git Hooks
+
+Install pre-commit hooks to automatically run linting before commits:
+
+```bash
+# Install hooks
+make hooks
+
+# Remove hooks
+make hooks-remove
+```
+
 ## Next Steps
 
 - [Backend Development Guide](backend.mdx) - Deep dive into backend development

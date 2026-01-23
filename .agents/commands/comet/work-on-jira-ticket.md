@@ -79,7 +79,7 @@ This workflow will:
 
 - **Bugfix**: repro steps, root cause hypothesis, affected files, fix approach, risks, tests, verification.
 - **Feature**: user story recap, acceptance criteria, implementation plan, tests, rollout notes.
-- **Always reference `.cursor/rules` for tech stack guidance and Opik-specific patterns**:
+- **Always reference `.agents/rules` for tech stack guidance and Opik-specific patterns**:
   - **Global rules**: General development guidelines, git workflow, project structure
   - **Backend rules**: API design, architecture, business logic, database migrations, error handling, logging, MySQL transactions, testing
   - **Frontend rules**: Tech stack, performance, UI components, API data fetching, state management, forms, code quality, accessibility testing, unit testing
@@ -122,7 +122,7 @@ This workflow will:
 ### 8. Implementation Suggestion
 
 - **Based on Jira context and Opik cursor rules**, suggest implementing the feature/bugfix:
-  - Reference relevant `.cursor/rules` for tech stack guidance (Java backend, React frontend, Python/TypeScript SDKs)
+  - Reference relevant `.agents/rules` for tech stack guidance (Java backend, React frontend, Python/TypeScript SDKs)
   - Provide specific implementation steps based on the task plan
   - Include code examples or file paths where appropriate
   - Suggest testing approaches and quality checks
