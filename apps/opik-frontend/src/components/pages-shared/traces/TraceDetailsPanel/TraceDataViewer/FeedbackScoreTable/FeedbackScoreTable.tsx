@@ -15,11 +15,10 @@ import {
 import { ExpandingFeedbackScoreRow } from "./types";
 import { mapFeedbackScoresToRowsWithExpanded } from "./utils";
 import { ExpandedState, ColumnSizingState } from "@tanstack/react-table";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
-import ActionsCell from "./cells/ActionsCell";
 import DeleteFeedbackScoreValueDialog from "./DeleteFeedbackScoreValueDialog";
 import { useFeedbackScoreDeletePreference } from "./hooks/useFeedbackScoreDeletePreference";
 import useLocalStorageState from "use-local-storage-state";
+import FeedbackScoreRowActions from "./FeedbackScoreRowActions";
 
 export type FeedbackScoreTableProps = {
   onDeleteFeedbackScore?: (
@@ -98,7 +97,7 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
       ? CONFIGURABLE_COLUMNS
       : getConfigurableColumnsWithoutType();
 
-    const baseColumns = [
+    return [
       ...convertColumnDataToColumn<
         ExpandingFeedbackScoreRow,
         ExpandingFeedbackScoreRow
@@ -111,27 +110,7 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
         columnsOrder: finalColumnsOrder,
       }),
     ];
-
-    // Only add actions column if deletion is enabled
-    if (onDeleteFeedbackScore) {
-      baseColumns.push(
-        generateActionsColumDef({
-          cell: ActionsCell,
-          customMeta: {
-            onDelete: handleDeleteClick,
-          },
-        }),
-      );
-    }
-
-    return baseColumns;
-  }, [
-    finalSelectedColumns,
-    finalColumnsOrder,
-    handleDeleteClick,
-    onDeleteFeedbackScore,
-    isAggregatedSpanScores,
-  ]);
+  }, [finalSelectedColumns, finalColumnsOrder, isAggregatedSpanScores]);
 
   return (
     <>
@@ -150,6 +129,18 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
         }}
         getRowId={(row: ExpandingFeedbackScoreRow) => row.id}
         getSubRows={(row: ExpandingFeedbackScoreRow) => row?.subRows}
+        actionsConfig={
+          onDeleteFeedbackScore
+            ? {
+                render: (row) => (
+                  <FeedbackScoreRowActions
+                    row={row.original}
+                    onDelete={handleDeleteClick}
+                  />
+                ),
+              }
+            : undefined
+        }
         noData={
           <FeedbackScoreTableNoData
             entityType={entityType}

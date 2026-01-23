@@ -8,7 +8,6 @@ import {
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import {
-  ColumnDef,
   ColumnPinningState,
   ColumnSort,
   RowSelectionState,
@@ -33,9 +32,8 @@ import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import AnnotateQueueCell from "@/components/pages-shared/annotation-queues/AnnotateQueueCell";
 import AnnotationQueueProgressCell from "@/components/pages-shared/annotation-queues/AnnotationQueueProgressCell";
-import AnnotationQueueRowActionsCell from "@/components/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
+import AnnotationQueueRowActions from "@/components/pages-shared/annotation-queues/AnnotationQueueRowActions";
 import AnnotationQueuesActionsPanel from "@/components/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
@@ -51,7 +49,6 @@ import {
 } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import {
-  generateActionsColumDef,
   generateSelectColumDef,
   getRowId,
 } from "@/components/shared/DataTable/utils";
@@ -327,18 +324,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
           sortableColumns: sortableBy,
         },
       ),
-      {
-        accessorKey: "annotate_queue",
-        header: "",
-        cell: AnnotateQueueCell,
-        size: 140,
-        enableResizing: false,
-        enableHiding: false,
-        enableSorting: false,
-      } as ColumnDef<AnnotationQueue>,
-      generateActionsColumDef({
-        cell: AnnotationQueueRowActionsCell,
-      }),
     ];
   }, [sortableBy, columnsOrder, selectedColumns]);
 
@@ -451,6 +436,9 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        actionsConfig={{
+          render: (row) => <AnnotationQueueRowActions queue={row.original} />,
+        }}
         noData={<DataTableNoData title={noDataText} />}
         onRowClick={handleRowClick}
         TableWrapper={PageBodyStickyTableWrapper}

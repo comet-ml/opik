@@ -30,13 +30,10 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
+import { PromptRowActions } from "@/components/pages/PromptsPage/PromptRowActions";
 import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
 import PromptsActionsPanel from "@/components/pages/PromptsPage/PromptsActionsPanel";
-import {
-  generateActionsColumDef,
-  generateSelectColumDef,
-} from "@/components/shared/DataTable/utils";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import {
   ColumnPinningState,
   ColumnSort,
@@ -272,9 +269,6 @@ const PromptsPage: React.FunctionComponent = () => {
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef({
-        cell: PromptRowActionsCell,
-      }),
     ];
   }, [sortableBy, columnsOrder, selectedColumns]);
 
@@ -361,6 +355,9 @@ const PromptsPage: React.FunctionComponent = () => {
         columns={columns}
         data={prompts}
         onRowClick={handleRowClick}
+        actionsConfig={{
+          render: (row) => <PromptRowActions prompt={row.original} />,
+        }}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{

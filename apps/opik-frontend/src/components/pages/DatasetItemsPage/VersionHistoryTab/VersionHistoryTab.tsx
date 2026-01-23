@@ -11,9 +11,8 @@ import { DatasetVersion } from "@/types/datasets";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import Loader from "@/components/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import VersionChangeSummaryCell from "./VersionChangeSummaryCell";
-import VersionRowActionsCell from "./VersionRowActionsCell";
+import VersionRowActions from "./VersionRowActions";
 
 interface VersionHistoryTabProps {
   datasetId: string;
@@ -80,19 +79,11 @@ const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
   });
 
   const columns = useMemo(() => {
-    const baseColumns = convertColumnDataToColumn<
-      DatasetVersion,
-      DatasetVersion
-    >(COLUMNS, {});
-
-    return [
-      ...baseColumns,
-      generateActionsColumDef<DatasetVersion>({
-        cell: VersionRowActionsCell,
-        customMeta: { datasetId },
-      }),
-    ];
-  }, [datasetId]);
+    return convertColumnDataToColumn<DatasetVersion, DatasetVersion>(
+      COLUMNS,
+      {},
+    );
+  }, []);
 
   const data = versionsData?.content || [];
   const total = versionsData?.total ?? 0;
@@ -112,6 +103,11 @@ const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
         data={data}
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        actionsConfig={{
+          render: (row) => (
+            <VersionRowActions version={row.original} datasetId={datasetId} />
+          ),
+        }}
         noData={
           <DataTableNoData title="No version history yet">
             <div className="text-sm text-muted-foreground">

@@ -20,7 +20,7 @@ import { Dataset } from "@/types/datasets";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 import DatasetsActionsPanel from "@/components/pages/DatasetsPage/DatasetsActionsPanel";
-import { DatasetRowActionsCell } from "@/components/pages/DatasetsPage/DatasetRowActionsCell";
+import { DatasetRowActions } from "@/components/pages/DatasetsPage/DatasetRowActions";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
@@ -39,10 +39,7 @@ import {
 } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
-import {
-  generateActionsColumDef,
-  generateSelectColumDef,
-} from "@/components/shared/DataTable/utils";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
@@ -261,9 +258,6 @@ const DatasetsPage: React.FunctionComponent = () => {
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef({
-        cell: DatasetRowActionsCell,
-      }),
     ];
   }, [sortableBy, columnsOrder, selectedColumns]);
 
@@ -352,6 +346,9 @@ const DatasetsPage: React.FunctionComponent = () => {
         columns={columns}
         data={datasets}
         onRowClick={handleRowClick}
+        actionsConfig={{
+          render: (row) => <DatasetRowActions dataset={row.original} />,
+        }}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{

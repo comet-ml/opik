@@ -3,7 +3,6 @@ import { useQueryParam } from "use-query-params";
 
 import { convertColumnDataToColumn } from "@/lib/table";
 import DataTable from "@/components/shared/DataTable/DataTable";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
 import useWorkspaceConfig from "@/api/workspaces/useWorkspaceConfig";
 import useWorkspaceConfigMutation from "@/api/workspaces/useWorkspaceConfigMutation";
@@ -21,7 +20,7 @@ import {
   WORKSPACE_PREFERENCES_DEFAULT_THREAD_TIMEOUT,
   WORKSPACE_PREFERENCES_DEFAULT_TRUNCATION_TOGGLE,
 } from "./constants";
-import WorkspacePreferencesActionsCell from "./WorkspacePreferencesActionsCell";
+import WorkspacePreferencesRowActions from "./WorkspacePreferencesRowActions";
 import EditThreadTimeoutDialog from "./EditThreadTimeoutDialog";
 import { EditThreadTimeoutFormValues } from "./EditThreadTimeoutForm";
 import EditTruncationToggleDialog from "./EditTruncationToggleDialog";
@@ -138,14 +137,8 @@ const WorkspacePreferencesTab: React.FC = () => {
         WORKSPACE_PREFERENCES_DEFAULT_COLUMNS,
         {},
       ),
-      generateActionsColumDef({
-        cell: WorkspacePreferencesActionsCell,
-        customMeta: {
-          onEdit: handleEdit,
-        },
-      }),
     ];
-  }, [handleEdit]);
+  }, []);
 
   return (
     <>
@@ -156,6 +149,14 @@ const WorkspacePreferencesTab: React.FC = () => {
           columns={columns}
           data={data}
           columnPinning={WORKSPACE_PREFERENCES_DEFAULT_COLUMN_PINNING}
+          actionsConfig={{
+            render: (row) => (
+              <WorkspacePreferencesRowActions
+                preference={row.original}
+                onEdit={handleEdit}
+              />
+            ),
+          }}
         />
       )}
 

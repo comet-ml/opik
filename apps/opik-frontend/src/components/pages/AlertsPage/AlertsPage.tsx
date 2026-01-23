@@ -5,7 +5,7 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { useNavigate } from "@tanstack/react-router";
 
 import useAlertsList from "@/api/alerts/useAlertsList";
-import AlertsRowActionsCell from "@/components/pages/AlertsPage/AlertsRowActionsCell";
+import AlertsRowActions from "@/components/pages/AlertsPage/AlertsRowActions";
 import AlertsEventsCell from "@/components/pages/AlertsPage/AlertsEventsCell";
 import AlertTypeCell from "@/components/pages/AlertsPage/AlertTypeCell";
 import { ALERT_TYPE_LABELS } from "@/components/pages/AlertsPage/AddEditAlertPage/helpers";
@@ -38,10 +38,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import {
-  generateActionsColumDef,
-  generateSelectColumDef,
-} from "@/components/shared/DataTable/utils";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { Separator } from "@/components/ui/separator";
 import AlertsActionsPanel from "@/components/pages/AlertsPage/AlertsActionsPanel";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -268,9 +265,6 @@ const AlertsPage: React.FunctionComponent = () => {
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef({
-        cell: AlertsRowActionsCell,
-      }),
     ];
   }, [columnsOrder, selectedColumns, sortableBy]);
 
@@ -367,6 +361,9 @@ const AlertsPage: React.FunctionComponent = () => {
               )}
             </DataTableNoData>
           }
+          actionsConfig={{
+            render: (row) => <AlertsRowActions row={row} />,
+          }}
         />
         <div className="py-4">
           <DataTablePagination
