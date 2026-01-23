@@ -691,6 +691,10 @@ navigation:
             icon: fa-regular fa-calendar
             path: docs/agent_optimization/getting_started/changelog.mdx
             slug: changelog
+          - page: Known Issues
+            icon: fa-regular fa-triangle-exclamation
+            path: docs/agent_optimization/known_issues.mdx
+            slug: known_issues
       - section: Optimization
         slug: /optimization
         contents:

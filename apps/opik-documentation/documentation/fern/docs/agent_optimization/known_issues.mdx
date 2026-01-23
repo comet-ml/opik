@@ -1,0 +1,45 @@
+---
+description: Known runtime issues when running Opik Optimizer with current dependencies.
+headline: Known Issues
+title: Known Issues
+---
+
+## Rate limiter errors
+
+If `pyrate_limiter` 4.x is installed you may see `TypeError: Limiter.__init__() got an unexpected keyword argument 'raise_when_fail'`. That version dropped the legacy flag our optimizer still passes. Before the `2.3.12` series ships, pin `pyrate-limiter` to a 3.x release like this:
+
+```bash
+pip install "pyrate-limiter>=3.0.0,<4.0.0"
+```
+
+Our upcoming `2.3.12`+ builds remove the dependency on that flag, so the error disappears once you upgrade your SDK.
+
+## tqdm / rich progress error
+
+`convert_tqdm_to_rich.<locals>._tqdm_to_track() missing 1 required positional argument: 'iterable'` comes from `tqdm` >= 4.71 changing the wrapper signature we rely on. Until the runtime is updated in `Opik Optimizer 2.3.12+`, pin `tqdm` to `4.70.0`:
+
+```bash
+pip install tqdm==4.70.0
+```
+
+Downgrading the optimizer to `1.9.70` also helped in the past, but upgrading to `2.3.12` or later is the preferred long-term fix.
+
+## Pydantic serialization warnings
+
+`PydanticSerializationUnexpectedValue` is emitted when Litellm serializes `Message` objects with fewer fields than the schema (an upstream change in litellm/pydantic V2). We suppress the warning because the payload is still valid. If you want to avoid seeing it, upgrade to the nightly litellm build that fixed the serialization (see https://github.com/BerriAI/litellm/pull/18972):
+
+```bash
+pip install --upgrade "litellm<1.81.1"
+```
+
+The warning does not affect performance; you only need to pin the version while the fix propagates through litellm and our SDK.
+
+## litellm → OpenAI connection errors
+
+`litellm.InternalServerError: OpenAIException - Connection error.` has been reproducible against litellm `1.81.1` (Jan 21). These releases break the OpenAI evaluation flow inside Opik SDK/Optimizer, so we currently avoid that build until the upstream bug is fixed:
+
+```bash
+pip install --upgrade "litellm<1.81.1"
+```
+
+We’ve filed a bug with Litellm and will remove the avoid list once the root issue is resolved.

@@ -7,7 +7,14 @@ from typing import Any
 from rich import box
 from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
-from rich.progress import track
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    TaskProgressColumn,
+    track,
+)
 from rich.text import Text
 
 from .utils import get_optimization_run_url_by_id
@@ -44,11 +51,79 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
     """Context manager to convert tqdm to rich."""
     import opik.evaluation.engine.evaluation_tasks_executor
 
-    def _tqdm_to_track(iterable: Any, desc: str, disable: bool, total: int) -> Any:
-        disable = verbose == 0
-        return track(
-            iterable, description=description or desc, disable=disable, total=total
+    # FIXME: Remove in V3 refactor, added as a patch fix to prod
+    def _tqdm_to_track(
+        iterable: Any = None,
+        desc: str = "",
+        disable: bool = False,
+        total: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Convert tqdm calls to Rich progress bars.
+
+        Handles two cases:
+        1. With iterable: Returns Rich track() wrapped iterable
+        2. Without iterable: Returns Rich Progress object for context manager usage
+        """
+        disable = verbose == 0 or disable
+
+        # Case 1: Called with iterable (e.g., for loop)
+        if iterable is not None:
+            return track(
+                iterable, description=description or desc, disable=disable, total=total
+            )
+
+        # Case 2: Called without iterable (e.g., as context manager)
+        # Return a Rich Progress object that mimics tqdm's API
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=get_console(),
+            disable=disable,
         )
+        progress.start()
+        task_id = progress.add_task(description or desc or "Progress", total=total)
+
+        # Create a wrapper object that mimics tqdm's interface
+        class RichProgressBar:
+            def __init__(self, progress: Progress, task_id: Any):
+                self._progress = progress
+                self._task_id = task_id
+                self.n = 0
+                self._total = total
+
+            @property
+            def total(self) -> int | None:
+                """Get the total number of items."""
+                return self._total
+
+            @total.setter
+            def total(self, value: int | None) -> None:
+                """Set the total number of items and update the progress bar."""
+                self._total = value
+                if value is not None:
+                    self._progress.update(self._task_id, total=value)
+
+            def update(self, n: int = 1) -> None:
+                """Update progress by n steps."""
+                self.n += n
+                self._progress.update(self._task_id, advance=n)
+
+            def close(self) -> None:
+                """Close the progress bar."""
+                self._progress.stop()
+
+            def __enter__(self) -> "RichProgressBar":
+                return self
+
+            def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+                self.close()
+
+        return RichProgressBar(progress, task_id)
+
+    # FIXME: END - Remove in V3 refactor, added as a patch fix to prod
 
     original__tqdm = opik.evaluation.engine.evaluation_tasks_executor._tqdm
     opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track
