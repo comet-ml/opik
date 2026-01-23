@@ -18,21 +18,23 @@ import static com.comet.opik.api.sorting.SortableFields.TRACE_COUNT;
 
 public class ExperimentSortingFactory extends SortingFactory {
 
+    public static final List<String> EXPERIMENT_SORTABLE_FIELDS = List.of(
+            ID,
+            NAME,
+            CREATED_AT,
+            LAST_UPDATED_AT,
+            CREATED_BY,
+            LAST_UPDATED_BY,
+            TAGS,
+            TRACE_COUNT,
+            TOTAL_ESTIMATED_COST,
+            TOTAL_ESTIMATED_COST_AVG,
+            FEEDBACK_SCORES,
+            EXPERIMENT_METRICS,
+            DURATION_AGG);
+
     @Override
     public List<String> getSortableFields() {
-        return List.of(
-                ID,
-                NAME,
-                CREATED_AT,
-                LAST_UPDATED_AT,
-                CREATED_BY,
-                LAST_UPDATED_BY,
-                TAGS,
-                TRACE_COUNT,
-                TOTAL_ESTIMATED_COST,
-                TOTAL_ESTIMATED_COST_AVG,
-                FEEDBACK_SCORES,
-                EXPERIMENT_METRICS,
-                DURATION_AGG);
+        return EXPERIMENT_SORTABLE_FIELDS;
     }
 }

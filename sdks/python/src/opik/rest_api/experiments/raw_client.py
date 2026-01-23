@@ -26,11 +26,12 @@ from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.experiment_public import ExperimentPublic
 from ..types.experiment_score import ExperimentScore
 from ..types.experiment_score_write import ExperimentScoreWrite
+from ..types.experiment_update import ExperimentUpdate
+from ..types.experiment_update_status import ExperimentUpdateStatus
+from ..types.experiment_update_type import ExperimentUpdateType
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.json_node import JsonNode
 from ..types.prompt_version_link_write import PromptVersionLinkWrite
-from .types.experiment_update_status import ExperimentUpdateStatus
-from .types.experiment_update_type import ExperimentUpdateType
 from .types.experiment_write_status import ExperimentWriteStatus
 from .types.experiment_write_type import ExperimentWriteType
 
@@ -41,6 +42,69 @@ OMIT = typing.cast(typing.Any, ...)
 class RawExperimentsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def batch_update_experiments(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: ExperimentUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Update multiple experiments
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of experiment IDs to update (max 1000)
+
+        update : ExperimentUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/batch",
+            method="PATCH",
+            json={
+                "ids": ids,
+                "update": convert_and_respect_annotation_metadata(
+                    object_=update, annotation=ExperimentUpdate, direction="write"
+                ),
+                "merge_tags": merge_tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def find_experiments(
         self,
@@ -974,6 +1038,69 @@ class RawExperimentsClient:
 class AsyncRawExperimentsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def batch_update_experiments(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: ExperimentUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Update multiple experiments
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of experiment IDs to update (max 1000)
+
+        update : ExperimentUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/experiments/batch",
+            method="PATCH",
+            json={
+                "ids": ids,
+                "update": convert_and_respect_annotation_metadata(
+                    object_=update, annotation=ExperimentUpdate, direction="write"
+                ),
+                "merge_tags": merge_tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_experiments(
         self,
