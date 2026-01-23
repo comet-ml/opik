@@ -97,7 +97,7 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
       <DropdownMenuTrigger asChild>
         <Button
           size="icon-xs"
-          variant="outline"
+          variant="ghost"
           className={cn(
             "hidden group-hover:inline-flex",
             keepVisible && "inline-flex",

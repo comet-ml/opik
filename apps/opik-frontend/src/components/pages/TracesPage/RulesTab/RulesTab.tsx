@@ -2,11 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { NumberParam, StringParam, useQueryParam } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
-import {
-  ColumnDef,
-  ColumnPinningState,
-  RowSelectionState,
-} from "@tanstack/react-table";
+import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
 import round from "lodash/round";
 
 import {
@@ -18,10 +14,7 @@ import {
 } from "@/types/shared";
 import { EvaluatorsRule } from "@/types/automations";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
-import {
-  generateActionsColumDef,
-  generateSelectColumDef,
-} from "@/components/shared/DataTable/utils";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -39,8 +32,7 @@ import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoRulesPage from "@/components/pages-shared/automations/NoRulesPage";
 import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
-import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
-import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
+import RuleRowActions from "@/components/pages-shared/automations/RuleRowActions";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
@@ -237,31 +229,8 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
           selectedColumns,
         },
       ),
-      {
-        accessorKey: "rule_logs",
-        header: "",
-        cell: RuleLogsCell,
-        size: 110,
-        enableResizing: false,
-        enableHiding: false,
-        enableSorting: false,
-      } as ColumnDef<EvaluatorsRule>,
-      generateActionsColumDef<EvaluatorsRule>({
-        cell: (props) => (
-          <RuleRowActionsCell
-            {...props}
-            openEditDialog={handleOpenEditDialog}
-            openCloneDialog={handleOpenCloneDialog}
-          />
-        ),
-      }),
     ];
-  }, [
-    columnsOrder,
-    selectedColumns,
-    handleOpenEditDialog,
-    handleOpenCloneDialog,
-  ]);
+  }, [columnsOrder, selectedColumns]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -360,6 +329,15 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         }}
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        actionsConfig={{
+          render: (row) => (
+            <RuleRowActions
+              rule={row.original}
+              openEditDialog={handleOpenEditDialog}
+              openCloneDialog={handleOpenCloneDialog}
+            />
+          ),
+        }}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
