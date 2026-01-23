@@ -1765,7 +1765,7 @@ class ExperimentsResourceTest {
             // Filter by project1 - should only return experiment1
             var response1 = experimentResourceClient.findExperiments(
                     1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
-                    false, null, null, null, project1Id, false, apiKey, workspaceName, HttpStatus.SC_OK);
+                    false, null, null, false, null, project1Id, false, apiKey, workspaceName, HttpStatus.SC_OK);
 
             assertThat(response1.content()).hasSize(1);
             assertThat(response1.content().get(0).id()).isEqualTo(experiment1Id);
@@ -1773,7 +1773,7 @@ class ExperimentsResourceTest {
             // Filter by project2 - should only return experiment2
             var response2 = experimentResourceClient.findExperiments(
                     1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
-                    false, null, null, null, project2Id, false, apiKey, workspaceName, HttpStatus.SC_OK);
+                    false, null, null, false, null, project2Id, false, apiKey, workspaceName, HttpStatus.SC_OK);
 
             assertThat(response2.content()).hasSize(1);
             assertThat(response2.content().get(0).id()).isEqualTo(experiment2Id);
@@ -1781,7 +1781,7 @@ class ExperimentsResourceTest {
             // No project filter - should return both experiments
             var responseAll = experimentResourceClient.findExperiments(
                     1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
-                    false, null, null, null, null, false, apiKey, workspaceName, HttpStatus.SC_OK);
+                    false, null, null, false, null, null, false, apiKey, workspaceName, HttpStatus.SC_OK);
 
             assertThat(responseAll.content()).hasSize(2);
         }
