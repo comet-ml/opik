@@ -200,6 +200,7 @@ describe("Opik client custom config", () => {
 describe("Opik client apiKey propagation", () => {
   const originalFetch = global.fetch;
   let capturedHeaders: Headers | null = null;
+  const originalEnvironmentVariables = { ...process.env };
 
   beforeEach(() => {
     // Mock fetch to capture request headers
@@ -222,6 +223,7 @@ describe("Opik client apiKey propagation", () => {
   afterEach(() => {
     global.fetch = originalFetch;
     capturedHeaders = null;
+    process.env = { ...originalEnvironmentVariables };
   });
 
   it("should propagate apiKey to Authorization header in HTTP requests", async () => {
@@ -270,10 +272,5 @@ describe("Opik client apiKey propagation", () => {
       expect(authorizationHeader).toBeDefined();
       expect(authorizationHeader).toContain(testApiKey);
     }
-
-    // Cleanup
-    delete process.env.OPIK_API_KEY;
-    delete process.env.OPIK_URL_OVERRIDE;
-    delete process.env.OPIK_WORKSPACE;
   });
 });
