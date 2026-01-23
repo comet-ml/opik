@@ -414,26 +414,21 @@ class ExperimentDAO {
                     GROUP BY entity_id
                 ) AS tc ON ei.trace_id = tc.entity_id
                 GROUP BY ei.experiment_id
-            ), experiment_trace_ids AS (
-                -- Get any trace_id per experiment (all traces have same project_id)
-                SELECT experiment_id, any(trace_id) as trace_id
-                FROM experiment_items_final
-                GROUP BY experiment_id
             ), experiment_projects AS (
                 -- All traces from an experiment belong to the same project (SDK invariant)
-                -- Look up project_id only for the trace_ids we need (one trace per experiment)
                 -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
                 SELECT
-                    et.experiment_id,
-                    ifNull(t.project_id, '') AS project_id
-                FROM experiment_trace_ids et
+                    ei.experiment_id,
+                    ifNull(any(t.project_id), '') AS project_id
+                FROM experiment_items_final ei
                 LEFT JOIN (
                     SELECT id, project_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                ) t ON et.trace_id = t.id
+                ) t ON ei.trace_id = t.id
+                GROUP BY ei.experiment_id
             )
             SELECT
                 e.workspace_id as workspace_id,
@@ -729,26 +724,21 @@ class ExperimentDAO {
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN (SELECT id FROM experiments_filtered)
-            ), experiment_trace_ids AS (
-                -- Get any trace_id per experiment (all traces have same project_id)
-                SELECT experiment_id, any(trace_id) as trace_id
-                FROM experiment_items_final
-                GROUP BY experiment_id
             ), experiment_projects AS (
                 -- All traces from an experiment belong to the same project (SDK invariant)
-                -- Look up project_id only for the trace_ids we need (one trace per experiment)
                 -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
                 SELECT
-                    et.experiment_id,
-                    ifNull(t.project_id, '') AS project_id
-                FROM experiment_trace_ids et
+                    ei.experiment_id,
+                    ifNull(any(t.project_id), '') AS project_id
+                FROM experiment_items_final ei
                 LEFT JOIN (
                     SELECT id, project_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                ) t ON et.trace_id = t.id
+                ) t ON ei.trace_id = t.id
+                GROUP BY ei.experiment_id
             ), experiments_with_projects AS (
                 SELECT
                     ef.id,
@@ -938,26 +928,21 @@ class ExperimentDAO {
                       AND length(JSON_VALUE(score, '$.name')) > 0
                 ) AS es
                 GROUP BY experiment_id
-            ), experiment_trace_ids AS (
-                -- Get any trace_id per experiment (all traces have same project_id)
-                SELECT experiment_id, any(trace_id) as trace_id
-                FROM experiment_items_final
-                GROUP BY experiment_id
             ), experiment_projects AS (
                 -- All traces from an experiment belong to the same project (SDK invariant)
-                -- Look up project_id only for the trace_ids we need (one trace per experiment)
                 -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
                 SELECT
-                    et.experiment_id,
-                    ifNull(t.project_id, '') AS project_id
-                FROM experiment_trace_ids et
+                    ei.experiment_id,
+                    ifNull(any(t.project_id), '') AS project_id
+                FROM experiment_items_final ei
                 LEFT JOIN (
                     SELECT id, project_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
-                ) t ON et.trace_id = t.id
+                ) t ON ei.trace_id = t.id
+                GROUP BY ei.experiment_id
             ), experiments_full AS (
                 SELECT
                     e.id as id,
