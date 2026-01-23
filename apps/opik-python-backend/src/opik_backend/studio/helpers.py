@@ -77,7 +77,7 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
     """
     try:
         dataset = client.get_dataset(dataset_name)
-        logger.info(f"Loaded dataset: {dataset_name}")
+        logger.debug(f"Loaded dataset: {dataset_name}")
     except Exception as e:
         logger.error(f"Failed to load dataset '{dataset_name}': {e}")
         raise DatasetNotFoundError(dataset_name, e)
@@ -87,7 +87,7 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
     if not dataset_items:
         raise EmptyDatasetError(dataset_name)
 
-    logger.info(f"Dataset has {len(dataset_items)} items")
+    logger.debug(f"Dataset has {len(dataset_items)} items")
     return dataset
 
 

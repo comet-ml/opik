@@ -76,6 +76,7 @@ import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
+import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
@@ -752,14 +753,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             return "-";
           }
 
-          // Format arrays and objects as JSON
-          if (isArray(value) || isObject(value)) {
-            return JSON.stringify(value, null, 2);
-          }
-
-          return String(value);
+          // Return raw value - AutodetectCell will handle type detection
+          // and display primitives as text, objects/arrays as JSON
+          return value;
         },
-        cell: CodeCell as never,
+        cell: AutodetectCell as never,
       };
     }) as ColumnData<BaseTraceData>[];
 
@@ -968,6 +966,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         id: "error_info",
         label: "Errors",
         type: COLUMN_TYPE.errors,
+      },
+      {
+        id: COLUMN_METADATA_ID,
+        label: "Metadata",
+        type: COLUMN_TYPE.dictionary,
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,

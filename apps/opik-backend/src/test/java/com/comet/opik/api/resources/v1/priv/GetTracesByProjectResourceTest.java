@@ -440,6 +440,18 @@ class GetTracesByProjectResourceTest {
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
                                 case ERROR_CONTAINER -> Stream.of();
+                                case LIST -> {
+                                    // For LIST fields, skip invalid value tests for NO_VALUE_OPERATORS
+                                    // because these operators don't care about the value
+                                    if (Operator.NO_VALUE_OPERATORS.contains(operator)) {
+                                        yield Stream.empty();
+                                    }
+                                    yield Stream.of(TraceFilter.builder()
+                                            .field(filter.getKey())
+                                            .operator(operator)
+                                            .value(getInvalidValue(filter.getKey()))
+                                            .build());
+                                }
                                 default -> Stream.of(TraceFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)

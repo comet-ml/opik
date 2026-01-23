@@ -29,12 +29,12 @@ import java.util.stream.Collectors;
  * 1. Deleting expired files from S3/MinIO
  * 2. Removing expired records from the database
  *
- * Runs every hour at the top of the hour.
+ * Runs every 5 minutes.
  */
 @Singleton
 @Slf4j
 @DisallowConcurrentExecution
-@On(value = "0 0 * * * ?", timeZone = "UTC") // every hour at the top of the hour
+@On(value = "0 0/5 * * * ?", timeZone = "UTC") // every 5 minutes
 public class DatasetExportCleanupJob extends Job implements InterruptableJob {
 
     private final DatasetExportJobService exportJobService;

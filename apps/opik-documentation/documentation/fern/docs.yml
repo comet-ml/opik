@@ -691,6 +691,10 @@ navigation:
             icon: fa-regular fa-calendar
             path: docs/agent_optimization/getting_started/changelog.mdx
             slug: changelog
+          - page: Known Issues
+            icon: fa-regular fa-triangle-exclamation
+            path: docs/agent_optimization/known_issues.mdx
+            slug: known_issues
       - section: Optimization
         slug: /optimization
         contents:
@@ -830,6 +834,9 @@ navigation:
           - page: Large CSV uploads
             path: docs/self-host/configure/large_csv_uploads.mdx
             slug: large_csv_uploads
+          - page: Dataset versioning migration
+            path: docs/self-host/configure/dataset_versioning_migration.mdx
+            slug: dataset_versioning_migration
   - tab: reference
     layout:
       - page: Overview

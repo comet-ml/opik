@@ -11,6 +11,7 @@ const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
 export type UseExperimentsGroupsParams = {
   workspaceName?: string;
   promptId?: string;
+  projectId?: string;
   types?: EXPERIMENT_TYPE[];
   filters?: Filters;
   groups: Groups;
@@ -26,6 +27,7 @@ export const getExperimentsGroups = async (
   {
     workspaceName,
     promptId,
+    projectId,
     types = DEFAULT_EXPERIMENTS_TYPES,
     filters,
     groups,
@@ -39,6 +41,7 @@ export const getExperimentsGroups = async (
       ...processFilters(filters, generatePromptFilters(promptId)),
       ...processGroups(groups),
       ...(search && { name: search }),
+      ...(projectId && { project_id: projectId }),
       ...(types && { types: JSON.stringify(types) }),
     },
   });

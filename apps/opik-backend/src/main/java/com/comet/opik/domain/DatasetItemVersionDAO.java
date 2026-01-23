@@ -268,6 +268,48 @@ public interface DatasetItemVersionDAO {
     record DatasetItemIdMapping(UUID rowId, UUID datasetItemId, UUID datasetId) {
     }
 
+    /**
+     * Soft deletes all items from a specific dataset version.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the number of deleted rows
+     */
+    Mono<Long> deleteItemsFromVersion(UUID datasetId, UUID versionId, String workspaceId);
+
+    /**
+     * Copies all items from legacy dataset_items table to dataset_item_versions for a specific dataset.
+     * Preserves all original timestamps and user information.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID (should equal datasetId for version 1)
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the number of copied rows
+     */
+    Mono<Long> copyItemsFromLegacy(UUID datasetId, UUID versionId, String workspaceId);
+
+    /**
+     * Counts items in a specific dataset version.
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the version ID
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the count of items
+     */
+    Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId, String workspaceId);
+
+    /**
+     * Counts items for multiple dataset versions in a single query.
+     * This is used for batch migration of items_total field.
+     * Uses workspace_id, dataset_id, and dataset_version_id to optimize the query
+     * according to the table's ordering key: (workspace_id, dataset_id, dataset_version_id, id).
+     *
+     * @param versions list of version info (workspace_id, dataset_id, version_id) to count items for
+     * @return Flux emitting item counts for each version
+     */
+    Flux<DatasetVersionItemsCount> countItemsInVersionsBatch(List<DatasetVersionInfo> versions);
+
 }
 
 @Singleton
@@ -1469,6 +1511,66 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ;
             """;
 
+    // Migration queries
+    private static final String DELETE_ITEMS_FROM_VERSION_MIGRATION = """
+            DELETE FROM dataset_item_versions
+            WHERE workspace_id = :workspaceId
+              AND dataset_id = :datasetId
+              AND dataset_version_id = :versionId
+            """;
+
+    private static final String COPY_ITEMS_FROM_LEGACY = """
+            INSERT INTO dataset_item_versions (
+                id, dataset_item_id, dataset_id, dataset_version_id,
+                data, metadata, source, trace_id, span_id, tags,
+                item_created_at, item_last_updated_at,
+                item_created_by, item_last_updated_by,
+                created_at, last_updated_at, created_by, last_updated_by,
+                workspace_id
+            )
+            SELECT
+                id,
+                id as dataset_item_id,
+                dataset_id,
+                :versionId as dataset_version_id,
+                data, metadata, source, trace_id, span_id, tags,
+                created_at as item_created_at,
+                last_updated_at as item_last_updated_at,
+                created_by as item_created_by,
+                last_updated_by as item_last_updated_by,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                workspace_id
+            FROM dataset_items
+            WHERE workspace_id = :workspaceId
+              AND dataset_id = :datasetId
+            """;
+
+    private static final String COUNT_ITEMS_IN_VERSION = """
+            SELECT count(DISTINCT id) as count
+            FROM dataset_item_versions
+            WHERE workspace_id = :workspaceId
+              AND dataset_id = :datasetId
+              AND dataset_version_id = :versionId
+            """;
+
+    /**
+     * Query to count items for multiple versions in a single statement.
+     * Uses (workspace_id, dataset_id, dataset_version_id) tuples to optimize the query
+     * according to the table's ordering key: (workspace_id, dataset_id, dataset_version_id, id).
+     * This allows ClickHouse to efficiently skip irrelevant data partitions.
+     */
+    private static final String COUNT_ITEMS_IN_VERSIONS_BATCH = """
+            SELECT
+                dataset_version_id,
+                count(DISTINCT id) as count
+            FROM dataset_item_versions
+            WHERE (workspace_id, dataset_id, dataset_version_id) IN (<version_tuples>)
+            GROUP BY dataset_version_id
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -2651,6 +2753,116 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     FilterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM);
                 });
+    }
+
+    @Override
+    public Mono<Long> deleteItemsFromVersion(UUID datasetId, UUID versionId, String workspaceId) {
+        log.debug("Deleting items from version '{}' for dataset '{}' in workspace '{}'", versionId, datasetId,
+                workspaceId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(DELETE_ITEMS_FROM_VERSION_MIGRATION)
+                    .bind("workspaceId", workspaceId)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("versionId", versionId.toString());
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "delete_items_from_version_migration");
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .next()
+                    .defaultIfEmpty(0L)
+                    .doOnSuccess(count -> log.debug("Deleted '{}' items from version '{}'", count, versionId))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    public Mono<Long> copyItemsFromLegacy(UUID datasetId, UUID versionId, String workspaceId) {
+        log.debug("Copying items from legacy table for dataset '{}' to version '{}' in workspace '{}'", datasetId,
+                versionId, workspaceId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(COPY_ITEMS_FROM_LEGACY)
+                    .bind("workspaceId", workspaceId)
+                    .bind("versionId", versionId.toString())
+                    .bind("datasetId", datasetId.toString());
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "copy_items_from_legacy");
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .next()
+                    .defaultIfEmpty(0L)
+                    .doOnSuccess(count -> log.debug("Copied '{}' items from legacy table for dataset '{}'", count,
+                            datasetId))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    public Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId, String workspaceId) {
+        log.debug("Counting items in version '{}' for dataset '{}' in workspace '{}'", versionId, datasetId,
+                workspaceId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(COUNT_ITEMS_IN_VERSION)
+                    .bind("workspaceId", workspaceId)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("versionId", versionId.toString());
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "count_items_in_version");
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L)
+                    .doOnSuccess(count -> log.debug("Counted '{}' items in version '{}'", count, versionId))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    public Flux<DatasetVersionItemsCount> countItemsInVersionsBatch(List<DatasetVersionInfo> versions) {
+        if (versions.isEmpty()) {
+            log.debug("No versions to count items for");
+            return Flux.empty();
+        }
+
+        log.debug("Counting items for '{}' versions in batch", versions.size());
+
+        // Build the tuple IN clause to match ClickHouse ordering key
+        // Format: ('workspace1', 'dataset1', 'version1'), ('workspace2', 'dataset2', 'version2'), ...
+        String versionTuples = versions.stream()
+                .map(v -> "('" + v.workspaceId() + "', '" + v.datasetId() + "', '" + v.versionId() + "')")
+                .collect(Collectors.joining(", "));
+
+        String query = COUNT_ITEMS_IN_VERSIONS_BATCH.replace("<version_tuples>", versionTuples);
+
+        Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "count_items_in_versions_batch");
+
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(query);
+
+            // Note: We don't use bindWorkspaceIdToFlux here because workspace_id is explicitly
+            // included in the query tuples. This is a cross-workspace migration query.
+            return Flux.from(statement.execute())
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, rowMetadata) -> {
+                        UUID versionId = Optional.ofNullable(row.get("dataset_version_id", String.class))
+                                .map(UUID::fromString)
+                                .orElseThrow(() -> new IllegalStateException("dataset_version_id cannot be null"));
+                        long count = Optional.ofNullable(row.get("count", Long.class))
+                                .orElse(0L);
+                        return DatasetVersionItemsCount.builder()
+                                .versionId(versionId)
+                                .count(count)
+                                .build();
+                    }));
+        })
+                .collectList()
+                .doOnSuccess(itemCounts -> log.debug("Completed counting items for '{}' versions", itemCounts.size()))
+                .flatMapMany(Flux::fromIterable);
     }
 
 }
