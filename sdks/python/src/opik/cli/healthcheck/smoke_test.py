@@ -57,37 +57,48 @@ def verify_trace_ingested(
     Returns:
         True if the trace was found, False otherwise.
     """
-    start_time = time.time()
-    poll_interval = 0.5  # Start with 0.5 second intervals
-    max_poll_interval = 2.0  # Maximum interval between polls
+    try:
+        start_time = time.time()
+        poll_interval = 0.5  # Start with 0.5 second intervals
+        max_poll_interval = 2.0  # Maximum interval between polls
 
-    while time.time() - start_time < timeout_seconds:
-        try:
-            traces = client.search_traces(
-                project_name=project_name,
-                filter_string=f'name = "{trace_name}"',
-                max_results=10,
-            )
+        while time.time() - start_time < timeout_seconds:
+            try:
+                traces = client.search_traces(
+                    project_name=project_name,
+                    filter_string=f'name = "{trace_name}"',
+                    max_results=10,
+                )
 
-            if traces:
+                if traces:
+                    if debug:
+                        console.print(
+                            f"[dim]Found {len(traces)} trace(s) matching name '{trace_name}'[/dim]"
+                        )
+                    return True
+
+                # Exponential backoff: increase poll interval up to max
+                time.sleep(min(poll_interval, max_poll_interval))
+                poll_interval *= 1.5
+
+            except Exception as e:
                 if debug:
                     console.print(
-                        f"[dim]Found {len(traces)} trace(s) matching name '{trace_name}'[/dim]"
+                        f"[yellow]Warning: Error querying traces: {e}[/yellow]"
                     )
-                return True
+                # If querying fails, we can't verify, so return False
+                return False
 
-            # Exponential backoff: increase poll interval up to max
-            time.sleep(min(poll_interval, max_poll_interval))
-            poll_interval *= 1.5
-
-        except Exception as e:
-            if debug:
-                console.print(f"[yellow]Warning: Error querying traces: {e}[/yellow]")
-            # If querying fails, we can't verify, so return False
-            return False
-
-    # Timeout reached without finding trace
-    return False
+        # Timeout reached without finding trace
+        return False
+    except Exception as e:
+        # Catch any exception that might occur when calling search_traces (e.g., AttributeError
+        # if client is a mock without proper setup). Return False to indicate verification failed.
+        if debug:
+            console.print(
+                f"[yellow]Warning: Could not verify trace ingestion: {e}[/yellow]"
+            )
+        return False
 
 
 @contextmanager

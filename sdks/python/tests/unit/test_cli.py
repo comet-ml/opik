@@ -113,6 +113,7 @@ class TestSmokeTestCommand:
         assert result.exit_code != 0
         assert "Error" in result.output or "Missing" in result.output
 
+    @patch("opik.cli.healthcheck.cli.opik_healthcheck.run")
     @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
     @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
@@ -129,10 +130,16 @@ class TestSmokeTestCommand:
         mock_start_trace,
         mock_opik_class,
         mock_get_client_cached,
+        mock_healthcheck_run,
     ):
         """Test healthcheck --smoke-test command with workspace and --project-name arguments."""
         # Setup mocks
         mock_client = MagicMock()
+        # Mock search_traces to raise an exception immediately to skip verification polling
+        # This prevents the verification from running and triggering real client creation
+        mock_client.search_traces = MagicMock(
+            side_effect=AttributeError("Mock client - search_traces not available")
+        )
         mock_opik_class.return_value = mock_client
 
         mock_cached_client = MagicMock()
@@ -190,6 +197,7 @@ class TestSmokeTestCommand:
         mock_client.flush.assert_called_once()
         mock_client.end.assert_called_once()
 
+    @patch("opik.cli.healthcheck.cli.opik_healthcheck.run")
     @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
     @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
@@ -206,10 +214,16 @@ class TestSmokeTestCommand:
         mock_start_trace,
         mock_opik_class,
         mock_get_client_cached,
+        mock_healthcheck_run,
     ):
         """Test healthcheck --smoke-test command with workspace only (uses default project name)."""
         # Setup mocks
         mock_client = MagicMock()
+        # Mock search_traces to raise an exception immediately to skip verification polling
+        # This prevents the verification from running and triggering real client creation
+        mock_client.search_traces = MagicMock(
+            side_effect=AttributeError("Mock client - search_traces not available")
+        )
         mock_opik_class.return_value = mock_client
 
         mock_cached_client = MagicMock()
