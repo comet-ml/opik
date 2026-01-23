@@ -431,7 +431,6 @@ class ExperimentDAO {
                     SELECT id, project_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_trace_ids)
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) t ON et.trace_id = t.id
@@ -747,7 +746,6 @@ class ExperimentDAO {
                     SELECT id, project_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_trace_ids)
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) t ON et.trace_id = t.id
@@ -957,7 +955,6 @@ class ExperimentDAO {
                     SELECT id, project_id
                     FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_trace_ids)
                     ORDER BY id DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) t ON et.trace_id = t.id
