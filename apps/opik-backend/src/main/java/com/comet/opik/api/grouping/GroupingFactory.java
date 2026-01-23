@@ -90,8 +90,9 @@ public abstract class GroupingFactory {
             return LIST;
         }
 
-        // Default to STRING for unknown fields
-        return STRING;
+        // Return null for unknown fields - let validation handle it
+        // This avoids assigning incorrect types to future fields
+        return null;
     }
 
     private void validateGroups(@NonNull List<GroupBy> groups) {
