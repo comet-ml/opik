@@ -96,7 +96,7 @@ def insert_env_file($path):
     # Transform based on command type
     if .command == "docker" and $envPath then
       # Docker: move envFile to --env-file arg, remove standalone -e vars
-      .args = (.args | remove_standalone_env_vars | insert_env_file($envPath)) |
+      .args = ((.args // []) | remove_standalone_env_vars | insert_env_file($envPath)) |
       del(.envFile)
     elif $envPath then
       # Non-docker: parse envFile and merge into .env map
