@@ -6,7 +6,7 @@ import capitalize from "lodash/capitalize";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
 import FeedbackDefinitionsValueCell from "@/components/shared/DataTableCells/FeedbackDefinitionsValueCell";
-import FeedbackDefinitionsRowActionsCell from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsRowActionsCell";
+import FeedbackDefinitionsRowActions from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsRowActions";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -28,10 +28,7 @@ import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
-import {
-  generateActionsColumDef,
-  generateSelectColumDef,
-} from "@/components/shared/DataTable/utils";
+import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { Separator } from "@/components/ui/separator";
 import FeedbackDefinitionsActionsPanel from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsActionsPanel";
 import FeedbackScoreNameCell from "@/components/shared/DataTableCells/FeedbackScoreNameCell";
@@ -166,9 +163,6 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
-      generateActionsColumDef({
-        cell: FeedbackDefinitionsRowActionsCell,
-      }),
     ];
   }, [columnsOrder, selectedColumns]);
 
@@ -235,6 +229,11 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
         }}
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        actionsConfig={{
+          render: (row) => (
+            <FeedbackDefinitionsRowActions feedbackDefinition={row.original} />
+          ),
+        }}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
