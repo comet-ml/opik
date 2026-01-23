@@ -65,7 +65,7 @@ def test_rate_limiter_falls_back_when_argument_removed(
                 raise TypeError("unsupported argument")
             captured["rate"] = rate
 
-        def try_acquire(self, key: Any, *, blocking: bool = True) -> bool:
+        def try_acquire(self, key: Any, *, blocking: bool = True) -> bool:  # noqa: ARG002
             return True
 
     monkeypatch.setattr(
