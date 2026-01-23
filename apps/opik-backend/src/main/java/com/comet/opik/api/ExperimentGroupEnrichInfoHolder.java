@@ -6,5 +6,5 @@ import java.util.Map;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
-public record ExperimentGroupEnrichInfoHolder(Map<UUID, Dataset> datasetMap) {
+public record ExperimentGroupEnrichInfoHolder(Map<UUID, Dataset> datasetMap, Map<UUID, Project> projectMap) {
 }

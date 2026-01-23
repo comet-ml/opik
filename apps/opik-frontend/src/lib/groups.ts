@@ -2,6 +2,7 @@ import uniqid from "uniqid";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
+  COLUMN_PROJECT_ID,
   COLUMN_TYPE,
 } from "@/types/shared";
 import { SORT_DIRECTION } from "@/types/sorting";
@@ -120,6 +121,8 @@ export const calculateGroupLabel = (group?: Group) => {
   if (!group) return "";
 
   switch (group.field) {
+    case COLUMN_PROJECT_ID:
+      return "Project";
     case COLUMN_DATASET_ID:
       return "Dataset";
     case COLUMN_METADATA_ID:

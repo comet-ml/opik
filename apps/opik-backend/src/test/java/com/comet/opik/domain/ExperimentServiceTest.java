@@ -47,6 +47,9 @@ class ExperimentServiceTest {
     private DatasetVersionService datasetVersionService;
 
     @Mock
+    private ProjectService projectService;
+
+    @Mock
     private IdGenerator idGenerator;
 
     @Mock
@@ -77,6 +80,7 @@ class ExperimentServiceTest {
                 experimentItemDAO,
                 datasetService,
                 datasetVersionService,
+                projectService,
                 idGenerator,
                 nameGenerator,
                 eventBus,

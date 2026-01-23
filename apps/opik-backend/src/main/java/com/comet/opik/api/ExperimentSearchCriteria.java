@@ -15,5 +15,5 @@ import java.util.UUID;
 public record ExperimentSearchCriteria(String name, UUID datasetId, @NonNull EntityType entityType,
         boolean datasetDeleted, Collection<UUID> datasetIds, UUID promptId, List<SortingField> sortingFields,
         UUID optimizationId, Set<ExperimentType> types, List<? extends Filter> filters,
-        Set<UUID> experimentIds) {
+        Set<UUID> experimentIds, UUID projectId, boolean projectDeleted) {
 }
