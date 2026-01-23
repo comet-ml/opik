@@ -1,184 +1,128 @@
 package com.comet.opik.domain.evaluators.python;
 
 import com.comet.opik.api.evaluators.CommonMetric;
-import com.comet.opik.api.evaluators.CommonMetric.InitParameter;
-import com.comet.opik.api.evaluators.CommonMetric.ScoreParameter;
+import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.RetriableHttpClient;
+import com.comet.opik.utils.RetryUtils;
+import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
 /**
  * Registry of common metrics available for online evaluation.
- * These are simple heuristic metrics from the Python SDK that don't require LLM calls.
+ * These are heuristic metrics from the Python SDK that don't require LLM calls.
  *
- * For now, this is a static list. In the future, we may dynamically parse these from the SDK.
+ * Metrics are dynamically fetched from the Python backend on first access and cached.
+ * If the Python backend is unavailable, an empty list is returned.
  */
 @Slf4j
 @Singleton
+@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class CommonMetricsRegistry {
 
-    private static final List<CommonMetric> COMMON_METRICS = List.of(
-            // Equals metric
-            CommonMetric.builder()
-                    .id("equals")
-                    .name("Equals")
-                    .description("A metric that checks if an output string exactly matches a reference string. " +
-                            "Returns 1.0 if the strings match exactly, and 0.0 otherwise.")
-                    .scoreParameters(List.of(
-                            ScoreParameter.builder()
-                                    .name("output")
-                                    .type("str")
-                                    .description("The output string to check.")
-                                    .required(true)
-                                    .mappable(true)
-                                    .build(),
-                            ScoreParameter.builder()
-                                    .name("reference")
-                                    .type("str")
-                                    .description("The reference string to compare against.")
-                                    .required(true)
-                                    .mappable(false)
-                                    .build()))
-                    .initParameters(List.of(
-                            InitParameter.builder()
-                                    .name("case_sensitive")
-                                    .type("bool")
-                                    .description("Whether the comparison should be case-sensitive.")
-                                    .defaultValue("False")
-                                    .required(false)
-                                    .build()))
-                    .build(),
+    private static final String COMMON_METRICS_URL_TEMPLATE = "%s/v1/private/evaluators/common-metrics";
 
-            // Contains metric
-            CommonMetric.builder()
-                    .id("contains")
-                    .name("Contains")
-                    .description("A metric that checks if a reference string is contained within an output string. " +
-                            "Returns 1.0 if the reference is found in the output, 0.0 otherwise.")
-                    .scoreParameters(List.of(
-                            ScoreParameter.builder()
-                                    .name("output")
-                                    .type("str")
-                                    .description("The output string to check.")
-                                    .required(true)
-                                    .mappable(true)
-                                    .build(),
-                            ScoreParameter.builder()
-                                    .name("reference")
-                                    .type("str")
-                                    .description("The reference string to look for in the output. " +
-                                            "If not provided, falls back to the default reference set at initialization.")
-                                    .required(false)
-                                    .mappable(false)
-                                    .build()))
-                    .initParameters(List.of(
-                            InitParameter.builder()
-                                    .name("case_sensitive")
-                                    .type("bool")
-                                    .description("Whether the comparison should be case-sensitive.")
-                                    .defaultValue("False")
-                                    .required(false)
-                                    .build(),
-                            InitParameter.builder()
-                                    .name("reference")
-                                    .type("str")
-                                    .description("Optional default reference string. If provided, it will be used " +
-                                            "unless a reference is explicitly passed to score().")
-                                    .defaultValue(null)
-                                    .required(false)
-                                    .build()))
-                    .build(),
+    private final @NonNull RetriableHttpClient client;
+    private final @NonNull OpikConfiguration config;
 
-            // LevenshteinRatio metric
-            CommonMetric.builder()
-                    .id("levenshtein_ratio")
-                    .name("LevenshteinRatio")
-                    .description("A metric that calculates the Levenshtein ratio between two strings. " +
-                            "Returns a score between 0.0 and 1.0, where 1.0 indicates identical strings.")
-                    .scoreParameters(List.of(
-                            ScoreParameter.builder()
-                                    .name("output")
-                                    .type("str")
-                                    .description("The output string to compare.")
-                                    .required(true)
-                                    .mappable(true)
-                                    .build(),
-                            ScoreParameter.builder()
-                                    .name("reference")
-                                    .type("str")
-                                    .description("The reference string to compare against.")
-                                    .required(true)
-                                    .mappable(false)
-                                    .build()))
-                    .initParameters(List.of(
-                            InitParameter.builder()
-                                    .name("case_sensitive")
-                                    .type("bool")
-                                    .description("Whether the comparison should be case-sensitive.")
-                                    .defaultValue("False")
-                                    .required(false)
-                                    .build()))
-                    .build(),
+    private volatile List<CommonMetric> cachedMetrics;
+    private volatile boolean initialized = false;
 
-            // RegexMatch metric
-            CommonMetric.builder()
-                    .id("regex_match")
-                    .name("RegexMatch")
-                    .description(
-                            "A metric that checks if an output string matches a given regular expression pattern. " +
-                                    "Returns 1.0 if the output matches the pattern, 0.0 otherwise.")
-                    .scoreParameters(List.of(
-                            ScoreParameter.builder()
-                                    .name("output")
-                                    .type("str")
-                                    .description("The output string to check against the regex pattern.")
-                                    .required(true)
-                                    .mappable(true)
-                                    .build()))
-                    .initParameters(List.of(
-                            InitParameter.builder()
-                                    .name("regex")
-                                    .type("str")
-                                    .description("The regular expression pattern to match against.")
-                                    .defaultValue(null)
-                                    .required(true)
-                                    .build()))
-                    .build(),
+    /**
+     * Ensures the metrics are loaded, fetching from Python backend if not already cached.
+     * Uses double-checked locking for thread safety.
+     */
+    private void ensureInitialized() {
+        if (!initialized) {
+            synchronized (this) {
+                if (!initialized) {
+                    log.info("Lazily initializing CommonMetricsRegistry - fetching metrics from Python backend");
+                    try {
+                        this.cachedMetrics = fetchMetricsFromPythonBackend();
+                        log.info("Successfully fetched '{}' common metrics from Python backend", cachedMetrics.size());
+                    } catch (Exception e) {
+                        log.warn("Failed to fetch metrics from Python backend, returning empty list", e);
+                        this.cachedMetrics = List.of();
+                    }
+                    initialized = true;
+                }
+            }
+        }
+    }
 
-            // IsJson metric
-            CommonMetric.builder()
-                    .id("is_json")
-                    .name("IsJson")
-                    .description("A metric that checks if a given output string is valid JSON. " +
-                            "Returns 1.0 if the output can be parsed as JSON, 0.0 otherwise.")
-                    .scoreParameters(List.of(
-                            ScoreParameter.builder()
-                                    .name("output")
-                                    .type("str")
-                                    .description("The output string to check for JSON validity.")
-                                    .required(true)
-                                    .mappable(true)
-                                    .build()))
-                    .initParameters(List.of())
-                    .build());
+    /**
+     * Fetches the list of common metrics from the Python backend.
+     *
+     * @return List of common metrics
+     */
+    private List<CommonMetric> fetchMetricsFromPythonBackend() {
+        String url = COMMON_METRICS_URL_TEMPLATE.formatted(config.getPythonEvaluator().getUrl());
+        log.debug("Fetching common metrics from '{}'", url);
+
+        return RetriableHttpClient.newGet(c -> c.target(url))
+                .withRetryPolicy(RetryUtils.handleHttpErrors(
+                        config.getPythonEvaluator().getMaxRetryAttempts(),
+                        config.getPythonEvaluator().getMinRetryDelay().toJavaDuration(),
+                        config.getPythonEvaluator().getMaxRetryDelay().toJavaDuration()))
+                .withResponse(this::processResponse)
+                .execute(client);
+    }
+
+    /**
+     * Processes the HTTP response from the Python backend.
+     *
+     * @param response The HTTP response
+     * @return List of common metrics
+     */
+    private List<CommonMetric> processResponse(Response response) {
+        int statusCode = response.getStatus();
+        Response.StatusType statusInfo = response.getStatusInfo();
+
+        if (statusInfo.getFamily() == Response.Status.Family.SUCCESSFUL) {
+            CommonMetric.CommonMetricList metricList = response.readEntity(CommonMetric.CommonMetricList.class);
+            return metricList.content() != null ? metricList.content() : List.of();
+        }
+
+        String errorMessage = "Unknown error";
+        if (response.hasEntity() && response.bufferEntity()) {
+            try {
+                errorMessage = response.readEntity(String.class);
+            } catch (RuntimeException e) {
+                log.warn("Failed to parse error response", e);
+            }
+        }
+
+        throw new RuntimeException(
+                "Failed to fetch common metrics from Python backend (HTTP " + statusCode + "): " + errorMessage);
+    }
 
     /**
      * Returns all available common metrics.
+     * Fetches from Python backend on first call and caches the result.
      */
     public CommonMetric.CommonMetricList getAll() {
-        log.debug("Returning '{}' common metrics", COMMON_METRICS.size());
+        ensureInitialized();
+        log.debug("Returning '{}' common metrics", cachedMetrics != null ? cachedMetrics.size() : 0);
         return CommonMetric.CommonMetricList.builder()
-                .content(COMMON_METRICS)
+                .content(cachedMetrics != null ? cachedMetrics : List.of())
                 .build();
     }
 
     /**
      * Finds a metric by its ID.
+     * Fetches from Python backend on first call and caches the result.
      */
     public CommonMetric findById(@NonNull String id) {
-        return COMMON_METRICS.stream()
+        ensureInitialized();
+        if (cachedMetrics == null) {
+            return null;
+        }
+        return cachedMetrics.stream()
                 .filter(m -> m.id().equals(id))
                 .findFirst()
                 .orElse(null);

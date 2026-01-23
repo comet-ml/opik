@@ -13,6 +13,9 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download NLTK data required for heuristic metrics
+RUN python3 -c "import nltk; nltk.download('wordnet', quiet=True); nltk.download('omw-1.4', quiet=True); nltk.download('punkt', quiet=True); nltk.download('punkt_tab', quiet=True)"
+
 ##############################################################
 # Runtime stage - minimal packages only
 FROM docker:28.4.0
@@ -28,6 +31,9 @@ WORKDIR /opt/opik-python-backend
 # Copy the virtual environment from builder stage
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy NLTK data from builder stage
+COPY --from=builder /root/nltk_data /root/nltk_data
 
 ENV PYTHON_CODE_EXECUTOR_ASSET_NAME="opik-sandbox-executor-python"
 # Optionally copies the file. It's built ok without it, as it'll be pulled before running anyway.
