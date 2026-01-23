@@ -4,6 +4,7 @@ import os
 import random
 import string
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
@@ -34,6 +35,59 @@ def create_opik_logo_image() -> Path:
         tmp.write(OPIK_LOGO_PNG)
         temp_path = Path(tmp.name)
     return temp_path
+
+
+def verify_trace_ingested(
+    client: opik.Opik,
+    trace_name: str,
+    project_name: str,
+    timeout_seconds: int = 20,
+    debug: bool = False,
+) -> bool:
+    """
+    Verify that a trace was successfully ingested into Opik by polling the backend.
+
+    Args:
+        client: The Opik client instance to use for querying.
+        trace_name: The name of the trace to search for.
+        project_name: The project name where the trace should be found.
+        timeout_seconds: Maximum time to wait for the trace (default: 20 seconds).
+        debug: Whether to print debug information.
+
+    Returns:
+        True if the trace was found, False otherwise.
+    """
+    start_time = time.time()
+    poll_interval = 0.5  # Start with 0.5 second intervals
+    max_poll_interval = 2.0  # Maximum interval between polls
+
+    while time.time() - start_time < timeout_seconds:
+        try:
+            traces = client.search_traces(
+                project_name=project_name,
+                filter_string=f'name = "{trace_name}"',
+                max_results=10,
+            )
+
+            if traces:
+                if debug:
+                    console.print(
+                        f"[dim]Found {len(traces)} trace(s) matching name '{trace_name}'[/dim]"
+                    )
+                return True
+
+            # Exponential backoff: increase poll interval up to max
+            time.sleep(min(poll_interval, max_poll_interval))
+            poll_interval *= 1.5
+
+        except Exception as e:
+            if debug:
+                console.print(f"[yellow]Warning: Error querying traces: {e}[/yellow]")
+            # If querying fails, we can't verify, so return False
+            return False
+
+    # Timeout reached without finding trace
+    return False
 
 
 @contextmanager
@@ -176,13 +230,48 @@ def run_smoke_test(
                 # Only print success messages after flush/end complete successfully
                 if original_exception is None:
                     console.print("[green]✓[/green] Flushed data to Opik")
-                    console.print(
-                        "\n[bold green]Smoke test completed successfully![/bold green]"
-                    )
-                    console.print(
-                        f"[dim]Check your Opik dashboard at workspace '{workspace}' "
-                        f"and project '{project_name}' to verify the trace was created.[/dim]"
-                    )
+
+                    # Verify trace was ingested by querying the backend
+                    trace_name = "smoke-test"
+                    try:
+                        console.print("[dim]Verifying trace ingestion...[/dim]")
+                        trace_found = verify_trace_ingested(
+                            client=client,
+                            trace_name=trace_name,
+                            project_name=project_name,
+                            timeout_seconds=20,
+                            debug=debug,
+                        )
+
+                        if trace_found:
+                            console.print(
+                                "\n[bold green]Smoke test completed successfully![/bold green]"
+                            )
+                            console.print(
+                                f"[dim]Trace '{trace_name}' verified in workspace '{workspace}' "
+                                f"and project '{project_name}'.[/dim]"
+                            )
+                        else:
+                            console.print(
+                                "\n[yellow]Smoke test data flushed to Opik, but trace verification timed out.[/yellow]"
+                            )
+                            console.print(
+                                f"[dim]Data may still be processing. Please verify in the Opik dashboard "
+                                f"at workspace '{workspace}' and project '{project_name}'.[/dim]"
+                            )
+                    except Exception as verification_error:
+                        # If verification fails (e.g., API errors), print advisory message
+                        if debug:
+                            console.print(
+                                f"[yellow]Warning: Could not verify trace ingestion: {verification_error}[/yellow]"
+                            )
+                        console.print(
+                            "\n[yellow]Smoke test data flushed to Opik — please verify in the dashboard.[/yellow]"
+                        )
+                        console.print(
+                            f"[dim]Check your Opik dashboard at workspace '{workspace}' "
+                            f"and project '{project_name}' to verify the trace was created.[/dim]"
+                        )
             except Exception as cleanup_error:
                 # Treat flush/end failures as test failures
                 if original_exception is None:

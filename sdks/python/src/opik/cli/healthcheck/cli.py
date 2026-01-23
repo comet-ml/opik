@@ -84,12 +84,20 @@ def healthcheck(
         api_key = ctx.obj.get("api_key") if ctx.obj else None
         debug = ctx.obj.get("debug", False) if ctx.obj else False
 
-        run_smoke_test(
-            workspace=smoke_test,
-            project_name=project_name,
-            api_key=api_key,
-            debug=debug,
-        )
+        try:
+            run_smoke_test(
+                workspace=smoke_test,
+                project_name=project_name,
+                api_key=api_key,
+                debug=debug,
+            )
+        except Exception as e:
+            click.echo(f"Smoke test failed: {e}", err=True)
+            if debug:
+                import traceback
+
+                click.echo("Traceback:", err=True)
+                click.echo(traceback.format_exc(), err=True)
 
     # Always run the standard healthcheck
     opik_healthcheck.run(show_installed_packages)
