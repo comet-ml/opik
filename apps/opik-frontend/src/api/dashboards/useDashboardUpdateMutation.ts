@@ -47,6 +47,14 @@ const useDashboardUpdateMutation = (
             variant: "destructive",
           });
         },
+
+    onMutate: async ({ dashboard }: UseDashboardUpdateMutationParams) => {
+      // optimistic update
+      queryClient.setQueryData(
+        [DASHBOARD_KEY, { dashboardId: dashboard.id }],
+        dashboard,
+      );
+    },
     onSuccess: (data: Dashboard) => {
       queryClient.invalidateQueries({
         queryKey: [DASHBOARDS_KEY],

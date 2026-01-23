@@ -175,7 +175,9 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
           </div>
         )}
 
-        {!isPending && dashboard && <DashboardContent />}
+        {!isPending && dashboard && (
+          <DashboardContent onSave={isTemplate ? undefined : save} />
+        )}
       </div>
     </>
   );
