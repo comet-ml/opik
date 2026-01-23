@@ -34,93 +34,20 @@ Comprehensive guidelines for writing and maintaining ClickHouse SQL queries embe
 
 ### **Common ClickHouse Tables**
 
-```sql
--- Core analytics tables (from 000001_init_script.sql)
-traces (
-    id              FixedString(36),
-    workspace_id    String,
-    project_id      FixedString(36),
-    name            String,
-    start_time      DateTime64(9, 'UTC'),
-    end_time        Nullable(DateTime64(9, 'UTC')),
-    input           String,
-    output          String,
-    metadata        String,
-    tags            Array(String),
-    created_at      DateTime64(9, 'UTC'),
-    last_updated_at DateTime64(9, 'UTC'),
-    created_by      String,
-    last_updated_by String,
-    thread_id       String,
-    error_info      String,
-    visibility_mode Enum8('unknown' = 0, 'default' = 1, 'hidden' = 2) DEFAULT 'default'
-) ENGINE = ReplacingMergeTree(last_updated_at)
-  ORDER BY (workspace_id, project_id, id);
+**Note**: The schema examples below are for reference only. Always verify the actual schema from migration files in `src/main/resources/liquibase/db-app-analytics/migrations/` as they are the source of truth. Key tables include:
 
-spans (
-    id              FixedString(36),
-    workspace_id    String,
-    project_id      FixedString(36),
-    trace_id        FixedString(36),
-    parent_span_id  String,
-    name            String,
-    type            Enum8('unknown' = 0, 'general' = 1, 'tool' = 2, 'llm' = 3),
-    start_time      DateTime64(9, 'UTC'),
-    end_time        Nullable(DateTime64(9, 'UTC')),
-    input           String,
-    output          String,
-    metadata        String,
-    tags            Array(String),
-    usage           Map(String, Int32),
-    total_estimated_cost Decimal(38, 12),  -- Changed from Decimal128(12) in migration 000017
-    created_at      DateTime64(9, 'UTC'),
-    last_updated_at DateTime64(9, 'UTC'),
-    created_by      String,
-    last_updated_by String,
-    model           String,
-    error_info      String
-) ENGINE = ReplacingMergeTree(last_updated_at)
-  ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id);
+- `traces` - Main trace entities (ReplacingMergeTree)
+- `spans` - Span entities within traces (ReplacingMergeTree)
+- `feedback_scores` - Feedback scores for entities (ReplacingMergeTree)
+- `experiments` - Experiment entities (ReplacingMergeTree)
+- `automation_rule_evaluator_logs` - Audit logs (ReplicatedMergeTree - no deduplication needed)
+- `alert_logs` - Alert audit logs (ReplicatedMergeTree - no deduplication needed)
 
-feedback_scores (
-    entity_id       FixedString(36),
-    entity_type     ENUM('unknown' = 0, 'span' = 1, 'trace' = 2, 'thread' = 3),
-    project_id      FixedString(36),
-    workspace_id    String,
-    name            String,
-    category_name   String,
-    value           Decimal64(9),
-    reason          String,
-    source          Enum8('sdk', 'ui'),
-    created_at      DateTime64(9, 'UTC'),
-    last_updated_at DateTime64(9, 'UTC'),
-    created_by      String,
-    last_updated_by String
-) ENGINE = ReplacingMergeTree(last_updated_at)
-  ORDER BY (workspace_id, project_id, entity_type, entity_id, name);
-
-experiments (
-    workspace_id    String,
-    dataset_id      FixedString(36),
-    id              FixedString(36),
-    name            String,
-    metadata        String,
-    tags            Array(String),  -- Added in migration 000051
-    created_at      DateTime64(9, 'UTC'),
-    last_updated_at DateTime64(9, 'UTC'),
-    created_by      String,
-    last_updated_by String,
-    prompt_version_id Nullable(FixedString(36)),  -- Made nullable in migration 000017
-    prompt_id       Nullable(FixedString(36)),    -- Made nullable in migration 000017
-    prompt_versions Map(FixedString(36), Array(FixedString(36))),  -- Updated in migration 000017
-    type            ENUM('regular' = 0, 'trial' = 1, 'mini-batch' = 2),  -- Updated in migration 000021
-    optimization_id String,  -- Changed from FixedString(36) in migration 000021
-    status          ENUM('running' = 0, 'completed' = 1, 'cancelled' = 2),
-    experiment_scores String,  -- Added in migration 000049
-    dataset_version_id String  -- Added in migration 000050
-) ENGINE = ReplacingMergeTree(last_updated_at)
-  ORDER BY (workspace_id, dataset_id, id);
-```
+**Important enum values to note**:
+- `spans.type`: `Enum8('unknown' = 0, 'general' = 1, 'tool' = 2, 'llm' = 3, 'guardrail' = 4)` (migration 000016)
+- `feedback_scores.source`: `Enum8('sdk' = 1, 'ui' = 2, 'online_scoring' = 3)` (migration 000017)
+- `traces.visibility_mode`: `Enum8('unknown' = 0, 'default' = 1, 'hidden' = 2)` (migration 000027)
+- `experiments.type`: `ENUM('regular' = 0, 'trial' = 1, 'mini-batch' = 2)` (migration 000021)
 
 ### **Before Writing Queries**
 
@@ -136,21 +63,14 @@ experiments (
 
 ## ReplacingMergeTree Deduplication
 
-All ClickHouse analytics tables use `ReplacingMergeTree` engine, which requires explicit deduplication to get the latest version of each row.
+Most ClickHouse analytics tables use `ReplacingMergeTree` engine, which requires explicit deduplication to get the latest version of each row. 
+
+**Important**: This does **not** apply to audit/log tables that use `ReplicatedMergeTree` (e.g., `automation_rule_evaluator_logs`, `alert_logs`), which are expected to keep full history and should never be deduplicated.
 
 ### **Three Deduplication Patterns**
 
 ```java
-// Pattern 1: FINAL (simplest, but potentially slower for large tables)
-private static final String QUERY = """
-    SELECT *
-    FROM traces FINAL
-    WHERE workspace_id = :workspace_id
-    AND project_id = :project_id
-    ;
-    """;
-
-// Pattern 2: ORDER BY + LIMIT 1 BY (more explicit, better performance)
+// Pattern 1: ORDER BY + LIMIT 1 BY (most common in Opik, better performance)
 private static final String QUERY = """
     SELECT *
     FROM traces
@@ -158,6 +78,15 @@ private static final String QUERY = """
     AND project_id = :project_id
     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
     LIMIT 1 BY id
+    ;
+    """;
+
+// Pattern 2: FINAL (simplest syntax, increasingly used, good for straightforward queries)
+private static final String QUERY = """
+    SELECT *
+    FROM traces FINAL
+    WHERE workspace_id = :workspace_id
+    AND project_id = :project_id
     ;
     """;
 
@@ -186,8 +115,8 @@ private static final String QUERY = """
 
 ### **When to Use Each Pattern**
 
-- **FINAL**: Simplest syntax, use for small tables or when performance is not critical
-- **ORDER BY + LIMIT 1 BY**: Better performance than FINAL, use when you need explicit ordering control
+- **ORDER BY + LIMIT 1 BY**: Most common pattern in Opik, better performance for large tables, use when you need explicit ordering control
+- **FINAL**: Simplest syntax, increasingly preferred for straightforward queries, good readability
 - **CTE with deduplication**: Use when the deduplicated result is referenced multiple times in the same query (avoids redundant deduplication)
 
 ## String Template Engine Patterns
@@ -501,11 +430,21 @@ WITH traces_scope AS (
 )
 SELECT * FROM traces_scope;
 
-// ✅ Good: Use IN subqueries for filtering
+// ✅ Good: Use IN subqueries for filtering (preferred over JOINs in ClickHouse)
 WHERE entity_id IN (SELECT trace_id FROM experiment_items_final)
+
+// ✅ Good: Subqueries generally perform better than JOINs for filtering
+// Prefer subqueries as the first option; use JOINs sparingly and only when necessary
+WHERE trace_id IN (
+    SELECT id FROM traces WHERE project_id = :project_id
+)
 
 // ❌ Bad: Don't fetch all data then filter in Java
 SELECT * FROM traces;  // Then filter in Java
+
+// ❌ Bad: Avoid unnecessary JOINs when a subquery would suffice
+FROM traces t
+JOIN experiments e ON t.id = e.trace_id  // Use IN subquery instead
 ```
 
 ### **LIMIT 1 BY Performance**
@@ -596,6 +535,7 @@ var template = getSTWithLogComment(QUERY, "queryName", workspaceId, projectId);
 ## Key References
 
 - **Migration files**: `src/main/resources/liquibase/db-app-analytics/migrations/`
+- **Migration script guidelines**: See `apps/opik-backend/.cursor/rules/db_migration_script.mdc` for creating new migrations
 - **Example DAOs**: `ProjectMetricsDAO.java`, `TraceDAO.java`, `ExperimentDAO.java`
 - **ClickHouse docs**: [ClickHouse Documentation](https://clickhouse.com/docs)
 - **R2DBC ClickHouse**: [R2DBC ClickHouse Driver](https://github.com/ClickHouse/clickhouse-java)
