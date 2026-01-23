@@ -196,3 +196,84 @@ describe("Opik client custom config", () => {
     expect(client.config.requestOptions?.headers).eq(undefined);
   });
 });
+
+describe("Opik client apiKey propagation", () => {
+  const originalFetch = global.fetch;
+  let capturedHeaders: Headers | null = null;
+
+  beforeEach(() => {
+    // Mock fetch to capture request headers
+    global.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.headers) {
+        // Convert headers to Headers object if needed
+        if (init.headers instanceof Headers) {
+          capturedHeaders = init.headers;
+        } else if (typeof init.headers === "object") {
+          capturedHeaders = new Headers(init.headers as Record<string, string>);
+        }
+      }
+      return new Response(JSON.stringify({}), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    capturedHeaders = null;
+  });
+
+  it("should propagate apiKey to Authorization header in HTTP requests", async () => {
+    const testApiKey = "test-api-key-12345";
+    const client = new Opik({
+      apiKey: testApiKey,
+      apiUrl: "https://www.comet.com/opik/api",
+      workspaceName: "test-workspace",
+    });
+
+    // Make an API call that will trigger an HTTP request
+    await client.api.isAlive();
+
+    // Verify fetch was called
+    expect(global.fetch).toHaveBeenCalled();
+
+    // Verify Authorization header contains the apiKey
+    expect(capturedHeaders).not.toBeNull();
+    if (capturedHeaders) {
+      // The apiKey should be in the Authorization header
+      // Note: Fern may format it differently, so we check for the key value
+      const authorizationHeader = capturedHeaders.get("authorization");
+      expect(authorizationHeader).toBeDefined();
+      expect(authorizationHeader).toContain(testApiKey);
+    }
+  });
+
+  it("should propagate apiKey from environment variable to HTTP requests", async () => {
+    const testApiKey = "env-api-key-67890";
+    process.env.OPIK_API_KEY = testApiKey;
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/opik/api";
+    process.env.OPIK_WORKSPACE = "test-workspace";
+
+    const client = new Opik();
+
+    // Make an API call that will trigger an HTTP request
+    await client.api.isAlive();
+
+    // Verify fetch was called
+    expect(global.fetch).toHaveBeenCalled();
+
+    // Verify Authorization header contains the apiKey
+    expect(capturedHeaders).not.toBeNull();
+    if (capturedHeaders) {
+      const authorizationHeader = capturedHeaders.get("authorization");
+      expect(authorizationHeader).toBeDefined();
+      expect(authorizationHeader).toContain(testApiKey);
+    }
+
+    // Cleanup
+    delete process.env.OPIK_API_KEY;
+    delete process.env.OPIK_URL_OVERRIDE;
+    delete process.env.OPIK_WORKSPACE;
+  });
+});
