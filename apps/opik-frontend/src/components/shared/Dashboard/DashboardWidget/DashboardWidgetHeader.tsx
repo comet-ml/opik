@@ -5,7 +5,6 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 type DashboardWidgetHeaderProps = {
   title: string;
   subtitle?: string;
-  messages?: (string | React.ReactNode)[];
   actions?: React.ReactElement<{ onOpenChange?: (open: boolean) => void }>;
   dragHandle?: React.ReactNode;
   className?: string;
@@ -14,15 +13,7 @@ type DashboardWidgetHeaderProps = {
 
 const DashboardWidgetHeader: React.FunctionComponent<
   DashboardWidgetHeaderProps
-> = ({
-  title,
-  subtitle,
-  messages,
-  actions,
-  dragHandle,
-  className,
-  preview = false,
-}) => {
+> = ({ title, subtitle, actions, dragHandle, className, preview = false }) => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const actionsWithHandler =
@@ -31,17 +22,6 @@ const DashboardWidgetHeader: React.FunctionComponent<
       : null;
 
   const showDragHandle = dragHandle && !preview;
-
-  const renderMessages = () => {
-    if (!messages || messages.length === 0) return null;
-
-    return messages.map((msg, index) => (
-      <React.Fragment key={index}>
-        {index > 0 && <span className="mx-1">·</span>}
-        {msg}
-      </React.Fragment>
-    ));
-  };
 
   return (
     <div
@@ -72,13 +52,6 @@ const DashboardWidgetHeader: React.FunctionComponent<
             <TooltipWrapper content={subtitle}>
               <div className="line-clamp-3 text-xs font-normal text-muted-slate">
                 {subtitle}
-              </div>
-            </TooltipWrapper>
-          )}
-          {messages && messages.length > 0 && (
-            <TooltipWrapper content={<div>{renderMessages()}</div>}>
-              <div className="line-clamp-2 text-xs font-normal text-muted-slate">
-                {renderMessages()}
               </div>
             </TooltipWrapper>
           )}

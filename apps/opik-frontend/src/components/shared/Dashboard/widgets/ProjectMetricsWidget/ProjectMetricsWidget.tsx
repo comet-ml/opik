@@ -69,7 +69,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
     { enabled: overrideDefaults && !!widgetProjectId },
   );
 
-  const { projectId, messages, interval, intervalStart, intervalEnd } =
+  const { projectId, generatedSubtitle, interval, intervalStart, intervalEnd } =
     useMemo(() => {
       const { projectId: resolvedProjectId, infoMessage } =
         resolveProjectIdFromConfig(
@@ -83,11 +83,11 @@ const ProjectMetricsWidget: React.FunctionComponent<
         globalConfig.dateRange,
       );
 
-      const messages = [infoMessage].filter(Boolean) as string[];
+      const generatedSubtitle = infoMessage || "";
 
       return {
         projectId: resolvedProjectId,
-        messages,
+        generatedSubtitle,
         interval,
         intervalStart,
         intervalEnd,
@@ -218,12 +218,11 @@ const ProjectMetricsWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader messages={messages} />
+        <DashboardWidget.PreviewHeader generatedSubtitle={generatedSubtitle} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
-          subtitle={widget.subtitle}
-          messages={messages}
+          subtitle={widget.subtitle || generatedSubtitle || ""}
           actions={
             <DashboardWidget.ActionsMenu
               sectionId={sectionId!}

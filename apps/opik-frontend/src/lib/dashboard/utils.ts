@@ -42,9 +42,8 @@ export const resolveProjectIdFromConfig = (
   const projectId = overrideDefaults ? widgetProjectId : globalProjectId;
 
   let infoMessage: string | undefined;
-  if (overrideDefaults) {
-    const name = projectName || "custom project";
-    infoMessage = `This widget uses ${name} instead of the dashboard default.`;
+  if (overrideDefaults && projectName) {
+    infoMessage = `Project: ${projectName}`;
   }
 
   return {

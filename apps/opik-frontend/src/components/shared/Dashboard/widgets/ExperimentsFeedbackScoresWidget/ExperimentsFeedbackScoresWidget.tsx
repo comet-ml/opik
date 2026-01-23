@@ -376,15 +376,16 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     !isSelectExperimentsMode &&
     totalExperiments > experimentsListSize;
 
-  const messages = [
-    overrideDefaults &&
-      "This widget uses custom experiments instead of the dashboard default.",
+  const generatedSubtitle = [
+    overrideDefaults && "Experiments: custom selection",
     hasMoreThanLimit &&
       `Showing first ${experimentsListSize} of ${totalExperiments} experiments`,
     isSelectExperimentsMode &&
       hasMoreThanMaxSelected &&
       `Showing first ${MAX_SELECTED_EXPERIMENTS} of ${experimentIds.length} selected experiments`,
-  ].filter(Boolean) as string[];
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const { transformedData, chartConfig } = useMemo(() => {
     if (chartType === CHART_TYPE.radar || chartType === CHART_TYPE.bar) {
@@ -524,12 +525,11 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   return (
     <DashboardWidget>
       {preview ? (
-        <DashboardWidget.PreviewHeader messages={messages} />
+        <DashboardWidget.PreviewHeader generatedSubtitle={generatedSubtitle} />
       ) : (
         <DashboardWidget.Header
           title={widget.title || widget.generatedTitle || ""}
-          subtitle={widget.subtitle}
-          messages={messages}
+          subtitle={widget.subtitle || generatedSubtitle || ""}
           actions={
             <DashboardWidget.ActionsMenu
               sectionId={sectionId!}

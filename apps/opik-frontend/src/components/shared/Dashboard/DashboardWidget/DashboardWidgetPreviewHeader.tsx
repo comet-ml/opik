@@ -6,16 +6,15 @@ import {
 } from "@/store/DashboardStore";
 import InlineEditableText from "@/components/shared/InlineEditableText/InlineEditableText";
 import { cn } from "@/lib/utils";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type DashboardWidgetPreviewHeaderProps = {
   className?: string;
-  messages?: (string | React.ReactNode)[];
+  generatedSubtitle?: string;
 };
 
 const DashboardWidgetPreviewHeader: React.FunctionComponent<
   DashboardWidgetPreviewHeaderProps
-> = ({ className, messages }) => {
+> = ({ className, generatedSubtitle }) => {
   const previewWidget = useDashboardStore(selectPreviewWidget);
   const updatePreviewWidget = useDashboardStore(selectUpdatePreviewWidget);
 
@@ -25,7 +24,9 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
 
   const { title, subtitle, generatedTitle } = previewWidget;
   const displayTitle = title || generatedTitle || "";
+  const displaySubtitle = subtitle || generatedSubtitle || "";
   const titlePlaceholder = generatedTitle || "Enter widget title";
+  const subtitlePlaceholder = generatedSubtitle || "Click to add a description";
 
   const handleTitleChange = (newTitle: string) => {
     updatePreviewWidget({ title: newTitle });
@@ -33,17 +34,6 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
 
   const handleSubtitleChange = (newSubtitle: string) => {
     updatePreviewWidget({ subtitle: newSubtitle });
-  };
-
-  const renderMessages = () => {
-    if (!messages || messages.length === 0) return null;
-
-    return messages.map((msg, index) => (
-      <React.Fragment key={index}>
-        {index > 0 && <span className="mx-1">·</span>}
-        {msg}
-      </React.Fragment>
-    ));
   };
 
   return (
@@ -56,18 +46,11 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
         isTitle
       />
       <InlineEditableText
-        value={subtitle || ""}
-        placeholder="Click to add a description"
-        defaultValue=""
+        value={displaySubtitle}
+        placeholder={subtitlePlaceholder}
+        defaultValue={generatedSubtitle}
         onChange={handleSubtitleChange}
       />
-      {messages && messages.length > 0 && (
-        <TooltipWrapper content={<div>{renderMessages()}</div>}>
-          <div className="line-clamp-2 px-2 text-xs font-normal text-muted-slate">
-            {renderMessages()}
-          </div>
-        </TooltipWrapper>
-      )}
     </div>
   );
 };
