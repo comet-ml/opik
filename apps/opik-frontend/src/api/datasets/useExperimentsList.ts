@@ -12,6 +12,8 @@ const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
 export type UseExperimentsListParams = {
   workspaceName?: string;
   promptId?: string;
+  projectId?: string;
+  projectDeleted?: boolean;
   optimizationId?: string;
   datasetDeleted?: boolean;
   types?: EXPERIMENT_TYPE[];
@@ -36,6 +38,8 @@ export const getExperimentsList = async (
   {
     workspaceName,
     promptId,
+    projectId,
+    projectDeleted,
     optimizationId,
     datasetDeleted,
     types = DEFAULT_EXPERIMENTS_TYPES,
@@ -53,9 +57,11 @@ export const getExperimentsList = async (
     params: {
       ...(workspaceName && { workspace_name: workspaceName }),
       ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
+      ...(isBoolean(projectDeleted) && { project_deleted: projectDeleted }),
       ...processFilters(filters, generatePromptFilters(promptId)),
       ...processSorting(sorting),
       ...(search && { name: search }),
+      ...(projectId && { project_id: projectId }),
       ...(optimizationId && { optimization_id: optimizationId }),
       ...(types && { types: JSON.stringify(types) }),
       ...(experimentIds && { experiment_ids: JSON.stringify(experimentIds) }),
