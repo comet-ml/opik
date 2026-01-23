@@ -5,6 +5,7 @@ import random
 import string
 import tempfile
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
@@ -164,6 +165,11 @@ def run_smoke_test(
     client: Optional[opik.Opik] = None
     original_exception: Optional[Exception] = None
 
+    # Generate a unique trace name for this run to avoid false positives
+    # from older traces with the same name. This ensures deterministic usage
+    # throughout the function execution.
+    trace_name = f"smoke-test-{uuid.uuid4().hex[:8]}"
+
     try:
         console.print("[green]Starting Opik smoke test...[/green]")
 
@@ -184,7 +190,7 @@ def run_smoke_test(
             # Create a trace using context manager
             # Use flush=True to ensure the client flushes when trace ends
             with opik.start_as_current_trace(
-                name="smoke-test", project_name=project_name, flush=True
+                name=trace_name, project_name=project_name, flush=True
             ):
                 console.print("[green]✓[/green] Created trace")
 
@@ -243,7 +249,7 @@ def run_smoke_test(
                     console.print("[green]✓[/green] Flushed data to Opik")
 
                     # Verify trace was ingested by querying the backend
-                    trace_name = "smoke-test"
+                    # trace_name was generated at the start of the function to ensure uniqueness
                     try:
                         console.print("[dim]Verifying trace ingestion...[/dim]")
                         trace_found = verify_trace_ingested(
