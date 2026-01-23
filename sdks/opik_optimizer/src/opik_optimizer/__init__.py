@@ -1,6 +1,7 @@
 import importlib.metadata
 import logging
 import os
+import warnings
 
 from opik.evaluation.models.litellm import warning_filters
 
@@ -36,6 +37,17 @@ __version__ = importlib.metadata.version("opik_optimizer")
 setup_logging(level=logging.WARNING)
 
 warning_filters.add_warning_filters()
+
+# Silence noisy Pydantic serialization warnings emitted by upstream LiteLLM/OpenAI models.
+# We rely on DOTALL regex (`(?s)`) because the warning text spans multiple lines.
+# TODO(opik_optimizer/#pydantic-serialization): remove this filter once we align our expected
+# response models with LiteLLM/OpenAI objects instead of ignoring the warning.
+warnings.filterwarnings(
+    "ignore",
+    message=r"(?s)Pydantic serializer warnings:.*PydanticSerializationUnexpectedValue",
+    category=UserWarning,
+)
+
 
 __all__ = [
     "BaseOptimizer",
