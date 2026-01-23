@@ -60,6 +60,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.v1.events.TraceDeletedListener;
 import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetEventInfoHolder;
@@ -1175,6 +1176,56 @@ class ExperimentsResourceTest {
                     Arguments.of(Operator.NOT_EQUAL, "other"),
                     Arguments.of(Operator.CONTAINS, "tag"),
                     Arguments.of(Operator.NOT_CONTAINS, "other"));
+        }
+
+        @ParameterizedTest
+        @MethodSource("tagsEmptyOperators")
+        @DisplayName("when filtering by tags with IS_EMPTY/IS_NOT_EMPTY, then return correct experiments")
+        void findByFilterTagsEmpty(Operator operator, boolean expectExperimentWithTags) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create two experiments: one with tags, one without
+            var experimentWithTags = generateExperiment().toBuilder()
+                    .tags(Set.of("tag1", "tag2"))
+                    .build();
+            var experimentWithoutTags = generateExperiment().toBuilder()
+                    .tags(null)
+                    .build();
+
+            createAndAssert(experimentWithTags, apiKey, workspaceName);
+            createAndAssert(experimentWithoutTags, apiKey, workspaceName);
+
+            // Filter by tags with IS_EMPTY or IS_NOT_EMPTY
+            var filters = List.of(ExperimentFilter.builder()
+                    .field(ExperimentField.TAGS)
+                    .operator(operator)
+                    .value("")
+                    .build());
+
+            try (var actualResponse = findExperiment(workspaceName, apiKey, 1, 10, null, null, false, null, null,
+                    null, null, filters)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(ExperimentPage.class);
+
+                assertThat(actualPage.total()).isEqualTo(1);
+                assertThat(actualPage.content()).hasSize(1);
+
+                var expectedExperimentId = expectExperimentWithTags
+                        ? experimentWithTags.id()
+                        : experimentWithoutTags.id();
+                assertThat(actualPage.content().getFirst().id()).isEqualTo(expectedExperimentId);
+            }
+        }
+
+        private Stream<Arguments> tagsEmptyOperators() {
+            return Stream.of(
+                    Arguments.of(Operator.IS_NOT_EMPTY, true),
+                    Arguments.of(Operator.IS_EMPTY, false));
         }
 
         @ParameterizedTest
@@ -2909,6 +2960,78 @@ class ExperimentsResourceTest {
                     Set.of(ExperimentType.REGULAR), null, null, apiKey, workspaceName, 400);
         }
 
+        @Test
+        @DisplayName("when grouping by tags including experiments with empty tags, then empty tags appear as separate group")
+        void groupByTagsIncludingEmptyTags() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create experiments: some with tags, some without
+            var experimentWithTags1 = generateExperiment().toBuilder()
+                    .tags(Set.of("tag1", "tag2"))
+                    .build();
+            var experimentWithTags2 = generateExperiment().toBuilder()
+                    .tags(Set.of("tag1", "tag3"))
+                    .build();
+            var experimentWithoutTags1 = generateExperiment().toBuilder()
+                    .tags(null)
+                    .build();
+            var experimentWithoutTags2 = generateExperiment().toBuilder()
+                    .tags(null)
+                    .build();
+
+            createAndAssert(experimentWithTags1, apiKey, workspaceName);
+            createAndAssert(experimentWithTags2, apiKey, workspaceName);
+            createAndAssert(experimentWithoutTags1, apiKey, workspaceName);
+            createAndAssert(experimentWithoutTags2, apiKey, workspaceName);
+
+            // Group by tags
+            var groups = List.of(GroupBy.builder().field(TAGS).type(FieldType.LIST).build());
+
+            var response = experimentResourceClient.findGroupsAggregations(
+                    groups,
+                    Set.of(ExperimentType.REGULAR),
+                    null,
+                    null,
+                    apiKey,
+                    workspaceName,
+                    200);
+
+            // Verify response contains groups for each tag and empty string for experiments without tags
+            assertThat(response).isNotNull();
+            assertThat(response.content()).isNotEmpty();
+
+            // Find the empty tag group
+            var emptyTagGroup = response.content().values().stream()
+                    .filter(group -> "".equals(group.label()))
+                    .findFirst();
+
+            assertThat(emptyTagGroup).isPresent();
+            assertThat(emptyTagGroup.get().aggregations().experimentCount()).isEqualTo(2L); // Two experiments without tags
+
+            // Verify tag groups exist
+            var tag1Group = response.content().values().stream()
+                    .filter(group -> "tag1".equals(group.label()))
+                    .findFirst();
+            assertThat(tag1Group).isPresent();
+            assertThat(tag1Group.get().aggregations().experimentCount()).isEqualTo(2L); // Two experiments have tag1
+
+            var tag2Group = response.content().values().stream()
+                    .filter(group -> "tag2".equals(group.label()))
+                    .findFirst();
+            assertThat(tag2Group).isPresent();
+            assertThat(tag2Group.get().aggregations().experimentCount()).isEqualTo(1L); // One experiment has tag2
+
+            var tag3Group = response.content().values().stream()
+                    .filter(group -> "tag3".equals(group.label()))
+                    .findFirst();
+            assertThat(tag3Group).isPresent();
+            assertThat(tag3Group.get().aggregations().experimentCount()).isEqualTo(1L); // One experiment has tag3
+        }
+
         private Trace createTraceWithDuration(long durationMillis) {
             var startTime = Instant.now();
             return podamFactory.manufacturePojo(Trace.class).toBuilder()
@@ -3500,6 +3623,8 @@ class ExperimentsResourceTest {
             assertThat(actualPage.page()).isEqualTo(page);
             assertThat(actualPage.size()).isEqualTo(expectedExperiments.size());
             assertThat(actualPage.total()).isEqualTo(expectedTotal);
+            assertThat(actualPage.sortableBy())
+                    .containsExactlyElementsOf(ExperimentSortingFactory.EXPERIMENT_SORTABLE_FIELDS);
             assertExperiments(
                     datasetId,
                     expectedExperiments,

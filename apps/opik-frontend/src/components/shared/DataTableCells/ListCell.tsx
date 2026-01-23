@@ -25,14 +25,8 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
     [items, isEmpty],
   );
 
-  const {
-    cellRef,
-    visibleItems,
-    hiddenItems,
-    hasHiddenItems,
-    remainingCount,
-    onMeasure,
-  } = useVisibleItemsByWidth(sortedList, LIST_CELL_CONFIG);
+  const { cellRef, visibleItems, hasHiddenItems, remainingCount, onMeasure } =
+    useVisibleItemsByWidth(sortedList, LIST_CELL_CONFIG);
 
   if (isEmpty) {
     return null;
@@ -63,7 +57,7 @@ const ListCell = (context: CellContext<unknown, unknown>) => {
           ))}
           {hasHiddenItems && (
             <TooltipWrapper
-              content={<TagListTooltipContent tags={hiddenItems} />}
+              content={<TagListTooltipContent tags={sortedList} />}
             >
               <div className="comet-body-s-accented flex h-6 items-center rounded-md border border-border pl-1 pr-1.5 text-muted-slate">
                 +{remainingCount}

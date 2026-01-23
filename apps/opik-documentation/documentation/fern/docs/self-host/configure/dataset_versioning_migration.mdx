@@ -1,0 +1,111 @@
+---
+headline: Dataset versioning migration | Opik Documentation
+og:description: Learn about the dataset versioning migration process when upgrading to Opik 1.9.92 or higher, including configuration options and expected behavior.
+og:site_name: Opik Documentation
+og:title: Dataset Versioning Migration in Opik
+subtitle: Understanding the dataset versioning migration process
+title: Dataset versioning migration
+---
+
+# Dataset Versioning Migration
+
+Starting with Opik version `1.9.92`, the platform includes an automatic migration process to support enhanced dataset versioning capabilities. This migration runs automatically when you first start Opik `1.9.92` or higher.
+
+## Overview
+
+The dataset versioning migration consists of two parts:
+
+1. **Liquibase Migration**: Automatically runs during application startup and migrates existing datasets to the new versioning schema
+2. **Items Total Migration**: Calculates and updates the `items_total` field for dataset versions created during the Liquibase migration (enabled by default)
+
+Additionally, there is a **Lazy Migration** option (disabled by default) that can be temporarily enabled to handle edge cases where a dataset was created during the migration process and was not migrated by the Liquibase migration. Once such datasets are migrated, this option can be turned off again.
+
+**In most environments, the default configuration is sufficient and requires no changes.**
+
+## Expected Behavior During Migration
+
+### First Startup with Version 1.9.92+
+
+When you first start Opik version `1.9.92` or higher, you may see transient errors in the logs similar to:
+
+```
+Causing: liquibase.exception.DatabaseException: ClickHouse exception, code: 159, host: clickhouse-opik-clickhouse, port: 8123; Read timed out [Failed SQL: (159) INSERT INTO opik_prod.dataset_item_versions
+```
+
+<Callout intent="info">
+  **These errors are expected and transient.** The system automatically recovers once the migration process completes. No manual intervention is required.
+</Callout>
+
+### Migration Process
+
+The migration runs as a background job that:
+- Starts 30 seconds after application startup (by default)
+- Completes automatically without requiring downtime
+
+## Configuration Options
+
+All configuration is done through environment variables. The default values are appropriate for most deployments.
+
+### Lazy Migration Settings
+
+Controls whether datasets that were not migrated during the Liquibase migration are migrated on first access. This is typically only needed if datasets were created during the migration process itself.
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `DATASET_VERSIONING_MIGRATION_LAZY_ENABLED` | `false` | Enable lazy migration for datasets created during the migration process (migrate on first access) |
+
+### Items Total Migration Settings
+
+Controls the automatic calculation of `items_total` for existing dataset versions:
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED` | `true` | Enable the items_total migration on startup |
+| `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_BATCH_SIZE` | `100` | Number of dataset versions to process per batch |
+| `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_LOCK_TIMEOUT_SECONDS` | `3600` | Lock timeout in seconds (1 hour) |
+| `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_STARTUP_DELAY_SECONDS` | `30` | Delay before starting migration after startup |
+| `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS` | `3600` | Maximum time for the entire migration job (1 hour) |
+
+## When to Adjust Configuration
+
+### Default Configuration (Recommended)
+
+For most deployments, use the default configuration. The migration will:
+- Start 30 seconds after application startup
+- Process 100 dataset versions per batch
+- Complete within 1 hour for typical workloads
+- Automatically handle transient errors
+
+### Disabling Migration After Completion (Optional)
+
+Disabling the migration after completion is **optional**. The migration automatically detects if all dataset counts have been previously migrated and does nothing in that case, so leaving it enabled will not cause any issues.
+
+However, if you prefer to disable it after the initial migration completes, you can do so:
+
+```yaml
+# Docker Compose
+services:
+  backend:
+    environment:
+      - DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED=false
+```
+
+```yaml
+# Kubernetes/Helm
+component:
+  backend:
+    env:
+      DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED: "false"
+```
+
+## Monitoring Migration Progress
+
+### Migration Completion
+
+The migration is complete when you see:
+
+```
+Dataset versioning items_total migration completed successfully
+```
+
+After this message, the migration will not run again unless you restart the application with the migration still enabled.
