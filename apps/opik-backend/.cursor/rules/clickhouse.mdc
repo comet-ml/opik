@@ -53,7 +53,7 @@ traces (
     last_updated_by String,
     thread_id       String,
     error_info      String,
-    visibility_mode ENUM('public' = 0, 'private' = 1)
+    visibility_mode Enum8('unknown' = 0, 'default' = 1, 'hidden' = 2) DEFAULT 'default'
 ) ENGINE = ReplacingMergeTree(last_updated_at)
   ORDER BY (workspace_id, project_id, id);
 
@@ -72,7 +72,7 @@ spans (
     metadata        String,
     tags            Array(String),
     usage           Map(String, Int32),
-    total_estimated_cost Decimal128(12),
+    total_estimated_cost Decimal(38, 12),  -- Changed from Decimal128(12) in migration 000017
     created_at      DateTime64(9, 'UTC'),
     last_updated_at DateTime64(9, 'UTC'),
     created_by      String,
@@ -105,19 +105,19 @@ experiments (
     id              FixedString(36),
     name            String,
     metadata        String,
-    tags            Array(String),
+    tags            Array(String),  -- Added in migration 000051
     created_at      DateTime64(9, 'UTC'),
     last_updated_at DateTime64(9, 'UTC'),
     created_by      String,
     last_updated_by String,
-    prompt_version_id FixedString(36),
-    prompt_id       FixedString(36),
-    prompt_versions Map(String, String),
-    type            ENUM('dataset' = 0, 'prompt' = 1),
-    optimization_id FixedString(36),
+    prompt_version_id Nullable(FixedString(36)),  -- Made nullable in migration 000017
+    prompt_id       Nullable(FixedString(36)),    -- Made nullable in migration 000017
+    prompt_versions Map(FixedString(36), Array(FixedString(36))),  -- Updated in migration 000017
+    type            ENUM('regular' = 0, 'trial' = 1, 'mini-batch' = 2),  -- Updated in migration 000021
+    optimization_id String,  -- Changed from FixedString(36) in migration 000021
     status          ENUM('running' = 0, 'completed' = 1, 'cancelled' = 2),
-    experiment_scores String,
-    dataset_version_id FixedString(36)
+    experiment_scores String,  -- Added in migration 000049
+    dataset_version_id String  -- Added in migration 000050
 ) ENGINE = ReplacingMergeTree(last_updated_at)
   ORDER BY (workspace_id, dataset_id, id);
 ```
@@ -249,10 +249,10 @@ if (request.uuidToTime() != null) {
 
 ```java
 // ✅ Good: Bind correct types
-statement.bind("workspace_id", workspaceId);  // String
-statement.bind("project_id", projectId);      // UUID
-statement.bind("limit", limit);               // int
-statement.bind("offset", offset);             // int
+statement.bind("workspace_id", workspaceId);          // String
+statement.bind("project_id", projectId.toString());   // String (FixedString(36))
+statement.bind("limit", limit);                       // int
+statement.bind("offset", offset);                     // int
 statement.bind("tags", tags.toArray(new String[0]));  // Array
 
 // ✅ Good: Convert UUIDs to strings
@@ -310,15 +310,15 @@ toDecimal64(
 
 ```java
 // ✅ Good: Use correct Decimal types from schema
-Decimal64(9)   // For feedback scores (from 000002_change_decimal_precision.sql)
-Decimal128(12) // For total_estimated_cost (from 000013_update_total_estimated_cost_precision.sql)
+Decimal64(9)    // For feedback scores (from 000002_change_decimal_precision.sql)
+Decimal(38, 12) // For total_estimated_cost (from 000017_change_tables_to_replicated.sql)
 
 // ✅ Good: Convert aggregations to Decimal
 toDecimal64(avg(value), 9)
-toDecimal128(sum(total_estimated_cost), 12)
+toDecimal128(sum(total_estimated_cost), 12)  // Use Decimal128 for aggregations
 
 // ❌ Bad: Don't use incorrect precision
-toDecimal64(total_estimated_cost, 9)  // Should be Decimal128(12)
+toDecimal64(total_estimated_cost, 9)  // Should be Decimal(38, 12)
 ```
 
 ### **Array and Map Operations**
@@ -534,7 +534,7 @@ WHERE id \\<= :uuid_to_time
 // ❌ Bad: Using wrong Decimal precision
 toDecimal64(total_estimated_cost, 9)
 
-// ✅ Good: Match schema precision
+// ✅ Good: Match schema precision (Decimal(38, 12) from migration 000017)
 toDecimal128(total_estimated_cost, 12)
 
 // ❌ Bad: Not handling NaN/Inf
@@ -577,7 +577,7 @@ var template = getSTWithLogComment(QUERY, "queryName", workspaceId, projectId);
 - ✅ Escape comparison operators in StringTemplate (\\<, \\>)
 - ✅ Use snake_case for parameter names
 - ✅ Clamp numeric values to prevent NaN/Inf
-- ✅ Use correct Decimal precision (Decimal64(9), Decimal128(12))
+- ✅ Use correct Decimal precision (Decimal64(9), Decimal(38, 12))
 - ✅ Add log comments to all queries
 - ✅ Use CTEs for complex queries
 - ✅ Match column aliases to Java field names
