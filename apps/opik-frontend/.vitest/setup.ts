@@ -9,6 +9,12 @@ if (typeof (Promise as any).withResolvers === 'undefined') {
 }
 
 import '@testing-library/jest-dom/vitest'
+import { vi } from 'vitest'
+
+// Mock react-h5-audio-player
+vi.mock('react-h5-audio-player', () => ({
+  default: vi.fn(() => null),
+}))
 
 // Mock Worker for pdfjs
 global.Worker = class Worker {

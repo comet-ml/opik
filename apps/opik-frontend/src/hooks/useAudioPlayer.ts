@@ -107,7 +107,10 @@ export const useAudioPlayer = (
     // Pause handler
     const onPause = () => {
       setIsPlaying(false);
-      setCurrentlyPlaying(null);
+      // Only clear global state if this player owns it
+      if (currentlyPlayingId === playerId) {
+        setCurrentlyPlaying(null);
+      }
     };
 
     // Can play handler - audio is ready to play

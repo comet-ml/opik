@@ -10,7 +10,17 @@ import {
   ATTACHMENT_TYPE,
 } from "@/types/attachments";
 import { safelyParseJSON } from "@/lib/utils";
-import { isBackendAttachmentPlaceholder } from "@/components/shared/SyntaxHighlighter/llmMessages/utils";
+
+/**
+ * Check if a string is a backend attachment placeholder pattern.
+ * Matches patterns like "[input-attachment-1-1768916401606.wav]",
+ * "[output-attachment-1-xxx.wav]", or "[output-attachment-2-9876543210-sdk.json]"
+ */
+export const isBackendAttachmentPlaceholder = (value: string): boolean => {
+  return /^\[(input|output)-attachment-\d+-\d+(?:-[a-zA-Z0-9]+)?\.\w+\]$/.test(
+    value,
+  );
+};
 
 /**
  * Type guard to check if a value is already parsed media data

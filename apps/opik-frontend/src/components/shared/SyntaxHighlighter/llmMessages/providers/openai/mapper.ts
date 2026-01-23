@@ -543,8 +543,8 @@ const mapMessageContent = (
     });
   }
 
-  // Handle tool result messages
-  if (message.role === "tool" && message.content) {
+  // Handle tool result messages (only for non-string content)
+  if (message.role === "tool" && message.content && typeof message.content !== "string") {
     // Tool content is typically a string (JSON-like or plain text)
     const content =
       typeof message.content === "string"

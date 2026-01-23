@@ -5,7 +5,8 @@ import React, {
   ReactNode,
 } from "react";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
-import { isBackendAttachmentPlaceholder, isPlaceholder } from "./utils";
+import { isPlaceholder } from "./utils";
+import { isBackendAttachmentPlaceholder } from "@/lib/images";
 
 /**
  * Media context value providing unified media access and resolution utilities
