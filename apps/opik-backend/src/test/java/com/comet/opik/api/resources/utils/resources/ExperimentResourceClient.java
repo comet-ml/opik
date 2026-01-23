@@ -300,6 +300,27 @@ public class ExperimentResourceClient {
     }
 
     public Experiment.ExperimentPage findExperiments(
+            int page, int size, String name, String apiKey, String workspaceName) {
+        return findExperiments(
+                page,
+                size,
+                null,
+                null,
+                null,
+                name,
+                false,
+                null,
+                null,
+                false,
+                null,
+                null,
+                false,
+                apiKey,
+                workspaceName,
+                HttpStatus.SC_OK);
+    }
+
+    public Experiment.ExperimentPage findExperiments(
             int page, int size, boolean forceSorting, String apiKey, String workspaceName) {
         return findExperiments(
                 page,
@@ -326,6 +347,14 @@ public class ExperimentResourceClient {
             String apiKey, String workspaceName, int expectedStatus) {
         return findExperiments(page, size, datasetId, optimizationId, types, name, datasetDeleted, promptId, sorting,
                 false, filters, null, false, apiKey, workspaceName, expectedStatus);
+    }
+
+    public Experiment.ExperimentPage findExperiments(
+            int page, int size, UUID datasetId, UUID optimizationId, Set<ExperimentType> types, String name,
+            boolean datasetDeleted, UUID promptId, String sorting, List<? extends ExperimentFilter> filters,
+            UUID projectId, boolean projectDeleted, String apiKey, String workspaceName, int expectedStatus) {
+        return findExperiments(page, size, datasetId, optimizationId, types, name, datasetDeleted, promptId, sorting,
+                false, filters, projectId, projectDeleted, apiKey, workspaceName, expectedStatus);
     }
 
     public Experiment.ExperimentPage findExperiments(
