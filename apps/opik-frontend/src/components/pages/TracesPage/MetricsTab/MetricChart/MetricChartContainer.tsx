@@ -11,10 +11,7 @@ import isNumber from "lodash/isNumber";
 import { formatNumericData } from "@/lib/utils";
 
 import { TransformedData } from "@/types/projects";
-import {
-  getDefaultHashedColorsChartConfig,
-  generateBreakdownColorMap,
-} from "@/lib/charts";
+import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import useProjectMetric, {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
@@ -170,22 +167,13 @@ const MetricContainerChart = ({
   }, [data, lines, isPending]);
 
   const config = useMemo(() => {
-    // Use distinct colors for breakdown groups to ensure visual distinction
-    if (breakdown) {
-      const breakdownColorMap = generateBreakdownColorMap(lines);
-      return getDefaultHashedColorsChartConfig(
-        lines,
-        labelsMap,
-        breakdownColorMap,
-      );
-    }
     // Use predefined colors for non-breakdown charts (legacy behavior)
     return getDefaultHashedColorsChartConfig(
       lines,
       labelsMap,
       predefinedColorMap,
     );
-  }, [lines, labelsMap, breakdown]);
+  }, [lines, labelsMap]);
 
   const CHART = METRIC_CHART_TYPE[chartType];
 
