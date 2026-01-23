@@ -4,7 +4,7 @@ import { ProjectMetricTrace } from "@/types/projects";
 import { Filter } from "@/types/filters";
 import { processFiltersArray } from "@/lib/filters";
 import { BreakdownConfig } from "@/types/dashboard";
-import { BREAKDOWN_FIELD } from "@/constants/breakdown";
+import { BREAKDOWN_FIELD } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
 
 export enum METRIC_NAME_TYPE {
   FEEDBACK_SCORES = "FEEDBACK_SCORES",

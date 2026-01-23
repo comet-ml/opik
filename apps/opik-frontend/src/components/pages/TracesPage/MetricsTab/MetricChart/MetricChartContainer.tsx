@@ -28,7 +28,7 @@ import { CHART_TYPE } from "@/constants/chart";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
 import { BreakdownConfig } from "@/types/dashboard";
-import { BREAKDOWN_GROUP_NAMES } from "@/constants/breakdown";
+import { BREAKDOWN_GROUP_NAMES } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
 
 const MAX_DECIMAL_PLACES = 4;
 
@@ -117,13 +117,12 @@ const MetricContainerChart = ({
 
   const traces = response?.results;
 
-  const [data, lines, perBucketRanking] = useMemo(() => {
+  const [data, lines] = useMemo(() => {
     if (!traces?.filter((trace) => !!trace.name).length) {
-      return [[], [], undefined];
+      return [[], []];
     }
 
     const linesList: string[] = [];
-    const lineTotals: Record<string, number> = {};
 
     // collect all unique time values from all traces
     const sortedTimeValues = Array.from(
@@ -151,50 +150,17 @@ const MetricContainerChart = ({
             : trace.name;
         linesList.push(displayName);
 
-        // Calculate total value for sorting
-        let total = 0;
         trace.data?.forEach((d) => {
           const index = timeToIndexMap.get(d.time);
           if (index !== undefined && transformedData[index]) {
             transformedData[index][displayName] = d.value;
           }
-          if (isNumber(d.value)) {
-            total += d.value;
-          }
         });
-        lineTotals[displayName] = total;
       }
     });
 
-    // For bar charts with breakdown, sort bars by value within each time bucket (descending)
-    // This ensures the largest value bar is rendered first (leftmost) for each date
-    if (breakdown && chartType === CHART_TYPE.bar && linesList.length > 1) {
-      // Create per-bucket ranking: for each time bucket, store the sorted order of groups
-      const ranking: Record<string, string[]> = {};
-
-      transformedData.forEach((dataPoint) => {
-        const time = dataPoint.time as string;
-        // Get all groups with their values for this time bucket
-        const groupValues = linesList.map((groupName) => ({
-          name: groupName,
-          value: isNumber(dataPoint[groupName])
-            ? (dataPoint[groupName] as number)
-            : 0,
-        }));
-
-        // Sort by value descending
-        groupValues.sort((a, b) => b.value - a.value);
-        ranking[time] = groupValues.map((g) => g.name);
-      });
-
-      // Sort linesList by total for legend ordering (highest total first)
-      linesList.sort((a, b) => (lineTotals[b] || 0) - (lineTotals[a] || 0));
-
-      return [transformedData, linesList, ranking];
-    }
-
-    return [transformedData, linesList, undefined];
-  }, [traces, filterLineCallback, breakdown, chartType]);
+    return [transformedData, linesList];
+  }, [traces, filterLineCallback]);
 
   const noData = useMemo(() => {
     if (isPending) return false;
@@ -237,7 +203,6 @@ const MetricContainerChart = ({
       chartId={chartId}
       isPending={isPending}
       data={data}
-      perBucketRanking={perBucketRanking}
     />
   );
 

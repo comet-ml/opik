@@ -20,7 +20,6 @@ interface MetricBarChartProps {
   chartId: string;
   data: TransformedData[];
   isPending: boolean;
-  perBucketRanking?: Record<string, string[]>;
 }
 
 const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
@@ -31,7 +30,6 @@ const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
   chartId,
   isPending,
   data,
-  perBucketRanking,
 }) => {
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
@@ -74,7 +72,6 @@ const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
       renderTooltipValue={renderValue}
       renderTooltipHeader={renderChartTooltipHeader}
       showLegend
-      perBucketRanking={perBucketRanking}
     />
   );
 };

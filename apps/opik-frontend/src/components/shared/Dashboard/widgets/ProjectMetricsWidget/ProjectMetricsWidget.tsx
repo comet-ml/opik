@@ -26,7 +26,7 @@ import {
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
-import { BREAKDOWN_FIELD } from "@/constants/breakdown";
+import { BREAKDOWN_FIELD } from "./breakdown";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps

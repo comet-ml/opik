@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/schema";
 import { CHART_TYPE } from "@/constants/chart";
-import { BREAKDOWN_FIELD } from "@/constants/breakdown";
+import { BREAKDOWN_FIELD } from "./breakdown";
 
 export const BreakdownConfigSchema = z
   .object({

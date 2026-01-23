@@ -4,7 +4,7 @@ import { TRACE_DATA_TYPE } from "@/constants/traces";
 import { Groups } from "@/types/groups";
 import { CHART_TYPE } from "@/constants/chart";
 import { Sorting } from "@/types/sorting";
-import { BREAKDOWN_FIELD } from "@/constants/breakdown";
+import { BREAKDOWN_FIELD } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
 
 export enum WIDGET_TYPE {
   PROJECT_METRICS = "project_metrics",
