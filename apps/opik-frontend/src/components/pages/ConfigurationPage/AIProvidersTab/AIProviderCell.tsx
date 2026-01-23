@@ -5,6 +5,7 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { PROVIDERS } from "@/constants/providers";
 import { ProviderObject, PROVIDER_TYPE } from "@/types/providers";
 import { getProviderDisplayName } from "@/lib/provider";
+import { Tag } from "@/components/ui/tag";
 
 const AIProviderCell = (
   context: CellContext<ProviderObject, PROVIDER_TYPE>,
@@ -17,10 +18,17 @@ const AIProviderCell = (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="flex gap-1"
+      className="flex items-center gap-2"
     >
-      {Icon && <Icon className="text-foreground" />}
-      <span>{providerKeyLabel}</span>
+      <div className="flex items-center gap-1">
+        {Icon && <Icon className="text-foreground" />}
+        <span>{providerKeyLabel}</span>
+      </div>
+      {row.read_only && (
+        <Tag size="sm" variant="gray">
+          Read-only
+        </Tag>
+      )}
     </CellWrapper>
   );
 };

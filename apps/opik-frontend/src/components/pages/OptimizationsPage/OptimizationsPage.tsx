@@ -51,7 +51,7 @@ import AddOptimizationDialog from "@/components/pages/OptimizationsPage/AddOptim
 import OptimizationsActionsPanel from "@/components/pages/OptimizationsPage/OptimizationsActionsPanel/OptimizationsActionsPanel";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
-import OptimizationRowActionsCell from "@/components/pages/OptimizationsPage/OptimizationRowActionsCell";
+import OptimizationRowActions from "@/components/pages/OptimizationsPage/OptimizationRowActions";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,6 @@ import useGroupedOptimizationsList, {
 } from "@/hooks/useGroupedOptimizationsList";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
-  generateActionsColumDef,
   generateGroupedRowCellDef,
   generateDataRowCellDef,
   getIsGroupRow,
@@ -315,9 +314,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
           selectedColumns,
         },
       ),
-      generateActionsColumDef({
-        cell: OptimizationRowActionsCell,
-      }),
     ];
   }, [checkboxClickHandler, columnsOrder, selectedColumns]);
 
@@ -454,6 +450,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
           groupingConfig={GROUPING_CONFIG}
           getRowId={getRowId}
           columnPinning={DEFAULT_COLUMN_PINNING}
+          actionsConfig={{
+            render: (row) => (
+              <OptimizationRowActions optimization={row.original} />
+            ),
+          }}
           noData={
             <DataTableNoData title={noDataText}>
               {noData && (
