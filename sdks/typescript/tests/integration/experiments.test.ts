@@ -224,12 +224,12 @@ describe.skipIf(!shouldRunApiTests)("Experiment Management Integration Tests", (
       async () => {
         try {
           await client.getExperimentById(experiment.id);
-          return [1]; // Still exists
+          return []; // Still exists, keep waiting
         } catch {
-          return []; // Deleted successfully
+          return [1]; // Deleted successfully, deletion confirmed
         }
       },
-      0, // Wait for 0 results (experiment should not exist)
+      1, // Wait for at least 1 result (deletion confirmation)
       5000,
       500
     );
