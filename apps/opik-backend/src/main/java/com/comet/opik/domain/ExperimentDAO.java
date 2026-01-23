@@ -414,18 +414,13 @@ class ExperimentDAO {
                 GROUP BY ei.experiment_id
             ), experiment_projects AS (
                 -- All traces from an experiment belong to the same project (SDK invariant)
-                -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
+                -- Using ANY JOIN to handle potential duplicate trace versions
                 SELECT
                     ei.experiment_id,
-                    ifNull(any(t.project_id), '') AS project_id
+                    ifNull(t.project_id, '') AS project_id
                 FROM experiment_items_final ei
-                LEFT JOIN (
-                    SELECT id, project_id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) t ON ei.trace_id = t.id
+                LEFT ANY JOIN traces t ON ei.trace_id = t.id
+                    AND t.workspace_id = :workspace_id
                 GROUP BY ei.experiment_id
             )
             SELECT
@@ -720,18 +715,13 @@ class ExperimentDAO {
                 AND experiment_id IN (SELECT id FROM experiments_filtered)
             ), experiment_projects AS (
                 -- All traces from an experiment belong to the same project (SDK invariant)
-                -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
+                -- Using ANY JOIN to handle potential duplicate trace versions
                 SELECT
                     ei.experiment_id,
-                    ifNull(any(t.project_id), '') AS project_id
+                    ifNull(t.project_id, '') AS project_id
                 FROM experiment_items_final ei
-                LEFT JOIN (
-                    SELECT id, project_id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) t ON ei.trace_id = t.id
+                LEFT ANY JOIN traces t ON ei.trace_id = t.id
+                    AND t.workspace_id = :workspace_id
                 GROUP BY ei.experiment_id
             ), experiments_with_projects AS (
                 SELECT
@@ -924,18 +914,13 @@ class ExperimentDAO {
                 GROUP BY experiment_id
             ), experiment_projects AS (
                 -- All traces from an experiment belong to the same project (SDK invariant)
-                -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
+                -- Using ANY JOIN to handle potential duplicate trace versions
                 SELECT
                     ei.experiment_id,
-                    ifNull(any(t.project_id), '') AS project_id
+                    ifNull(t.project_id, '') AS project_id
                 FROM experiment_items_final ei
-                LEFT JOIN (
-                    SELECT id, project_id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) t ON ei.trace_id = t.id
+                LEFT ANY JOIN traces t ON ei.trace_id = t.id
+                    AND t.workspace_id = :workspace_id
                 GROUP BY ei.experiment_id
             ), experiments_full AS (
                 SELECT
