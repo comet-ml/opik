@@ -4,4 +4,4 @@
 
 CREATE INDEX idx_dataset_versions_workspace_id_dataset_id_id ON dataset_versions(workspace_id, dataset_id, id);
 
---rollback DROP INDEX idx_dataset_versions_workspace_id_dataset_id_id;
+--rollback DROP INDEX idx_dataset_versions_workspace_id_dataset_id_id ON dataset_versions;
