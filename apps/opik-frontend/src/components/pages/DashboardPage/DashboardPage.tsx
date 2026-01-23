@@ -99,7 +99,7 @@ const DashboardPage: React.FunctionComponent = () => {
         </div>
       </div>
       <div className="pb-4 pt-1">
-        <DashboardContent />
+        <DashboardContent onSave={save} />
       </div>
     </>
   );
