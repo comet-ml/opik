@@ -132,6 +132,7 @@ clean:
 	@find . -type f -name ".coverage*" -delete 2>/dev/null || true
 	@rm -rf .hf_home
 	@rm -rf .hf_datasets
+	@rm -rf .hf_cache
 	@rm -rf htmlcov coverage.xml
 	@rm -rf $(VENV)
 	@echo "Clean complete."
