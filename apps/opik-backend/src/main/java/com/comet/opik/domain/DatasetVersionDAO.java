@@ -39,12 +39,18 @@ public interface DatasetVersionDAO {
     void insert(@BindMethods("version") DatasetVersion version, @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
-            WITH version_sequences AS (
-                SELECT
-                    id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
+            WITH target_dataset AS (
+                SELECT dataset_id
                 FROM dataset_versions
-                WHERE workspace_id = :workspace_id
+                WHERE id = :id AND workspace_id = :workspace_id
+            ),
+            version_sequences AS (
+                SELECT
+                    dv.id,
+                    ROW_NUMBER() OVER (PARTITION BY dv.dataset_id ORDER BY dv.id) AS seq_num
+                FROM dataset_versions dv
+                INNER JOIN target_dataset td ON dv.dataset_id = td.dataset_id
+                WHERE dv.workspace_id = :workspace_id
             )
             SELECT
                 dv.id,
@@ -68,6 +74,7 @@ public interface DatasetVersionDAO {
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
+                WHERE version_id = :id
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
             WHERE dv.id = :id AND dv.workspace_id = :workspace_id
@@ -104,6 +111,7 @@ public interface DatasetVersionDAO {
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
+                WHERE version_id in (select id from version_sequences)
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
             WHERE dv.batch_group_id = :batch_group_id
@@ -144,6 +152,7 @@ public interface DatasetVersionDAO {
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
+                WHERE version_id in (select id from version_sequences)
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id = :dataset_id
@@ -183,6 +192,7 @@ public interface DatasetVersionDAO {
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
+                WHERE version_id in (select id from version_sequences)
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id = :dataset_id
@@ -246,6 +256,7 @@ public interface DatasetVersionDAO {
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
+                WHERE version_id in (select id from version_sequences)
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
             WHERE dvt.dataset_id = :dataset_id
@@ -294,8 +305,10 @@ public interface DatasetVersionDAO {
             INNER JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
+                WHERE tag = 'latest'
+                AND version_id in (select id from version_sequences)
                 GROUP BY version_id
-            ) AS t ON t.version_id = dv.id AND JSON_CONTAINS(t.tags, '"latest"')
+            ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id IN (<dataset_ids>)
                 AND dv.workspace_id = :workspace_id
             """)
@@ -303,12 +316,18 @@ public interface DatasetVersionDAO {
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
-            WITH version_sequences AS (
+            WITH target_datasets AS (
+                SELECT DISTINCT dataset_id
+                FROM dataset_versions
+                WHERE id IN (<version_ids>) AND workspace_id = :workspace_id
+            ),
+            version_sequences AS (
                 SELECT
                     id,
                     ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
                 WHERE workspace_id = :workspace_id
+                  AND dataset_id IN (SELECT dataset_id FROM target_datasets)
             )
             SELECT
                 dv.id,
@@ -332,6 +351,7 @@ public interface DatasetVersionDAO {
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
+                WHERE version_id IN (<version_ids>)
                 GROUP BY version_id
             ) AS t ON t.version_id = dv.id
             WHERE dv.id IN (<version_ids>)
