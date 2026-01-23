@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.InternalServerErrorException;
@@ -49,9 +50,10 @@ public interface CsvDatasetExportProcessor {
      * Generates a CSV file from dataset items and uploads it to S3/MinIO.
      *
      * @param datasetId The dataset ID to export
+     * @param versionId Optional version ID. If null, uses legacy dataset_items table. If provided, uses dataset_item_versions table.
      * @return A Mono containing the export result with file path and expiration
      */
-    Mono<CsvExportResult> generateAndUploadCsv(UUID datasetId);
+    Mono<CsvExportResult> generateAndUploadCsv(UUID datasetId, @Nullable UUID versionId);
 
     /**
      * Result of CSV export containing file metadata
@@ -69,6 +71,7 @@ public interface CsvDatasetExportProcessor {
 class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
     private final @NonNull DatasetItemDAO datasetItemDao;
+    private final @NonNull DatasetItemVersionDAO datasetItemVersionDao;
     private final @NonNull FileService fileService;
     private final @NonNull @Config("datasetExport") DatasetExportConfig exportConfig;
 
@@ -76,19 +79,24 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
     private static final int S3_MIN_PART_SIZE = 5242880; // 5 MB - S3 requirement for non-final parts
 
     @Override
-    public Mono<CsvExportResult> generateAndUploadCsv(@NonNull UUID datasetId) {
-        log.info("Starting CSV generation for dataset: '{}'", datasetId);
+    public Mono<CsvExportResult> generateAndUploadCsv(@NonNull UUID datasetId, @Nullable UUID versionId) {
+        if (versionId != null) {
+            log.info("Starting CSV generation for dataset: '{}', version: '{}' (using versioned table)", datasetId,
+                    versionId);
+        } else {
+            log.info("Starting CSV generation for dataset: '{}' (using legacy table)", datasetId);
+        }
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             // Step 1: Discover all columns in the dataset
-            return discoverColumns(datasetId)
+            return discoverColumns(datasetId, versionId)
                     .flatMap(columns -> {
                         log.info("Discovered '{}' columns for dataset '{}'", columns.size(), datasetId);
 
                         // Step 2: Generate CSV and upload using streaming approach
-                        return generateAndUploadCsvStreaming(datasetId, columns, workspaceId)
+                        return generateAndUploadCsvStreaming(datasetId, versionId, columns, workspaceId)
                                 .map(filePath -> {
                                     // Step 3: Calculate expiration time
                                     Duration ttl = exportConfig.getDefaultTtl().toJavaDuration();
@@ -108,21 +116,26 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
     /**
      * Discovers all unique column names from the dataset items.
+     * Uses versioned table if versionId is provided, otherwise uses legacy table.
      * Columns are returned in the order provided by the DAO (LinkedHashMap preserves insertion order).
      *
      * @param datasetId The dataset ID
+     * @param versionId Optional version ID. If null, uses legacy table. If provided, uses versioned table.
      * @return A Mono containing an ordered set of column names
      */
-    private Mono<Set<String>> discoverColumns(@NonNull UUID datasetId) {
-        log.debug("Discovering columns for dataset: '{}'", datasetId);
+    private Mono<Set<String>> discoverColumns(@NonNull UUID datasetId, @Nullable UUID versionId) {
+        log.debug("Discovering columns for dataset: '{}', versionId: '{}'", datasetId, versionId);
 
-        return datasetItemDao.getColumns(datasetId)
-                .map(columnsMap -> {
-                    // LinkedHashMap from DAO preserves insertion order
-                    Set<String> columnNames = new LinkedHashSet<>(columnsMap.keySet());
-                    log.debug("Found columns for dataset '{}': '{}'", datasetId, columnNames);
-                    return columnNames;
-                });
+        Mono<Map<String, List<String>>> columnsMono = versionId != null
+                ? datasetItemVersionDao.getColumns(datasetId, versionId)
+                : datasetItemDao.getColumns(datasetId);
+
+        return columnsMono.map(columnsMap -> {
+            // LinkedHashMap from DAO preserves insertion order
+            Set<String> columnNames = new LinkedHashSet<>(columnsMap.keySet());
+            log.debug("Found columns for dataset '{}': '{}'", datasetId, columnNames);
+            return columnNames;
+        });
     }
 
     /**
@@ -133,12 +146,13 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
      * Parts metadata is kept minimal (only partNumber and eTag) to avoid memory issues.
      *
      * @param datasetId   The dataset ID
+     * @param versionId   Optional version ID. If null, uses legacy table. If provided, uses versioned table.
      * @param columns     The ordered set of column names
      * @param workspaceId The workspace ID
      * @return A Mono containing the S3/MinIO key of the uploaded file
      */
-    private Mono<String> generateAndUploadCsvStreaming(@NonNull UUID datasetId, @NonNull Set<String> columns,
-            @NonNull String workspaceId) {
+    private Mono<String> generateAndUploadCsvStreaming(@NonNull UUID datasetId, @Nullable UUID versionId,
+            @NonNull Set<String> columns, @NonNull String workspaceId) {
         // Enforce S3's hard minimum of 5MB for non-final parts
         int minPartSize = Math.max(exportConfig.getMinPartSize(), S3_MIN_PART_SIZE);
         int maxPartSize = Math.max(exportConfig.getMaxPartSize(), minPartSize);
@@ -174,7 +188,7 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
                             createNewBuffer(headerBytes, maxPartSize));
 
                     // Stream items reactively and process in batches
-                    return streamAllItems(datasetId, lastRetrievedId, itemBatchSize)
+                    return streamAllItems(datasetId, versionId, lastRetrievedId, itemBatchSize)
                             .map(item -> convertItemToCsvRow(item, columnList))
                             .buffer(itemBatchSize)
                             .concatMap(rows -> {
@@ -322,12 +336,17 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
     /**
      * Streams all dataset items using cursor-based pagination.
+     * Uses versioned table if versionId is provided, otherwise uses legacy table.
      * Repeatedly fetches pages until an empty page or partial page is returned.
      */
-    private Flux<DatasetItem> streamAllItems(UUID datasetId, AtomicReference<UUID> lastRetrievedId, int batchSize) {
+    private Flux<DatasetItem> streamAllItems(UUID datasetId, UUID versionId, AtomicReference<UUID> lastRetrievedId,
+            int batchSize) {
         return Flux.defer(() -> {
-            return datasetItemDao.getItems(datasetId, batchSize, lastRetrievedId.get())
-                    .collectList()
+            Flux<DatasetItem> itemsFlux = versionId != null
+                    ? datasetItemVersionDao.getItems(datasetId, versionId, batchSize, lastRetrievedId.get())
+                    : datasetItemDao.getItems(datasetId, batchSize, lastRetrievedId.get());
+
+            return itemsFlux.collectList()
                     .flatMapMany(items -> {
                         if (items.isEmpty()) {
                             // No more items, stop pagination
@@ -342,7 +361,8 @@ class CsvDatasetExportProcessorImpl implements CsvDatasetExportProcessor {
 
                         // If we got a full page, there might be more data - recurse
                         if (items.size() == batchSize) {
-                            return pageFlux.concatWith(streamAllItems(datasetId, lastRetrievedId, batchSize));
+                            return pageFlux
+                                    .concatWith(streamAllItems(datasetId, versionId, lastRetrievedId, batchSize));
                         }
 
                         // Partial page means this is the last page
