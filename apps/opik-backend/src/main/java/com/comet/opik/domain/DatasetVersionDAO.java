@@ -42,7 +42,7 @@ public interface DatasetVersionDAO {
             WITH version_sequences AS (
                 SELECT
                     id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
                 WHERE workspace_id = :workspace_id
             )
@@ -78,7 +78,7 @@ public interface DatasetVersionDAO {
             WITH version_sequences AS (
                 SELECT
                     id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
                 WHERE workspace_id = :workspace_id
             )
@@ -118,7 +118,7 @@ public interface DatasetVersionDAO {
             WITH version_sequences AS (
                 SELECT
                     id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
                 WHERE workspace_id = :workspace_id
             )
@@ -157,7 +157,7 @@ public interface DatasetVersionDAO {
             WITH version_sequences AS (
                 SELECT
                     id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
                 WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
             )
@@ -219,7 +219,7 @@ public interface DatasetVersionDAO {
             WITH version_sequences AS (
                 SELECT
                     id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
                 WHERE workspace_id = :workspace_id
             )
@@ -268,7 +268,7 @@ public interface DatasetVersionDAO {
             WITH version_sequences AS (
                 SELECT
                     id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
                 WHERE workspace_id = :workspace_id AND dataset_id IN (<dataset_ids>)
             )
@@ -306,7 +306,7 @@ public interface DatasetVersionDAO {
             WITH version_sequences AS (
                 SELECT
                     id,
-                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY created_at) AS seq_num
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
                 WHERE workspace_id = :workspace_id
             )
