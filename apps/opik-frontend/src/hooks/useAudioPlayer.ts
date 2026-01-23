@@ -194,7 +194,7 @@ export const useAudioPlayer = (
       audio.removeEventListener("loadstart", onLoadStart);
       audio.removeEventListener("error", onError);
     };
-  }, [url, playerId, setCurrentlyPlaying]);
+  }, [url, playerId, setCurrentlyPlaying, currentlyPlayingId]);
 
   const formatTime = useCallback((seconds: number): string => {
     if (isNaN(seconds) || !isFinite(seconds)) return "0:00";
