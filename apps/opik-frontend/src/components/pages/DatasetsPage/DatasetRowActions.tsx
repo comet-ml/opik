@@ -1,5 +1,4 @@
 import React, { useCallback } from "react";
-import { Download } from "lucide-react";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Dataset } from "@/types/datasets";

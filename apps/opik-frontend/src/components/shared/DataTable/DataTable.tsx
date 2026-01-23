@@ -360,7 +360,9 @@ const DataTable = <TData, TValue>({
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              {hoveredRowId === row.id && actionsConfig.render(row)}
+              {hoveredRowId === row.id &&
+                !row.getIsGrouped() &&
+                actionsConfig.render(row)}
             </div>
           </TableCell>
         )}

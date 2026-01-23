@@ -35,7 +35,7 @@ export const LegacyDatasetItemRowActions: React.FC<
         setOpen={close}
         onConfirm={handleDelete}
         title="Delete dataset item"
-        description="Deleting an dataset item will also remove the related sample data from any linked experiments. This action can't be undone. Are you sure you want to continue?"
+        description="Deleting a dataset item will also remove the related sample data from any linked experiments. This action can't be undone. Are you sure you want to continue?"
         confirmText="Delete dataset item"
         confirmButtonVariant="destructive"
       />
