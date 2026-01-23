@@ -65,6 +65,7 @@ export class DatasetItemsPage {
     await row.getByRole('button', { name: 'Actions menu' }).click();
     await this.page.getByRole('menuitem', { name: 'Delete' }).click();
     await this.page.getByRole('button', { name: 'Save changes' }).click();
+    await this.page.getByRole('button', { name: 'Save changes' }).click();
 
     return item;
   }
