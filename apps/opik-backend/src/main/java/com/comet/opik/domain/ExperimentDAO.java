@@ -166,33 +166,13 @@ class ExperimentDAO {
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
-                <if(project_id)>
-                AND id IN (
-                    SELECT DISTINCT experiment_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (
-                        SELECT id FROM traces
-                        WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                    )
-                )
-                <endif>
-                <if(project_deleted)>
-                AND id IN (
-                    SELECT DISTINCT ei.experiment_id
-                    FROM experiment_items ei
-                    LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
-                    WHERE ei.workspace_id = :workspace_id
-                    GROUP BY ei.experiment_id
-                    HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
-                )
-                <endif>
                 <if(limit &&
                 !feedback_scores_filters &&
                 !feedback_scores_empty_filters &&
                 !experiment_scores_filters &&
                 !experiment_scores_empty_filters &&
+                !project_id &&
+                !project_deleted &&
                 !sort_fields
                 )>
                 LIMIT :limit <if(offset)> OFFSET :offset <endif>
@@ -490,12 +470,34 @@ class ExperimentDAO {
             <if(experiment_scores_empty_filters)>
             AND id NOT IN (SELECT experiment_id FROM esc)
             <endif>
+            <if(project_id)>
+            AND e.id IN (
+                SELECT DISTINCT experiment_id
+                FROM experiment_items_final
+                WHERE trace_id IN (
+                    SELECT id FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                )
+            )
+            <endif>
+            <if(project_deleted)>
+            AND e.id IN (
+                SELECT DISTINCT ei.experiment_id
+                FROM experiment_items_final ei
+                LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
+                GROUP BY ei.experiment_id
+                HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
+            )
+            <endif>
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
             <if(limit && (
                 feedback_scores_filters ||
                 feedback_scores_empty_filters ||
                 experiment_scores_filters ||
                 experiment_scores_empty_filters ||
+                project_id ||
+                project_deleted ||
                 sort_fields
                 )
             )>
@@ -518,28 +520,6 @@ class ExperimentDAO {
                 <if(experiment_ids)> AND id IN :experiment_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
-                <if(project_id)>
-                AND id IN (
-                    SELECT DISTINCT experiment_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (
-                        SELECT id FROM traces
-                        WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                    )
-                )
-                <endif>
-                <if(project_deleted)>
-                AND id IN (
-                    SELECT DISTINCT ei.experiment_id
-                    FROM experiment_items ei
-                    LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
-                    WHERE ei.workspace_id = :workspace_id
-                    GROUP BY ei.experiment_id
-                    HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
-                )
-                <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_final AS (
@@ -675,6 +655,26 @@ class ExperimentDAO {
             <if(experiment_scores_empty_filters)>
             AND id NOT IN (SELECT experiment_id FROM esc)
             <endif>
+            <if(project_id)>
+            AND id IN (
+                SELECT DISTINCT experiment_id
+                FROM experiment_items_final
+                WHERE trace_id IN (
+                    SELECT id FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                )
+            )
+            <endif>
+            <if(project_deleted)>
+            AND id IN (
+                SELECT DISTINCT ei.experiment_id
+                FROM experiment_items_final ei
+                LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
+                GROUP BY ei.experiment_id
+                HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
+            )
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -693,18 +693,6 @@ class ExperimentDAO {
                 <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(filters)> AND <filters> <endif>
-                <if(project_id)>
-                AND id IN (
-                    SELECT DISTINCT experiment_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
-                    AND trace_id IN (
-                        SELECT id FROM traces
-                        WHERE workspace_id = :workspace_id
-                        AND project_id = :project_id
-                    )
-                )
-                <endif>
             ), experiment_items_final AS (
                 SELECT
                     id, experiment_id, trace_id
@@ -735,6 +723,27 @@ class ExperimentDAO {
             )
             SELECT <groupSelects>, max(created_at) AS last_created_experiment_at
             FROM experiments_with_projects
+            WHERE 1=1
+            <if(project_id)>
+            AND id IN (
+                SELECT DISTINCT experiment_id
+                FROM experiment_items_final
+                WHERE trace_id IN (
+                    SELECT id FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                )
+            )
+            <endif>
+            <if(project_deleted)>
+            AND id IN (
+                SELECT DISTINCT ei.experiment_id
+                FROM experiment_items_final ei
+                LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
+                GROUP BY ei.experiment_id
+                HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
+            )
+            <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -949,6 +958,27 @@ class ExperimentDAO {
                 avgMap(duration) as duration,
                 <groupSelects>
             FROM experiments_full
+            WHERE 1=1
+            <if(project_id)>
+            AND id IN (
+                SELECT DISTINCT experiment_id
+                FROM experiment_items_final
+                WHERE trace_id IN (
+                    SELECT id FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                )
+            )
+            <endif>
+            <if(project_deleted)>
+            AND id IN (
+                SELECT DISTINCT ei.experiment_id
+                FROM experiment_items_final ei
+                LEFT JOIN traces t ON t.id = ei.trace_id AND t.workspace_id = :workspace_id
+                GROUP BY ei.experiment_id
+                HAVING countIf(t.project_id != '' AND t.project_id IS NOT NULL) = 0
+            )
+            <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
