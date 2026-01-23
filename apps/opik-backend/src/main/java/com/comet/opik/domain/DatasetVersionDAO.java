@@ -80,7 +80,7 @@ public interface DatasetVersionDAO {
                     id,
                     ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
-                WHERE workspace_id = :workspace_id
+                WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
             )
             SELECT
                 dv.id,
@@ -120,7 +120,7 @@ public interface DatasetVersionDAO {
                     id,
                     ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
-                WHERE workspace_id = :workspace_id
+                WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
             )
             SELECT
                 dv.id,
@@ -187,7 +187,7 @@ public interface DatasetVersionDAO {
             ) AS t ON t.version_id = dv.id
             WHERE dv.dataset_id = :dataset_id
                 AND dv.workspace_id = :workspace_id
-            ORDER BY dv.created_at DESC
+            ORDER BY dv.id DESC
             LIMIT :limit OFFSET :offset
             """)
     List<DatasetVersion> findByDatasetId(@Bind("dataset_id") UUID datasetId, @Bind("workspace_id") String workspaceId,
@@ -221,7 +221,7 @@ public interface DatasetVersionDAO {
                     id,
                     ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
                 FROM dataset_versions
-                WHERE workspace_id = :workspace_id
+                WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
             )
             SELECT
                 dv.id,
