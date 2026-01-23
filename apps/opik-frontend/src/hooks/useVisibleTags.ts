@@ -3,7 +3,6 @@ import { useMemo } from "react";
 interface UseVisibleTagsReturn {
   sortedItems: string[];
   visibleItems: string[];
-  hiddenItems: string[];
   hasMoreItems: boolean;
   remainingCount: number;
 }
@@ -20,14 +19,12 @@ export const useVisibleTags = (
   return useMemo(() => {
     const sortedItems = sortTags(tags);
     const visibleItems = sortedItems.slice(0, maxVisible);
-    const hiddenItems = sortedItems.slice(maxVisible);
     const hasMoreItems = sortedItems.length > maxVisible;
     const remainingCount = Math.max(0, sortedItems.length - maxVisible);
 
     return {
       sortedItems,
       visibleItems,
-      hiddenItems,
       hasMoreItems,
       remainingCount,
     };

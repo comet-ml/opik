@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import last from "lodash/last";
 import first from "lodash/first";
 import isEqual from "fast-deep-equal";
@@ -101,18 +101,22 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     }
   }, [open, versionOptions, versions]);
 
-  const renderTagsWithSeparator = useCallback((tags: string[] | undefined) => {
+  const renderTagsWithSeparator = (tags: string[] | undefined) => {
     if (!tags || tags.length === 0) return null;
 
     return (
-      <span className="inline-flex items-center gap-1.5">
-        <span className="text-xs text-muted-slate/60 transition-opacity">
+      <>
+        <span className="shrink-0 text-xs text-muted-slate/60 transition-opacity">
           ·
         </span>
-        <VersionTags tags={tags} />
-      </span>
+        <VersionTags
+          tags={tags}
+          containerClassName="max-w-[320px]"
+          maxVisibleTags={5}
+        />
+      </>
     );
-  }, []);
+  };
 
   const generateTitle = (
     version: PromptVersion | undefined,
@@ -136,14 +140,12 @@ const ComparePromptVersionDialog: React.FunctionComponent<
             renderTrigger={(value) => {
               const option = versionOptions.find((o) => o.value === value);
               return (
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <span className="shrink-0">
-                    {option?.label} ({option?.description})
+                <span className="comet-body-s truncate">
+                  {option?.label}{" "}
+                  <span className="text-light-slate">
+                    {option?.description}
                   </span>
-                  <span className="inline-flex origin-left scale-[0.90]">
-                    {renderTagsWithSeparator(option?.tags)}
-                  </span>
-                </div>
+                </span>
               );
             }}
             renderOption={(
@@ -153,12 +155,18 @@ const ComparePromptVersionDialog: React.FunctionComponent<
                 <SelectItem
                   key={option.value}
                   value={option.value}
-                  description={option.description}
                   disabled={option.disabled}
                 >
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <span className="shrink-0">{option.label}</span>
-                    {renderTagsWithSeparator(option.tags)}
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="comet-body-s-accented shrink-0">
+                        {option.label}
+                      </span>
+                      {renderTagsWithSeparator(option.tags)}
+                    </div>
+                    <span className="comet-body-s text-light-slate">
+                      {option.description}
+                    </span>
                   </div>
                 </SelectItem>
               );
@@ -168,12 +176,16 @@ const ComparePromptVersionDialog: React.FunctionComponent<
       );
     } else {
       return (
-        <div className="-mb-2 px-0.5">
-          <span className="comet-body-s-accented mr-2">{version.commit}</span>
-          <span className="comet-body-s mr-2 text-light-slate">
+        <div className="-mb-2 flex flex-col gap-0.5 px-0.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="comet-body-s-accented shrink-0">
+              {version.commit}
+            </span>
+            {renderTagsWithSeparator(version.tags)}
+          </div>
+          <span className="comet-body-s text-light-slate">
             {formatDate(version.created_at)}
           </span>
-          {renderTagsWithSeparator(version.tags)}
         </div>
       );
     }
