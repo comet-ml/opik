@@ -392,6 +392,11 @@ const DatasetItemsPage = () => {
     }));
 
     return [
+      {
+        id: "id",
+        label: "ID",
+        type: COLUMN_TYPE.string,
+      },
       ...dataFilterColumns,
       {
         id: "tags",

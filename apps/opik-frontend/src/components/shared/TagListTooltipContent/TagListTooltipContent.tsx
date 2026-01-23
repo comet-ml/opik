@@ -1,5 +1,6 @@
 import React from "react";
 import { useVisibleTags } from "@/hooks/useVisibleTags";
+import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 
 interface TagListTooltipContentProps {
   tags: string[];
@@ -18,20 +19,12 @@ const TagListTooltipContent: React.FC<TagListTooltipContentProps> = ({
   return (
     <div className="flex max-w-[300px] flex-wrap gap-1">
       {visibleItems.map((tag, index) => (
-        <React.Fragment key={`${tag}-${index}`}>
-          {index > 0 && (
-            <span className="text-xs text-muted-foreground">•</span>
-          )}
-          <span className="text-xs text-muted-foreground">{tag}</span>
-        </React.Fragment>
+        <ColoredTag key={`${tag}-${index}`} label={tag} size="sm" />
       ))}
       {hasMoreItems && (
-        <>
-          <span className="text-xs text-muted-foreground">•</span>
-          <span className="text-xs italic text-muted-foreground">
-            ... and {remainingCount} more
-          </span>
-        </>
+        <span className="text-xs italic text-muted-foreground">
+          ... and {remainingCount} more
+        </span>
       )}
     </div>
   );

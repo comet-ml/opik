@@ -5,10 +5,11 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .function import Function
+from .tool_type import ToolType
 
 
 class Tool(UniversalBaseModel):
-    type: typing.Optional[typing.Literal["function"]] = None
+    type: typing.Optional[ToolType] = None
     function: typing.Optional[Function] = None
 
     if IS_PYDANTIC_V2:

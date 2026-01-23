@@ -1,3 +1,3 @@
-export * from "./PromptWriteType";
-export * from "./PromptWriteTemplateStructure";
-export * from "./CreatePromptVersionDetailTemplateStructure";
+export * from "./CreatePromptVersionDetailTemplateStructure.js";
+export * from "./PromptWriteTemplateStructure.js";
+export * from "./PromptWriteType.js";

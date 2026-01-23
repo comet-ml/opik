@@ -571,15 +571,36 @@ navigation:
           - section: Gateways
             skip-slug: true
             contents:
+              - page: Opik LLM Gateway
+                path: docs/tracing/integrations/opik-llm-gateway.mdx
+                slug: opik-llm-gateway
+              - page: Kong AI Gateway
+                path: docs/tracing/integrations/kong-ai-gateway.mdx
+                slug: kong-ai-gateway
               - page: AISuite
                 path: docs/tracing/integrations/aisuite.mdx
                 slug: aisuite
+              - page: Anannas AI
+                path: docs/tracing/integrations/anannas.mdx
+                slug: anannas
+              - page: Helicone
+                path: docs/tracing/integrations/helicone.mdx
+                slug: helicone
               - page: LiteLLM
                 path: docs/tracing/integrations/litellm.mdx
                 slug: litellm
               - page: OpenRouter
                 path: docs/tracing/integrations/openrouter.mdx
                 slug: openrouter
+              - page: Portkey
+                path: docs/tracing/integrations/portkey.mdx
+                slug: portkey
+              - page: TrueFoundry
+                path: docs/tracing/integrations/truefoundry.mdx
+                slug: truefoundry
+              - page: Vercel AI Gateway
+                path: docs/tracing/integrations/vercel-ai-gateway.mdx
+                slug: vercel-ai-gateway
           - section: Other
             skip-slug: true
             contents:
@@ -670,6 +691,10 @@ navigation:
             icon: fa-regular fa-calendar
             path: docs/agent_optimization/getting_started/changelog.mdx
             slug: changelog
+          - page: Known Issues
+            icon: fa-regular fa-triangle-exclamation
+            path: docs/agent_optimization/known_issues.mdx
+            slug: known_issues
       - section: Optimization
         slug: /optimization
         contents:
@@ -809,6 +834,9 @@ navigation:
           - page: Large CSV uploads
             path: docs/self-host/configure/large_csv_uploads.mdx
             slug: large_csv_uploads
+          - page: Dataset versioning migration
+            path: docs/self-host/configure/dataset_versioning_migration.mdx
+            slug: dataset_versioning_migration
   - tab: reference
     layout:
       - page: Overview

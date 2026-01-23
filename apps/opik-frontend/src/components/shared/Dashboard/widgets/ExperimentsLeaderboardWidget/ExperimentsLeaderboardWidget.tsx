@@ -22,7 +22,7 @@ import {
 import {
   useDashboardStore,
   selectUpdateWidget,
-  selectConfig,
+  selectMixedConfig,
 } from "@/store/DashboardStore";
 import useAppStore from "@/store/AppStore";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
@@ -44,9 +44,6 @@ import RankingHeader from "@/components/shared/DataTableHeaders/RankingHeader";
 import {
   formatConfigColumnName,
   PREDEFINED_COLUMNS,
-  DEFAULT_MAX_ROWS,
-  MIN_MAX_ROWS,
-  MAX_MAX_ROWS,
   getExperimentListParams,
   isSelectExperimentsMode,
   parseScoreColumnId,
@@ -55,6 +52,11 @@ import {
   getRankingSorting,
   getRankingFilters,
 } from "./helpers";
+import {
+  MIN_MAX_EXPERIMENTS,
+  MAX_MAX_EXPERIMENTS,
+  DEFAULT_MAX_EXPERIMENTS,
+} from "@/lib/dashboard/utils";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
@@ -78,8 +80,19 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
     }),
   );
 
+  const globalConfig = useDashboardStore(
+    useShallow((state) => {
+      const config = selectMixedConfig(state);
+      return {
+        experimentIds: config?.experimentIds || [],
+        experimentDataSource: config?.experimentDataSource,
+        experimentFilters: config?.experimentFilters || [],
+        maxExperimentsCount: config?.maxExperimentsCount,
+      };
+    }),
+  );
+
   const updateWidget = useDashboardStore(selectUpdateWidget);
-  const globalConfig = useDashboardStore(selectConfig);
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,
   );
@@ -97,8 +110,6 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
   const config = useMemo(() => widgetConfig || {}, [widgetConfig]);
 
   const {
-    dataSource = EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
-    filters = [],
     selectedColumns = [],
     enableRanking = true,
     rankingMetric,
@@ -107,17 +118,30 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
     columnsOrder = [],
     scoresColumnsOrder = [],
     metadataColumnsOrder = [],
-    maxRows,
     sorting: savedSorting = [],
     overrideDefaults = false,
   } = config;
 
-  const maxRowsValue = useMemo(() => {
-    if (!isNumber(maxRows)) {
-      return DEFAULT_MAX_ROWS;
+  const dataSource =
+    (overrideDefaults
+      ? widgetConfig?.dataSource
+      : globalConfig.experimentDataSource) ??
+    EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
+
+  const filters = useMemo(() => {
+    if (overrideDefaults) {
+      return config.filters || [];
     }
-    return Math.max(MIN_MAX_ROWS, Math.min(MAX_MAX_ROWS, maxRows));
-  }, [maxRows]);
+    return globalConfig?.experimentFilters || [];
+  }, [overrideDefaults, config.filters, globalConfig?.experimentFilters]);
+
+  const maxRows =
+    (overrideDefaults ? config.maxRows : globalConfig.maxExperimentsCount) ??
+    MAX_MAX_EXPERIMENTS;
+
+  const maxRowsValue = !isNumber(maxRows)
+    ? DEFAULT_MAX_EXPERIMENTS
+    : Math.max(MIN_MAX_EXPERIMENTS, Math.min(MAX_MAX_EXPERIMENTS, maxRows));
 
   const experimentIds = useMemo(() => {
     if (overrideDefaults) {
@@ -158,7 +182,10 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
       experimentIds: experimentListParams.experimentIds,
       sorting: apiSorting,
       page: 1,
-      size: isSelectExperimentsMode(dataSource) ? MAX_MAX_ROWS : maxRowsValue,
+      size: isSelectExperimentsMode(dataSource)
+        ? MAX_MAX_EXPERIMENTS
+        : maxRowsValue,
+      forceSorting: true,
     },
     {
       placeholderData: keepPreviousData,
@@ -178,8 +205,9 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
       experimentIds: experimentListParams.experimentIds,
       sorting: rankingSorting,
       page: 1,
-      size: MAX_MAX_ROWS,
+      size: MAX_MAX_EXPERIMENTS,
       queryKey: "experiments-ranking",
+      forceSorting: true,
     },
     {
       placeholderData: keepPreviousData,
