@@ -24,9 +24,8 @@ result = optimizer.optimize_prompt(
     n_samples=50,
 )
 ```
-
 Notes:
-- `n_samples` accepts an integer or the strings `"all"` / `"full"` (same as `None`).
+- `n_samples` accepts an integer, a fractional float, a percent string (e.g. `"10%"`), or the special values `"all"`, `"full"`, or `None`.
 - If `n_samples` is larger than the evaluation dataset size, the optimizer falls back to the full dataset and logs a warning.
 
 ## Deterministic subsampling (n_samples_strategy)
