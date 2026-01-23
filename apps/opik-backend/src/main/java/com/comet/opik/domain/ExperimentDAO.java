@@ -395,7 +395,7 @@ class ExperimentDAO {
                 -- Using ANY JOIN to handle potential duplicate trace versions
                 SELECT
                     ei.experiment_id,
-                    ifNull(t.project_id, '') AS project_id
+                    ifNull(any(t.project_id), '') AS project_id
                 FROM experiment_items_final ei
                 LEFT ANY JOIN traces t ON ei.trace_id = t.id
                     AND t.workspace_id = :workspace_id
@@ -704,7 +704,7 @@ class ExperimentDAO {
                 -- Using ANY JOIN to handle potential duplicate trace versions
                 SELECT
                     ei.experiment_id,
-                    ifNull(t.project_id, '') AS project_id
+                    ifNull(any(t.project_id), '') AS project_id
                 FROM experiment_items_final ei
                 LEFT ANY JOIN traces t ON ei.trace_id = t.id
                     AND t.workspace_id = :workspace_id
@@ -924,7 +924,7 @@ class ExperimentDAO {
                 -- Using ANY JOIN to handle potential duplicate trace versions
                 SELECT
                     ei.experiment_id,
-                    ifNull(t.project_id, '') AS project_id
+                    ifNull(any(t.project_id), '') AS project_id
                 FROM experiment_items_final ei
                 LEFT ANY JOIN traces t ON ei.trace_id = t.id
                     AND t.workspace_id = :workspace_id
