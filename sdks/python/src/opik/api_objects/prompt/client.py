@@ -29,6 +29,11 @@ class PromptClient:
         metadata: Optional[Dict[str, Any]],
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         template_structure: str = "text",
+        id: Optional[str] = None,
+        commit: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        variables: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -39,6 +44,11 @@ class PromptClient:
         - metadata: Optional metadata for the prompt.
         - type: The template type (MUSTACHE or JINJA2).
         - template_structure: Either "text" (default) or "chat".
+        - id: Optional version unique identifier (generated if absent).
+        - commit: Optional version short unique identifier (8 chars, generated if absent).
+        - change_description: Optional description of changes in this version.
+        - tags: Optional list of tags for the prompt.
+        - variables: Optional list of variables in the template.
 
         Returns:
         - A Prompt object for the provided prompt name and template.
@@ -89,6 +99,11 @@ class PromptClient:
                 type=type,
                 metadata=metadata,
                 template_structure=template_structure,
+                id=id,
+                commit=commit,
+                change_description=change_description,
+                tags=tags,
+                variables=variables,
             )
 
         return prompt_version
@@ -100,11 +115,21 @@ class PromptClient:
         type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
         template_structure: str = "text",
+        id: Optional[str] = None,
+        commit: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        variables: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
             template=prompt,
             metadata=metadata,
             type=type,
+            id=id,
+            commit=commit,
+            change_description=change_description,
+            tags=tags,
+            variables=variables,
         )
         new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
             self._rest_client.prompts.create_prompt_version(

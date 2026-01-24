@@ -1428,6 +1428,11 @@ class Opik:
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+        id: Optional[str] = None,
+        commit: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        variables: Optional[List[str]] = None,
     ) -> prompt_module.Prompt:
         """
         Creates a new text prompt with the given name and template.
@@ -1438,6 +1443,11 @@ class Opik:
             prompt: The template content of the prompt.
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
+            id: Optional version unique identifier (generated if absent).
+            commit: Optional version short unique identifier (8 characters, generated if absent).
+            change_description: Optional description of changes in this version.
+            tags: Optional list of tags for the prompt.
+            variables: Optional list of variables in the template.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -1448,7 +1458,15 @@ class Opik:
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         prompt_version = prompt_client_.create_prompt(
-            name=name, prompt=prompt, metadata=metadata, type=type
+            name=name,
+            prompt=prompt,
+            metadata=metadata,
+            type=type,
+            id=id,
+            commit=commit,
+            change_description=change_description,
+            tags=tags,
+            variables=variables,
         )
         return prompt_module.Prompt.from_fern_prompt_version(name, prompt_version)
 
@@ -1458,6 +1476,11 @@ class Opik:
         messages: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+        id: Optional[str] = None,
+        commit: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        variables: Optional[List[str]] = None,
     ) -> prompt_module.ChatPrompt:
         """
         Creates a new chat prompt with the given name and message templates.
@@ -1468,6 +1491,11 @@ class Opik:
             messages: List of message dictionaries with 'role' and 'content' fields.
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
+            id: Optional version unique identifier (generated if absent).
+            commit: Optional version short unique identifier (8 characters, generated if absent).
+            change_description: Optional description of changes in this version.
+            tags: Optional list of tags for the prompt.
+            variables: Optional list of variables in the template.
 
         Returns:
             A ChatPrompt object containing details of the created or retrieved chat prompt.
@@ -1477,7 +1505,15 @@ class Opik:
             ApiError: If there is an error during the creation of the prompt.
         """
         return prompt_module.ChatPrompt(
-            name=name, messages=messages, metadata=metadata, type=type
+            name=name,
+            messages=messages,
+            metadata=metadata,
+            type=type,
+            id=id,
+            commit=commit,
+            change_description=change_description,
+            tags=tags,
+            variables=variables,
         )
 
     def get_prompt(

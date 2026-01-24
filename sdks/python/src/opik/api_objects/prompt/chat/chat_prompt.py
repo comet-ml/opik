@@ -29,6 +29,11 @@ class ChatPrompt(base_prompt.BasePrompt):
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         validate_placeholders: bool = False,
+        id: Optional[str] = None,
+        commit: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        variables: Optional[List[str]] = None,
     ) -> None:
         """
         Initializes a new instance of the ChatPrompt class.
@@ -40,6 +45,11 @@ class ChatPrompt(base_prompt.BasePrompt):
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
             validate_placeholders: Whether to validate template placeholders.
+            id: Optional version unique identifier (generated if absent).
+            commit: Optional version short unique identifier (8 characters, generated if absent).
+            change_description: Optional description of changes in this version.
+            tags: Optional list of tags for the prompt.
+            variables: Optional list of variables in the template.
 
         Raises:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
@@ -58,7 +68,11 @@ class ChatPrompt(base_prompt.BasePrompt):
         self._metadata = metadata
         self._type = type
         self._messages = messages
-        self._commit: Optional[str] = None
+        self._commit: Optional[str] = commit
+        self._id = id
+        self._change_description = change_description
+        self._tags = tags
+        self._variables = variables
         self.__internal_api__prompt_id__: str
         self.__internal_api__version_id__: str
 
@@ -86,6 +100,11 @@ class ChatPrompt(base_prompt.BasePrompt):
             metadata=self._metadata,
             type=self._type,
             template_structure="chat",
+            id=self._id,
+            commit=self._commit,
+            change_description=self._change_description,
+            tags=self._tags,
+            variables=self._variables,
         )
 
         self._commit = prompt_version.commit
