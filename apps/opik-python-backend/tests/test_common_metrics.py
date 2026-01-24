@@ -5,6 +5,7 @@ from opik_backend import create_app
 from opik_backend.common_metrics import (
     get_common_metrics_list,
     instantiate_metric,
+    init_common_metrics_registry,
     _get_common_metrics_registry,
     _discover_heuristic_metrics,
     _camel_to_snake,
@@ -102,6 +103,21 @@ class TestGetCommonMetricsRegistry:
 
     def test_registry_is_not_empty(self):
         """Registry should contain discovered metrics."""
+        registry = _get_common_metrics_registry()
+        assert len(registry) > 0
+
+    def test_init_common_metrics_registry(self, app):
+        """init_common_metrics_registry should initialize the registry."""
+        # The registry is already initialized by the app fixture,
+        # but calling init again should be safe (idempotent)
+        init_common_metrics_registry(app)
+        registry = _get_common_metrics_registry()
+        assert len(registry) > 0
+
+    def test_init_common_metrics_registry_without_app(self):
+        """init_common_metrics_registry should work without Flask app."""
+        # Should not raise any exceptions
+        init_common_metrics_registry()
         registry = _get_common_metrics_registry()
         assert len(registry) > 0
 

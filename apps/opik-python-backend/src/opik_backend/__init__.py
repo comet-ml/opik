@@ -76,11 +76,14 @@ def create_app(test_config=None, should_init_executor=True):
     from opik_backend.post_user_signup import post_user_signup
     from opik_backend.healthcheck import healthcheck
     from opik_backend.rq_worker_manager import init_rq_worker
-    from opik_backend.common_metrics import common_metrics_bp
+    from opik_backend.common_metrics import common_metrics_bp, init_common_metrics_registry
 
     # Initialize the code executor if needed - some of the tests override the executor and therefore don't initialize it
     if should_init_executor:
         init_executor(app)
+
+    # Initialize the common metrics registry at startup
+    init_common_metrics_registry(app)
 
     app.register_blueprint(healthcheck)
     app.register_blueprint(evaluator)

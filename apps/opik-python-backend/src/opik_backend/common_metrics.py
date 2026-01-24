@@ -122,6 +122,23 @@ def _get_common_metrics_registry() -> Dict[str, Type[base_metric.BaseMetric]]:
     return _COMMON_METRICS_REGISTRY
 
 
+def init_common_metrics_registry(app=None) -> None:
+    """
+    Initialize the common metrics registry at startup.
+
+    This should be called during application startup to ensure metrics
+    are discovered and cached before any requests arrive.
+
+    Args:
+        app: Optional Flask app for logging. If not provided, uses module logger.
+    """
+    logger = app.logger if app else _logger
+    logger.info("Initializing common metrics registry...")
+
+    registry = _get_common_metrics_registry()
+    logger.info(f"Common metrics registry initialized with {len(registry)} metrics")
+
+
 def _get_class_docstring(cls: Type) -> str:
     """Extract the main description from a class docstring."""
     if not cls.__doc__:
