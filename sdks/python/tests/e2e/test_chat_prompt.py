@@ -569,3 +569,36 @@ def test_chat_prompt__invalid_messages__raises_validation_error(opik_client: opi
 
     assert "ChatPrompt.__init__" in str(exc_info.value)
     assert "messages[0].role" in str(exc_info.value)
+
+
+def test_chat_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
+    """Test that create_chat_prompt() accepts tags parameter."""
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"chat-prompt-with-tags-{unique_identifier}"
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Hello!"},
+    ]
+    tags = ["chat-tag1", "chat-tag2", "production"]
+
+    # Create chat prompt with tags
+    chat_prompt = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=messages,
+        tags=tags,
+    )
+
+    # Verify prompt was created
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
+        name=prompt_name,
+        messages=messages,
+    )
+
+    # Verify tags were set by searching for the prompt
+    filtered_prompts = opik_client.search_prompts(
+        filter_string=f'name = "{prompt_name}" AND tags contains "chat-tag1"',
+    )
+    assert len(filtered_prompts) == 1
+    assert filtered_prompts[0].name == prompt_name

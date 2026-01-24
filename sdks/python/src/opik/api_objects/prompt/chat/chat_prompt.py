@@ -29,6 +29,10 @@ class ChatPrompt(base_prompt.BasePrompt):
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         validate_placeholders: bool = False,
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> None:
         """
         Initializes a new instance of the ChatPrompt class.
@@ -40,6 +44,10 @@ class ChatPrompt(base_prompt.BasePrompt):
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
             validate_placeholders: Whether to validate template placeholders.
+            id: Optional unique identifier (UUID) for the prompt.
+            description: Optional description of the prompt (up to 255 characters).
+            change_description: Optional description of changes in this version.
+            tags: Optional list of tags to associate with the prompt.
 
         Raises:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
@@ -58,6 +66,10 @@ class ChatPrompt(base_prompt.BasePrompt):
         self._metadata = metadata
         self._type = type
         self._messages = messages
+        self._id = id
+        self._description = description
+        self._change_description = change_description
+        self._tags = tags
         self._commit: Optional[str] = None
         self.__internal_api__prompt_id__: str
         self.__internal_api__version_id__: str
@@ -86,6 +98,10 @@ class ChatPrompt(base_prompt.BasePrompt):
             metadata=self._metadata,
             type=self._type,
             template_structure="chat",
+            id=self._id,
+            description=self._description,
+            change_description=self._change_description,
+            tags=self._tags,
         )
 
         self._commit = prompt_version.commit

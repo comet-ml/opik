@@ -29,6 +29,10 @@ class PromptClient:
         metadata: Optional[Dict[str, Any]],
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         template_structure: str = "text",
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -39,6 +43,10 @@ class PromptClient:
         - metadata: Optional metadata for the prompt.
         - type: The template type (MUSTACHE or JINJA2).
         - template_structure: Either "text" (default) or "chat".
+        - id: Optional unique identifier (UUID) for the prompt.
+        - description: Optional description of the prompt (up to 255 characters).
+        - change_description: Optional description of changes in this version.
+        - tags: Optional list of tags to associate with the prompt.
 
         Returns:
         - A Prompt object for the provided prompt name and template.
@@ -89,6 +97,10 @@ class PromptClient:
                 type=type,
                 metadata=metadata,
                 template_structure=template_structure,
+                id=id,
+                description=description,
+                change_description=change_description,
+                tags=tags,
             )
 
         return prompt_version
@@ -100,19 +112,48 @@ class PromptClient:
         type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
         template_structure: str = "text",
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
-        new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
-            template=prompt,
-            metadata=metadata,
-            type=type,
-        )
-        new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
-            self._rest_client.prompts.create_prompt_version(
+        # Check if this is a new prompt (no existing versions)
+        existing_version = self._get_latest_version(name)
+
+        # If it's a new prompt and container-level params are provided, use create_prompt endpoint
+        # which creates both the container and first version in one call
+        if existing_version is None and (
+            id is not None or description is not None or tags is not None
+        ):
+            self._rest_client.prompts.create_prompt(
+                name=name,
+                id=id,
+                description=description,
+                template=prompt,
+                metadata=metadata,
+                change_description=change_description,
+                type=type,
+                template_structure=template_structure,
+                tags=tags,
+            )
+            # After creating, retrieve the version that was created
+            new_prompt_version_detail = (
+                self._rest_client.prompts.retrieve_prompt_version(
+                    name=name,
+                )
+            )
+        else:
+            # For existing prompts or when no container-level params, use create_prompt_version
+            new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
+                template=prompt,
+                metadata=metadata,
+                type=type,
+            )
+            new_prompt_version_detail = self._rest_client.prompts.create_prompt_version(
                 name=name,
                 version=new_prompt_version_detail_data,
                 template_structure=template_structure,
             )
-        )
         return new_prompt_version_detail
 
     def _get_latest_version(
