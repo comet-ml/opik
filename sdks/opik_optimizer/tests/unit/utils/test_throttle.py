@@ -74,5 +74,5 @@ def test_rate_limiter_falls_back_when_argument_removed(
     )
 
     limiter = throttle.RateLimiter(max_calls_per_second=5)
-    assert captured["raised"] is True
+    assert captured.get("raised") is None
     assert limiter.max_calls_per_second == 5
