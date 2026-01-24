@@ -83,7 +83,7 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
 
         form.setValue("pythonCodeDetails.arguments", newArguments);
         form.setValue("pythonCodeDetails.parsingArgumentsError", false);
-        
+
         // Set up scoreConfig for non-mappable score parameters
         // These are static values that go directly to score(), not __init__()
         const newScoreConfig: Record<string, string> = {};
@@ -100,11 +100,9 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
       }
 
       // Set up init config with default values from __init__ parameters
-      const newInitConfig: Record<
-        string,
-        string | boolean | number | null
-      > = {};
-      
+      const newInitConfig: Record<string, string | boolean | number | null> =
+        {};
+
       // Add init parameters only
       selectedMetric.init_parameters?.forEach((param) => {
         // Try to preserve existing config values
@@ -119,7 +117,7 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
           );
         }
       });
-      
+
       form.setValue("commonMetricDetails.initConfig", newInitConfig);
     }
   }, [selectedMetric, form, isThreadScope]);
@@ -130,7 +128,11 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
     type: string,
   ): string | boolean | number | null => {
     // Handle null, undefined, or "None" string
-    if (defaultValue === null || defaultValue === undefined || defaultValue === "None") {
+    if (
+      defaultValue === null ||
+      defaultValue === undefined ||
+      defaultValue === "None"
+    ) {
       return null;
     }
     const lowerType = type.toLowerCase();
@@ -240,36 +242,38 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
               </div>
             </div>
           )}
-          
+
           {/* Non-mappable score parameters (static values for score() method) */}
           {!isThreadScope &&
             selectedMetric.score_parameters.some((p) => !p.mappable) && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-1">
-                <Label className="text-sm font-medium">Score Parameters</Label>
-                <TooltipWrapper content="These are static values passed to the metric's score() method. Unlike variable mappings, these values don't change per trace/span.">
-                  <button
-                    type="button"
-                    className="inline-flex cursor-help"
-                    tabIndex={0}
-                  >
-                    <Info className="size-4 text-muted-foreground" />
-                  </button>
-                </TooltipWrapper>
+              <div className="space-y-4">
+                <div className="flex items-center gap-1">
+                  <Label className="text-sm font-medium">
+                    Score Parameters
+                  </Label>
+                  <TooltipWrapper content="These are static values passed to the metric's score() method. Unlike variable mappings, these values don't change per trace/span.">
+                    <button
+                      type="button"
+                      className="inline-flex cursor-help"
+                      tabIndex={0}
+                    >
+                      <Info className="size-4 text-muted-foreground" />
+                    </button>
+                  </TooltipWrapper>
+                </div>
+                <div className="grid gap-4">
+                  {selectedMetric.score_parameters
+                    .filter((p) => !p.mappable)
+                    .map((param) => (
+                      <ScoreParameterConfigInput
+                        key={param.name}
+                        param={param}
+                        form={form}
+                      />
+                    ))}
+                </div>
               </div>
-              <div className="grid gap-4">
-                {selectedMetric.score_parameters
-                  .filter((p) => !p.mappable)
-                  .map((param) => (
-                    <ScoreParameterConfigInput
-                      key={param.name}
-                      param={param}
-                      form={form}
-                    />
-                  ))}
-              </div>
-            </div>
-          )}
+            )}
 
           {/* Variable Mappings (mappable score method parameters only) */}
           {!isThreadScope &&

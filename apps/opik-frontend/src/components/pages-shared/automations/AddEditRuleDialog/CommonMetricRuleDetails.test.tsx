@@ -124,7 +124,9 @@ const TestWrapper = () => {
 
     return (
       <FormProvider {...form}>
-        <CommonMetricRuleDetails form={form as unknown as UseFormReturn<EvaluationRuleFormType>} />
+        <CommonMetricRuleDetails
+          form={form as unknown as UseFormReturn<EvaluationRuleFormType>}
+        />
       </FormProvider>
     );
   };

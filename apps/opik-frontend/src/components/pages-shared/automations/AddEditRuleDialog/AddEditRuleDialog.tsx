@@ -178,8 +178,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     useConfirmAction();
   const { toast } = useToast();
 
+  // Pass the code to getUIRuleType to properly detect common metrics
   const formUIRuleType = defaultRule?.type
-    ? getUIRuleType(defaultRule.type)
+    ? getUIRuleType(defaultRule.type, defaultRule.code)
     : UI_EVALUATORS_RULE_TYPE.llm_judge;
   const formScope = defaultRule?.type
     ? getUIRuleScope(defaultRule.type)
@@ -191,6 +192,24 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     }
     return defaultRule?.name || "";
   };
+
+  // Extract common metric details from the rule if it's a common metric
+  const getInitialCommonMetricDetails = useCallback(() => {
+    if (
+      defaultRule &&
+      isPythonCodeRule(defaultRule) &&
+      formUIRuleType === UI_EVALUATORS_RULE_TYPE.common_metric
+    ) {
+      const code = defaultRule.code as PythonCodeObject;
+      if ("common_metric_id" in code && code.common_metric_id) {
+        return {
+          metricId: code.common_metric_id,
+          initConfig: code.init_config || {},
+        };
+      }
+    }
+    return undefined;
+  }, [defaultRule, formUIRuleType]);
 
   const form: UseFormReturn<EvaluationRuleFormType> = useForm<
     z.infer<typeof EvaluationRuleFormSchema>
@@ -224,6 +243,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
               defaultRule.code as LLMJudgeObject,
             )
           : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[formScope]),
+      commonMetricDetails: getInitialCommonMetricDetails(),
     },
   });
 
@@ -291,6 +311,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 defaultRule.code as LLMJudgeObject,
               )
             : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[formScope]),
+        commonMetricDetails: getInitialCommonMetricDetails(),
       };
       form.reset(cloneFormData as EvaluationRuleFormType);
     }
@@ -303,6 +324,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     formScope,
     formUIRuleType,
     form,
+    getInitialCommonMetricDetails,
   ]);
 
   const handleScopeChange = useCallback(
@@ -452,7 +474,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       formData.uiType === UI_EVALUATORS_RULE_TYPE.common_metric &&
       formData.commonMetricDetails?.metricId
     ) {
-      pythonCodeDetails.common_metric_id = formData.commonMetricDetails.metricId;
+      pythonCodeDetails.common_metric_id =
+        formData.commonMetricDetails.metricId;
       pythonCodeDetails.init_config = formData.commonMetricDetails.initConfig;
       // score_config is already in pythonCodeDetails from the form
       // Clear the metric code field since we're using the SDK metric

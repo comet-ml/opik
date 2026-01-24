@@ -349,7 +349,12 @@ export const BasePythonCodeFormSchema = z.object({
     .min(1, { message: "Code is required" }),
   // Common metric fields (optional - only present for common metrics)
   common_metric_id: z.string().optional(),
-  init_config: z.record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()])).optional(),
+  init_config: z
+    .record(
+      z.string(),
+      z.union([z.string(), z.boolean(), z.number(), z.null()]),
+    )
+    .optional(),
   score_config: z.record(z.string(), z.string()).optional(),
 });
 
@@ -360,7 +365,12 @@ export const CommonMetricDetailsSchema = z.object({
     })
     .min(1, { message: "Please select a metric" }),
   // Configuration parameters from __init__ (e.g., case_sensitive, reference)
-  initConfig: z.record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()])).optional(),
+  initConfig: z
+    .record(
+      z.string(),
+      z.union([z.string(), z.boolean(), z.number(), z.null()]),
+    )
+    .optional(),
 });
 
 export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
