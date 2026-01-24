@@ -52,6 +52,7 @@ export interface PythonCodeDetailsTraceForm {
   // Common metric fields (optional - only present for common metrics)
   common_metric_id?: string;
   init_config?: Record<string, string | boolean | number | null>;
+  score_config?: Record<string, string>; // Static values for non-mappable score parameters
 }
 
 export interface PythonCodeDetailsThreadForm {
@@ -68,6 +69,7 @@ export interface PythonCodeDetailsSpanForm {
   // Common metric fields (optional - only present for common metrics)
   common_metric_id?: string;
   init_config?: Record<string, string | boolean | number | null>;
+  score_config?: Record<string, string>; // Static values for non-mappable score parameters
 }
 
 export type PythonCodeObject =

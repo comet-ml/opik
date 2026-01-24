@@ -16,5 +16,5 @@ import java.util.Map;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record CommonMetricEvaluatorRequest(
         Map<String, Object> initConfig,
-        Map<String, String> data) {
+        Map<String, String> scoringKwargs) {
 }

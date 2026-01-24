@@ -43,20 +43,20 @@ public class PythonEvaluatorService {
     /**
      * Evaluates a common metric from the SDK by its ID.
      *
-     * @param metricId   The ID of the common metric (e.g., "contains", "equals")
-     * @param initConfig Configuration parameters for the metric's __init__ method
-     * @param data       Data to pass to the metric's score method
+     * @param metricId     The ID of the common metric (e.g., "contains", "equals")
+     * @param initConfig   Configuration parameters for the metric's __init__ method
+     * @param scoringKwargs Arguments to pass to the metric's score method
      * @return List of score results
      */
     public List<PythonScoreResult> evaluateCommonMetric(
             @NonNull String metricId,
             Map<String, Object> initConfig,
-            Map<String, String> data) {
-        Preconditions.checkArgument(MapUtils.isNotEmpty(data), "Argument 'data' must not be empty");
+            Map<String, String> scoringKwargs) {
+        Preconditions.checkArgument(MapUtils.isNotEmpty(scoringKwargs), "Argument 'scoringKwargs' must not be empty");
 
         var request = CommonMetricEvaluatorRequest.builder()
                 .initConfig(initConfig)
-                .data(data)
+                .scoringKwargs(scoringKwargs)
                 .build();
 
         String url = COMMON_METRIC_URL_TEMPLATE.formatted(config.getPythonEvaluator().getUrl(), metricId);

@@ -421,8 +421,8 @@ def execute_common_metric(metric_id: str):
 
     Expected payload:
     {
-        "init_config": { ... },  // Optional: __init__ parameters
-        "data": { ... }          // Required: score method parameters
+        "init_config": { ... },      // Optional: __init__ parameters
+        "scoring_kwargs": { ... }    // Required: score method parameters
     }
     """
     registry = _get_common_metrics_registry()
@@ -433,17 +433,17 @@ def execute_common_metric(metric_id: str):
     payload = request.get_json(force=True)
 
     init_config = payload.get("init_config", {})
-    data = payload.get("data")
+    scoring_kwargs = payload.get("scoring_kwargs")
 
-    if data is None:
-        abort(400, "Field 'data' is missing in the request")
+    if scoring_kwargs is None:
+        abort(400, "Field 'scoring_kwargs' is missing in the request")
 
     try:
         # Instantiate the metric
         metric = instantiate_metric(metric_id, init_config)
 
         # Call the score method
-        result = metric.score(**data)
+        result = metric.score(**scoring_kwargs)
 
         # Convert result to dict
         if hasattr(result, "__iter__") and not isinstance(result, dict):

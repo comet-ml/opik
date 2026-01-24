@@ -39,7 +39,8 @@ public final class AutomationRuleEvaluatorSpanUserDefinedMetricPython
                     View.Public.class, View.Write.class}) String metric,
             @JsonView({View.Public.class, View.Write.class}) Map<String, String> arguments,
             @JsonView({View.Public.class, View.Write.class}) String commonMetricId,
-            @JsonView({View.Public.class, View.Write.class}) Map<String, Object> initConfig){
+            @JsonView({View.Public.class, View.Write.class}) Map<String, Object> initConfig,
+            @JsonView({View.Public.class, View.Write.class}) Map<String, String> scoreConfig){
 
         /**
          * Returns true if this is a common metric (from the SDK) rather than custom Python code.

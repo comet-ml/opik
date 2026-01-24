@@ -350,6 +350,7 @@ export const BasePythonCodeFormSchema = z.object({
   // Common metric fields (optional - only present for common metrics)
   common_metric_id: z.string().optional(),
   init_config: z.record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()])).optional(),
+  score_config: z.record(z.string(), z.string()).optional(),
 });
 
 export const CommonMetricDetailsSchema = z.object({

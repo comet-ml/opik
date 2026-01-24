@@ -68,7 +68,7 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
   useEffect(() => {
     if (selectedMetric) {
       // Set up arguments based on metric score_parameters (only for non-thread scope)
-      // Only include mappable parameters in the arguments
+      // Only include mappable parameters (which map to trace/span fields)
       if (!isThreadScope) {
         const newArguments: Record<string, string> = {};
         selectedMetric.score_parameters
@@ -83,16 +83,29 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
 
         form.setValue("pythonCodeDetails.arguments", newArguments);
         form.setValue("pythonCodeDetails.parsingArgumentsError", false);
+        
+        // Set up scoreConfig for non-mappable score parameters
+        // These are static values that go directly to score(), not __init__()
+        const newScoreConfig: Record<string, string> = {};
+        selectedMetric.score_parameters
+          .filter((p) => !p.mappable)
+          .forEach((param) => {
+            // Try to preserve existing score config values
+            const currentScoreConfig = form.getValues(
+              "pythonCodeDetails.score_config",
+            );
+            newScoreConfig[param.name] = currentScoreConfig?.[param.name] ?? "";
+          });
+        form.setValue("pythonCodeDetails.score_config", newScoreConfig);
       }
 
-      // Set up init config with default values
-      // Include both init_parameters and non-mappable score_parameters
+      // Set up init config with default values from __init__ parameters
       const newInitConfig: Record<
         string,
         string | boolean | number | null
       > = {};
       
-      // Add init parameters
+      // Add init parameters only
       selectedMetric.init_parameters?.forEach((param) => {
         // Try to preserve existing config values
         const currentConfig = form.getValues("commonMetricDetails.initConfig");
@@ -106,19 +119,6 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
           );
         }
       });
-      
-      // Add non-mappable score parameters as config
-      selectedMetric.score_parameters
-        .filter((p) => !p.mappable)
-        .forEach((param) => {
-          const currentConfig = form.getValues("commonMetricDetails.initConfig");
-          if (currentConfig?.[param.name] !== undefined) {
-            newInitConfig[param.name] = currentConfig[param.name];
-          } else {
-            // Non-mappable score parameters don't have default values, set to null
-            newInitConfig[param.name] = null;
-          }
-        });
       
       form.setValue("commonMetricDetails.initConfig", newInitConfig);
     }
@@ -213,9 +213,8 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
             </p>
           </div>
 
-          {/* Configuration Parameters (Init Parameters + Non-mappable Score Parameters) */}
-          {(selectedMetric.init_parameters.length > 0 ||
-            selectedMetric.score_parameters.some((p) => !p.mappable)) && (
+          {/* Configuration Parameters (Init Parameters only) */}
+          {selectedMetric.init_parameters.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center gap-1">
                 <Label className="text-sm font-medium">Configuration</Label>
@@ -238,7 +237,27 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
                     form={form}
                   />
                 ))}
-                {/* Render non-mappable score parameters as config inputs */}
+              </div>
+            </div>
+          )}
+          
+          {/* Non-mappable score parameters (static values for score() method) */}
+          {!isThreadScope &&
+            selectedMetric.score_parameters.some((p) => !p.mappable) && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-1">
+                <Label className="text-sm font-medium">Score Parameters</Label>
+                <TooltipWrapper content="These are static values passed to the metric's score() method. Unlike variable mappings, these values don't change per trace/span.">
+                  <button
+                    type="button"
+                    className="inline-flex cursor-help"
+                    tabIndex={0}
+                  >
+                    <Info className="size-4 text-muted-foreground" />
+                  </button>
+                </TooltipWrapper>
+              </div>
+              <div className="grid gap-4">
                 {selectedMetric.score_parameters
                   .filter((p) => !p.mappable)
                   .map((param) => (
@@ -380,7 +399,8 @@ const InitParameterInput: React.FC<InitParameterInputProps> = ({
   );
 };
 
-// Sub-component for rendering non-mappable score parameters as config inputs
+// Sub-component for rendering non-mappable score parameters
+// These values go to score_config and are passed directly to the score() method
 type ScoreParameterConfigInputProps = {
   param: ScoreParameter;
   form: UseFormReturn<EvaluationRuleFormType>;
@@ -390,61 +410,20 @@ const ScoreParameterConfigInput: React.FC<ScoreParameterConfigInputProps> = ({
   param,
   form,
 }) => {
-  const lowerType = param.type.toLowerCase();
-  const isBool = lowerType === "bool" || lowerType === "boolean";
+  // Watch the score_config object and extract the specific value
+  const scoreConfig = form.watch("pythonCodeDetails.score_config");
+  const currentValue = scoreConfig?.[param.name] ?? "";
 
-  // Watch the entire initConfig object and extract the specific value
-  const initConfig = form.watch("commonMetricDetails.initConfig");
-  const currentValue = initConfig?.[param.name];
-
-  const handleChange = (value: string | boolean | number | null) => {
+  const handleChange = (value: string) => {
     const currentConfig =
-      form.getValues("commonMetricDetails.initConfig") || {};
+      form.getValues("pythonCodeDetails.score_config") || {};
     form.setValue(
-      "commonMetricDetails.initConfig",
+      "pythonCodeDetails.score_config",
       {
         ...currentConfig,
         [param.name]: value,
       },
       { shouldDirty: true },
-    );
-  };
-
-  const renderInput = () => {
-    if (isBool) {
-      return (
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={currentValue === true}
-            onCheckedChange={(checked) => handleChange(checked)}
-          />
-          <span className="text-sm text-muted-foreground">
-            {currentValue === true ? "True" : "False"}
-          </span>
-        </div>
-      );
-    }
-
-    // For string/other types
-    return (
-      <Input
-        value={currentValue?.toString() ?? ""}
-        onChange={(e) => {
-          const val = e.target.value;
-          // Try to parse as number if the type suggests it
-          if (
-            lowerType === "int" ||
-            lowerType === "float" ||
-            lowerType === "number"
-          ) {
-            const num = parseFloat(val);
-            handleChange(isNaN(num) ? val : num);
-          } else {
-            handleChange(val || null);
-          }
-        }}
-        placeholder={`Enter ${param.name}`}
-      />
     );
   };
 
@@ -467,7 +446,11 @@ const ScoreParameterConfigInput: React.FC<ScoreParameterConfigInputProps> = ({
           </TooltipWrapper>
         )}
       </div>
-      {renderInput()}
+      <Input
+        value={currentValue}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder={`Enter ${param.name}`}
+      />
     </div>
   );
 };

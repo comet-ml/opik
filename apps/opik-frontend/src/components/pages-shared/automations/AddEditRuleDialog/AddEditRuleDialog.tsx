@@ -447,13 +447,14 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     // For Python code rules, check if it's a common metric
     const pythonCodeDetails = { ...formData.pythonCodeDetails };
 
-    // If this is a common metric, add the metric ID and init config
+    // If this is a common metric, add the metric ID, init config, and score config
     if (
       formData.uiType === UI_EVALUATORS_RULE_TYPE.common_metric &&
       formData.commonMetricDetails?.metricId
     ) {
       pythonCodeDetails.common_metric_id = formData.commonMetricDetails.metricId;
       pythonCodeDetails.init_config = formData.commonMetricDetails.initConfig;
+      // score_config is already in pythonCodeDetails from the form
       // Clear the metric code field since we're using the SDK metric
       pythonCodeDetails.metric = "";
     }

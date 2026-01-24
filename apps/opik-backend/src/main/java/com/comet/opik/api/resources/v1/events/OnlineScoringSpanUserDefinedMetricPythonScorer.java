@@ -97,10 +97,17 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
                     // Use the common metric endpoint
                     userFacingLogger.info("Using common metric '{}' for spanId '{}'",
                             message.code().commonMetricId(), span.id());
+
+                    // Build scoring_kwargs: merge mappable args (from span fields) with scoreConfig (static values)
+                    Map<String, String> scoringKwargs = new java.util.HashMap<>(data);
+                    if (message.code().scoreConfig() != null) {
+                        scoringKwargs.putAll(message.code().scoreConfig());
+                    }
+
                     scoreResults = pythonEvaluatorService.evaluateCommonMetric(
                             message.code().commonMetricId(),
                             message.code().initConfig(),
-                            data);
+                            scoringKwargs);
                 } else {
                     // Use the custom Python code endpoint
                     scoreResults = pythonEvaluatorService.evaluate(message.code().metric(), data);

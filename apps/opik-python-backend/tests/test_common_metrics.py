@@ -274,14 +274,14 @@ class TestExecuteCommonMetricEndpoint:
             "/v1/private/evaluators/common-metrics/contains/score",
             json={
                 "init_config": {"reference": "hello"},
-                "data": {"output": "hello world"}
+                "scoring_kwargs": {"output": "hello world"}
             }
         )
         assert response.status_code == 200
-        data = response.get_json()
-        assert "scores" in data
-        assert len(data["scores"]) == 1
-        assert data["scores"][0]["value"] == 1.0
+        result = response.get_json()
+        assert "scores" in result
+        assert len(result["scores"]) == 1
+        assert result["scores"][0]["value"] == 1.0
 
     def test_execute_contains_metric_no_match(self, client):
         """POST /common-metrics/contains/score should return 0 when no match."""
@@ -289,12 +289,12 @@ class TestExecuteCommonMetricEndpoint:
             "/v1/private/evaluators/common-metrics/contains/score",
             json={
                 "init_config": {"reference": "goodbye"},
-                "data": {"output": "hello world"}
+                "scoring_kwargs": {"output": "hello world"}
             }
         )
         assert response.status_code == 200
-        data = response.get_json()
-        assert data["scores"][0]["value"] == 0.0
+        result = response.get_json()
+        assert result["scores"][0]["value"] == 0.0
 
     def test_execute_contains_case_sensitive(self, client):
         """POST /common-metrics/contains/score with case_sensitive=True."""
@@ -303,7 +303,7 @@ class TestExecuteCommonMetricEndpoint:
             "/v1/private/evaluators/common-metrics/contains/score",
             json={
                 "init_config": {"reference": "HELLO"},
-                "data": {"output": "hello world"}
+                "scoring_kwargs": {"output": "hello world"}
             }
         )
         assert response.status_code == 200
@@ -314,7 +314,7 @@ class TestExecuteCommonMetricEndpoint:
             "/v1/private/evaluators/common-metrics/contains/score",
             json={
                 "init_config": {"case_sensitive": True, "reference": "HELLO"},
-                "data": {"output": "hello world"}
+                "scoring_kwargs": {"output": "hello world"}
             }
         )
         assert response.status_code == 200
@@ -324,12 +324,12 @@ class TestExecuteCommonMetricEndpoint:
         """POST /common-metrics/unknown/score should return 404."""
         response = client.post(
             "/v1/private/evaluators/common-metrics/unknown/score",
-            json={"data": {"output": "test"}}
+            json={"scoring_kwargs": {"output": "test"}}
         )
         assert response.status_code == 404
 
-    def test_execute_missing_data_returns_400(self, client):
-        """POST /common-metrics/contains/score without data should return 400."""
+    def test_execute_missing_scoring_kwargs_returns_400(self, client):
+        """POST /common-metrics/contains/score without scoring_kwargs should return 400."""
         response = client.post(
             "/v1/private/evaluators/common-metrics/contains/score",
             json={"init_config": {"reference": "test"}}
@@ -341,30 +341,30 @@ class TestExecuteCommonMetricEndpoint:
         response = client.post(
             "/v1/private/evaluators/common-metrics/equals/score",
             json={
-                "data": {"output": "hello", "reference": "hello"}
+                "scoring_kwargs": {"output": "hello", "reference": "hello"}
             }
         )
         assert response.status_code == 200
-        data = response.get_json()
-        assert data["scores"][0]["value"] == 1.0
+        result = response.get_json()
+        assert result["scores"][0]["value"] == 1.0
 
     def test_execute_is_json_metric(self, client):
         """POST /common-metrics/is_json/score should execute the metric."""
         response = client.post(
             "/v1/private/evaluators/common-metrics/is_json/score",
             json={
-                "data": {"output": '{"key": "value"}'}
+                "scoring_kwargs": {"output": '{"key": "value"}'}
             }
         )
         assert response.status_code == 200
-        data = response.get_json()
-        assert data["scores"][0]["value"] == 1.0
+        result = response.get_json()
+        assert result["scores"][0]["value"] == 1.0
 
         # Invalid JSON
         response = client.post(
             "/v1/private/evaluators/common-metrics/is_json/score",
             json={
-                "data": {"output": "not json"}
+                "scoring_kwargs": {"output": "not json"}
             }
         )
         assert response.status_code == 200
