@@ -392,7 +392,7 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
   const noDataText = noData
-    ? "No experiments have been run for this project yet"
+    ? "No experiments related to this project"
     : "No search results";
 
   const hasGroups = Boolean(groups.length);
