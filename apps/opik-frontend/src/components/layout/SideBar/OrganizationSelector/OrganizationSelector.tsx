@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
+import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
@@ -21,8 +22,7 @@ import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 import useUser from "@/plugins/comet/useUser";
 import useAppStore from "@/store/AppStore";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "@/plugins/comet/types";
-import { buildUrl, isOnPremise } from "@/plugins/comet/utils";
-import Logo from "@/components/layout/Logo/Logo";
+import { buildUrl } from "@/plugins/comet/utils";
 
 interface OrganizationSelectorProps {
   expanded: boolean;
@@ -109,11 +109,6 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
   // Check if user is organization admin
   const isOrganizationAdmin =
     currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
-
-  // In Open-Source version, show logo + text instead of organization selector
-  if (isOnPremise()) {
-    return <Logo expanded={expanded} />;
-  }
 
   const handleOpenChange = (open: boolean) => {
     setIsDropdownOpen(open);
@@ -230,7 +225,7 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
                     <Shield className="size-3.5 shrink-0 text-primary" />
                   </span>
                   <span className="comet-body-s text-primary">
-                    Admin Dashboard
+                    {ADMIN_DASHBOARD_LABEL}
                   </span>
                 </div>
               </div>
@@ -296,7 +291,9 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
               >
                 <div className="comet-body-s flex min-w-0 items-center gap-2 text-primary">
                   <Shield className="size-3.5 shrink-0" />
-                  <span className="min-w-0 truncate">Admin Dashboard</span>
+                  <span className="min-w-0 truncate">
+                    {ADMIN_DASHBOARD_LABEL}
+                  </span>
                 </div>
               </div>
             </div>

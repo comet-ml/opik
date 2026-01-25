@@ -35,6 +35,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { APP_VERSION } from "@/constants/app";
+import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
@@ -285,7 +286,7 @@ const UserMenu = () => {
               >
                 <DropdownMenuItem className="cursor-pointer">
                   <Shield className="mr-2 size-4" />
-                  <span>Admin Dashboard</span>
+                  <span>{ADMIN_DASHBOARD_LABEL}</span>
                 </DropdownMenuItem>
               </a>
             ) : null}

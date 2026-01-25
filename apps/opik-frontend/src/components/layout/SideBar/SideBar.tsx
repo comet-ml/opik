@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "@tanstack/react-router";
 
 import {
   Bell,
@@ -197,15 +198,21 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
+  const UserMenu = usePluginsStore((state) => state.UserMenu);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
   );
 
+  // For open-source: use full logo (with text when expanded)
+  // For Comet: use compact icon (without text)
   const logo = LogoComponent ? (
     <LogoComponent expanded={expanded} />
   ) : (
     <Logo expanded={expanded} />
   );
+
+  // Compact icon for Comet mode (organization selector)
+  const compactIcon = <Logo expanded={false} />;
 
   const { data: projectData } = useProjectsList(
     {
@@ -421,12 +428,24 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     <>
       <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
         <div className="comet-header-height relative flex w-full min-w-0 items-center justify-between gap-6 border-b px-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <div className="shrink-0">{logo}</div>
-            <div className="min-w-0 flex-1">
-              <OrganizationSelector expanded={expanded} />
+          {!UserMenu ? (
+            // Open-source: Show logo as clickable link to home
+            <Link
+              to="/$workspaceName/home"
+              className="absolute left-[18px] z-10 block"
+              params={{ workspaceName }}
+            >
+              {logo}
+            </Link>
+          ) : (
+            // Comet: Show compact icon + organization selector
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="shrink-0">{compactIcon}</div>
+              <div className="min-w-0 flex-1">
+                <OrganizationSelector expanded={expanded} />
+              </div>
             </div>
-          </div>
+          )}
         </div>
         <div className="relative flex h-[calc(100%-var(--header-height))]">
           {renderExpandCollapseButton()}
