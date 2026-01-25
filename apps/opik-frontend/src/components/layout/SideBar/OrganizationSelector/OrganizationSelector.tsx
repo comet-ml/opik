@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronDown, Shield } from "lucide-react";
+import { ChevronsUpDown, Shield } from "lucide-react";
 import sortBy from "lodash/sortBy";
 import toLower from "lodash/toLower";
 
@@ -27,6 +27,108 @@ import { buildUrl } from "@/plugins/comet/utils";
 interface OrganizationSelectorProps {
   expanded: boolean;
 }
+
+interface DropdownContentProps {
+  filteredOrganizations: Organization[];
+  currentOrganization: Organization;
+  isOrganizationAdmin: boolean;
+  handleChangeOrganization: (org: Organization) => void;
+  handleManageOrganization: () => void;
+  search: string;
+  setSearch: (search: string) => void;
+  align?: "start" | "center" | "end";
+  side?: "top" | "right" | "bottom" | "left";
+}
+
+const DropdownContent: React.FC<DropdownContentProps> = ({
+  filteredOrganizations,
+  currentOrganization,
+  isOrganizationAdmin,
+  handleChangeOrganization,
+  handleManageOrganization,
+  search,
+  setSearch,
+  align = "start",
+  side,
+}) => {
+  return (
+    <DropdownMenuContent
+      className="w-60 p-1 pt-12"
+      align={align}
+      side={side}
+      onCloseAutoFocus={(e) => e.preventDefault()}
+    >
+      <div
+        className="absolute inset-x-1 top-1 h-11"
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <SearchInput
+          searchText={search}
+          setSearchText={setSearch}
+          placeholder="Find organization"
+          variant="ghost"
+        />
+        <Separator className="mt-1" />
+      </div>
+      <div className="max-h-[200px] overflow-auto">
+        {filteredOrganizations.length > 0 ? (
+          sortBy(filteredOrganizations, "name").map((org) => (
+            <DropdownMenuCheckboxItem
+              checked={currentOrganization.name === org.name}
+              key={org.name}
+              onClick={() => handleChangeOrganization(org)}
+            >
+              <TooltipWrapper content={org.name}>
+                <span
+                  className={side === "right" ? "truncate" : "min-w-0 truncate"}
+                >
+                  {org.name}
+                </span>
+              </TooltipWrapper>
+            </DropdownMenuCheckboxItem>
+          ))
+        ) : (
+          <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
+            <div className="comet-body-s text-muted-slate">
+              No organizations found
+            </div>
+          </div>
+        )}
+      </div>
+      {isOrganizationAdmin && (
+        <div className="sticky inset-x-0 bottom-0">
+          <Separator className="my-1" />
+          <div
+            className={
+              side === "right"
+                ? "flex h-10 cursor-pointer items-center justify-start rounded-md px-4 hover:bg-primary-foreground"
+                : "relative flex h-10 cursor-pointer items-center rounded-md pl-8 pr-2 hover:bg-primary-foreground"
+            }
+            onClick={handleManageOrganization}
+          >
+            {side === "right" ? (
+              <div className="comet-body-s flex min-w-0 items-center gap-2 text-primary">
+                <Shield className="size-3.5 shrink-0" />
+                <span className="min-w-0 truncate">
+                  {ADMIN_DASHBOARD_LABEL}
+                </span>
+              </div>
+            ) : (
+              <>
+                <span className="absolute left-2 flex size-3.5 items-center justify-center">
+                  <Shield className="size-3.5 shrink-0 text-primary" />
+                </span>
+                <span className="comet-body-s text-primary">
+                  {ADMIN_DASHBOARD_LABEL}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </DropdownMenuContent>
+  );
+};
 
 const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
   expanded,
@@ -144,7 +246,7 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
             {currentOrganization.name}
           </span>
           {hasMultipleOrganizations && (
-            <ChevronDown className="ml-auto size-4 shrink-0 text-muted-slate" />
+            <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-slate" />
           )}
         </>
       )}
@@ -186,61 +288,16 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
       <div className="w-full min-w-0">
         <DropdownMenu open={isDropdownOpen} onOpenChange={handleOpenChange}>
           <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="w-60 p-1 pt-12"
+          <DropdownContent
+            filteredOrganizations={filteredOrganizations}
+            currentOrganization={currentOrganization}
+            isOrganizationAdmin={isOrganizationAdmin}
+            handleChangeOrganization={handleChangeOrganization}
+            handleManageOrganization={handleManageOrganization}
+            search={search}
+            setSearch={setSearch}
             align="start"
-            onCloseAutoFocus={(e) => e.preventDefault()}
-          >
-            <div
-              className="absolute inset-x-1 top-1 h-11"
-              onKeyDown={(e) => e.stopPropagation()}
-            >
-              <SearchInput
-                searchText={search}
-                setSearchText={setSearch}
-                placeholder="Find organization"
-                variant="ghost"
-              />
-              <Separator className="mt-1" />
-            </div>
-            <div className="max-h-[200px] overflow-auto">
-              {filteredOrganizations.length > 0 ? (
-                sortBy(filteredOrganizations, "name").map((org) => (
-                  <DropdownMenuCheckboxItem
-                    checked={currentOrganization.name === org.name}
-                    key={org.name}
-                    onClick={() => handleChangeOrganization(org)}
-                  >
-                    <TooltipWrapper content={org.name}>
-                      <span className="min-w-0 truncate">{org.name}</span>
-                    </TooltipWrapper>
-                  </DropdownMenuCheckboxItem>
-                ))
-              ) : (
-                <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
-                  <div className="comet-body-s text-muted-slate">
-                    No organizations found
-                  </div>
-                </div>
-              )}
-            </div>
-            {isOrganizationAdmin && (
-              <div className="sticky inset-x-0 bottom-0">
-                <Separator className="my-1" />
-                <div
-                  className="relative flex h-10 cursor-pointer items-center rounded-md pl-8 pr-2 hover:bg-primary-foreground"
-                  onClick={handleManageOrganization}
-                >
-                  <span className="absolute left-2 flex size-3.5 items-center justify-center">
-                    <Shield className="size-3.5 shrink-0 text-primary" />
-                  </span>
-                  <span className="comet-body-s text-primary">
-                    {ADMIN_DASHBOARD_LABEL}
-                  </span>
-                </div>
-              </div>
-            )}
-          </DropdownMenuContent>
+          />
         </DropdownMenu>
       </div>
     );
@@ -253,62 +310,17 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
         <TooltipWrapper content={currentOrganization.name} side="right">
           <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
         </TooltipWrapper>
-        <DropdownMenuContent
-          className="w-60 p-1 pt-12"
-          side="right"
+        <DropdownContent
+          filteredOrganizations={filteredOrganizations}
+          currentOrganization={currentOrganization}
+          isOrganizationAdmin={isOrganizationAdmin}
+          handleChangeOrganization={handleChangeOrganization}
+          handleManageOrganization={handleManageOrganization}
+          search={search}
+          setSearch={setSearch}
           align="end"
-          onCloseAutoFocus={(e) => e.preventDefault()}
-        >
-          <div
-            className="absolute inset-x-1 top-1 h-11"
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <SearchInput
-              searchText={search}
-              setSearchText={setSearch}
-              placeholder="Find organization"
-              variant="ghost"
-            />
-            <Separator className="mt-1" />
-          </div>
-          <div className="max-h-[200px] overflow-auto">
-            {filteredOrganizations.length > 0 ? (
-              sortBy(filteredOrganizations, "name").map((org) => (
-                <DropdownMenuCheckboxItem
-                  checked={currentOrganization.name === org.name}
-                  key={org.name}
-                  onClick={() => handleChangeOrganization(org)}
-                >
-                  <TooltipWrapper content={org.name}>
-                    <span className="truncate">{org.name}</span>
-                  </TooltipWrapper>
-                </DropdownMenuCheckboxItem>
-              ))
-            ) : (
-              <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
-                <div className="comet-body-s text-muted-slate">
-                  No organizations found
-                </div>
-              </div>
-            )}
-          </div>
-          {isOrganizationAdmin && (
-            <div className="sticky inset-x-0 bottom-0">
-              <Separator className="my-1" />
-              <div
-                className="flex h-10 cursor-pointer items-center justify-start rounded-md px-4 hover:bg-primary-foreground"
-                onClick={handleManageOrganization}
-              >
-                <div className="comet-body-s flex min-w-0 items-center gap-2 text-primary">
-                  <Shield className="size-3.5 shrink-0" />
-                  <span className="min-w-0 truncate">
-                    {ADMIN_DASHBOARD_LABEL}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-        </DropdownMenuContent>
+          side="right"
+        />
       </DropdownMenu>
     </div>
   );

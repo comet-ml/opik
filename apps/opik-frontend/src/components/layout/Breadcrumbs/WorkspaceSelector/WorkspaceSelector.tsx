@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronDown, Settings } from "lucide-react";
+import { ChevronsUpDown, Settings } from "lucide-react";
 import sortBy from "lodash/sortBy";
 import toLower from "lodash/toLower";
 
@@ -104,7 +104,7 @@ const WorkspaceSelector: React.FC = () => {
         {currentWorkspaceDisplayName}
       </span>
       {shouldShowDropdown && (
-        <ChevronDown className="ml-auto size-4 shrink-0 text-muted-slate" />
+        <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-slate" />
       )}
     </>
   );
