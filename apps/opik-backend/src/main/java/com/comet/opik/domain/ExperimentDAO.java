@@ -1208,7 +1208,6 @@ class ExperimentDAO {
                     .id(row.get("id", UUID.class))
                     .datasetId(row.get("dataset_id", UUID.class))
                     .projectId(RowUtils.getOptionalValue(row, "project_id", UUID.class))
-                    .projectName(null) // Will be enriched by ExperimentService
                     .name(row.get("name", String.class))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
                     .tags(Optional.ofNullable(row.get("tags", String[].class))
