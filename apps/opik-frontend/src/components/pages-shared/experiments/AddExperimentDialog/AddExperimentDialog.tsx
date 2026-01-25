@@ -278,7 +278,7 @@ eval_results = evaluate(
   experiment_name="my_evaluation",
   dataset=dataset,
   task=evaluation_task${metricsParam}${
-    projectName ? `,\n  project_name="${projectName}"` : ""
+    projectName ? `,\n  project_name=${JSON.stringify(projectName)}` : ""
   }
 )`;
 
