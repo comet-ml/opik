@@ -1822,20 +1822,17 @@ class ExperimentsResourceTest {
                     .build();
             createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
 
-            // Wait for ClickHouse to process the data and verify projectId is set first
+            // Wait for ClickHouse to process the trace-experiment relationship
             Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
                 var retrievedExperiment = getExperiment(experimentId, workspaceName, apiKey);
                 assertThat(retrievedExperiment).isNotNull();
                 assertThat(retrievedExperiment.projectId())
                         .as("projectId should be set from trace")
                         .isEqualTo(projectId);
+                assertThat(retrievedExperiment.projectName())
+                        .as("projectName should be enriched from projectId")
+                        .isEqualTo(project.name());
             });
-
-            // Now verify projectName is enriched
-            var retrievedExperiment = getExperiment(experimentId, workspaceName, apiKey);
-            assertThat(retrievedExperiment.projectName())
-                    .as("projectName should be enriched from projectId")
-                    .isEqualTo(project.name());
 
             // Also verify when finding experiments
             var response = experimentResourceClient.findExperiments(
