@@ -59,7 +59,10 @@ import {
 } from "@/components/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useExperimentsTableConfig } from "@/components/pages-shared/experiments/useExperimentsTableConfig";
-import { useExperimentsGroupsAndFilters } from "@/components/pages-shared/experiments/useExperimentsGroupsAndFilters";
+import {
+  useExperimentsGroupsAndFilters,
+  FILTER_AND_GROUP_COLUMNS as SHARED_FILTER_AND_GROUP_COLUMNS,
+} from "@/components/pages-shared/experiments/useExperimentsGroupsAndFilters";
 import { useExperimentsFeedbackScores } from "@/components/pages-shared/experiments/useExperimentsFeedbackScores";
 import { useExperimentsAutoExpandingLogic } from "@/components/pages-shared/experiments/useExperimentsAutoExpandingLogic";
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
@@ -86,25 +89,9 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 // Filter and group columns for project experiments (excludes project since we're already in project context)
-const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
-  {
-    id: COLUMN_DATASET_ID,
-    label: "Dataset",
-    type: COLUMN_TYPE.string,
-    disposable: true,
-  },
-  {
-    id: "tags",
-    label: "Tags",
-    type: COLUMN_TYPE.list,
-    iconType: "tags",
-  },
-  {
-    id: COLUMN_METADATA_ID,
-    label: "Configuration",
-    type: COLUMN_TYPE.dictionary,
-  },
-];
+const FILTER_AND_GROUP_COLUMNS = SHARED_FILTER_AND_GROUP_COLUMNS.filter(
+  (col) => col.id !== COLUMN_PROJECT_ID,
+);
 
 interface ProjectExperimentsTabProps {
   projectId: string;
@@ -407,17 +394,11 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
   );
 
   // Filter out dataset column when grouping by dataset
-  // Also filter out project column since we're already in project context
   const availableColumns = useMemo(() => {
     const isGroupingByDataset = groups.some(
       (g) => g.field === COLUMN_DATASET_ID,
     );
     let filteredColumns = columnsDef;
-
-    // Always filter out project column in project experiments tab
-    filteredColumns = filteredColumns.filter(
-      (col) => col.id !== COLUMN_PROJECT_ID,
-    );
 
     if (isGroupingByDataset) {
       filteredColumns = filteredColumns.filter(
