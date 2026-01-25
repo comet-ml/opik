@@ -63,6 +63,7 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 
 const STORAGE_KEY_PREFIX = "project-experiments";
 const PAGINATION_SIZE_KEY = "project-experiments-pagination-size";
@@ -420,6 +421,12 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
 
   return (
     <>
+      <PageBodyStickyContainer direction="horizontal" limitWidth>
+        <ExplainerCallout
+          className="mb-4"
+          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_experiment]}
+        />
+      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
