@@ -30,6 +30,7 @@ import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
 import OrganizationSelector from "@/components/layout/SideBar/OrganizationSelector/OrganizationSelector";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
@@ -195,8 +196,15 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
+  const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
+  );
+
+  const logo = LogoComponent ? (
+    <LogoComponent expanded={expanded} />
+  ) : (
+    <Logo expanded={expanded} />
   );
 
   const { data: projectData } = useProjectsList(
@@ -412,8 +420,13 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   return (
     <>
       <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
-        <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
-          <OrganizationSelector expanded={expanded} />
+        <div className="comet-header-height relative flex w-full min-w-0 items-center justify-between gap-6 border-b px-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="shrink-0">{logo}</div>
+            <div className="min-w-0 flex-1">
+              <OrganizationSelector expanded={expanded} />
+            </div>
+          </div>
         </div>
         <div className="relative flex h-[calc(100%-var(--header-height))]">
           {renderExpandCollapseButton()}
