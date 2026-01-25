@@ -112,7 +112,9 @@ const WorkspaceSelector: React.FC = () => {
   if (!shouldShowDropdown) {
     // Single workspace (and not default) - just show it
     return (
-      <div className="flex h-8 items-center gap-1.5">{triggerContent}</div>
+      <div className="-mr-1.5 flex h-8 items-center gap-1.5 px-1.5">
+        {triggerContent}
+      </div>
     );
   }
 
@@ -121,7 +123,7 @@ const WorkspaceSelector: React.FC = () => {
     <button
       className={cn(
         "comet-body-s flex items-center gap-1.5 rounded-md text-foreground transition-colors hover:bg-primary-foreground",
-        "h-8",
+        "h-8 px-1.5 -mr-1.5",
       )}
     >
       {triggerContent}
