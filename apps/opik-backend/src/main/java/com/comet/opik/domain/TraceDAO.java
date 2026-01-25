@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
+import com.comet.opik.api.ExperimentReference;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
@@ -1084,6 +1085,25 @@ class TraceDAOImpl implements TraceDAO {
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
+            ), experiments_agg AS (
+                SELECT
+                    ei.trace_id,
+                    e.id AS experiment_id,
+                    e.name AS experiment_name,
+                    e.dataset_id AS experiment_dataset_id
+                FROM experiment_items ei
+                INNER JOIN (
+                    SELECT id, name, dataset_id
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) e ON ei.experiment_id = e.id
+                WHERE ei.workspace_id = :workspace_id
+                <if(uuid_from_time)> AND ei.trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND ei.trace_id \\<= :uuid_to_time <endif>
+                ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                LIMIT 1 BY ei.trace_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1129,6 +1149,9 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(sort_has_span_statistics)>
                 LEFT JOIN spans_agg s ON t.id = s.trace_id
+                <endif>
+                <if(sort_has_experiment)>
+                LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
                 <endif>
                 <if(feedback_scores_empty_filters)>
                 LEFT JOIN fsc ON fsc.entity_id = t.id
@@ -1180,12 +1203,12 @@ class TraceDAOImpl implements TraceDAO {
                  <if(experiment_filters)>
                  AND id IN (
                     SELECT
-                        trace_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
+                        ei.trace_id
+                    FROM experiment_items ei
+                    WHERE ei.workspace_id = :workspace_id
                     AND <experiment_filters>
-                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                    LIMIT 1 BY ei.trace_id
                  )
                  <endif>
                  <if(feedback_scores_empty_filters)>
@@ -1226,12 +1249,14 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
+                  <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
+             <if(!exclude_experiment)>LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id<endif>
              ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1610,12 +1635,12 @@ class TraceDAOImpl implements TraceDAO {
                     <if(experiment_filters)>
                     AND id IN (
                         SELECT
-                            trace_id
-                        FROM experiment_items
-                        WHERE workspace_id = :workspace_id
+                            ei.trace_id
+                        FROM experiment_items ei
+                        WHERE ei.workspace_id = :workspace_id
                         AND <experiment_filters>
-                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
+                        ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                        LIMIT 1 BY ei.trace_id
                     )
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
@@ -2275,12 +2300,12 @@ class TraceDAOImpl implements TraceDAO {
                 <if(experiment_filters)>
                 AND id IN (
                     SELECT
-                        trace_id
-                    FROM experiment_items
-                    WHERE workspace_id = :workspace_id
+                        ei.trace_id
+                    FROM experiment_items ei
+                    WHERE ei.workspace_id = :workspace_id
                     AND <experiment_filters>
-                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                    LIMIT 1 BY ei.trace_id
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>
@@ -2443,6 +2468,8 @@ class TraceDAOImpl implements TraceDAO {
             LIMIT 1 BY t.id
             SETTINGS log_comment = '<log_comment>';
             """;
+
+    private static final Map<String, String> EXPERIMENT_FIELD_MAPPING = Map.of("experiment_id", "eaag.experiment_name");
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -2812,6 +2839,7 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
+                .experiment(mapExperiment(exclude, row))
                 .build();
     }
 
@@ -2829,6 +2857,21 @@ class TraceDAOImpl implements TraceDAO {
                         .details(JsonNodeFactory.instance.objectNode())
                         .build())
                 .toList());
+    }
+
+    private ExperimentReference mapExperiment(Set<Trace.TraceField> exclude, Row row) {
+        String experimentId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_id", String.class);
+        String experimentName = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_name", String.class);
+        String experimentDatasetId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_dataset_id",
+                String.class);
+
+        if (StringUtils.isBlank(experimentId) || StringUtils.isBlank(experimentName)
+                || StringUtils.isBlank(experimentDatasetId)) {
+            return null;
+        }
+
+        return new ExperimentReference(UUID.fromString(experimentId), experimentName,
+                UUID.fromString(experimentDatasetId));
     }
 
     private Publisher<TraceDetails> mapToTraceDetails(Result result) {
@@ -2904,7 +2947,8 @@ class TraceDAOImpl implements TraceDAO {
             template.add("log_comment", logComment);
 
             var finalTemplate = template;
-            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields()))
+            Optional.ofNullable(
+                    sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(), EXPERIMENT_FIELD_MAPPING))
                     .ifPresent(sortFields -> {
 
                         if (sortFields.contains("feedback_scores")) {
@@ -2913,6 +2957,10 @@ class TraceDAOImpl implements TraceDAO {
 
                         if (hasSpanStatistics(sortFields)) {
                             finalTemplate.add("sort_has_span_statistics", true);
+                        }
+
+                        if (sortFields.contains("experiment_id") || sortFields.contains("eaag.experiment")) {
+                            finalTemplate.add("sort_has_experiment", true);
                         }
 
                         finalTemplate.add("sort_fields", sortFields);
@@ -2982,6 +3030,8 @@ class TraceDAOImpl implements TraceDAO {
                                 fields.contains(Trace.TraceField.LLM_SPAN_COUNT.getValue()));
                         template.add("exclude_has_tool_spans",
                                 fields.contains(Trace.TraceField.HAS_TOOL_SPANS.getValue()));
+                        template.add("exclude_experiment",
+                                fields.contains(Trace.TraceField.EXPERIMENT.getValue()));
                     }
                 });
     }
