@@ -147,6 +147,10 @@ public class ExperimentService {
                     .map(Experiment::datasetVersionId)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toUnmodifiableSet());
+            var projectIds = experiments.stream()
+                    .map(Experiment::projectId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toUnmodifiableSet());
 
             return Mono.zip(
                     promptService.getVersionsInfoByVersionsIds(getPromptVersionIds(experiments)),
@@ -155,7 +159,10 @@ public class ExperimentService {
                             .map(this::getDatasetMap),
                     Mono.fromCallable(() -> datasetVersionService.findByIds(versionIds, workspaceId))
                             .subscribeOn(Schedulers.boundedElastic())
-                            .map(this::getDatasetVersionMap))
+                            .map(this::getDatasetVersionMap),
+                    Mono.fromCallable(() -> projectService.findByIds(workspaceId, projectIds))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .map(this::getProjectMap))
                     .map(tuple -> experiments.stream()
                             .map(experiment -> experiment.toBuilder()
                                     .datasetName(Optional
@@ -166,6 +173,11 @@ public class ExperimentService {
                                             .ofNullable(experiment.datasetVersionId())
                                             .map(tuple.getT3()::get)
                                             .map(DatasetVersionMapper.INSTANCE::toDatasetVersionSummary)
+                                            .orElse(null))
+                                    .projectName(Optional
+                                            .ofNullable(experiment.projectId())
+                                            .map(tuple.getT4()::get)
+                                            .map(Project::name)
                                             .orElse(null))
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
                                     .promptVersions(buildPromptVersions(tuple.getT1(), experiment))
