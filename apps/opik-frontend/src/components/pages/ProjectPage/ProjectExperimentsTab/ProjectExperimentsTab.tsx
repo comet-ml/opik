@@ -15,6 +15,8 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
+import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
+import { Button } from "@/components/ui/button";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
@@ -34,6 +36,7 @@ import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
+import useProjectById from "@/api/projects/useProjectById";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
@@ -112,6 +115,13 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
   const isDatasetVersioningEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.DATASET_VERSIONING_ENABLED,
   );
+
+  const [openDialog, setOpenDialog] = useState<boolean>(false);
+
+  const { data: project } = useProjectById({
+    projectId,
+  });
+
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -463,7 +473,10 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
-          ></ColumnsButton>
+          />
+          <Button size="sm" onClick={() => setOpenDialog(true)}>
+            Create experiment
+          </Button>
         </div>
       </PageBodyStickyContainer>
       <DataTable
@@ -502,6 +515,11 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
           />
         )}
       </PageBodyStickyContainer>
+      <AddExperimentDialog
+        open={openDialog}
+        setOpen={setOpenDialog}
+        projectName={project?.name}
+      />
     </>
   );
 };
