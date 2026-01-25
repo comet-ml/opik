@@ -428,7 +428,7 @@ const PlaygroundOutputActions = ({
             <div className="mt-2.5">
               <NavigationTag
                 resource={RESOURCE_TYPE.experiment}
-                id={datasetId}
+                id={plainDatasetId}
                 name={
                   createdExperiments.length === 1 ? "Experiment" : "Experiments"
                 }
