@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { Link } from "@tanstack/react-router";
 
 import {
   Bell,
@@ -31,8 +30,8 @@ import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
+import OrganizationSelector from "@/components/layout/SideBar/OrganizationSelector/OrganizationSelector";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
@@ -46,8 +45,6 @@ import SidebarMenuItem, {
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
-
-const HOME_PATH = "/$workspaceName/home";
 
 const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
@@ -198,7 +195,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
-  const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
   );
@@ -343,12 +339,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     optimizations_running: hasActiveOptimizations,
   };
 
-  const logo = LogoComponent ? (
-    <LogoComponent expanded={expanded} />
-  ) : (
-    <Logo expanded={expanded} />
-  );
-
   const renderItems = (items: MenuItem[]) => {
     return items.map((item) => (
       <SidebarMenuItem
@@ -423,13 +413,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     <>
       <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
         <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
-          <Link
-            to={HOME_PATH}
-            className="absolute left-[18px] z-10 block"
-            params={{ workspaceName }}
-          >
-            {logo}
-          </Link>
+          <OrganizationSelector expanded={expanded} />
         </div>
         <div className="relative flex h-[calc(100%-var(--header-height))]">
           {renderExpandCollapseButton()}
