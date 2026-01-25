@@ -501,7 +501,15 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
         groupingConfig={groupingConfig}
         getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
-        noData={<DataTableNoData title={noDataText}></DataTableNoData>}
+        noData={
+          <DataTableNoData title={noDataText}>
+            {noData && (
+              <Button variant="link" onClick={() => setOpenDialog(true)}>
+                Create new experiment
+              </Button>
+            )}
+          </DataTableNoData>
+        }
         TableBody={DataTableVirtualBody}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
