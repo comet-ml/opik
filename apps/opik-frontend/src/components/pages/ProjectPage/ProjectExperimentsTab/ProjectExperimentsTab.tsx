@@ -17,7 +17,8 @@ import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import { Button } from "@/components/ui/button";
-import { Info } from "lucide-react";
+import { Info, RotateCw } from "lucide-react";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
@@ -325,18 +326,19 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
     maxExpandedDeepestGroups: MAX_EXPANDED_DEEPEST_GROUPS,
   });
 
-  const { data, isPending, isPlaceholderData } = useGroupedExperimentsList({
-    workspaceName,
-    groupLimit,
-    projectId,
-    filters,
-    sorting: sortedColumns,
-    groups,
-    search: search!,
-    page: page!,
-    size: size!,
-    expandedMap: expandingConfig.expanded as Record<string, boolean>,
-  });
+  const { data, isPending, isPlaceholderData, refetch } =
+    useGroupedExperimentsList({
+      workspaceName,
+      groupLimit,
+      projectId,
+      filters,
+      sorting: sortedColumns,
+      groups,
+      search: search!,
+      page: page!,
+      size: size!,
+      expandedMap: expandingConfig.expanded as Record<string, boolean>,
+    });
 
   const experiments = useMemo(() => data?.content ?? [], [data?.content]);
 
@@ -467,6 +469,16 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
         <div className="flex items-center gap-2">
           <ExperimentsActionsPanel experiments={selectedRows} />
           <Separator orientation="vertical" className="mx-2 h-4" />
+          <TooltipWrapper content="Refresh experiments list">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              className="shrink-0"
+              onClick={() => refetch()}
+            >
+              <RotateCw />
+            </Button>
+          </TooltipWrapper>
           <ColumnsButton
             columns={availableColumns}
             selectedColumns={selectedColumns}
