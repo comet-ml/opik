@@ -17,6 +17,7 @@ import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import { Button } from "@/components/ui/button";
+import { Info } from "lucide-react";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
@@ -474,8 +475,13 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           />
-          <Button size="sm" onClick={() => setOpenDialog(true)}>
-            Create experiment
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setOpenDialog(true)}
+          >
+            <Info className="mr-1.5 size-3.5" />
+            Create new experiment
           </Button>
         </div>
       </PageBodyStickyContainer>
