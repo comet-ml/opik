@@ -533,10 +533,10 @@ export default function useGroupedExperimentsList(
         : undefined;
       const isOrphanProject = projectMeta?.label === DELETED_ENTITY_LABEL;
 
-      // Get project ID - prefer filter value, fall back to group metadata value
-      const projectIdValue = (projectFilter?.value ?? projectMeta?.value) as
-        | string
-        | undefined;
+      // Get project ID - prefer direct param, then filter value, then group metadata value
+      const projectIdValue = (projectId ??
+        projectFilter?.value ??
+        projectMeta?.value) as string | undefined;
 
       const queryParams: UseExperimentsListParams = {
         workspaceName: params.workspaceName,

@@ -432,7 +432,7 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
             placeholder="Search by name"
             className="w-[320px]"
             dimension="sm"
-          ></SearchInput>
+          />
           <FiltersButton
             columns={FILTER_AND_GROUP_COLUMNS}
             config={filtersAndGroupsConfig as never}
@@ -492,7 +492,7 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
             size={size!}
             sizeChange={setSize}
             total={total}
-          ></DataTablePagination>
+          />
         )}
       </PageBodyStickyContainer>
     </>
