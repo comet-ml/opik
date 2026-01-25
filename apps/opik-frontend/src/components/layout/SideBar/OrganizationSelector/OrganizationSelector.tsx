@@ -48,11 +48,22 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const handleChangeOrganization = (newOrganization: Organization) => {
-    if (!userInvitedWorkspaces) return;
+    // First try to find workspaces from userInvitedWorkspaces
+    let newOrganizationWorkspaces =
+      userInvitedWorkspaces?.filter(
+        (workspace) => workspace.organizationId === newOrganization.id,
+      ) || [];
 
-    const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
-      (workspace) => workspace.organizationId === newOrganization.id,
-    );
+    // If no invited workspaces found, fall back to allWorkspaces
+    if (newOrganizationWorkspaces.length === 0) {
+      newOrganizationWorkspaces =
+        allWorkspaces?.filter(
+          (workspace) => workspace.organizationId === newOrganization.id,
+        ) || [];
+    }
+
+    // Early return if there are truly no workspaces for this organization
+    if (newOrganizationWorkspaces.length === 0) return;
 
     const newWorkspace =
       newOrganizationWorkspaces.find((workspace) => workspace.default) ||
