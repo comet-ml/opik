@@ -79,7 +79,6 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
     !user?.loggedIn ||
     isLoading ||
     !organizations ||
-    !allWorkspaces ||
     !userInvitedWorkspaces ||
     !currentOrganization
   ) {
