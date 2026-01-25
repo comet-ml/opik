@@ -140,8 +140,8 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
     if (!searchQuery || isQueryTooShort) {
       return (
         <div className="comet-body-s flex h-full items-center justify-center text-muted-slate">
-          Type at least {MIN_USERNAME_LENGTH} characters or enter an email
-          address
+          Enter an email address, or search by username ({MIN_USERNAME_LENGTH}+
+          characters) for users in your organization
         </div>
       );
     }
@@ -152,7 +152,8 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
     if (!hasResults && !showEmailRow && !isLoading) {
       return (
         <div className="comet-body-s flex h-full items-center justify-center text-muted-slate">
-          No users found. You can also invite by email address
+          No users found. Enter an email address to invite, or search by
+          username for organization members
         </div>
       );
     }
