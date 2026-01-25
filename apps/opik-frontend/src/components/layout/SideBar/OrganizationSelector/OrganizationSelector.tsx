@@ -21,7 +21,8 @@ import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 import useUser from "@/plugins/comet/useUser";
 import useAppStore from "@/store/AppStore";
 import { Organization, ORGANIZATION_ROLE_TYPE } from "@/plugins/comet/types";
-import { buildUrl } from "@/plugins/comet/utils";
+import { buildUrl, isOnPremise } from "@/plugins/comet/utils";
+import Logo from "@/components/layout/Logo/Logo";
 
 interface OrganizationSelectorProps {
   expanded: boolean;
@@ -108,6 +109,11 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
   // Check if user is organization admin
   const isOrganizationAdmin =
     currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
+
+  // In Open-Source version, show logo + text instead of organization selector
+  if (isOnPremise()) {
+    return <Logo expanded={expanded} />;
+  }
 
   const handleOpenChange = (open: boolean) => {
     setIsDropdownOpen(open);
