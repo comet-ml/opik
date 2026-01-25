@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronsUpDown, Settings } from "lucide-react";
 import sortBy from "lodash/sortBy";
 import toLower from "lodash/toLower";
@@ -98,42 +98,52 @@ const WorkspaceSelector: React.FC = () => {
     });
   };
 
-  const triggerContent = (
-    <>
-      <span className="comet-body-s min-w-0 flex-1 truncate text-left">
-        {currentWorkspaceDisplayName}
-      </span>
-      {shouldShowDropdown && (
-        <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-slate" />
-      )}
-    </>
-  );
-
   if (!shouldShowDropdown) {
-    // Single workspace (and not default) - just show it
+    // Single workspace (and not default) - just show it as a link
     return (
       <div className="-mr-1.5 flex h-8 items-center gap-1.5 px-1.5">
-        {triggerContent}
+        <Link
+          to="/$workspaceName/home"
+          params={{ workspaceName }}
+          className="comet-body-s min-w-0 flex-1 truncate text-left hover:underline"
+        >
+          {currentWorkspaceDisplayName}
+        </Link>
       </div>
     );
   }
 
-  // Multiple workspaces - show dropdown
-  const triggerButton = (
+  // Multiple workspaces - show name as link and chevron as dropdown trigger
+  const nameLink = (
+    <Link
+      to="/$workspaceName/home"
+      params={{ workspaceName }}
+      className="comet-body-s min-w-0 flex-1 truncate text-left hover:underline"
+    >
+      {currentWorkspaceDisplayName}
+    </Link>
+  );
+
+  const chevronButton = (
     <button
       className={cn(
-        "comet-body-s flex items-center gap-1.5 rounded-md text-foreground transition-colors hover:bg-primary-foreground",
-        "h-8 px-1.5 -mr-1.5",
+        "flex items-center justify-center rounded-md text-foreground transition-colors hover:bg-primary-foreground",
+        "h-8 w-6 shrink-0 px-0",
       )}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
     >
-      {triggerContent}
+      <ChevronsUpDown className="size-4 shrink-0 text-muted-slate" />
     </button>
   );
 
   return (
-    <div>
+    <div className="-mr-1.5 flex h-8 items-center gap-1 px-1.5">
+      {nameLink}
       <DropdownMenu open={isDropdownOpen} onOpenChange={handleOpenChange}>
-        <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild>{chevronButton}</DropdownMenuTrigger>
         <DropdownMenuContent className="w-60 p-1 pt-12" align="start">
           <div className="absolute inset-x-1 top-1 h-11">
             <SearchInput

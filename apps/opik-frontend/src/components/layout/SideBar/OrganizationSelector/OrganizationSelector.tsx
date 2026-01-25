@@ -238,40 +238,27 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
     );
   };
 
-  const triggerContent = (
-    <>
-      {expanded && (
-        <>
-          <span className="comet-body-s min-w-0 flex-1 truncate text-left">
-            {currentOrganization.name}
-          </span>
-          {hasMultipleOrganizations && (
-            <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-slate" />
-          )}
-        </>
-      )}
-    </>
-  );
-
   if (!hasMultipleOrganizations) {
     // Single organization - just show it, optionally with tooltip when collapsed
     if (expanded) {
       return (
         <div className="flex h-8 w-full items-center gap-1.5 px-3">
-          {triggerContent}
+          <span className="comet-body-s min-w-0 flex-1 truncate text-left">
+            {currentOrganization.name}
+          </span>
         </div>
       );
     }
     return (
       <TooltipWrapper content={currentOrganization.name} side="right">
         <div className="flex size-8 shrink-0 items-center justify-center">
-          {triggerContent}
+          <span className="comet-body-s">{currentOrganization.name}</span>
         </div>
       </TooltipWrapper>
     );
   }
 
-  // Multiple organizations - show dropdown
+  // Multiple organizations - show name and chevron, entire container is clickable
   const triggerButton = (
     <button
       className={cn(
@@ -279,7 +266,17 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
         expanded ? "h-8 gap-1.5 px-2" : "h-8 w-8 shrink-0 justify-center gap-0",
       )}
     >
-      {triggerContent}
+      {expanded && (
+        <>
+          <span className="min-w-0 flex-1 truncate text-left">
+            {currentOrganization.name}
+          </span>
+          <ChevronsUpDown className="ml-auto size-4 shrink-0 text-muted-slate" />
+        </>
+      )}
+      {!expanded && (
+        <ChevronsUpDown className="size-4 shrink-0 text-muted-slate" />
+      )}
     </button>
   );
 
