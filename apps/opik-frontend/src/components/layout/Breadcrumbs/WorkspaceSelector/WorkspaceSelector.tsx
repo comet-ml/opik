@@ -77,12 +77,9 @@ const WorkspaceSelector: React.FC = () => {
   const currentWorkspaceDisplayName = calculateWorkspaceName(workspaceName);
 
   // Determine if we should show dropdown
-  // Allow opening dropdown even with one workspace, but not if current workspace is Personal (default)
-  const isCurrentWorkspaceDefault = workspaceName === DEFAULT_WORKSPACE_NAME;
+  // Allow opening dropdown even when in Personal (default) if there are other workspaces
   const hasSelectableWorkspaces = selectableWorkspaces.length > 0;
-  const shouldShowDropdown =
-    hasSelectableWorkspaces && !isCurrentWorkspaceDefault;
-
+  const shouldShowDropdown = hasSelectableWorkspaces;
   const handleOpenChange = (open: boolean) => {
     setIsDropdownOpen(open);
     if (!open) {
