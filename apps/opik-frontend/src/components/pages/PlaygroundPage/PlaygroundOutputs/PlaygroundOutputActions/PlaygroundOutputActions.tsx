@@ -423,12 +423,12 @@ const PlaygroundOutputActions = ({
         </div>
       )}
       <div className="sticky flex items-center justify-between gap-2">
-        {createdExperiments.length > 0 && datasetId && (
+        {createdExperiments.length > 0 && plainDatasetId && (
           <div className="flex gap-2">
             <div className="mt-2.5">
               <NavigationTag
                 resource={RESOURCE_TYPE.experiment}
-                id={datasetId}
+                id={plainDatasetId}
                 name={
                   createdExperiments.length === 1 ? "Experiment" : "Experiments"
                 }
