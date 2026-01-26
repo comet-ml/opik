@@ -26,6 +26,27 @@ const SORTABLE_PREFIXES = [
   EXPERIMENT_ITEM_METADATA_PREFIX,
 ];
 
+/**
+ * Normalizes a column ID for TanStack Table lookups
+ * TanStack Table converts dots to underscores in column IDs
+ * (e.g., "feedback_scores.accuracy" -> "feedback_scores_accuracy")
+ */
+export const normalizeColumnId = (columnId: string): string => {
+  // Convert dot to underscore notation for all prefixed columns
+  for (const prefix of SORTABLE_PREFIXES) {
+    if (columnId.startsWith(prefix)) {
+      return columnId.replace(`${prefix}.`, `${prefix}_`);
+    }
+  }
+
+  return columnId;
+};
+
+/**
+ * Denormalizes a column ID for backend API calls
+ * Converts underscore to dot notation for all prefixed columns
+ * (e.g., "feedback_scores_accuracy" -> "feedback_scores.accuracy")
+ */
 export const mapComplexColumn = (column: ColumnSort): ColumnSort => {
   // Convert underscore to dot notation for all prefixed columns
   for (const prefix of SORTABLE_PREFIXES) {

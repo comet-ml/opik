@@ -35,7 +35,7 @@ const RankingCell = <TData extends RowWithId>(
     >
       <div className="flex items-center justify-center">
         {rank === undefined ? (
-          <span className="comet-body-s text-slate-400">—</span>
+          <span className="comet-body-s text-slate-400">-</span>
         ) : (
           <>
             {medalColor && (

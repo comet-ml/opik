@@ -1,22 +1,20 @@
 import React from "react";
-import { Info } from "lucide-react";
 import {
   useDashboardStore,
   selectPreviewWidget,
   selectUpdatePreviewWidget,
 } from "@/store/DashboardStore";
 import InlineEditableText from "@/components/shared/InlineEditableText/InlineEditableText";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 
 type DashboardWidgetPreviewHeaderProps = {
   className?: string;
-  infoMessage?: string;
+  generatedSubtitle?: string;
 };
 
 const DashboardWidgetPreviewHeader: React.FunctionComponent<
   DashboardWidgetPreviewHeaderProps
-> = ({ className, infoMessage }) => {
+> = ({ className, generatedSubtitle }) => {
   const previewWidget = useDashboardStore(selectPreviewWidget);
   const updatePreviewWidget = useDashboardStore(selectUpdatePreviewWidget);
 
@@ -26,7 +24,9 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
 
   const { title, subtitle, generatedTitle } = previewWidget;
   const displayTitle = title || generatedTitle || "";
+  const displaySubtitle = subtitle || generatedSubtitle || "";
   const titlePlaceholder = generatedTitle || "Enter widget title";
+  const subtitlePlaceholder = generatedSubtitle || "Click to add a description";
 
   const handleTitleChange = (newTitle: string) => {
     updatePreviewWidget({ title: newTitle });
@@ -44,18 +44,11 @@ const DashboardWidgetPreviewHeader: React.FunctionComponent<
         defaultValue={generatedTitle}
         onChange={handleTitleChange}
         isTitle
-        rightIcon={
-          infoMessage ? (
-            <TooltipWrapper content={infoMessage}>
-              <Info className="size-3 shrink-0 text-light-slate" />
-            </TooltipWrapper>
-          ) : undefined
-        }
       />
       <InlineEditableText
-        value={subtitle || ""}
-        placeholder="Click to add a description"
-        defaultValue=""
+        value={displaySubtitle}
+        placeholder={subtitlePlaceholder}
+        defaultValue={generatedSubtitle}
         onChange={handleSubtitleChange}
       />
     </div>

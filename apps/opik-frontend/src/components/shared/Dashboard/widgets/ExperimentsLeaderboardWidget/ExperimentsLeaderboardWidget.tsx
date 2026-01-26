@@ -35,6 +35,7 @@ import {
   COLUMN_METADATA_ID,
   DynamicColumn,
   ColumnData,
+  COLUMN_NAME_ID,
 } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
@@ -62,7 +63,6 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 
 const RANK_COLUMN_ID = "rank";
-const NAME_COLUMN_ID = "name";
 
 const ExperimentsLeaderboardWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
@@ -319,9 +319,10 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
           header: RankingHeader as never,
           cell: RankingCell as never,
           size: 50,
-          sortable: false,
+          sortable: true, // Sortable, but delegates to ranking metric in header
           customMeta: {
             getRank: (rowId: string) => rankingMap?.get(rowId),
+            rankingMetric,
           },
         }),
       );
@@ -330,7 +331,7 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
     // 2. Name column (always shown)
     allColumns.push(
       mapColumnDataFields<Experiment, Experiment>({
-        id: NAME_COLUMN_ID,
+        id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
@@ -377,6 +378,7 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
     return allColumns;
   }, [
     enableRanking,
+    rankingMetric,
     rankingMap,
     selectedColumns,
     columnsOrder,
