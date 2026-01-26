@@ -8,6 +8,7 @@ import {
   JsonSchemaValidatorMetricParameters,
   GEvalMetricParameters,
   LevenshteinMetricParameters,
+  CodeMetricParameters,
 } from "@/types/optimizations";
 import {
   DropdownMenu,
@@ -19,6 +20,7 @@ import EqualsMetricConfigs from "@/components/pages-shared/optimizations/MetricS
 import JsonSchemaValidatorMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/JsonSchemaValidatorMetricConfigs";
 import GEvalMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/GEvalMetricConfigs";
 import LevenshteinMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/LevenshteinMetricConfigs";
+import CodeMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/CodeMetricConfigs";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
@@ -77,6 +79,15 @@ const MetricConfigs = ({
           configs={configs as Partial<LevenshteinMetricParameters>}
           onChange={onChange}
           datasetVariables={datasetVariables}
+        />
+      );
+    }
+
+    if (metricType === METRIC_TYPE.CODE) {
+      return (
+        <CodeMetricConfigs
+          configs={configs as Partial<CodeMetricParameters>}
+          onChange={onChange}
         />
       );
     }
