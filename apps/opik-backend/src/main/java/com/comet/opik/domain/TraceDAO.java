@@ -267,11 +267,11 @@ class TraceDAOImpl implements TraceDAO {
                 ) as visibility_mode,
                 new_trace.truncation_threshold as truncation_threshold,
                 multiIf(
-                    LENGTH(old_trace.input) > 0, if(length(old_trace.input_slim) > 0, old_trace.input_slim, old_trace.truncated_input),
+                    notEmpty(old_trace.input), old_trace.input_slim,
                     new_trace.input_slim
                 ) as input_slim,
                 multiIf(
-                    LENGTH(old_trace.output) > 0, if(length(old_trace.output_slim) > 0, old_trace.output_slim, old_trace.truncated_output),
+                    notEmpty(old_trace.output), old_trace.output_slim,
                     new_trace.output_slim
                 ) as output_slim
             FROM (
@@ -335,8 +335,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(thread_id)> :thread_id <else> thread_id <endif> as thread_id,
                 visibility_mode,
                 :truncation_threshold as truncation_threshold,
-                <if(input)> :input_slim <else> if(length(input_slim) > 0, input_slim, truncated_input) <endif> as input_slim,
-                <if(output)> :output_slim <else> if(length(output_slim) > 0, output_slim, truncated_output) <endif> as output_slim
+                <if(input)> :input_slim <else> input_slim <endif> as input_slim,
+                <if(output)> :output_slim <else> output_slim <endif> as output_slim
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -1757,13 +1757,13 @@ class TraceDAOImpl implements TraceDAO {
                 ) as visibility_mode,
                 new_trace.truncation_threshold as truncation_threshold,
                 multiIf(
-                    LENGTH(new_trace.input_slim) > 0, new_trace.input_slim,
-                    LENGTH(old_trace.input) > 0, if(length(old_trace.input_slim) > 0, old_trace.input_slim, old_trace.truncated_input),
+                    notEmpty(new_trace.input_slim), new_trace.input_slim,
+                    notEmpty(old_trace.input), old_trace.input_slim,
                     new_trace.input_slim
                 ) as input_slim,
                 multiIf(
-                    LENGTH(new_trace.output_slim) > 0, new_trace.output_slim,
-                    LENGTH(old_trace.output) > 0, if(length(old_trace.output_slim) > 0, old_trace.output_slim, old_trace.truncated_output),
+                    notEmpty(new_trace.output_slim), new_trace.output_slim,
+                    notEmpty(old_trace.output), old_trace.output_slim,
                     new_trace.output_slim
                 ) as output_slim
             FROM (
@@ -2451,8 +2451,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
                 t.visibility_mode,
                 :truncation_threshold as truncation_threshold,
-                <if(input)> :input_slim <else> if(length(t.input_slim) > 0, t.input_slim, t.truncated_input) <endif> as input_slim,
-                <if(output)> :output_slim <else> if(length(t.output_slim) > 0, t.output_slim, t.truncated_output) <endif> as output_slim
+                <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
+                <if(output)> :output_slim <else> t.output_slim <endif> as output_slim
             FROM traces t
             WHERE t.id IN :ids AND t.workspace_id = :workspace_id
             ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC

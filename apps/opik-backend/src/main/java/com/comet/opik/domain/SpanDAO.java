@@ -252,11 +252,11 @@ class SpanDAO {
                 new_span.last_updated_by as last_updated_by,
                 new_span.truncation_threshold as truncation_threshold,
                 multiIf(
-                    LENGTH(old_span.input) > 0, if(length(old_span.input_slim) > 0, old_span.input_slim, old_span.truncated_input),
+                    notEmpty(old_span.input), old_span.input_slim,
                     new_span.input_slim
                 ) as input_slim,
                 multiIf(
-                    LENGTH(old_span.output) > 0, if(length(old_span.output_slim) > 0, old_span.output_slim, old_span.truncated_output),
+                    notEmpty(old_span.output), old_span.output_slim,
                     new_span.output_slim
                 ) as output_slim
             FROM (
@@ -357,8 +357,8 @@ class SpanDAO {
             	created_by,
                 :user_name as last_updated_by,
                 :truncation_threshold,
-                <if(input)> :input_slim <else> if(length(input_slim) > 0, input_slim, truncated_input) <endif> as input_slim,
-                <if(output)> :output_slim <else> if(length(output_slim) > 0, output_slim, truncated_output) <endif> as output_slim
+                <if(input)> :input_slim <else> input_slim <endif> as input_slim,
+                <if(output)> :output_slim <else> output_slim <endif> as output_slim
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -482,13 +482,13 @@ class SpanDAO {
                 new_span.last_updated_by as last_updated_by,
                 new_span.truncation_threshold as truncation_threshold,
                 multiIf(
-                    LENGTH(new_span.input_slim) > 0, new_span.input_slim,
-                    LENGTH(old_span.input) > 0, if(length(old_span.input_slim) > 0, old_span.input_slim, old_span.truncated_input),
+                    notEmpty(new_span.input_slim), new_span.input_slim,
+                    notEmpty(old_span.input), old_span.input_slim,
                     new_span.input_slim
                 ) as input_slim,
                 multiIf(
-                    LENGTH(new_span.output_slim) > 0, new_span.output_slim,
-                    LENGTH(old_span.output) > 0, if(length(old_span.output_slim) > 0, old_span.output_slim, old_span.truncated_output),
+                    notEmpty(new_span.output_slim), new_span.output_slim,
+                    notEmpty(old_span.output), old_span.output_slim,
                     new_span.output_slim
                 ) as output_slim
             FROM (
@@ -2422,8 +2422,8 @@ class SpanDAO {
                 s.created_by,
                 :user_name as last_updated_by,
                 :truncation_threshold,
-                <if(input)> :input_slim <else> if(length(s.input_slim) > 0, s.input_slim, s.truncated_input) <endif> as input_slim,
-                <if(output)> :output_slim <else> if(length(s.output_slim) > 0, s.output_slim, s.truncated_output) <endif> as output_slim
+                <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
+                <if(output)> :output_slim <else> s.output_slim <endif> as output_slim
             FROM spans s
             WHERE s.id IN :ids AND s.workspace_id = :workspace_id
             ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
