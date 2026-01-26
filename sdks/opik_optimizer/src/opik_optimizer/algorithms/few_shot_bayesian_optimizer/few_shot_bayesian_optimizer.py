@@ -267,30 +267,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "trials_completed": context.trials_completed,
         }
 
-    # FIXME: Dead code, should be wired or removed
-    def _split_dataset(
-        self, dataset: list[dict[str, Any]], train_ratio: float
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """
-        Split the dataset into training and validation sets.
-
-        Args:
-            dataset: List of dataset items
-            train_ratio: Ratio of items to use for training
-
-        Returns:
-            Tuple of (train_set, validation_set)
-        """
-        if not dataset:
-            return [], []
-
-        rng = self._derive_rng("split_dataset", train_ratio)
-        dataset_copy = dataset.copy()
-        rng.shuffle(dataset_copy)
-
-        split_idx = int(len(dataset_copy) * train_ratio)
-        return dataset_copy[:split_idx], dataset_copy[split_idx:]
-
     def _sanitize_prompt_field_names(
         self, prompt_names: list[str]
     ) -> tuple[list[str], dict[str, str]]:
