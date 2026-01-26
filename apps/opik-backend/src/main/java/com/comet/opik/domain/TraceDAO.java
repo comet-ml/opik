@@ -1204,12 +1204,12 @@ class TraceDAOImpl implements TraceDAO {
                  <if(experiment_filters)>
                  AND id IN (
                     SELECT
-                        ei.trace_id
-                    FROM experiment_items ei
-                    WHERE ei.workspace_id = :workspace_id
+                        trace_id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
                     AND <experiment_filters>
-                    ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
-                    LIMIT 1 BY ei.id
+                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                  )
                  <endif>
                  <if(feedback_scores_empty_filters)>
@@ -1636,12 +1636,12 @@ class TraceDAOImpl implements TraceDAO {
                     <if(experiment_filters)>
                     AND id IN (
                         SELECT
-                            ei.trace_id
-                        FROM experiment_items ei
-                        WHERE ei.workspace_id = :workspace_id
+                            trace_id
+                        FROM experiment_items
+                        WHERE workspace_id = :workspace_id
                         AND <experiment_filters>
-                        ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
-                        LIMIT 1 BY ei.id
+                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
                     )
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
@@ -2301,12 +2301,12 @@ class TraceDAOImpl implements TraceDAO {
                 <if(experiment_filters)>
                 AND id IN (
                     SELECT
-                        ei.trace_id
-                    FROM experiment_items ei
-                    WHERE ei.workspace_id = :workspace_id
+                        trace_id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
                     AND <experiment_filters>
-                    ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
-                    LIMIT 1 BY ei.id
+                    ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>
