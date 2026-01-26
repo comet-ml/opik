@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import dayjs from "dayjs";
-import customParseFormat from "dayjs/plugin/customParseFormat";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -19,8 +18,6 @@ import { COLUMN_TYPE } from "@/types/shared";
 import { formatDate } from "@/lib/date";
 import { useDateFormat, DATE_FORMAT_LABELS } from "@/hooks/useDateFormat";
 import { cn } from "@/lib/utils";
-
-dayjs.extend(customParseFormat);
 
 type TimeRowProps = {
   filter: Filter;
