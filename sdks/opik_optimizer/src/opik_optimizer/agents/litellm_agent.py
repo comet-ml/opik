@@ -128,12 +128,14 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         prompt: "chat_prompt.ChatPrompt | None" = None,
         dataset_item: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        if prompt is None or dataset_item is None:
-            raise ValueError("prompt and dataset_item must be provided")
-        messages = prompt.get_messages(dataset_item)
-        all_messages: list[dict[str, Any]] = []
-        if messages is not None:
-            all_messages.extend(messages)
+        if prompt is not None and dataset_item is not None:
+            messages = prompt.get_messages(dataset_item)
+            all_messages: list[dict[str, Any]] = []
+            if messages is not None:
+                all_messages.extend(messages)
+            return self._prepare_messages(all_messages, dataset_item)
+
+        all_messages = super()._build_messages(query, messages)
         return self._prepare_messages(all_messages, dataset_item)
 
     def _update_trace_metadata(self) -> None:

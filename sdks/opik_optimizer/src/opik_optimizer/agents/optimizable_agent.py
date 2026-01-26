@@ -266,12 +266,9 @@ class OptimizableAgent(ABC):
             tool_name = tool_call["function"]["name"]
             arguments = json.loads(tool_call["function"]["arguments"])
             tool_func = prompt.function_map.get(tool_name)
-            try:
-                tool_result = (
-                    tool_func(**arguments) if tool_func is not None else "Unknown tool"
-                )
-            except Exception:
-                tool_result = f"Error in calling tool `{tool_name}`"
+            tool_result = (
+                tool_func(**arguments) if tool_func is not None else "Unknown tool"
+            )
             messages.append(
                 {
                     "role": "tool",
