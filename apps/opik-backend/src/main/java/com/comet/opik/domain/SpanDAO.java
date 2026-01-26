@@ -734,18 +734,7 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH target_spans AS (
-                SELECT id
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                <if(trace_id)> AND trace_id = :trace_id <endif>
-                <if(type)> AND type = :type <endif>
-                <if(filters)> AND <filters> <endif>
-            ),
-            comments_final AS (
+            WITH comments_final AS (
               SELECT
                    entity_id,
                    groupArray(tuple(
@@ -2132,13 +2121,7 @@ class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newFindTemplate(COUNT_BY_PROJECT_ID, spanSearchCriteria, "count_spans_by_project_id",
                     workspaceId);
-            // OPTIMIZATION: Set no_feedback_scores_filters flag if feedback_scores_filters is not set
-            if (spanSearchCriteria.filters() == null ||
-                    filterQueryBuilder
-                            .toAnalyticsDbFilters(spanSearchCriteria.filters(), FilterStrategy.FEEDBACK_SCORES)
-                            .isEmpty()) {
-                template.add("no_feedback_scores_filters", true);
-            }
+
             var statement = connection.createStatement(template.render())
                     .bind("project_id", spanSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId);
