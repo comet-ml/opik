@@ -322,10 +322,6 @@ public class OnlineScoringEngine {
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
-        // If variables is null or empty, return empty map (auto-extract mode will be used)
-        if (variables == null || variables.isEmpty()) {
-            return Map.of();
-        }
         return toReplacements(variables, section -> switch (section) {
             case INPUT -> trace.input();
             case OUTPUT -> trace.output();
@@ -334,10 +330,6 @@ public class OnlineScoringEngine {
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
-        // If variables is null or empty, return empty map (auto-extract mode will be used)
-        if (variables == null || variables.isEmpty()) {
-            return Map.of();
-        }
         return toReplacements(variables, section -> switch (section) {
             case INPUT -> span.input();
             case OUTPUT -> span.output();
