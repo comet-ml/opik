@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 import inspect
 import logging
 
@@ -175,7 +176,9 @@ def build_prompt_payloads(
         if rendered_messages is not None:
             messages = rendered_messages.get(name)
         payloads.append(
-            build_prompt_payload(prompt, rendered_messages=messages, include_template=True)
+            build_prompt_payload(
+                prompt, rendered_messages=messages, include_template=True
+            )
         )
     return payloads
 
@@ -183,7 +186,9 @@ def build_prompt_payloads(
 def _merge_trace_metadata(extra_metadata: dict[str, Any]) -> dict[str, Any]:
     """Merge optimizer prompt metadata into the current trace metadata safely."""
     trace_data = opik_context.get_current_trace_data()
-    existing_metadata = trace_data.metadata if trace_data and trace_data.metadata else {}
+    existing_metadata = (
+        trace_data.metadata if trace_data and trace_data.metadata else {}
+    )
     if not isinstance(existing_metadata, dict):
         existing_metadata = {}
     return deep_merge_dicts(existing_metadata, extra_metadata)
@@ -249,7 +254,10 @@ def normalize_prompt_input(
     support = _get_opik_prompt_support()
 
     if isinstance(prompt_input, dict):
-        if all(isinstance(prompt, chat_prompt.ChatPrompt) for prompt in prompt_input.values()):
+        if all(
+            isinstance(prompt, chat_prompt.ChatPrompt)
+            for prompt in prompt_input.values()
+        ):
             return prompt_input, False
 
         normalized: dict[str, chat_prompt.ChatPrompt] = {}
@@ -280,7 +288,10 @@ def _normalize_single_prompt(
             raise TypeError("Opik Prompt template must be a string.")
         normalized = chat_prompt.ChatPrompt(name=name, user=template)
         _attach_opik_prompt_source(
-            normalized, prompt, prompt_type="text", source_name=getattr(prompt, "name", None)
+            normalized,
+            prompt,
+            prompt_type="text",
+            source_name=getattr(prompt, "name", None),
         )
         return normalized
 
@@ -293,7 +304,10 @@ def _normalize_single_prompt(
             raise TypeError("Opik ChatPrompt template must be a list of messages.")
         normalized = chat_prompt.ChatPrompt(name=name, messages=messages)
         _attach_opik_prompt_source(
-            normalized, prompt, prompt_type="chat", source_name=getattr(prompt, "name", None)
+            normalized,
+            prompt,
+            prompt_type="chat",
+            source_name=getattr(prompt, "name", None),
         )
         return normalized
 
@@ -318,9 +332,7 @@ def collect_opik_prompt_sources(
 def attach_initial_prompts(prompts: dict[str, chat_prompt.ChatPrompt]) -> None:
     """Attach initial prompt payloads to the current trace metadata."""
     payloads = build_prompt_payloads(prompts)
-    metadata = _merge_trace_metadata(
-        {"opik_optimizer": {"initial_prompts": payloads}}
-    )
+    metadata = _merge_trace_metadata({"opik_optimizer": {"initial_prompts": payloads}})
 
     support = _get_opik_prompt_support()
     opik_prompts: list[Any] = []
@@ -338,7 +350,9 @@ def record_candidate_prompts(prompts: dict[str, chat_prompt.ChatPrompt]) -> None
     payloads = build_prompt_payloads(prompts)
 
     trace_data = opik_context.get_current_trace_data()
-    existing_metadata = trace_data.metadata if trace_data and trace_data.metadata else {}
+    existing_metadata = (
+        trace_data.metadata if trace_data and trace_data.metadata else {}
+    )
     if not isinstance(existing_metadata, dict):
         existing_metadata = {}
 
@@ -368,9 +382,7 @@ def attach_span_prompt_payload(
             prompt, rendered_messages=rendered_messages, include_template=True
         )
     ]
-    metadata = _merge_span_metadata(
-        {"opik_optimizer": {"prompt_payloads": payloads}}
-    )
+    metadata = _merge_span_metadata({"opik_optimizer": {"prompt_payloads": payloads}})
 
     support = _get_opik_prompt_support()
     opik_prompt = getattr(prompt, "_opik_prompt_source", None)

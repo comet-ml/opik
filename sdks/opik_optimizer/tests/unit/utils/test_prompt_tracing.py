@@ -223,16 +223,12 @@ def test_record_candidate_prompts__appends_candidates(
 
     from opik import opik_context
 
-    existing_metadata = {
-        "opik_optimizer": {"candidate_prompts": [{"name": "old"}]}
-    }
+    existing_metadata = {"opik_optimizer": {"candidate_prompts": [{"name": "old"}]}}
     monkeypatch.setattr(
         opik_context, "get_current_trace_data", lambda: _TraceData(existing_metadata)
     )
 
-    prompts = {
-        "p1": chat_prompt.ChatPrompt(name="p1", user="Hello {name}")
-    }
+    prompts = {"p1": chat_prompt.ChatPrompt(name="p1", user="Hello {name}")}
 
     prompt_tracing.record_candidate_prompts(prompts)
 
