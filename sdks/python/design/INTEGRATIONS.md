@@ -322,11 +322,13 @@ result = app.invoke({"message": "Hello"})
 - `on_lm_start/end()` - LM calls (extracts provider/model from "provider/model" format)
 - `on_tool_start/end()` - Tool executions
 
-**Key Implementation Detail**: **Isolated Context Storage**
+**Key Implementation Detail**: **Global Context Storage with Safe Operations**
 
-Uses dedicated `OpikContextStorage` instance (not global). Prevents interference when used alongside `@track` decorator.
+Uses global `OpikContextStorage` instance, enabling `opik.opik_context` API access to spans/traces created by DSPy callbacks. This allows users to:
+- Access current span/trace data via `opik_context.get_current_span_data()` / `opik_context.get_current_trace_data()`
+- Update spans/traces via `opik_context.update_current_span()` / `opik_context.update_current_trace()`
 
-**Why?** DSPy callbacks can coexist with `@track` decorated functions. Separate storage prevents context conflicts.
+**Context Safety**: Uses `ensure_id` parameter for all context pop operations (`pop_span_data(ensure_id=...)`, `pop_trace_data(ensure_id=...)`) to prevent context corruption in concurrent scenarios or when DSPy callbacks coexist with `@track` decorated functions.
 
 **Graph Visualization**: Builds Mermaid diagram of DSPy program structure (`graph.py`).
 
@@ -579,7 +581,7 @@ Supported providers for cost tracking:
 - **Bedrock**: Extensible aggregator system (add formats without modifying code)
 - **ADK**: OpenTelemetry interception (single tracing backend)
 - **LangChain**: External context support (composes with `@track`)
-- **DSPy**: Isolated context storage (coexists with `@track`)
+- **DSPy**: Global context with safe operations (enables `opik_context` API access)
 - **CrewAI**: LiteLLM delegation (reuses existing integration)
 
 For implementation details, see source code in:

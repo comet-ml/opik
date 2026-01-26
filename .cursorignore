@@ -1,0 +1,53 @@
+# Cursor-specific ignore file
+# Prevents Cursor from indexing/scanning these directories
+
+# Dependencies
+**/node_modules/
+**/target/
+**/.venv/
+**/.venv*/
+**/venv/
+**/__pycache__/
+
+# Build outputs
+**/dist/
+**/build/
+**/.next/
+**/.nuxt/
+**/.output/
+
+# Caches
+**/.cache/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/.eslintcache
+**/.tsbuildinfo
+**/.turbo/
+
+# IDE
+**/.idea/
+**/.vscode/
+**/.DS_Store
+
+# Test outputs
+**/coverage/
+**/htmlcov/
+**/.nyc_output/
+
+# Generated files
+**/*.egg-info/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.Python
+
+# Large data directories
+**/artifacts/
+**/benchmark_results/
+
+# Temporary files
+**/temp/
+**/tmp/
+**/*.log
+**/*.tmp

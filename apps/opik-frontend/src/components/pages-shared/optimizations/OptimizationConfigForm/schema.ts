@@ -76,6 +76,10 @@ export const GEvalMetricParamsSchema = z.object({
   evaluation_criteria: z.string().min(1, "Evaluation criteria is required"),
 });
 
+export const CodeMetricParamsSchema = z.object({
+  code: z.string().min(1, "Python code is required"),
+});
+
 export const LevenshteinMetricParamsSchema = z.object({
   normalize: z.boolean().optional(),
   reference_key: z.string().min(1, "Reference key is required"),
@@ -141,11 +145,17 @@ const LevenshteinMetricConfigSchema = BaseOptimizationConfigSchema.extend({
   metricParams: LevenshteinMetricParamsSchema,
 });
 
+const CodeMetricConfigSchema = BaseOptimizationConfigSchema.extend({
+  metricType: z.literal(METRIC_TYPE.CODE),
+  metricParams: CodeMetricParamsSchema,
+});
+
 export const OptimizationConfigSchema = z.discriminatedUnion("metricType", [
   EqualsMetricConfigSchema,
   JsonSchemaValidatorMetricConfigSchema,
   GEvalMetricConfigSchema,
   LevenshteinMetricConfigSchema,
+  CodeMetricConfigSchema,
 ]);
 
 export type OptimizationConfigFormType = z.infer<

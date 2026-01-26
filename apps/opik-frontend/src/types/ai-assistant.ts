@@ -28,6 +28,11 @@ export type TraceAnalyzerLLMMessage = {
   isError?: boolean;
 };
 
+export enum SESSION_FEEDBACK_VALUE {
+  dislike = 0,
+  like = 1,
+}
+
 export type TraceAnalyzerHistoryResponse = {
   content: TraceAnalyzerLLMMessage[];
 };
