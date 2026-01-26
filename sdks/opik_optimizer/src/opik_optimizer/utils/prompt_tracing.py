@@ -120,7 +120,6 @@ def _extract_system_prompt(messages: list[dict[str, Any]]) -> str | None:
 def build_prompt_payload(
     prompt: chat_prompt.ChatPrompt,
     *,
-    rendered_messages: list[dict[str, Any]] | None = None,
     include_template: bool = True,
 ) -> dict[str, Any]:
     """Serialize a ChatPrompt into a tracing payload for metadata/UI display."""
@@ -131,9 +130,6 @@ def build_prompt_payload(
 
     if include_template:
         payload["template"] = prompt.to_dict()
-
-    if rendered_messages is not None:
-        payload["rendered_messages"] = rendered_messages
 
     tools = serialize_tools(prompt)
     if tools:
@@ -167,20 +163,11 @@ def build_prompt_payload(
 
 def build_prompt_payloads(
     prompts: dict[str, chat_prompt.ChatPrompt],
-    *,
-    rendered_messages: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build prompt payloads for multiple prompts."""
     payloads: list[dict[str, Any]] = []
     for name, prompt in prompts.items():
-        messages = None
-        if rendered_messages is not None:
-            messages = rendered_messages.get(name)
-        payloads.append(
-            build_prompt_payload(
-                prompt, rendered_messages=messages, include_template=True
-            )
-        )
+        payloads.append(build_prompt_payload(prompt, include_template=True))
     return payloads
 
 
@@ -407,14 +394,9 @@ def record_candidate_prompts(prompts: dict[str, chat_prompt.ChatPrompt]) -> None
 
 def attach_span_prompt_payload(
     prompt: chat_prompt.ChatPrompt,
-    rendered_messages: list[dict[str, Any]] | None = None,
 ) -> None:
     """Attach prompt payload metadata to the current span."""
-    payloads = [
-        build_prompt_payload(
-            prompt, rendered_messages=rendered_messages, include_template=True
-        )
-    ]
+    payloads = [build_prompt_payload(prompt, include_template=True)]
     metadata = _merge_span_metadata(
         {
             "opik_optimizer": {"prompt_payloads": payloads},

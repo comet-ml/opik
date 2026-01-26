@@ -81,7 +81,9 @@ def _is_hf_revision_not_found(exc: Exception) -> bool:
         return False
     message = str(exc)
     lower_message = message.lower()
-    return "revision" in lower_message and ("404" in message or "not found" in lower_message)
+    return "revision" in lower_message and (
+        "404" in message or "not found" in lower_message
+    )
 
 
 def _retry_with_main_revision(

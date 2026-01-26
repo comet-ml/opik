@@ -197,9 +197,7 @@ class OptimizableAgent(ABC):
 
     def _attach_prompt_span(self, messages: list[dict[str, str]]) -> None:
         if self.prompt is not None:
-            prompt_tracing.attach_span_prompt_payload(
-                self.prompt, rendered_messages=messages
-            )
+            prompt_tracing.attach_span_prompt_payload(self.prompt)
 
     def _tag_optimizer_trace(self) -> None:
         optimizer_ref = self.optimizer

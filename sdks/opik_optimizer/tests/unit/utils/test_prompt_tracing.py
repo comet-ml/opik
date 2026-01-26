@@ -200,7 +200,7 @@ def test_attach_initial_prompts__optimizer_prompt_uses_metadata_only(
     assert opik_version["metadata"]["type"] == "messages_json"
 
 
-def test_attach_span_prompt_payload__adds_rendered_messages(
+def test_attach_span_prompt_payload__does_not_include_rendered_messages(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls = _patch_prompt_support(monkeypatch)
@@ -210,14 +210,13 @@ def test_attach_span_prompt_payload__adds_rendered_messages(
     monkeypatch.setattr(opik_context, "get_current_span_data", lambda: _SpanData())
 
     prompt = chat_prompt.ChatPrompt(name="p", user="Hello {name}")
-    rendered = [{"role": "user", "content": "Hello Ada"}]
 
-    prompt_tracing.attach_span_prompt_payload(prompt, rendered_messages=rendered)
+    prompt_tracing.attach_span_prompt_payload(prompt)
 
     assert calls["span"]
     metadata = calls["span"][-1]["metadata"] or {}
     payloads = metadata["opik_optimizer"]["prompt_payloads"]
-    assert payloads[0]["rendered_messages"] == rendered
+    assert "rendered_messages" not in payloads[0]
     assert metadata["opik_prompts"][0]["name"] == "p"
     opik_version = metadata["opik_prompts"][0]["version"]
     assert opik_version["metadata"]["created_from"] == "opik_ui"

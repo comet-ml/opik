@@ -156,7 +156,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         tools: list[dict[str, Any]] | None,
         seed: int | None,
     ) -> Any:
-        prompt_tracing.attach_span_prompt_payload(prompt, rendered_messages=messages)
+        prompt_tracing.attach_span_prompt_payload(prompt)
         response = self._llm_complete(
             model=prompt.model,
             messages=messages,
