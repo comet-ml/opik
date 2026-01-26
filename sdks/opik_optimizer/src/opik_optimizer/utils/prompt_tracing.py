@@ -243,8 +243,9 @@ def _update_trace(
             return
         if metadata is not None:
             opik_context.update_current_trace(metadata=metadata)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("Failed to update current trace metadata/prompts.")
+        raise exc
 
 
 def _update_span(
@@ -265,8 +266,9 @@ def _update_span(
             return
         if metadata is not None:
             opik_context.update_current_span(metadata=metadata)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("Failed to update current span metadata/prompts.")
+        raise exc
 
 
 def normalize_prompt_input(
