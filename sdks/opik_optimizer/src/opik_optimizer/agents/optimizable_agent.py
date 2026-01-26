@@ -211,6 +211,11 @@ class OptimizableAgent(ABC):
                 pass
 
     def _push_trace_metadata(self) -> None:
+        """Push trace_metadata to opik_context for tool/LLM observability.
+
+        Expects a mapping of keys to optional values; only non-None entries are sent.
+        No-op when metadata is empty; runs during tracing after tagging.
+        """
         # Push trace metadata for better visibility (tools/LLM logs in Opik)
         if self.trace_metadata:
             filtered_metadata = {
