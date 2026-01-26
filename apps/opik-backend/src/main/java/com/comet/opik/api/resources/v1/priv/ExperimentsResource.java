@@ -36,6 +36,7 @@ import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
+import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.infrastructure.usagelimit.UsageLimited;
@@ -100,6 +101,7 @@ public class ExperimentsResource {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull Streamer streamer;
     private final @NonNull ExperimentSortingFactory sortingFactory;
+    private final @NonNull WorkspaceMetadataService workspaceMetadataService;
     private final @NonNull ExperimentItemBulkIngestionService experimentItemBulkIngestionService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull ExperimentGroupingFactory groupingFactory;
@@ -119,11 +121,21 @@ public class ExperimentsResource {
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("project_deleted") boolean projectDeleted,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters,
-            @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIds) {
+            @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIds,
+            @QueryParam("force_sorting") @DefaultValue("false") @Schema(description = "Force sorting even when exceeding the endpoint result set limit. May result in slower queries") boolean forceSorting) {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
+
+        var metadata = workspaceMetadataService.getExperimentMetadata(
+                requestContext.get().getWorkspaceId(), datasetId)
+                .block();
+        if (!forceSorting && !sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
+            sortingFields = List.of();
+        }
 
         var experimentFilters = filtersFactory.newFilters(filters, ExperimentFilter.LIST_TYPE_REFERENCE);
 
@@ -142,6 +154,8 @@ public class ExperimentsResource {
                 .entityType(EntityType.TRACE)
                 .datasetDeleted(datasetDeleted)
                 .promptId(promptId)
+                .projectId(projectId)
+                .projectDeleted(projectDeleted)
                 .sortingFields(sortingFields)
                 .optimizationId(optimizationId)
                 .types(types)
@@ -151,6 +165,12 @@ public class ExperimentsResource {
 
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)
+                .map(experimentPage -> {
+                    if (!forceSorting && metadata.cannotUseDynamicSorting()) {
+                        return experimentPage.toBuilder().sortableBy(List.of()).build();
+                    }
+                    return experimentPage;
+                })
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found experiments by '{}', count '{}', page '{}', size '{}'",
@@ -168,6 +188,7 @@ public class ExperimentsResource {
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
@@ -185,6 +206,7 @@ public class ExperimentsResource {
                 .name(name)
                 .types(types)
                 .filters(experimentFilters)
+                .projectId(projectId)
                 .build();
 
         log.info("Finding experiment groups by criteria '{}'", experimentGroupCriteria);
@@ -206,6 +228,7 @@ public class ExperimentsResource {
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
@@ -223,6 +246,7 @@ public class ExperimentsResource {
                 .name(name)
                 .types(types)
                 .filters(experimentFilters)
+                .projectId(projectId)
                 .build();
 
         log.info("Finding experiment groups aggregations by criteria '{}'", experimentGroupCriteria);

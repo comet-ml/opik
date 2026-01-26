@@ -217,6 +217,12 @@ public class ExperimentResourceClient {
     public ExperimentGroupResponse findGroups(List<GroupBy> groups, Set<ExperimentType> types,
             List<? extends ExperimentFilter> filters, String name, String apiKey,
             String workspaceName, int expectedStatus) {
+        return findGroups(groups, types, filters, name, null, apiKey, workspaceName, expectedStatus);
+    }
+
+    public ExperimentGroupResponse findGroups(List<GroupBy> groups, Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters, String name, UUID projectId, String apiKey,
+            String workspaceName, int expectedStatus) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("groups")
                 .queryParam("name", name);
@@ -231,6 +237,10 @@ public class ExperimentResourceClient {
 
         if (CollectionUtils.isNotEmpty(groups)) {
             webTarget = webTarget.queryParam("groups", toURLEncodedQueryParam(groups));
+        }
+
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
         }
 
         try (Response response = webTarget
@@ -249,6 +259,12 @@ public class ExperimentResourceClient {
     public ExperimentGroupAggregationsResponse findGroupsAggregations(List<GroupBy> groups, Set<ExperimentType> types,
             List<? extends ExperimentFilter> filters, String name, String apiKey,
             String workspaceName, int expectedStatus) {
+        return findGroupsAggregations(groups, types, filters, name, null, apiKey, workspaceName, expectedStatus);
+    }
+
+    public ExperimentGroupAggregationsResponse findGroupsAggregations(List<GroupBy> groups, Set<ExperimentType> types,
+            List<? extends ExperimentFilter> filters, String name, UUID projectId, String apiKey,
+            String workspaceName, int expectedStatus) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("groups")
                 .path("aggregations")
@@ -266,6 +282,10 @@ public class ExperimentResourceClient {
             webTarget = webTarget.queryParam("groups", toURLEncodedQueryParam(groups));
         }
 
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
         try (Response response = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -280,6 +300,27 @@ public class ExperimentResourceClient {
     }
 
     public Experiment.ExperimentPage findExperiments(
+            int page, int size, boolean forceSorting, String apiKey, String workspaceName) {
+        return findExperiments(
+                page,
+                size,
+                null,
+                null,
+                null,
+                null,
+                false,
+                null,
+                null,
+                forceSorting,
+                null,
+                null,
+                false,
+                apiKey,
+                workspaceName,
+                HttpStatus.SC_OK);
+    }
+
+    public Experiment.ExperimentPage findExperiments(
             int page, int size, String name, String apiKey, String workspaceName) {
         return findExperiments(page, size, null, null, null, name, false, null, null, null, apiKey, workspaceName,
                 HttpStatus.SC_OK);
@@ -288,6 +329,15 @@ public class ExperimentResourceClient {
     public Experiment.ExperimentPage findExperiments(
             int page, int size, UUID datasetId, UUID optimizationId, Set<ExperimentType> types, String name,
             boolean datasetDeleted, UUID promptId, String sorting, List<? extends ExperimentFilter> filters,
+            String apiKey, String workspaceName, int expectedStatus) {
+        return findExperiments(page, size, datasetId, optimizationId, types, name, datasetDeleted, promptId, sorting,
+                false, filters, null, false, apiKey, workspaceName, expectedStatus);
+    }
+
+    public Experiment.ExperimentPage findExperiments(
+            int page, int size, UUID datasetId, UUID optimizationId, Set<ExperimentType> types, String name,
+            boolean datasetDeleted, UUID promptId, String sorting, boolean forceSorting,
+            List<? extends ExperimentFilter> filters, UUID projectId, boolean projectDeleted,
             String apiKey, String workspaceName, int expectedStatus) {
 
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -307,7 +357,7 @@ public class ExperimentResourceClient {
             webTarget = webTarget.queryParam("name", name);
         }
         if (datasetDeleted) {
-            webTarget = webTarget.queryParam("dataset_deleted", datasetDeleted);
+            webTarget = webTarget.queryParam("dataset_deleted", true);
         }
         if (promptId != null) {
             webTarget = webTarget.queryParam("prompt_id", promptId);
@@ -317,6 +367,15 @@ public class ExperimentResourceClient {
         }
         if (CollectionUtils.isNotEmpty(filters)) {
             webTarget = webTarget.queryParam("filters", toURLEncodedQueryParam(filters));
+        }
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+        if (projectDeleted) {
+            webTarget = webTarget.queryParam("project_deleted", projectDeleted);
+        }
+        if (forceSorting) {
+            webTarget = webTarget.queryParam("force_sorting", true);
         }
 
         try (Response response = webTarget
