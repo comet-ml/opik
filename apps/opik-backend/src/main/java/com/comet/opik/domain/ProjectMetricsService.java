@@ -6,6 +6,7 @@ import com.comet.opik.api.metrics.BreakdownQueryBuilder;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -25,6 +26,8 @@ public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
+
+    Mono<List<String>> getProjectTokenUsageNames(String workspaceId, UUID projectId);
 }
 
 @Slf4j
@@ -33,6 +36,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> projectMetricHandler;
     private final @NonNull ProjectService projectService;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull ProjectMetricsDAO projectMetricsDAO;
 
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
@@ -54,6 +58,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 Map.entry(MetricType.SPAN_TOKEN_USAGE, projectMetricsDAO::getSpanTokenUsage));
         this.projectService = projectService;
         this.instantToUUIDMapper = instantToUUIDMapper;
+        this.projectMetricsDAO = projectMetricsDAO;
     }
 
     @Override
@@ -180,5 +185,12 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> getMetricHandler(
             MetricType metricType) {
         return projectMetricHandler.get(metricType);
+    }
+
+    @Override
+    @Cacheable(name = "project_token_usage_names_per_workspace", key = "$workspaceId +'-'+ $projectId", returnType = String.class, wrapperType = List.class)
+    public Mono<List<String>> getProjectTokenUsageNames(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return validateProject(projectId)
+                .then(projectMetricsDAO.getProjectTokenUsageNames(workspaceId, projectId));
     }
 }
