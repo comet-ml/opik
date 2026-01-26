@@ -13,6 +13,7 @@ from ..constants import resolve_project_name, tool_call_max_iterations
 from ..utils.opik_env import set_project_name_env
 from ..utils import throttle as _throttle
 from ..utils.logging import debug_tool_call
+from ..utils import prompt_tracing
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -133,6 +134,12 @@ class OptimizableAgent(ABC):
             messages=messages,
             seed=seed,
             tools=tools,
+            metadata={
+                "opik": {
+                    "current_span_data": opik_context.get_current_span_data(),
+                    "project_name": self.project_name,
+                },
+            },
             **effective_kwargs,
         )
         return response
@@ -168,6 +175,11 @@ class OptimizableAgent(ABC):
 
         if query is not None:
             all_messages.append({"role": "user", "content": query})
+
+        if self.prompt is not None:
+            prompt_tracing.attach_span_prompt_payload(
+                self.prompt, rendered_messages=all_messages
+            )
 
         optimizer_ref = self.optimizer
         phase = self.trace_phase or "Prompt Optimization"

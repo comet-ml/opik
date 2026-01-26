@@ -49,6 +49,7 @@ from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
 from .utils import rng as rng_utils
 from .utils import sampling
+from .utils import prompt_tracing
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -317,10 +318,7 @@ class BaseOptimizer(ABC):
         Returns:
             Tuple of (normalized_prompts_dict, is_single_prompt_optimization)
         """
-        # TODO: Remove this method in favour of auto-detection.
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            return {prompt.name: prompt}, True
-        return prompt, False
+        return prompt_tracing.normalize_prompt_input(prompt)
 
     def _create_optimization_run(
         self,
@@ -596,6 +594,7 @@ class BaseOptimizer(ABC):
                 if context.should_stop:
                     break
         """
+        prompt_tracing.record_candidate_prompts(prompts)
         self.pre_trial(context, prompts)
         try:
             suppress_progress = bool(
@@ -663,6 +662,7 @@ class BaseOptimizer(ABC):
         sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems]:
         """Evaluate prompts and return both the score and EvaluationResult."""
+        prompt_tracing.record_candidate_prompts(prompts)
         self.pre_trial(context, prompts)
         try:
             suppress_progress = bool(
@@ -1213,6 +1213,7 @@ class BaseOptimizer(ABC):
             self._history_builder.set_context(context)
 
         runtime.show_run_start(optimizer=self, context=context)
+        prompt_tracing.attach_initial_prompts(context.prompts)
 
         # Allow subclasses to perform pre-optimization setup (e.g., set self.agent)
         self.pre_optimize(context)

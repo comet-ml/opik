@@ -22,6 +22,7 @@ from ..utils.opik_env import set_project_name_env
 from ..utils.logging import debug_tool_call
 from ..constants import tool_call_max_iterations
 from ..utils.candidate_selection import extract_choice_logprob
+from ..utils import prompt_tracing
 
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         tools: list[dict[str, Any]] | None,
         seed: int | None,
     ) -> Any:
+        prompt_tracing.attach_span_prompt_payload(prompt, rendered_messages=messages)
         response = self._llm_complete(
             model=prompt.model,
             messages=messages,
