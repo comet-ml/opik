@@ -80,6 +80,7 @@ def sanitize_generated_prompts(
         "scoring function",
         "summary_1",
         "passages_1",
+        "passages_2",
         "gaps_1",
         "n_samples",
     ]
