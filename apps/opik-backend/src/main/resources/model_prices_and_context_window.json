@@ -1312,6 +1312,9 @@
         "supports_function_calling": true
     },
     "azure_ai/claude-haiku-4-5": {
+        "cache_creation_input_token_cost": 1.25e-06,
+        "cache_creation_input_token_cost_above_1hr": 2e-06,
+        "cache_read_input_token_cost": 1e-07,
         "input_cost_per_token": 1e-06,
         "litellm_provider": "azure_ai",
         "max_input_tokens": 200000,
@@ -1330,6 +1333,9 @@
         "supports_vision": true
     },
     "azure_ai/claude-opus-4-5": {
+        "cache_creation_input_token_cost": 6.25e-06,
+        "cache_creation_input_token_cost_above_1hr": 1e-05,
+        "cache_read_input_token_cost": 5e-07,
         "input_cost_per_token": 5e-06,
         "litellm_provider": "azure_ai",
         "max_input_tokens": 200000,
@@ -1348,6 +1354,9 @@
         "supports_vision": true
     },
     "azure_ai/claude-opus-4-1": {
+        "cache_creation_input_token_cost": 1.875e-05,
+        "cache_creation_input_token_cost_above_1hr": 3e-05,
+        "cache_read_input_token_cost": 1.5e-06,
         "input_cost_per_token": 1.5e-05,
         "litellm_provider": "azure_ai",
         "max_input_tokens": 200000,
@@ -1366,6 +1375,9 @@
         "supports_vision": true
     },
     "azure_ai/claude-sonnet-4-5": {
+        "cache_creation_input_token_cost": 3.75e-06,
+        "cache_creation_input_token_cost_above_1hr": 6e-06,
+        "cache_read_input_token_cost": 3e-07,
         "input_cost_per_token": 3e-06,
         "litellm_provider": "azure_ai",
         "max_input_tokens": 200000,
@@ -9776,6 +9788,7 @@
         "supports_tool_choice": true
     },
     "deepinfra/google/gemini-2.0-flash-001": {
+        "deprecation_date": "2026-03-31",
         "max_tokens": 1000000,
         "max_input_tokens": 1000000,
         "max_output_tokens": 1000000,
@@ -12093,6 +12106,7 @@
     },
     "gemini-2.0-flash": {
         "cache_read_input_token_cost": 2.5e-08,
+        "deprecation_date": "2026-03-31",
         "input_cost_per_audio_token": 7e-07,
         "input_cost_per_token": 1e-07,
         "litellm_provider": "vertex_ai-language-models",
@@ -12132,7 +12146,7 @@
     },
     "gemini-2.0-flash-001": {
         "cache_read_input_token_cost": 3.75e-08,
-        "deprecation_date": "2026-02-05",
+        "deprecation_date": "2026-03-31",
         "input_cost_per_audio_token": 1e-06,
         "input_cost_per_token": 1.5e-07,
         "litellm_provider": "vertex_ai-language-models",
@@ -12218,6 +12232,7 @@
     },
     "gemini-2.0-flash-lite": {
         "cache_read_input_token_cost": 1.875e-08,
+        "deprecation_date": "2026-03-31",
         "input_cost_per_audio_token": 7.5e-08,
         "input_cost_per_token": 7.5e-08,
         "litellm_provider": "vertex_ai-language-models",
@@ -12253,7 +12268,7 @@
     },
     "gemini-2.0-flash-lite-001": {
         "cache_read_input_token_cost": 1.875e-08,
-        "deprecation_date": "2026-02-25",
+        "deprecation_date": "2026-03-31",
         "input_cost_per_audio_token": 7.5e-08,
         "input_cost_per_token": 7.5e-08,
         "litellm_provider": "vertex_ai-language-models",
@@ -13918,6 +13933,7 @@
     },
     "gemini/gemini-2.0-flash": {
         "cache_read_input_token_cost": 2.5e-08,
+        "deprecation_date": "2026-03-31",
         "input_cost_per_audio_token": 7e-07,
         "input_cost_per_token": 1e-07,
         "litellm_provider": "gemini",
@@ -13958,6 +13974,7 @@
     },
     "gemini/gemini-2.0-flash-001": {
         "cache_read_input_token_cost": 2.5e-08,
+        "deprecation_date": "2026-03-31",
         "input_cost_per_audio_token": 7e-07,
         "input_cost_per_token": 1e-07,
         "litellm_provider": "gemini",
@@ -14045,6 +14062,7 @@
     },
     "gemini/gemini-2.0-flash-lite": {
         "cache_read_input_token_cost": 1.875e-08,
+        "deprecation_date": "2026-03-31",
         "input_cost_per_audio_token": 7.5e-08,
         "input_cost_per_token": 7.5e-08,
         "litellm_provider": "gemini",
@@ -23146,6 +23164,7 @@
         "supports_tool_choice": true
     },
     "openrouter/google/gemini-2.0-flash-001": {
+        "deprecation_date": "2026-03-31",
         "input_cost_per_audio_token": 7e-07,
         "input_cost_per_token": 1e-07,
         "litellm_provider": "openrouter",
@@ -27683,6 +27702,7 @@
         "output_cost_per_token": 9e-07
     },
     "vercel_ai_gateway/google/gemini-2.0-flash": {
+        "deprecation_date": "2026-03-31",
         "input_cost_per_token": 1.5e-07,
         "litellm_provider": "vercel_ai_gateway",
         "max_input_tokens": 1048576,
@@ -27692,6 +27712,7 @@
         "output_cost_per_token": 6e-07
     },
     "vercel_ai_gateway/google/gemini-2.0-flash-lite": {
+        "deprecation_date": "2026-03-31",
         "input_cost_per_token": 7.5e-08,
         "litellm_provider": "vercel_ai_gateway",
         "max_input_tokens": 1048576,
