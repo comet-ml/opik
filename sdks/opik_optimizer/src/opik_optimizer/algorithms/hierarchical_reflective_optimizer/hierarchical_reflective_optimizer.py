@@ -14,6 +14,7 @@ from ...api_objects.types import Content
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
+from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 
 from .rootcause_ops import HierarchicalRootCauseAnalyzer
 from .types import (
@@ -353,6 +354,23 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     message for message in raw_messages if _message_has_content(message)
                 ]
                 original = original_prompts[prompt_name]
+                allowed_roles = (
+                    context.extra_params.get("optimizable_roles")
+                    if context.extra_params
+                    else None
+                )
+                dropped = count_disallowed_role_updates(
+                    original.get_messages(), messages_as_dicts, allowed_roles
+                )
+                if dropped:
+                    logger.debug(
+                        "HRPO candidate dropped %s update(s) for prompt '%s' due to optimize_prompt constraints.",
+                        dropped,
+                        prompt_name,
+                    )
+                messages_as_dicts = apply_role_constraints(
+                    original.get_messages(), messages_as_dicts, allowed_roles
+                )
 
                 improved_chat_prompts[prompt_name] = chat_prompt.ChatPrompt(
                     name=original.name,

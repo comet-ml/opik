@@ -183,6 +183,19 @@ class GepaOptimizer(BaseOptimizer):
         display_progress_bar = context.extra_params.get("display_progress_bar", False)
         seed = context.extra_params.get("seed", 42)
         raise_on_exception = context.extra_params.get("raise_on_exception", True)
+        optimizable_roles = (
+            context.extra_params.get("optimizable_roles")
+            if context.extra_params
+            else None
+        )
+        if optimizable_roles is not None and "user" in optimizable_roles:
+            logger.warning(
+                "Opik Optimizer with GEPA currently uses a non-native adapter; optimizing user messages may drop candidate edits when constraints apply."
+            )
+        if optimizable_roles is not None and "user" not in optimizable_roles:
+            logger.warning(
+                "GEPA will drop candidate edits for disallowed roles due to optimize_prompt constraints."
+            )
 
         for p in optimizable_prompts.values():
             if p.model is None:
@@ -191,7 +204,8 @@ class GepaOptimizer(BaseOptimizer):
                 p.model_kwargs = dict(self.model_parameters)
 
         seed_candidate = candidate_ops.build_seed_candidate(
-            optimizable_prompts=optimizable_prompts
+            optimizable_prompts=optimizable_prompts,
+            allowed_roles=optimizable_roles,
         )
 
         input_key, output_key = helpers.infer_dataset_keys(dataset)

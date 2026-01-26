@@ -14,6 +14,8 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type RawPromptData = {
   id: string;
@@ -23,6 +25,16 @@ type RawPromptData = {
     id: string;
     template: string;
   };
+};
+
+type OptimizerPromptPayload = {
+  name?: string;
+  type?: string;
+  template?: Record<string, unknown>;
+  rendered_messages?: unknown;
+  opik_prompt?: RawPromptData;
+  source_name?: string;
+  system_prompt?: string;
 };
 
 type PromptsTabProps = {
@@ -85,15 +97,72 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   data,
   search,
 }) => {
-  const rawPrompts = get(data.metadata, "opik_prompts", null);
+  const rawPrompts = get(
+    data.metadata as Record<string, unknown>,
+    "opik_prompts",
+    null,
+  ) as RawPromptData[] | null;
+  const optimizerPayloads = get(
+    data.metadata,
+    "opik_optimizer.initial_prompts",
+    null,
+  ) as OptimizerPromptPayload[] | null;
+  const spanPromptPayloads = get(
+    data.metadata,
+    "opik_optimizer.prompt_payloads",
+    null,
+  ) as OptimizerPromptPayload[] | null;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const showOptimizerPrompts = useIsFeatureEnabled(
+    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+  );
 
   const prompts = useMemo(() => {
-    if (!rawPrompts || !Array.isArray(rawPrompts)) return [];
-    return (rawPrompts as RawPromptData[]).map(
-      convertRawPromptToPromptWithLatestVersion,
-    );
-  }, [rawPrompts]);
+    if (Array.isArray(rawPrompts) && rawPrompts.length > 0) {
+      return (rawPrompts as RawPromptData[]).map(
+        convertRawPromptToPromptWithLatestVersion,
+      );
+    }
+    if (showOptimizerPrompts) {
+      const mergedPayloads: OptimizerPromptPayload[] =
+        Array.isArray(optimizerPayloads) && optimizerPayloads.length > 0
+          ? optimizerPayloads
+          : Array.isArray(spanPromptPayloads) && spanPromptPayloads.length > 0
+            ? spanPromptPayloads
+            : [];
+      if (mergedPayloads.length > 0) {
+        return mergedPayloads
+          .map((payload, index) => {
+            const name =
+              payload?.name ||
+              payload?.source_name ||
+              `Optimizer Prompt ${index + 1}`;
+            const template =
+              payload?.opik_prompt?.version?.template ??
+              payload?.template ??
+              payload?.rendered_messages ??
+              payload?.system_prompt ??
+              {};
+            const templateString =
+              typeof template === "string"
+                ? template
+                : JSON.stringify(template, null, 2);
+            const rawPrompt: RawPromptData = {
+              id: payload?.opik_prompt?.id || "",
+              name,
+              version: {
+                commit: payload?.opik_prompt?.version?.commit || "",
+                id: payload?.opik_prompt?.version?.id || "",
+                template: templateString,
+              },
+            };
+            return convertRawPromptToPromptWithLatestVersion(rawPrompt);
+          })
+          .filter(Boolean);
+      }
+    }
+    return [];
+  }, [rawPrompts, optimizerPayloads, spanPromptPayloads, showOptimizerPrompts]);
 
   const renderPrompts = () => {
     if (!prompts || prompts.length === 0) return null;

@@ -38,9 +38,20 @@ def rescore_candidates(
             dataset_name = getattr(dataset, "name", None)
             for idx, (_, candidate) in enumerate(filtered_indexed_candidates):
                 candidate_id = candidate.get("id") or f"gepa_candidate_{idx}"
+                allowed_roles = (
+                    context.extra_params.get("optimizable_roles")
+                    if context.extra_params
+                    else None
+                )
+                dropped_components = (
+                    candidate_ops.count_disallowed_candidate_components(
+                        candidate, allowed_roles
+                    )
+                )
                 prompt_variants = candidate_ops.rebuild_prompts_from_candidate(
                     base_prompts=optimizable_prompts,
                     candidate=candidate,
+                    allowed_roles=allowed_roles,
                 )
 
                 try:
@@ -82,6 +93,7 @@ def rescore_candidates(
                     ),
                     selection_policy=selection_policy,
                     dataset_name=dataset_name,
+                    dropped_components=dropped_components,
                 )
             optimizer.set_selection_meta(
                 {

@@ -24,10 +24,11 @@ class RateLimiter:
         self.max_calls_per_second = max_calls_per_second
         rate = pyrate_limiter.Rate(max_calls_per_second, pyrate_limiter.Duration.SECOND)
         limiter_cls: Any = pyrate_limiter.Limiter
-        try:
-            self.limiter = limiter_cls(rate, raise_when_fail=False)
-        except TypeError:
-            self.limiter = limiter_cls(rate)
+        launcher_kwargs: dict[str, Any] = {}
+        init_sig = inspect.signature(limiter_cls.__init__)
+        if "raise_when_fail" in init_sig.parameters:
+            launcher_kwargs["raise_when_fail"] = False
+        self.limiter = limiter_cls(rate, **launcher_kwargs)
         self.bucket_key = "global_rate_limit"
         self._sync_try_acquire: Callable[[], bool] | None = None
         self._async_try_acquire: Callable[[], Awaitable[bool]] | None = None
