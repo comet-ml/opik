@@ -18,6 +18,8 @@
 ## Build, Test, and Development Commands
 - Stack via Docker: `./opik.sh --build` (first run) then `./opik.sh`.
 - Hot-reload loop: `scripts/dev-runner.sh` with `--start`, `--build-fe`, `--build-be` as needed.
+- Skills sync: `make sync-skills` to sync from `.agents/skills/` to `.cursor/skills/`.
+- Git hooks: `make install-hooks` or `make remove-hooks`.
 - Backend build/tests: `mvn verify` in `apps/opik-backend`; respect `apps/opik-backend/.cursor/rules/code_quality.mdc`.
 - Frontend checks: `npm install`, `npm lint`, `npm test`, `npm build`; follow `apps/opik-frontend/.cursor/rules/code-quality.mdc`, `apps/opik-frontend/.cursor/rules/unit-testing.mdc`.
 - Python SDK: `pip install -e .[dev]`, `ruff check`, `pytest`; align with `sdks/python/.cursor/rules/test-best-practices.mdc`.

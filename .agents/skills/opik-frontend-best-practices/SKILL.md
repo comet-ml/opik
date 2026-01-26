@@ -23,6 +23,7 @@ Comprehensive performance optimization guide for the Opik React application buil
 ## When to Apply
 
 Reference these guidelines when:
+
 - Writing new React components
 - Implementing data fetching with React Query
 - Reviewing code for performance issues
@@ -32,15 +33,15 @@ Reference these guidelines when:
 
 ## Rule Categories by Priority
 
-| Priority | Category | Impact | Prefix |
-|----------|----------|--------|--------|
-| 1 | Data Fetching & Caching | HIGH | `data-` |
-| 2 | Bundle Size Optimization | CRITICAL | `bundle-` |
-| 3 | Re-render Optimization | MEDIUM | `rerender-` |
-| 4 | Rendering Performance | MEDIUM | `rendering-` |
-| 5 | Client-Side Patterns | MEDIUM | `client-` |
-| 6 | JavaScript Performance | LOW-MEDIUM | `js-` |
-| 7 | Advanced Patterns | LOW | `advanced-` |
+| Priority | Category                 | Impact     | Prefix       |
+| -------- | ------------------------ | ---------- | ------------ |
+| 1        | Data Fetching & Caching  | HIGH       | `data-`      |
+| 2        | Bundle Size Optimization | CRITICAL   | `bundle-`    |
+| 3        | Re-render Optimization   | MEDIUM     | `rerender-`  |
+| 4        | Rendering Performance    | MEDIUM     | `rendering-` |
+| 5        | Client-Side Patterns     | MEDIUM     | `client-`    |
+| 6        | JavaScript Performance   | LOW-MEDIUM | `js-`        |
+| 7        | Advanced Patterns        | LOW        | `advanced-`  |
 
 ## Quick Reference
 
@@ -119,11 +120,8 @@ rules/rerender-memo.md
 ```
 
 Each rule file contains:
+
 - Brief explanation of why it matters
 - Incorrect code example with explanation
 - Correct code example with explanation
 - Additional context and references
-
-## Full Compiled Document
-
-For the complete guide with all rules expanded: `AGENTS.md`
