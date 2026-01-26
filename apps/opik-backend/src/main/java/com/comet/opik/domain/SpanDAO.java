@@ -524,7 +524,6 @@ class SpanDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
-                  AND project_id IN (SELECT project_id FROM target_projects)
                   AND entity_id IN :ids
                 UNION ALL
                 SELECT workspace_id,
@@ -543,7 +542,6 @@ class SpanDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
-                  AND project_id IN (SELECT project_id FROM target_projects)
                   AND entity_id IN :ids
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
