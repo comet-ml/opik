@@ -29,7 +29,6 @@ from . import (
 LOGGER = logging.getLogger(__name__)
 
 TRACES_CREATED_BY_DECORATOR: Set[str] = set()
-FAKE_REMOTE_TRACES: Set[str] = set()
 
 
 class TrackingStartOptions(NamedTuple):
