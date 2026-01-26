@@ -21,8 +21,6 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
-import { createFilter } from "@/lib/filters";
-import { COLUMN_TYPE } from "@/types/shared";
 
 const COLLAPSE_KEYS_BUTTON_WIDTH = 340;
 
@@ -106,14 +104,6 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
               resource={RESOURCE_TYPE.datasetItem}
               search={{
                 row: datasetItemId,
-                filters: [
-                  createFilter({
-                    field: "id",
-                    type: COLUMN_TYPE.string,
-                    operator: "=",
-                    value: datasetItemId,
-                  }),
-                ],
               }}
               tooltipContent="View this item in the dataset"
               className="h-8"
