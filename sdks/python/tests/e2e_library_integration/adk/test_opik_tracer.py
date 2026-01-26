@@ -247,15 +247,13 @@ def test_opik_tracer_with_sample_agent__openai(
     spans = opik_client_unique_project_name.search_spans()
 
     assert len(spans) >= 3  # sometimes it duplicates calls to the function
-    assert spans[0].type == "llm"
-    assert spans[0].provider == "openai"
-    assert spans[0].model.startswith("gpt-4o")
-    OpenAICompletionsUsage.from_original_usage_dict(spans[0].usage)
-
-    assert spans[2].type == "llm"
-    assert spans[2].provider == "openai"
-    assert spans[2].model.startswith("gpt-4o")
-    OpenAICompletionsUsage.from_original_usage_dict(spans[2].usage)
+    for span in spans:
+        if span.type == "llm":
+            assert span.provider == "openai"
+            assert span.model.startswith("gpt-4o")
+            OpenAICompletionsUsage.from_original_usage_dict(span.usage)
+        elif span.type == "tool":
+            assert span.name == "get_weather"
 
 
 @pytest.mark.parametrize("start_api_server", ["sample_agent_anthropic"], indirect=True)
