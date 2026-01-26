@@ -93,6 +93,19 @@ def build_optuna_objective(
                 scope="parameter_trial",
                 candidate_id=str(trial.number),
             )
+            # Extract trial-specific model_kwargs to override optimizer_metadata.model_parameters
+            # For single prompt, use its model_kwargs directly; for multi-prompt, use first prompt's
+            first_prompt = next(iter(tuned_prompts.values()))
+            trial_model_kwargs = copy.deepcopy(first_prompt.model_kwargs or {})
+            # Create experiment_config override with trial-specific model_parameters
+            trial_experiment_config = (
+                copy.deepcopy(experiment_config) if experiment_config else {}
+            )
+            if "optimizer_metadata" not in trial_experiment_config:
+                trial_experiment_config["optimizer_metadata"] = {}
+            trial_experiment_config["optimizer_metadata"]["model_parameters"] = (
+                trial_model_kwargs
+            )
             score = optimizer.evaluate_prompt(
                 prompt=tuned_prompts,
                 agent=agent,
@@ -100,7 +113,7 @@ def build_optuna_objective(
                 metric=metric,
                 n_threads=optimizer.n_threads,
                 verbose=optimizer.verbose,
-                experiment_config=experiment_config,
+                experiment_config=trial_experiment_config,
                 n_samples=n_samples,
                 n_samples_strategy=n_samples_strategy or context.n_samples_strategy,
                 sampling_tag=sampling_tag,
