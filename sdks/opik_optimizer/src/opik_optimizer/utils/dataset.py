@@ -7,6 +7,7 @@ import secrets
 import time
 import warnings
 import itertools
+from contextlib import contextmanager
 from collections.abc import Callable, Iterable, Mapping, Sequence
 import logging
 from dataclasses import dataclass
@@ -30,6 +31,32 @@ from opik_optimizer.api_objects.types import DatasetSpec
 logger = logging.getLogger(__name__)
 
 FilterBy = Mapping[str, Any]
+
+
+@contextmanager
+def _suppress_hf_auth_warning() -> Iterable[None]:
+    """Suppress Hugging Face Hub auth warnings that are noisy in notebooks."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r".*HF_TOKEN.*Colab secrets.*",
+            category=UserWarning,
+            module=r"huggingface_hub\.utils\._auth",
+        )
+        yield
+
+
+def _run_with_hf_auth_warning_suppressed(
+    func: Callable[..., Any], *args: Any, **kwargs: Any
+) -> Any:
+    with _suppress_hf_auth_warning():
+        return func(*args, **kwargs)
+
+
+def _load_dataset_to_list(
+    *, load_fn: Callable[..., Any], **kwargs: Any
+) -> list[dict[str, Any]]:
+    return load_fn(**kwargs).to_list()
 
 
 def _normalize_filter_value(value: Any) -> Any:
@@ -319,19 +346,21 @@ def fetch_records_for_slice(
     use_streaming = os.getenv("OPIK_USE_HF_STREAMING", "true").lower() == "true"
     if use_streaming:
         try:
-            return stream_records_for_slice(
-                load_fn=load_fn,
-                load_kwargs=load_kwargs,
-                start=slice_request.start,
-                count=slice_request.count,
-                filter_by=filter_by,
-            )
+            with _suppress_hf_auth_warning():
+                return stream_records_for_slice(
+                    load_fn=load_fn,
+                    load_kwargs=load_kwargs,
+                    start=slice_request.start,
+                    count=slice_request.count,
+                    filter_by=filter_by,
+                )
         except Exception as exc:
             retry = _retry_with_main_revision(
                 load_kwargs=load_kwargs,
                 dataset_name=slice_request.dataset_name,
                 exc=exc,
-                runner=lambda kwargs: stream_records_for_slice(
+                runner=lambda kwargs: _run_with_hf_auth_warning_suppressed(
+                    stream_records_for_slice,
                     load_fn=load_fn,
                     load_kwargs=kwargs,
                     start=slice_request.start,
@@ -364,33 +393,38 @@ def fetch_records_for_slice(
                 slice_request.dataset_name,
             )
             try:
-                return load_fn(**sliced_kwargs).to_list()
+                with _suppress_hf_auth_warning():
+                    return load_fn(**sliced_kwargs).to_list()
             except Exception as exc:
                 retry = _retry_with_main_revision(
                     load_kwargs=sliced_kwargs,
                     dataset_name=slice_request.dataset_name,
                     exc=exc,
-                    runner=lambda kwargs: load_fn(**kwargs).to_list(),
+                    runner=lambda kwargs: _run_with_hf_auth_warning_suppressed(
+                        _load_dataset_to_list, load_fn=load_fn, **kwargs
+                    ),
                 )
                 if retry is not None:
                     return retry
                 raise
 
     try:
-        return download_and_slice_hf_dataset(
-            load_fn=load_fn,
-            load_kwargs=load_kwargs,
-            start=slice_request.start,
-            count=slice_request.count,
-            seed=seed,
-            filter_by=filter_by,
-        )
+        with _suppress_hf_auth_warning():
+            return download_and_slice_hf_dataset(
+                load_fn=load_fn,
+                load_kwargs=load_kwargs,
+                start=slice_request.start,
+                count=slice_request.count,
+                seed=seed,
+                filter_by=filter_by,
+            )
     except Exception as exc:
         retry = _retry_with_main_revision(
             load_kwargs=load_kwargs,
             dataset_name=slice_request.dataset_name,
             exc=exc,
-            runner=lambda kwargs: download_and_slice_hf_dataset(
+            runner=lambda kwargs: _run_with_hf_auth_warning_suppressed(
+                download_and_slice_hf_dataset,
                 load_fn=load_fn,
                 load_kwargs=kwargs,
                 start=slice_request.start,
