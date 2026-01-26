@@ -28,6 +28,7 @@ def record_candidate_round(
     filtered_val_score: float | None,
     selection_policy: str,
     dataset_name: str | None = None,
+    dropped_components: int | None = None,
 ) -> None:
     finalize_round = round_handle is None
     debug_log(
@@ -57,6 +58,7 @@ def record_candidate_round(
             "components": components,
             "source": candidate.get("source"),
             "score_label": "opik_rescore",
+            "dropped_components": dropped_components,
         },
         dataset=dataset_name,
         dataset_split=context.dataset_split,
@@ -65,6 +67,7 @@ def record_candidate_round(
             "components": components,
             "candidate_id": candidate_id,
             "score_label": "opik_rescore",
+            "dropped_components": dropped_components,
         },
     )
     debug_log(

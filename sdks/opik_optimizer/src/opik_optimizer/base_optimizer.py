@@ -50,6 +50,7 @@ from .utils.candidate_selection import select_candidate
 from .utils import rng as rng_utils
 from .utils import sampling
 from .utils import prompt_tracing
+from .utils.prompt_roles import normalize_optimizable_roles
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -399,6 +400,7 @@ class BaseOptimizer(ABC):
         project_name: str | None = None,
         optimization_id: str | None = None,
         max_trials: int = 10,
+        optimize_prompt: bool | str | list[str] | None = "system",
         **extra_params: Any,
     ) -> OptimizationContext:
         # Normalize prompt input
@@ -474,6 +476,17 @@ class BaseOptimizer(ABC):
         )
         if not isinstance(resolved_strategy, str) or not resolved_strategy:
             resolved_strategy = constants.DEFAULT_N_SAMPLES_STRATEGY
+
+        optimizable_roles = normalize_optimizable_roles(optimize_prompt)
+        extra_params["optimizable_roles"] = optimizable_roles
+        self._optimizable_roles = optimizable_roles
+        if not optimizable_roles:
+            logger.warning(
+                "optimize_prompt resolved to no roles; prompt content will not be mutated."
+            )
+
+        if hasattr(self, "allow_user_prompt_optimization"):
+            setattr(self, "allow_user_prompt_optimization", "user" in optimizable_roles)
 
         # Return optimization context
         context = OptimizationContext(
@@ -1302,6 +1315,7 @@ class BaseOptimizer(ABC):
         validation_dataset: Dataset | None,
         max_trials: int,
         allow_tool_use: bool,
+        optimize_prompt: bool | str | list[str] | None,
         extra_kwargs: dict[str, Any],
     ) -> dict[str, Any]:
         return {
@@ -1319,6 +1333,7 @@ class BaseOptimizer(ABC):
             "validation_dataset": validation_dataset,
             "max_trials": max_trials,
             "allow_tool_use": allow_tool_use,
+            "optimize_prompt": optimize_prompt,
             "extra_kwargs": extra_kwargs,
         }
 
@@ -1390,6 +1405,7 @@ class BaseOptimizer(ABC):
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
         allow_tool_use: bool = True,
+        optimize_prompt: bool | str | list[str] | None = "system",
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -1423,6 +1439,7 @@ class BaseOptimizer(ABC):
            validation_dataset: Optional validation dataset for ranking candidates
            max_trials: Maximum number of optimization trials
            allow_tool_use: Whether tools may be executed during evaluation (default True)
+           optimize_prompt: Which prompt roles to allow for optimization
            **kwargs: Additional arguments passed to _setup_optimization and _run_optimization
 
         Returns:
@@ -1444,6 +1461,7 @@ class BaseOptimizer(ABC):
                 validation_dataset=validation_dataset,
                 max_trials=max_trials,
                 allow_tool_use=allow_tool_use,
+                optimize_prompt=optimize_prompt,
                 extra_kwargs=kwargs,
             )
         )

@@ -14,11 +14,15 @@ from ....api_objects.types import rebuild_content_with_new_text
 def build_seed_candidate(
     *,
     optimizable_prompts: dict[str, Any],
+    allowed_roles: set[str] | None = None,
 ) -> dict[str, str]:
     seed_candidate: dict[str, str] = {}
     for prompt_name, prompt_obj in optimizable_prompts.items():
         messages = prompt_obj.get_messages()
         for idx, msg in enumerate(messages):
+            role = msg.get("role")
+            if allowed_roles is not None and role not in allowed_roles:
+                continue
             component_key = f"{prompt_name}_{msg['role']}_{idx}"
             content = msg.get("content", "")
             if isinstance(content, list):
@@ -102,6 +106,7 @@ def rebuild_prompts_from_candidate(
     *,
     base_prompts: dict[str, Any],
     candidate: dict[str, str],
+    allowed_roles: set[str] | None = None,
 ) -> dict[str, Any]:
     """Rebuild prompts with optimized messages from a GEPA candidate."""
     rebuilt: dict[str, Any] = {}
@@ -113,7 +118,10 @@ def rebuild_prompts_from_candidate(
             original_content = msg.get("content", "")
             optimized_text = candidate.get(component_key)
 
-            if optimized_text is not None:
+            if (
+                optimized_text is not None
+                and (allowed_roles is None or msg.get("role") in allowed_roles)
+            ):
                 new_content = rebuild_content_with_new_text(
                     original_content, optimized_text
                 )
@@ -126,3 +134,23 @@ def rebuild_prompts_from_candidate(
         new_prompt.set_messages(new_messages)
         rebuilt[prompt_name] = new_prompt
     return rebuilt
+
+
+def count_disallowed_candidate_components(
+    candidate: dict[str, str],
+    allowed_roles: set[str] | None,
+) -> int:
+    """Count candidate components that target disallowed roles."""
+    if allowed_roles is None:
+        return 0
+    if not allowed_roles:
+        return sum(1 for key in candidate.keys() if key)
+    count = 0
+    for key in candidate.keys():
+        parts = key.rsplit("_", 2)
+        if len(parts) != 3:
+            continue
+        role = parts[1]
+        if role not in allowed_roles:
+            count += 1
+    return count

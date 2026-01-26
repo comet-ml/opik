@@ -73,6 +73,11 @@ def build_algorithm_result(
     final_prompts = candidate_ops.rebuild_prompts_from_candidate(
         base_prompts=optimizable_prompts,
         candidate=best_candidate,
+        allowed_roles=(
+            context.extra_params.get("optimizable_roles")
+            if context.extra_params
+            else None
+        ),
     )
 
     metadata: dict[str, Any] = {
