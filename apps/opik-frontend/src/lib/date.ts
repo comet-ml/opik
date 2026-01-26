@@ -6,6 +6,7 @@ import isString from "lodash/isString";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import isNull from "lodash/isNull";
+import { getDateFormatFromLocalStorage } from "@/hooks/useDateFormat";
 
 dayjs.extend(utc);
 dayjs.extend(relativeTime);
@@ -17,15 +18,22 @@ const FORMATTED_DATE_STRING_REGEXP =
 type FormatDateConfig = {
   utc?: boolean;
   includeSeconds?: boolean;
+  format?: string;
 };
 
 export const formatDate = (
   value: string,
-  { utc = false, includeSeconds = false }: FormatDateConfig = {},
+  { utc = false, includeSeconds = false, format }: FormatDateConfig = {},
 ) => {
-  const dateTimeFormat = includeSeconds
-    ? "MM/DD/YY hh:mm:ss A"
-    : "MM/DD/YY hh:mm A";
+  const storedFormat = getDateFormatFromLocalStorage();
+
+  let dateTimeFormat = format || storedFormat;
+
+  if (!format && includeSeconds) {
+    dateTimeFormat = includeSeconds
+      ? "MM/DD/YY hh:mm:ss A"
+      : "MM/DD/YY hh:mm A";
+  }
 
   if (isString(value) && dayjs(value).isValid()) {
     if (utc) {

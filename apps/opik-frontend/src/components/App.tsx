@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { QueryParamProvider } from "use-query-params";
 import { WindowHistoryAdapter } from "use-query-params/adapters/window";
 import useCustomScrollbarClass from "@/hooks/useCustomScrollbarClass";
+import { useDateFormatKey } from "@/hooks/useDateFormat";
 import SentryErrorBoundary from "@/components/layout/SentryErrorBoundary/SentryErrorBoundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PostHogProvider } from "posthog-js/react";
@@ -25,6 +26,7 @@ const queryClient = new QueryClient({
 
 function App() {
   useCustomScrollbarClass();
+  const dateFormatKey = useDateFormatKey();
 
   return (
     <SentryErrorBoundary>
@@ -36,7 +38,7 @@ function App() {
                 delayDuration={TOOLTIP_DELAY_DURATION}
                 skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
               >
-                <RouterProvider router={router} />
+                <RouterProvider router={router} key={dateFormatKey} />
                 <DatasetExportPanel />
               </TooltipProvider>
               <Toaster />

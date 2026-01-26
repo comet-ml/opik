@@ -1,7 +1,7 @@
 import Breadcrumbs from "@/components/layout/Breadcrumbs/Breadcrumbs";
 import usePluginsStore from "@/store/PluginsStore";
 import AppDebugInfo from "@/components/layout/AppDebugInfo/AppDebugInfo";
-import ThemeToggle from "../ThemeToggle/ThemeToggle";
+import SettingsMenu from "../SettingsMenu/SettingsMenu";
 
 const TopBar = () => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
@@ -13,7 +13,7 @@ const TopBar = () => {
       </div>
 
       <AppDebugInfo />
-      {UserMenu ? <UserMenu /> : <ThemeToggle />}
+      {UserMenu ? <UserMenu /> : <SettingsMenu />}
     </nav>
   );
 };
