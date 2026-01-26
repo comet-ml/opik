@@ -88,22 +88,3 @@ Error handling
        # The context manager automatically logs the error
        # and attaches error information to the root span
        print(f"Operation failed: {e}")
-
-Creating nested spans within distributed context
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: python
-
-   from opik import track
-   from opik.decorator.context_manager import distributed_headers
-
-   @track()
-   def sub_operation():
-       # This will be a nested span
-       pass
-
-   def handle_distributed_request(headers_dict):
-       # Create the root span with distributed headers
-       with distributed_headers(headers_dict):
-           # These tracked functions will be nested under the root span
-           sub_operation()
