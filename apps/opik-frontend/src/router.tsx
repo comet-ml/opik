@@ -44,6 +44,7 @@ import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper
 import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
+import JsonBuilderPage from "@/components/pages/JsonBuilderPage/JsonBuilderPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -474,6 +475,17 @@ const automationLogsRoute = createRoute({
   component: AutomationLogsPage,
 });
 
+// ----------- JSON Builder Demo
+
+const jsonBuilderRoute = createRoute({
+  path: "/json-builder",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "JSON Builder",
+  },
+  component: JsonBuilderPage,
+});
+
 const routeTree = rootRoute.addChildren([
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
@@ -522,6 +534,7 @@ const routeTree = rootRoute.addChildren([
         annotationQueuesListRoute,
         annotationQueueDetailsRoute,
       ]),
+      jsonBuilderRoute,
     ]),
   ]),
 ]);
