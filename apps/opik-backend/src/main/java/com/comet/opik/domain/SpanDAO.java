@@ -502,7 +502,12 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_IDS = """
-            WITH feedback_scores_combined_raw AS (
+            WITH target_projects AS (
+                SELECT DISTINCT project_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND id IN :ids
+            ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -519,6 +524,7 @@ class SpanDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
+                  AND project_id IN (SELECT project_id FROM target_projects)
                   AND entity_id IN :ids
                 UNION ALL
                 SELECT workspace_id,
@@ -537,6 +543,7 @@ class SpanDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
+                  AND project_id IN (SELECT project_id FROM target_projects)
                   AND entity_id IN :ids
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
@@ -628,6 +635,7 @@ class SpanDAO {
                 FROM spans
                 WHERE id IN :ids
                 AND workspace_id = :workspace_id
+                AND project_id IN (SELECT project_id FROM target_projects)
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s
@@ -643,6 +651,7 @@ class SpanDAO {
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND entity_id IN :ids
+                AND project_id IN (SELECT project_id FROM target_projects)
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS c ON s.id = c.entity_id
@@ -702,6 +711,12 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_TRACE_IDS = """
+            WITH target_projects AS (
+                SELECT DISTINCT project_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND trace_id IN :trace_ids
+            )
             SELECT
                 s.*,
                 if(end_time IS NOT NULL AND start_time IS NOT NULL
@@ -710,6 +725,7 @@ class SpanDAO {
                     NULL) AS duration
             FROM spans s
             WHERE workspace_id = :workspace_id
+            AND project_id IN (SELECT project_id FROM target_projects)
             AND trace_id IN :trace_ids
             ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
@@ -718,7 +734,18 @@ class SpanDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH comments_final AS (
+            WITH target_spans AS (
+                SELECT id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
+            ),
+            comments_final AS (
               SELECT
                    entity_id,
                    groupArray(tuple(
@@ -970,7 +997,18 @@ class SpanDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
-            WITH feedback_scores_combined_raw AS (
+            WITH target_spans AS (
+                SELECT id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
+            ),
+            feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -982,6 +1020,7 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -994,6 +1033,7 @@ class SpanDAO {
                  WHERE entity_type = 'span'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
+                   AND entity_id IN (SELECT id FROM target_spans)
              ), feedback_scores_with_ranking AS (
                  SELECT workspace_id,
                         project_id,
@@ -1113,7 +1153,15 @@ class SpanDAO {
             """;
 
     private static final String SELECT_SPANS_STATS = """
-            WITH feedback_scores_combined_raw AS (
+            WITH target_spans AS (
+                SELECT id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+            ),
+            feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1131,6 +1179,7 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -1149,6 +1198,7 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  AND entity_id IN (SELECT id FROM target_spans)
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -2082,6 +2132,13 @@ class SpanDAO {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newFindTemplate(COUNT_BY_PROJECT_ID, spanSearchCriteria, "count_spans_by_project_id",
                     workspaceId);
+            // OPTIMIZATION: Set no_feedback_scores_filters flag if feedback_scores_filters is not set
+            if (spanSearchCriteria.filters() == null ||
+                    filterQueryBuilder
+                            .toAnalyticsDbFilters(spanSearchCriteria.filters(), FilterStrategy.FEEDBACK_SCORES)
+                            .isEmpty()) {
+                template.add("no_feedback_scores_filters", true);
+            }
             var statement = connection.createStatement(template.render())
                     .bind("project_id", spanSearchCriteria.projectId())
                     .bind("workspace_id", workspaceId);
