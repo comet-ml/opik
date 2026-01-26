@@ -3,7 +3,6 @@ import pprint
 import pytest
 
 import opik
-import opik.opik_context
 from opik import opik_context
 from opik.decorator.context_manager import distributed_headers_context_manager
 from opik.types import DistributedTraceHeadersDict
@@ -184,8 +183,8 @@ def test_distributed_headers__exception_handling_and_reraise(fake_backend, captu
     assert str(exc_info.value) == "Test error in user code"
 
     # Verify context is cleaned up after an exception
-    assert opik.opik_context.get_current_span_data() is None
-    assert opik.opik_context.get_current_trace_data() is None
+    assert opik_context.get_current_span_data() is None
+    assert opik_context.get_current_trace_data() is None
 
     # Error should be logged
     assert (
@@ -217,8 +216,8 @@ def test_distributed_headers__context_cleanup_in_normal_flow(fake_backend):
     opik.flush_tracker()
 
     # Verify context is cleaned up after a normal exit
-    assert opik.opik_context.get_current_span_data() is None
-    assert opik.opik_context.get_current_trace_data() is None
+    assert opik_context.get_current_span_data() is None
+    assert opik_context.get_current_trace_data() is None
 
     # Verify span was saved to the backend
     assert len(fake_backend.trace_trees) == 1

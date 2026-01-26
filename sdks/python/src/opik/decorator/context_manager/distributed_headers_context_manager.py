@@ -3,8 +3,7 @@ from contextlib import contextmanager
 from typing import Generator, Any
 
 from opik import context_storage
-from opik.api_objects import span
-from opik.decorator import base_track_decorator
+from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict
 
 LOGGER = logging.getLogger(__name__)
@@ -24,15 +23,18 @@ def distributed_headers(
     Args:
         headers: Distributed tracing headers used for root span creation.
     """
-    if not headers:
+    if not headers or not headers.get("opik_trace_id"):
         LOGGER.warning(
             "Empty distributed headers provided. Skipping setting distributed headers."
         )
         yield
         return
 
+    opik_context_storage = context_storage.get_current_context_instance()
+
     trace_id = headers["opik_trace_id"]
-    base_track_decorator.add_fake_remote_trace(trace_id)
+    trace_data = trace.TraceData(id=trace_id)
+    opik_context_storage.set_trace_data(trace_data)
 
     parent_span_id = headers.get("opik_parent_span_id")
     if parent_span_id is not None:
@@ -58,8 +60,6 @@ def distributed_headers(
         raise
     finally:
         # Clean up fake trace/span data from context
-        opik_context_storage = context_storage.get_current_context_instance()
         opik_context_storage.pop_trace_data(ensure_id=trace_id)
-        base_track_decorator.pop_fake_remote_trace_id(trace_id=trace_id)
         if span_data is not None:
             opik_context_storage.pop_span_data(ensure_id=span_data.id)

@@ -647,7 +647,7 @@ def pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
     if (
         context_storage.span_data_stack_empty()
         and possible_trace_data_to_end is not None
-        and not is_fake_remote_trace(possible_trace_data_to_end.id)
+        # and not is_fake_remote_trace(possible_trace_data_to_end.id)
         and possible_trace_data_to_end.id in TRACES_CREATED_BY_DECORATOR
     ):
         trace_data_to_end = context_storage.pop_trace_data()
@@ -747,27 +747,6 @@ def add_start_trace_candidate(
     client = opik_client.get_client_cached()
     if client.config.log_start_trace_span:
         client.trace(**trace_data.as_start_parameters)
-
-
-def add_fake_remote_trace(trace_id: str) -> None:
-    """
-    Adds a trace data object to the context storage and marks it as a fake remote trace
-    to avoid overriding original trace properties in pop_end_candidate_trace_data().
-
-    Args:
-        trace_id: The of the trace data object to be added and marked.
-    """
-    trace_data = trace.TraceData(id=trace_id)
-    context_storage.set_trace_data(trace=trace_data)
-    FAKE_REMOTE_TRACES.add(trace_data.id)
-
-
-def pop_fake_remote_trace_id(trace_id: str) -> None:
-    return FAKE_REMOTE_TRACES.discard(trace_id)
-
-
-def is_fake_remote_trace(trace_id: str) -> bool:
-    return trace_id in FAKE_REMOTE_TRACES
 
 
 def _show_root_span_not_created_warning_if_needed(
