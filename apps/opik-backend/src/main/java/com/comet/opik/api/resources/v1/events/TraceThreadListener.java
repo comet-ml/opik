@@ -133,10 +133,9 @@ public class TraceThreadListener {
 
         feedbackScoreService.deleteAllThreadScores(event.threadModelIds(), event.projectId())
                 .doOnError(error -> {
-                    log.info(
-                            "Failed to delete all scores for threads in workspace: '{}', projectId: '{}'",
-                            event.workspaceId(), event.projectId());
-                    log.error("Error deleting all scores for threads", error);
+                    log.error(
+                            "Error deleting all scores for threads in workspace: '{}', projectId: '{}', threadModelIds: '[{}]'",
+                            event.workspaceId(), event.projectId(), event.threadModelIds(), error);
                 })
                 .doOnSuccess(unused -> log.info("Deleted all scores for threads in workspace: '{}', projectId: '{}'",
                         event.workspaceId(), event.projectId()))
