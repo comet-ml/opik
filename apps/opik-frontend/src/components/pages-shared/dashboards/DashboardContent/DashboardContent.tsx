@@ -12,7 +12,13 @@ import WidgetConfigDialog from "@/components/shared/Dashboard/WidgetConfigDialog
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import { DashboardWidget } from "@/types/dashboard";
 
-const DashboardContent: React.FunctionComponent = () => {
+interface DashboardContentProps {
+  onSave?: () => Promise<void>;
+}
+
+const DashboardContent: React.FunctionComponent<DashboardContentProps> = ({
+  onSave,
+}) => {
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
   const [targetSectionId, setTargetSectionId] = useState<string | null>(null);
@@ -54,8 +60,10 @@ const DashboardContent: React.FunctionComponent = () => {
     title: "You have unsaved changes",
     description:
       "If you leave now, your changes will be lost. Are you sure you want to continue?",
-    confirmText: "Leave without saving",
+    confirmText: "Discard and leave",
     cancelText: "Stay on page",
+    onSaveAndLeave: onSave,
+    saveAndLeaveText: "Save and leave",
   });
 
   return (
