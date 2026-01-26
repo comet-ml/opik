@@ -320,7 +320,7 @@ public class ProjectsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Find token usage names by project_id '{}', on workspaceId '{}'", projectId, workspaceId);
-        List<String> tokenUsageNames = projectMetricsService.getProjectTokenUsageNames(projectId)
+        List<String> tokenUsageNames = projectMetricsService.getProjectTokenUsageNames(workspaceId, projectId)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Found token usage names '{}' by project_id '{}', on workspaceId '{}'",

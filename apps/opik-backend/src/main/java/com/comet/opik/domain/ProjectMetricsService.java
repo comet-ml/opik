@@ -6,6 +6,7 @@ import com.comet.opik.api.metrics.BreakdownQueryBuilder;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -26,7 +27,7 @@ public interface ProjectMetricsService {
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
 
-    Mono<List<String>> getProjectTokenUsageNames(UUID projectId);
+    Mono<List<String>> getProjectTokenUsageNames(String workspaceId, UUID projectId);
 }
 
 @Slf4j
@@ -187,8 +188,9 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     }
 
     @Override
-    public Mono<List<String>> getProjectTokenUsageNames(UUID projectId) {
+    @Cacheable(name = "project_token_usage_names_per_workspace", key = "$workspaceId +'-'+ $projectId", returnType = String.class, wrapperType = List.class)
+    public Mono<List<String>> getProjectTokenUsageNames(@NonNull String workspaceId, @NonNull UUID projectId) {
         return validateProject(projectId)
-                .then(projectMetricsDAO.getProjectTokenUsageNames(projectId));
+                .then(projectMetricsDAO.getProjectTokenUsageNames(workspaceId, projectId));
     }
 }

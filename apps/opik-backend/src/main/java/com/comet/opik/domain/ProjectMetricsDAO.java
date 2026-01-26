@@ -115,7 +115,7 @@ public interface ProjectMetricsDAO {
 
     Mono<List<Entry>> getSpanFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 
-    Mono<List<String>> getProjectTokenUsageNames(@NonNull UUID projectId);
+    Mono<List<String>> getProjectTokenUsageNames(@NonNull String workspaceId, @NonNull UUID projectId);
 }
 
 @Slf4j
@@ -1675,8 +1675,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     }
 
     @Override
-    public Mono<List<String>> getProjectTokenUsageNames(@NonNull UUID projectId) {
-        return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+    public Mono<List<String>> getProjectTokenUsageNames(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return template.nonTransaction(connection -> {
             var stTemplate = getSTWithLogComment(GET_PROJECT_TOKEN_USAGE_NAMES, "getProjectTokenUsageNames",
                     workspaceId, projectId.toString());
 
@@ -1690,6 +1690,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     .flatMapMany(result -> result.map((row, metadata) -> row.get("name", String.class)))
                     .collectList()
                     .doFinally(signalType -> endSegment(segment));
-        }));
+        });
     }
 }

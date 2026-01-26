@@ -119,8 +119,7 @@ public class ProjectResourceClient {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(projectId.toString())
                 .path("token-usage")
-                .path("names")
-                .queryParam("project_id", projectId);
+                .path("names");
 
         try (var actualResponse = webTarget
                 .request()
