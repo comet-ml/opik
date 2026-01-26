@@ -1102,13 +1102,6 @@ class TraceDAOImpl implements TraceDAO {
                     SELECT id, name, dataset_id
                     FROM experiments
                     WHERE workspace_id = :workspace_id
-                    AND id IN (
-                        SELECT DISTINCT experiment_id
-                        FROM experiment_items
-                        WHERE workspace_id = :workspace_id
-                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
-                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
-                    )
                     ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) e ON ei.experiment_id = e.id
