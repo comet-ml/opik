@@ -38,7 +38,7 @@ This workflow will:
 ### Configuration
 - **Slack MCP**: Required - uses custom Slack MCP server (`ghcr.io/korotovsky/slack-mcp-server`)
   - Uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) to post messages as your authenticated user account
-  - See `.cursor/SLACK_MCP_SETUP.md` for complete setup instructions
+  - See `.agents/SLACK_MCP_SETUP.md` for complete setup instructions
   - Requires Docker to be installed and running
 
 ---
@@ -59,7 +59,7 @@ This workflow will:
   - The server must be configured with `mcp-server --transport stdio` in the Docker args and have the `conversations_add_message` tool enabled (e.g., via `SLACK_MCP_ADD_MESSAGE_TOOL=true`) so the final send step can succeed
   - If Slack MCP tool is available and callable: Proceed with message sending via MCP (messages will post as user)
   - If Slack MCP is not available or tool call fails: 
-    > "Slack MCP is not available. Please configure Slack MCP according to `.cursor/SLACK_MCP_SETUP.md` and restart Cursor IDE."
+    > "Slack MCP is not available. Please configure Slack MCP according to `.agents/SLACK_MCP_SETUP.md` and restart Cursor IDE."
     > Stop here.
 
 ---
@@ -186,7 +186,7 @@ This workflow will:
 ### 6. Send Slack Message
 
 - **Use Slack MCP tool `conversations_add_message`** from `ghcr.io/korotovsky/slack-mcp-server`
-- This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) configured according to `.cursor/SLACK_MCP_SETUP.md`
+- This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) configured according to `.agents/SLACK_MCP_SETUP.md`
 - The server must be configured with:
   - `mcp-server --transport stdio` in the Docker args (required for MCP protocol)
   - `SLACK_MCP_ADD_MESSAGE_TOOL=true` environment variable (required to enable the tool - disabled by default for safety)
@@ -199,12 +199,12 @@ This workflow will:
   - If successful: Show success message with message timestamp/ID if provided
   - If failed: Show error message and stop
   - Common errors:
-    - **Tool disabled error**: The `conversations_add_message` tool is disabled by default. Add `SLACK_MCP_ADD_MESSAGE_TOOL=true` to Docker args and restart Cursor (see `.cursor/SLACK_MCP_SETUP.md`)
-    - Authentication errors: Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-`) - see `.cursor/SLACK_MCP_SETUP.md`
+    - **Tool disabled error**: The `conversations_add_message` tool is disabled by default. Add `SLACK_MCP_ADD_MESSAGE_TOOL=true` to Docker args and restart Cursor (see `.agents/SLACK_MCP_SETUP.md`)
+    - Authentication errors: Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-`) - see `.agents/SLACK_MCP_SETUP.md`
     - Channel not found: Verify channel name `#opik-code-review` exists and you have access
-    - Permission errors: Verify `chat:write` scope is configured in User Token Scopes (see `.cursor/SLACK_MCP_SETUP.md`)
+    - Permission errors: Verify `chat:write` scope is configured in User Token Scopes (see `.agents/SLACK_MCP_SETUP.md`)
     - Docker errors: Ensure Docker is running and can pull the image `ghcr.io/korotovsky/slack-mcp-server:latest`
-    - MCP not configured: Verify Slack MCP is properly configured according to `.cursor/SLACK_MCP_SETUP.md` and Cursor IDE has been restarted
+    - MCP not configured: Verify Slack MCP is properly configured according to `.agents/SLACK_MCP_SETUP.md` and Cursor IDE has been restarted
 
 ---
 
@@ -223,29 +223,29 @@ This workflow will:
 ### **Slack MCP Errors**
 
 - **Slack MCP unavailable**: 
-  - Check if Slack MCP server is properly configured according to `.cursor/SLACK_MCP_SETUP.md`
+  - Check if Slack MCP server is properly configured according to `.agents/SLACK_MCP_SETUP.md`
   - Verify Docker is installed and running (`docker --version`)
   - Verify the Docker image can be pulled: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
   - Restart Cursor IDE after configuring MCP
 - **Slack MCP tool not found**: 
   - Verify `conversations_add_message` tool is available from `ghcr.io/korotovsky/slack-mcp-server`
-  - Ensure `mcp-server --transport stdio` is included in Docker args (see `.cursor/SLACK_MCP_SETUP.md`)
-  - Ensure `SLACK_MCP_ADD_MESSAGE_TOOL=true` is set in Docker args (see `.cursor/SLACK_MCP_SETUP.md`)
+  - Ensure `mcp-server --transport stdio` is included in Docker args (see `.agents/SLACK_MCP_SETUP.md`)
+  - Ensure `SLACK_MCP_ADD_MESSAGE_TOOL=true` is set in Docker args (see `.agents/SLACK_MCP_SETUP.md`)
   - Check Cursor Settings > Features > MCP for error messages
   - Ensure MCP server is running and properly configured
   - Check Docker logs if the container fails to start
 - **MCP authentication errors**: 
-  - Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-` for user token) - see `.cursor/SLACK_MCP_SETUP.md`
+  - Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-` for user token) - see `.agents/SLACK_MCP_SETUP.md`
   - Verify token is not expired
   - Reinstall Slack app to workspace if needed
-  - Ensure token has `chat:write` scope in **User Token Scopes** (not Bot Token Scopes) - see `.cursor/SLACK_MCP_SETUP.md`
+  - Ensure token has `chat:write` scope in **User Token Scopes** (not Bot Token Scopes) - see `.agents/SLACK_MCP_SETUP.md`
 - **Docker errors**: 
   - Ensure Docker is running: `docker ps`
   - Check if Docker can pull the image: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
   - Verify Docker has network access to reach Slack API
 - **Channel access errors**: 
   - Verify channel name `#opik-code-review` exists
-  - Ensure you have `chat:write` scope in User Token Scopes (see `.cursor/SLACK_MCP_SETUP.md`)
+  - Ensure you have `chat:write` scope in User Token Scopes (see `.agents/SLACK_MCP_SETUP.md`)
   - Check that you are a member of the channel (join it if needed)
   - Try using channel ID instead of name if issues persist
 
@@ -290,7 +290,7 @@ The command is successful when:
 
 - **GitHub MCP Required**: Uses GitHub MCP to fetch PR information automatically
 - **Slack MCP Required**: Uses custom Slack MCP server (`ghcr.io/korotovsky/slack-mcp-server`) for sending messages
-  - Configure according to `.cursor/SLACK_MCP_SETUP.md`
+  - Configure according to `.agents/SLACK_MCP_SETUP.md`
   - Uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) - messages are posted as your authenticated user account
   - Uses `conversations_add_message` tool with `channel_id` and `payload` parameters
   - Uses `channels_list` tool to verify MCP availability
@@ -305,7 +305,7 @@ The command is successful when:
 - **Channel**: Message is always sent to `#opik-code-review` channel
 - **PR detection**: Automatically finds PR for current branch, falls back to manual input if needed
 - **Smart extraction**: Uses heuristics to find test environment links and component summaries in PR description
-- **MCP Configuration**: Slack MCP must be configured before using this command (see `.cursor/SLACK_MCP_SETUP.md` for detailed setup)
+- **MCP Configuration**: Slack MCP must be configured before using this command (see `.agents/SLACK_MCP_SETUP.md` for detailed setup)
 - **Video limitations**: Slack cannot send videos directly. Use `cursor generate-code-review-slack-command` to generate a copiable command that you can edit before sending (allowing you to add @ mentions, media links, and final proof editing)
 
 ---
@@ -315,7 +315,7 @@ The command is successful when:
 ### Setup and Usage
 
 ```bash
-# 1. Configure Slack MCP according to .cursor/SLACK_MCP_SETUP.md
+# 1. Configure Slack MCP according to .agents/SLACK_MCP_SETUP.md
 #    - Follow the complete setup guide for configuring the Slack MCP server
 #    - Add your User OAuth Token (xoxp-...) to the Docker args
 #    - Ensure 'mcp-server --transport stdio' is included in Docker args

@@ -13,7 +13,10 @@ export interface FindExperimentsRequest {
     name?: string;
     datasetDeleted?: boolean;
     promptId?: string;
+    projectId?: string;
+    projectDeleted?: boolean;
     sorting?: string;
     filters?: string;
     experimentIds?: string;
+    forceSorting?: boolean;
 }
