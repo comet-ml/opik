@@ -39,10 +39,12 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.regex.Matcher;
@@ -196,40 +198,66 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Render the rule evaluator message template using the values from an actual
-     * trace.
+     * Render the rule evaluator message template using the values from an actual trace.
      * <p>
-     * As the rule may consist in multiple messages, we check each one of them for
-     * variables to fill.
-     * Then we go through every variable template to replace them for the value from
-     * the trace.
+     * Supports two modes:
+     * 1. Variable mapping mode: variablesMap defines mappings like {"myvar": "input.question"}
+     * 2. Auto-extract mode: variablesMap is null/empty, automatically extract variables from template
      *
-     * @param templateMessages a list of messages with variables to fill with a
-     *                         Trace value
-     * @param variablesMap     a map of template variable to a path to a value into
-     *                         a Trace
-     * @param trace            the trace with value to use to replace template
-     *                         variables
+     * @param templateMessages a list of messages with variables to fill with a Trace value
+     * @param variablesMap     a map of template variable to a path to a value into a Trace (can be null)
+     * @param trace            the trace with value to use to replace template variables
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
-        Map<String, String> replacements = toReplacements(variablesMap, trace);
+        Map<String, String> replacements;
+        
+        if (variablesMap == null || variablesMap.isEmpty()) {
+            // Auto-extract variables from templates
+            String allTemplates = collectAllTemplateText(templateMessages);
+            replacements = extractVariablesFromTemplate(allTemplates, section -> switch (section) {
+                case INPUT -> trace.input();
+                case OUTPUT -> trace.output();
+                case METADATA -> trace.metadata();
+            });
+        } else {
+            // Use provided variable mappings
+            replacements = toReplacements(variablesMap, trace);
+        }
+        
         return renderMessagesWithReplacements(templateMessages, replacements);
     }
 
     /**
      * Render the rule evaluator message template using the values from an actual span.
-     * Similar to renderMessages but for spans.
+     * <p>
+     * Supports two modes:
+     * 1. Variable mapping mode: variablesMap defines mappings like {"myvar": "input.query"}
+     * 2. Auto-extract mode: variablesMap is null/empty, automatically extract variables from template
      *
      * @param templateMessages a list of messages with variables to fill with a Span value
-     * @param variablesMap     a map of template variable to a path to a value into a Span
+     * @param variablesMap     a map of template variable to a path to a value into a Span (can be null)
      * @param span             the span with value to use to replace template variables
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Span span) {
-        Map<String, String> replacements = toReplacements(variablesMap, span);
+        Map<String, String> replacements;
+        
+        if (variablesMap == null || variablesMap.isEmpty()) {
+            // Auto-extract variables from templates
+            String allTemplates = collectAllTemplateText(templateMessages);
+            replacements = extractVariablesFromTemplate(allTemplates, section -> switch (section) {
+                case INPUT -> span.input();
+                case OUTPUT -> span.output();
+                case METADATA -> span.metadata();
+            });
+        } else {
+            // Use provided variable mappings
+            replacements = toReplacements(variablesMap, span);
+        }
+        
         return renderMessagesWithReplacements(templateMessages, replacements);
     }
 
@@ -294,6 +322,10 @@ public class OnlineScoringEngine {
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
+        // If variables is null or empty, return empty map (auto-extract mode will be used)
+        if (variables == null || variables.isEmpty()) {
+            return Map.of();
+        }
         return toReplacements(variables, section -> switch (section) {
             case INPUT -> trace.input();
             case OUTPUT -> trace.output();
@@ -302,6 +334,10 @@ public class OnlineScoringEngine {
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
+        // If variables is null or empty, return empty map (auto-extract mode will be used)
+        if (variables == null || variables.isEmpty()) {
+            return Map.of();
+        }
         return toReplacements(variables, section -> switch (section) {
             case INPUT -> span.input();
             case OUTPUT -> span.output();
@@ -315,6 +351,10 @@ public class OnlineScoringEngine {
      */
     private static Map<String, String> toReplacements(
             Map<String, String> variables, JsonSectionExtractor sectionExtractor) {
+        // Safety check - should not happen as public methods check this, but defensive programming
+        if (variables == null || variables.isEmpty()) {
+            return Map.of();
+        }
         var parsedVariables = toVariableMapping(variables);
         // extract the actual value from the entity
         return parsedVariables.stream().map(mapper -> {
@@ -340,6 +380,9 @@ public class OnlineScoringEngine {
      * @return a parsed list of mappings, easier to use for the template rendering
      */
     static List<MessageVariableMapping> toVariableMapping(Map<String, String> evaluatorVariables) {
+        if (evaluatorVariables == null || evaluatorVariables.isEmpty()) {
+            return List.of();
+        }
         return evaluatorVariables.entrySet().stream()
                 .map(mapper -> {
                     var templateVariable = mapper.getKey();
@@ -550,6 +593,68 @@ public class OnlineScoringEngine {
         // Assume the whole response is raw JSON
         return response.trim();
     }
+
+
+    /**
+     * Collect all template text from messages (for variable extraction).
+     *
+     * @param templateMessages messages to extract text from
+     * @return concatenated template text
+     */
+    private static String collectAllTemplateText(List<LlmAsJudgeMessage> templateMessages) {
+        StringBuilder allText = new StringBuilder();
+        for (var msg : templateMessages) {
+            if (msg.isStringContent()) {
+                allText.append(msg.asString()).append(" ");
+            } else if (msg.isStructuredContent()) {
+                for (var part : msg.asContentList()) {
+                    if ("text".equals(part.type()) && part.text() != null) {
+                        allText.append(part.text()).append(" ");
+                    }
+                    // Also check URLs for templates
+                    if ("image_url".equals(part.type()) && part.imageUrl() != null && part.imageUrl().url() != null) {
+                        allText.append(part.imageUrl().url()).append(" ");
+                    }
+                    if ("video_url".equals(part.type()) && part.videoUrl() != null && part.videoUrl().url() != null) {
+                        allText.append(part.videoUrl().url()).append(" ");
+                    }
+                    if ("audio_url".equals(part.type()) && part.audioUrl() != null && part.audioUrl().url() != null) {
+                        allText.append(part.audioUrl().url()).append(" ");
+                    }
+                }
+            }
+        }
+        return allText.toString();
+    }
+
+    /**
+     * Auto-extract variables from template and create a mapping for them.
+     * Reuses the existing variable mapping logic to handle JSONPath extraction.
+     *
+     * @param template         template text with variable placeholders
+     * @param sectionExtractor function to extract JsonNode for a given section (input/output/metadata)
+     * @return map of variable names to their extracted values
+     */
+    private static Map<String, String> extractVariablesFromTemplate(
+            String template, JsonSectionExtractor sectionExtractor) {
+        // Extract all variable placeholders from template
+        Set<String> variableNames = TemplateParseUtils.extractVariables(template, PromptType.MUSTACHE);
+        
+        if (variableNames.isEmpty()) {
+            return Map.of();
+        }
+        
+        // Create auto-variables map: use variable name as both key and value
+        // Example: {"input.messages[0].content": "input.messages[0].content"}
+        Map<String, String> autoVariables = new HashMap<>();
+        for (String varName : variableNames) {
+            autoVariables.put(varName, varName);
+        }
+        
+        // Reuse existing variable mapping logic which handles JSONPath extraction
+        return toReplacements(autoVariables, sectionExtractor);
+    }
+
 
     @AllArgsConstructor
     enum TraceSection {
