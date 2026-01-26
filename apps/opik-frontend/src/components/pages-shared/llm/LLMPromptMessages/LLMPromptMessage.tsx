@@ -289,19 +289,28 @@ const LLMPromptMessage = forwardRef<
 
               // If this is the second '{', open the popover
               if (charBefore === "{") {
-                // Get cursor coordinates for popover positioning
-                const coords = view.coordsAtPos(cursorPos + 1);
-                if (coords) {
-                  setPopoverPosition({
-                    top: coords.bottom,
-                    left: coords.left,
-                  });
-                }
-
                 // Store the position after the opening '{{' (cursorPos was before the second {, now cursor is at cursorPos + 1)
                 setBraceStartPos(cursorPos + 1);
                 setJsonSearchQuery("");
-                setIsJsonPopoverOpen(true);
+
+                // Use requestMeasure to get accurate coordinates after DOM update
+                view.requestMeasure({
+                  read: () => {
+                    const coords = view.coordsAtPos(cursorPos + 1);
+                    const editorRect = view.dom.getBoundingClientRect();
+                    return { coords, editorRect };
+                  },
+                  write: ({ coords, editorRect }) => {
+                    if (coords && editorRect) {
+                      // Calculate position relative to the editor container
+                      setPopoverPosition({
+                        top: coords.bottom - editorRect.top,
+                        left: coords.left - editorRect.left,
+                      });
+                    }
+                    setIsJsonPopoverOpen(true);
+                  },
+                });
               }
             }
             return true; // Prevent default handling
@@ -517,7 +526,7 @@ const LLMPromptMessage = forwardRef<
                           className="pointer-events-none"
                           aria-hidden="true"
                           style={{
-                            position: "fixed",
+                            position: "absolute",
                             top: popoverPosition.top,
                             left: popoverPosition.left,
                             width: 1,
