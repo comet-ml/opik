@@ -80,6 +80,7 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -6356,6 +6357,7 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class ExperimentReferenceTest {
 
+        @Builder(toBuilder = true)
         private record TestContext(String workspaceName, String workspaceId, String projectName, UUID projectId,
                 String datasetName, UUID datasetId) {
         }
@@ -6377,7 +6379,14 @@ class TracesResourceTest {
                     .build();
             var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
 
-            return new TestContext(workspaceName, workspaceId, projectName, projectId, datasetName, datasetId);
+            return TestContext.builder()
+                    .workspaceName(workspaceName)
+                    .workspaceId(workspaceId)
+                    .projectName(projectName)
+                    .projectId(projectId)
+                    .datasetName(datasetName)
+                    .datasetId(datasetId)
+                    .build();
         }
 
         @Test

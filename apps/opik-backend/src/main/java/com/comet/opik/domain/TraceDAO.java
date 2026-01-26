@@ -2869,7 +2869,11 @@ class TraceDAOImpl implements TraceDAO {
         }
 
         String experimentName = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_name", String.class);
-        return new ExperimentReference(experimentId, experimentName, experimentDatasetId);
+        return ExperimentReference.builder()
+                .id(experimentId)
+                .name(experimentName)
+                .datasetId(experimentDatasetId)
+                .build();
     }
 
     private Publisher<TraceDetails> mapToTraceDetails(Result result) {

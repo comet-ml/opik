@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import lombok.Builder;
 
 import java.util.Comparator;
 import java.util.UUID;
@@ -14,6 +15,7 @@ import java.util.UUID;
  * Used in traces to represent associated experiments.
  * Implements Comparable for natural ordering by experiment name, then by experiment ID.
  */
+@Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Schema(description = "Experiment reference with ID, name, and dataset ID")
