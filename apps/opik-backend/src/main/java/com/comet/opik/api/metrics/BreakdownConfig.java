@@ -21,40 +21,6 @@ public record BreakdownConfig(
         String metadataKey,
         String subMetric) {
 
-    // Fixed defaults - not configurable
-    public static final int LIMIT = 10;
-    public static final String OTHERS_GROUP_NAME = "__others__";
-    public static final String UNKNOWN_GROUP_NAME = "Unknown";
-
-    /**
-     * Check if breakdown is enabled (field is not NONE and not null).
-     */
-    public boolean isEnabled() {
-        return field != null && field != BreakdownField.NONE;
-    }
-
-    /**
-     * Validate the configuration.
-     *
-     * @throws IllegalArgumentException if configuration is invalid
-     */
-    public void validate(MetricType metricType) {
-        if (!isEnabled()) {
-            return;
-        }
-
-        if (field == BreakdownField.METADATA && (metadataKey == null || metadataKey.isBlank())) {
-            throw new IllegalArgumentException("metadata_key is required when group by field is 'metadata'");
-        }
-
-        if (!field.isCompatibleWith(metricType)) {
-            throw new IllegalArgumentException(
-                    "Group by field '%s' is not compatible with metric type '%s'. This field supports %s."
-                            .formatted(field.getValue(), metricType.name(),
-                                    field.getCompatibleMetricTypesDescription()));
-        }
-    }
-
     /**
      * Creates a default config with no grouping.
      */

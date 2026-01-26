@@ -49,7 +49,7 @@ public enum BreakdownField {
             MetricType.THREAD_FEEDBACK_SCORES);
 
     // Span-based metrics
-    private static final Set<MetricType> SPAN_METRICS = EnumSet.of(
+    public static final Set<MetricType> SPAN_METRICS = EnumSet.of(
             MetricType.SPAN_COUNT,
             MetricType.SPAN_DURATION,
             MetricType.SPAN_TOKEN_USAGE,

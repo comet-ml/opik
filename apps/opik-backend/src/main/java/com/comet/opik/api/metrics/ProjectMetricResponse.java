@@ -32,12 +32,5 @@ public record ProjectMetricResponse<T extends Number>(
     public record Results<T extends Number>(
             String name,
             List<DataPoint<T>> data) {
-
-        /**
-         * Check if this result represents the "Others" aggregated group.
-         */
-        public boolean isOthersGroup() {
-            return BreakdownConfig.OTHERS_GROUP_NAME.equals(name);
-        }
     }
 }

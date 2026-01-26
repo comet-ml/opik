@@ -32,6 +32,7 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.redis.testcontainers.RedisContainer;
+import io.dropwizard.jersey.validation.ValidationErrorMessage;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.extern.slf4j.Slf4j;
@@ -289,9 +290,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("not compatible with metric type");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
         }
     }
@@ -373,9 +374,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("not compatible with metric type");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
         }
     }
@@ -458,9 +459,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("not compatible with metric type");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
         }
     }
@@ -534,9 +535,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("not compatible with metric type");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
         }
     }
@@ -619,9 +620,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("not compatible with metric type");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
         }
     }
@@ -695,9 +696,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("not compatible with metric type");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
         }
     }
@@ -767,9 +768,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("not compatible with metric type");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
         }
     }
@@ -843,9 +844,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("not compatible with metric type");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
         }
     }
@@ -920,9 +921,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("not compatible with metric type");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("not compatible with metric type");
             }
         }
     }
@@ -1000,9 +1001,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("metadata_key is required");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("metadata_key is required");
             }
         }
     }
@@ -1084,9 +1085,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("metadata_key is required");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("metadata_key is required");
             }
         }
     }
@@ -1169,9 +1170,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("metadata_key is required");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("metadata_key is required");
             }
         }
 
@@ -1255,9 +1256,9 @@ class ProjectMetricsWithBreakdownResourceTest {
                     .header(WORKSPACE_HEADER, WORKSPACE_NAME)
                     .post(Entity.json(request))) {
 
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
-                var error = response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class);
-                assertThat(error.getMessage()).contains("metadata_key is required");
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_CONTENT);
+                var error = response.readEntity(ValidationErrorMessage.class);
+                assertThat(error.getErrors().getFirst()).contains("metadata_key is required");
             }
         }
     }

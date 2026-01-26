@@ -2,8 +2,8 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.TimeInterval;
-import com.comet.opik.api.metrics.BreakdownConfig;
 import com.comet.opik.api.metrics.BreakdownField;
+import com.comet.opik.api.metrics.BreakdownQueryBuilder;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -27,7 +27,6 @@ import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +34,8 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.metrics.BreakdownField.SPAN_METRICS;
+import static com.comet.opik.api.metrics.BreakdownQueryBuilder.getBreakdownGroupExpression;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -128,12 +129,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             TimeInterval.WEEKLY, "toIntervalWeek(1)",
             TimeInterval.DAILY, "toIntervalDay(1)",
             TimeInterval.HOURLY, "toIntervalHour(1)");
-
-    private static final EnumSet<MetricType> SPAN_METRICS = EnumSet.of(
-            MetricType.SPAN_COUNT,
-            MetricType.SPAN_DURATION,
-            MetricType.SPAN_TOKEN_USAGE,
-            MetricType.SPAN_FEEDBACK_SCORES);
 
     private static final String PROJECT_METRIC_QUERY_NAME_PREFIX = "ProjectMetrics_";
     private static final String ALERT_METRIC_QUERY_NAME_PREFIX = "AlertMetrics_";
@@ -684,6 +679,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
             )
             SELECT <bucket> AS bucket,
@@ -711,6 +708,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
             )
             SELECT <bucket> AS bucket,
@@ -734,6 +733,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
@@ -765,6 +766,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     FROM spans final
                     WHERE project_id = :project_id
                     AND workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND id >= :uuid_from_time<endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time<endif>
                 ) s ON s.trace_id = t.id
                 ARRAY JOIN mapKeys(usage) AS name, mapValues(usage) AS value
                 WHERE value > 0
@@ -1507,7 +1510,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 template.add("group_expression",
                         getBreakdownGroupExpression(request.metricType(), request.breakdown()));
                 Optional.ofNullable(request.breakdown().subMetric())
-                        .map(this::mapSubMetric)
+                        .map(BreakdownQueryBuilder::mapSubMetric)
                         .ifPresent(subMetric -> template.add("sub_metric", subMetric));
             }
 
@@ -1635,69 +1638,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
         return stmt;
     }
 
-    /**
-     * Get the SQL expression for the breakdown group based on the metric type and breakdown field.
-     * This is used in the GROUP BY clause to group metrics by the specified dimension.
-     * The table alias prefix depends on the metric type:
-     * - Span metrics use 's.' prefix (spans_filtered)
-     * - Trace/Thread metrics use 't.' prefix (traces_filtered/threads_filtered)
-     */
-    private String getBreakdownGroupExpression(MetricType metricType, BreakdownConfig breakdown) {
-        if (breakdown == null || !breakdown.isEnabled()) {
-            return "''";
-        }
-
-        // Span metrics use 's.' prefix, trace/thread metrics use 't.' prefix
-        if (SPAN_METRICS.contains(metricType)) {
-            return getSpanBreakdownExpression(breakdown);
-        } else {
-            return getTraceOrThreadBreakdownExpression(breakdown);
-        }
-    }
-
-    /**
-     * Get breakdown expression for span metrics using 's.' table alias.
-     */
-    private String getSpanBreakdownExpression(BreakdownConfig breakdown) {
-        return switch (breakdown.field()) {
-            case TAGS -> "arrayJoin(if(empty(s.tags), ['Unknown'], s.tags))";
-            case METADATA -> "ifNull(JSONExtractString(s.metadata, :metadata_key), 'Unknown')";
-            case NAME -> "ifNull(s.name, 'Unknown')";
-            case ERROR_INFO -> "if(length(s.error_info) > 0, 'Has Error', 'No Error')";
-            case MODEL -> "if(s.model = '', 'Unknown', s.model)";
-            case PROVIDER -> "if(s.provider = '', 'Unknown', s.provider)";
-            case TYPE -> "toString(s.type)";
-            default -> "''";
-        };
-    }
-
-    /**
-     * Get breakdown expression for trace/thread metrics using 't.' table alias.
-     */
-    private String getTraceOrThreadBreakdownExpression(BreakdownConfig breakdown) {
-        return switch (breakdown.field()) {
-            case TAGS -> "arrayJoin(if(empty(t.tags), ['Unknown'], t.tags))";
-            case METADATA -> "ifNull(JSONExtractString(t.metadata, :metadata_key), 'Unknown')";
-            case NAME -> "ifNull(t.name, 'Unknown')";
-            case ERROR_INFO -> "if(length(t.error_info) > 0, 'Has Error', 'No Error')";
-            default -> "''";
-        };
-    }
-
     private String intervalToSql(TimeInterval interval) {
         return Optional.ofNullable(INTERVAL_TO_SQL.get(interval))
                 .orElseThrow(() -> new IllegalArgumentException("Invalid interval: " + interval));
-    }
-
-    /**
-     * Maps sub-metric names (p50, p90, p99) to ClickHouse quantile values (0.5, 0.9, 0.99).
-     */
-    private String mapSubMetric(String subMetric) {
-        return switch (subMetric.toLowerCase()) {
-            case "p50" -> "0.5";
-            case "p90" -> "0.9";
-            case "p99" -> "0.99";
-            default -> subMetric;
-        };
     }
 }
