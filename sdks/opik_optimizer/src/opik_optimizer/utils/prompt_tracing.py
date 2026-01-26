@@ -1,3 +1,10 @@
+"""Helpers to build/serialize prompt payloads and attach them as Opik trace/span metadata.
+Defines: Opik Prompt (library prompt object), ChatPrompt (optimizer prompt wrapper),
+trace metadata (per-trace key/value annotations), span metadata (per-span annotations).
+Best-effort updates: metadata writes are swallowed on error; compatibility is gated
+by Opik SDK version/signature checks and may no-op when Opik is missing/unsupported.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
