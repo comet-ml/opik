@@ -646,7 +646,6 @@ def pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
     if (
         context_storage.span_data_stack_empty()
         and possible_trace_data_to_end is not None
-        # and not is_fake_remote_trace(possible_trace_data_to_end.id)
         and possible_trace_data_to_end.id in TRACES_CREATED_BY_DECORATOR
     ):
         trace_data_to_end = context_storage.pop_trace_data()
