@@ -25,6 +25,8 @@ public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
+
+    Mono<List<String>> getProjectTokenUsageNames(UUID projectId);
 }
 
 @Slf4j
@@ -33,6 +35,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> projectMetricHandler;
     private final @NonNull ProjectService projectService;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull ProjectMetricsDAO projectMetricsDAO;
 
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
@@ -54,6 +57,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 Map.entry(MetricType.SPAN_TOKEN_USAGE, projectMetricsDAO::getSpanTokenUsage));
         this.projectService = projectService;
         this.instantToUUIDMapper = instantToUUIDMapper;
+        this.projectMetricsDAO = projectMetricsDAO;
     }
 
     @Override
@@ -180,5 +184,11 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> getMetricHandler(
             MetricType metricType) {
         return projectMetricHandler.get(metricType);
+    }
+
+    @Override
+    public Mono<List<String>> getProjectTokenUsageNames(UUID projectId) {
+        return validateProject(projectId)
+                .then(projectMetricsDAO.getProjectTokenUsageNames(projectId));
     }
 }

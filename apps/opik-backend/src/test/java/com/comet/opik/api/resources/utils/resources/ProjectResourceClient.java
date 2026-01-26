@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectStatsSummary;
+import com.comet.opik.api.TokenUsageNames;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.ws.rs.client.Entity;
@@ -106,6 +107,34 @@ public class ProjectResourceClient {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
 
             return actualResponse.readEntity(FeedbackScoreNames.class);
+        }
+    }
+
+    public TokenUsageNames findTokenUsageNames(UUID projectId, String apiKey, String workspaceName) {
+        return findTokenUsageNames(projectId, apiKey, workspaceName, org.apache.http.HttpStatus.SC_OK);
+    }
+
+    public TokenUsageNames findTokenUsageNames(UUID projectId, String apiKey, String workspaceName,
+            int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(projectId.toString())
+                .path("token-usage")
+                .path("names")
+                .queryParam("project_id", projectId);
+
+        try (var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == org.apache.http.HttpStatus.SC_OK) {
+                return actualResponse.readEntity(TokenUsageNames.class);
+            }
+
+            return null;
         }
     }
 

@@ -114,6 +114,8 @@ public interface ProjectMetricsDAO {
     Mono<List<Entry>> getSpanTokenUsage(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
 
     Mono<List<Entry>> getSpanFeedbackScores(@NonNull UUID projectId, @NonNull ProjectMetricRequest request);
+
+    Mono<List<String>> getProjectTokenUsageNames(@NonNull UUID projectId);
 }
 
 @Slf4j
@@ -640,7 +642,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
               FROM traces_filtered t
               GROUP BY bucket, group_name
             )
-            ORDER BY bucket, group_name;
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TRACE_COUNT = """
@@ -664,7 +667,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                    nullIf(count(DISTINCT id), 0) as count
             FROM traces_filtered t
             GROUP BY bucket, group_name
-            ORDER BY bucket, group_name;
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_COST = """
@@ -717,7 +721,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                    nullIf(sum(value), 0) AS value
             FROM spans_dedup
             GROUP BY bucket, group_name
-            ORDER BY bucket, group_name;
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_TOKEN_USAGE = """
@@ -778,7 +783,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     nullIf(sum(value), 0) AS value
             FROM spans_dedup
             GROUP BY group_name, bucket
-            ORDER BY group_name, bucket;
+            ORDER BY group_name, bucket
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_FEEDBACK_SCORES = """
@@ -817,7 +823,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     nullIf(avg(value), 0) AS value
             FROM feedback_scores_deduplication
             GROUP BY group_name, bucket
-            ORDER BY group_name, bucket;
+            ORDER BY group_name, bucket
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_GUARDRAILS_FAILED_COUNT = """
@@ -845,7 +852,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 JOIN guardrails AS g ON g.entity_id = t.id
             WHERE g.result = 'failed'
             GROUP BY bucket, group_name
-            ORDER BY bucket, group_name;
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(TRACE_FILTERED_PREFIX);
 
     private static final String GET_SPAN_FEEDBACK_SCORES = """
@@ -884,7 +892,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     nullIf(avg(value), 0) AS value
             FROM span_feedback_scores
             GROUP BY group_name, bucket
-            ORDER BY group_name, bucket;
+            ORDER BY group_name, bucket
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
     private static final String GET_SPAN_DURATION = """
@@ -931,7 +940,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
               FROM spans_filtered s
               GROUP BY bucket, group_name
             )
-            ORDER BY bucket, group_name;
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
     private static final String GET_SPAN_COUNT = """
@@ -955,7 +965,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                    nullIf(count(DISTINCT id), 0) as count
             FROM spans_filtered s
             GROUP BY bucket, group_name
-            ORDER BY bucket, group_name;
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
     private static final String GET_SPAN_TOKEN_USAGE = """
@@ -996,7 +1007,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     nullIf(sum(value), 0) AS value
             FROM spans_usage
             GROUP BY group_name, bucket
-            ORDER BY group_name, bucket;
+            ORDER BY group_name, bucket
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(SPAN_FILTERED_PREFIX);
 
     private static final String GET_THREAD_FEEDBACK_SCORES = """
@@ -1047,7 +1059,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                     nullIf(avg(value), 0) AS value
             FROM thread_feedback_scores
             GROUP BY bucket, group_name
-            ORDER BY bucket, group_name;
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_TOTAL_COST = """
@@ -1123,7 +1136,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                    nullIf(count(DISTINCT id), 0) as count
             FROM threads_filtered t
             GROUP BY bucket, group_name
-            ORDER BY bucket, group_name;
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
 
     private static final String GET_THREAD_DURATION = """
@@ -1170,8 +1184,25 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
               FROM threads_filtered t
               GROUP BY bucket, group_name
             )
-            ORDER BY bucket, group_name;
+            ORDER BY bucket, group_name
+            SETTINGS log_comment = '<log_comment>';
             """.formatted(THREAD_FILTERED_PREFIX);
+
+    private static final String GET_PROJECT_TOKEN_USAGE_NAMES = """
+            SELECT DISTINCT name
+            FROM (
+                SELECT
+                    usage
+                FROM spans final
+                WHERE project_id = :project_id
+                AND workspace_id = :workspace_id
+            )
+            ARRAY JOIN
+                mapKeys(usage) AS name,
+                mapValues(usage) AS value
+            WHERE value > 0
+            SETTINGS log_comment = '<log_comment>';
+            """;
 
     @Override
     public Mono<List<Entry>> getDuration(@NonNull UUID projectId, @NonNull ProjectMetricRequest request) {
@@ -1641,5 +1672,24 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
     private String intervalToSql(TimeInterval interval) {
         return Optional.ofNullable(INTERVAL_TO_SQL.get(interval))
                 .orElseThrow(() -> new IllegalArgumentException("Invalid interval: " + interval));
+    }
+
+    @Override
+    public Mono<List<String>> getProjectTokenUsageNames(@NonNull UUID projectId) {
+        return template.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var stTemplate = getSTWithLogComment(GET_PROJECT_TOKEN_USAGE_NAMES, "getProjectTokenUsageNames",
+                    workspaceId, projectId.toString());
+
+            var statement = connection.createStatement(stTemplate.render())
+                    .bind("project_id", projectId)
+                    .bind("workspace_id", workspaceId);
+
+            InstrumentAsyncUtils.Segment segment = startSegment("getProjectTokenUsageNames", "Clickhouse", "get");
+
+            return Mono.from(statement.execute())
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("name", String.class)))
+                    .collectList()
+                    .doFinally(signalType -> endSegment(segment));
+        }));
     }
 }
