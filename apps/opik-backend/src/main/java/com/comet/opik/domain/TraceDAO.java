@@ -333,7 +333,27 @@ class TraceDAOImpl implements TraceDAO {
     // Format: if span_id exists, use 'author_spanId', otherwise use 'author'.
     // The tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
     private static final String SELECT_BY_IDS = """
-            WITH feedback_scores_combined_raw AS (
+            WITH attachment_counts AS (
+                SELECT
+                    entity_id,
+                    COUNT(*) AS attachment_count
+                FROM attachments
+                WHERE workspace_id = :workspace_id
+                AND (
+                    (entity_id IN :ids AND entity_type = 'trace')
+                    OR (entity_id IN (SELECT id FROM spans WHERE workspace_id = :workspace_id AND trace_id IN :ids) AND entity_type = 'span')
+                )
+                GROUP BY entity_id, entity_type
+            ), trace_attachment_counts AS (
+                SELECT
+                    CASE
+                        WHEN entity_type = 'trace' THEN entity_id
+                        ELSE (SELECT trace_id FROM spans WHERE id = entity_id AND workspace_id = :workspace_id LIMIT 1)
+                    END AS trace_id,
+                    SUM(attachment_count) AS total_attachment_count
+                FROM attachment_counts
+                GROUP BY trace_id
+            ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -593,7 +613,8 @@ class TraceDAOImpl implements TraceDAO {
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores_list) as feedback_scores_list,
                 any(sfs.span_feedback_scores_list) as span_feedback_scores_list,
-                any(gr.guardrails) as guardrails_validations
+                any(gr.guardrails) as guardrails_validations,
+                coalesce(a.total_attachment_count, 0) as attachment_count
             FROM (
                 SELECT
                     *,
@@ -706,8 +727,9 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
             ) AS gr ON t.id = gr.entity_id
+            LEFT JOIN trace_attachment_counts a ON t.id = a.trace_id
             GROUP BY
-                t.*
+                t.*, a.total_attachment_count
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -723,7 +745,27 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH feedback_scores_combined_raw AS (
+            WITH attachment_counts AS (
+                SELECT
+                    entity_id,
+                    entity_type,
+                    COUNT(*) AS attachment_count
+                FROM attachments
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                GROUP BY entity_id, entity_type
+            ), trace_attachment_counts AS (
+                SELECT
+                    CASE
+                        WHEN entity_type = 'trace' THEN entity_id
+                        ELSE (SELECT trace_id FROM spans WHERE id = entity_id AND workspace_id = :workspace_id LIMIT 1)
+                    END AS trace_id,
+                    SUM(attachment_count) AS total_attachment_count
+                FROM attachment_counts
+                GROUP BY trace_id
+            ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -2812,6 +2854,8 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
+                .attachmentCount(
+                        getValue(exclude, Trace.TraceField.ATTACHMENT_COUNT, row, "attachment_count", Integer.class))
                 .build();
     }
 
