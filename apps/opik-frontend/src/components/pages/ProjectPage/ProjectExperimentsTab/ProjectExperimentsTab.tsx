@@ -7,6 +7,7 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
+import get from "lodash/get";
 import isObject from "lodash/isObject";
 
 import Loader from "@/components/shared/Loader/Loader";
@@ -33,6 +34,7 @@ import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
+import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import useAppStore from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
@@ -225,6 +227,22 @@ const ProjectExperimentsTab: React.FC<ProjectExperimentsTabProps> = ({
         customMeta: {
           aggregationKey: "duration.p99",
         },
+      },
+      {
+        id: "prompt",
+        label: "Prompt commit",
+        type: COLUMN_TYPE.list,
+        accessorFn: (row) => get(row, ["prompt_versions"], []),
+        cell: MultiResourceCell as never,
+        customMeta: {
+          nameKey: "commit",
+          idKey: "prompt_id",
+          resource: RESOURCE_TYPE.prompt,
+          getSearch: (data: GroupedExperiment) => ({
+            activeVersionId: get(data, "id", null),
+          }),
+        },
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
       },
       {
         id: "trace_count",
