@@ -197,7 +197,7 @@ class ExperimentsResourceTest {
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments", "projectId"};
+            "lastUpdatedBy", "comments", "projectId", "projectName"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -1784,6 +1784,65 @@ class ExperimentsResourceTest {
                     false, null, null, false, null, null, false, apiKey, workspaceName, HttpStatus.SC_OK);
 
             assertThat(responseAll.content()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("when getting experiments with project, then projectName is returned")
+        void getExperiments_whenExperimentHasProject_thenProjectNameReturned() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a project
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Create a dataset for the experiment
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            // Create an experiment
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetId(dataset.id())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Create a trace linked to the project
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), apiKey, workspaceName);
+
+            // Create experiment item linking experiment to trace
+            var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .traceId(trace.id())
+                    .build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Wait for ClickHouse to process the trace-experiment relationship
+            Awaitility.await().pollInterval(500, TimeUnit.MILLISECONDS).untilAsserted(() -> {
+                var retrievedExperiment = getExperiment(experimentId, workspaceName, apiKey);
+                assertThat(retrievedExperiment).isNotNull();
+                assertThat(retrievedExperiment.projectId())
+                        .as("projectId should be set from trace")
+                        .isEqualTo(projectId);
+                assertThat(retrievedExperiment.projectName())
+                        .as("projectName should be enriched from projectId")
+                        .isEqualTo(project.name());
+            });
+
+            // Also verify when finding experiments
+            var response = experimentResourceClient.findExperiments(
+                    1, 10, null, null, Set.of(ExperimentType.REGULAR), null,
+                    false, null, null, false, null, null, false, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertThat(response.content()).hasSize(1);
+            var foundExperiment = response.content().get(0);
+            assertThat(foundExperiment.projectId()).isEqualTo(projectId);
+            assertThat(foundExperiment.projectName()).isEqualTo(project.name());
         }
 
         @Test
