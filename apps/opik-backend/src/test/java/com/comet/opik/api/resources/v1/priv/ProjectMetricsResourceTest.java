@@ -2728,17 +2728,17 @@ class ProjectMetricsResourceTest {
             List<BigDecimal> durationsCurrent = createSpansWithDuration(projectName, marker);
 
             var durationMinus3 = Map.of(
-                    "duration.p50", durationsMinus3.get(0),
-                    "duration.p90", durationsMinus3.get(1),
-                    "duration.p99", durationsMinus3.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsMinus3.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsMinus3.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsMinus3.getLast());
             var durationMinus1 = Map.of(
-                    "duration.p50", durationsMinus1.get(0),
-                    "duration.p90", durationsMinus1.get(1),
-                    "duration.p99", durationsMinus1.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsMinus1.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsMinus1.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    "duration.p50", durationsCurrent.get(0),
-                    "duration.p90", durationsCurrent.get(1),
-                    "duration.p99", durationsCurrent.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsCurrent.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsCurrent.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsCurrent.getLast());
 
             getMetricsAndAssert(
                     projectId,
@@ -2749,7 +2749,9 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of("duration.p50", "duration.p90", "duration.p99"),
+                    List.of(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99),
                     BigDecimal.class,
                     durationMinus3,
                     durationMinus1,
@@ -2799,25 +2801,26 @@ class ProjectMetricsResourceTest {
             List<BigDecimal> durationsAllSpans = calculateQuantiles(spans);
 
             var durationFirstSpan = Map.of(
-                    "duration.p50", durationsFirstSpan.get(0),
-                    "duration.p90", durationsFirstSpan.get(1),
-                    "duration.p99", durationsFirstSpan.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsFirstSpan.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsFirstSpan.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsFirstSpan.getLast());
             var durationOtherSpans = Map.of(
-                    "duration.p50", durationsOtherSpans.get(0),
-                    "duration.p90", durationsOtherSpans.get(1),
-                    "duration.p99", durationsOtherSpans.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsOtherSpans.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsOtherSpans.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99,
+                    durationsOtherSpans.getLast());
             var durationAllSpans = Map.of(
-                    "duration.p50", durationsAllSpans.get(0),
-                    "duration.p90", durationsAllSpans.get(1),
-                    "duration.p99", durationsAllSpans.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsAllSpans.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsAllSpans.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsAllSpans.getLast());
             var durationMinus1 = Map.of(
-                    "duration.p50", durationsMinus1.get(0),
-                    "duration.p90", durationsMinus1.get(1),
-                    "duration.p99", durationsMinus1.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsMinus1.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsMinus1.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    "duration.p50", durationsCurrent.get(0),
-                    "duration.p90", durationsCurrent.get(1),
-                    "duration.p99", durationsCurrent.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsCurrent.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsCurrent.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsCurrent.getLast());
 
             var expectedValues = Arrays.asList(
                     durationFirstSpan, // 0: first span only
@@ -2837,7 +2840,9 @@ class ProjectMetricsResourceTest {
                             .spanFilters(List.of(getFilter.apply(spans.getFirst())))
                             .build(),
                     marker,
-                    List.of("duration.p50", "duration.p90", "duration.p99"),
+                    List.of(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99),
                     BigDecimal.class,
                     expectedValues.get(expectedIndexes.get(0)),
                     expectedValues.get(expectedIndexes.get(1)),
@@ -2860,9 +2865,9 @@ class ProjectMetricsResourceTest {
 
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
-                    put("duration.p50", null);
-                    put("duration.p90", null);
-                    put("duration.p99", null);
+                    put(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, null);
+                    put(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, null);
+                    put(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, null);
                 }
             };
 
@@ -2875,7 +2880,9 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of("duration.p50", "duration.p90", "duration.p99"),
+                    List.of(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99),
                     BigDecimal.class,
                     empty,
                     empty,

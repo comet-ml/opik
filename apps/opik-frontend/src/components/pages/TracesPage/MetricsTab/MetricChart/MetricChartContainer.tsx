@@ -24,6 +24,8 @@ import { Filter } from "@/types/filters";
 import { CHART_TYPE } from "@/constants/chart";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
+import { BreakdownConfig } from "@/types/dashboard";
+import { BREAKDOWN_GROUP_NAMES } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
 
 const MAX_DECIMAL_PLACES = 4;
 
@@ -52,6 +54,7 @@ interface MetricContainerChartProps {
   spanFilters?: Filter[];
   filterLineCallback?: (lineName: string) => boolean;
   chartOnly?: boolean;
+  breakdown?: BreakdownConfig;
 }
 
 const predefinedColorMap = {
@@ -89,8 +92,9 @@ const MetricContainerChart = ({
   spanFilters,
   filterLineCallback,
   chartOnly = false,
+  breakdown,
 }: MetricContainerChartProps) => {
-  const { data: traces, isPending } = useProjectMetric(
+  const { data: response, isPending } = useProjectMetric(
     {
       projectId,
       metricName,
@@ -100,6 +104,7 @@ const MetricContainerChart = ({
       traceFilters,
       threadFilters,
       spanFilters,
+      breakdown,
     },
     {
       enabled: !!projectId,
@@ -107,12 +112,14 @@ const MetricContainerChart = ({
     },
   );
 
+  const traces = response?.results;
+
   const [data, lines] = useMemo(() => {
     if (!traces?.filter((trace) => !!trace.name).length) {
       return [[], []];
     }
 
-    const lines: string[] = [];
+    const linesList: string[] = [];
 
     // collect all unique time values from all traces
     const sortedTimeValues = Array.from(
@@ -133,18 +140,23 @@ const MetricContainerChart = ({
         : true;
 
       if (shouldInclude) {
-        lines.push(trace.name);
+        // Use display_name if available (for "Others" group), otherwise use name
+        const displayName =
+          trace.name === BREAKDOWN_GROUP_NAMES.OTHERS
+            ? BREAKDOWN_GROUP_NAMES.OTHERS_DISPLAY
+            : trace.name;
+        linesList.push(displayName);
 
         trace.data?.forEach((d) => {
           const index = timeToIndexMap.get(d.time);
           if (index !== undefined && transformedData[index]) {
-            transformedData[index][trace.name] = d.value;
+            transformedData[index][displayName] = d.value;
           }
         });
       }
     });
 
-    return [transformedData, lines.sort()];
+    return [transformedData, linesList];
   }, [traces, filterLineCallback]);
 
   const noData = useMemo(() => {
@@ -155,6 +167,7 @@ const MetricContainerChart = ({
   }, [data, lines, isPending]);
 
   const config = useMemo(() => {
+    // Use predefined colors for non-breakdown charts (legacy behavior)
     return getDefaultHashedColorsChartConfig(
       lines,
       labelsMap,

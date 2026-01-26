@@ -4,6 +4,7 @@ import { TRACE_DATA_TYPE } from "@/constants/traces";
 import { Groups } from "@/types/groups";
 import { CHART_TYPE } from "@/constants/chart";
 import { Sorting } from "@/types/sorting";
+import { BREAKDOWN_FIELD } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
 
 export enum WIDGET_TYPE {
   PROJECT_METRICS = "project_metrics",
@@ -35,6 +36,12 @@ export enum TEMPLATE_SCOPE {
   EXPERIMENTS = "experiments",
 }
 
+export interface BreakdownConfig {
+  field: BREAKDOWN_FIELD;
+  metadataKey?: string;
+  subMetric?: string;
+}
+
 export interface ProjectMetricsWidget {
   type: WIDGET_TYPE.PROJECT_METRICS;
   config: {
@@ -45,6 +52,9 @@ export interface ProjectMetricsWidget {
     threadFilters?: Filters;
     spanFilters?: Filters;
     feedbackScores?: string[];
+    durationMetrics?: string[];
+    usageMetrics?: string[];
+    breakdown?: BreakdownConfig;
     overrideDefaults?: boolean;
   } & Record<string, unknown>;
 }

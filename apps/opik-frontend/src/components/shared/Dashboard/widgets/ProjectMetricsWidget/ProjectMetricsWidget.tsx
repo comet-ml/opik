@@ -7,7 +7,10 @@ import {
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
 import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
-import { DashboardWidgetComponentProps } from "@/types/dashboard";
+import {
+  DashboardWidgetComponentProps,
+  BreakdownConfig,
+} from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
 import MetricContainerChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer";
@@ -23,6 +26,7 @@ import {
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
+import { BREAKDOWN_FIELD } from "./breakdown";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
@@ -105,19 +109,134 @@ const ProjectMetricsWidget: React.FunctionComponent<
     metricName === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
   const feedbackScores = widget?.config?.feedbackScores as string[] | undefined;
+  const durationMetrics = widget?.config?.durationMetrics as
+    | string[]
+    | undefined;
+  const usageMetrics = widget?.config?.usageMetrics as string[] | undefined;
+  const breakdown = widget?.config?.breakdown as BreakdownConfig | undefined;
+
+  // Check if this is a feedback score metric
+  const isFeedbackScoreMetric =
+    metricName === METRIC_NAME_TYPE.FEEDBACK_SCORES ||
+    metricName === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES ||
+    metricName === METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES;
+
+  // Check if this is a token usage metric
+  const isTokenUsageMetric =
+    metricName === METRIC_NAME_TYPE.TOKEN_USAGE ||
+    metricName === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
+
+  // Only pass breakdown if it's enabled (field is not NONE)
+  // Also skip if METADATA is selected but no metadataKey is provided
+  // For feedback score metrics, we need exactly one metric selected to add it as subMetric
+  // For duration metrics, we need exactly one percentile selected to add it as subMetric
+  const effectiveBreakdown = useMemo(() => {
+    if (!breakdown || breakdown.field === BREAKDOWN_FIELD.NONE) {
+      return undefined;
+    }
+
+    // Check if METADATA field without metadataKey
+    if (
+      breakdown.field === BREAKDOWN_FIELD.METADATA &&
+      (!breakdown.metadataKey || breakdown.metadataKey.trim() === "")
+    ) {
+      return undefined;
+    }
+
+    // For feedback score metrics, include the selected metric name as subMetric
+    if (
+      isFeedbackScoreMetric &&
+      feedbackScores &&
+      feedbackScores.length === 1
+    ) {
+      return {
+        ...breakdown,
+        subMetric: feedbackScores[0],
+      };
+    }
+
+    // For feedback score metrics without exactly one metric selected, don't apply breakdown
+    if (isFeedbackScoreMetric) {
+      return undefined;
+    }
+
+    // For duration metrics, include the selected percentile as subMetric
+    if (isDurationMetric && durationMetrics && durationMetrics.length === 1) {
+      return {
+        ...breakdown,
+        subMetric: durationMetrics[0],
+      };
+    }
+
+    // For duration metrics without exactly one percentile selected, don't apply breakdown
+    if (isDurationMetric) {
+      return undefined;
+    }
+
+    // For token usage metrics, include the selected usage key as subMetric
+    if (isTokenUsageMetric && usageMetrics && usageMetrics.length === 1) {
+      return {
+        ...breakdown,
+        subMetric: usageMetrics[0],
+      };
+    }
+
+    // For token usage metrics without exactly one metric selected, don't apply breakdown
+    if (isTokenUsageMetric) {
+      return undefined;
+    }
+
+    return breakdown;
+  }, [
+    breakdown,
+    isFeedbackScoreMetric,
+    feedbackScores,
+    isDurationMetric,
+    durationMetrics,
+    isTokenUsageMetric,
+    usageMetrics,
+  ]);
 
   const filterLineCallback = useCallback(
     (lineName: string) => {
-      if (
-        metricName !== METRIC_NAME_TYPE.FEEDBACK_SCORES &&
-        metricName !== METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES &&
-        metricName !== METRIC_NAME_TYPE.SPAN_FEEDBACK_SCORES
-      )
+      // When breakdown is applied, the line names are group names (e.g., tag values),
+      // not feedback score names, duration percentile names, or usage key names, so we shouldn't filter them
+      if (effectiveBreakdown) {
         return true;
-      if (!feedbackScores || feedbackScores.length === 0) return true;
-      return feedbackScores.includes(lineName);
+      }
+
+      // Filter for feedback score metrics
+      if (isFeedbackScoreMetric) {
+        if (!feedbackScores || feedbackScores.length === 0) return true;
+        return feedbackScores.includes(lineName);
+      }
+
+      // Filter for duration metrics (p50, p90, p99)
+      if (isDurationMetric) {
+        if (!durationMetrics || durationMetrics.length === 0) return true;
+        // Line names are like "duration.p50", "duration.p90", etc.
+        // We need to check if the percentile part matches
+        const percentile = lineName.split(".").pop();
+        return percentile ? durationMetrics.includes(percentile) : true;
+      }
+
+      // Filter for token usage metrics (completion_tokens, prompt_tokens, total_tokens)
+      if (isTokenUsageMetric) {
+        if (!usageMetrics || usageMetrics.length === 0) return true;
+        return usageMetrics.includes(lineName);
+      }
+
+      return true;
     },
-    [feedbackScores, metricName],
+    [
+      feedbackScores,
+      durationMetrics,
+      usageMetrics,
+      isFeedbackScoreMetric,
+      isDurationMetric,
+      isTokenUsageMetric,
+      effectiveBreakdown,
+    ],
   );
 
   if (!widget) {
@@ -183,6 +302,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           threadFilters={validThreadFilters}
           spanFilters={validSpanFilters}
           filterLineCallback={filterLineCallback}
+          breakdown={effectiveBreakdown}
           renderValue={
             isCostMetric
               ? renderCostTooltipValue
