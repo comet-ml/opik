@@ -3,13 +3,14 @@
 from abc import ABC
 from typing import Any, TYPE_CHECKING
 import json
-import os
 import copy
 
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
-from opik.opik_context import update_current_trace
+from opik import opik_context
+from opik.integrations.litellm import track_completion
 from ..constants import resolve_project_name, tool_call_max_iterations
+from ..utils.opik_env import set_project_name_env
 from ..utils import throttle as _throttle
 from ..utils.logging import debug_tool_call
 
@@ -93,11 +94,7 @@ class OptimizableAgent(ABC):
 
     def init_llm(self) -> None:
         """Initialize the LLM with the appropriate callbacks."""
-        # FIXME: Setting global os.environ is problematic in multi-threaded scenarios.
-        # Consider using thread-local storage or passing project_name through call context instead.
-        # Litellm bug requires this (maybe problematic if multi-threaded)
-        if "OPIK_PROJECT_NAME" not in os.environ:
-            os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
+        set_project_name_env(self.project_name)
         # FIXME: Setting global litellm.callbacks can cause issues with multiple agents.
         # Consider using per-instance callbacks or a callback registry.
         self.opik_logger = OpikLogger()
@@ -125,13 +122,13 @@ class OptimizableAgent(ABC):
         seed: int | None = None,
         model_kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        """Make an LLM completion call with rate limiting."""
+        """Make an LLM completion call with rate limiting and Opik tracing."""
         # Use provided model/kwargs or fall back to instance attributes
         effective_model = model if model is not None else self.model
         effective_kwargs = (
             model_kwargs if model_kwargs is not None else self.model_kwargs
         )
-        response = litellm.completion(
+        response = track_completion()(litellm.completion)(
             model=effective_model,
             messages=messages,
             seed=seed,
@@ -182,7 +179,7 @@ class OptimizableAgent(ABC):
 
         # Push trace metadata for better visibility (tools/LLM logs in Opik)
         try:
-            update_current_trace(metadata=self.trace_metadata)
+            opik_context.update_current_trace(metadata=self.trace_metadata)
         except Exception:
             pass
 

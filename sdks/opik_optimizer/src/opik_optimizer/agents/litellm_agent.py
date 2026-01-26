@@ -9,15 +9,16 @@ owning optimizer for telemetry and budgeting.
 from ..api_objects import chat_prompt
 from ..core import llm_calls as _llm_calls
 from ..utils import throttle as _throttle
-import os
 from typing import Any
 import json
 import logging
+import os
 from opik import opik_context
 import litellm
 from opik.integrations.litellm import track_completion
 from . import optimizable_agent
 from ..constants import resolve_project_name
+from ..utils.opik_env import set_project_name_env
 from ..utils.logging import debug_tool_call
 from ..constants import tool_call_max_iterations
 from ..utils.candidate_selection import extract_choice_logprob
@@ -45,9 +46,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
 
     def init_llm(self) -> None:
         """Initialize the LLM with the appropriate callbacks."""
-        # Litellm bug requires this (maybe problematic if multi-threaded)
-        if "OPIK_PROJECT_NAME" not in os.environ:
-            os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
+        set_project_name_env(self.project_name)
 
         # Attach default metadata; subclasses may override per-run via start_bundle_trace.
         self.trace_metadata = {"project_name": self.project_name}
