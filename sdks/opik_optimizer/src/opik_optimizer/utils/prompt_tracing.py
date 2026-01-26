@@ -231,6 +231,10 @@ def _update_trace(
     prompts: Iterable[Any] | None = None,
 ) -> None:
     """Best-effort update of current trace with metadata/prompts."""
+    trace_data = opik_context.get_current_trace_data()
+    if trace_data is None:
+        logger.debug("Skipping trace update; no active trace in context.")
+        return
     try:
         if prompts:
             if metadata is not None:
@@ -254,6 +258,10 @@ def _update_span(
     prompts: Iterable[Any] | None = None,
 ) -> None:
     """Best-effort update of current span with metadata/prompts."""
+    span_data = opik_context.get_current_span_data()
+    if span_data is None:
+        logger.debug("Skipping span update; no active span in context.")
+        return
     try:
         if prompts:
             if metadata is not None:

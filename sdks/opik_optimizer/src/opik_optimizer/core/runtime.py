@@ -208,6 +208,7 @@ def _record_fallback_history(
         prompt_or_payload=result_prompt,
         score=score,
         id="fallback",
+        context=context,
     )
     optimizer.post_trial(
         context,
@@ -259,6 +260,7 @@ def record_and_post_trial(
         metrics=metrics,
         notes=notes,
         extra=extra,
+        context=context,
     )
     if post_metrics is _INHERIT:
         resolved_metrics: dict[str, Any] | None = entry.get("metrics")
@@ -423,6 +425,7 @@ def record_baseline_history(
         prompt_or_payload=prompt,
         score=score,
         id="baseline",
+        context=context,
     )
     optimizer.post_trial(
         context,

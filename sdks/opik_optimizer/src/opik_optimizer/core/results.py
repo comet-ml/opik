@@ -207,7 +207,19 @@ class OptimizationHistoryState:
     def _normalize_candidate_payload(candidate: Any) -> Any:
         if candidate is None:
             return None
-        if isinstance(candidate, (chat_prompt.ChatPrompt, dict)):
+        # Normalize prompts to messages format to match baseline evaluation format
+        # Always use dict format: {prompt_name: messages}
+        if isinstance(candidate, chat_prompt.ChatPrompt):
+            # Single prompt: normalize to dict format with prompt name as key
+            prompt_name = getattr(candidate, "name", "prompt")
+            return {prompt_name: candidate.get_messages()}
+        if isinstance(candidate, dict):
+            # Check if it's a dict of ChatPrompts
+            first_value = next(iter(candidate.values())) if candidate else None
+            if isinstance(first_value, chat_prompt.ChatPrompt):
+                # Multi-prompt: normalize to dict[str, list[dict]]
+                return {k: p.get_messages() for k, p in candidate.items()}
+            # Otherwise, keep as-is (already a dict, not ChatPrompts)
             return candidate
         return {"value": candidate}
 
@@ -667,8 +679,28 @@ def build_candidate_entry(
         notes: Optional free-text notes.
         extra: Optional extra metadata (lineage, params, components, etc.).
     """
+    # Normalize prompts to messages format to match baseline evaluation format
+    # Single ChatPrompt -> dict[str, list[dict]] (wrap in dict with prompt name)
+    # Dict of ChatPrompts -> dict[str, list[dict]] (prompt_name -> messages)
+    normalized_candidate = prompt_or_payload
+    if isinstance(prompt_or_payload, chat_prompt.ChatPrompt):
+        # Single prompt: normalize to dict format with prompt name as key
+        prompt_name = getattr(prompt_or_payload, "name", "prompt")
+        normalized_candidate = {prompt_name: prompt_or_payload.get_messages()}
+    elif isinstance(prompt_or_payload, dict):
+        # Check if it's a dict of ChatPrompts
+        first_value = (
+            next(iter(prompt_or_payload.values())) if prompt_or_payload else None
+        )
+        if isinstance(first_value, chat_prompt.ChatPrompt):
+            # Multi-prompt: normalize to dict[str, list[dict]]
+            normalized_candidate = {
+                k: p.get_messages() for k, p in prompt_or_payload.items()
+            }
+        # Otherwise, keep as-is (already a dict, not ChatPrompts)
+
     return OptimizerCandidate(
-        candidate=prompt_or_payload,
+        candidate=normalized_candidate,
         id=id,
         score=score,
         metrics=metrics,

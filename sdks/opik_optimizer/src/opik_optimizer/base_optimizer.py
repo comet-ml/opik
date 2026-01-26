@@ -1546,6 +1546,7 @@ class BaseOptimizer(ABC):
         metrics: dict[str, Any] | None = None,
         notes: str | None = None,
         extra: dict[str, Any] | None = None,
+        context: OptimizationContext | None = None,
     ) -> dict[str, Any]:
         """Normalize and cache a candidate entry for reuse in trial/round logging."""
         entry = build_candidate_entry(

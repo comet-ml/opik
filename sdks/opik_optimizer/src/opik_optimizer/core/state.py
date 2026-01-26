@@ -181,9 +181,10 @@ def prepare_experiment_config(
 ) -> dict[str, Any]:
     project_name = optimizer.project_name
 
-    prompt_messages: list[dict[str, Any]] | dict[str, list[dict[str, Any]]]
-    prompt_name: str | None | dict[str, str | None]
-    prompt_project_name: str | None | dict[str, str | None]
+    # Always use dict format for consistency with candidate logging
+    prompt_messages: dict[str, list[dict[str, Any]]]
+    prompt_name: dict[str, str | None]
+    prompt_project_name: dict[str, str | None]
 
     if isinstance(prompt, dict):
         first_prompt = next(iter(prompt.values()))
@@ -192,17 +193,13 @@ def prepare_experiment_config(
         )
         tool_signatures = summarize_tool_signatures(first_prompt)
 
-        if is_single_prompt_optimization:
-            prompt_messages = first_prompt.get_messages()
-            prompt_name = getattr(first_prompt, "name", None)
-            prompt_project_name = getattr(first_prompt, "project_name", None)
-        else:
-            prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
-            prompt_messages = {k: p.get_messages() for k, p in prompt_dict.items()}
-            prompt_name = {k: getattr(p, "name", None) for k, p in prompt_dict.items()}
-            prompt_project_name = {
-                k: getattr(p, "project_name", None) for k, p in prompt_dict.items()
-            }
+        # Always use dict format for consistency with candidate logging
+        prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+        prompt_messages = {k: p.get_messages() for k, p in prompt_dict.items()}
+        prompt_name = {k: getattr(p, "name", None) for k, p in prompt_dict.items()}
+        prompt_project_name = {
+            k: getattr(p, "project_name", None) for k, p in prompt_dict.items()
+        }
 
         tools = serialize_tools(first_prompt)
     else:
@@ -210,10 +207,12 @@ def prepare_experiment_config(
             optimizer=optimizer, prompt=prompt
         )
         tool_signatures = summarize_tool_signatures(prompt)
-        prompt_messages = prompt.get_messages()
-        prompt_name = getattr(prompt, "name", None)
+        # Always use dict format for consistency with candidate logging
+        prompt_name_attr = getattr(prompt, "name", "prompt")
+        prompt_messages = {prompt_name_attr: prompt.get_messages()}
+        prompt_name = {prompt_name_attr: getattr(prompt, "name", None)}
         tools = serialize_tools(prompt)
-        prompt_project_name = getattr(prompt, "project_name", None)
+        prompt_project_name = {prompt_name_attr: getattr(prompt, "project_name", None)}
 
     base_config: dict[str, Any] = {
         "project_name": project_name,
