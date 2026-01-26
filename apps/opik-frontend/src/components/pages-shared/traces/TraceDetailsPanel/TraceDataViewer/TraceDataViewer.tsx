@@ -75,7 +75,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
 
   const hasPrompts = useMemo(() => {
-    const prompts = get(data.metadata, "opik_prompts", null);
+    const prompts = (data.metadata as Record<string, unknown>)?.opik_prompts;
     return Array.isArray(prompts) && prompts.length > 0;
   }, [data.metadata]);
 
