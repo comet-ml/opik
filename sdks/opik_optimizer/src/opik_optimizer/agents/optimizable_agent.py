@@ -3,15 +3,17 @@
 from abc import ABC
 from typing import Any, TYPE_CHECKING
 import json
-import os
 import copy
 
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
-from opik.opik_context import update_current_trace
+from opik import opik_context
+from opik.integrations.litellm import track_completion
 from ..constants import resolve_project_name, tool_call_max_iterations
+from ..utils.opik_env import set_project_name_env
 from ..utils import throttle as _throttle
 from ..utils.logging import debug_tool_call
+from ..utils import prompt_tracing
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -93,11 +95,7 @@ class OptimizableAgent(ABC):
 
     def init_llm(self) -> None:
         """Initialize the LLM with the appropriate callbacks."""
-        # FIXME: Setting global os.environ is problematic in multi-threaded scenarios.
-        # Consider using thread-local storage or passing project_name through call context instead.
-        # Litellm bug requires this (maybe problematic if multi-threaded)
-        if "OPIK_PROJECT_NAME" not in os.environ:
-            os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
+        set_project_name_env(self.project_name)
         # FIXME: Setting global litellm.callbacks can cause issues with multiple agents.
         # Consider using per-instance callbacks or a callback registry.
         self.opik_logger = OpikLogger()
@@ -125,17 +123,25 @@ class OptimizableAgent(ABC):
         seed: int | None = None,
         model_kwargs: dict[str, Any] | None = None,
     ) -> Any:
-        """Make an LLM completion call with rate limiting."""
+        """Make an LLM completion call with rate limiting and Opik tracing."""
         # Use provided model/kwargs or fall back to instance attributes
         effective_model = model if model is not None else self.model
         effective_kwargs = (
             model_kwargs if model_kwargs is not None else self.model_kwargs
         )
-        response = litellm.completion(
+        opik_metadata: dict[str, Any] = {
+            "current_span_data": opik_context.get_current_span_data()
+        }
+        if self.project_name:
+            opik_metadata["project_name"] = self.project_name
+        response = track_completion()(litellm.completion)(
             model=effective_model,
             messages=messages,
             seed=seed,
             tools=tools,
+            metadata={
+                "opik": opik_metadata,
+            },
             **effective_kwargs,
         )
         return response
@@ -165,13 +171,35 @@ class OptimizableAgent(ABC):
         Returns:
             str: The LLM's response
         """
-        all_messages = []
+        all_messages = self._build_messages(query, messages)
+        self._attach_prompt_span(all_messages)
+        self._tag_optimizer_trace()
+        self._push_trace_metadata()
+
+        if allow_tool_use and self.prompt and self.prompt.tools:
+            return self._invoke_with_tools(all_messages, seed)
+        return self._invoke_without_tools(all_messages, seed)
+
+    def _build_messages(
+        self,
+        query: str | None,
+        messages: list[dict[str, str]] | None,
+        *,
+        prompt: "chat_prompt.ChatPrompt | None" = None,
+        dataset_item: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        all_messages: list[dict[str, str]] = []
         if messages is not None:
             all_messages.extend(messages)
-
         if query is not None:
             all_messages.append({"role": "user", "content": query})
+        return all_messages
 
+    def _attach_prompt_span(self, messages: list[dict[str, str]]) -> None:
+        if self.prompt is not None:
+            prompt_tracing.attach_span_prompt_payload(self.prompt)
+
+    def _tag_optimizer_trace(self) -> None:
         optimizer_ref = self.optimizer
         phase = self.trace_phase or "Prompt Optimization"
         if optimizer_ref is not None and hasattr(optimizer_ref, "_tag_trace"):
@@ -180,76 +208,98 @@ class OptimizableAgent(ABC):
             except Exception:
                 pass
 
+    def _push_trace_metadata(self) -> None:
+        """Push trace_metadata to opik_context for tool/LLM observability.
+
+        Expects a mapping of keys to optional values; only non-None entries are sent.
+        No-op when metadata is empty; runs during tracing after tagging.
+        """
         # Push trace metadata for better visibility (tools/LLM logs in Opik)
-        try:
-            update_current_trace(metadata=self.trace_metadata)
-        except Exception:
-            pass
+        if self.trace_metadata:
+            filtered_metadata = {
+                key: value
+                for key, value in self.trace_metadata.items()
+                if value is not None
+            }
+            if filtered_metadata:
+                opik_context.update_current_trace(metadata=filtered_metadata)
 
-        if allow_tool_use and self.prompt and self.prompt.tools:
-            # Tool-calling loop
-            final_response = "I was unable to find the desired information."
-            count = 0
-            # honour system-wide max tool call loop
-            max_iterations = tool_call_max_iterations()
-            while count < max_iterations:
-                count += 1
-                response = self._llm_complete(
-                    self.model, all_messages, self.prompt.tools, seed
-                )
-                optimizer_ref = self.optimizer
-                if optimizer_ref is not None and hasattr(
-                    optimizer_ref, "_increment_llm_counter"
-                ):
-                    optimizer_ref._increment_llm_counter()
-                msg = response.choices[0].message
-                all_messages.append(msg.to_dict())
-                if msg.tool_calls:
-                    for tool_call in msg["tool_calls"]:
-                        tool_name = tool_call["function"]["name"]
-                        arguments = json.loads(tool_call["function"]["arguments"])
+    def _invoke_with_tools(
+        self,
+        messages: list[dict[str, str]],
+        seed: int | None,
+    ) -> str:
+        prompt = self.prompt
+        if prompt is None:
+            raise ValueError("prompt must be set before tool-enabled invocation")
+        final_response = "I was unable to find the desired information."
+        count = 0
+        max_iterations = tool_call_max_iterations()
+        while count < max_iterations:
+            count += 1
+            response = self._llm_complete(self.model, messages, prompt.tools, seed)
+            self._increment_llm_counter()
+            msg = response.choices[0].message
+            messages.append(msg.to_dict())
+            if msg.tool_calls:
+                self._handle_tool_calls(msg["tool_calls"], messages)
+            else:
+                final_response = msg["content"]
+                break
+        return final_response
 
-                        tool_func = self.prompt.function_map.get(tool_name)
-                        try:
-                            tool_result = (
-                                tool_func(**arguments)
-                                if tool_func is not None
-                                else "Unknown tool"
-                            )
-                        except Exception:
-                            tool_result = f"Error in calling tool `{tool_name}`"
-                        all_messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call["id"],
-                                "content": str(tool_result),
-                            }
-                        )
-                        debug_tool_call(
-                            tool_name=tool_name,
-                            arguments=arguments,
-                            result=tool_result,
-                            tool_call_id=tool_call["id"],
-                        )
-                        # Increment tool call counter if we have access to the optimizer
-                        optimizer_ref = self.optimizer
-                        if optimizer_ref is not None and hasattr(
-                            optimizer_ref, "_increment_llm_call_tools_counter"
-                        ):
-                            optimizer_ref._increment_llm_call_tools_counter()
-                else:
-                    final_response = msg["content"]
-                    break
-            result = final_response
-        else:
-            response = self._llm_complete(self.model, all_messages, None, seed)
-            optimizer_ref = self.optimizer
-            if optimizer_ref is not None and hasattr(
-                optimizer_ref, "_increment_llm_counter"
-            ):
-                optimizer_ref._increment_llm_counter()
-            result = response.choices[0].message.content
-        return result
+    def _invoke_without_tools(
+        self,
+        messages: list[dict[str, str]],
+        seed: int | None,
+    ) -> str:
+        response = self._llm_complete(self.model, messages, None, seed)
+        self._increment_llm_counter()
+        return response.choices[0].message.content
+
+    def _handle_tool_calls(
+        self,
+        tool_calls: list[dict[str, Any]],
+        messages: list[dict[str, str]],
+    ) -> None:
+        prompt = self.prompt
+        if prompt is None:
+            raise ValueError("prompt must be set before handling tool calls")
+        for tool_call in tool_calls:
+            tool_name = tool_call["function"]["name"]
+            arguments = json.loads(tool_call["function"]["arguments"])
+            tool_func = prompt.function_map.get(tool_name)
+            tool_result = (
+                tool_func(**arguments) if tool_func is not None else "Unknown tool"
+            )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "content": str(tool_result),
+                }
+            )
+            debug_tool_call(
+                tool_name=tool_name,
+                arguments=arguments,
+                result=tool_result,
+                tool_call_id=tool_call["id"],
+            )
+            self._increment_llm_call_tools_counter()
+
+    def _increment_llm_counter(self) -> None:
+        optimizer_ref = self.optimizer
+        if optimizer_ref is not None and hasattr(
+            optimizer_ref, "_increment_llm_counter"
+        ):
+            optimizer_ref._increment_llm_counter()
+
+    def _increment_llm_call_tools_counter(self) -> None:
+        optimizer_ref = self.optimizer
+        if optimizer_ref is not None and hasattr(
+            optimizer_ref, "_increment_llm_call_tools_counter"
+        ):
+            optimizer_ref._increment_llm_call_tools_counter()
 
     # TODO: Deprecate this legacy method. Use invoke_agent() instead.
     def invoke_dataset_item(self, dataset_item: dict[str, str]) -> str:

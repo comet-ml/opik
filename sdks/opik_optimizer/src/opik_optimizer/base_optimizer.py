@@ -49,6 +49,8 @@ from .utils.prompt_library import PromptLibrary, PromptOverrides
 from .utils.candidate_selection import select_candidate
 from .utils import rng as rng_utils
 from .utils import sampling
+from .utils import prompt_tracing
+from .utils.prompt_roles import normalize_optimizable_roles
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -317,10 +319,7 @@ class BaseOptimizer(ABC):
         Returns:
             Tuple of (normalized_prompts_dict, is_single_prompt_optimization)
         """
-        # TODO: Remove this method in favour of auto-detection.
-        if isinstance(prompt, chat_prompt.ChatPrompt):
-            return {prompt.name: prompt}, True
-        return prompt, False
+        return prompt_tracing.normalize_prompt_input(prompt)
 
     def _create_optimization_run(
         self,
@@ -401,6 +400,7 @@ class BaseOptimizer(ABC):
         project_name: str | None = None,
         optimization_id: str | None = None,
         max_trials: int = 10,
+        optimize_prompt: bool | str | list[str] | None = "system",
         **extra_params: Any,
     ) -> OptimizationContext:
         # Normalize prompt input
@@ -476,6 +476,17 @@ class BaseOptimizer(ABC):
         )
         if not isinstance(resolved_strategy, str) or not resolved_strategy:
             resolved_strategy = constants.DEFAULT_N_SAMPLES_STRATEGY
+
+        optimizable_roles = normalize_optimizable_roles(optimize_prompt)
+        extra_params["optimizable_roles"] = optimizable_roles
+        self._optimizable_roles = optimizable_roles
+        if not optimizable_roles:
+            logger.warning(
+                "optimize_prompt resolved to no roles; prompt content will not be mutated."
+            )
+
+        if hasattr(self, "allow_user_prompt_optimization"):
+            setattr(self, "allow_user_prompt_optimization", "user" in optimizable_roles)
 
         # Return optimization context
         context = OptimizationContext(
@@ -596,6 +607,7 @@ class BaseOptimizer(ABC):
                 if context.should_stop:
                     break
         """
+        prompt_tracing.record_candidate_prompts(prompts)
         self.pre_trial(context, prompts)
         try:
             suppress_progress = bool(
@@ -663,6 +675,7 @@ class BaseOptimizer(ABC):
         sampling_tag: str | None = None,
     ) -> tuple[float, EvaluationResult | EvaluationResultOnDictItems]:
         """Evaluate prompts and return both the score and EvaluationResult."""
+        prompt_tracing.record_candidate_prompts(prompts)
         self.pre_trial(context, prompts)
         try:
             suppress_progress = bool(
@@ -1175,6 +1188,7 @@ class BaseOptimizer(ABC):
         validation_dataset: Dataset | None,
         max_trials: int,
         allow_tool_use: bool,
+        optimize_prompt: bool | str | list[str] | None,
         extra_kwargs: dict[str, Any],
     ) -> OptimizationContext:
         # Reset counters at the start of each optimization run
@@ -1196,6 +1210,7 @@ class BaseOptimizer(ABC):
             max_trials=max_trials,
             auto_continue=auto_continue,
             allow_tool_use=allow_tool_use,
+            optimize_prompt=optimize_prompt,
             **extra_kwargs,
         )
         debug_log(
@@ -1213,6 +1228,7 @@ class BaseOptimizer(ABC):
             self._history_builder.set_context(context)
 
         runtime.show_run_start(optimizer=self, context=context)
+        prompt_tracing.attach_initial_prompts(context.prompts)
 
         # Allow subclasses to perform pre-optimization setup (e.g., set self.agent)
         self.pre_optimize(context)
@@ -1301,6 +1317,7 @@ class BaseOptimizer(ABC):
         validation_dataset: Dataset | None,
         max_trials: int,
         allow_tool_use: bool,
+        optimize_prompt: bool | str | list[str] | None,
         extra_kwargs: dict[str, Any],
     ) -> dict[str, Any]:
         return {
@@ -1318,6 +1335,7 @@ class BaseOptimizer(ABC):
             "validation_dataset": validation_dataset,
             "max_trials": max_trials,
             "allow_tool_use": allow_tool_use,
+            "optimize_prompt": optimize_prompt,
             "extra_kwargs": extra_kwargs,
         }
 
@@ -1389,6 +1407,7 @@ class BaseOptimizer(ABC):
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
         allow_tool_use: bool = True,
+        optimize_prompt: bool | str | list[str] | None = "system",
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -1422,6 +1441,7 @@ class BaseOptimizer(ABC):
            validation_dataset: Optional validation dataset for ranking candidates
            max_trials: Maximum number of optimization trials
            allow_tool_use: Whether tools may be executed during evaluation (default True)
+           optimize_prompt: Which prompt roles to allow for optimization
            **kwargs: Additional arguments passed to _setup_optimization and _run_optimization
 
         Returns:
@@ -1443,6 +1463,7 @@ class BaseOptimizer(ABC):
                 validation_dataset=validation_dataset,
                 max_trials=max_trials,
                 allow_tool_use=allow_tool_use,
+                optimize_prompt=optimize_prompt,
                 extra_kwargs=kwargs,
             )
         )

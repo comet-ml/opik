@@ -67,7 +67,7 @@ def _truthful_custom_loader(
 
 TRUTHFUL_QA_SPEC = DatasetSpec(
     name="truthful_qa",
-    hf_path="truthful_qa",
+    hf_path="truthfulqa/truthful_qa",
     hf_name="generation",
     default_source_split="validation",
     prefer_presets=True,

@@ -17,6 +17,7 @@ from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound
 from ....utils import display as display_utils
+from ....utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from ....utils.text import normalize_llm_text
 from .. import prompts as meta_prompts
 from .. import reporting
@@ -326,6 +327,25 @@ def _build_prompts_from_items(
                     model_parameters=current_prompt.model_kwargs,
                 )
             )
+            allowed_roles = getattr(optimizer, "_optimizable_roles", None)
+            if allowed_roles is not None:
+                constrained = apply_role_constraints(
+                    current_prompt.get_messages(),
+                    valid_prompts[-1].get_messages(),
+                    allowed_roles,
+                )
+                dropped = count_disallowed_role_updates(
+                    current_prompt.get_messages(),
+                    valid_prompts[-1].get_messages(),
+                    allowed_roles,
+                )
+                if dropped:
+                    logger.debug(
+                        "MetaPrompt candidate %s dropped %s update(s) due to optimize_prompt constraints.",
+                        idx,
+                        dropped,
+                    )
+                valid_prompts[-1].set_messages(constrained)
             prompt_ref = valid_prompts[-1]
             optimizer._candidate_metadata_by_prompt_id[id(prompt_ref)] = {
                 "improvement_focus": improvement_focus,

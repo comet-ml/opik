@@ -36,6 +36,7 @@ from ...utils import throttle as _throttle
 from ...utils.prompt_library import PromptOverrides
 from ...utils.logging import debug_log
 from ...constants import normalize_eval_threads
+from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from . import types
 from . import prompts as few_shot_prompts
 from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
@@ -267,30 +268,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "trials_completed": context.trials_completed,
         }
 
-    # FIXME: Dead code, should be wired or removed
-    def _split_dataset(
-        self, dataset: list[dict[str, Any]], train_ratio: float
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """
-        Split the dataset into training and validation sets.
-
-        Args:
-            dataset: List of dataset items
-            train_ratio: Ratio of items to use for training
-
-        Returns:
-            Tuple of (train_set, validation_set)
-        """
-        if not dataset:
-            return [], []
-
-        rng = self._derive_rng("split_dataset", train_ratio)
-        dataset_copy = dataset.copy()
-        rng.shuffle(dataset_copy)
-
-        split_idx = int(len(dataset_copy) * train_ratio)
-        return dataset_copy[:split_idx], dataset_copy[split_idx:]
-
     def _sanitize_prompt_field_names(
         self, prompt_names: list[str]
     ) -> tuple[list[str], dict[str, str]]:
@@ -317,6 +294,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         model: str,
         prompts: dict[str, chat_prompt.ChatPrompt],
         few_shot_examples: list[dict[str, Any]],
+        allowed_roles: set[str] | None = None,
     ) -> tuple[dict[str, chat_prompt.ChatPrompt], str]:
         """
         Generate a few-shot prompt template that can be used to insert examples into the prompt.
@@ -325,6 +303,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             model: The model to use for generating the template
             prompt: The base prompts to modify
             few_shot_examples: List of example pairs with input and output fields
+            allowed_roles: Optional set of allowed message roles (e.g., {"system", "user"}).
+                When None, no role filtering is applied. When provided, any edits to
+                disallowed roles are removed via apply_role_constraints/count_disallowed_role_updates
+                and logged at debug level, so prompts may contain fewer messages.
 
         Returns:
             A tuple containing the updated prompts and the example template
@@ -413,7 +395,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     )
                 ]
                 new_prompt = prompts[prompt_name].copy()
-                new_prompt.set_messages(messages)
+                constrained = apply_role_constraints(
+                    prompts[prompt_name].get_messages(), messages, allowed_roles
+                )
+                dropped = count_disallowed_role_updates(
+                    prompts[prompt_name].get_messages(), messages, allowed_roles
+                )
+                if dropped:
+                    logger.debug(
+                        "FewShot template dropped %s update(s) for prompt '%s' due to optimize_prompt constraints.",
+                        dropped,
+                        prompt_name,
+                    )
+                new_prompt.set_messages(constrained)
             except Exception as e:
                 logger.error(
                     f"Couldn't create prompt with placeholder for {prompt_name}: {e}"
@@ -642,6 +636,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 prompts_with_placeholder=prompts,
                 demo_examples=demo_examples,
                 few_shot_prompt_template=few_shot_prompt_template,
+                allowed_roles=(
+                    context.extra_params.get("optimizable_roles")
+                    if context.extra_params
+                    else None
+                ),
             )
 
             llm_task = self._build_task_from_messages(
@@ -649,6 +648,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 prompts=prompts,
                 few_shot_examples=few_shot_examples,
                 allow_tool_use=context.allow_tool_use,
+                allowed_roles=(
+                    context.extra_params.get("optimizable_roles")
+                    if context.extra_params
+                    else None
+                ),
             )
 
             # Build messages for reporting from the prompts with examples
@@ -788,6 +792,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 prompts_with_placeholder=prompts,
                 demo_examples=best_demo_examples,
                 few_shot_prompt_template=few_shot_prompt_template,
+                allowed_roles=(
+                    context.extra_params.get("optimizable_roles")
+                    if context.extra_params
+                    else None
+                ),
             )
 
         # finish_reason, stopped_early, stop_reason are handled by base class
@@ -834,6 +843,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     {k: v for k, v in item.items() if k != "id"}
                     for item in dataset.get_items(nb_samples=10)
                 ],
+                allowed_roles=(
+                    context.extra_params.get("optimizable_roles")
+                    if context.extra_params
+                    else None
+                ),
             )
         )
 
@@ -865,6 +879,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompts: dict[str, chat_prompt.ChatPrompt],
         few_shot_examples: str,
         allow_tool_use: bool | None = None,
+        allowed_roles: set[str] | None = None,
     ) -> Callable[[dict[str, Any]], dict[str, Any]]:
         self._set_agent_trace_phase(agent, "Evaluation")
 
@@ -881,6 +896,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             prompts_with_examples = self._reconstruct_prompts_with_examples(
                 prompts_with_placeholder=prompts,
                 few_shot_examples=few_shot_examples,
+                allowed_roles=allowed_roles,
             )
 
             effective_allow_tool_use = (
@@ -948,6 +964,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         demo_examples: list[dict[str, Any]] | None = None,
         few_shot_prompt_template: str | None = None,
         few_shot_examples: str | None = None,
+        allowed_roles: set[str] | None = None,
     ) -> dict[str, chat_prompt.ChatPrompt]:
         """
         Reconstruct the prompts dict with few-shot examples filled in.
@@ -957,6 +974,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             demo_examples: List of example dictionaries from the dataset
             few_shot_prompt_template: The template string for formatting each example
             few_shot_examples: Preformatted few-shot string to insert directly
+            allowed_roles: Optional set of allowed message roles (e.g., {"system", "user"}).
+                When None, no role filtering is applied. When provided, any edits to
+                disallowed roles are removed via apply_role_constraints/count_disallowed_role_updates
+                and logged at debug level, so prompts may contain fewer messages.
 
         Returns:
             Dictionary of ChatPrompt objects with examples filled in
@@ -980,7 +1001,19 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 example_placeholder,
                 few_shot_examples,
             )
-            new_prompt.set_messages(new_messages)
+            constrained = apply_role_constraints(
+                prompt.get_messages(), new_messages, allowed_roles
+            )
+            dropped = count_disallowed_role_updates(
+                prompt.get_messages(), new_messages, allowed_roles
+            )
+            if dropped:
+                logger.debug(
+                    "FewShot examples dropped %s update(s) for prompt '%s' due to optimize_prompt constraints.",
+                    dropped,
+                    key,
+                )
+            new_prompt.set_messages(constrained)
             result_prompts[key] = new_prompt
 
         return result_prompts

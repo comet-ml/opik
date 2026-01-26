@@ -19,6 +19,7 @@ from ....api_objects.types import (
 from ....core import llm_calls as _llm_calls
 from .. import helpers
 from opik_optimizer.utils.display import display_error, display_success
+from ....utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from ....utils.prompt_library import PromptLibrary
 from ..types import MutationResponse
 
@@ -219,9 +220,13 @@ def _word_level_mutation_prompt(
     model_parameters: dict[str, Any],
     prompts: PromptLibrary,
     rng: RandomLike,
+    allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
     mutated_messages: list[dict[str, Any]] = []
     for message in prompt.get_messages():
+        if allowed_roles is not None and message.get("role") not in allowed_roles:
+            mutated_messages.append(message)
+            continue
         mutated_content = _word_level_mutation(
             msg_content=message["content"],
             model=model,
@@ -250,11 +255,15 @@ def _structural_mutation(
     model_parameters: dict[str, Any],
     prompts: PromptLibrary,
     rng: RandomLike,
+    allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
     """Perform structural mutation (reordering, combining, splitting)."""
     mutated_messages: list[dict[str, Any]] = []
 
     for message in prompt.get_messages():
+        if allowed_roles is not None and message.get("role") not in allowed_roles:
+            mutated_messages.append(message)
+            continue
         original_content = message["content"]
         role = message["role"]
         text = extract_text_from_content(original_content)
@@ -322,6 +331,7 @@ def _semantic_mutation(
     output_style_guidance: str,
     prompts: PromptLibrary,
     rng: RandomLike,
+    allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
     """Enhanced semantic mutation with multiple strategies."""
     current_output_style_guidance = output_style_guidance
@@ -334,6 +344,7 @@ def _semantic_mutation(
             model_parameters=model_parameters,
             output_style_guidance=output_style_guidance,
             prompts=prompts,
+            allowed_roles=allowed_roles,
         )
 
     try:
@@ -395,8 +406,19 @@ def _semantic_mutation(
                 "Error parsing semantic mutation response as JSON. "
                 f"Response: {response_item!r}\nOriginal error: {parse_exc}"
             ) from parse_exc
+        constrained_messages = apply_role_constraints(
+            prompt.get_messages(), messages, allowed_roles
+        )
+        dropped = count_disallowed_role_updates(
+            prompt.get_messages(), messages, allowed_roles
+        )
+        if dropped:
+            logger.debug(
+                "Evolutionary semantic mutation dropped %s update(s) due to optimize_prompt constraints.",
+                dropped,
+            )
         return chat_prompt.ChatPrompt(
-            messages=messages,
+            messages=constrained_messages,
             tools=prompt.tools,
             function_map=prompt.function_map,
             model=prompt.model,
@@ -417,6 +439,7 @@ def _radical_innovation_mutation(
     model_parameters: dict[str, Any],
     output_style_guidance: str,
     prompts: PromptLibrary,
+    allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
     """Attempts to generate a significantly improved and potentially very different prompt using an LLM."""
     logger.debug(
@@ -463,8 +486,19 @@ def _radical_innovation_mutation(
                 f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."
             )
             return prompt
+        constrained_messages = apply_role_constraints(
+            prompt.get_messages(), new_messages, allowed_roles
+        )
+        dropped = count_disallowed_role_updates(
+            prompt.get_messages(), new_messages, allowed_roles
+        )
+        if dropped:
+            logger.debug(
+                "Evolutionary radical mutation dropped %s update(s) due to optimize_prompt constraints.",
+                dropped,
+            )
         return chat_prompt.ChatPrompt(
-            messages=new_messages,
+            messages=constrained_messages,
             tools=prompt.tools,
             function_map=prompt.function_map,
             model=prompt.model,
@@ -488,6 +522,7 @@ def deap_mutation(
     optimization_id: str | None,
     verbose: int,
     prompts: PromptLibrary,
+    allowed_roles: set[str] | None = None,
     rng: random.Random | None = None,
 ) -> Any:
     """Enhanced mutation operation with multiple strategies.
@@ -495,6 +530,8 @@ def deap_mutation(
     Operates on dict-based individuals (prompt_name -> messages).
     Randomly selects ONE prompt to mutate.
     """
+    if allowed_roles is not None and not allowed_roles:
+        return individual
     # Individual is a dict mapping prompt_name -> messages
     prompts_metadata = getattr(individual, "prompts_metadata", {})
     rng = rng or random.Random()
@@ -551,6 +588,7 @@ def deap_mutation(
                     model_parameters=model_parameters,
                     prompts=prompts,
                     rng=rng,
+                    allowed_roles=allowed_roles,
                 )
                 reporting.display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited by randomizing words (word-level mutation).",
@@ -563,6 +601,7 @@ def deap_mutation(
                     model_parameters=model_parameters,
                     prompts=prompts,
                     rng=rng,
+                    allowed_roles=allowed_roles,
                 )
                 reporting.display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
@@ -578,6 +617,7 @@ def deap_mutation(
                     output_style_guidance=output_style_guidance,
                     prompts=prompts,
                     rng=rng,
+                    allowed_roles=allowed_roles,
                 )
                 reporting.display_success(
                     f"      Mutation successful for '{prompt_name}', prompt has been edited using an LLM (semantic mutation).",

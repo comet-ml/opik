@@ -54,6 +54,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         self._validation_dataset = validation_dataset
         self._experiment_config = experiment_config
         self._metric_name = metric.__name__
+        self._allowed_roles = (
+            context.extra_params.get("optimizable_roles")
+            if context.extra_params
+            else None
+        )
+        # TODO: Replace with native GEPA adapter once available; role constraints may drop candidate edits.
 
         # Pre-compute item ID sets for fast lookup during evaluate()
         self._train_item_ids: set[str] = {
@@ -151,6 +157,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
     ) -> dict[str, chat_prompt.ChatPrompt]:
         """Rebuild prompts with optimized messages, preserving tools/function_map/model."""
         rebuilt: dict[str, chat_prompt.ChatPrompt] = {}
+        dropped_components = 0
         for prompt_name, prompt_obj in self._base_prompts.items():
             original_messages = prompt_obj.get_messages()
             new_messages = []
@@ -158,13 +165,25 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 component_key = f"{prompt_name}_{msg['role']}_{idx}"
                 # Use optimized content if available, otherwise keep original
                 original_content = msg.get("content", "")
-                optimized_content = candidate.get(component_key, original_content)
+                if (
+                    self._allowed_roles is not None
+                    and msg.get("role") not in self._allowed_roles
+                ):
+                    optimized_content = original_content
+                    dropped_components += 1
+                else:
+                    optimized_content = candidate.get(component_key, original_content)
                 new_messages.append({"role": msg["role"], "content": optimized_content})
 
             # prompt.copy() preserves tools, function_map, model, model_kwargs
             new_prompt = prompt_obj.copy()
             new_prompt.set_messages(new_messages)
             rebuilt[prompt_name] = new_prompt
+        if dropped_components:
+            logger.warning(
+                "GEPA adapter dropped %s component(s) due to optimize_prompt constraints.",
+                dropped_components,
+            )
         return rebuilt
 
     def evaluate(

@@ -9,18 +9,20 @@ owning optimizer for telemetry and budgeting.
 from ..api_objects import chat_prompt
 from ..core import llm_calls as _llm_calls
 from ..utils import throttle as _throttle
-import os
 from typing import Any
 import json
 import logging
+import os
 from opik import opik_context
 import litellm
 from opik.integrations.litellm import track_completion
 from . import optimizable_agent
 from ..constants import resolve_project_name
+from ..utils.opik_env import set_project_name_env
 from ..utils.logging import debug_tool_call
 from ..constants import tool_call_max_iterations
 from ..utils.candidate_selection import extract_choice_logprob
+from ..utils import prompt_tracing
 
 
 logger = logging.getLogger(__name__)
@@ -45,9 +47,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
 
     def init_llm(self) -> None:
         """Initialize the LLM with the appropriate callbacks."""
-        # Litellm bug requires this (maybe problematic if multi-threaded)
-        if "OPIK_PROJECT_NAME" not in os.environ:
-            os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
+        set_project_name_env(self.project_name)
 
         # Attach default metadata; subclasses may override per-run via start_bundle_trace.
         self.trace_metadata = {"project_name": self.project_name}
@@ -122,13 +122,20 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
 
     def _build_messages(
         self,
-        prompt: "chat_prompt.ChatPrompt",
-        dataset_item: dict[str, Any],
+        query: str | None = None,
+        messages: list[dict[str, str]] | None = None,
+        *,
+        prompt: "chat_prompt.ChatPrompt | None" = None,
+        dataset_item: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        messages = prompt.get_messages(dataset_item)
-        all_messages: list[dict[str, Any]] = []
-        if messages is not None:
-            all_messages.extend(messages)
+        if prompt is not None and dataset_item is not None:
+            messages = prompt.get_messages(dataset_item)
+            all_messages: list[dict[str, Any]] = []
+            if messages is not None:
+                all_messages.extend(messages)
+            return self._prepare_messages(all_messages, dataset_item)
+
+        all_messages = super()._build_messages(query, messages)
         return self._prepare_messages(all_messages, dataset_item)
 
     def _update_trace_metadata(self) -> None:
@@ -149,6 +156,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         tools: list[dict[str, Any]] | None,
         seed: int | None,
     ) -> Any:
+        prompt_tracing.attach_span_prompt_payload(prompt)
         response = self._llm_complete(
             model=prompt.model,
             messages=messages,
@@ -254,7 +262,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
     ) -> str:
         """Invoke multiple prompts"""
         prompt = self._select_single_prompt(prompts)
-        all_messages = self._build_messages(prompt, dataset_item)
+        all_messages = self._build_messages(prompt=prompt, dataset_item=dataset_item)
         self._update_trace_metadata()
         if allow_tool_use and prompt.tools:
             return self._run_tool_call_loop(

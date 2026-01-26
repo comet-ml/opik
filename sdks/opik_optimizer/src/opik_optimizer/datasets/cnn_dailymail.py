@@ -7,7 +7,7 @@ from opik_optimizer.utils.dataset import DatasetHandle, FilterBy
 
 CNN_DAILYMAIL_SPEC = DatasetSpec(
     name="cnn_dailymail",
-    hf_path="cnn_dailymail",
+    hf_path="abisee/cnn_dailymail",
     hf_name="3.0.0",
     default_source_split="train",
     prefer_presets=True,

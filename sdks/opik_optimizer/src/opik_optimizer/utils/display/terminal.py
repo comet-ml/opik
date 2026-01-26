@@ -253,8 +253,10 @@ def display_header(
     )
 
     content = rich.text.Text.assemble(
-        ("● ", "green"), "Running Opik Evaluation - ", (algorithm, "blue"), "\n\n"
-    ).append(link_text)
+        ("● ", "green"), "Running Opik Evaluation - ", (algorithm, "blue"), "\n"
+    )
+    if optimization_id is not None and dataset_id is not None:
+        content.append("\n").append(link_text)
 
     panel = rich.panel.Panel(content, box=rich.box.ROUNDED, width=DEFAULT_PANEL_WIDTH)
 

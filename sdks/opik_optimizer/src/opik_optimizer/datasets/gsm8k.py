@@ -7,7 +7,7 @@ from opik_optimizer.utils.dataset import DatasetHandle, FilterBy
 
 GSM8K_SPEC = DatasetSpec(
     name="gsm8k",
-    hf_path="gsm8k",
+    hf_path="openai/gsm8k",
     hf_name="main",
     default_source_split="train",
     prefer_presets=True,

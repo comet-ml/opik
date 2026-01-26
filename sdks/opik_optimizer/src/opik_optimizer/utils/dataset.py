@@ -31,6 +31,14 @@ logger = logging.getLogger(__name__)
 
 FilterBy = Mapping[str, Any]
 
+# Suppress noisy HF auth warnings in notebook environments (e.g., Colab).
+warnings.filterwarnings(
+    "ignore",
+    message=r".*HF_TOKEN.*Colab secrets.*",
+    category=UserWarning,
+    module=r"huggingface_hub\.utils\._auth",
+)
+
 
 def _normalize_filter_value(value: Any) -> Any:
     if isinstance(value, (set, frozenset, tuple)):
@@ -69,6 +77,42 @@ def record_matches_filter_by(record: dict[str, Any], filter_by: FilterBy) -> boo
             if value != expected:
                 return False
     return True
+
+
+def _is_hf_revision_not_found(exc: Exception) -> bool:
+    """Detect HF 404 errors caused by stale or missing dataset revisions."""
+    try:
+        from huggingface_hub.errors import HfHubHTTPError
+    except ImportError:  # pragma: no cover
+        return False
+    if not isinstance(exc, HfHubHTTPError):
+        return False
+    message = str(exc)
+    lower_message = message.lower()
+    return "revision" in lower_message and (
+        "404" in message or "not found" in lower_message
+    )
+
+
+def _retry_with_main_revision(
+    *,
+    load_kwargs: dict[str, Any],
+    dataset_name: str,
+    runner: Callable[[dict[str, Any]], list[dict[str, Any]]],
+    exc: Exception,
+) -> list[dict[str, Any]] | None:
+    """Retry a failed HF load with revision=main when a pinned revision vanished."""
+    if not _is_hf_revision_not_found(exc):
+        return None
+    if load_kwargs.get("revision") == "main":
+        return None
+    updated = dict(load_kwargs)
+    updated["revision"] = "main"
+    logger.warning(
+        "HF revision not found for %s; retrying with revision=main.",
+        dataset_name,
+    )
+    return runner(updated)
 
 
 @lru_cache(maxsize=None)
@@ -291,6 +335,20 @@ def fetch_records_for_slice(
                 filter_by=filter_by,
             )
         except Exception as exc:
+            retry = _retry_with_main_revision(
+                load_kwargs=load_kwargs,
+                dataset_name=slice_request.dataset_name,
+                exc=exc,
+                runner=lambda kwargs: stream_records_for_slice(
+                    load_fn=load_fn,
+                    load_kwargs=kwargs,
+                    start=slice_request.start,
+                    count=slice_request.count,
+                    filter_by=filter_by,
+                ),
+            )
+            if retry is not None:
+                return retry
             logger.warning(
                 "Streaming fetch failed for %s (split=%s start=%s count=%s); falling back to non-streaming: %s",
                 slice_request.dataset_name,
@@ -313,16 +371,45 @@ def fetch_records_for_slice(
                 sliced_kwargs["split"],
                 slice_request.dataset_name,
             )
-            return load_fn(**sliced_kwargs).to_list()
+            try:
+                return load_fn(**sliced_kwargs).to_list()
+            except Exception as exc:
+                retry = _retry_with_main_revision(
+                    load_kwargs=sliced_kwargs,
+                    dataset_name=slice_request.dataset_name,
+                    exc=exc,
+                    runner=lambda kwargs: load_fn(**kwargs).to_list(),
+                )
+                if retry is not None:
+                    return retry
+                raise
 
-    return download_and_slice_hf_dataset(
-        load_fn=load_fn,
-        load_kwargs=load_kwargs,
-        start=slice_request.start,
-        count=slice_request.count,
-        seed=seed,
-        filter_by=filter_by,
-    )
+    try:
+        return download_and_slice_hf_dataset(
+            load_fn=load_fn,
+            load_kwargs=load_kwargs,
+            start=slice_request.start,
+            count=slice_request.count,
+            seed=seed,
+            filter_by=filter_by,
+        )
+    except Exception as exc:
+        retry = _retry_with_main_revision(
+            load_kwargs=load_kwargs,
+            dataset_name=slice_request.dataset_name,
+            exc=exc,
+            runner=lambda kwargs: download_and_slice_hf_dataset(
+                load_fn=load_fn,
+                load_kwargs=kwargs,
+                start=slice_request.start,
+                count=slice_request.count,
+                seed=seed,
+                filter_by=filter_by,
+            ),
+        )
+        if retry is not None:
+            return retry
+        raise
 
 
 def default_dataset_name(
