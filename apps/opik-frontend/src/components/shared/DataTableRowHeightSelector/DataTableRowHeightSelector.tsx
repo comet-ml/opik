@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type DataTableRowHeightSelectorProps = {
   type: string;
@@ -32,12 +33,13 @@ const DataTableRowHeightSelector: React.FunctionComponent<
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Rows3 className="mr-1.5 size-3.5" />
-          Rows
-        </Button>
-      </DropdownMenuTrigger>
+      <TooltipWrapper content="Rows">
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="icon-sm">
+            <Rows3 className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipWrapper>
       <DropdownMenuContent align="end">
         {OPTIONS.map(({ value, label }) => (
           <DropdownMenuItem key={value} onClick={() => handleSelect(value)}>
