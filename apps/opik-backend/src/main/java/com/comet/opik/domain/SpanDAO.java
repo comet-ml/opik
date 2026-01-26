@@ -985,7 +985,7 @@ class SpanDAO {
 
     private static final String COUNT_BY_PROJECT_ID = """
             WITH target_spans AS (
-                SELECT id
+                SELECT DISTINCT id
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -1141,12 +1141,15 @@ class SpanDAO {
 
     private static final String SELECT_SPANS_STATS = """
             WITH target_spans AS (
-                SELECT id
+                SELECT DISTINCT id
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(trace_id)> AND trace_id = :trace_id <endif>
+                <if(type)> AND type = :type <endif>
+                <if(filters)> AND <filters> <endif>
             ),
             feedback_scores_combined_raw AS (
                 SELECT workspace_id,

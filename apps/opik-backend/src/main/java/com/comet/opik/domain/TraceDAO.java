@@ -340,7 +340,7 @@ class TraceDAOImpl implements TraceDAO {
                 AND id IN :ids
             ), target_spans AS (
                 SELECT id, trace_id, type
-                FROM spans
+                FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id IN (SELECT project_id FROM target_projects)
                 AND trace_id IN :ids
