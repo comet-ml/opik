@@ -194,6 +194,10 @@ def test_attach_initial_prompts__optimizer_prompt_uses_metadata_only(
     assert last_call["prompts"] is None
     metadata = last_call["metadata"] or {}
     assert metadata["opik_optimizer"]["initial_prompts"][0]["name"] == "p1"
+    assert metadata["opik_prompts"][0]["name"] == "p1"
+    opik_version = metadata["opik_prompts"][0]["version"]
+    assert opik_version["metadata"]["created_from"] == "opik_ui"
+    assert opik_version["metadata"]["type"] == "messages_json"
 
 
 def test_attach_span_prompt_payload__adds_rendered_messages(
@@ -214,6 +218,10 @@ def test_attach_span_prompt_payload__adds_rendered_messages(
     metadata = calls["span"][-1]["metadata"] or {}
     payloads = metadata["opik_optimizer"]["prompt_payloads"]
     assert payloads[0]["rendered_messages"] == rendered
+    assert metadata["opik_prompts"][0]["name"] == "p"
+    opik_version = metadata["opik_prompts"][0]["version"]
+    assert opik_version["metadata"]["created_from"] == "opik_ui"
+    assert opik_version["metadata"]["type"] == "messages_json"
 
 
 def test_record_candidate_prompts__appends_candidates(

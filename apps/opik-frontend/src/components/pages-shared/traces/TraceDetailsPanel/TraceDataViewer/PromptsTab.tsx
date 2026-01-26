@@ -28,16 +28,6 @@ type RawPromptData = {
   };
 };
 
-type OptimizerPromptPayload = {
-  name?: string;
-  type?: string;
-  template?: Record<string, unknown>;
-  rendered_messages?: unknown;
-  opik_prompt?: RawPromptData;
-  source_name?: string;
-  system_prompt?: string;
-};
-
 type PromptsTabProps = {
   data: Trace | Span;
   search?: string;
@@ -103,80 +93,20 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
     "opik_prompts",
     null,
   ) as RawPromptData[] | null;
-  const optimizerPayloads = get(
-    data.metadata,
-    "opik_optimizer.initial_prompts",
-    null,
-  ) as OptimizerPromptPayload[] | null;
-  const spanPromptPayloads = get(
-    data.metadata,
-    "opik_optimizer.prompt_payloads",
-    null,
-  ) as OptimizerPromptPayload[] | null;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const showOptimizerPrompts = useIsFeatureEnabled(
     FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
   );
 
   const prompts = useMemo(() => {
+    if (!showOptimizerPrompts) return [];
     if (Array.isArray(rawPrompts) && rawPrompts.length > 0) {
       return (rawPrompts as RawPromptData[]).map(
         convertRawPromptToPromptWithLatestVersion,
       );
     }
-    if (showOptimizerPrompts) {
-      const mergedPayloads: OptimizerPromptPayload[] =
-        Array.isArray(optimizerPayloads) && optimizerPayloads.length > 0
-          ? optimizerPayloads
-          : Array.isArray(spanPromptPayloads) && spanPromptPayloads.length > 0
-            ? spanPromptPayloads
-            : [];
-      if (mergedPayloads.length > 0) {
-        return mergedPayloads
-          .map((payload, index) => {
-            const baseName = payload?.name ?? "prompt";
-            const label = payload?.source_name ?? `Candidate ${index + 1}`;
-            const name = baseName === label ? label : `${label} · ${baseName}`;
-
-            const templateFromPrompt = payload?.template;
-            const templateMessages =
-              payload?.type === "chat"
-                ? Array.isArray(templateFromPrompt?.messages)
-                  ? templateFromPrompt.messages
-                  : [
-                      ...(templateFromPrompt?.system
-                        ? [
-                            {
-                              role: "system",
-                              content: templateFromPrompt.system,
-                            },
-                          ]
-                        : []),
-                      ...(templateFromPrompt?.user
-                        ? [{ role: "user", content: templateFromPrompt.user }]
-                        : []),
-                    ]
-                : templateFromPrompt ?? payload?.rendered_messages ?? {};
-            const templateString = JSON.stringify(templateMessages, null, 2);
-            const rawPrompt: RawPromptData = {
-              id: payload?.opik_prompt?.id || "",
-              name,
-              version: {
-                commit:
-                  payload?.opik_prompt?.version?.commit ||
-                  `candidate-${index + 1}`,
-                id: payload?.opik_prompt?.version?.id || "",
-                template: templateString,
-                metadata: { created_from: "opik_ui", type: "messages_json" },
-              },
-            };
-            return convertRawPromptToPromptWithLatestVersion(rawPrompt);
-          })
-          .filter(Boolean);
-      }
-    }
     return [];
-  }, [rawPrompts, optimizerPayloads, spanPromptPayloads, showOptimizerPrompts]);
+  }, [rawPrompts, showOptimizerPrompts]);
 
   const renderPrompts = () => {
     if (!prompts || prompts.length === 0) return null;
