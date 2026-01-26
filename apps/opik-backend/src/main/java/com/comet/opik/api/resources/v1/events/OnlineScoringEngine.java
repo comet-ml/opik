@@ -212,7 +212,7 @@ public class OnlineScoringEngine {
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
         Map<String, String> replacements;
-        
+
         if (variablesMap == null || variablesMap.isEmpty()) {
             // Auto-extract variables from templates
             String allTemplates = collectAllTemplateText(templateMessages);
@@ -225,7 +225,7 @@ public class OnlineScoringEngine {
             // Use provided variable mappings
             replacements = toReplacements(variablesMap, trace);
         }
-        
+
         return renderMessagesWithReplacements(templateMessages, replacements);
     }
 
@@ -244,7 +244,7 @@ public class OnlineScoringEngine {
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Span span) {
         Map<String, String> replacements;
-        
+
         if (variablesMap == null || variablesMap.isEmpty()) {
             // Auto-extract variables from templates
             String allTemplates = collectAllTemplateText(templateMessages);
@@ -257,7 +257,7 @@ public class OnlineScoringEngine {
             // Use provided variable mappings
             replacements = toReplacements(variablesMap, span);
         }
-        
+
         return renderMessagesWithReplacements(templateMessages, replacements);
     }
 
@@ -594,7 +594,6 @@ public class OnlineScoringEngine {
         return response.trim();
     }
 
-
     /**
      * Collect all template text from messages (for variable extraction).
      *
@@ -639,22 +638,21 @@ public class OnlineScoringEngine {
             String template, JsonSectionExtractor sectionExtractor) {
         // Extract all variable placeholders from template
         Set<String> variableNames = TemplateParseUtils.extractVariables(template, PromptType.MUSTACHE);
-        
+
         if (variableNames.isEmpty()) {
             return Map.of();
         }
-        
+
         // Create auto-variables map: use variable name as both key and value
         // Example: {"input.messages[0].content": "input.messages[0].content"}
         Map<String, String> autoVariables = new HashMap<>();
         for (String varName : variableNames) {
             autoVariables.put(varName, varName);
         }
-        
+
         // Reuse existing variable mapping logic which handles JSONPath extraction
         return toReplacements(autoVariables, sectionExtractor);
     }
-
 
     @AllArgsConstructor
     enum TraceSection {

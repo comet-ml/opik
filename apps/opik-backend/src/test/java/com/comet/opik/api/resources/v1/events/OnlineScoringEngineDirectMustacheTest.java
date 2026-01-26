@@ -27,11 +27,9 @@ class OnlineScoringEngineDirectMustacheTest {
     void testAutoExtractSimpleFields() {
         // Given
         JsonNode input = JsonUtils.getMapper().valueToTree(Map.of(
-                "question", "What is AI?"
-        ));
+                "question", "What is AI?"));
         JsonNode output = JsonUtils.getMapper().valueToTree(Map.of(
-                "answer", "AI is Artificial Intelligence"
-        ));
+                "answer", "AI is Artificial Intelligence"));
 
         Trace trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -63,9 +61,7 @@ class OnlineScoringEngineDirectMustacheTest {
         JsonNode input = JsonUtils.getMapper().valueToTree(Map.of(
                 "messages", List.of(
                         Map.of("role", "user", "content", "What is AI?"),
-                        Map.of("role", "assistant", "content", "AI is Artificial Intelligence")
-                )
-        ));
+                        Map.of("role", "assistant", "content", "AI is Artificial Intelligence"))));
 
         Trace trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -97,10 +93,7 @@ class OnlineScoringEngineDirectMustacheTest {
                 "user", Map.of(
                         "profile", Map.of(
                                 "name", "John Doe",
-                                "email", "john@example.com"
-                        )
-                )
-        ));
+                                "email", "john@example.com"))));
 
         Trace trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -131,14 +124,10 @@ class OnlineScoringEngineDirectMustacheTest {
                 "conversation", List.of(
                         Map.of(
                                 "user", Map.of("name", "Alice"),
-                                "message", "Hello"
-                        ),
+                                "message", "Hello"),
                         Map.of(
                                 "user", Map.of("name", "Bob"),
-                                "message", "Hi there"
-                        )
-                )
-        ));
+                                "message", "Hi there"))));
 
         Trace trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -147,7 +136,8 @@ class OnlineScoringEngineDirectMustacheTest {
 
         LlmAsJudgeMessage message = LlmAsJudgeMessage.builder()
                 .role(ChatMessageType.USER)
-                .content("{{input.conversation[0].user.name}}: {{input.conversation[0].message}}\n{{input.conversation[1].user.name}}: {{input.conversation[1].message}}")
+                .content(
+                        "{{input.conversation[0].user.name}}: {{input.conversation[0].message}}\n{{input.conversation[1].user.name}}: {{input.conversation[1].message}}")
                 .build();
 
         // When
@@ -246,8 +236,7 @@ class OnlineScoringEngineDirectMustacheTest {
 
         Map<String, String> variables = Map.of(
                 "q", "input.question",
-                "a", "output.answer"
-        );
+                "a", "output.answer");
 
         // When - providing variables uses variable mapping mode
         List<ChatMessage> result = OnlineScoringEngine.renderMessages(
