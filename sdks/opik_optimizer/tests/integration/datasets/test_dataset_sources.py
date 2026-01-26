@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import time
 from pathlib import Path
 from collections.abc import Iterable
 
@@ -138,3 +139,4 @@ def test_hf_sources_resolve_one_record(
     assert len(records) == 1
     assert isinstance(records[0], dict)
     assert records[0], "Fetched record should contain data"
+    time.sleep(0.5)
