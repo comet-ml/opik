@@ -24,6 +24,7 @@ type RawPromptData = {
     commit: string;
     id: string;
     template: string;
+    metadata?: object;
   };
 };
 
@@ -50,7 +51,7 @@ const convertRawPromptToPromptWithLatestVersion = (
   const promptVersion: PromptVersion = {
     id: rawPrompt.version.id,
     template: rawPrompt.version.template,
-    metadata: {},
+    metadata: rawPrompt.version.metadata ?? {},
     commit: rawPrompt.version.commit,
     prompt_id: rawPrompt.id,
     created_at: date, // We don't have this in raw data, using current time
@@ -133,27 +134,40 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
       if (mergedPayloads.length > 0) {
         return mergedPayloads
           .map((payload, index) => {
-            const name =
-              payload?.name ||
-              payload?.source_name ||
-              `Optimizer Prompt ${index + 1}`;
-            const template =
-              payload?.opik_prompt?.version?.template ??
-              payload?.template ??
-              payload?.rendered_messages ??
-              payload?.system_prompt ??
-              {};
-            const templateString =
-              typeof template === "string"
-                ? template
-                : JSON.stringify(template, null, 2);
+            const baseName = payload?.name ?? "prompt";
+            const label = payload?.source_name ?? `Candidate ${index + 1}`;
+            const name = baseName === label ? label : `${label} · ${baseName}`;
+
+            const templateFromPrompt = payload?.template;
+            const templateMessages =
+              payload?.type === "chat"
+                ? Array.isArray(templateFromPrompt?.messages)
+                  ? templateFromPrompt.messages
+                  : [
+                      ...(templateFromPrompt?.system
+                        ? [
+                            {
+                              role: "system",
+                              content: templateFromPrompt.system,
+                            },
+                          ]
+                        : []),
+                      ...(templateFromPrompt?.user
+                        ? [{ role: "user", content: templateFromPrompt.user }]
+                        : []),
+                    ]
+                : templateFromPrompt ?? payload?.rendered_messages ?? {};
+            const templateString = JSON.stringify(templateMessages, null, 2);
             const rawPrompt: RawPromptData = {
               id: payload?.opik_prompt?.id || "",
               name,
               version: {
-                commit: payload?.opik_prompt?.version?.commit || "",
+                commit:
+                  payload?.opik_prompt?.version?.commit ||
+                  `candidate-${index + 1}`,
                 id: payload?.opik_prompt?.version?.id || "",
                 template: templateString,
+                metadata: { created_from: "opik_ui", type: "messages_json" },
               },
             };
             return convertRawPromptToPromptWithLatestVersion(rawPrompt);

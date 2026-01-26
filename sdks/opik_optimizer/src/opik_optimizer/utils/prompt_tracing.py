@@ -5,6 +5,7 @@ from typing import Any
 from collections.abc import Iterable
 import inspect
 import logging
+import json
 
 from opik import opik_context
 
@@ -203,6 +204,33 @@ def _merge_span_metadata(extra_metadata: dict[str, Any]) -> dict[str, Any]:
     return deep_merge_dicts(existing_metadata, extra_metadata)
 
 
+def _build_opik_prompt_stubs(
+    prompts: dict[str, chat_prompt.ChatPrompt],
+) -> list[dict[str, Any]]:
+    """Build opik_prompts-style metadata from ChatPrompts for UI rendering."""
+    stubs: list[dict[str, Any]] = []
+    for prompt in prompts.values():
+        messages = prompt.get_messages()
+        try:
+            template = json.dumps(messages, ensure_ascii=False)
+        except (TypeError, ValueError):
+            template = json.dumps([], ensure_ascii=False)
+        opik_info = _extract_opik_prompt_info(prompt) or {}
+        stubs.append(
+            {
+                "id": opik_info.get("id", ""),
+                "name": prompt.name,
+                "version": {
+                    "id": opik_info.get("version", {}).get("id", ""),
+                    "commit": opik_info.get("version", {}).get("commit", ""),
+                    "template": template,
+                    "metadata": {"created_from": "opik_ui", "type": "messages_json"},
+                },
+            }
+        )
+    return stubs
+
+
 def _update_trace(
     *,
     metadata: dict[str, Any] | None = None,
@@ -332,7 +360,12 @@ def collect_opik_prompt_sources(
 def attach_initial_prompts(prompts: dict[str, chat_prompt.ChatPrompt]) -> None:
     """Attach initial prompt payloads to the current trace metadata."""
     payloads = build_prompt_payloads(prompts)
-    metadata = _merge_trace_metadata({"opik_optimizer": {"initial_prompts": payloads}})
+    metadata = _merge_trace_metadata(
+        {
+            "opik_optimizer": {"initial_prompts": payloads},
+            "opik_prompts": _build_opik_prompt_stubs(prompts),
+        }
+    )
 
     support = _get_opik_prompt_support()
     opik_prompts: list[Any] = []
@@ -382,7 +415,12 @@ def attach_span_prompt_payload(
             prompt, rendered_messages=rendered_messages, include_template=True
         )
     ]
-    metadata = _merge_span_metadata({"opik_optimizer": {"prompt_payloads": payloads}})
+    metadata = _merge_span_metadata(
+        {
+            "opik_optimizer": {"prompt_payloads": payloads},
+            "opik_prompts": _build_opik_prompt_stubs({"prompt": prompt}),
+        }
+    )
 
     support = _get_opik_prompt_support()
     opik_prompt = getattr(prompt, "_opik_prompt_source", None)
