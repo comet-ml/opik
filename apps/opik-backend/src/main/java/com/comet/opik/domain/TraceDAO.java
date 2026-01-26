@@ -708,7 +708,6 @@ class TraceDAOImpl implements TraceDAO {
                     FROM guardrails
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
-                    AND project_id IN (SELECT project_id FROM target_projects)
                     AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_type, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY entity_id, id
