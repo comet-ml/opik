@@ -303,6 +303,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             model: The model to use for generating the template
             prompt: The base prompts to modify
             few_shot_examples: List of example pairs with input and output fields
+            allowed_roles: Optional set of allowed message roles (e.g., {"system", "user"}).
+                When None, no role filtering is applied. When provided, any edits to
+                disallowed roles are removed via apply_role_constraints/count_disallowed_role_updates
+                and logged at debug level, so prompts may contain fewer messages.
 
         Returns:
             A tuple containing the updated prompts and the example template
@@ -971,6 +975,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             demo_examples: List of example dictionaries from the dataset
             few_shot_prompt_template: The template string for formatting each example
             few_shot_examples: Preformatted few-shot string to insert directly
+            allowed_roles: Optional set of allowed message roles (e.g., {"system", "user"}).
+                When None, no role filtering is applied. When provided, any edits to
+                disallowed roles are removed via apply_role_constraints/count_disallowed_role_updates
+                and logged at debug level, so prompts may contain fewer messages.
 
         Returns:
             Dictionary of ChatPrompt objects with examples filled in

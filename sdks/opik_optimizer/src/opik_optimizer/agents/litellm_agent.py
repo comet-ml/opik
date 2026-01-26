@@ -122,9 +122,14 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
 
     def _build_messages(
         self,
-        prompt: "chat_prompt.ChatPrompt",
-        dataset_item: dict[str, Any],
+        query: str | None = None,
+        messages: list[dict[str, str]] | None = None,
+        *,
+        prompt: "chat_prompt.ChatPrompt | None" = None,
+        dataset_item: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
+        if prompt is None or dataset_item is None:
+            raise ValueError("prompt and dataset_item must be provided")
         messages = prompt.get_messages(dataset_item)
         all_messages: list[dict[str, Any]] = []
         if messages is not None:
@@ -255,7 +260,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
     ) -> str:
         """Invoke multiple prompts"""
         prompt = self._select_single_prompt(prompts)
-        all_messages = self._build_messages(prompt, dataset_item)
+        all_messages = self._build_messages(prompt=prompt, dataset_item=dataset_item)
         self._update_trace_metadata()
         if allow_tool_use and prompt.tools:
             return self._run_tool_call_loop(

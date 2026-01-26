@@ -1188,6 +1188,7 @@ class BaseOptimizer(ABC):
         validation_dataset: Dataset | None,
         max_trials: int,
         allow_tool_use: bool,
+        optimize_prompt: bool | str | list[str] | None,
         extra_kwargs: dict[str, Any],
     ) -> OptimizationContext:
         # Reset counters at the start of each optimization run
@@ -1209,6 +1210,7 @@ class BaseOptimizer(ABC):
             max_trials=max_trials,
             auto_continue=auto_continue,
             allow_tool_use=allow_tool_use,
+            optimize_prompt=optimize_prompt,
             **extra_kwargs,
         )
         debug_log(
