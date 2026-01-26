@@ -114,7 +114,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
         convertRawPromptToPromptWithLatestVersion,
       );
     }
-    const mergedPayloads =
+    const mergedPayloads: OptimizerPromptPayload[] =
       Array.isArray(optimizerPayloads) && optimizerPayloads.length > 0
         ? optimizerPayloads
         : Array.isArray(spanPromptPayloads) && spanPromptPayloads.length > 0
@@ -124,7 +124,9 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
       return mergedPayloads
         .map((payload, index) => {
           const name =
-            payload?.name || payload?.source_name || `Optimizer Prompt ${index + 1}`;
+            payload?.name ||
+            payload?.source_name ||
+            `Optimizer Prompt ${index + 1}`;
           const template =
             payload?.opik_prompt?.version?.template ??
             payload?.template ??
