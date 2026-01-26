@@ -196,11 +196,9 @@ Not only you will be able to see the score values, but the LLM-judge reasoning b
 </Frame>
 
 <Note>
-  Important: The `status` field represents the status of the thread, inactive means that the thread has not received any new traces in the last 15 minutes (Default value but can be changed).
-  Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI or via SDK.
-
-You can only evaluate/score threads that are inactive.
-
+  You can evaluate and score threads at any time, regardless of whether new traces are still being added.
+  For online evaluation rules (automatic scoring), Opik waits for a configurable "cooling period" after
+  the last activity before running the rules.
 </Note>
 
 ## Multi-Value Feedback Scores for Threads
