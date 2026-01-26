@@ -43,6 +43,9 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   );
 
   const placeholder = DATE_FORMAT_LABELS[dateFormat];
+  const is12HourFormat =
+    dateFormat.includes("hh") || dateFormat.includes("h A");
+  const includeSeconds = dateFormat.includes(":ss");
 
   const onSelectDate = (value: Date | undefined) => {
     setDate(value);
@@ -118,7 +121,12 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
               initialFocus
             />
             <div className="border-t border-border p-3">
-              <TimePicker date={date} setDate={onSelectDate} />
+              <TimePicker
+                date={date}
+                setDate={onSelectDate}
+                is12HourFormat={is12HourFormat}
+                includeSeconds={includeSeconds}
+              />
             </div>
           </PopoverContent>
         </Popover>

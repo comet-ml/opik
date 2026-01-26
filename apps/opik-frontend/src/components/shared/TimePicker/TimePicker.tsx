@@ -1,17 +1,22 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { TimePickerInput } from "@/components/ui/time-picker-input";
 import { TimePeriodSelect } from "@/components/ui/time-picker-period-select";
 import { getPeriodByDate, Period } from "@/components/ui/time-picker-utils";
-import { useDateFormat } from "@/hooks/useDateFormat";
 
 type TimePickerDemoProps = {
   date: Date | undefined;
   setDate: (date: Date | undefined) => void;
+  is12HourFormat?: boolean;
+  includeSeconds?: boolean;
 };
 
-const TimePicker: React.FC<TimePickerDemoProps> = ({ date, setDate }) => {
-  const [dateFormat] = useDateFormat();
+const TimePicker: React.FC<TimePickerDemoProps> = ({
+  date,
+  setDate,
+  is12HourFormat = true,
+  includeSeconds = false,
+}) => {
   const [period, setPeriod] = useState<Period>(getPeriodByDate(date));
 
   const minuteRef = useRef<HTMLInputElement>(null);
@@ -19,9 +24,12 @@ const TimePicker: React.FC<TimePickerDemoProps> = ({ date, setDate }) => {
   const secondRef = useRef<HTMLInputElement>(null);
   const periodRef = useRef<HTMLButtonElement>(null);
 
-  const is12HourFormat =
-    dateFormat.includes("hh") || dateFormat.includes("h A");
-  const includeSeconds = dateFormat.includes(":ss");
+  // sync period state with date changes
+  useEffect(() => {
+    if (date) {
+      setPeriod(getPeriodByDate(date));
+    }
+  }, [date]);
 
   return (
     <div className="flex items-end gap-2">
