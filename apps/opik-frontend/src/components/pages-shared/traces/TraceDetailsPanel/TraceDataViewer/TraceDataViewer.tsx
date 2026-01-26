@@ -39,6 +39,8 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -73,11 +75,15 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
   const hasSpanAgentGraph =
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
+  const showOptimizerPrompts = useIsFeatureEnabled(
+    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+  );
 
   const hasPrompts = useMemo(() => {
+    if (!showOptimizerPrompts) return false;
     const prompts = (data.metadata as Record<string, unknown>)?.opik_prompts;
     return Array.isArray(prompts) && prompts.length > 0;
-  }, [data.metadata]);
+  }, [data.metadata, showOptimizerPrompts]);
 
   const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
