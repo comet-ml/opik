@@ -652,15 +652,14 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
 
             # Build messages for reporting from the prompts with examples
-            messages_for_reporting = []
-            for prompt_obj in prompts_with_examples.values():
-                messages_for_reporting.extend(prompt_obj.get_messages())
+            messages_for_reporting = {
+                key: prompt_obj.get_messages()
+                for key, prompt_obj in prompts_with_examples.items()
+            }
 
             # Log trial config
             trial_config = copy.deepcopy(base_experiment_config)
-            trial_config["configuration"]["prompt"] = (
-                messages_for_reporting  # Base instruction
-            )
+            trial_config["configuration"]["prompt"] = messages_for_reporting
             trial_config["configuration"]["examples"] = (
                 processed_demo_examples  # Log stringified examples
             )

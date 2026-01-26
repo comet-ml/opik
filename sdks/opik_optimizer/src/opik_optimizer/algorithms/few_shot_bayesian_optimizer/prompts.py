@@ -19,7 +19,7 @@ SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
     - "prompts": a list of prompt objects, each containing:
         - "name": the identifier for this prompt (e.g., "chat-prompt")
         - "messages": a list of messages, each with a role (system, user, or assistant) and a content field
-    - "examples": a list of example objects from the dataset (e.g., {{"text": "...", "expected_output": "..."}})
+    - "examples": a list of example objects from the dataset with their actual keys (e.g., {{"text": "...", "label": "..."}})
 
     Your task:
 
@@ -28,11 +28,11 @@ SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
         - Add a section title like "<!-- FEW-SHOT EXAMPLES -->" before the placeholder
 
     2. Create a simple "template" string for formatting each example. This template:
-        - Should be a simple format string like "Q: {{text}}\\nA: {{expected_output}}" using Python .format() style
-        - Must use variable names that match the keys in the examples (e.g., {{text}}, {{expected_output}})
+        - Should be a simple format string like "Q: {text}\\nA: {label}" using single curly braces for variable placeholders
+        - CRITICAL: Must use ONLY the EXACT key names that appear in the provided examples - check the "examples" field to see what keys are available
         - Must ONLY contain the format for a single example, NOT the entire prompt structure
         - Must NOT contain the string "{placeholder}" - the template is what REPLACES the placeholder
-        - Should include both input and expected output fields to demonstrate the expected response format
+        - Should include relevant fields from the examples to demonstrate the expected input/output format
 
     Return your output as a JSON object with:
     - One field for each prompt name (e.g., "chat-prompt") containing the updated messages list with the placeholder inserted
@@ -44,7 +44,7 @@ SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
             {{"role": "system", "content": "Instructions...\\n\\n<!-- FEW-SHOT EXAMPLES -->\\n{placeholder}"}},
             {{"role": "user", "content": "{{text}}"}}
         ],
-        "template": "Question: {{text}}\\nAnswer: {{expected_output}}"
+        "template": "Question: {text}\\nAnswer: {label}"
     }}
 
     IMPORTANT: The "template" field must be a simple format string for examples only. Do NOT include "{placeholder}" or the full prompt structure in the template.
