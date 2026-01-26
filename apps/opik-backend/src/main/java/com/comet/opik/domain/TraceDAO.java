@@ -1086,24 +1086,32 @@ class TraceDAOImpl implements TraceDAO {
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
             ), experiments_agg AS (
-                SELECT
+                SELECT DISTINCT
                     ei.trace_id,
                     e.id AS experiment_id,
                     e.name AS experiment_name,
                     e.dataset_id AS experiment_dataset_id
-                FROM experiment_items ei
+                FROM (
+                    SELECT DISTINCT experiment_id, trace_id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                ) ei
                 INNER JOIN (
                     SELECT id, name, dataset_id
                     FROM experiments
                     WHERE workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
+                    AND id IN (
+                        SELECT DISTINCT experiment_id
+                        FROM experiment_items
+                        WHERE workspace_id = :workspace_id
+                        <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                        <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                    )
+                    ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) e ON ei.experiment_id = e.id
-                WHERE ei.workspace_id = :workspace_id
-                <if(uuid_from_time)> AND ei.trace_id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND ei.trace_id \\<= :uuid_to_time <endif>
-                ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
-                LIMIT 1 BY ei.trace_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1208,7 +1216,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE ei.workspace_id = :workspace_id
                     AND <experiment_filters>
                     ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
-                    LIMIT 1 BY ei.trace_id
+                    LIMIT 1 BY ei.id
                  )
                  <endif>
                  <if(feedback_scores_empty_filters)>
@@ -1640,7 +1648,7 @@ class TraceDAOImpl implements TraceDAO {
                         WHERE ei.workspace_id = :workspace_id
                         AND <experiment_filters>
                         ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
-                        LIMIT 1 BY ei.trace_id
+                        LIMIT 1 BY ei.id
                     )
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
@@ -2305,7 +2313,7 @@ class TraceDAOImpl implements TraceDAO {
                     WHERE ei.workspace_id = :workspace_id
                     AND <experiment_filters>
                     ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
-                    LIMIT 1 BY ei.trace_id
+                    LIMIT 1 BY ei.id
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>
@@ -2468,8 +2476,6 @@ class TraceDAOImpl implements TraceDAO {
             LIMIT 1 BY t.id
             SETTINGS log_comment = '<log_comment>';
             """;
-
-    private static final Map<String, String> EXPERIMENT_FIELD_MAPPING = Map.of("experiment_id", "eaag.experiment_name");
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -2860,18 +2866,17 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ExperimentReference mapExperiment(Set<Trace.TraceField> exclude, Row row) {
-        String experimentId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_id", String.class);
-        String experimentName = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_name", String.class);
-        String experimentDatasetId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_dataset_id",
-                String.class);
+        UUID experimentId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_id", UUID.class);
+        UUID experimentDatasetId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_dataset_id",
+                UUID.class);
 
-        if (StringUtils.isBlank(experimentId) || StringUtils.isBlank(experimentName)
-                || StringUtils.isBlank(experimentDatasetId)) {
+        // Only check key fields - experimentName is editable and its absence doesn't indicate missing data
+        if (experimentId == null || experimentDatasetId == null) {
             return null;
         }
 
-        return new ExperimentReference(UUID.fromString(experimentId), experimentName,
-                UUID.fromString(experimentDatasetId));
+        String experimentName = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_name", String.class);
+        return new ExperimentReference(experimentId, experimentName, experimentDatasetId);
     }
 
     private Publisher<TraceDetails> mapToTraceDetails(Result result) {
@@ -2948,7 +2953,8 @@ class TraceDAOImpl implements TraceDAO {
 
             var finalTemplate = template;
             Optional.ofNullable(
-                    sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(), EXPERIMENT_FIELD_MAPPING))
+                    sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(),
+                            TraceSortingFactory.EXPERIMENT_FIELD_MAPPING))
                     .ifPresent(sortFields -> {
 
                         if (sortFields.contains("feedback_scores")) {
