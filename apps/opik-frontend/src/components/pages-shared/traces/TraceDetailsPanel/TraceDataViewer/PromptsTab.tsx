@@ -14,6 +14,8 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type RawPromptData = {
   id: string;
@@ -95,7 +97,11 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   data,
   search,
 }) => {
-  const rawPrompts = get(data.metadata, "opik_prompts", null);
+  const rawPrompts = get(
+    data.metadata as Record<string, unknown>,
+    "opik_prompts",
+    null,
+  ) as RawPromptData[] | null;
   const optimizerPayloads = get(
     data.metadata,
     "opik_optimizer.initial_prompts",
@@ -107,8 +113,8 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
     null,
   ) as OptimizerPromptPayload[] | null;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const showOptimizerPrompts = useAppStore(
-    (state) => state.featureFlags?.showOptimizerPrompts ?? false,
+  const showOptimizerPrompts = useIsFeatureEnabled(
+    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
   );
 
   const prompts = useMemo(() => {
