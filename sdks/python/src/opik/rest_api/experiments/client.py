@@ -95,9 +95,12 @@ class ExperimentsClient:
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
+        project_deleted: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         experiment_ids: typing.Optional[str] = None,
+        force_sorting: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -121,11 +124,17 @@ class ExperimentsClient:
 
         prompt_id : typing.Optional[str]
 
+        project_id : typing.Optional[str]
+
+        project_deleted : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         filters : typing.Optional[str]
 
         experiment_ids : typing.Optional[str]
+
+        force_sorting : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -150,9 +159,12 @@ class ExperimentsClient:
             name=name,
             dataset_deleted=dataset_deleted,
             prompt_id=prompt_id,
+            project_id=project_id,
+            project_deleted=project_deleted,
             sorting=sorting,
             filters=filters,
             experiment_ids=experiment_ids,
+            force_sorting=force_sorting,
             request_options=request_options,
         )
         return _response.data
@@ -399,6 +411,7 @@ class ExperimentsClient:
         groups: typing.Optional[str] = None,
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentGroupResponse:
@@ -412,6 +425,8 @@ class ExperimentsClient:
         types : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -430,7 +445,12 @@ class ExperimentsClient:
         client.experiments.find_experiment_groups()
         """
         _response = self._raw_client.find_experiment_groups(
-            groups=groups, types=types, name=name, filters=filters, request_options=request_options
+            groups=groups,
+            types=types,
+            name=name,
+            project_id=project_id,
+            filters=filters,
+            request_options=request_options,
         )
         return _response.data
 
@@ -440,6 +460,7 @@ class ExperimentsClient:
         groups: typing.Optional[str] = None,
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentGroupAggregationsResponse:
@@ -453,6 +474,8 @@ class ExperimentsClient:
         types : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -471,7 +494,12 @@ class ExperimentsClient:
         client.experiments.find_experiment_groups_aggregations()
         """
         _response = self._raw_client.find_experiment_groups_aggregations(
-            groups=groups, types=types, name=name, filters=filters, request_options=request_options
+            groups=groups,
+            types=types,
+            name=name,
+            project_id=project_id,
+            filters=filters,
+            request_options=request_options,
         )
         return _response.data
 
@@ -754,9 +782,12 @@ class AsyncExperimentsClient:
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
+        project_deleted: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         experiment_ids: typing.Optional[str] = None,
+        force_sorting: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentPagePublic:
         """
@@ -780,11 +811,17 @@ class AsyncExperimentsClient:
 
         prompt_id : typing.Optional[str]
 
+        project_id : typing.Optional[str]
+
+        project_deleted : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         filters : typing.Optional[str]
 
         experiment_ids : typing.Optional[str]
+
+        force_sorting : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -812,9 +849,12 @@ class AsyncExperimentsClient:
             name=name,
             dataset_deleted=dataset_deleted,
             prompt_id=prompt_id,
+            project_id=project_id,
+            project_deleted=project_deleted,
             sorting=sorting,
             filters=filters,
             experiment_ids=experiment_ids,
+            force_sorting=force_sorting,
             request_options=request_options,
         )
         return _response.data
@@ -1079,6 +1119,7 @@ class AsyncExperimentsClient:
         groups: typing.Optional[str] = None,
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentGroupResponse:
@@ -1092,6 +1133,8 @@ class AsyncExperimentsClient:
         types : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -1113,7 +1156,12 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_experiment_groups(
-            groups=groups, types=types, name=name, filters=filters, request_options=request_options
+            groups=groups,
+            types=types,
+            name=name,
+            project_id=project_id,
+            filters=filters,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1123,6 +1171,7 @@ class AsyncExperimentsClient:
         groups: typing.Optional[str] = None,
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentGroupAggregationsResponse:
@@ -1136,6 +1185,8 @@ class AsyncExperimentsClient:
         types : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -1157,7 +1208,12 @@ class AsyncExperimentsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_experiment_groups_aggregations(
-            groups=groups, types=types, name=name, filters=filters, request_options=request_options
+            groups=groups,
+            types=types,
+            name=name,
+            project_id=project_id,
+            filters=filters,
+            request_options=request_options,
         )
         return _response.data
 
