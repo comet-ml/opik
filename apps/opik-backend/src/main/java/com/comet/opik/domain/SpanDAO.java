@@ -992,8 +992,6 @@ class SpanDAO {
                 <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
-                <if(type)> AND type = :type <endif>
-                <if(filters)> AND <filters> <endif>
             ),
             feedback_scores_combined_raw AS (
                 SELECT workspace_id,
@@ -1148,8 +1146,6 @@ class SpanDAO {
                 <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                 <if(trace_id)> AND trace_id = :trace_id <endif>
-                <if(type)> AND type = :type <endif>
-                <if(filters)> AND <filters> <endif>
             ),
             feedback_scores_combined_raw AS (
                 SELECT workspace_id,
