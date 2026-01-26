@@ -50,6 +50,7 @@ export type UseExperimentsGroupsAndFiltersProps = {
   sortedColumns: ColumnSort[];
   filters: Filters;
   promptId?: string;
+  projectId?: string;
 };
 
 export const useExperimentsGroupsAndFilters = ({
@@ -57,6 +58,7 @@ export const useExperimentsGroupsAndFilters = ({
   sortedColumns,
   filters,
   promptId,
+  projectId,
 }: UseExperimentsGroupsAndFiltersProps) => {
   const [groups, setGroups] = useQueryParamAndLocalStorageState<Groups>({
     localStorageKey: `${storageKeyPrefix}-columns-groups`,
@@ -92,13 +94,14 @@ export const useExperimentsGroupsAndFilters = ({
             placeholder: "key",
             excludeRoot: true,
             ...(promptId && { promptId }),
+            ...(projectId && { projectId }),
             sorting: sortedColumns,
             filters,
           },
         },
       },
     }),
-    [filters, sortedColumns, promptId],
+    [filters, sortedColumns, promptId, projectId],
   );
 
   return {

@@ -163,11 +163,17 @@ type AddExperimentDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   datasetName?: string;
+  projectName?: string;
 };
 
 const AddExperimentDialog: React.FunctionComponent<
   AddExperimentDialogProps
-> = ({ open, setOpen, datasetName: initialDatasetName = "" }) => {
+> = ({
+  open,
+  setOpen,
+  datasetName: initialDatasetName = "",
+  projectName = "",
+}) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
@@ -271,7 +277,9 @@ ${metricsString}
 eval_results = evaluate(
   experiment_name="my_evaluation",
   dataset=dataset,
-  task=evaluation_task${metricsParam}
+  task=evaluation_task${metricsParam}${
+    projectName ? `,\n  project_name=${JSON.stringify(projectName)}` : ""
+  }
 )`;
 
   const { data, isLoading } = useDatasetsList(

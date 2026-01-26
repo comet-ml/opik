@@ -79,6 +79,7 @@ type UseGroupedExperimentsListParams = {
   sorting?: Sorting;
   groups?: Groups;
   promptId?: string;
+  projectId?: string;
   search?: string;
   page: number;
   size: number;
@@ -342,7 +343,17 @@ export default function useGroupedExperimentsList(
 
   // Extract project_id from filters and pass it as a separate parameter
   // because project_id filtering requires a special SQL query (join with traces)
+  // If projectId is provided directly as a parameter, use it instead
   const { projectId, projectDeleted, filtersWithoutProjectId } = useMemo(() => {
+    // If projectId is provided directly, use it
+    if (params.projectId) {
+      return {
+        projectId: params.projectId,
+        projectDeleted: undefined,
+        filtersWithoutProjectId: params.filters,
+      };
+    }
+
     const projectFilter = params.filters?.find(
       (f) => f.field === COLUMN_PROJECT_ID,
     );
@@ -361,7 +372,7 @@ export default function useGroupedExperimentsList(
       projectDeleted: isOrphanProjectFilter ? true : undefined,
       filtersWithoutProjectId: otherFilters,
     };
-  }, [params.filters]);
+  }, [params.filters, params.projectId]);
 
   const {
     data: groupsData,
@@ -522,10 +533,10 @@ export default function useGroupedExperimentsList(
         : undefined;
       const isOrphanProject = projectMeta?.label === DELETED_ENTITY_LABEL;
 
-      // Get project ID - prefer filter value, fall back to group metadata value
-      const projectIdValue = (projectFilter?.value ?? projectMeta?.value) as
-        | string
-        | undefined;
+      // Get project ID - prefer direct param, then filter value, then group metadata value
+      const projectIdValue = (projectId ??
+        projectFilter?.value ??
+        projectMeta?.value) as string | undefined;
 
       const queryParams: UseExperimentsListParams = {
         workspaceName: params.workspaceName,
