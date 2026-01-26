@@ -27,7 +27,6 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { Thread } from "@/types/traces";
-import { ThreadStatus } from "@/types/thread";
 import { AnnotationQueue } from "@/types/annotation-queues";
 import {
   convertColumnDataToColumn,
@@ -54,7 +53,6 @@ import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
-import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -102,12 +100,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
-  },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.category,
-    cell: ThreadStatusCell as never,
   },
   {
     id: "created_at",
@@ -315,15 +307,6 @@ const ThreadQueueItemsTab: React.FunctionComponent<
               .sort()
               .map((key) => ({ value: key, label: key })),
             placeholder: "Select score",
-          },
-        },
-        status: {
-          keyComponentProps: {
-            options: [
-              { value: ThreadStatus.INACTIVE, label: "Inactive" },
-              { value: ThreadStatus.ACTIVE, label: "Active" },
-            ],
-            placeholder: "Select value",
           },
         },
       },

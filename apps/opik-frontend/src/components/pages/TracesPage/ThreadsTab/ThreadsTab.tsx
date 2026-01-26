@@ -67,14 +67,12 @@ import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/Thread
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import { ThreadStatus } from "@/types/thread";
 import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
@@ -112,12 +110,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
-  },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.category,
-    cell: ThreadStatusCell as never,
   },
   {
     id: "created_at",
@@ -422,15 +414,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           keyComponentProps: {
             projectId,
             placeholder: "Select score",
-          },
-        },
-        status: {
-          keyComponentProps: {
-            options: [
-              { value: ThreadStatus.INACTIVE, label: "Inactive" },
-              { value: ThreadStatus.ACTIVE, label: "Active" },
-            ],
-            placeholder: "Select value",
           },
         },
       },

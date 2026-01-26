@@ -64,6 +64,8 @@ public interface FeedbackScoreDAO {
     Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(List<UUID> projectId);
 
     Mono<Long> deleteThreadManualScores(Set<UUID> threadModelIds, UUID projectId);
+
+    Mono<Long> deleteAllThreadScores(Set<UUID> threadModelIds, UUID projectId);
 }
 
 @Singleton
@@ -615,6 +617,45 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("entity_ids", threadModelIds)
                     .bind("entity_type", EntityType.THREAD.getType())
                     .bind("sources", sources)
+                    .bind("project_id", projectId)
+                    .bind("workspace_id", workspaceId);
+
+            return Mono.from(statement1.execute())
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
+                    .then(Mono.from(statement2.execute()))
+                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
+        }));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> deleteAllThreadScores(@NonNull Set<UUID> threadModelIds, @NonNull UUID projectId) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(threadModelIds),
+                "Argument 'threadModelIds' must not be empty");
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+
+            // Delete from feedback_scores table - no source filter, deletes all scores
+            var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS, "delete_all_thread_scores",
+                    workspaceId, threadModelIds.size());
+            template1.add("project_id", projectId);
+            template1.add("table_name", "feedback_scores");
+
+            var statement1 = connection.createStatement(template1.render())
+                    .bind("entity_ids", threadModelIds)
+                    .bind("entity_type", EntityType.THREAD.getType())
+                    .bind("project_id", projectId)
+                    .bind("workspace_id", workspaceId);
+
+            // Delete from authored_feedback_scores table - no source filter, deletes all scores
+            var template2 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
+                    "delete_all_thread_scores_authored", workspaceId, threadModelIds.size());
+            template2.add("project_id", projectId);
+            template2.add("table_name", "authored_feedback_scores");
+
+            var statement2 = connection.createStatement(template2.render())
+                    .bind("entity_ids", threadModelIds)
+                    .bind("entity_type", EntityType.THREAD.getType())
                     .bind("project_id", projectId)
                     .bind("workspace_id", workspaceId);
 
