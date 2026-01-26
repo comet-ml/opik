@@ -3,17 +3,16 @@ from contextlib import contextmanager
 from typing import Generator, Any
 
 from opik import context_storage
-from opik.api_objects import opik_client
-from opik.decorator import arguments_helpers, base_track_decorator, error_info_collector
+from opik.api_objects import span
+from opik.decorator import base_track_decorator
 from opik.types import DistributedTraceHeadersDict
-
 
 LOGGER = logging.getLogger(__name__)
 
 
 @contextmanager
 def distributed_headers(
-    headers: DistributedTraceHeadersDict, flush: bool = False
+    headers: DistributedTraceHeadersDict,
 ) -> Generator[None, Any, None]:
     """
     Context manager for managing distributed tracing headers.
@@ -24,7 +23,6 @@ def distributed_headers(
 
     Args:
         headers: Distributed tracing headers used for root span creation.
-        flush: Whether to flush the client data after the root span is created and processed.
     """
     if not headers:
         LOGGER.warning(
@@ -33,21 +31,20 @@ def distributed_headers(
         yield
         return
 
-    start_span_parameters = arguments_helpers.StartSpanParameters(
-        name="root",
-        type="general",
-    )
+    trace_id = headers["opik_trace_id"]
+    base_track_decorator.add_fake_remote_trace(trace_id)
 
-    # create the root span with distributed headers
-    span_creation_result = base_track_decorator.add_start_candidates(
-        start_span_parameters=start_span_parameters,
-        opik_distributed_trace_headers=headers,
-        opik_args_data=None,
-        tracing_active=True,
-        create_duplicate_root_span=True,
-    )
-
-    end_arguments = arguments_helpers.EndSpanParameters()
+    parent_span_id = headers.get("opik_parent_span_id")
+    if parent_span_id is not None:
+        # this is a fake span that imitates a span created somewhere,
+        # so using opik_parent_span_id as span_id
+        span_data = span.SpanData(
+            id=parent_span_id,
+            trace_id=trace_id,
+        )
+        context_storage.add_span_data(span_data)
+    else:
+        span_data = None
 
     try:
         yield
@@ -58,22 +55,11 @@ def distributed_headers(
             exc_info=True,
         )
 
-        # collect error info
-        end_arguments.error_info = error_info_collector.collect(exception)
         raise
     finally:
-        # save root span data at the end of the context manager
-        client = opik_client.get_client_cached()
-
-        # Initialize end time before saving
-        span_creation_result.span_data.update(
-            **end_arguments.to_kwargs()
-        ).init_end_time()
-        client.span(**span_creation_result.span_data.as_parameters)
-
-        # Clean up root span data from context
+        # Clean up fake trace/span data from context
         opik_context_storage = context_storage.get_current_context_instance()
-        opik_context_storage.pop_span_data(ensure_id=span_creation_result.span_data.id)
-
-        if flush:
-            client.flush()
+        opik_context_storage.pop_trace_data(ensure_id=trace_id)
+        base_track_decorator.pop_fake_remote_trace_id(trace_id=trace_id)
+        if span_data is not None:
+            opik_context_storage.pop_span_data(ensure_id=span_data.id)
