@@ -2339,6 +2339,15 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
       - name: sorting
         in: query
         schema:
@@ -2352,6 +2361,13 @@ paths:
         schema:
           type: string
           description: Filter experiments by a list of experiment IDs
+      - name: force_sorting
+        in: query
+        schema:
+          type: boolean
+          description: Force sorting even when exceeding the endpoint result set limit.
+            May result in slower queries
+          default: false
       responses:
         "200":
           description: Experiments resource
@@ -2507,6 +2523,11 @@ paths:
         schema:
           type: string
           description: "Filter experiments by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: filters
         in: query
         schema:
@@ -2545,6 +2566,11 @@ paths:
         schema:
           type: string
           description: "Filter experiments by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: filters
         in: query
         schema:
