@@ -113,7 +113,7 @@ const useNavigationBlocker = ({
     [handleCancelNavigation, isSaving],
   );
 
-  const showSaveAndLeave = Boolean(isFunction(onSaveAndLeave));
+  const showSaveAndLeave = isFunction(onSaveAndLeave);
 
   const stayButton = (
     <DialogClose asChild>
