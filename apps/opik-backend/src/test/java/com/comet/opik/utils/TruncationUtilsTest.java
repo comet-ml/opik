@@ -6,8 +6,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -17,18 +20,15 @@ class TruncationUtilsTest {
     @DisplayName("createSlimJson with JsonNode")
     class CreateSlimJsonNodeTests {
 
-        @Test
-        @DisplayName("should return NullNode for null input")
-        void shouldReturnNullNodeForNullInput() {
-            JsonNode result = TruncationUtils.createSlimJson(null, 100);
-            assertThat(result).isNotNull();
-            assertThat(result.isNull()).isTrue();
+        static Stream<JsonNode> nullishInputs() {
+            return Stream.of(null, NullNode.getInstance());
         }
 
-        @Test
-        @DisplayName("should return NullNode for NullNode input")
-        void shouldReturnNullNodeForNullNodeInput() {
-            JsonNode result = TruncationUtils.createSlimJson(NullNode.getInstance(), 100);
+        @ParameterizedTest
+        @MethodSource("nullishInputs")
+        @DisplayName("should return NullNode for nullish inputs")
+        void shouldReturnNullNodeForNullishInputs(JsonNode input) {
+            JsonNode result = TruncationUtils.createSlimJson(input, 100);
             assertThat(result).isNotNull();
             assertThat(result.isNull()).isTrue();
         }
