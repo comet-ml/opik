@@ -80,7 +80,8 @@ def _is_hf_revision_not_found(exc: Exception) -> bool:
     if not isinstance(exc, HfHubHTTPError):
         return False
     message = str(exc)
-    return "revision" in message and ("404" in message or "Not Found" in message)
+    lower_message = message.lower()
+    return "revision" in lower_message and ("404" in message or "not found" in lower_message)
 
 
 def _retry_with_main_revision(
