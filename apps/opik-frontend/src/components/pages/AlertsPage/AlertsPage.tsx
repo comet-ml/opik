@@ -329,6 +329,7 @@ const AlertsPage: React.FunctionComponent = () => {
               filters={filters}
               onChange={setFilters}
               config={filtersConfig}
+              layout="icon"
             />
           </div>
 
