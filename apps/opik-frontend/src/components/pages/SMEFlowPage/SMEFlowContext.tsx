@@ -176,7 +176,6 @@ const getChangedScores = (state: AnnotationState) => {
 
 const validateCurrentItem = (
   item: Trace | Thread | undefined,
-  isThread: boolean,
 ): ValidationError[] => {
   const errors: ValidationError[] = [];
 
@@ -748,13 +747,13 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   ]);
 
   const validationState = useMemo((): ValidationState => {
-    const errors = validateCurrentItem(currentItem, isThread);
+    const errors = validateCurrentItem(currentItem);
     const hasChanges = hasUnsavedChanges(currentAnnotationState);
     return {
       canSubmit: errors.length === 0 && hasChanges,
       errors,
     };
-  }, [currentItem, isThread, currentAnnotationState]);
+  }, [currentItem, currentAnnotationState]);
 
   useEffect(() => {
     if (!currentView && !isItemsLoading && queueItems.length > 0) {
