@@ -76,9 +76,21 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
   const hasPrompts = useMemo(() => {
     const prompts = get(data.metadata, "opik_prompts", null);
-    if (!prompts) return false;
-    if (Array.isArray(prompts)) return (prompts as unknown[]).length > 0;
-    return false; // opik_prompts should always be an array
+    if (Array.isArray(prompts) && prompts.length > 0) return true;
+    const optimizerInitial = get(
+      data.metadata,
+      "opik_optimizer.initial_prompts",
+      null,
+    );
+    if (Array.isArray(optimizerInitial) && optimizerInitial.length > 0) {
+      return true;
+    }
+    const optimizerPayloads = get(
+      data.metadata,
+      "opik_optimizer.prompt_payloads",
+      null,
+    );
+    return Array.isArray(optimizerPayloads) && optimizerPayloads.length > 0;
   }, [data.metadata]);
 
   const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
