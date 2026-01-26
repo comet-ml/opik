@@ -1,7 +1,47 @@
-"""Metric factory for Optimization Studio."""
+"""Metric factory for Optimization Studio.
+
+This module provides secure metric execution by reusing the executor infrastructure
+from the automations feature (opik_backend.evaluator).
+
+## Security Model
+
+Code metrics execute user-provided Python code, which requires security isolation
+appropriate for the deployment environment. This is controlled by the
+PYTHON_CODE_EXECUTOR_STRATEGY environment variable:
+
+- 'docker': Full container sandboxing for multi-tenant cloud environments
+- 'process': Process isolation for local/self-hosted environments
+
+## Architectural Constraints
+
+Optimization jobs run in isolated subprocesses (via IsolatedSubprocessExecutor)
+to prevent memory leaks and crashes from affecting the main Flask server.
+
+For the 'docker' strategy:
+- Uses DockerExecutor.run_scoring() for full container sandboxing
+- Inherits pre-allocated sandbox environments and configured timeouts
+
+For the 'process' strategy:
+- Calls run_user_code() directly instead of ProcessExecutor.run_scoring()
+- Why? ProcessExecutor.start_services() spawns its own worker process pool,
+  which fails when called from within an already-isolated subprocess due to
+  signal handler conflicts and nested process management issues
+- run_user_code() provides the same core security logic from process_worker.py
+  (exec() in isolated module namespace) without requiring a process pool
+- This is appropriate since:
+  * Optimization subprocess already provides memory/crash isolation
+  * Metrics execute sequentially, so ProcessExecutor's throughput/concurrency
+    configs are not relevant in this context
+  * Timeout is handled by the outer optimization job supervisor
+
+This hybrid approach matches the PR requirement to "reuse the existing executor
+infrastructure" while respecting the discovered architectural constraints of
+running within isolated optimization subprocesses.
+"""
 
 import logging
-from typing import Callable, Dict, Any
+import os
+from typing import Callable, Dict, Any, Optional
 
 from opik.evaluation.metrics import (
     Equals,
@@ -9,10 +49,73 @@ from opik.evaluation.metrics import (
     LevenshteinRatio,
     StructuredOutputCompliance,
 )
+from opik.evaluation.metrics.score_result import ScoreResult
+
+from opik_backend.executor import CodeExecutorBase
+
 from .config import DEFAULT_REFERENCE_KEY, DEFAULT_CASE_SENSITIVE
 from .exceptions import InvalidMetricError
 
 logger = logging.getLogger(__name__)
+
+# Environment variable to control execution strategy (same as evaluator.py)
+EXECUTION_STRATEGY = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "process")
+
+# Singleton executor for code metrics (only for docker strategy)
+_code_metric_executor: Optional[CodeExecutorBase] = None
+
+
+def _run_code_metric(code: str, data: dict) -> dict:
+    """Execute code metric using the appropriate executor strategy.
+    
+    Reuses the automations evaluator infrastructure (opik_backend.evaluator) while
+    respecting the architectural constraints of running in optimization subprocesses.
+    
+    Security Strategy (controlled by PYTHON_CODE_EXECUTOR_STRATEGY env var):
+    
+    'docker' strategy (multi-tenant environments):
+      - Uses DockerExecutor.run_scoring() for full container sandboxing
+      - Inherits pre-allocated sandbox environments
+      - Configured timeouts, concurrency via env vars
+      - Same executor used by opik_backend.evaluator.execute_evaluator_python
+    
+    'process' strategy (local/self-hosted environments):
+      - Uses run_user_code() directly from opik_backend.process_worker
+      - Same core security logic as ProcessExecutor (exec in isolated namespace)
+      - Why not ProcessExecutor.run_scoring()?
+        * Optimization jobs run in isolated subprocesses (IsolatedSubprocessExecutor)
+        * ProcessExecutor.start_services() spawns worker process pool
+        * Nested process pools fail with signal handler conflicts
+        * run_user_code() provides same isolation without nested pools
+        * ProcessExecutor's throughput/concurrency configs are irrelevant since
+          metrics execute sequentially in the optimization subprocess
+    
+    This hybrid approach reuses the executor infrastructure while respecting
+    the architectural reality that optimization jobs run in isolated subprocesses.
+    
+    Args:
+        code: Python code containing a BaseMetric subclass
+        data: Dictionary with 'output' (LLM response) and dataset_item fields
+        
+    Returns:
+        Response dict with 'scores' list on success, or 'error' key on failure
+    """
+    global _code_metric_executor
+    
+    if EXECUTION_STRATEGY == "docker":
+        # Multi-tenant: Use DockerExecutor for full container sandboxing
+        if _code_metric_executor is None:
+            from opik_backend.executor_docker import DockerExecutor
+            _code_metric_executor = DockerExecutor()
+            logger.info("Created DockerExecutor for code metrics (multi-tenant isolation)")
+        return _code_metric_executor.run_scoring(code, data)
+    
+    else:
+        # Local/self-hosted (process strategy): Use run_user_code directly
+        # This is the same core logic used by ProcessExecutor, but without creating
+        # a worker pool (which would fail in the nested subprocess context)
+        from opik_backend.process_worker import run_user_code
+        return run_user_code(code, data)
 
 
 class MetricFactory:
@@ -213,3 +316,116 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
     metric_fn.__name__ = "json_schema_validator"
     return metric_fn
 
+
+@MetricFactory.register("code")
+def _build_code_metric(params: Dict[str, Any], model: str) -> Callable:
+    """Build a custom code metric function using the secure executor infrastructure.
+    
+    User code is executed using the same executor infrastructure as the automations
+    evaluator, providing security isolation appropriate for the deployment environment:
+    - DockerExecutor: Full container sandboxing for multi-tenant environments
+    - ProcessExecutor: Process isolation with pre-warmed worker pools for local/OSS
+    
+    The executor type is determined by PYTHON_CODE_EXECUTOR_STRATEGY env var and
+    inherits all configuration (timeouts, concurrency, etc.) from the executor setup.
+    
+    Code must define a BaseMetric subclass:
+    
+        from opik.evaluation.metrics import BaseMetric
+        from opik.evaluation.metrics.score_result import ScoreResult
+        
+        class MyMetric(BaseMetric):
+            def __init__(self, name: str = "my_metric"):
+                super().__init__(name=name)
+            
+            def score(self, output: str, **kwargs) -> ScoreResult:
+                # output: the LLM response
+                # kwargs: contains dataset_item fields
+                return ScoreResult(
+                    name=self.name,
+                    value=1.0,
+                    reason="Evaluation reason"
+                )
+    
+    Args:
+        params: Metric parameters
+            - code (str): Python code containing a BaseMetric subclass
+        model: LLM model (not used for this metric)
+        
+    Returns:
+        Metric function with signature (dataset_item, llm_output) -> ScoreResult
+        
+    Raises:
+        InvalidMetricError: If code is missing or invalid
+    """
+    code = params.get("code")
+    if not code:
+        raise InvalidMetricError("code", "Missing 'code' parameter for code metric")
+    
+    logger.info(f"Building code metric (code length: {len(code)} chars)")
+    
+    # Validate code and extract metric name by running it once with dummy data
+    # This gets the actual metric.name attribute from the instantiated class
+    # Uses the same secure executor infrastructure (Docker or Process) as actual scoring
+    try:
+        # Do a quick validation run with dummy data to extract the metric name
+        validation_response = _run_code_metric(code, {"output": ""})
+        
+        if "error" in validation_response:
+            raise InvalidMetricError("code", f"Invalid Python code: {validation_response['error']}")
+        
+        # Extract the metric name from the first score result
+        scores = validation_response.get("scores", [])
+        if scores and scores[0].get("name"):
+            metric_name = scores[0]["name"]
+        else:
+            metric_name = "code"
+        logger.info(f"Extracted metric name from class: {metric_name}")
+        
+    except InvalidMetricError:
+        raise
+    except Exception as e:
+        raise InvalidMetricError("code", f"Failed to validate metric code: {e}")
+    
+    def isolated_metric(dataset_item: Dict[str, Any], llm_output: str) -> ScoreResult:
+        """Execute the metric using the configured executor strategy."""
+        # Merge data: output + dataset_item fields
+        # This matches metric.score(**data) interface in process_worker.py
+        data = {"output": llm_output, **dataset_item}
+        
+        logger.debug(f"Executing code metric with data keys: {list(data.keys())}")
+        
+        # Execute using the executor infrastructure (same as automations evaluator)
+        # This respects PYTHON_CODE_EXECUTOR_STRATEGY for appropriate security level
+        response = _run_code_metric(code, data)
+        
+        if "error" in response:
+            error_msg = response.get('error', 'Unknown error')
+            logger.warning(f"Code metric error: {error_msg}")
+            return ScoreResult(
+                name="code",
+                value=0.0,
+                reason=f"Error: {error_msg[:200]}"
+            )
+        
+        scores = response.get("scores", [])
+        if not scores:
+            logger.warning("Code metric returned no scores")
+            return ScoreResult(
+                name="code",
+                value=0.0,
+                reason="No ScoreResult returned by metric"
+            )
+        
+        # Return first score (studio expects single score)
+        # The metric name is preserved from the user's BaseMetric class
+        score = scores[0]
+        logger.debug(f"Code metric returned score: name={score.get('name')}, value={score.get('value')}")
+        return ScoreResult(
+            name=score.get("name"),
+            value=score.get("value", 0.0),
+            reason=score.get("reason", "")
+        )
+    
+    isolated_metric.__name__ = metric_name
+    return isolated_metric

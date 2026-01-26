@@ -17,14 +17,16 @@ export const isPythonCodeRule = (rule: EvaluatorsRule): boolean => {
 /**
  * Attempts to extract metric name from Python code by parsing the __init__ default parameter.
  * Looks for patterns like: def __init__(self, name: str = "my_custom_metric")
- * Returns empty array if no name can be extracted.
+ * Returns the extracted name or null if no name can be extracted.
  */
-const extractMetricNameFromPythonCode = (code: string): string[] => {
+export const extractMetricNameFromPythonCode = (
+  code: string,
+): string | null => {
   // Match: def __init__(self, name: str = "metric_name") or name = 'metric_name'
   const pattern =
     /def\s+__init__\s*\([^)]*name(?:\s*:\s*str)?\s*=\s*["']([^"']+)["']/;
   const match = code.match(pattern);
-  return match?.[1] ? [match[1]] : [];
+  return match?.[1] || null;
 };
 
 export const isLLMJudgeRule = (rule: EvaluatorsRule): boolean => {
@@ -45,7 +47,10 @@ export const getScoreNamesFromRule = (rule: EvaluatorsRule): string[] => {
     // Attempt to extract metric name from Python code by parsing __init__ default parameter
     // This works for the common pattern: def __init__(self, name: str = "metric_name")
     // Falls back to empty array if name cannot be extracted (dynamic names, etc.)
-    return extractMetricNameFromPythonCode(pythonRule.code.metric || "");
+    const metricName = extractMetricNameFromPythonCode(
+      pythonRule.code.metric || "",
+    );
+    return metricName ? [metricName] : [];
   }
   return [];
 };
