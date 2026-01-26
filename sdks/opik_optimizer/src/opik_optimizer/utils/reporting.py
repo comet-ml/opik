@@ -24,7 +24,6 @@ def get_console(*args: Any, **kwargs: Any) -> Console:
     global _CONSOLE
     if _CONSOLE is None:
         _CONSOLE = Console(*args, **kwargs)
-        _CONSOLE.is_jupyter = False
     return _CONSOLE
 
 
