@@ -39,18 +39,21 @@ def levenshtein_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreRe
 def create_optimizer_config(
     optimizer_class: type,
     *,
-    max_tokens: int,
+    max_tokens: int | None = None,
     verbose: int = 0,
 ) -> dict[str, Any]:
     """
     Create minimal optimizer configuration for fast e2e testing.
     """
+    model_parameters: dict[str, Any] = {
+        "temperature": 0.7,
+    }
+    if max_tokens is not None:
+        model_parameters["max_tokens"] = max_tokens
+
     base_config: dict[str, Any] = {
         "model": "openai/gpt-4o-mini",
-        "model_parameters": {
-            "temperature": 0.7,
-            "max_tokens": max_tokens,
-        },
+        "model_parameters": model_parameters,
         "verbose": verbose,
         "seed": 42,
         "name": f"e2e-{optimizer_class.__name__}",

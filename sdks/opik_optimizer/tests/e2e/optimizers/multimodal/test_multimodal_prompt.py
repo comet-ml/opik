@@ -120,7 +120,7 @@ def test_multimodal_prompt(
     dataset = setup_driving_hazard_dataset
 
     # Create optimizer with minimal config
-    config = create_optimizer_config(optimizer_class, max_tokens=5000, verbose=0)
+    config = create_optimizer_config(optimizer_class, verbose=0)
     optimizer = optimizer_class(**config)
     results = run_optimizer(
         optimizer_class=optimizer_class,

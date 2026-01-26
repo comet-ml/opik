@@ -183,6 +183,86 @@ class TestSanitizeGeneratedPrompts:
         # Original dict should still have same count (function returns new dict)
         assert len(prompt_json["prompts"]) == original_count
 
+    def test_handles_multimodal_content(self) -> None:
+        """Should handle multimodal content (list of content parts) without errors."""
+        # Create a prompt with multimodal content (text + image)
+        prompt_json = {
+            "prompts": [
+                {
+                    "prompt": [
+                        system_message("You are an image analysis assistant."),
+                        user_message(
+                            [
+                                {
+                                    "type": "text",
+                                    "text": "Describe this image with f1 score.",
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": "https://example.com/image.jpg"
+                                    },
+                                },
+                            ]
+                        ),
+                    ]
+                },
+                {
+                    "prompt": [
+                        system_message("Be helpful."),
+                        user_message(
+                            [
+                                {"type": "text", "text": "What is in this image?"},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": "https://example.com/image2.jpg"
+                                    },
+                                },
+                            ]
+                        ),
+                    ]
+                },
+            ]
+        }
+
+        result = sanitize_generated_prompts(prompt_json, "my_metric")
+
+        # First prompt should be rejected (contains "f1 score"), second should be kept
+        assert len(result["prompts"]) == 1
+        kept = result["prompts"][0]
+        # Verify multimodal structure is preserved
+        user_msg = kept["prompt"][1]
+        assert isinstance(user_msg["content"], list)
+        assert len(user_msg["content"]) == 2
+        assert user_msg["content"][0]["type"] == "text"
+        assert "What is in this image?" in user_msg["content"][0]["text"]
+
+    def test_handles_multimodal_content_with_clean_text(self) -> None:
+        """Should preserve multimodal prompts with clean text content."""
+        prompt_json = {
+            "prompts": [
+                {
+                    "prompt": [
+                        system_message("Analyze images."),
+                        user_message(
+                            [
+                                {"type": "text", "text": "What do you see?"},
+                                {"type": "image_url", "image_url": {"url": "{image}"}},
+                            ]
+                        ),
+                    ]
+                },
+            ]
+        }
+
+        result = sanitize_generated_prompts(prompt_json, "my_metric")
+
+        # Should be preserved (no leakage)
+        assert len(result["prompts"]) == 1
+        kept = result["prompts"][0]
+        assert isinstance(kept["prompt"][1]["content"], list)
+
 
 class TestFormatAgentPromptsForPrompt:
     """Tests for _format_agent_prompts_for_prompt function."""

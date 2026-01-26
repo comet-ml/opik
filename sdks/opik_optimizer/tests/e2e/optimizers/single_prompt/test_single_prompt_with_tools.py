@@ -101,7 +101,6 @@ def test_single_prompt_with_tools(
     # Create optimizer with minimal config
     config = create_optimizer_config(
         optimizer_class,
-        max_tokens=500,
         verbose=0,
     )
     optimizer = optimizer_class(**config)

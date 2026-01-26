@@ -12,7 +12,7 @@ from collections.abc import Callable, Sequence
 from litellm.exceptions import BadRequestError
 
 from ....api_objects import chat_prompt
-from ....api_objects.types import MetricFunction
+from ....api_objects.types import MetricFunction, extract_text_from_content
 from ....core import llm_calls as _llm_calls
 from ....core.llm_calls import StructuredOutputParsingError
 from ....core.results import OptimizationRound
@@ -93,13 +93,19 @@ def sanitize_generated_prompts(
             has_leakage = False
             for message in prompt_item["prompt"]:
                 content = message.get("content", "")
-                content_lower = content.lower()
+                # Extract text from content (handles both string and multimodal list content)
+                text_content = extract_text_from_content(content)
+                content_lower = text_content.lower()
                 for pattern in FORBIDDEN_PATTERNS:
                     if pattern in content_lower:
+                        # Format content for logging
+                        content_preview = (
+                            text_content[:100] if text_content else str(content)[:100]
+                        )
                         logger.warning(
                             "Detected data leakage in generated prompt: '%s' found in content: '%s...'",
                             pattern,
-                            content[:100],
+                            content_preview,
                         )
                         has_leakage = True
                         break
@@ -293,34 +299,51 @@ def _build_prompts_from_items(
         ):
             improvement_focus = item.get("improvement_focus")
             reasoning = item.get("reasoning")
-            system_content = None
-            user_content = None
 
-            for msg in item["prompt"]:
-                if msg.get("role") == "system":
-                    system_content = msg.get("content", "")
-                elif (
-                    msg.get("role") == "user"
-                    and optimizer.allow_user_prompt_optimization
-                ):
-                    user_content = msg.get("content", "")
+            # Always use messages approach - works for both string and multimodal content
+            candidate_messages = item["prompt"].copy()
 
-            if user_content is None:
+            # If user prompt optimization is not allowed, remove user messages from candidate
+            # and use the current prompt's user content instead
+            if not optimizer.allow_user_prompt_optimization:
+                candidate_messages = [
+                    msg for msg in candidate_messages if msg.get("role") != "user"
+                ]
+
+            # Check what roles are present in the candidate
+            candidate_roles = {msg.get("role") for msg in candidate_messages}
+
+            # Fill in missing roles from current prompt if needed
+            if "system" not in candidate_roles:
+                if current_prompt.system:
+                    candidate_messages.insert(
+                        0, {"role": "system", "content": current_prompt.system}
+                    )
+                elif current_prompt.messages:
+                    # Find system message from current prompt
+                    for msg in current_prompt.messages:
+                        if msg.get("role") == "system":
+                            candidate_messages.insert(0, msg)
+                            break
+
+            if "user" not in candidate_roles:
                 if current_prompt.user:
-                    user_content = current_prompt.user
-                elif current_prompt.messages is not None:
-                    user_content = current_prompt.messages[-1]["content"]
+                    candidate_messages.append(
+                        {"role": "user", "content": current_prompt.user}
+                    )
+                elif current_prompt.messages:
+                    # Find user message from current prompt
+                    for msg in current_prompt.messages:
+                        if msg.get("role") == "user":
+                            candidate_messages.append(msg)
+                            break
                 else:
                     raise Exception("User content not found in chat-prompt!")
-
-            if system_content is None:
-                system_content = ""
 
             valid_prompts.append(
                 chat_prompt.ChatPrompt(
                     name=current_prompt.name,
-                    system=system_content,
-                    user=user_content,
+                    messages=candidate_messages,
                     tools=current_prompt.tools,
                     function_map=current_prompt.function_map,
                     model=current_prompt.model,
