@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
 import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -15,8 +16,11 @@ import TimePicker from "@/components/shared/TimePicker/TimePicker";
 import { DEFAULT_OPERATORS, OPERATORS_MAP } from "@/constants/filters";
 import { Filter } from "@/types/filters";
 import { COLUMN_TYPE } from "@/types/shared";
-import { formatDate, isStringValidFormattedDate } from "@/lib/date";
+import { formatDate } from "@/lib/date";
+import { useDateFormat, DATE_FORMAT_LABELS } from "@/hooks/useDateFormat";
 import { cn } from "@/lib/utils";
+
+dayjs.extend(customParseFormat);
 
 type TimeRowProps = {
   filter: Filter;
@@ -27,6 +31,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   filter,
   onChange,
 }) => {
+  const [dateFormat] = useDateFormat();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState(false);
   const [date, setDate] = useState<Date | undefined>(
@@ -36,6 +41,8 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   const [dateString, setDateString] = useState<string>(
     dayjs(filter.value).isValid() ? formatDate(filter.value as string) : "",
   );
+
+  const placeholder = DATE_FORMAT_LABELS[dateFormat];
 
   const onSelectDate = (value: Date | undefined) => {
     setDate(value);
@@ -48,14 +55,10 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
   const onValueChange = (value: string) => {
     setDateString(value);
 
-    const isValid = isStringValidFormattedDate(value);
+    const parsedDate = dayjs(value, dateFormat, true);
+    const isValid = parsedDate.isValid();
 
     if (isValid) {
-      const parsedDate = dayjs(
-        value,
-        ["MM/DD/YY HH:mm A", "MM/DD/YYYY HH:mm A"],
-        true,
-      );
       setDate(parsedDate.toDate());
       onChange({
         ...filter,
@@ -92,7 +95,7 @@ export const TimeRow: React.FunctionComponent<TimeRowProps> = ({
                 "border-destructive focus-visible:border-destructive": error,
               })}
               onValueChange={(value) => onValueChange(value as string)}
-              placeholder="MM/DD/YY HH:mm A"
+              placeholder={placeholder}
               value={dateString}
               delay={500}
             />
