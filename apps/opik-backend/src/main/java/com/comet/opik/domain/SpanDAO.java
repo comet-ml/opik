@@ -252,11 +252,11 @@ class SpanDAO {
                 new_span.last_updated_by as last_updated_by,
                 new_span.truncation_threshold as truncation_threshold,
                 multiIf(
-                    notEmpty(old_span.input), old_span.input_slim,
+                    notEmpty(old_span.input) AND notEmpty(old_span.input_slim), old_span.input_slim,
                     new_span.input_slim
                 ) as input_slim,
                 multiIf(
-                    notEmpty(old_span.output), old_span.output_slim,
+                    notEmpty(old_span.output) AND notEmpty(old_span.output_slim), old_span.output_slim,
                     new_span.output_slim
                 ) as output_slim
             FROM (
@@ -483,12 +483,12 @@ class SpanDAO {
                 new_span.truncation_threshold as truncation_threshold,
                 multiIf(
                     notEmpty(new_span.input_slim), new_span.input_slim,
-                    notEmpty(old_span.input), old_span.input_slim,
+                    notEmpty(old_span.input) AND notEmpty(old_span.input_slim), old_span.input_slim,
                     new_span.input_slim
                 ) as input_slim,
                 multiIf(
                     notEmpty(new_span.output_slim), new_span.output_slim,
-                    notEmpty(old_span.output), old_span.output_slim,
+                    notEmpty(old_span.output) AND notEmpty(old_span.output_slim), old_span.output_slim,
                     new_span.output_slim
                 ) as output_slim
             FROM (

@@ -267,11 +267,11 @@ class TraceDAOImpl implements TraceDAO {
                 ) as visibility_mode,
                 new_trace.truncation_threshold as truncation_threshold,
                 multiIf(
-                    notEmpty(old_trace.input), old_trace.input_slim,
+                    notEmpty(old_trace.input) AND notEmpty(old_trace.input_slim), old_trace.input_slim,
                     new_trace.input_slim
                 ) as input_slim,
                 multiIf(
-                    notEmpty(old_trace.output), old_trace.output_slim,
+                    notEmpty(old_trace.output) AND notEmpty(old_trace.output_slim), old_trace.output_slim,
                     new_trace.output_slim
                 ) as output_slim
             FROM (
@@ -1758,12 +1758,12 @@ class TraceDAOImpl implements TraceDAO {
                 new_trace.truncation_threshold as truncation_threshold,
                 multiIf(
                     notEmpty(new_trace.input_slim), new_trace.input_slim,
-                    notEmpty(old_trace.input), old_trace.input_slim,
+                    notEmpty(old_trace.input) AND notEmpty(old_trace.input_slim), old_trace.input_slim,
                     new_trace.input_slim
                 ) as input_slim,
                 multiIf(
                     notEmpty(new_trace.output_slim), new_trace.output_slim,
-                    notEmpty(old_trace.output), old_trace.output_slim,
+                    notEmpty(old_trace.output) AND notEmpty(old_trace.output_slim), old_trace.output_slim,
                     new_trace.output_slim
                 ) as output_slim
             FROM (
