@@ -1,6 +1,6 @@
 import type OpenAI from "openai";
 import { logger } from "opik";
-import { flattenObject } from "./utils";
+import { flattenObject, filterNumericValues } from "./utils";
 
 type ModelParameter =
   | "frequency_penalty"
@@ -303,7 +303,7 @@ export const parseUsage = (
       completion_tokens: res.usage.completion_tokens,
       prompt_tokens: res.usage.prompt_tokens,
       total_tokens: res.usage.total_tokens,
-      ...flattenObject(res.usage, "original_usage"),
+      ...filterNumericValues(flattenObject(res.usage, "original_usage")),
     };
   }
 
@@ -312,7 +312,7 @@ export const parseUsage = (
       completion_tokens: res.usage.input_tokens,
       prompt_tokens: res.usage.output_tokens,
       total_tokens: res.usage.total_tokens,
-      ...flattenObject(res.usage, "original_usage"),
+      ...filterNumericValues(flattenObject(res.usage, "original_usage")),
     };
   }
 
@@ -321,7 +321,7 @@ export const parseUsage = (
       completion_tokens: 0,
       prompt_tokens: res.usage.prompt_tokens,
       total_tokens: res.usage.total_tokens,
-      ...flattenObject(res.usage, "original_usage"),
+      ...filterNumericValues(flattenObject(res.usage, "original_usage")),
     };
   }
 

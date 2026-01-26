@@ -1649,6 +1649,33 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/export-jobs/{jobId}/download:
+    get:
+      tags:
+      - Datasets
+      summary: Download dataset export file
+      description: Downloads the exported CSV file for a completed export job. This
+        endpoint proxies the file download to avoid exposing internal storage URLs.
+      operationId: downloadDatasetExport
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: CSV file content
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Export job is not ready for download
+        "404":
+          description: Export job not found
   /v1/private/datasets/{id}/expansions:
     post:
       tags:
@@ -1782,6 +1809,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectStats_Public"
+  /v1/private/datasets/export-jobs/{jobId}:
+    get:
+      tags:
+      - Datasets
+      summary: Get dataset export job status
+      description: Retrieves the current status of a dataset export job
+      operationId: getDatasetExportJob
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Export job details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetExportJob_Public"
+        "404":
+          description: Export job not found
+  /v1/private/datasets/export-jobs:
+    get:
+      tags:
+      - Datasets
+      summary: Get all dataset export jobs
+      description: Retrieves all export jobs for the workspace. This is used to restore
+        the export panel state after page refresh.
+      operationId: getDatasetExportJobs
+      responses:
+        "200":
+          description: List of export jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DatasetExportJob_Public"
   /v1/private/datasets/items/{itemId}:
     get:
       tags:
@@ -1901,6 +1968,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PageColumns"
+  /v1/private/datasets/export-jobs/{jobId}/mark-viewed:
+    put:
+      tags:
+      - Datasets
+      summary: Mark dataset export job as viewed
+      description: Marks a dataset export job as viewed by setting the viewed_at timestamp.
+        This is used to track that a user has seen a failed job's error message. This
+        operation is idempotent.
+      operationId: markDatasetExportJobViewed
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Job marked as viewed
+        "404":
+          description: Export job not found
+  /v1/private/datasets/{id}/export:
+    post:
+      tags:
+      - Datasets
+      summary: Start dataset CSV export
+      description: Initiates an asynchronous CSV export job for the dataset. Returns
+        immediately with job details for polling.
+      operationId: startDatasetExport
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "202":
+          description: Export job created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetExportJob_Public"
+        "200":
+          description: Existing export job in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetExportJob_Public"
   /v1/private/datasets/items/stream:
     post:
       tags:
@@ -2152,6 +2268,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/experiments/batch:
+    patch:
+      tags:
+      - Experiments
+      summary: Batch update experiments
+      description: Update multiple experiments
+      operationId: batchUpdateExperiments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments:
     get:
       tags:
@@ -2202,6 +2339,15 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
       - name: sorting
         in: query
         schema:
@@ -2215,6 +2361,13 @@ paths:
         schema:
           type: string
           description: Filter experiments by a list of experiment IDs
+      - name: force_sorting
+        in: query
+        schema:
+          type: boolean
+          description: Force sorting even when exceeding the endpoint result set limit.
+            May result in slower queries
+          default: false
       responses:
         "200":
           description: Experiments resource
@@ -2370,6 +2523,11 @@ paths:
         schema:
           type: string
           description: "Filter experiments by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: filters
         in: query
         schema:
@@ -2408,6 +2566,11 @@ paths:
         schema:
           type: string
           description: "Filter experiments by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: filters
         in: query
         schema:
@@ -9842,6 +10005,56 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProjectStatItemObject_Public"
+    DatasetExportJob_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        dataset_name:
+          type: string
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - PENDING
+          - PROCESSING
+          - COMPLETED
+          - FAILED
+        file_path:
+          type: string
+          readOnly: true
+        error_message:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        viewed_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
     DatasetItem_Public:
       required:
       - data
@@ -10145,6 +10358,74 @@ components:
             type: string
             description: Optional list of tags to add to this version
             example: "[\"production\",\"reviewed\"]"
+    ExperimentBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of experiment IDs to update (max 1000)
+          items:
+            type: string
+            description: List of experiment IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/ExperimentUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple experiments
+    ExperimentScore:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
+    ExperimentUpdate:
+      type: object
+      properties:
+        name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        tags:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+        type:
+          type: string
+          enum:
+          - regular
+          - trial
+          - mini-batch
+        status:
+          type: string
+          description: The status of the experiment
+          enum:
+          - running
+          - completed
+          - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore"
     Experiment:
       required:
       - dataset_name
@@ -10253,17 +10534,6 @@ components:
           format: uuid
         dataset_version_summary:
           $ref: "#/components/schemas/DatasetVersionSummary"
-    ExperimentScore:
-      required:
-      - name
-      - value
-      type: object
-      properties:
-        name:
-          minLength: 1
-          type: string
-        value:
-          type: number
     PercentageValues:
       type: object
       properties:
@@ -11263,40 +11533,6 @@ components:
         last_retrieved_id:
           type: string
           format: uuid
-    ExperimentUpdate:
-      type: object
-      properties:
-        name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        tags:
-          maxItems: 50
-          minItems: 0
-          uniqueItems: true
-          type: array
-          items:
-            maxLength: 100
-            minLength: 0
-            type: string
-        type:
-          type: string
-          enum:
-          - regular
-          - trial
-          - mini-batch
-        status:
-          type: string
-          description: The status of the experiment
-          enum:
-          - running
-          - completed
-          - cancelled
-        experiment_scores:
-          type: array
-          items:
-            $ref: "#/components/schemas/ExperimentScore"
     BooleanFeedbackDefinition:
       required:
       - details
@@ -13669,6 +13905,7 @@ components:
       - collaboratorsTabEnabled
       - csvUploadEnabled
       - customllmProviderEnabled
+      - datasetExportEnabled
       - datasetVersioningEnabled
       - exportEnabled
       - geminiProviderEnabled
@@ -13708,6 +13945,8 @@ components:
         optimizationStudioEnabled:
           type: boolean
         datasetVersioningEnabled:
+          type: boolean
+        datasetExportEnabled:
           type: boolean
         openaiProviderEnabled:
           type: boolean

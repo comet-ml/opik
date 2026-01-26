@@ -114,7 +114,7 @@ Screenshots must be placed in the correct directory structure:
 ## 📖 Complete Guidelines
 
 For detailed guidelines on integration documentation, see:
-**`.cursor/rules/integration-documentation.mdc`**
+**`.agents/rules/integration-documentation.mdc`**
 
 This includes:
 

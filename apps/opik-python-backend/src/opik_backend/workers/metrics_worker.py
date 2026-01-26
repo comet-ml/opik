@@ -77,17 +77,17 @@ class MetricsWorker(Worker):
         self._failure_ttl = RQ_FAILURE_TTL
         logger.info(f"MetricsWorker initialized with failure_ttl={self._failure_ttl}s")
 
-    def handle_job_failure(self, job: Job, exc_info):
+    def handle_job_failure(self, job: Job, queue: Queue, started_job_registry=None, exc_string=''):
         """Handle job failure with custom failure TTL.
 
         Override the default failure_ttl (1 year) with a configurable value.
-        Signature matches RQ 2.x: handle_job_failure(job, exc_info)
+        Signature matches RQ 2.6.0: handle_job_failure(job, queue, started_job_registry, exc_string)
         """
         if job.failure_ttl is None:
             job.failure_ttl = self._failure_ttl
             logger.debug(f"Set failure_ttl={self._failure_ttl}s for job {job.id}")
 
-        return super().handle_job_failure(job, exc_info)
+        return super().handle_job_failure(job, queue, started_job_registry, exc_string)
 
     def execute_job(self, job: Job, queue: Queue) -> bool:
         """Execute a job and return success status."""
