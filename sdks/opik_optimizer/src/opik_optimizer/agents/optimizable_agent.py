@@ -129,16 +129,18 @@ class OptimizableAgent(ABC):
         effective_kwargs = (
             model_kwargs if model_kwargs is not None else self.model_kwargs
         )
+        opik_metadata: dict[str, Any] = {
+            "current_span_data": opik_context.get_current_span_data()
+        }
+        if self.project_name:
+            opik_metadata["project_name"] = self.project_name
         response = track_completion()(litellm.completion)(
             model=effective_model,
             messages=messages,
             seed=seed,
             tools=tools,
             metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "project_name": self.project_name,
-                },
+                "opik": opik_metadata,
             },
             **effective_kwargs,
         )
@@ -191,7 +193,14 @@ class OptimizableAgent(ABC):
 
         # Push trace metadata for better visibility (tools/LLM logs in Opik)
         try:
-            opik_context.update_current_trace(metadata=self.trace_metadata)
+            if self.trace_metadata:
+                filtered_metadata = {
+                    key: value
+                    for key, value in self.trace_metadata.items()
+                    if value is not None
+                }
+                if filtered_metadata:
+                    opik_context.update_current_trace(metadata=filtered_metadata)
         except Exception:
             pass
 
