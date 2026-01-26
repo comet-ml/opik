@@ -4,7 +4,6 @@ import copy from "clipboard-copy";
 import sortBy from "lodash/sortBy";
 import {
   Book,
-  Calendar,
   Check,
   Copy,
   GraduationCap,
@@ -37,13 +36,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { useThemeOptions } from "@/hooks/useThemeOptions";
-import {
-  useDateFormat,
-  DATE_FORMATS,
-  DATE_FORMAT_LABELS,
-  DATE_FORMAT_EXAMPLES,
-  DateFormatType,
-} from "@/hooks/useDateFormat";
+import { useDateFormat } from "@/hooks/useDateFormat";
+import DateFormatDropdown from "@/components/shared/DateFormatDropdown/DateFormatDropdown";
 import { APP_VERSION } from "@/constants/app";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -482,37 +476,10 @@ const UserMenu = () => {
               </DropdownMenuPortal>
             </DropdownMenuSub>
           </DropdownMenuGroup>
-          <DropdownMenuGroup>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
-                <Calendar className="mr-2 size-4" />
-                <span>Date format</span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuPortal>
-                <DropdownMenuSubContent className="w-64">
-                  {Object.entries(DATE_FORMATS).map(([key, format]) => (
-                    <DropdownMenuItem
-                      key={key}
-                      className="cursor-pointer"
-                      onClick={() => setDateFormat(format as DateFormatType)}
-                    >
-                      <div className="relative flex w-full flex-col pl-6">
-                        {dateFormat === format && (
-                          <Check className="absolute left-0 top-1/2 size-4 -translate-y-1/2" />
-                        )}
-                        <span className="comet-body-s">
-                          {DATE_FORMAT_LABELS[format]}
-                        </span>
-                        <span className="comet-body-xs text-muted-foreground">
-                          {DATE_FORMAT_EXAMPLES[format]}
-                        </span>
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuSubContent>
-              </DropdownMenuPortal>
-            </DropdownMenuSub>
-          </DropdownMenuGroup>
+          <DateFormatDropdown
+            dateFormat={dateFormat}
+            setDateFormat={setDateFormat}
+          />
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={async () => {

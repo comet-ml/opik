@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { TimePickerInput } from "@/components/ui/time-picker-input";
 import { TimePeriodSelect } from "@/components/ui/time-picker-period-select";
@@ -19,13 +19,9 @@ const TimePicker: React.FC<TimePickerDemoProps> = ({ date, setDate }) => {
   const secondRef = useRef<HTMLInputElement>(null);
   const periodRef = useRef<HTMLButtonElement>(null);
 
-  const is12HourFormat = useMemo(() => {
-    return dateFormat.includes("hh") || dateFormat.includes("h A");
-  }, [dateFormat]);
-
-  const includeSeconds = useMemo(() => {
-    return dateFormat.includes(":ss");
-  }, [dateFormat]);
+  const is12HourFormat =
+    dateFormat.includes("hh") || dateFormat.includes("h A");
+  const includeSeconds = dateFormat.includes(":ss");
 
   return (
     <div className="flex items-end gap-2">

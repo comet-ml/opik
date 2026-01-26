@@ -31,7 +31,10 @@ export const getDateFormatFromLocalStorage = (): DateFormatType => {
     const stored = localStorage.getItem(DATE_FORMAT_LOCAL_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      return parsed || DEFAULT_DATE_FORMAT;
+      const validFormats = Object.values(DATE_FORMATS);
+      if (parsed && validFormats.includes(parsed)) {
+        return parsed;
+      }
     }
   } catch {
     // Ignore parsing errors
