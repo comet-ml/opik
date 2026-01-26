@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Iterable, Any
+from typing import Any
+from collections.abc import Iterable
 import copy
 
 ALLOWED_PROMPT_ROLES = {"system", "user", "assistant"}
@@ -77,7 +78,9 @@ def count_disallowed_role_updates(
     if allowed_roles is None:
         return 0
     if not allowed_roles:
-        return sum(1 for msg in original_messages if msg.get("role") in ALLOWED_PROMPT_ROLES)
+        return sum(
+            1 for msg in original_messages if msg.get("role") in ALLOWED_PROMPT_ROLES
+        )
     count = 0
     for idx, original in enumerate(original_messages):
         role = original.get("role")

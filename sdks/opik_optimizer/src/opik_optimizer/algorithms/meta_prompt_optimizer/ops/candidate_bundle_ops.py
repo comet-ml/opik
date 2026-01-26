@@ -179,7 +179,9 @@ def generate_agent_bundle_candidates(
                                 model=current_prompts[name].model,
                                 model_parameters=current_prompts[name].model_kwargs,
                             )
-                            allowed_roles = getattr(optimizer, "_optimizable_roles", None)
+                            allowed_roles = getattr(
+                                optimizer, "_optimizable_roles", None
+                            )
                             if allowed_roles is not None:
                                 constrained = apply_role_constraints(
                                     current_prompts[name].get_messages(),

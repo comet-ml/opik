@@ -320,11 +320,7 @@ def run_generation(
                 optimization_id=optimizer.current_optimization_id,
                 verbose=optimizer.verbose,
                 prompts=optimizer._prompts,
-                allowed_roles=(
-                    context.extra_params.get("optimizable_roles")
-                    if context.extra_params
-                    else None
-                ),
+                allowed_roles=getattr(optimizer, "_optimizable_roles", None),
                 rng=mutation_rng,
             )
             offspring[i] = new_ind

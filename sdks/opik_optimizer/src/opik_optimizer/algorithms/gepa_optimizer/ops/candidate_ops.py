@@ -118,9 +118,8 @@ def rebuild_prompts_from_candidate(
             original_content = msg.get("content", "")
             optimized_text = candidate.get(component_key)
 
-            if (
-                optimized_text is not None
-                and (allowed_roles is None or msg.get("role") in allowed_roles)
+            if optimized_text is not None and (
+                allowed_roles is None or msg.get("role") in allowed_roles
             ):
                 new_content = rebuild_content_with_new_text(
                     original_content, optimized_text

@@ -165,7 +165,10 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 component_key = f"{prompt_name}_{msg['role']}_{idx}"
                 # Use optimized content if available, otherwise keep original
                 original_content = msg.get("content", "")
-                if self._allowed_roles is not None and msg.get("role") not in self._allowed_roles:
+                if (
+                    self._allowed_roles is not None
+                    and msg.get("role") not in self._allowed_roles
+                ):
                     optimized_content = original_content
                     dropped_components += 1
                 else:

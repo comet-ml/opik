@@ -43,8 +43,10 @@ def rescore_candidates(
                     if context.extra_params
                     else None
                 )
-                dropped_components = candidate_ops.count_disallowed_candidate_components(
-                    candidate, allowed_roles
+                dropped_components = (
+                    candidate_ops.count_disallowed_candidate_components(
+                        candidate, allowed_roles
+                    )
                 )
                 prompt_variants = candidate_ops.rebuild_prompts_from_candidate(
                     base_prompts=optimizable_prompts,
