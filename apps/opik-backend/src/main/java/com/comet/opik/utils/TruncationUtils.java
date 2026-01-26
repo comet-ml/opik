@@ -57,7 +57,7 @@ public final class TruncationUtils {
      */
     public static JsonNode createSlimJson(JsonNode node, int maxStringLength) {
         if (node == null || node.isNull() || node.isMissingNode()) {
-            return node;
+            return JsonUtils.getMapper().getNodeFactory().nullNode();
         }
 
         if (node.isTextual()) {
@@ -100,7 +100,7 @@ public final class TruncationUtils {
             return JsonUtils.writeValueAsString(slimNode);
         } catch (UncheckedIOException e) {
             // Not valid JSON, fall back to simple truncation
-            log.debug("Input is not valid JSON, falling back to simple truncation: {}", e.getMessage());
+            log.debug("Input is not valid JSON, falling back to simple truncation: {}", e);
             return truncateString(jsonString, maxStringLength);
         }
     }
