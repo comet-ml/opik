@@ -18,9 +18,11 @@ class TruncationUtilsTest {
     class CreateSlimJsonNodeTests {
 
         @Test
-        @DisplayName("should return null for null input")
-        void shouldReturnNullForNullInput() {
-            assertThat(TruncationUtils.createSlimJson(null, 100)).isNull();
+        @DisplayName("should return NullNode for null input")
+        void shouldReturnNullNodeForNullInput() {
+            JsonNode result = TruncationUtils.createSlimJson(null, 100);
+            assertThat(result).isNotNull();
+            assertThat(result.isNull()).isTrue();
         }
 
         @Test
