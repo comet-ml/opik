@@ -11,6 +11,7 @@ from opik.decorator import (
     error_info_collector,
 )
 from opik.api_objects import opik_client
+from opik.types import DistributedTraceHeadersDict
 
 from . import llm_span_helpers
 
@@ -51,8 +52,13 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
         "invocation",  # This is the span that is created by ADK when the invocation is started.
     ]
 
-    def __init__(self, opik_client: opik_client.Opik):
+    def __init__(
+        self,
+        opik_client: opik_client.Opik,
+        distributed_headers: Optional[DistributedTraceHeadersDict],
+    ) -> None:
         self.opik_client = opik_client
+        self._distributed_headers = distributed_headers
 
     def start_span(
         self,
@@ -111,6 +117,7 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
                     name=name,
                     current_trace_data=current_trace_data,
                     current_span_data=current_span_data,
+                    distributed_headers=self._distributed_headers,
                 )
             )
 
@@ -164,6 +171,7 @@ def _prepare_trace_and_span_to_be_finalized(
     name: str,
     current_trace_data: Optional[trace.TraceData],
     current_span_data: Optional[span.SpanData],
+    distributed_headers: Optional[DistributedTraceHeadersDict],
 ) -> Tuple[Optional[trace.TraceData], Optional[span.SpanData]]:
     """
     Prepares a trace and a span to be finalized in the finally block.
@@ -172,9 +180,25 @@ def _prepare_trace_and_span_to_be_finalized(
     trace_to_close_in_finally_block = None
     span_to_close_in_finally_block = None
 
-    if current_trace_data is None:
+    if distributed_headers is not None and current_span_data is None:
+        # create top root span connected to distributed headers
+        start_span_arguments = arguments_helpers.StartSpanParameters(
+            name=name,
+            type="general",
+        )
+        span_to_close_in_finally_block = (
+            span_creation_handler.create_span_respecting_context(
+                start_span_arguments=start_span_arguments,
+                distributed_trace_headers=distributed_headers,
+            ).span_data
+        )
+        opik.context_storage.add_span_data(span_to_close_in_finally_block)
+
+    elif current_trace_data is None and distributed_headers is None:
+        # create trace only if no distributed_headers provided
         trace_to_close_in_finally_block = trace.TraceData(name=name)
         opik.context_storage.set_trace_data(trace_to_close_in_finally_block)
+
     elif (
         current_span_data is not None
         and llm_span_helpers.is_externally_created_llm_span_that_just_started(
@@ -184,12 +208,13 @@ def _prepare_trace_and_span_to_be_finalized(
         # LLM span has just been created and put into context storage from the OpikTracer.before_model_call
         # Not need to create a new one, just remember it to close it in finally block
         span_to_close_in_finally_block = current_span_data
+
     else:
+        # create child span
         start_span_arguments = arguments_helpers.StartSpanParameters(
             name=name,
             type="general",
         )
-
         span_to_close_in_finally_block = (
             span_creation_handler.create_span_respecting_context(
                 start_span_arguments=start_span_arguments,

@@ -14,6 +14,7 @@ Available Context Managers
 
    start_as_current_span
    start_as_current_trace
+   distributed_headers
 
 Key Features
 ------------

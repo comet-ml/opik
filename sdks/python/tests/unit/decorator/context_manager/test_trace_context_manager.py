@@ -1,9 +1,10 @@
 import pytest
 
 import opik
-import opik.opik_context
+from opik import opik_context
+from opik.decorator import base_track_decorator
 from opik.types import ErrorInfoDict
-from ...testlib import (
+from tests.testlib import (
     ANY_BUT_NONE,
     ANY_STRING,
     TraceModel,
@@ -23,6 +24,10 @@ def test_start_as_current_trace__inside__happy_flow(fake_backend):
         trace.thread_id = "test-thread-123"
 
     assert len(fake_backend.trace_trees) == 1
+
+    # check the context was cleared after exiting the context manager
+    assert opik_context.get_current_trace_data() is None
+    assert trace.id not in base_track_decorator.TRACES_CREATED_BY_DECORATOR
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -53,10 +58,14 @@ def test_start_as_current_trace__outside__happy_flow(fake_backend):
         project_name="test-project",
         thread_id="test-thread-123",
         flush=True,
-    ):
-        pass  # No modifications inside context manager
+    ) as trace:
+        pass  # No modifications inside the context manager
 
     assert len(fake_backend.trace_trees) == 1
+
+    # check the context was cleared after exiting the context manager
+    assert opik_context.get_current_trace_data() is None
+    assert trace.id not in base_track_decorator.TRACES_CREATED_BY_DECORATOR
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -127,12 +136,16 @@ def test_start_as_current_trace__user_error__logged_and_raised(fake_backend):
             metadata={"one": "first", "two": "second", "three": "third"},
             project_name="test-project",
             flush=True,
-        ):
+        ) as trace:
             raise Exception("Test exception")
 
     assert exc_info.value.args[0] == "Test exception"
 
     assert len(fake_backend.trace_trees) == 1
+
+    # check the context was cleared after exiting the context manager
+    assert opik_context.get_current_trace_data() is None
+    assert trace.id not in base_track_decorator.TRACES_CREATED_BY_DECORATOR
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -179,16 +192,16 @@ def test_start_as_current_trace__context_cleanup__trace_removed_after_exit(
 ):
     """Test that the trace is properly removed from context after the context manager exits."""
     # Verify no trace exists before
-    assert opik.opik_context.get_current_trace_data() is None
+    assert opik_context.get_current_trace_data() is None
 
     # Create trace and verify it exists inside context
     with opik.start_as_current_trace("test-trace", flush=True) as trace:
-        current_trace = opik.opik_context.get_current_trace_data()
+        current_trace = opik_context.get_current_trace_data()
         assert current_trace is not None
         assert current_trace.id == trace.id
 
     # Verify trace is removed from context after exit
-    assert opik.opik_context.get_current_trace_data() is None
+    assert opik_context.get_current_trace_data() is None
 
     # Verify trace was logged to backend
     assert len(fake_backend.trace_trees) == 1
