@@ -107,6 +107,9 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
     null,
   ) as OptimizerPromptPayload[] | null;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const showOptimizerPrompts = useAppStore(
+    (state) => state.featureFlags?.showOptimizerPrompts ?? false,
+  );
 
   const prompts = useMemo(() => {
     if (Array.isArray(rawPrompts) && rawPrompts.length > 0) {
@@ -114,40 +117,46 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
         convertRawPromptToPromptWithLatestVersion,
       );
     }
-    const mergedPayloads: OptimizerPromptPayload[] =
-      Array.isArray(optimizerPayloads) && optimizerPayloads.length > 0
-        ? optimizerPayloads
-        : Array.isArray(spanPromptPayloads) && spanPromptPayloads.length > 0
-          ? spanPromptPayloads
-          : [];
-    if (mergedPayloads.length > 0) {
-      return mergedPayloads
-        .map((payload, index) => {
-          const name =
-            payload?.name ||
-            payload?.source_name ||
-            `Optimizer Prompt ${index + 1}`;
-          const template =
-            payload?.opik_prompt?.version?.template ??
-            payload?.template ??
-            payload?.rendered_messages ??
-            payload?.system_prompt ??
-            {};
-          const rawPrompt: RawPromptData = {
-            id: payload?.opik_prompt?.id || "",
-            name,
-            version: {
-              commit: payload?.opik_prompt?.version?.commit || "",
-              id: payload?.opik_prompt?.version?.id || "",
-              template: JSON.stringify(template, null, 2),
-            },
-          };
-          return convertRawPromptToPromptWithLatestVersion(rawPrompt);
-        })
-        .filter(Boolean);
+    if (showOptimizerPrompts) {
+      const mergedPayloads: OptimizerPromptPayload[] =
+        Array.isArray(optimizerPayloads) && optimizerPayloads.length > 0
+          ? optimizerPayloads
+          : Array.isArray(spanPromptPayloads) && spanPromptPayloads.length > 0
+            ? spanPromptPayloads
+            : [];
+      if (mergedPayloads.length > 0) {
+        return mergedPayloads
+          .map((payload, index) => {
+            const name =
+              payload?.name ||
+              payload?.source_name ||
+              `Optimizer Prompt ${index + 1}`;
+            const template =
+              payload?.opik_prompt?.version?.template ??
+              payload?.template ??
+              payload?.rendered_messages ??
+              payload?.system_prompt ??
+              {};
+            const templateString =
+              typeof template === "string"
+                ? template
+                : JSON.stringify(template, null, 2);
+            const rawPrompt: RawPromptData = {
+              id: payload?.opik_prompt?.id || "",
+              name,
+              version: {
+                commit: payload?.opik_prompt?.version?.commit || "",
+                id: payload?.opik_prompt?.version?.id || "",
+                template: templateString,
+              },
+            };
+            return convertRawPromptToPromptWithLatestVersion(rawPrompt);
+          })
+          .filter(Boolean);
+      }
     }
     return [];
-  }, [rawPrompts, optimizerPayloads, spanPromptPayloads]);
+  }, [rawPrompts, optimizerPayloads, spanPromptPayloads, showOptimizerPrompts]);
 
   const renderPrompts = () => {
     if (!prompts || prompts.length === 0) return null;
