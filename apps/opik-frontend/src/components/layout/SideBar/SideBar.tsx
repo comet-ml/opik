@@ -427,7 +427,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   return (
     <>
       <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
-        <div className="comet-header-height relative flex w-full min-w-0 items-center justify-between gap-6 border-b px-3">
+        <div className="comet-header-height relative flex w-full min-w-0 items-center gap-2 border-b px-3">
           {!UserMenu ? (
             // Open-source: Show logo as clickable link to home
             <Link
@@ -439,12 +439,22 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
             </Link>
           ) : (
             // Comet: Show compact icon + organization selector
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="shrink-0">{compactIcon}</div>
-              <div className="min-w-0 flex-1">
-                <OrganizationSelector expanded={expanded} />
+            // Match menu item structure: same padding/width logic
+            <>
+              <div
+                className={cn(
+                  "flex shrink-0 items-center",
+                  expanded ? "pl-[6px]" : "w-9 justify-center",
+                )}
+              >
+                {compactIcon}
               </div>
-            </div>
+              {expanded && (
+                <div className="min-w-0 flex-1">
+                  <OrganizationSelector expanded={expanded} />
+                </div>
+              )}
+            </>
           )}
         </div>
         <div className="relative flex h-[calc(100%-var(--header-height))]">

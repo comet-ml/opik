@@ -239,7 +239,7 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
   };
 
   if (!hasMultipleOrganizations) {
-    // Single organization - just show it, optionally with tooltip when collapsed
+    // Single organization - only show when expanded
     if (expanded) {
       return (
         <div className="flex h-8 w-full items-center gap-1.5 px-3">
@@ -249,13 +249,8 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
         </div>
       );
     }
-    return (
-      <TooltipWrapper content={currentOrganization.name} side="right">
-        <div className="flex size-8 shrink-0 items-center justify-center">
-          <span className="comet-body-s">{currentOrganization.name}</span>
-        </div>
-      </TooltipWrapper>
-    );
+    // Hide when collapsed
+    return null;
   }
 
   // Multiple organizations - show name and chevron, entire container is clickable
@@ -300,27 +295,8 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
     );
   }
 
-  // Collapsed state with tooltip
-  return (
-    <div className="w-8 shrink-0">
-      <DropdownMenu open={isDropdownOpen} onOpenChange={handleOpenChange}>
-        <TooltipWrapper content={currentOrganization.name} side="right">
-          <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
-        </TooltipWrapper>
-        <DropdownContent
-          filteredOrganizations={filteredOrganizations}
-          currentOrganization={currentOrganization}
-          isOrganizationAdmin={isOrganizationAdmin}
-          handleChangeOrganization={handleChangeOrganization}
-          handleManageOrganization={handleManageOrganization}
-          search={search}
-          setSearch={setSearch}
-          align="end"
-          side="right"
-        />
-      </DropdownMenu>
-    </div>
-  );
+  // Hide when collapsed
+  return null;
 };
 
 export default OrganizationSelector;
