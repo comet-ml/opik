@@ -10,9 +10,15 @@ from opik_optimizer.utils.dataset import DatasetHandle, FilterBy
 
 HOT_POT_SPEC = DatasetSpec(
     name="hotpot",
-    hf_path="hotpot_qa",
+    hf_path="hotpotqa/hotpot_qa",
     hf_name="fullwiki",
     default_source_split="train",
+    load_kwargs_resolver=lambda split: {
+        "path": "hotpotqa/hotpot_qa",
+        "name": "fullwiki",
+        "split": split,
+        "revision": "main",
+    },
     presets={
         "train": DatasetSplitPreset(
             source_split="train",
