@@ -213,6 +213,21 @@ scripts\dev-runner.ps1 --help
 
 For comprehensive documentation on local development, including troubleshooting, advanced usage, and workflow examples, see our [Local Development Guide](apps/opik-documentation/documentation/fern/docs/contributing/local-development.mdx).
 
+### AI Editor Configuration
+
+Opik provides AI coding rules for editors like Cursor and Claude Code. These are stored in `.agents/` and synced using the Makefile:
+
+```bash
+# For Cursor - creates .cursor symlink to .agents/
+make cursor
+
+# For Claude Code - syncs rules to .claude/
+make claude
+
+# Install git pre-commit hooks
+make hooks
+```
+
 ### Contributing to the documentation
 
 The documentation is made up of two main parts:
