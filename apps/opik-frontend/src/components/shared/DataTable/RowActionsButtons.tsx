@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { cn } from "@/lib/utils";
 
 export type ActionButtonType =
   | "edit"
@@ -66,11 +67,9 @@ export const RowActionsButtons: React.FC<RowActionsButtonsProps> = ({
             onClick={action.onClick}
             disabled={action.disabled}
             aria-label={label}
-            className={
-              withLabel
-                ? "gap-1.5 [&>svg]:size-3.5 [&>svg]:shrink-0"
-                : undefined
-            }
+            className={cn(
+              withLabel && "gap-1.5 [&>svg]:size-3.5 [&>svg]:shrink-0",
+            )}
           >
             <Icon />
             {withLabel ? label : null}
