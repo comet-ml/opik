@@ -1,8 +1,14 @@
 import { AggregatedFeedbackScore } from "@/types/shared";
+import { Filter } from "@/types/filters";
 
 export enum ANNOTATION_QUEUE_SCOPE {
   TRACE = "trace",
   THREAD = "thread",
+}
+
+export enum ANNOTATION_QUEUE_TYPE {
+  MANUAL = "manual",
+  DYNAMIC = "dynamic",
 }
 
 export interface AnnotationQueueReviewer {
@@ -20,6 +26,8 @@ export interface AnnotationQueue {
   comments_enabled: boolean;
   feedback_definition_names: string[];
   scope: ANNOTATION_QUEUE_SCOPE;
+  queue_type?: ANNOTATION_QUEUE_TYPE;
+  filter_criteria?: Filter[];
   reviewers?: AnnotationQueueReviewer[];
   feedback_scores?: AggregatedFeedbackScore[];
   items_count: number;
@@ -42,7 +50,10 @@ export type CreateAnnotationQueue = Omit<
   | "last_updated_at"
   | "last_updated_by"
   | "last_scored_at"
->;
+> & {
+  queue_type?: ANNOTATION_QUEUE_TYPE;
+  filter_criteria?: Filter[];
+};
 
 export type UpdateAnnotationQueue = Partial<
   Omit<
@@ -51,6 +62,8 @@ export type UpdateAnnotationQueue = Partial<
     | "project_id"
     | "project_name"
     | "scope"
+    | "queue_type"
+    | "filter_criteria"
     | "reviewers"
     | "feedback_scores"
     | "items_count"
