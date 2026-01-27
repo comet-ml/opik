@@ -1390,7 +1390,18 @@ class BaseOptimizer(ABC):
             return self.post_optimize(context, result)
         except Exception as e:
             logger.error(f"Optimization failed: {e}")
-            self._finalize_optimization(context, status="error")
+            logger.error(
+                f"Finalizing optimization with error status. "
+                f"Optimization ID: {context.optimization_id}, "
+                f"Optimization object exists: {context.optimization is not None}"
+            )
+            try:
+                self._finalize_optimization(context, status="error")
+            except Exception as finalize_error:
+                logger.error(
+                    f"Failed to finalize optimization status: {finalize_error}",
+                    exc_info=True,
+                )
             raise
 
     # ------------------------------------------------------------------
@@ -1646,15 +1657,31 @@ class BaseOptimizer(ABC):
     ) -> None:
         # FIXME: remove when a solution is added to opik's optimization.update method
         count = 0
+        last_error = None
         while count < 3:
             try:
                 optimization.update(status=status)
-                break
-            except ApiError:
+                logger.debug(f"Successfully updated optimization status to {status}")
+                return
+            except ApiError as e:
+                last_error = e
                 count += 1
-                time.sleep(5)
-        if count == 3:
-            logger.warning("Unable to update optimization status; continuing...")
+                logger.warning(
+                    f"Attempt {count}/3 to update optimization status to {status} failed: {e}"
+                )
+                if count < 3:
+                    time.sleep(5)
+            except Exception as e:
+                last_error = e
+                logger.error(
+                    f"Unexpected error updating optimization status to {status}: {e}"
+                )
+                break
+        if count == 3 or last_error:
+            logger.error(
+                f"Unable to update optimization status to {status} after {count} attempts. "
+                f"Last error: {last_error}"
+            )
 
     @staticmethod
     def _coerce_score(raw_score: Any) -> float:
@@ -1667,9 +1694,18 @@ class BaseOptimizer(ABC):
         status: str = "completed",
     ) -> None:
         if context.optimization is not None:
-            self._update_optimization(context.optimization, status)
-            logger.debug(
-                f"Optimization {context.optimization_id} status updated to {status}."
+            try:
+                self._update_optimization(context.optimization, status)
+                logger.debug(
+                    f"Optimization {context.optimization_id} status updated to {status}."
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to update optimization {context.optimization_id} status to {status}: {e}"
+                )
+        else:
+            logger.warning(
+                f"Cannot update optimization status to {status}: optimization object is None"
             )
         # No implicit context storage; nothing to clear here.
 
