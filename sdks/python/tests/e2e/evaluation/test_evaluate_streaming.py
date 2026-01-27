@@ -66,9 +66,13 @@ def test_streaming_starts_evaluation_before_complete_download(
         """Wrapper that tracks when items are yielded from the stream."""
         items = original_read_and_parse_stream(stream, item_class, nb_samples)
         tracked_items = []
+        # Only track dataset item yields, not span/trace yields from other operations
+        from opik.rest_api.types import dataset_item_public
+        is_dataset_item = item_class == dataset_item_public.DatasetItemPublic
         for item in items:
-            with events_lock:
-                events.append("yield")
+            if is_dataset_item:
+                with events_lock:
+                    events.append("yield")
             tracked_items.append(item)
         return tracked_items
 
