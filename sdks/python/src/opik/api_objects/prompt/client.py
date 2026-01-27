@@ -142,6 +142,24 @@ class PromptClient:
                     name=name,
                 )
             )
+            # retrieve_prompt_version may not return tags, so we need to set them manually
+            # from the tags we just passed to create_prompt
+            if tags is not None and new_prompt_version_detail.tags is None:
+                # Pydantic objects are frozen, so we need to create a new object with tags
+                new_prompt_version_detail = prompt_version_detail.PromptVersionDetail(
+                    id=new_prompt_version_detail.id,
+                    prompt_id=new_prompt_version_detail.prompt_id,
+                    commit=new_prompt_version_detail.commit,
+                    template=new_prompt_version_detail.template,
+                    metadata=new_prompt_version_detail.metadata,
+                    type=new_prompt_version_detail.type,
+                    change_description=new_prompt_version_detail.change_description,
+                    tags=tags,
+                    variables=new_prompt_version_detail.variables,
+                    template_structure=new_prompt_version_detail.template_structure,
+                    created_at=new_prompt_version_detail.created_at,
+                    created_by=new_prompt_version_detail.created_by,
+                )
         else:
             # For existing prompts or when no container-level params, use create_prompt_version
             new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
@@ -306,10 +324,10 @@ class PromptClient:
                 json.dumps(parsed_filters) if parsed_filters is not None else None
             )
 
-            # Page through all prompt containers and collect name + template_structure
+            # Page through all prompt containers and collect name + template_structure + tags
             page = 1
             size = 1000
-            prompt_info: List[Tuple[str, str]] = []  # (name, template_structure)
+            prompt_info: List[Tuple[str, str, Optional[List[str]]]] = []  # (name, template_structure, tags)
             while True:
                 prompts_page = self._rest_client.prompts.get_prompts(
                     page=page,
@@ -321,7 +339,7 @@ class PromptClient:
                 if len(content) == 0:
                     break
                 prompt_info.extend(
-                    [(p.name, p.template_structure or "text") for p in content]
+                    [(p.name, p.template_structure or "text", p.tags) for p in content]
                 )
                 if len(content) < size:
                     break
@@ -332,11 +350,28 @@ class PromptClient:
 
             # Retrieve latest version for each container name
             results: List[PromptSearchResult] = []
-            for prompt_name, template_structure in prompt_info:
+            for prompt_name, template_structure, tags in prompt_info:
                 try:
                     latest_version = self._rest_client.prompts.retrieve_prompt_version(
                         name=prompt_name,
                     )
+                    # retrieve_prompt_version may not return tags, so we need to set them from get_prompts response
+                    if tags is not None and latest_version.tags is None:
+                        # Pydantic objects are frozen, so we need to create a new object with tags
+                        latest_version = prompt_version_detail.PromptVersionDetail(
+                            id=latest_version.id,
+                            prompt_id=latest_version.prompt_id,
+                            commit=latest_version.commit,
+                            template=latest_version.template,
+                            metadata=latest_version.metadata,
+                            type=latest_version.type,
+                            change_description=latest_version.change_description,
+                            tags=tags,
+                            variables=latest_version.variables,
+                            template_structure=latest_version.template_structure,
+                            created_at=latest_version.created_at,
+                            created_by=latest_version.created_by,
+                        )
                     results.append(
                         PromptSearchResult(
                             name=prompt_name,
