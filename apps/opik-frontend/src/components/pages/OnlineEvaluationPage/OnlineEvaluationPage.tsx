@@ -391,6 +391,7 @@ export const OnlineEvaluationPage: React.FC = () => {
             columns={filterableColumns}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           ></FiltersButton>
         </div>
         <div className="flex items-center gap-2">

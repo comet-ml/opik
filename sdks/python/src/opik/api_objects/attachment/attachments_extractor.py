@@ -52,22 +52,22 @@ class AttachmentsExtractor:
     ) -> List[attachment_context.AttachmentWithContext]:
         """
         Extract attachments from data and replace with placeholders.
-        
+
         Handles both dict and list at the top level, recursively processing
         nested structures to find and extract base64-encoded attachments.
-        
+
         Args:
             data: The data structure to process (dict or list)
             entity_type: Type of entity (span or trace)
             entity_id: ID of the entity
             project_name: Name of the project
             context: Context where data is located (input, output, or metadata)
-            
+
         Returns:
             List of extracted attachments with context
         """
         attachments: List[attachment_context.AttachmentWithContext] = []
-        
+
         if isinstance(data, dict):
             # For dicts, iterate over items and extract attachments from values
             for key, value in data.items():

@@ -1172,6 +1172,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">
