@@ -470,16 +470,16 @@
     left: var(--sidebar-width);
   }
 
-  .comet-table-row-active[data-row-active="true"] td {
-    background: hsl(var(--primary-foreground));
-  }
-
   .comet-table-row-best td {
     background-color: var(--table-best-row-bg);
   }
 
   .comet-table-row-best:hover td {
     background-color: var(--table-best-row-hover-bg);
+  }
+
+  .comet-table-row-active[data-row-active="true"] td {
+    background: hsl(var(--primary-foreground));
   }
 
   code,
