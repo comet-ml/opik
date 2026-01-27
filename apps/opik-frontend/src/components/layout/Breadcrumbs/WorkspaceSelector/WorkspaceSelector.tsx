@@ -20,6 +20,7 @@ import useUser from "@/plugins/comet/useUser";
 import useAppStore from "@/store/AppStore";
 import { Workspace } from "@/plugins/comet/types";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
+import { buildUrl } from "@/plugins/comet/utils";
 
 const WorkspaceSelector: React.FC = () => {
   const navigate = useNavigate();
@@ -89,10 +90,6 @@ const WorkspaceSelector: React.FC = () => {
 
   const handleManageWorkspaces = () => {
     setIsDropdownOpen(false);
-    navigate({
-      to: "/$workspaceName/configuration",
-      params: { workspaceName },
-    });
   };
 
   if (!shouldShowDropdown) {
@@ -180,8 +177,9 @@ const WorkspaceSelector: React.FC = () => {
           </div>
           <div className="sticky inset-x-0 bottom-0">
             <Separator className="my-1" />
-            <div
+            <a
               className="relative flex h-10 cursor-pointer items-center rounded-md pl-8 pr-2 hover:bg-primary-foreground"
+              href={buildUrl("account-settings/workspaces", workspaceName)}
               onClick={handleManageWorkspaces}
             >
               <span className="absolute left-2 flex size-3.5 items-center justify-center">
@@ -190,7 +188,7 @@ const WorkspaceSelector: React.FC = () => {
               <span className="comet-body-s text-primary">
                 Manage workspaces
               </span>
-            </div>
+            </a>
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
