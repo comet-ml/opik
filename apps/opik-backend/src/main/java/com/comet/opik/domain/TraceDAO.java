@@ -2492,7 +2492,7 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("start_time", trace.startTime().toString())
                 .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
 
-        bindInputOutputAndSlim(statement, trace, null);
+        bindInputOutputMetadataAndSlim(statement, trace, null);
 
         if (trace.endTime() != null) {
             statement.bind("end_time", trace.endTime().toString());
@@ -2522,14 +2522,14 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     /**
-     * Binds input, output, metadata, and their slim versions to a statement.
-     * Centralizes the conversion and binding logic for consistency.
+     * Binds input, output, metadata, and their slim versions (input_slim, output_slim) to a statement.
+     * Centralizes the JSON conversion and binding logic for consistency across single and batch inserts.
      *
      * @param statement the statement to bind to
      * @param trace the trace containing the values
-     * @param index optional index suffix for batch operations (null for single insert)
+     * @param index optional index suffix for batch operations (e.g., 0, 1, 2); pass null for single insert
      */
-    private void bindInputOutputAndSlim(Statement statement, Trace trace, Integer index) {
+    private void bindInputOutputMetadataAndSlim(Statement statement, Trace trace, Integer index) {
         String suffix = index != null ? String.valueOf(index) : "";
 
         String inputValue = TruncationUtils.toJsonString(trace.input());
@@ -3111,7 +3111,7 @@ class TraceDAOImpl implements TraceDAO {
                                 trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
                         .bind("thread_id" + i, StringUtils.defaultIfBlank(trace.threadId(), ""));
 
-                bindInputOutputAndSlim(statement, trace, i);
+                bindInputOutputMetadataAndSlim(statement, trace, i);
 
                 if (trace.endTime() != null) {
                     statement.bind("end_time" + i, trace.endTime().toString());
