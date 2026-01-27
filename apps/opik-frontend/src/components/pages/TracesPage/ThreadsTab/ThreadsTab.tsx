@@ -667,6 +667,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             filters={filters}
             onChange={setFilters}
             config={filtersConfig as never}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">
