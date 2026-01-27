@@ -13,7 +13,7 @@ import { TABLE_WRAPPER_ATTRIBUTE } from "@/components/layout/PageBodyStickyTable
 export const getRowId = (e: Experiment) => e.id;
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: ["name"],
+  left: [],
   right: [],
 };
 

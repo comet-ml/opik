@@ -146,12 +146,12 @@ export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "id",
+  COLUMN_ID_ID,
   COLUMN_COMMENTS_ID,
   USER_FEEDBACK_COLUMN_ID,
 ];

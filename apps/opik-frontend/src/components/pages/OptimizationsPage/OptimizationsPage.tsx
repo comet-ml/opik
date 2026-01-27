@@ -79,7 +79,7 @@ import StudioTemplates from "@/components/pages-shared/optimizations/StudioTempl
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
-const SELECTED_COLUMNS_KEY = "optimizations-selected-columns";
+const SELECTED_COLUMNS_KEY = "optimizations-selected-columns-v2";
 const COLUMNS_WIDTH_KEY = "optimizations-columns-width";
 const COLUMNS_ORDER_KEY = "optimizations-columns-order";
 

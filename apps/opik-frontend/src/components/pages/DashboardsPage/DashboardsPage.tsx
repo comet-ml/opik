@@ -37,11 +37,7 @@ import {
 } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn } from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -49,18 +45,19 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
-const SELECTED_COLUMNS_KEY = "dashboards-selected-columns";
+const SELECTED_COLUMNS_KEY = "dashboards-selected-columns-v2";
 const COLUMNS_WIDTH_KEY = "dashboards-columns-width";
 const COLUMNS_ORDER_KEY = "dashboards-columns-order";
 const COLUMNS_SORT_KEY = "dashboards-columns-sort";
 const PAGINATION_SIZE_KEY = "dashboards-pagination-size";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "description",
   "last_updated_at",
   "created_at",
@@ -72,6 +69,18 @@ const DashboardsPage: React.FunctionComponent = () => {
 
   const columnsDef: ColumnData<Dashboard>[] = useMemo(() => {
     return [
+      {
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        cell: ResourceCell as never,
+        sortable: true,
+        customMeta: {
+          nameKey: "name",
+          idKey: "id",
+          resource: RESOURCE_TYPE.dashboard,
+        },
+      },
       {
         id: "id",
         label: "ID",
@@ -190,18 +199,6 @@ const DashboardsPage: React.FunctionComponent = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Dashboard>(),
-      mapColumnDataFields<Dashboard, Dashboard>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.dashboard,
-        },
-        sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-      }),
       ...convertColumnDataToColumn<Dashboard, Dashboard>(columnsDef, {
         columnsOrder,
         selectedColumns,
