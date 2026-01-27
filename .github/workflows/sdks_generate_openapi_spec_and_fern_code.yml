@@ -9,9 +9,6 @@ jobs:
   update-open-api-spec-and-fern-code:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: write       # To push the branch
-      pull-requests: write  # To create the PR
 
     steps:
       - name: Checkout Repository
@@ -76,7 +73,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.COMET_ACTION_CREATE_PR }}
           branch: ${{ env.BRANCH_NAME }}
           title: "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
           body: |
