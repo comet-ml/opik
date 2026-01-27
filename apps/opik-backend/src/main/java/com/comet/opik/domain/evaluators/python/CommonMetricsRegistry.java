@@ -6,6 +6,8 @@ import com.comet.opik.infrastructure.RetriableHttpClient;
 import com.comet.opik.utils.RetryUtils;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -88,7 +90,25 @@ public class CommonMetricsRegistry {
             return metricList.content() != null ? metricList.content() : List.of();
         }
 
-        String errorMessage = "Unknown error";
+        String errorMessage = extractErrorMessage(response);
+
+        if (statusCode == 400) {
+            throw new BadRequestException(errorMessage);
+        }
+
+        throw new InternalServerErrorException(
+                "Failed to fetch common metrics from Python backend (HTTP " + statusCode + "): " + errorMessage);
+    }
+
+    /**
+     * Extracts error message from HTTP response.
+     *
+     * @param response The HTTP response
+     * @return Error message string
+     */
+    private String extractErrorMessage(Response response) {
+        String errorMessage = "Unknown error fetching common metrics";
+
         if (response.hasEntity() && response.bufferEntity()) {
             try {
                 errorMessage = response.readEntity(String.class);
@@ -97,8 +117,7 @@ public class CommonMetricsRegistry {
             }
         }
 
-        throw new RuntimeException(
-                "Failed to fetch common metrics from Python backend (HTTP " + statusCode + "): " + errorMessage);
+        return errorMessage;
     }
 
     /**

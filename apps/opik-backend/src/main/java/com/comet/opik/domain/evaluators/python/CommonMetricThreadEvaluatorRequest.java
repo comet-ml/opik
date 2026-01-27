@@ -19,5 +19,6 @@ import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluator
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record CommonMetricThreadEvaluatorRequest(
         Map<String, Object> initConfig,
+        Map<String, String> scoringKwargs,
         List<ChatMessage> data) {
 }

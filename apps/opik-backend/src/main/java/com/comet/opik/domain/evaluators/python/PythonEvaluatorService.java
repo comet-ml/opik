@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -85,8 +86,12 @@ public class PythonEvaluatorService {
             List<ChatMessage> context) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(context), "Argument 'context' must not be empty");
 
+        // For thread evaluation, scoring_kwargs is typically empty as the context is passed via data
+        Map<String, String> scoringKwargs = Collections.emptyMap();
+
         var request = CommonMetricThreadEvaluatorRequest.builder()
                 .initConfig(initConfig)
+                .scoringKwargs(scoringKwargs)
                 .data(context)
                 .build();
 
