@@ -320,8 +320,7 @@ def _normalize_current_span_data() -> None:
             current_metadata = getattr(span_data, "metadata", None)
             # Metadata should already be a dict, but normalize lists just in case
             if isinstance(current_metadata, list):
-                normalized_metadata = _normalize_span_data_field(current_metadata)
-                updates["metadata"] = normalized_metadata
+                updates["metadata"] = {"_data": current_metadata}
 
         # Only update if we have changes
         if updates:
