@@ -1355,6 +1355,15 @@ class BaseOptimizer(ABC):
                 raise TypeError(
                     "run_optimization must return AlgorithmResult (legacy OptimizationResult is no longer supported)"
                 )
+
+            # Check if optimization failed (finish_reason = "error")
+            # This can happen if evaluation fails but run_optimization() catches and returns
+            if context.finish_reason == "error":
+                logger.error("Optimization failed with error finish_reason")
+                result = self._build_final_result(raw_result, context)
+                self._finalize_optimization(context, status="error")
+                return self.post_optimize(context, result)
+
             result = self._build_final_result(raw_result, context)
 
             result_prompt = runtime.select_result_display_prompt(result.prompt)
@@ -1381,10 +1390,7 @@ class BaseOptimizer(ABC):
             return self.post_optimize(context, result)
         except Exception as e:
             logger.error(f"Optimization failed: {e}")
-            # FIXME(opik): Switch to status="error" once Optimization.update allows it.
-            # REST supports "error" via PUT v1/private/optimizations/{id} (status field),
-            # but Optimization.update() currently restricts to running/completed/cancelled.
-            self._finalize_optimization(context, status="cancelled")
+            self._finalize_optimization(context, status="error")
             raise
 
     # ------------------------------------------------------------------
