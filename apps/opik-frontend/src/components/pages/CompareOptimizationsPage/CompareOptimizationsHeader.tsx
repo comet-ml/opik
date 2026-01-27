@@ -12,13 +12,33 @@ import {
 import useOptimizationStopMutation from "@/api/optimizations/useOptimizationStopMutation";
 import useAppStore from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
-import { extractPromptData } from "@/lib/prompt";
+import { extractPromptData, OpenAIMessage } from "@/lib/prompt";
 import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
 import get from "lodash/get";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+
+type LoadPlaygroundFn = (params: {
+  promptContent: string;
+  templateStructure: PROMPT_TEMPLATE_STRUCTURE;
+}) => void;
+
+const deployMessagesToPlayground = (
+  messages: OpenAIMessage[],
+  loadPlayground: LoadPlaygroundFn,
+) => {
+  const convertedMessages = messages.map((msg) => ({
+    ...msg,
+    content: convertOptimizationVariableFormat(msg.content),
+  }));
+  const promptContent = JSON.stringify(convertedMessages, null, 2);
+  loadPlayground({
+    promptContent,
+    templateStructure: PROMPT_TEMPLATE_STRUCTURE.CHAT,
+  });
+};
 
 type CompareOptimizationsHeaderProps = {
   title: string;
@@ -82,28 +102,12 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
     if (!extractedPrompt) return;
 
     if (extractedPrompt.type === "single") {
-      const convertedMessages = extractedPrompt.data.map((msg) => ({
-        ...msg,
-        content: convertOptimizationVariableFormat(msg.content),
-      }));
-      const promptContent = JSON.stringify(convertedMessages, null, 2);
-      loadPlayground({
-        promptContent,
-        templateStructure: PROMPT_TEMPLATE_STRUCTURE.CHAT,
-      });
+      deployMessagesToPlayground(extractedPrompt.data, loadPlayground);
     } else {
       // For multi-agent prompts (named prompts), we'll load the first one
       const firstPromptName = Object.keys(extractedPrompt.data)[0];
       const firstPrompt = extractedPrompt.data[firstPromptName];
-      const convertedMessages = firstPrompt.map((msg) => ({
-        ...msg,
-        content: convertOptimizationVariableFormat(msg.content),
-      }));
-      const promptContent = JSON.stringify(convertedMessages, null, 2);
-      loadPlayground({
-        promptContent,
-        templateStructure: PROMPT_TEMPLATE_STRUCTURE.CHAT,
-      });
+      deployMessagesToPlayground(firstPrompt, loadPlayground);
     }
   }, [extractedPrompt, loadPlayground]);
 
