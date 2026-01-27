@@ -106,6 +106,29 @@ describe("transformMessageIntoProviderMessage", () => {
         image_url: { url: literalUrl },
       });
     });
+
+    it("should render embedded variables as comma-separated string instead of expanding", () => {
+      const message: LLMMessage = {
+        id: "msg-1",
+        role: LLM_MESSAGE_ROLE.user,
+        content: [
+          { type: "text", text: "Images" },
+          { type: "image_url", image_url: { url: "https://example.com/{{imagePath}}" } },
+        ],
+      };
+
+      const datasetItem = {
+        imagePath: ["path1.jpg", "path2.jpg"],
+      };
+
+      const result = transformMessageIntoProviderMessage(message, datasetItem);
+
+      expect(result.content).toHaveLength(2);
+      expect(result.content[1]).toEqual({
+        type: "image_url",
+        image_url: { url: "https://example.com/path1.jpg,path2.jpg" },
+      });
+    });
   });
 
   describe("video URL array expansion", () => {
@@ -157,6 +180,29 @@ describe("transformMessageIntoProviderMessage", () => {
         text: "No videos",
       });
     });
+
+    it("should render embedded variables as comma-separated string instead of expanding", () => {
+      const message: LLMMessage = {
+        id: "msg-1",
+        role: LLM_MESSAGE_ROLE.user,
+        content: [
+          { type: "text", text: "Videos" },
+          { type: "video_url", video_url: { url: "https://example.com/{{videoPath}}" } },
+        ],
+      };
+
+      const datasetItem = {
+        videoPath: ["video1.mp4", "video2.mp4"],
+      };
+
+      const result = transformMessageIntoProviderMessage(message, datasetItem);
+
+      expect(result.content).toHaveLength(2);
+      expect(result.content[1]).toEqual({
+        type: "video_url",
+        video_url: { url: "https://example.com/video1.mp4,video2.mp4" },
+      });
+    });
   });
 
   describe("audio URL array expansion", () => {
@@ -203,6 +249,29 @@ describe("transformMessageIntoProviderMessage", () => {
       const result = transformMessageIntoProviderMessage(message, datasetItem);
 
       expect(result.content).toHaveLength(1);
+    });
+
+    it("should render embedded variables as comma-separated string instead of expanding", () => {
+      const message: LLMMessage = {
+        id: "msg-1",
+        role: LLM_MESSAGE_ROLE.user,
+        content: [
+          { type: "text", text: "Audios" },
+          { type: "audio_url", audio_url: { url: "https://example.com/{{audioPath}}" } },
+        ],
+      };
+
+      const datasetItem = {
+        audioPath: ["audio1.mp3", "audio2.mp3"],
+      };
+
+      const result = transformMessageIntoProviderMessage(message, datasetItem);
+
+      expect(result.content).toHaveLength(2);
+      expect(result.content[1]).toEqual({
+        type: "audio_url",
+        audio_url: { url: "https://example.com/audio1.mp3,audio2.mp3" },
+      });
     });
   });
 
