@@ -19,6 +19,7 @@ import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.integrations.openai import chat_completion_chunks_aggregator
+from opik.integrations import model_defaults
 from opik.types import LLMProvider
 
 from . import stream_patchers
@@ -66,6 +67,13 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
             kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
         metadata = dict_utils.deepmerge(metadata, new_metadata)
+
+        # Add default parameters for OpenAI models
+        model = kwargs.get("model", None)
+        default_params = model_defaults.get_openai_default_params(model, kwargs)
+        if default_params:
+            metadata = dict_utils.deepmerge(metadata, default_params)
+
         metadata.update(
             {
                 "created_from": "openai",

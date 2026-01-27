@@ -69,6 +69,97 @@ def _compute_experiment_scores(
     return all_scores
 
 
+def _extract_model_config_from_trace(
+    client: opik_client.Opik,
+    trace_id: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Extract model configuration from a trace by inspecting its spans.
+
+    This function looks for LLM spans (spans with provider and model info) and
+    extracts model parameters from their metadata.
+
+    Args:
+        client: Opik client instance
+        trace_id: ID of the trace to inspect
+
+    Returns:
+        Dictionary with model configuration, or None if no LLM spans found
+    """
+    try:
+        # Search for spans in this trace
+        spans = client.search_spans(
+            trace_id=trace_id,
+            max_results=10,  # Get up to 10 spans
+        )
+
+        config: Dict[str, Any] = {}
+
+        # Look for the first LLM span (span with provider and model)
+        for span_data in spans:
+            # Check if this is an LLM span (has provider and model)
+            if span_data.provider and span_data.model:
+                # Add model and provider
+                config["model"] = span_data.model
+                config["provider"] = span_data.provider
+
+                # Extract parameters from metadata
+                if span_data.metadata and isinstance(span_data.metadata, dict):
+                    # Look for common model parameters (snake_case from Python SDK)
+                    model_params = [
+                        "temperature",
+                        "top_p",
+                        "frequency_penalty",
+                        "presence_penalty",
+                        "reasoning_effort",
+                        "thinking_level",
+                        "max_tokens",
+                        "max_completion_tokens",
+                    ]
+
+                    for param in model_params:
+                        if param in span_data.metadata:
+                            config[param] = span_data.metadata[param]
+
+                # We found an LLM span, use it and stop
+                break
+
+        return config if config else None
+
+    except Exception as e:
+        LOGGER.debug(
+            "Failed to extract model config from trace %s: %s",
+            trace_id,
+            e,
+            exc_info=True,
+        )
+        return None
+
+
+def _extract_model_config_from_test_results(
+    client: opik_client.Opik,
+    test_results: List[test_result.TestResult],
+) -> Optional[Dict[str, Any]]:
+    """
+    Extract model configuration from test results by inspecting the first trace.
+
+    Args:
+        client: Opik client instance
+        test_results: List of test results from evaluation
+
+    Returns:
+        Dictionary with model configuration, or None if extraction fails
+    """
+    if not test_results:
+        return None
+
+    # Get the first test result's trace
+    first_test = test_results[0]
+    trace_id = first_test.test_case.trace_id
+
+    return _extract_model_config_from_trace(client, trace_id)
+
+
 def evaluate(
     dataset: dataset.Dataset,
     task: LLMTask,
@@ -206,6 +297,7 @@ def evaluate(
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
+        experiment_config_was_provided=(experiment_config is not None),
     )
 
 
@@ -225,6 +317,7 @@ def _evaluate_task(
     dataset_sampler: Optional[samplers.BaseDatasetSampler],
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
+    experiment_config_was_provided: bool,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -248,6 +341,42 @@ def _evaluate_task(
         )
 
     total_time = time.time() - start_time
+
+    # Auto-populate experiment config if it wasn't provided by user
+    if not experiment_config_was_provided:
+        try:
+            if test_results:
+                # Flush to ensure all spans are written to backend
+                client.flush()
+
+                # Give backend a moment to process the spans
+                time.sleep(0.5)
+
+                extracted_config = _extract_model_config_from_test_results(
+                    client, test_results
+                )
+                if extracted_config:
+                    # Update experiment with extracted model configuration
+                    client._rest_client.experiments.update_experiment(
+                        id=experiment.id,
+                        metadata=extracted_config,
+                    )
+                    LOGGER.debug(
+                        "Auto-populated experiment %s config with model parameters",
+                        experiment.id,
+                    )
+            else:
+                LOGGER.debug(
+                    "No test results available for experiment %s, skipping auto-population",
+                    experiment.id,
+                )
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to auto-populate experiment config for experiment %s: %s",
+                experiment.id,
+                e,
+                exc_info=True,
+            )
 
     # Compute experiment scores
     computed_experiment_scores = _compute_experiment_scores(
@@ -821,6 +950,7 @@ def evaluate_optimization_trial(
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
+        experiment_config_was_provided=(experiment_config is not None),
     )
 
 
