@@ -1361,7 +1361,26 @@ class BaseOptimizer(ABC):
             if context.finish_reason == "error":
                 logger.error("Optimization failed with error finish_reason")
                 result = self._build_final_result(raw_result, context)
+                result_prompt = runtime.select_result_display_prompt(result.prompt)
+                runtime.show_final_result(
+                    optimizer=self,
+                    initial_score=(
+                        result.initial_score
+                        if result.initial_score is not None
+                        else baseline_score
+                    ),
+                    best_score=result.score,
+                    prompt=result_prompt,
+                )
                 self._finalize_optimization(context, status="error")
+                debug_log(
+                    "optimize_end",
+                    optimizer=self.__class__.__name__,
+                    best_score=result.score,
+                    trials_completed=context.trials_completed,
+                    stop_reason=context.finish_reason,
+                )
+                runtime.log_final_state(optimizer=self, result=result)
                 return self.post_optimize(context, result)
 
             result = self._build_final_result(raw_result, context)
@@ -1654,7 +1673,7 @@ class BaseOptimizer(ABC):
 
     def _update_optimization(
         self, optimization: optimization.Optimization, status: str
-    ) -> None:
+    ) -> bool:
         # FIXME: remove when a solution is added to opik's optimization.update method
         count = 0
         last_error = None
@@ -1662,7 +1681,7 @@ class BaseOptimizer(ABC):
             try:
                 optimization.update(status=status)
                 logger.debug(f"Successfully updated optimization status to {status}")
-                return
+                return True
             except ApiError as e:
                 last_error = e
                 count += 1
@@ -1682,6 +1701,7 @@ class BaseOptimizer(ABC):
                 f"Unable to update optimization status to {status} after {count} attempts. "
                 f"Last error: {last_error}"
             )
+        return False
 
     @staticmethod
     def _coerce_score(raw_score: Any) -> float:
@@ -1694,14 +1714,14 @@ class BaseOptimizer(ABC):
         status: str = "completed",
     ) -> None:
         if context.optimization is not None:
-            try:
-                self._update_optimization(context.optimization, status)
+            updated = self._update_optimization(context.optimization, status)
+            if updated:
                 logger.debug(
                     f"Optimization {context.optimization_id} status updated to {status}."
                 )
-            except Exception as e:
-                logger.error(
-                    f"Failed to update optimization {context.optimization_id} status to {status}: {e}"
+            else:
+                logger.warning(
+                    f"Optimization {context.optimization_id} status update to {status} did not complete."
                 )
         else:
             logger.warning(
