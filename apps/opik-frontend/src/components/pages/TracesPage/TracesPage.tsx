@@ -73,29 +73,39 @@ const TracesPage = () => {
   const defaultLogsType =
     threadCount > 0 ? LOGS_TYPE.threads : LOGS_TYPE.traces;
 
-  // Remember the last selected LOGS_TYPE to preserve user selection across tab switches
-  const [lastLogsType, setLastLogsType] = useState<LOGS_TYPE | null>(null);
+  // Remember the user's selected LOGS_TYPE to preserve their choice across tab switches
+  const [userSelectedLogsType, setUserSelectedLogsType] =
+    useState<LOGS_TYPE | null>(null);
 
-  const [type = defaultLogsType, setType] = useQueryParam("type", StringParam, {
-    updateType: "replaceIn",
-  });
+  const [queryType = defaultLogsType, setQueryType] = useQueryParam(
+    "type",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   // Determine which main tab is active based on the type value
-  const activeTab = Object.values(PROJECT_TAB).includes(type as PROJECT_TAB)
-    ? (type as PROJECT_TAB)
-    : PROJECT_TAB.logs;
+  // Cast once to avoid repeated casting throughout the component
+  const typeAsProjectTab = queryType as PROJECT_TAB;
+  const typeAsLogsType = queryType as LOGS_TYPE;
+  const isValidProjectTab =
+    Object.values(PROJECT_TAB).includes(typeAsProjectTab);
+  const isValidLogsType = Object.values(LOGS_TYPE).includes(typeAsLogsType);
 
-  // Handle tab change - preserve user's last selected logs type when returning to Logs tab
+  const activeTab = isValidProjectTab ? typeAsProjectTab : PROJECT_TAB.logs;
+
+  // Handle tab change - preserve user's selected logs type when returning to Logs tab
   const handleTabChange = (newTab: string) => {
     if (newTab === PROJECT_TAB.logs) {
       // Use remembered value if available, otherwise use default
-      setType(lastLogsType ?? defaultLogsType);
+      setQueryType(userSelectedLogsType ?? defaultLogsType);
     } else {
       // Remember current logs type before switching away
-      if (Object.values(LOGS_TYPE).includes(type as LOGS_TYPE)) {
-        setLastLogsType(type as LOGS_TYPE);
+      if (isValidLogsType) {
+        setUserSelectedLogsType(typeAsLogsType);
       }
-      setType(newTab);
+      setQueryType(newTab);
     }
   };
 
