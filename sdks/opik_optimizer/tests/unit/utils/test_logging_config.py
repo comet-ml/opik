@@ -6,7 +6,7 @@ from collections.abc import Generator
 
 import pytest
 
-from opik_optimizer.logging_config import setup_logging
+from opik_optimizer.utils.logging import setup_logging
 
 
 try:  # pragma: no cover - executed only when rich is installed normally
@@ -41,7 +41,7 @@ if "opik_optimizer" not in sys.modules:
 
 @pytest.fixture(autouse=True)
 def reset_logging_state(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
-    monkeypatch.delenv("OPIK_LOG_LEVEL", raising=False)
+    monkeypatch.delenv("OPIK_OPTIMIZER_LOG_LEVEL", raising=False)
     # Ensure each test starts from a clean slate
     setup_logging(level=logging.WARNING, force=True)
     yield
@@ -58,7 +58,7 @@ def test_setup_logging_accepts_string_level() -> None:
 
 
 def test_setup_logging_honours_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPIK_LOG_LEVEL", "ERROR")
+    monkeypatch.setenv("OPIK_OPTIMIZER_LOG_LEVEL", "ERROR")
     setup_logging(level="INFO", force=True)
     package_logger = logging.getLogger("opik_optimizer")
     assert package_logger.level == logging.ERROR
