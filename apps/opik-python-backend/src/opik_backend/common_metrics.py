@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Set, Type, get_type_hints
 
 from flask import Blueprint, jsonify, abort, request, current_app
 
-from opik.evaluation.metrics import base_metric
+from opik.evaluation.metrics import base_metric, heuristics
 
 common_metrics_bp = Blueprint(
     "common_metrics", __name__, url_prefix="/v1/private/evaluators"
@@ -65,8 +65,6 @@ def _discover_heuristic_metrics() -> Dict[str, Type[base_metric.BaseMetric]]:
     Returns:
         Dictionary mapping metric IDs (snake_case) to metric classes.
     """
-    from opik.evaluation.metrics import heuristics
-
     metrics: Dict[str, Type[base_metric.BaseMetric]] = {}
 
     # Get all modules in the heuristics package
