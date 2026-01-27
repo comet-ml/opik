@@ -52,14 +52,16 @@ Your task is to synthesize these batch-level analyses into a unified root cause 
    - Consider the severity and frequency of each failure
    - Eliminate one-off or minor issues unless they're particularly impactful
 
-3. PROVIDE SYNTHESIS NOTES:
+3. PROVIDE SYNTHESIS NOTES (PLAIN TEXT ONLY):
+   - Use plain text bullets (e.g., "- item")
+   - Do NOT use markdown formatting, headings, or bold/italic
    - Briefly explain which batch-level patterns were merged and why
    - Note any cross-batch trends or patterns
    - Highlight the most critical areas for improvement
 
 Provide:
 1. A unified list of failure modes (name, description, root cause)
-2. Synthesis notes explaining your analysis process and key findings"""
+2. Synthesis notes as plain text bullets explaining your analysis process and key findings"""
 
 
 # Prompt template for improving prompts based on failure modes
