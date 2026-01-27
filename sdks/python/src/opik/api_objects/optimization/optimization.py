@@ -23,7 +23,9 @@ class Optimization:
     def update(
         self,
         name: Optional[str] = None,
-        status: Optional[Literal["running", "completed", "cancelled", "initialized", "error"]] = None,
+        status: Optional[
+            Literal["running", "completed", "cancelled", "initialized", "error"]
+        ] = None,
     ) -> None:
         LOGGER.debug(
             f"Updating optimization {self.id} with name {name} and status {status}"
