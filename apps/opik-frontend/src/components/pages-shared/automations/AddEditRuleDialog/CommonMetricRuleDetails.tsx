@@ -58,6 +58,20 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
   // Get the selected metric ID from form state
   const selectedMetricId = form.watch("commonMetricDetails.metricId");
 
+  // Auto-select the first metric if none is selected
+  useEffect(() => {
+    if (metricsData?.content && metricsData.content.length > 0) {
+      const currentMetricId = form.getValues("commonMetricDetails.metricId");
+      if (!currentMetricId) {
+        // Set the first metric as default
+        form.setValue(
+          "commonMetricDetails.metricId",
+          metricsData.content[0].id,
+        );
+      }
+    }
+  }, [metricsData?.content, form]);
+
   // Find the selected metric
   const selectedMetric = useMemo(() => {
     if (!metricsData?.content || !selectedMetricId) return null;
