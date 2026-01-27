@@ -132,11 +132,11 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
     const isLinux = platform.includes("linux");
 
     if (isMac || isWindows) {
-      return "http://host.docker.internal:11434";
+      return "http://host.docker.internal:11434/v1";
     } else if (isLinux) {
-      return "http://172.17.0.1:11434";
+      return "http://172.17.0.1:11434/v1";
     }
-    return "http://localhost:11434";
+    return "http://localhost:11434/v1";
   };
 
   return (
@@ -210,13 +210,14 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
               </FormControl>
               <FormMessage />
               <Description>
-                For local Ollama: Use platform-specific URL (Mac/Windows:{" "}
+                <strong>Important:</strong> URL must end with <code className="text-xs">/v1</code> for OpenAI API compatibility.
+                {" "}For local Ollama: Use platform-specific URL (Mac/Windows:{" "}
                 <code className="text-xs">
-                  http://host.docker.internal:11434
+                  http://host.docker.internal:11434/v1
                 </code>
                 , Linux:{" "}
-                <code className="text-xs">http://172.17.0.1:11434</code>). For
-                cloud: Enter your Ollama server URL.
+                <code className="text-xs">http://172.17.0.1:11434/v1</code>). For
+                cloud: Enter your Ollama server URL with <code className="text-xs">/v1</code> suffix.
               </Description>
             </FormItem>
           );
