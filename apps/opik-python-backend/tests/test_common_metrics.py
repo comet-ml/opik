@@ -12,6 +12,7 @@ from opik_backend.common_metrics import (
     EXCLUDED_METRICS,
     MAPPABLE_PARAMS,
 )
+from opik_backend.executor_process import ProcessExecutor
 
 
 @pytest.fixture
@@ -25,6 +26,32 @@ def app():
 def client(app):
     """Create test client."""
     return app.test_client()
+
+
+@pytest.fixture
+def executor():
+    """Fixture that provides a ProcessExecutor for execution tests."""
+    executor_instance = ProcessExecutor()
+    executor_instance.start_services()
+
+    try:
+        yield executor_instance
+    finally:
+        executor_instance.cleanup()
+
+
+@pytest.fixture
+def app_with_executor(executor):
+    """Create Flask app with executor for execution tests."""
+    app = create_app(test_config={"TESTING": True}, should_init_executor=False)
+    app.executor = executor
+    return app
+
+
+@pytest.fixture
+def client_with_executor(app_with_executor):
+    """Create test client with executor for execution tests."""
+    return app_with_executor.test_client()
 
 
 class TestCamelToSnake:
@@ -281,11 +308,15 @@ class TestListCommonMetricsEndpoint:
 
 
 class TestExecuteCommonMetricEndpoint:
-    """Tests for the /common-metrics/<metric_id>/score endpoint."""
+    """Tests for the /common-metrics/<metric_id>/score endpoint.
+    
+    These tests require an executor to be initialized since metric execution
+    now runs in isolated processes using the same infrastructure as user-supplied code.
+    """
 
-    def test_execute_contains_metric(self, client):
+    def test_execute_contains_metric(self, client_with_executor):
         """POST /common-metrics/contains/score should execute the metric."""
-        response = client.post(
+        response = client_with_executor.post(
             "/v1/private/evaluators/common-metrics/contains/score",
             json={
                 "init_config": {"reference": "hello"},
@@ -298,9 +329,9 @@ class TestExecuteCommonMetricEndpoint:
         assert len(result["scores"]) == 1
         assert result["scores"][0]["value"] == 1.0
 
-    def test_execute_contains_metric_no_match(self, client):
+    def test_execute_contains_metric_no_match(self, client_with_executor):
         """POST /common-metrics/contains/score should return 0 when no match."""
-        response = client.post(
+        response = client_with_executor.post(
             "/v1/private/evaluators/common-metrics/contains/score",
             json={
                 "init_config": {"reference": "goodbye"},
@@ -311,10 +342,10 @@ class TestExecuteCommonMetricEndpoint:
         result = response.get_json()
         assert result["scores"][0]["value"] == 0.0
 
-    def test_execute_contains_case_sensitive(self, client):
+    def test_execute_contains_case_sensitive(self, client_with_executor):
         """POST /common-metrics/contains/score with case_sensitive=True."""
         # Case insensitive (default) - should match
-        response = client.post(
+        response = client_with_executor.post(
             "/v1/private/evaluators/common-metrics/contains/score",
             json={
                 "init_config": {"reference": "HELLO"},
@@ -325,7 +356,7 @@ class TestExecuteCommonMetricEndpoint:
         assert response.get_json()["scores"][0]["value"] == 1.0
 
         # Case sensitive - should not match
-        response = client.post(
+        response = client_with_executor.post(
             "/v1/private/evaluators/common-metrics/contains/score",
             json={
                 "init_config": {"case_sensitive": True, "reference": "HELLO"},
@@ -335,25 +366,25 @@ class TestExecuteCommonMetricEndpoint:
         assert response.status_code == 200
         assert response.get_json()["scores"][0]["value"] == 0.0
 
-    def test_execute_unknown_metric_returns_404(self, client):
+    def test_execute_unknown_metric_returns_404(self, client_with_executor):
         """POST /common-metrics/unknown/score should return 404."""
-        response = client.post(
+        response = client_with_executor.post(
             "/v1/private/evaluators/common-metrics/unknown/score",
             json={"scoring_kwargs": {"output": "test"}}
         )
         assert response.status_code == 404
 
-    def test_execute_missing_scoring_kwargs_returns_400(self, client):
+    def test_execute_missing_scoring_kwargs_returns_400(self, client_with_executor):
         """POST /common-metrics/contains/score without scoring_kwargs should return 400."""
-        response = client.post(
+        response = client_with_executor.post(
             "/v1/private/evaluators/common-metrics/contains/score",
             json={"init_config": {"reference": "test"}}
         )
         assert response.status_code == 400
 
-    def test_execute_equals_metric(self, client):
+    def test_execute_equals_metric(self, client_with_executor):
         """POST /common-metrics/equals/score should execute the metric."""
-        response = client.post(
+        response = client_with_executor.post(
             "/v1/private/evaluators/common-metrics/equals/score",
             json={
                 "scoring_kwargs": {"output": "hello", "reference": "hello"}
@@ -363,9 +394,9 @@ class TestExecuteCommonMetricEndpoint:
         result = response.get_json()
         assert result["scores"][0]["value"] == 1.0
 
-    def test_execute_is_json_metric(self, client):
+    def test_execute_is_json_metric(self, client_with_executor):
         """POST /common-metrics/is_json/score should execute the metric."""
-        response = client.post(
+        response = client_with_executor.post(
             "/v1/private/evaluators/common-metrics/is_json/score",
             json={
                 "scoring_kwargs": {"output": '{"key": "value"}'}
@@ -376,7 +407,7 @@ class TestExecuteCommonMetricEndpoint:
         assert result["scores"][0]["value"] == 1.0
 
         # Invalid JSON
-        response = client.post(
+        response = client_with_executor.post(
             "/v1/private/evaluators/common-metrics/is_json/score",
             json={
                 "scoring_kwargs": {"output": "not json"}

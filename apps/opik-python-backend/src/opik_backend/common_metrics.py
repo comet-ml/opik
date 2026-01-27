@@ -1,9 +1,11 @@
 """
-Common metrics module for exposing Python SDK heuristic metrics.
+Common metrics helper functions for discovering and introspecting Python SDK heuristic metrics.
 
-This module provides endpoints to:
-1. List available common metrics with their metadata
-2. Execute metrics by name with provided parameters
+This module provides helper functions to:
+1. Discover available heuristic metrics from the opik SDK
+2. Extract metadata (parameters, descriptions) from metric classes
+3. Instantiate metrics with configuration
+4. Find metric classes by ID
 
 The metrics are dynamically discovered from the opik.evaluation.metrics.heuristics
 module, excluding only those that require heavy ML models (like BERTScore).
@@ -14,13 +16,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Set, Type, get_type_hints
 
-from flask import Blueprint, jsonify, abort, request, current_app
-
 from opik.evaluation.metrics import base_metric, heuristics
-
-common_metrics_bp = Blueprint(
-    "common_metrics", __name__, url_prefix="/v1/private/evaluators"
-)
 
 # Metrics to exclude from the common metrics registry
 EXCLUDED_METRICS: Set[str] = {
@@ -416,71 +412,15 @@ def instantiate_metric(
     return metric_cls(**init_kwargs)
 
 
-@common_metrics_bp.route("/common-metrics", methods=["GET"])
-def list_common_metrics():
-    """List all available common metrics with their metadata."""
-    metrics = get_common_metrics_list()
-    return jsonify({"content": metrics})
-
-
-@common_metrics_bp.route("/common-metrics/<metric_id>/score", methods=["POST"])
-def execute_common_metric(metric_id: str):
+def find_metric_class(metric_id: str) -> Optional[Type[base_metric.BaseMetric]]:
     """
-    Execute a common metric by its ID.
+    Find a common metric class by its snake_case ID.
 
-    Expected payload:
-    {
-        "init_config": { ... },      // Optional: __init__ parameters
-        "scoring_kwargs": { ... }    // Required: score method parameters
-    }
+    Args:
+        metric_id: The snake_case ID of the metric (e.g., 'contains', 'equals')
+
+    Returns:
+        The metric class if found, None otherwise
     """
     registry = _get_common_metrics_registry()
-
-    if metric_id not in registry:
-        abort(404, f"Unknown metric: {metric_id}")
-
-    payload = request.get_json(force=True)
-
-    init_config = payload.get("init_config", {})
-    scoring_kwargs = payload.get("scoring_kwargs")
-
-    if scoring_kwargs is None:
-        abort(400, "Field 'scoring_kwargs' is missing in the request")
-
-    if not isinstance(scoring_kwargs, dict):
-        abort(400, "Field 'scoring_kwargs' must be an object")
-
-    if init_config is not None and not isinstance(init_config, dict):
-        abort(400, "Field 'init_config' must be an object")
-
-    try:
-        # Instantiate the metric
-        metric = instantiate_metric(metric_id, init_config)
-
-        # Call the score method
-        result = metric.score(**scoring_kwargs)
-
-        # Convert result to dict
-        if hasattr(result, "__iter__") and not isinstance(result, dict):
-            # Multiple results
-            scores = [
-                {"name": r.name, "value": r.value, "reason": getattr(r, "reason", None)}
-                for r in result
-            ]
-        else:
-            # Single result
-            scores = [
-                {
-                    "name": result.name,
-                    "value": result.value,
-                    "reason": getattr(result, "reason", None),
-                }
-            ]
-
-        return jsonify({"scores": scores})
-
-    except ValueError as e:
-        abort(400, str(e))
-    except Exception as e:
-        current_app.logger.exception(f"Failed to execute metric {metric_id}")
-        abort(500, f"Failed to execute metric: {str(e)}")
+    return registry.get(metric_id)
