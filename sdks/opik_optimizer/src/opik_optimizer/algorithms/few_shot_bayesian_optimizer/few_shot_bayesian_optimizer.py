@@ -304,9 +304,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             prompt: The base prompts to modify
             few_shot_examples: List of example pairs with input and output fields
             allowed_roles: Optional set of allowed message roles (e.g., {"system", "user"}).
-                When None, no role filtering is applied. When provided, any edits to
-                disallowed roles are removed via apply_role_constraints/count_disallowed_role_updates
-                and logged at debug level, so prompts may contain fewer messages.
+                Note: Role constraints are NOT applied here to preserve placeholder-bearing messages.
+                Role filtering is applied later in _reconstruct_prompts_with_examples when examples
+                are actually injected into prompts.
 
         Returns:
             A tuple containing the updated prompts and the example template
@@ -395,19 +395,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     )
                 ]
                 new_prompt = prompts[prompt_name].copy()
-                constrained = apply_role_constraints(
-                    prompts[prompt_name].get_messages(), messages, allowed_roles
-                )
-                dropped = count_disallowed_role_updates(
-                    prompts[prompt_name].get_messages(), messages, allowed_roles
-                )
-                if dropped:
-                    logger.debug(
-                        "FewShot template dropped %s update(s) for prompt '%s' due to optimize_prompt constraints.",
-                        dropped,
-                        prompt_name,
-                    )
-                new_prompt.set_messages(constrained)
+                # Store LLM-produced messages as-is to preserve placeholders.
+                # Role constraints are applied later in _reconstruct_prompts_with_examples
+                # when examples are actually injected into prompts.
+                new_prompt.set_messages(messages)
             except Exception as e:
                 logger.error(
                     f"Couldn't create prompt with placeholder for {prompt_name}: {e}"
