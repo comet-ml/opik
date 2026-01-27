@@ -21,7 +21,7 @@ export default function useCommonMetricsQuery(
   options?: QueryConfig<CommonMetricList>,
 ) {
   return useQuery({
-    queryKey: [COMMON_METRICS_KEY],
+    queryKey: [COMMON_METRICS_KEY, {}],
     queryFn: getCommonMetrics,
     // Aggressive caching - metrics are static and bundled with the backend
     staleTime: Infinity,
