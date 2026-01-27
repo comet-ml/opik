@@ -702,19 +702,21 @@ def test_prompt__format_playground_chat_prompt__invalid_json__returns_string(
     assert result == '[{"role": "system", "content": "test content"}'
 
 
-def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
-    """Test that create_prompt() accepts tags parameter."""
+def test_prompt__create_with_additional_parameters__happyflow(opik_client: opik.Opik):
+    """Test that create_prompt() accepts tags and description parameters."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    prompt_name = f"prompt-with-tags-{unique_identifier}"
+    prompt_name = f"prompt-with-params-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
     tags = ["tag1", "tag2", "production"]
+    description = "This is a test prompt description"
 
-    # Create prompt with tags
+    # Create prompt with tags and description
     prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
         tags=tags,
+        description=description,
     )
 
     # Verify prompt was created
@@ -731,30 +733,7 @@ def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
     assert len(filtered_prompts) == 1
     assert filtered_prompts[0].name == prompt_name
 
-
-def test_prompt__create_with_description__happyflow(opik_client: opik.Opik):
-    """Test that create_prompt() accepts description parameter."""
-    unique_identifier = str(uuid.uuid4())[-6:]
-
-    prompt_name = f"prompt-with-desc-{unique_identifier}"
-    prompt_template = f"some-prompt-text-{unique_identifier}"
-    description = "This is a test prompt description"
-
-    # Create prompt with description
-    prompt = opik_client.create_prompt(
-        name=prompt_name,
-        prompt=prompt_template,
-        description=description,
-    )
-
-    # Verify prompt was created
-    verifiers.verify_prompt_version(
-        prompt,
-        name=prompt_name,
-        template=prompt_template,
-    )
-
-    # Retrieve the prompt to verify it was created
+    # Retrieve the prompt to verify description was set
     retrieved_prompt = opik_client.get_prompt(name=prompt_name)
     assert retrieved_prompt is not None
     assert retrieved_prompt.name == prompt_name
