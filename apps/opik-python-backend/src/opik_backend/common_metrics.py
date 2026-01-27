@@ -18,6 +18,12 @@ from typing import Any, Dict, List, Optional, Set, Type, get_type_hints
 
 from opik.evaluation.metrics import base_metric, heuristics
 
+
+class UnknownMetricError(Exception):
+    """Raised when attempting to use a metric that doesn't exist in the registry."""
+
+    pass
+
 # Metrics to exclude from the common metrics registry
 EXCLUDED_METRICS: Set[str] = {
     "BERTScore",  # Requires bert-score package + PyTorch + transformer models
@@ -386,12 +392,13 @@ def instantiate_metric(
         An instance of the metric
 
     Raises:
-        ValueError: If the metric ID is not found
+        UnknownMetricError: If the metric ID is not found
+        ValueError: If init_config is not a dictionary
     """
     registry = _get_common_metrics_registry()
 
     if metric_id not in registry:
-        raise ValueError(f"Unknown metric: {metric_id}")
+        raise UnknownMetricError(f"Unknown metric: {metric_id}")
 
     metric_cls = registry[metric_id]
 

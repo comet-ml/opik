@@ -9,8 +9,7 @@ from opik_backend.common_metrics import (
     _get_common_metrics_registry,
     _discover_heuristic_metrics,
     _camel_to_snake,
-    EXCLUDED_METRICS,
-    MAPPABLE_PARAMS,
+    UnknownMetricError,
 )
 from opik_backend.executor_process import ProcessExecutor
 
@@ -269,9 +268,9 @@ class TestInstantiateMetric:
             assert metric._default_reference == "test"
 
     def test_instantiate_unknown_metric_raises(self, app):
-        """Should raise ValueError for unknown metric."""
+        """Should raise UnknownMetricError for unknown metric."""
         with app.app_context():
-            with pytest.raises(ValueError, match="Unknown metric"):
+            with pytest.raises(UnknownMetricError, match="Unknown metric"):
                 instantiate_metric("unknown_metric")
 
     def test_tracking_is_disabled(self, app):

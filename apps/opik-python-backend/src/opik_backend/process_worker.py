@@ -10,7 +10,7 @@ from typing import Type, Union, List, Optional, Dict, Any
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 from .payload_types import PayloadType
-from .common_metrics import find_metric_class, EXCLUDED_INIT_PARAMS
+from .common_metrics import instantiate_metric, UnknownMetricError
 
 # Set up logging for the worker
 logger = logging.getLogger("process_worker")
@@ -56,24 +56,9 @@ def run_common_metric(
     Returns:
         Dictionary with 'scores' list on success, or 'code'/'error' on failure
     """
-    # Find the metric class using the helper from common_metrics
-    metric_cls = find_metric_class(metric_id)
-    if metric_cls is None:
-        return {"code": 404, "error": f"Unknown metric: {metric_id}"}
-
     try:
-        # Prepare init kwargs
-        init_kwargs = {}
-        if init_config:
-            for key, value in init_config.items():
-                if key not in EXCLUDED_INIT_PARAMS:
-                    init_kwargs[key] = value
 
-        # Always disable tracking for online evaluation
-        init_kwargs["track"] = False
-
-        # Instantiate the metric
-        metric = metric_cls(**init_kwargs)
+        metric = instantiate_metric(metric_id, init_config)
 
         # Call the score method
         result = metric.score(**scoring_kwargs)
@@ -83,6 +68,9 @@ def run_common_metric(
 
         return {"scores": [score.__dict__ for score in scores]}
 
+    except UnknownMetricError as e:
+        # Handle unknown metric errors
+        return {"code": 404, "error": str(e)}
     except Exception as e:
         stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
         return {"code": 400, "error": f"Failed to execute metric: {stacktrace}"}
