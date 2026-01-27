@@ -20,25 +20,11 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-type LoadPlaygroundFn = (params: {
-  promptContent: string;
-  templateStructure: PROMPT_TEMPLATE_STRUCTURE;
-}) => void;
-
-const deployMessagesToPlayground = (
-  messages: OpenAIMessage[],
-  loadPlayground: LoadPlaygroundFn,
-) => {
-  const convertedMessages = messages.map((msg) => ({
+const convertMessages = (messages: OpenAIMessage[]) =>
+  messages.map((msg) => ({
     ...msg,
     content: convertOptimizationVariableFormat(msg.content),
   }));
-  const promptContent = JSON.stringify(convertedMessages, null, 2);
-  loadPlayground({
-    promptContent,
-    templateStructure: PROMPT_TEMPLATE_STRUCTURE.CHAT,
-  });
-};
 
 type CompareOptimizationsHeaderProps = {
   title: string;
@@ -102,12 +88,20 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
     if (!extractedPrompt) return;
 
     if (extractedPrompt.type === "single") {
-      deployMessagesToPlayground(extractedPrompt.data, loadPlayground);
+      const convertedMessages = convertMessages(extractedPrompt.data);
+      loadPlayground({
+        promptContent: JSON.stringify(convertedMessages, null, 2),
+        templateStructure: PROMPT_TEMPLATE_STRUCTURE.CHAT,
+      });
     } else {
-      // For multi-agent prompts (named prompts), we'll load the first one
-      const firstPromptName = Object.keys(extractedPrompt.data)[0];
-      const firstPrompt = extractedPrompt.data[firstPromptName];
-      deployMessagesToPlayground(firstPrompt, loadPlayground);
+      // For multi-agent prompts, load all agents as separate Playground prompts
+      const namedPrompts = Object.entries(extractedPrompt.data).map(
+        ([name, messages]) => ({
+          name,
+          content: JSON.stringify(convertMessages(messages), null, 2),
+        }),
+      );
+      loadPlayground({ namedPrompts });
     }
   }, [extractedPrompt, loadPlayground]);
 
