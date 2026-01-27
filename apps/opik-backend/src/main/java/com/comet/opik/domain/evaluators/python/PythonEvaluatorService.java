@@ -15,7 +15,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -62,41 +61,6 @@ public class PythonEvaluatorService {
 
         String url = COMMON_METRIC_URL_TEMPLATE.formatted(config.getPythonEvaluator().getUrl(), metricId);
         log.info("Evaluating common metric '{}' at '{}'", metricId, url);
-
-        return RetriableHttpClient.newPost(c -> c.target(url))
-                .withRetryPolicy(RetryUtils.handleHttpErrors(config.getPythonEvaluator().getMaxRetryAttempts(),
-                        config.getPythonEvaluator().getMinRetryDelay().toJavaDuration(),
-                        config.getPythonEvaluator().getMaxRetryDelay().toJavaDuration()))
-                .withRequestBody(Entity.json(request))
-                .withResponse(this::processResponse)
-                .execute(client);
-    }
-
-    /**
-     * Evaluates a common metric for thread scope (no arguments, just context).
-     *
-     * @param metricId   The ID of the common metric
-     * @param initConfig Configuration parameters for the metric's __init__ method
-     * @param context    The conversation context
-     * @return List of score results
-     */
-    public List<PythonScoreResult> evaluateCommonMetricThread(
-            @NonNull String metricId,
-            Map<String, Object> initConfig,
-            List<ChatMessage> context) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(context), "Argument 'context' must not be empty");
-
-        // For thread evaluation, scoring_kwargs is typically empty as the context is passed via data
-        Map<String, String> scoringKwargs = Collections.emptyMap();
-
-        var request = CommonMetricThreadEvaluatorRequest.builder()
-                .initConfig(initConfig)
-                .scoringKwargs(scoringKwargs)
-                .data(context)
-                .build();
-
-        String url = COMMON_METRIC_URL_TEMPLATE.formatted(config.getPythonEvaluator().getUrl(), metricId);
-        log.debug("Evaluating common metric '{}' for thread at '{}'", metricId, url);
 
         return RetriableHttpClient.newPost(c -> c.target(url))
                 .withRetryPolicy(RetryUtils.handleHttpErrors(config.getPythonEvaluator().getMaxRetryAttempts(),

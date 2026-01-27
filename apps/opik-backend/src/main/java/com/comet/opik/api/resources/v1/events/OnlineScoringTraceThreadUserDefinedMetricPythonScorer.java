@@ -178,20 +178,19 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         userFacingLogger.info("Sending threadId: '{}' to Python evaluator using the following context:\n\n{}",
                 threadId, context);
 
+        // Validate that common metrics are not used with thread evaluation
+        if (message.code().isCommonMetric()) {
+            String errorMsg = String.format(
+                    "Common metrics are not supported for thread evaluation. Rule '%s' (ID: %s) uses common metric '%s'.",
+                    rule.getName(), message.ruleId(), message.code().commonMetricId());
+            userFacingLogger.error(errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+
         List<PythonScoreResult> scoreResults;
         try {
-            if (message.code().isCommonMetric()) {
-                // Use the common metric endpoint for thread context
-                userFacingLogger.info("Using common metric '{}' for threadId: '{}'",
-                        message.code().commonMetricId(), threadId);
-                scoreResults = pythonEvaluatorService.evaluateCommonMetricThread(
-                        message.code().commonMetricId(),
-                        message.code().initConfig(),
-                        context);
-            } else {
-                // Use the custom Python code endpoint
-                scoreResults = pythonEvaluatorService.evaluateThread(message.code().metric(), context);
-            }
+            // Use the custom Python code endpoint
+            scoreResults = pythonEvaluatorService.evaluateThread(message.code().metric(), context);
             userFacingLogger.info("Received response for threadId: '{}':\n\n{}", threadId, scoreResults);
         } catch (Exception exception) {
             userFacingLogger.error("Unexpected error while scoring traceId: '{}' with ruleName: '{}': \n\n{}",
