@@ -6,12 +6,17 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.Instant;
 import java.util.List;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -58,7 +63,10 @@ class OllamaServiceTest {
     @DisplayName("Should successfully test connection to Ollama instance")
     void testConnection__success() {
         // Given
-        String versionResponse = "{\"version\":\"0.1.27\"}";
+        String version = RandomStringUtils.secure().nextAlphanumeric(5) + "."
+                + RandomUtils.secure().randomInt(0, 10) + "."
+                + RandomUtils.secure().randomInt(0, 100);
+        String versionResponse = "{\"version\":\"" + version + "\"}";
         wireMockServer.stubFor(get(urlEqualTo("/api/version"))
                 .willReturn(aResponse()
                         .withStatus(200)
@@ -71,7 +79,7 @@ class OllamaServiceTest {
         // Then
         assertThat(response).isNotNull();
         assertThat(response.connected()).isTrue();
-        assertThat(response.version()).isEqualTo("0.1.27");
+        assertThat(response.version()).isEqualTo(version);
         assertThat(response.errorMessage()).isNull();
     }
 
@@ -90,7 +98,8 @@ class OllamaServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.connected()).isFalse();
         assertThat(response.version()).isNull();
-        assertThat(response.errorMessage()).contains("Failed to connect to Ollama: HTTP 404");
+        assertThat(response.errorMessage()).contains("Failed to connect to Ollama at");
+        assertThat(response.errorMessage()).contains("HTTP 404");
     }
 
     @Test
@@ -110,85 +119,64 @@ class OllamaServiceTest {
         assertThat(response.errorMessage()).contains("Failed to connect to Ollama");
     }
 
-    @Test
-    @DisplayName("Should normalize URL by removing trailing slash")
-    void testConnection__normalizeUrl() {
+    @ParameterizedTest
+    @ValueSource(strings = {"/", "/v1", "/v1/"})
+    @DisplayName("Should normalize URL by removing trailing slash and /v1 suffix")
+    void testConnection__normalizeUrl(String urlSuffix) {
         // Given
-        String versionResponse = "{\"version\":\"0.1.27\"}";
+        String version = RandomStringUtils.secure().nextAlphanumeric(5) + "."
+                + RandomUtils.secure().randomInt(0, 10) + "."
+                + RandomUtils.secure().randomInt(0, 100);
+        String versionResponse = "{\"version\":\"" + version + "\"}";
         wireMockServer.stubFor(get(urlEqualTo("/api/version"))
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withHeader("Content-Type", "application/json")
                         .withBody(versionResponse)));
 
-        // When - URL with trailing slash
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + "/");
+        // When - URL with various suffixes
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + urlSuffix);
 
         // Then
         assertThat(response.connected()).isTrue();
-        assertThat(response.version()).isEqualTo("0.1.27");
-    }
-
-    @Test
-    @DisplayName("Should normalize URL by removing /v1 suffix")
-    void testConnection__normalizeUrlWithV1() {
-        // Given
-        String versionResponse = "{\"version\":\"0.1.27\"}";
-        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        // When - URL with /v1 suffix (as frontend sends)
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + "/v1");
-
-        // Then
-        assertThat(response.connected()).isTrue();
-        assertThat(response.version()).isEqualTo("0.1.27");
-    }
-
-    @Test
-    @DisplayName("Should normalize URL by removing /v1 suffix and trailing slash")
-    void testConnection__normalizeUrlWithV1AndTrailingSlash() {
-        // Given
-        String versionResponse = "{\"version\":\"0.1.27\"}";
-        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        // When - URL with /v1 suffix and trailing slash
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + "/v1/");
-
-        // Then
-        assertThat(response.connected()).isTrue();
-        assertThat(response.version()).isEqualTo("0.1.27");
+        assertThat(response.version()).isEqualTo(version);
     }
 
     @Test
     @DisplayName("Should successfully list models from Ollama instance")
     void listModels__success() {
         // Given
-        String modelsResponse = """
+        String model1Name = RandomStringUtils.secure().nextAlphanumeric(10) + ":"
+                + RandomStringUtils.secure().nextAlphanumeric(5);
+        long model1Size = RandomUtils.secure().randomLong(1000L, 10000000000L);
+        String model1Digest = "sha256:" + RandomStringUtils.secure().nextAlphanumeric(64).toLowerCase();
+        Instant model1ModifiedAt = Instant.now().minusSeconds(RandomUtils.secure().randomLong(0, 86400));
+
+        String model2Name = RandomStringUtils.secure().nextAlphanumeric(10) + ":"
+                + RandomStringUtils.secure().nextAlphanumeric(5);
+        long model2Size = RandomUtils.secure().randomLong(1000L, 10000000000L);
+        String model2Digest = "sha256:" + RandomStringUtils.secure().nextAlphanumeric(64).toLowerCase();
+        Instant model2ModifiedAt = Instant.now().minusSeconds(RandomUtils.secure().randomLong(0, 86400));
+
+        String modelsResponse = String.format("""
                 {
                   "models": [
                     {
-                      "name": "llama2:latest",
-                      "size": 3826793677,
-                      "digest": "sha256:78e26419b4469263f75331927a00a0284ef6544c1975b826b15abdaef17bb962",
-                      "modified_at": "2024-01-15T10:30:00Z"
+                      "name": "%s",
+                      "size": %d,
+                      "digest": "%s",
+                      "modified_at": "%s"
                     },
                     {
-                      "name": "codellama:13b",
-                      "size": 7365960935,
-                      "digest": "sha256:9f438cb9cd581fc025612d27f7c1a6669ff83a8bb0ed86c94fcf4c5440555697",
-                      "modified_at": "2024-01-16T14:20:00Z"
+                      "name": "%s",
+                      "size": %d,
+                      "digest": "%s",
+                      "modified_at": "%s"
                     }
                   ]
                 }
-                """;
+                """, model1Name, model1Size, model1Digest, model1ModifiedAt.toString(),
+                model2Name, model2Size, model2Digest, model2ModifiedAt.toString());
 
         wireMockServer.stubFor(get(urlEqualTo("/api/tags"))
                 .willReturn(aResponse()
@@ -204,15 +192,14 @@ class OllamaServiceTest {
         assertThat(models).hasSize(2);
 
         OllamaModel firstModel = models.get(0);
-        assertThat(firstModel.name()).isEqualTo("llama2:latest");
-        assertThat(firstModel.size()).isEqualTo(3826793677L);
-        assertThat(firstModel.digest())
-                .isEqualTo("sha256:78e26419b4469263f75331927a00a0284ef6544c1975b826b15abdaef17bb962");
+        assertThat(firstModel.name()).isEqualTo(model1Name);
+        assertThat(firstModel.size()).isEqualTo(model1Size);
+        assertThat(firstModel.digest()).isEqualTo(model1Digest);
         assertThat(firstModel.modifiedAt()).isNotNull();
 
         OllamaModel secondModel = models.get(1);
-        assertThat(secondModel.name()).isEqualTo("codellama:13b");
-        assertThat(secondModel.size()).isEqualTo(7365960935L);
+        assertThat(secondModel.name()).isEqualTo(model2Name);
+        assertThat(secondModel.size()).isEqualTo(model2Size);
     }
 
     @Test
@@ -235,18 +222,24 @@ class OllamaServiceTest {
     @DisplayName("Should normalize URL by removing /v1 suffix when listing models")
     void listModels__normalizeUrlWithV1() {
         // Given
-        String modelsResponse = """
+        String modelName = RandomStringUtils.secure().nextAlphanumeric(10) + ":"
+                + RandomStringUtils.secure().nextAlphanumeric(5);
+        long modelSize = RandomUtils.secure().randomLong(1000L, 10000000000L);
+        String modelDigest = "sha256:" + RandomStringUtils.secure().nextAlphanumeric(64).toLowerCase();
+        Instant modelModifiedAt = Instant.now().minusSeconds(RandomUtils.secure().randomLong(0, 86400));
+
+        String modelsResponse = String.format("""
                 {
                   "models": [
                     {
-                      "name": "llama2:latest",
-                      "size": 3826793677,
-                      "digest": "sha256:78e26419b4469263f75331927a00a0284ef6544c1975b826b15abdaef17bb962",
-                      "modified_at": "2024-01-15T10:30:00Z"
+                      "name": "%s",
+                      "size": %d,
+                      "digest": "%s",
+                      "modified_at": "%s"
                     }
                   ]
                 }
-                """;
+                """, modelName, modelSize, modelDigest, modelModifiedAt.toString());
 
         wireMockServer.stubFor(get(urlEqualTo("/api/tags"))
                 .willReturn(aResponse()
@@ -260,7 +253,7 @@ class OllamaServiceTest {
         // Then
         assertThat(models).isNotNull();
         assertThat(models).hasSize(1);
-        assertThat(models.get(0).name()).isEqualTo("llama2:latest");
+        assertThat(models.get(0).name()).isEqualTo(modelName);
     }
 
     @Test

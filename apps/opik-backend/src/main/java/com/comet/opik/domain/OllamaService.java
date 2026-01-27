@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.inject.Inject;
@@ -57,13 +58,14 @@ public class OllamaService {
 
                 return createSuccessResponse(version);
             } else {
-                String errorMsg = "Failed to connect to Ollama: HTTP " + response.getStatus();
-                log.warn(errorMsg);
+                String redactedUrl = ValidationUtils.redactCredentialsFromUrl(normalizedUrl);
+                String errorMsg = "Failed to connect to Ollama at " + redactedUrl + ": HTTP " + response.getStatus();
+                log.warn("Failed to connect to Ollama at {}: HTTP {}", redactedUrl, response.getStatus());
                 return createErrorResponse(errorMsg);
             }
         } catch (Exception e) {
-            log.error("Failed to connect to Ollama at {}", normalizedUrl, e);
-            String errorMsg = "Failed to connect to Ollama: " + e.getMessage();
+            log.error("Failed to connect to Ollama", e);
+            String errorMsg = "Failed to connect to Ollama due to an internal error";
             return createErrorResponse(errorMsg);
         }
     }
@@ -104,11 +106,12 @@ public class OllamaService {
                 log.info("Found {} models on Ollama instance", models.size());
                 return models;
             } else {
-                log.warn("Failed to fetch models from Ollama: HTTP {}", response.getStatus());
+                String redactedUrl = ValidationUtils.redactCredentialsFromUrl(normalizedUrl);
+                log.warn("Failed to fetch models from Ollama at {}: HTTP {}", redactedUrl, response.getStatus());
                 return Collections.emptyList();
             }
         } catch (Exception e) {
-            log.error("Failed to fetch models from Ollama at {}", normalizedUrl, e);
+            log.error("Failed to fetch models from Ollama", e);
             return Collections.emptyList();
         }
     }

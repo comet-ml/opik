@@ -18,6 +18,8 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.core.HttpHeaders;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,6 +28,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -33,8 +38,10 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
@@ -102,43 +109,21 @@ class OllamaResourceTest {
         }
     }
 
-    @Test
-    @DisplayName("Should successfully test connection to Ollama instance with URL containing /v1 suffix")
-    void testConnection__successWithV1Suffix(ClientSupport client) {
-        // Given - URL with /v1 suffix (as frontend sends)
-        String versionResponse = "{\"version\":\"0.1.27\"}";
-        ollamaWireMock.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
-                .baseUrl(ollamaBaseUrl + "/v1")
-                .build();
-
-        // When
-        var response = client.target("/v1/private/ollama/test-connection")
-                .request()
-                .header(RequestContext.WORKSPACE_HEADER, "test-workspace")
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .post(jakarta.ws.rs.client.Entity.json(request));
-
-        // Then
-        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-        OllamaConnectionTestResponse result = response.readEntity(OllamaConnectionTestResponse.class);
-        assertThat(result).isNotNull();
-        assertThat(result.connected()).isTrue();
-        assertThat(result.version()).isEqualTo("0.1.27");
-        assertThat(result.errorMessage()).isNull();
+    static Stream<Arguments> baseUrlVariants() {
+        return Stream.of(
+                Arguments.of("", "base URL without suffix"),
+                Arguments.of("/v1", "base URL with /v1 suffix"));
     }
 
-    @Test
+    @ParameterizedTest
+    @MethodSource("baseUrlVariants")
     @DisplayName("Should successfully test connection to Ollama instance")
-    void testConnection__success(ClientSupport client) {
+    void testConnection__success(String urlSuffix, String description, ClientSupport client) {
         // Given
-        String versionResponse = "{\"version\":\"0.1.27\"}";
+        String version = RandomStringUtils.secure().nextAlphanumeric(5) + "."
+                + RandomUtils.secure().randomInt(0, 10) + "."
+                + RandomUtils.secure().randomInt(0, 100);
+        String versionResponse = "{\"version\":\"" + version + "\"}";
         ollamaWireMock.stubFor(get(urlEqualTo("/api/version"))
                 .willReturn(aResponse()
                         .withStatus(200)
@@ -146,7 +131,7 @@ class OllamaResourceTest {
                         .withBody(versionResponse)));
 
         OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
-                .baseUrl(ollamaBaseUrl)
+                .baseUrl(ollamaBaseUrl + urlSuffix)
                 .build();
 
         // When
@@ -162,7 +147,7 @@ class OllamaResourceTest {
         OllamaConnectionTestResponse result = response.readEntity(OllamaConnectionTestResponse.class);
         assertThat(result).isNotNull();
         assertThat(result.connected()).isTrue();
-        assertThat(result.version()).isEqualTo("0.1.27");
+        assertThat(result.version()).isEqualTo(version);
         assertThat(result.errorMessage()).isNull();
     }
 
@@ -233,26 +218,39 @@ class OllamaResourceTest {
     @DisplayName("Should successfully list models from Ollama instance")
     void listModels__success(ClientSupport client) {
         // Given - Using actual Ollama API response format with RFC3339 timestamps
-        String modelsResponse = """
+        String model1Name = RandomStringUtils.secure().nextAlphanumeric(10) + ":"
+                + RandomStringUtils.secure().nextAlphanumeric(5);
+        long model1Size = RandomUtils.secure().randomLong(1000L, 10000000000L);
+        String model1Digest = "sha256:" + RandomStringUtils.secure().nextAlphanumeric(64).toLowerCase();
+        Instant model1ModifiedAt = Instant.now().minusSeconds(RandomUtils.secure().randomLong(0, 86400));
+
+        String model2Name = RandomStringUtils.secure().nextAlphanumeric(10) + ":"
+                + RandomStringUtils.secure().nextAlphanumeric(5);
+        long model2Size = RandomUtils.secure().randomLong(1000L, 10000000000L);
+        String model2Digest = "sha256:" + RandomStringUtils.secure().nextAlphanumeric(64).toLowerCase();
+        Instant model2ModifiedAt = Instant.now().minusSeconds(RandomUtils.secure().randomLong(0, 86400));
+
+        String modelsResponse = String.format("""
                 {
                   "models": [
                     {
-                      "name": "llama2:latest",
-                      "model": "llama2:latest",
-                      "size": 3826793677,
-                      "digest": "sha256:78e26419b4469263f75331927a00a0284ef6544c1975b826b15abdaef17bb962",
-                      "modified_at": "2024-01-15T10:30:00.123456789Z"
+                      "name": "%s",
+                      "model": "%s",
+                      "size": %d,
+                      "digest": "%s",
+                      "modified_at": "%s"
                     },
                     {
-                      "name": "codellama:13b",
-                      "model": "codellama:13b",
-                      "size": 7365960935,
-                      "digest": "sha256:9f438cb9cd581fc025612d27f7c1a6669ff83a8bb0ed86c94fcf4c5440555697",
-                      "modified_at": "2024-01-16T14:20:00.987654321Z"
+                      "name": "%s",
+                      "model": "%s",
+                      "size": %d,
+                      "digest": "%s",
+                      "modified_at": "%s"
                     }
                   ]
                 }
-                """;
+                """, model1Name, model1Name, model1Size, model1Digest, model1ModifiedAt.toString(),
+                model2Name, model2Name, model2Size, model2Digest, model2ModifiedAt.toString());
 
         ollamaWireMock.stubFor(get(urlEqualTo("/api/tags"))
                 .willReturn(aResponse()
@@ -281,16 +279,15 @@ class OllamaResourceTest {
 
         // Verify first model
         OllamaModel firstModel = models.get(0);
-        assertThat(firstModel.name()).isEqualTo("llama2:latest");
-        assertThat(firstModel.size()).isEqualTo(3826793677L);
-        assertThat(firstModel.digest())
-                .isEqualTo("sha256:78e26419b4469263f75331927a00a0284ef6544c1975b826b15abdaef17bb962");
+        assertThat(firstModel.name()).isEqualTo(model1Name);
+        assertThat(firstModel.size()).isEqualTo(model1Size);
+        assertThat(firstModel.digest()).isEqualTo(model1Digest);
         assertThat(firstModel.modifiedAt()).isNotNull();
 
         // Verify second model
         OllamaModel secondModel = models.get(1);
-        assertThat(secondModel.name()).isEqualTo("codellama:13b");
-        assertThat(secondModel.size()).isEqualTo(7365960935L);
+        assertThat(secondModel.name()).isEqualTo(model2Name);
+        assertThat(secondModel.size()).isEqualTo(model2Size);
     }
 
     @Test
