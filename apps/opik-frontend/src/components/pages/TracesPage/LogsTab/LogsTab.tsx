@@ -64,7 +64,7 @@ const LogsTab: React.FC<LogsTabProps> = ({
     }
   };
 
-  return <>{renderContent()}</>;
+  return renderContent();
 };
 
 export default LogsTab;
