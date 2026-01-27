@@ -82,7 +82,6 @@ export enum EXPLAINER_ID {
   prompt_improvement_optimizer = "prompt_improvement_optimizer",
   whats_an_alert = "whats_an_alert",
   what_are_dashboards = "what_are_dashboards",
-  whats_the_optimization_studio = "whats_the_optimization_studio",
   whats_the_optimization_config = "whats_the_optimization_config",
   whats_the_algorithm_section = "whats_the_algorithm_section",
   whats_the_dataset_section = "whats_the_dataset_section",
@@ -599,17 +598,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "Set up dashboards to monitor quality, cost, and performance of your projects and share experiment results",
     docLink: "/production/dashboards",
   },
-  [EXPLAINER_ID.whats_the_optimization_studio]: {
-    id: EXPLAINER_ID.whats_the_optimization_studio,
-    description:
-      "Test multiple variations for your agent or prompt to find the best one based on your metrics.",
-    docLink: "/agent_optimization/overview",
-  },
   [EXPLAINER_ID.whats_the_optimization_config]: {
     id: EXPLAINER_ID.whats_the_optimization_config,
     description:
       "Configure your setup and let Opik automatically find the best prompt.",
-    docLink: "/agent_optimization/overview",
+    docLink: "/agent_optimization/optimization_studio",
   },
   [EXPLAINER_ID.whats_the_algorithm_section]: {
     id: EXPLAINER_ID.whats_the_algorithm_section,
