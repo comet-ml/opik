@@ -55,14 +55,12 @@ class TestPromptClientEndpointSelection:
         self, client, mock_rest_client
     ):
         """When creating a new prompt with id/description/tags, should call create_prompt endpoint."""
-        # Mock that no existing version exists (new prompt)
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            _make_404_error(),  # First call in create_prompt's _get_latest_version
-            _make_404_error(),  # Second call in _create_new_version's _get_latest_version
-            _make_mock_version(),  # Third call after create_prompt to retrieve created version
+            _make_404_error(),
+            _make_404_error(),
+            _make_mock_version(),
         ]
 
-        # Create a new prompt with container-level parameters
         client.create_prompt(
             name="test-prompt",
             prompt="test template",
@@ -73,11 +71,9 @@ class TestPromptClientEndpointSelection:
             tags=["test", "unit"],
         )
 
-        # Verify create_prompt was called (not create_prompt_version)
         mock_rest_client.prompts.create_prompt.assert_called_once()
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
 
-        # Verify the parameters were passed correctly
         call_kwargs = mock_rest_client.prompts.create_prompt.call_args[1]
         assert call_kwargs["name"] == "test-prompt"
         assert call_kwargs["id"] == "custom-id"
@@ -88,13 +84,11 @@ class TestPromptClientEndpointSelection:
         self, client, mock_rest_client
     ):
         """When creating a new prompt without id/description/tags, should call create_prompt_version."""
-        # Mock that no existing version exists (new prompt)
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
         mock_rest_client.prompts.create_prompt_version.return_value = (
             _make_mock_version()
         )
 
-        # Create a new prompt without container-level parameters
         client.create_prompt(
             name="test-prompt",
             prompt="test template",
@@ -102,7 +96,6 @@ class TestPromptClientEndpointSelection:
             type=prompt_types.PromptType.MUSTACHE,
         )
 
-        # Verify create_prompt_version was called (not create_prompt)
         mock_rest_client.prompts.create_prompt_version.assert_called_once()
         mock_rest_client.prompts.create_prompt.assert_not_called()
 
@@ -110,17 +103,15 @@ class TestPromptClientEndpointSelection:
         self, client, mock_rest_client
     ):
         """When updating an existing prompt, should always call create_prompt_version regardless of params."""
-        # Mock that an existing version exists
         existing_version = _make_mock_version(template="old template")
         mock_rest_client.prompts.retrieve_prompt_version.return_value = existing_version
         mock_rest_client.prompts.create_prompt_version.return_value = (
             _make_mock_version(template="new template")
         )
 
-        # Update existing prompt with new template and container params
         client.create_prompt(
             name="test-prompt",
-            prompt="new template",  # Different template triggers version creation
+            prompt="new template",
             metadata=None,
             type=prompt_types.PromptType.MUSTACHE,
             id="custom-id",
@@ -128,8 +119,6 @@ class TestPromptClientEndpointSelection:
             tags=["updated"],
         )
 
-        # Verify create_prompt_version was called (not create_prompt)
-        # Container-level params are ignored for existing prompts
         mock_rest_client.prompts.create_prompt_version.assert_called_once()
         mock_rest_client.prompts.create_prompt.assert_not_called()
 
@@ -137,14 +126,12 @@ class TestPromptClientEndpointSelection:
         self, client, mock_rest_client
     ):
         """When creating a new prompt with only id parameter, should call create_prompt."""
-        # Mock that no existing version exists (new prompt)
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            _make_404_error(),  # First call in create_prompt's _get_latest_version
-            _make_404_error(),  # Second call in _create_new_version's _get_latest_version
-            _make_mock_version(),  # Third call after create_prompt to retrieve created version
+            _make_404_error(),
+            _make_404_error(),
+            _make_mock_version(),
         ]
 
-        # Create with only id parameter (no description or tags)
         client.create_prompt(
             name="test-prompt",
             prompt="test template",
@@ -153,7 +140,6 @@ class TestPromptClientEndpointSelection:
             id="custom-id",
         )
 
-        # Should still call create_prompt because id is provided
         mock_rest_client.prompts.create_prompt.assert_called_once()
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
 
@@ -161,14 +147,12 @@ class TestPromptClientEndpointSelection:
         self, client, mock_rest_client
     ):
         """When creating a new prompt with only description parameter, should call create_prompt."""
-        # Mock that no existing version exists (new prompt)
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            _make_404_error(),  # First call in create_prompt's _get_latest_version
-            _make_404_error(),  # Second call in _create_new_version's _get_latest_version
-            _make_mock_version(),  # Third call after create_prompt to retrieve created version
+            _make_404_error(),
+            _make_404_error(),
+            _make_mock_version(),
         ]
 
-        # Create with only description parameter
         client.create_prompt(
             name="test-prompt",
             prompt="test template",
@@ -177,7 +161,6 @@ class TestPromptClientEndpointSelection:
             description="A test prompt",
         )
 
-        # Should call create_prompt because description is provided
         mock_rest_client.prompts.create_prompt.assert_called_once()
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
 
@@ -185,14 +168,12 @@ class TestPromptClientEndpointSelection:
         self, client, mock_rest_client
     ):
         """When creating a new prompt with only tags parameter, should call create_prompt."""
-        # Mock that no existing version exists (new prompt)
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            _make_404_error(),  # First call in create_prompt's _get_latest_version
-            _make_404_error(),  # Second call in _create_new_version's _get_latest_version
-            _make_mock_version(),  # Third call after create_prompt to retrieve created version
+            _make_404_error(),
+            _make_404_error(),
+            _make_mock_version(),
         ]
 
-        # Create with only tags parameter
         client.create_prompt(
             name="test-prompt",
             prompt="test template",
@@ -201,6 +182,5 @@ class TestPromptClientEndpointSelection:
             tags=["test"],
         )
 
-        # Should call create_prompt because tags is provided
         mock_rest_client.prompts.create_prompt.assert_called_once()
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
