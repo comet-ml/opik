@@ -75,12 +75,11 @@ class TestDiscoverHeuristicMetrics:
         assert "regex_match" in metrics
 
     def test_excludes_bertscore(self):
-        """Should exclude BERTScore as it requires heavy ML models."""
+        """Should exclude BERTScore."""
         metrics = _discover_heuristic_metrics()
         
         # BERTScore should be excluded
-        for metric_id in metrics:
-            assert "bertscore" not in metric_id.lower() or "BERTScore" in EXCLUDED_METRICS
+        assert all("bertscore" not in metric_id.lower() for metric_id in metrics)
 
     def test_metrics_are_basemetric_subclasses(self):
         """All discovered metrics should be BaseMetric subclasses."""

@@ -265,12 +265,7 @@ def _extract_init_parameters(cls: Type[base_metric.BaseMetric]) -> List[Dict[str
             default_value = param.default if has_default else None
 
             # Convert default value to string for JSON serialization
-            if default_value is None:
-                default_str = None
-            elif isinstance(default_value, bool):
-                default_str = str(default_value)
-            else:
-                default_str = str(default_value) if default_value is not None else None
+            default_str = None if default_value is None else str(default_value)
 
             parameters.append(
                 {
@@ -406,7 +401,9 @@ def instantiate_metric(
 
     # Prepare init kwargs
     init_kwargs = {}
-    if init_config:
+    if init_config is not None:
+        if not isinstance(init_config, dict):
+            raise ValueError("init_config must be a dictionary")
         for key, value in init_config.items():
             # Skip excluded parameters
             if key in EXCLUDED_INIT_PARAMS:
@@ -422,12 +419,8 @@ def instantiate_metric(
 @common_metrics_bp.route("/common-metrics", methods=["GET"])
 def list_common_metrics():
     """List all available common metrics with their metadata."""
-    try:
-        metrics = get_common_metrics_list()
-        return jsonify({"content": metrics})
-    except Exception as e:
-        current_app.logger.exception("Failed to list common metrics")
-        abort(500, f"Failed to list common metrics: {str(e)}")
+    metrics = get_common_metrics_list()
+    return jsonify({"content": metrics})
 
 
 @common_metrics_bp.route("/common-metrics/<metric_id>/score", methods=["POST"])
@@ -453,6 +446,12 @@ def execute_common_metric(metric_id: str):
 
     if scoring_kwargs is None:
         abort(400, "Field 'scoring_kwargs' is missing in the request")
+
+    if not isinstance(scoring_kwargs, dict):
+        abort(400, "Field 'scoring_kwargs' must be an object")
+
+    if init_config is not None and not isinstance(init_config, dict):
+        abort(400, "Field 'init_config' must be an object")
 
     try:
         # Instantiate the metric
