@@ -94,6 +94,9 @@ const addNewLabelGenerator = (providerType: PROVIDER_TYPE) => {
   if (providerType === PROVIDER_TYPE.BEDROCK) {
     return "Add Bedrock provider";
   }
+  if (providerType === PROVIDER_TYPE.OLLAMA) {
+    return "Ollama";
+  }
   if (providerType === PROVIDER_TYPE.CUSTOM) {
     return "Add vLLM / Custom provider";
   }

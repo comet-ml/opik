@@ -2,8 +2,9 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
+import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
@@ -27,7 +28,6 @@ import java.util.List;
 public class OllamaService {
 
     private final @NonNull Client httpClient;
-    private final @NonNull ObjectMapper objectMapper;
 
     /**
      * Tests connection to an Ollama instance and retrieves server version.
@@ -48,7 +48,7 @@ public class OllamaService {
 
             if (response.getStatus() == 200 && response.hasEntity()) {
                 String responseBody = response.readEntity(String.class);
-                OllamaVersionResponse versionResponse = objectMapper.readValue(responseBody,
+                OllamaVersionResponse versionResponse = JsonUtils.readValue(responseBody,
                         OllamaVersionResponse.class);
                 log.info("Successfully connected to Ollama version: {}", versionResponse.version());
 
@@ -93,7 +93,7 @@ public class OllamaService {
 
             if (response.getStatus() == 200 && response.hasEntity()) {
                 String responseBody = response.readEntity(String.class);
-                OllamaTagsResponse tagsResponse = objectMapper.readValue(responseBody, OllamaTagsResponse.class);
+                OllamaTagsResponse tagsResponse = JsonUtils.readValue(responseBody, OllamaTagsResponse.class);
 
                 List<OllamaModel> models = tagsResponse.models().stream()
                         .map(model -> OllamaModel.builder()
@@ -138,6 +138,7 @@ public class OllamaService {
     private record OllamaTagsResponse(@JsonProperty("models") List<OllamaModelResponse> models) {
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     private record OllamaModelResponse(
             @JsonProperty("name") String name,
             @JsonProperty("size") Long size,

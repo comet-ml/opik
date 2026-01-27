@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.OllamaConnectionTestResponse;
 import com.comet.opik.api.OllamaModel;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import jakarta.ws.rs.client.Client;
@@ -37,10 +36,7 @@ class OllamaServiceTest {
         baseUrl = "http://localhost:" + wireMockServer.port();
         httpClient = ClientBuilder.newClient();
 
-        // Configure ObjectMapper with JavaTimeModule for Instant support
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.findAndRegisterModules(); // This registers JSR310 module for java.time support
-        ollamaService = new OllamaService(httpClient, mapper);
+        ollamaService = new OllamaService(httpClient);
     }
 
     @AfterAll
