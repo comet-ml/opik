@@ -1438,8 +1438,8 @@ class SpanDAO {
 
             int i = 0;
             for (Span span : spans) {
-                String inputValue = span.input() != null ? span.input().toString() : "";
-                String outputValue = span.output() != null ? span.output().toString() : "";
+                String inputValue = TruncationUtils.toJsonString(span.input());
+                String outputValue = TruncationUtils.toJsonString(span.output());
 
                 statement.bind("id" + i, span.id())
                         .bind("project_id" + i, span.projectId())
@@ -1510,8 +1510,8 @@ class SpanDAO {
     private Publisher<? extends Result> insert(Span span, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newInsertTemplate(span, workspaceId);
-            String inputValue = Objects.toString(span.input(), "");
-            String outputValue = Objects.toString(span.output(), "");
+            String inputValue = TruncationUtils.toJsonString(span.input());
+            String outputValue = TruncationUtils.toJsonString(span.output());
             var statement = connection.createStatement(template.render())
                     .bind("id", span.id())
                     .bind("project_id", span.projectId())

@@ -126,6 +126,28 @@ public final class TruncationUtils {
         return createSlimJson(node, DEFAULT_SLIM_STRING_MAX_LENGTH);
     }
 
+    /**
+     * Converts a JsonNode to its string representation, returning empty string for null.
+     * This provides consistent null handling across all DAO classes.
+     *
+     * @param node the JSON node to convert (may be null)
+     * @return the JSON string representation, or empty string if null
+     */
+    public static String toJsonString(JsonNode node) {
+        return node != null ? node.toString() : "";
+    }
+
+    /**
+     * Converts a JsonNode to a slim JSON string using the default max length.
+     * Combines toJsonString and createSlimJsonString for convenience.
+     *
+     * @param node the JSON node to process (may be null)
+     * @return the slim JSON string, or empty string if null
+     */
+    public static String createSlimJsonStringFromNode(JsonNode node) {
+        return createSlimJsonString(toJsonString(node));
+    }
+
     private static TextNode truncateTextNode(String text, int maxLength) {
         if (text.length() <= maxLength) {
             return TextNode.valueOf(text);

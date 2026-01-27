@@ -2486,8 +2486,8 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Statement buildInsertStatement(Trace trace, Connection connection, ST template) {
-        String inputValue = Objects.toString(trace.input(), "");
-        String outputValue = Objects.toString(trace.output(), "");
+        String inputValue = TruncationUtils.toJsonString(trace.input());
+        String outputValue = TruncationUtils.toJsonString(trace.output());
 
         Statement statement = connection.createStatement(template.render())
                 .bind("id", trace.id())
@@ -3088,8 +3088,8 @@ class TraceDAOImpl implements TraceDAO {
             int i = 0;
             for (Trace trace : traces) {
 
-                String inputValue = getOrDefault(trace.input());
-                String outputValue = getOrDefault(trace.output());
+                String inputValue = TruncationUtils.toJsonString(trace.input());
+                String outputValue = TruncationUtils.toJsonString(trace.output());
 
                 statement.bind("id" + i, trace.id())
                         .bind("project_id" + i, trace.projectId())
@@ -3097,7 +3097,7 @@ class TraceDAOImpl implements TraceDAO {
                         .bind("start_time" + i, trace.startTime().toString())
                         .bind("input" + i, inputValue)
                         .bind("output" + i, outputValue)
-                        .bind("metadata" + i, getOrDefault(trace.metadata()))
+                        .bind("metadata" + i, TruncationUtils.toJsonString(trace.metadata()))
                         .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
                                 trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
@@ -3135,10 +3135,6 @@ class TraceDAOImpl implements TraceDAO {
             return Mono.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));
         });
-    }
-
-    private String getOrDefault(JsonNode value) {
-        return value != null ? value.toString() : "";
     }
 
     @Override
