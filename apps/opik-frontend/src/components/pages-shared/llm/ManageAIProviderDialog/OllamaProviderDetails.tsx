@@ -20,7 +20,7 @@ import { PROVIDERS } from "@/constants/providers";
 import { PROVIDER_TYPE } from "@/types/providers";
 import useOllamaTestConnectionMutation from "@/api/provider-keys/useOllamaTestConnectionMutation";
 import useOllamaListModelsMutation from "@/api/provider-keys/useOllamaListModelsMutation";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 
 type OllamaProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
