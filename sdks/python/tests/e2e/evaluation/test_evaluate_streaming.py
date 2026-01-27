@@ -68,6 +68,7 @@ def test_streaming_starts_evaluation_before_complete_download(
         tracked_items = []
         # Only track dataset item yields, not span/trace yields from other operations
         from opik.rest_api.types import dataset_item_public
+
         is_dataset_item = item_class == dataset_item_public.DatasetItemPublic
         for item in items:
             if is_dataset_item:
