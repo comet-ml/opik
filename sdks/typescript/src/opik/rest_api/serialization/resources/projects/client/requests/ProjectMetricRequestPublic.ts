@@ -3,6 +3,7 @@
 import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
+import { BreakdownConfigPublic } from "../../../../types/BreakdownConfigPublic.js";
 import { SpanFilterPublic } from "../../../../types/SpanFilterPublic.js";
 import { TraceFilterPublic } from "../../../../types/TraceFilterPublic.js";
 import { TraceThreadFilterPublic } from "../../../../types/TraceThreadFilterPublic.js";
@@ -23,6 +24,7 @@ export const ProjectMetricRequestPublic: core.serialization.Schema<
         "thread_filters",
         core.serialization.list(TraceThreadFilterPublic).optional(),
     ),
+    breakdown: BreakdownConfigPublic.optional(),
 });
 
 export declare namespace ProjectMetricRequestPublic {
@@ -34,5 +36,6 @@ export declare namespace ProjectMetricRequestPublic {
         span_filters?: SpanFilterPublic.Raw[] | null;
         trace_filters?: TraceFilterPublic.Raw[] | null;
         thread_filters?: TraceThreadFilterPublic.Raw[] | null;
+        breakdown?: BreakdownConfigPublic.Raw | null;
     }
 }

@@ -155,6 +155,8 @@ from .boolean_feedback_detail import BooleanFeedbackDetail
 from .boolean_feedback_detail_create import BooleanFeedbackDetailCreate
 from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
 from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
+from .breakdown_config_public import BreakdownConfigPublic
+from .breakdown_config_public_field import BreakdownConfigPublicField
 from .categorical_feedback_definition import CategoricalFeedbackDefinition
 from .categorical_feedback_definition_create import CategoricalFeedbackDefinitionCreate
 from .categorical_feedback_definition_public import CategoricalFeedbackDefinitionPublic
@@ -492,6 +494,7 @@ from .studio_optimizer_write import StudioOptimizerWrite
 from .studio_prompt import StudioPrompt
 from .studio_prompt_public import StudioPromptPublic
 from .studio_prompt_write import StudioPromptWrite
+from .token_usage_names import TokenUsageNames
 from .tool import Tool
 from .tool_call import ToolCall
 from .tool_call_type import ToolCallType
@@ -679,6 +682,8 @@ __all__ = [
     "BooleanFeedbackDetailCreate",
     "BooleanFeedbackDetailPublic",
     "BooleanFeedbackDetailUpdate",
+    "BreakdownConfigPublic",
+    "BreakdownConfigPublicField",
     "CategoricalFeedbackDefinition",
     "CategoricalFeedbackDefinitionCreate",
     "CategoricalFeedbackDefinitionPublic",
@@ -1007,6 +1012,7 @@ __all__ = [
     "StudioPrompt",
     "StudioPromptPublic",
     "StudioPromptWrite",
+    "TokenUsageNames",
     "Tool",
     "ToolCall",
     "ToolCallType",

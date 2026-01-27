@@ -5,6 +5,7 @@ import typing
 
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
+from ..types.breakdown_config_public import BreakdownConfigPublic
 from ..types.feedback_score_names import FeedbackScoreNames
 from ..types.project_detailed import ProjectDetailed
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
@@ -12,6 +13,7 @@ from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
 from ..types.span_filter_public import SpanFilterPublic
+from ..types.token_usage_names import TokenUsageNames
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_thread_filter_public import TraceThreadFilterPublic
 from .raw_client import AsyncRawProjectsClient, RawProjectsClient
@@ -261,6 +263,33 @@ class ProjectsClient:
         )
         return _response.data
 
+    def find_token_usage_names(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> TokenUsageNames:
+        """
+        Find Token Usage names
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        TokenUsageNames
+            Token Usage names resource
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.projects.find_token_usage_names(id='id', )
+        """
+        _response = self._raw_client.find_token_usage_names(id, request_options=request_options)
+        return _response.data
+
     def get_project_metrics(
         self,
         id: str,
@@ -272,6 +301,7 @@ class ProjectsClient:
         span_filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
         trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
         thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
+        breakdown: typing.Optional[BreakdownConfigPublic] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectMetricResponsePublic:
         """
@@ -294,6 +324,8 @@ class ProjectsClient:
         trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
 
         thread_filters : typing.Optional[typing.Sequence[TraceThreadFilterPublic]]
+
+        breakdown : typing.Optional[BreakdownConfigPublic]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -318,6 +350,7 @@ class ProjectsClient:
             span_filters=span_filters,
             trace_filters=trace_filters,
             thread_filters=thread_filters,
+            breakdown=breakdown,
             request_options=request_options,
         )
         return _response.data
@@ -651,6 +684,36 @@ class AsyncProjectsClient:
         )
         return _response.data
 
+    async def find_token_usage_names(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> TokenUsageNames:
+        """
+        Find Token Usage names
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        TokenUsageNames
+            Token Usage names resource
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.projects.find_token_usage_names(id='id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.find_token_usage_names(id, request_options=request_options)
+        return _response.data
+
     async def get_project_metrics(
         self,
         id: str,
@@ -662,6 +725,7 @@ class AsyncProjectsClient:
         span_filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
         trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
         thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
+        breakdown: typing.Optional[BreakdownConfigPublic] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ProjectMetricResponsePublic:
         """
@@ -684,6 +748,8 @@ class AsyncProjectsClient:
         trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
 
         thread_filters : typing.Optional[typing.Sequence[TraceThreadFilterPublic]]
+
+        breakdown : typing.Optional[BreakdownConfigPublic]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -711,6 +777,7 @@ class AsyncProjectsClient:
             span_filters=span_filters,
             trace_filters=trace_filters,
             thread_filters=thread_filters,
+            breakdown=breakdown,
             request_options=request_options,
         )
         return _response.data

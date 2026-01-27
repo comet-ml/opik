@@ -7,6 +7,7 @@ export interface ExperimentPublic {
     datasetName: string;
     datasetId?: string;
     projectId?: string;
+    projectName?: string;
     name?: string;
     metadata?: OpikApi.JsonListStringPublic;
     tags?: string[];

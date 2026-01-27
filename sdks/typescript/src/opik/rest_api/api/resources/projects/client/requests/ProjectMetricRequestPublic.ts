@@ -14,4 +14,5 @@ export interface ProjectMetricRequestPublic {
     spanFilters?: OpikApi.SpanFilterPublic[];
     traceFilters?: OpikApi.TraceFilterPublic[];
     threadFilters?: OpikApi.TraceThreadFilterPublic[];
+    breakdown?: OpikApi.BreakdownConfigPublic;
 }

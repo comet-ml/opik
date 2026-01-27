@@ -21,6 +21,7 @@ export const ExperimentPublic: core.serialization.ObjectSchema<
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
     datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
     projectId: core.serialization.property("project_id", core.serialization.string().optional()),
+    projectName: core.serialization.property("project_name", core.serialization.string().optional()),
     name: core.serialization.string().optional(),
     metadata: JsonListStringPublic.optional(),
     tags: core.serialization.list(core.serialization.string()).optional(),
@@ -66,6 +67,7 @@ export declare namespace ExperimentPublic {
         dataset_name: string;
         dataset_id?: string | null;
         project_id?: string | null;
+        project_name?: string | null;
         name?: string | null;
         metadata?: JsonListStringPublic.Raw | null;
         tags?: string[] | null;

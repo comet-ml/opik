@@ -21,6 +21,7 @@ class Experiment(UniversalBaseModel):
     dataset_name: str
     dataset_id: typing.Optional[str] = None
     project_id: typing.Optional[str] = None
+    project_name: typing.Optional[str] = None
     name: typing.Optional[str] = None
     metadata: typing.Optional[JsonListString] = None
     tags: typing.Optional[typing.List[str]] = None
