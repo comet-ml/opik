@@ -675,6 +675,10 @@ navigation:
             icon: fa-regular fa-house
             path: docs/agent_optimization/overview.mdx
             slug: overview
+          - page: Optimization Studio
+            icon: fa-regular fa-window-maximize
+            path: docs/agent_optimization/optimization/optimization_studio.mdx
+            slug: optimization_studio
           - page: Quickstart
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/getting_started/quickstart.mdx
