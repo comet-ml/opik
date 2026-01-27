@@ -80,6 +80,10 @@ class Prompt(base_prompt.BasePrompt):
         self._commit = prompt_version.commit
         self.__internal_api__prompt_id__ = prompt_version.prompt_id
         self.__internal_api__version_id__ = prompt_version.id
+        # Update fields from backend response to ensure consistency
+        self._id = prompt_version.id
+        self._change_description = prompt_version.change_description
+        self._tags = prompt_version.tags
 
     @property
     @override
