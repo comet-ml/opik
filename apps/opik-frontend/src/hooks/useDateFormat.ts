@@ -1,9 +1,9 @@
 import useLocalStorageState from "use-local-storage-state";
 
 export const DATE_FORMATS = {
+  US_24H: "MM/DD/YY HH:mm",
   US_12H: "MM/DD/YY hh:mm A",
   EU_24H: "DD/MM/YY HH:mm",
-  US_24H: "MM/DD/YY HH:mm",
   ISO: "YYYY-MM-DD HH:mm",
 } as const;
 
