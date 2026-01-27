@@ -72,6 +72,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 import static java.util.function.Predicate.not;
 
@@ -2859,16 +2860,21 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private ExperimentReference mapExperiment(Set<Trace.TraceField> exclude, Row row) {
-        UUID experimentId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_id", UUID.class);
-        UUID experimentDatasetId = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_dataset_id",
-                UUID.class);
+        String experimentIdStr = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_id", String.class);
+        String experimentDatasetIdStr = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_dataset_id",
+                String.class);
 
         // Only check key fields - experimentName is editable and its absence doesn't indicate missing data
-        if (experimentId == null || experimentDatasetId == null) {
+        if (StringUtils.isBlank(experimentIdStr) || StringUtils.isBlank(experimentDatasetIdStr)
+                || CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(experimentIdStr)
+                || CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(experimentDatasetIdStr)) {
             return null;
         }
 
+        UUID experimentId = UUID.fromString(experimentIdStr);
+        UUID experimentDatasetId = UUID.fromString(experimentDatasetIdStr);
         String experimentName = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_name", String.class);
+
         return ExperimentReference.builder()
                 .id(experimentId)
                 .name(experimentName)
