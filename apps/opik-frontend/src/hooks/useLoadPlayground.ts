@@ -100,7 +100,12 @@ const useLoadPlayground = () => {
         templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
       } = {},
     ) => {
-      const { promptId, promptVersionId, autoImprove = false, templateStructure } = options;
+      const {
+        promptId,
+        promptVersionId,
+        autoImprove = false,
+        templateStructure,
+      } = options;
 
       const newPrompt = generateDefaultPrompt({
         setupProviders: providerKeys,
