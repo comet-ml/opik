@@ -1,32 +1,53 @@
 ---
 headline: Dataset versioning migration | Opik Documentation
-og:description: Learn about the dataset versioning migration process when upgrading to Opik 1.9.92 or higher, including configuration options and expected behavior.
+og:description: Learn about the automated dataset versioning migration process when upgrading to Opik 1.9.92 or higher, including configuration, monitoring, and recovery steps.
 og:site_name: Opik Documentation
 og:title: Dataset Versioning Migration in Opik
-subtitle: Understanding the dataset versioning migration process
+subtitle: Understanding the automated dataset versioning migration process
 title: Dataset versioning migration
 ---
 
 # Dataset Versioning Migration
 
-Starting with Opik version `1.9.92`, the platform includes an automatic migration process to support enhanced dataset versioning capabilities. This migration runs automatically when you first start Opik `1.9.92` or higher.
+Starting with Opik version `1.9.92`, the platform includes an **automated migration process** to support enhanced dataset versioning capabilities. This migration runs automatically when you first start Opik `1.9.92` or higher.
+
+<Callout intent="info">
+  **Migration Duration**: Unlike typical Liquibase migrations, the data migration can take **2-10 minutes** depending on the size of your datasets. This is normal and expected.
+</Callout>
 
 ## Overview
 
-The dataset versioning migration consists of two parts:
+The dataset versioning migration is a **three-part automated process**:
 
-1. **Liquibase Migration**: Automatically runs during application startup and migrates existing datasets to the new versioning schema
-2. **Items Total Migration**: Calculates and updates the `items_total` field for dataset versions created during the Liquibase migration (enabled by default)
+### 1. Liquibase Schema Migration (Automated)
+Automatically runs during application startup and migrates existing datasets to the new versioning schema in ClickHouse.
 
-Additionally, there is a **Lazy Migration** option (disabled by default) that can be temporarily enabled to handle edge cases where a dataset was created during the migration process and was not migrated by the Liquibase migration. Once such datasets are migrated, this option can be turned off again.
+### 2. MySQL Counter Migration (Automated, Recommended to Disable After Completion)
+Migrates dataset version counters in MySQL. This is controlled by `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED` (enabled by default).
 
-**In most environments, the default configuration is sufficient and requires no changes.**
+**Recommendation**: After the upgrade completes successfully, you can **optionally disable this flag** to prevent the migration job from running on subsequent restarts. However, this is **not required** - after the first successful run, the migration automatically detects that all data has been migrated and becomes a no-op (does nothing):
+
+```yaml
+# Disable after successful migration
+DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED: false
+```
+
+### 3. Lazy Migration (Optional Data Reconciliation)
+An optional safety mechanism controlled by `DATASET_VERSIONING_MIGRATION_LAZY_ENABLED` (disabled by default).
+
+**When to enable**: Only if data was left behind due to concurrent writes during the migration. This handles the edge case where datasets were created during the migration process itself and were not migrated by the Liquibase migration.
+
+**How it works**: When enabled, every dataset CRUD operation checks whether the dataset was migrated. If not migrated, it automatically migrates the dataset during that operation. This means you can simply access an unmigrated dataset through the UI or API, and it will be migrated on-the-fly.
+
+**Usage**: If you know a specific dataset was not migrated, enable this flag temporarily and access that dataset. It's recommended to disable this flag after all datasets are aligned (have a first version), but this is **not mandatory** - the check only runs for the dataset being accessed, so it becomes a no-op for datasets that are already migrated (the check will find they're already migrated and do nothing).
 
 ## Expected Behavior During Migration
 
 ### First Startup with Version 1.9.92+
 
-When you first start Opik version `1.9.92` or higher, you may see transient errors in the logs similar to:
+**Expected Timeline**: The migration typically takes **2-10 minutes**, longer than standard Liquibase migrations due to data processing requirements.
+
+During this time, you may see transient errors in the logs similar to:
 
 ```
 Causing: liquibase.exception.DatabaseException: ClickHouse exception, code: 159, host: clickhouse-opik-clickhouse, port: 8123; Read timed out [Failed SQL: (159) INSERT INTO opik_prod.dataset_item_versions
@@ -36,51 +57,67 @@ Causing: liquibase.exception.DatabaseException: ClickHouse exception, code: 159,
   **These errors are expected and transient.** The system automatically recovers once the migration process completes. No manual intervention is required.
 </Callout>
 
-### Migration Process
+### Migration Process Timeline
 
-The migration runs as a background job that:
-- Starts 30 seconds after application startup (by default)
-- Completes automatically without requiring downtime
+The automated migration follows this sequence:
+
+1. **Application starts** (t=0s)
+2. **Liquibase migration begins** (immediately)
+   - Migrates dataset schema in ClickHouse
+   - Duration: 2-10 minutes (depends on data volume)
+3. **Startup delay** (default: 30 seconds after app start)
+4. **MySQL counter migration begins** (after startup delay)
+   - Processes dataset versions in batches
+   - Updates `items_total` field in MySQL
+5. **Migration completes** automatically without downtime
 
 ## Configuration Options
 
-All configuration is done through environment variables. The default values are appropriate for most deployments.
+All configuration is done through environment variables. **The default values are appropriate for most deployments and require no changes.**
 
-### Lazy Migration Settings
+### MySQL Counter Migration (Recommended to Disable After Completion)
 
-Controls whether datasets that were not migrated during the Liquibase migration are migrated on first access. This is typically only needed if datasets were created during the migration process itself.
-
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `DATASET_VERSIONING_MIGRATION_LAZY_ENABLED` | `false` | Enable lazy migration for datasets created during the migration process (migrate on first access) |
-
-### Items Total Migration Settings
-
-Controls the automatic calculation of `items_total` for existing dataset versions:
+Controls the MySQL dataset version counter migration. **This should be disabled after the upgrade completes successfully.**
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED` | `true` | Enable the items_total migration on startup |
+| `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED` | `true` | Enable the MySQL counter migration on startup. **Disable after successful upgrade.** |
 | `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_BATCH_SIZE` | `100` | Number of dataset versions to process per batch |
 | `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_LOCK_TIMEOUT_SECONDS` | `3600` | Lock timeout in seconds (1 hour) |
 | `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_STARTUP_DELAY_SECONDS` | `30` | Delay before starting migration after startup |
 | `DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS` | `3600` | Maximum time for the entire migration job (1 hour) |
 
-## When to Adjust Configuration
+### Lazy Migration (Optional Data Reconciliation)
 
-### Default Configuration (Recommended)
+Controls optional data reconciliation for datasets that may have been missed during concurrent writes. **Only enable if you suspect data was left behind during migration.**
 
-For most deployments, use the default configuration. The migration will:
-- Start 30 seconds after application startup
-- Process 100 dataset versions per batch
-- Complete within 1 hour for typical workloads
-- Automatically handle transient errors
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `DATASET_VERSIONING_MIGRATION_LAZY_ENABLED` | `false` | Enable lazy migration for reconciling missed datasets (migrate on first access) |
 
-### Disabling Migration After Completion (Optional)
+## Post-Migration Steps
 
-Disabling the migration after completion is **optional**. The migration automatically detects if all dataset counts have been previously migrated and does nothing in that case, so leaving it enabled will not cause any issues.
+### Step 1: Verify Migration Completion
 
-However, if you prefer to disable it after the initial migration completes, you can do so:
+Monitor the backend logs to confirm successful completion:
+
+```bash
+# Kubernetes
+kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
+
+# Docker Compose
+docker-compose logs -f backend | grep -i "migration"
+```
+
+Look for the completion message:
+
+```
+Dataset version items_total migration completed successfully
+```
+
+### Step 2: Optionally Disable MySQL Counter Migration
+
+Once you see the completion message, you can **optionally disable the MySQL counter migration flag**. This is not required since the migration automatically becomes a no-op after the first successful run, but you may choose to disable it for clarity:
 
 ```yaml
 # Docker Compose
@@ -98,14 +135,292 @@ component:
       DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED: "false"
 ```
 
+If you choose to disable it, restart the backend service to apply the change.
+
+### Step 3: Verify Data Integrity
+
+After migration, verify that:
+1. Your datasets are accessible and contain all expected data
+2. Each dataset has a first version (version 1) visible in the UI or API
+
+#### Additional Validation Queries
+
+You can run these queries to validate the migration completed successfully:
+
+**Verify item counts match between ClickHouse tables:**
+
+```sql
+-- Both queries should return the same count
+SELECT count(distinct id) from dataset_items;
+SELECT count(distinct id) from dataset_item_versions;
+```
+
+**Verify all MySQL dataset version counters are updated:**
+
+```sql
+-- Should return empty result set (0 rows)
+-- Any rows returned indicate versions with incomplete items total migration
+SELECT count(id)
+FROM dataset_versions
+WHERE items_total = -1;
+```
+
+**For comprehensive validation**, refer to the [test_dataset_versioning_migration.sql](https://github.com/comet-ml/opik/blob/main/apps/opik-backend/src/main/resources/liquibase/test_dataset_versioning_migration.sql) script which includes additional checks for:
+- Verifying version 1 created for all datasets
+- Validating 'latest' tags are properly assigned
+- Checking dataset metadata integrity
+- Confirming ClickHouse data consistency
+
+## Troubleshooting and Recovery
+
+### Scenario 1: Migration Takes Longer Than Expected
+
+**Symptoms:**
+- Migration runs for more than 10 minutes
+- No completion message in logs after extended period
+
+**Root Causes:**
+- Very large number of dataset items
+- ClickHouse or MySQL performance issues
+- Resource constraints (CPU, memory, disk I/O)
+
+**Recovery Steps:**
+
+1. **Check if migration is still progressing:**
+   ```bash
+   # Monitor backend logs for progress
+   kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
+   ```
+
+2. **If migration is stuck, increase timeouts:**
+   ```yaml
+   # Extend timeouts for large deployments
+   DATASET_VERSION_ITEMS_TOTAL_MIGRATION_LOCK_TIMEOUT_SECONDS: "7200"  # 2 hours
+   DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS: "7200"   # 2 hours
+   ```
+
+3. **Check database health:**
+   ```bash
+   # Verify ClickHouse is responsive
+   kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 -- clickhouse-client -q "SELECT 1"
+   
+   # Check MySQL connectivity
+   kubectl exec -it mysql-pod -- mysql -u opik -p -e "SELECT 1"
+   ```
+
+4. **Restart the backend service** after adjusting configuration:
+   ```bash
+   # Kubernetes
+   kubectl rollout restart deployment/opik-backend -n opik
+   
+   # Docker Compose
+   docker-compose restart backend
+   ```
+
+### Scenario 2: Transient Timeout Errors During Migration
+
+**Symptoms:**
+```
+liquibase.exception.DatabaseException: ClickHouse exception, code: 159
+Read timed out
+```
+
+**What's Happening:**
+
+These timeout errors are **expected and transient** during the migration process. They occur because:
+- The Liquibase migration is actively writing large amounts of data to ClickHouse
+- Temporary resource contention during data migration
+- Normal behavior for the 2-10 minute migration window
+
+**Recovery Steps:**
+
+<Callout intent="success">
+  **Simply wait for the migration to complete.** These errors are temporary and the system automatically recovers. No manual intervention is required.
+</Callout>
+
+**If errors persist beyond 15-20 minutes:**
+
+1. **Check migration progress in logs:**
+   ```bash
+   # Kubernetes
+   kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
+   
+   # Docker Compose
+   docker-compose logs -f backend | grep -i "migration"
+   ```
+
+2. **Verify ClickHouse is responding:**
+   ```bash
+   # Check ClickHouse is healthy
+   kubectl exec -it chi-opik-clickhouse-cluster-0-0-0 -- clickhouse-client -q "SELECT 1"
+   ```
+
+3. **If ClickHouse is unresponsive, check resources:**
+   ```bash
+   # Check ClickHouse CPU and memory usage
+   kubectl top pod -n opik | grep clickhouse
+   ```
+
+4. **Only if ClickHouse is severely resource-constrained, consider increasing resources temporarily during migration.**
+   ```
+
+### Scenario 3: Data Missing After Migration
+
+**Symptoms:**
+- Some datasets were not migrated
+- Users report incomplete data
+
+**Root Causes:**
+- Concurrent writes during migration
+- Migration job interrupted before completion
+
+**Recovery Steps:**
+
+1. **Enable lazy migration** to reconcile missed data:
+   ```yaml
+   # Docker Compose
+   services:
+     backend:
+       environment:
+         - DATASET_VERSIONING_MIGRATION_LAZY_ENABLED=true
+   ```
+   
+   ```yaml
+   # Kubernetes/Helm
+   component:
+     backend:
+       env:
+         DATASET_VERSIONING_MIGRATION_LAZY_ENABLED: "true"
+   ```
+
+2. **Restart the backend service:**
+   ```bash
+   # Kubernetes
+   kubectl rollout restart deployment/opik-backend -n opik
+   
+   # Docker Compose
+   docker-compose restart backend
+   ```
+
+3. **Access affected datasets** through the UI or API to trigger lazy migration for those specific datasets.
+
+4. **Monitor logs** for lazy migration activity:
+   ```bash
+   kubectl logs -n opik deployment/opik-backend -f | grep -i "lazy.*migration"
+   ```
+
+5. **After reconciliation is complete, disable lazy migration:**
+   ```yaml
+   DATASET_VERSIONING_MIGRATION_LAZY_ENABLED: "false"
+   ```
+
+6. **Restart the backend** to apply the change.
+
+### Scenario 4: Cannot Disable Migration Flag
+
+**Symptoms:**
+- Migration continues to run after disabling the flag
+- Completion message appears on every restart
+
+**Root Causes:**
+- Configuration not properly applied
+- Using wrong environment variable name
+- Backend not restarted after configuration change
+
+**Recovery Steps:**
+
+1. **Verify the exact environment variable name:**
+   ```yaml
+   # Correct variable name
+   DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED: "false"
+   ```
+
+2. **Check that configuration is applied:**
+   ```bash
+   # Kubernetes - check environment variables
+   kubectl get pod -n opik -l app=opik-backend -o jsonpath='{.items[0].spec.containers[0].env[*]}'
+   
+   # Docker Compose - check container environment
+   docker-compose exec backend env | grep DATASET_VERSION
+   ```
+
+3. **Ensure backend was restarted after configuration change:**
+   ```bash
+   # Kubernetes
+   kubectl rollout restart deployment/opik-backend -n opik
+   kubectl rollout status deployment/opik-backend -n opik
+   
+   # Docker Compose
+   docker-compose restart backend
+   ```
+
+4. **Monitor logs to confirm migration is skipped:**
+   ```bash
+   kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
+   ```
+
+   You should see logs indicating the migration is disabled or skipped.
+
+## Best Practices
+
+### Before Migration
+
+1. **Backup your databases** before upgrading to version 1.9.92+
+   - See [Advanced ClickHouse Backup](/docs/opik/self-host/backup) guide
+   - Backup MySQL data as well
+
+2. **Review resource allocation:**
+   - Ensure adequate CPU, memory, and disk space
+   - Consider the 2-10 minute migration window
+
+3. **Plan for the migration window:**
+   - Schedule the upgrade during low-traffic periods
+   - Inform users of the expected 2-10 minute migration time
+
+### During Migration
+
+1. **Monitor logs actively** during the first startup
+2. **Don't restart the backend** while migration is in progress
+3. **Verify database connectivity** if issues occur
+
+### After Migration
+
+1. **Verify completion** by checking for the success message in logs
+2. **Optionally disable the MySQL items_total migration flag** (not required - it becomes a no-op after first run)
+3. **Validate data integrity** using the verification queries:
+   - Compare item counts between ClickHouse tables
+   - Verify all MySQL counters are updated (no `items_total = -1`)
+   - Test dataset access through UI and API
+4. **Keep lazy migration disabled** unless data reconciliation is needed
+
 ## Monitoring Migration Progress
 
-### Migration Completion
+### Check Migration Status
 
-The migration is complete when you see:
+Monitor the backend logs to track migration progress:
+
+```bash
+# Kubernetes
+kubectl logs -n opik deployment/opik-backend -f | grep -i "migration"
+
+# Docker Compose
+docker-compose logs -f backend | grep -i "migration"
+```
+
+### Expected Log Messages
+
+During migration, you should see logs indicating:
 
 ```
-Dataset versioning items_total migration completed successfully
+Starting dataset versioning items_total migration...
+Processing dataset versions batch...
+Migration completed successfully, processed X dataset versions
+Dataset version items_total migration completed successfully
 ```
 
-After this message, the migration will not run again unless you restart the application with the migration still enabled.
+## Additional Resources
+
+- [Troubleshooting](/self-host/troubleshooting) - General troubleshooting guide
+- [Scaling Opik](/self-host/scaling) - Performance optimization guidelines
+- [Kubernetes Deployment](/self-host/kubernetes) - Helm chart configuration
+- [Advanced ClickHouse Backup](/docs/opik/self-host/backup) - Database backup procedures
