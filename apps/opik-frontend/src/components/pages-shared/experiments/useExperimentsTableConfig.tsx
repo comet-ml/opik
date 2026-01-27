@@ -13,7 +13,7 @@ import uniqBy from "lodash/uniqBy";
 
 import { Groups } from "@/types/groups";
 import {
-  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
   ColumnData,
   DynamicColumn,
   COLUMN_TYPE,
@@ -23,7 +23,7 @@ import {
   SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { getExperimentScore, RowWithScores } from "./scoresUtils";
-import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
+import { convertColumnDataToColumn } from "@/lib/table";
 import {
   buildGroupFieldName,
   buildGroupFieldNameForMeta,
@@ -38,12 +38,12 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import {
   generateActionsColumDef,
   generateGroupedRowCellDef,
-  generateDataRowCellDef,
+  generateSelectColumDef,
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
-import { Experiment, ExperimentsAggregations } from "@/types/datasets";
+import { ExperimentsAggregations } from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -78,7 +78,7 @@ export const useExperimentsTableConfig = <
   setSortedColumns,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    `${storageKeyPrefix}-selected-columns`,
+    `${storageKeyPrefix}-selected-columns-v2`,
     {
       defaultValue: defaultSelectedColumns,
     },
@@ -281,26 +281,7 @@ export const useExperimentsTableConfig = <
     });
 
     const baseColumns = [
-      generateDataRowCellDef<T>(
-        {
-          id: COLUMN_NAME_ID,
-          label: "Name",
-          type: COLUMN_TYPE.string,
-          cell: ResourceCell as never,
-          customMeta: {
-            nameKey: "name",
-            idKey: "dataset_id",
-            resource: RESOURCE_TYPE.experiment,
-            getSearch: (data: Experiment) => ({
-              experiments: [data.id],
-            }),
-          },
-          headerCheckbox: true,
-          sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-          size: 200,
-        },
-        checkboxClickHandler,
-      ),
+      generateSelectColumDef<T>(),
       ...groupColumns,
       ...convertColumnDataToColumn<T, T>(defaultColumns, {
         columnsOrder,
@@ -355,7 +336,7 @@ export const useExperimentsTableConfig = <
 
   const columnPinningConfig = useMemo(() => {
     return {
-      left: [COLUMN_NAME_ID, ...groupFieldNames],
+      left: [COLUMN_SELECT_ID, ...groupFieldNames],
       right: [],
     } as ColumnPinningState;
   }, [groupFieldNames]);

@@ -9,6 +9,7 @@ import isArray from "lodash/isArray";
 import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
+  COLUMN_NAME_ID,
   ROW_HEIGHT,
 } from "@/types/shared";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
@@ -21,13 +22,15 @@ import { useOptimizationScores } from "@/components/pages-shared/experiments/use
 
 const MAX_EXPERIMENTS_LOADED = 1000;
 
-const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns";
+const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns-v2";
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "optimization-experiments-columns-order";
 const COLUMNS_SORT_KEY = "optimization-experiments-columns-sort-v2";
 const ROW_HEIGHT_KEY = "optimization-experiments-row-height";
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
+  COLUMN_ID_ID,
   "prompt",
   "objective_name",
   "created_at",
