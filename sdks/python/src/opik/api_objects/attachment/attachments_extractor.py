@@ -68,6 +68,22 @@ class AttachmentsExtractor:
         """
         attachments: List[attachment_context.AttachmentWithContext] = []
 
+        # Defensive check: ensure we have a dict or list
+        if not isinstance(data, (dict, list)):
+            # For other types (str, int, bool, None, etc.), try to extract but don't mutate
+            extraction_result = self._try_extract_attachments(data, context)
+            for extracted_attachment in extraction_result.attachments:
+                attachments.append(
+                    attachment_context.AttachmentWithContext(
+                        attachment_data=extracted_attachment,
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        project_name=project_name,
+                        context=context,
+                    )
+                )
+            return attachments
+
         if isinstance(data, dict):
             # For dicts, iterate over items and extract attachments from values
             for key, value in data.items():
@@ -92,19 +108,6 @@ class AttachmentsExtractor:
             data.clear()
             data.extend(extraction_result.sanitized_data)
             # Convert extracted attachments to AttachmentWithContext
-            for extracted_attachment in extraction_result.attachments:
-                attachments.append(
-                    attachment_context.AttachmentWithContext(
-                        attachment_data=extracted_attachment,
-                        entity_type=entity_type,
-                        entity_id=entity_id,
-                        project_name=project_name,
-                        context=context,
-                    )
-                )
-        else:
-            # For other types (str, int, bool, None, etc.), try to extract but don't mutate
-            extraction_result = self._try_extract_attachments(data, context)
             for extracted_attachment in extraction_result.attachments:
                 attachments.append(
                     attachment_context.AttachmentWithContext(
@@ -174,6 +177,14 @@ class AttachmentsExtractor:
         """Recursively extract attachments from a dictionary."""
         all_attachments: List[attachment.Attachment] = []
         sanitized_dict = {}
+
+        # Defensive check: ensure data is actually a dict before calling .items()
+        if not isinstance(data, dict):
+            # If somehow a non-dict was passed, treat it as a single value
+            result = self._try_extract_attachments(data, context)
+            return ExtractionResult(
+                attachments=result.attachments, sanitized_data=result.sanitized_data
+            )
 
         for key, value in data.items():
             result = self._try_extract_attachments(value, context)
