@@ -92,13 +92,19 @@ print(result.final_output)
   made. You can also view this information aggregated for the entire agent execution.
 </Tip>
 
-## Advanced Example: Agents with Function Tools
+## Example: Agents with Function Tools
 
-For more complex use cases, you can create agents with custom function tools and use the `@track` decorator for multi-step workflows:
+<Frame>
+  <img src="/img/tracing/openai_agents_trace.png" alt="OpenAI Agents trace in Opik" />
+</Frame>
+
+You can create agents with custom function tools. The `OpikTracingProcessor` automatically captures all tool calls as well:
 
 ```python
-from agents import Agent, Runner, function_tool
-from opik import track
+from agents import Agent, Runner, function_tool, set_trace_processors
+from opik.integrations.openai.agents import OpikTracingProcessor
+
+set_trace_processors(processors=[OpikTracingProcessor()])
 
 @function_tool
 def calculate_average(numbers: list[float]) -> float:
@@ -127,55 +133,57 @@ def get_recommendation(topic: str, user_level: str) -> str:
     else:
         return f"For {topic} at {user_level} level: Focus on fundamentals, practice regularly, and build projects to apply your knowledge."
 
-def create_advanced_agent():
-    """Create an advanced agent with tools and comprehensive instructions."""
-    instructions = """
-    You are an expert programming tutor and learning advisor. You have access to tools that help you:
-    1. Calculate averages for performance metrics, grades, or other numerical data
-    2. Provide personalized learning recommendations based on topics and user experience levels
-    
-    Your role:
-    - Help users learn programming concepts effectively
-    - Provide clear, beginner-friendly explanations when needed
-    - Use your tools when appropriate to give concrete help
-    - Offer structured learning paths and resources
-    - Be encouraging and supportive
-    
-    When users ask about:
-    - Programming languages: Use get_recommendation to provide tailored advice
-    - Performance or scores: Use calculate_average if numbers are involved
-    - Learning paths: Combine your knowledge with tool-based recommendations
-    
-    Always explain your reasoning and make your responses educational.
-    """
-    
-    return Agent(
-        name="AdvancedProgrammingTutor",
-        instructions=instructions,
-        model="gpt-4o-mini",
-        tools=[calculate_average, get_recommendation]
-    )
+agent = Agent(
+    name="ProgrammingTutor",
+    instructions="You are an expert programming tutor. Use your tools to help users.",
+    model="gpt-4o-mini",
+    tools=[calculate_average, get_recommendation]
+)
 
-# Create and use the advanced agent
-advanced_agent = create_advanced_agent()
-
-# Example queries
-queries = [
-    "I'm new to Python programming. Can you tell me about it?",
-    "I got these test scores: 85, 92, 78, 96, 88. What's my average and how am I doing?",
-    "I know some Python basics but want to learn machine learning. What should I do next?",
-]
-
-for i, query in enumerate(queries, 1):
-    print(f"\n📝 Query {i}: {query}")
-    result = Runner.run_sync(advanced_agent, query)
-    print(f"🤖 Response: {result.final_output}")
-    print("=" * 80)
+result = Runner.run_sync(agent, "I'm new to Python. What should I learn first?")
+print(result.final_output)
 ```
 
-{/* <Frame>
-  <img src="/img/cookbook/openai_agents_cookbook.png" />
-</Frame> */}
+### Adding granularity with the `@track` decorator
+
+If you need more visibility into what happens inside your tool functions, you can use the `@track` decorator to trace specific steps within the tool execution:
+
+```python
+from agents import Agent, Runner, function_tool, set_trace_processors
+from opik.integrations.openai.agents import OpikTracingProcessor
+from opik import track
+
+set_trace_processors(processors=[OpikTracingProcessor()])
+
+@track(name="fetch_user_data")
+def fetch_user_data(user_id: str) -> dict:
+    # This step will be traced separately
+    return {"user_id": user_id, "preferences": ["python", "ml"]}
+
+@track(name="generate_recommendations")
+def generate_recommendations(preferences: list) -> str:
+    # This step will also be traced separately
+    return f"Based on your interests in {', '.join(preferences)}, we recommend..."
+
+@function_tool
+def get_personalized_advice(user_id: str) -> str:
+    """Get personalized learning advice for a user."""
+    # Each tracked function call inside the tool will appear as a separate span
+    user_data = fetch_user_data(user_id)
+    recommendations = generate_recommendations(user_data["preferences"])
+    return recommendations
+
+agent = Agent(
+    name="PersonalizedTutor",
+    instructions="Help users with personalized learning advice.",
+    model="gpt-4o-mini",
+    tools=[get_personalized_advice]
+)
+
+result = Runner.run_sync(agent, "Give me learning advice for user_123")
+print(result.final_output)
+```
+
 
 ## Logging threads
 
