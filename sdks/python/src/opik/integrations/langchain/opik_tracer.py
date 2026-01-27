@@ -182,14 +182,16 @@ class OpikTracer(BaseTracer):
 
         error_info: Optional[ErrorInfoDict]
         trace_additional_metadata: Dict[str, Any] = {}
-        
+
         error_str = run_dict.get("error")
         outputs: Optional[Dict[str, Any]] = None
         error_info = None
 
         if error_str is not None:
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
-            if interrupt_value := run_parse_helpers.parse_graph_interrupt_value(error_str):
+            if interrupt_value := run_parse_helpers.parse_graph_interrupt_value(
+                error_str
+            ):
                 outputs = {LANGGRAPH_INTERRUPT_OUTPUT_KEY: interrupt_value}
                 trace_additional_metadata[LANGGRAPH_INTERRUPT_METADATA_KEY] = True
                 # Don't set error_info - this is not an error
@@ -240,7 +242,9 @@ class OpikTracer(BaseTracer):
             trace_data.input = run_dict["inputs"]
         elif isinstance(trace_data.input, dict) and "input" in trace_data.input:
             input_value = trace_data.input.get("input")
-            if resume_value := run_parse_helpers.extract_resume_value_from_command(input_value):
+            if resume_value := run_parse_helpers.extract_resume_value_from_command(
+                input_value
+            ):
                 trace_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
         # Check if any child span has a GraphInterrupt output and use it for trace output
@@ -598,7 +602,9 @@ class OpikTracer(BaseTracer):
                 span_data.input = run_dict["inputs"]
             elif isinstance(span_data.input, dict):
                 input_value = span_data.input.get("input")
-                if resume_value := run_parse_helpers.extract_resume_value_from_command(input_value):
+                if resume_value := run_parse_helpers.extract_resume_value_from_command(
+                    input_value
+                ):
                     span_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
             run_dict_outputs = run_dict.get("outputs")
@@ -654,7 +660,9 @@ class OpikTracer(BaseTracer):
             error_str = run_dict["error"]
 
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
-            if interrupt_value := run_parse_helpers.parse_graph_interrupt_value(error_str):
+            if interrupt_value := run_parse_helpers.parse_graph_interrupt_value(
+                error_str
+            ):
                 span_data.init_end_time().update(
                     metadata={LANGGRAPH_INTERRUPT_METADATA_KEY: True},
                     output={LANGGRAPH_INTERRUPT_OUTPUT_KEY: interrupt_value},

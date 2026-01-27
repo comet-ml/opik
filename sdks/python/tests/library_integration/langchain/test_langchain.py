@@ -736,7 +736,11 @@ def test_langchain__tool_with_description__description_attached_to_span_metadata
                 id=ANY_BUT_NONE,
                 type="llm",
                 name="FakeListLLM",
-                input={"prompts": ["Summarize this weather: The weather in Paris is sunny and 25°C."]},
+                input={
+                    "prompts": [
+                        "Summarize this weather: The weather in Paris is sunny and 25°C."
+                    ]
+                },
                 output=ANY_DICT,
                 metadata=ANY_DICT.containing({"created_from": "langchain"}),
                 start_time=ANY_BUT_NONE,
