@@ -252,6 +252,78 @@ def _update_trace(
         raise exc
 
 
+def _normalize_span_data_field(value: Any) -> dict[str, Any] | None:
+    """
+    Normalize span input/output/metadata fields to always be dicts.
+
+    This prevents issues where lists are passed instead of dicts, which can cause
+    errors in attachment extraction and other processing.
+
+    Args:
+        value: The field value to normalize (can be None, dict, list, or other)
+
+    Returns:
+        Normalized dict or None if value is None
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, list):
+        # Wrap list in a dict with a generic key
+        # This preserves the data while making it compatible with dict-based processing
+        return {"data": value}
+
+    # For other types (str, int, etc.), wrap in a dict
+    return {"value": value}
+
+
+def _normalize_current_span_data() -> None:
+    """
+    Normalize the current span's input/output/metadata fields to ensure they are dicts.
+
+    This is a defensive measure to prevent issues where the LiteLLM integration
+    or other code might set these fields to lists instead of dicts.
+    """
+    try:
+        span_data = opik_context.get_current_span_data()
+        if span_data is None:
+            return
+
+        # Normalize input, output, and metadata if they exist and are not dicts
+        updates: dict[str, Any] = {}
+
+        if hasattr(span_data, "input"):
+            current_input = getattr(span_data, "input", None)
+            # Only normalize if it's not already a dict or None
+            if current_input is not None and not isinstance(current_input, dict):
+                normalized_input = _normalize_span_data_field(current_input)
+                updates["input"] = normalized_input
+
+        if hasattr(span_data, "output"):
+            current_output = getattr(span_data, "output", None)
+            # Only normalize if it's not already a dict or None
+            if current_output is not None and not isinstance(current_output, dict):
+                normalized_output = _normalize_span_data_field(current_output)
+                updates["output"] = normalized_output
+
+        if hasattr(span_data, "metadata"):
+            current_metadata = getattr(span_data, "metadata", None)
+            # Metadata should already be a dict, but normalize just in case
+            if current_metadata is not None and not isinstance(current_metadata, dict):
+                normalized_metadata = _normalize_span_data_field(current_metadata)
+                updates["metadata"] = normalized_metadata
+
+        # Only update if we have changes
+        if updates:
+            opik_context.update_current_span(**updates)
+    except Exception:
+        # Silently fail - this is a defensive measure and shouldn't break the flow
+        logger.debug("Failed to normalize current span data", exc_info=True)
+
+
 def _update_span(
     *,
     metadata: dict[str, Any] | None = None,
