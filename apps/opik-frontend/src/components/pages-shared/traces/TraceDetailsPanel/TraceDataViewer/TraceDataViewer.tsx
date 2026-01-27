@@ -39,6 +39,8 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -73,13 +75,15 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
   const hasSpanAgentGraph =
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
+  const showOptimizerPrompts = useIsFeatureEnabled(
+    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+  );
 
   const hasPrompts = useMemo(() => {
-    const prompts = get(data.metadata, "opik_prompts", null);
-    if (!prompts) return false;
-    if (Array.isArray(prompts)) return (prompts as unknown[]).length > 0;
-    return false; // opik_prompts should always be an array
-  }, [data.metadata]);
+    if (!showOptimizerPrompts) return false;
+    const prompts = (data.metadata as Record<string, unknown>)?.opik_prompts;
+    return Array.isArray(prompts) && prompts.length > 0;
+  }, [data.metadata, showOptimizerPrompts]);
 
   const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",

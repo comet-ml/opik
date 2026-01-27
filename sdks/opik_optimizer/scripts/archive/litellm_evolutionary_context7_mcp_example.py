@@ -144,7 +144,7 @@ evo_optimizer = EvolutionaryOptimizer(
     verbose=1,
 )
 
-result = evo_optimizer.optimize_mcp(
+result = evo_optimizer.optimize_mcp(  # type: ignore[attr-defined]
     prompt=prompt,
     dataset=dataset,
     metric=context7_metric,

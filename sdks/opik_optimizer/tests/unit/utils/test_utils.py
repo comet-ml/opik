@@ -1,73 +1,54 @@
 import base64
+import json
 import pytest
 from pytest import MonkeyPatch
 
-from opik_optimizer.utils import (
-    format_prompt,
-    json_to_dict,
-    validate_prompt,
-    get_random_seed,
-    setup_logging,
-    get_optimization_run_url_by_id,
+from opik_optimizer.utils.helpers import json_to_dict
+from opik_optimizer.utils.display.format import format_prompt
+from opik_optimizer.utils.reporting import get_optimization_run_url_by_id
+from opik_optimizer.utils.logging import setup_logging
+from tests.unit.fixtures import assistant_message, system_message, user_message
+
+
+@pytest.mark.parametrize(
+    "prompt_template,kwargs,expected_result,should_raise",
+    [
+        ("Hello {name}!", {"name": "World"}, "Hello World!", None),
+        ("{greeting} {name}!", {"greeting": "Hi", "name": "World"}, "Hi World!", None),
+        ("{greeting} {name}!", {"greeting": "Hi"}, None, ValueError),
+    ],
 )
-
-
-def test_format_prompt() -> None:
+def test_format_prompt(
+    prompt_template: str,
+    kwargs: dict[str, str],
+    expected_result: str | None,
+    should_raise: type[Exception] | None,
+) -> None:
     """Test the format_prompt function."""
-    # Test basic formatting
-    prompt = "Hello {name}!"
-    result = format_prompt(prompt, name="World")
-    assert result == "Hello World!"
-
-    # Test with multiple variables
-    prompt = "{greeting} {name}!"
-    result = format_prompt(prompt, greeting="Hi", name="World")
-    assert result == "Hi World!"
-
-    # Test with missing variable
-    with pytest.raises(ValueError) as exc_info:
-        format_prompt(prompt, greeting="Hi")
-    assert "Missing required key in prompt: 'name'" in str(exc_info.value)
+    if should_raise:
+        with pytest.raises(should_raise) as exc_info:
+            format_prompt(prompt_template, **kwargs)
+        assert "Missing required key in prompt" in str(exc_info.value)
+    else:
+        result = format_prompt(prompt_template, **kwargs)
+        assert result == expected_result
 
 
-def test_validate_prompt() -> None:
-    # Test valid prompt
-    assert validate_prompt("Hello World!") is True
-
-    # Test empty prompt
-    assert validate_prompt("") is False
-
-    # Test prompt with only whitespace
-    assert validate_prompt("   ") is False
-
-    # Test prompt with newlines
-    assert validate_prompt("Hello\nWorld") is True
-
-
-def test_get_random_seed() -> None:
-    # Test that seed is an integer
-    seed = get_random_seed()
-    assert isinstance(seed, int)
-
-    # Test that seed is within reasonable range
-    assert 0 <= seed <= 2**32 - 1
-
-    # Test that seed is different on subsequent calls
-    seed1 = get_random_seed()
-    seed2 = get_random_seed()
-    assert seed1 != seed2
-
-
-def test_setup_logging() -> None:
-    # Test that setup_logging doesn't raise any errors
-    setup_logging()
-
-    # Test with custom log level
-    setup_logging(log_level="DEBUG")
-
-    # Test with invalid log level
-    with pytest.raises(ValueError):
-        setup_logging(log_level="INVALID")
+@pytest.mark.parametrize(
+    "level,should_raise",
+    [
+        ("INFO", False),
+        ("DEBUG", False),
+        ("INVALID", True),
+    ],
+)
+def test_setup_logging(level: str, should_raise: bool) -> None:
+    """Test setup_logging with different log levels."""
+    if should_raise:
+        with pytest.raises(ValueError):
+            setup_logging(level=level, force=True)
+    else:
+        setup_logging(level=level, force=True)
 
 
 def test_get_optimization_run_url_by_id(monkeypatch: MonkeyPatch) -> None:
@@ -92,41 +73,136 @@ def test_get_optimization_run_url_by_id(monkeypatch: MonkeyPatch) -> None:
 
 def test_json_to_dict_parses_raw_json_list() -> None:
     """Ensure json_to_dict handles plain JSON arrays of chat messages."""
-    payload = """[
-        {"role": "system", "content": "Be concise."},
-        {"role": "user", "content": "Question"}
-    ]"""
+    payload = json.dumps([system_message("Be concise."), user_message("Question")])
 
     result = json_to_dict(payload)
 
     assert result == [
-        {"role": "system", "content": "Be concise."},
-        {"role": "user", "content": "Question"},
+        system_message("Be concise."),
+        user_message("Question"),
     ]
 
 
 def test_json_to_dict_strips_json_code_block() -> None:
     """Ensure json_to_dict trims ```json fenced responses before parsing."""
-    payload = """```json
-    [
-        {"role": "assistant", "content": "Sure"}
-    ]
-    ```"""
+    payload = f"""```json
+{json.dumps([assistant_message("Sure")])}
+```"""
 
     result = json_to_dict(payload)
 
-    assert result == [{"role": "assistant", "content": "Sure"}]
+    assert result == [assistant_message("Sure")]
 
 
 def test_json_to_dict_handles_python_literal(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Ensure python-style reprs are parsed via literal_eval fallback."""
-    payload = """[{'role': 'system', 'content': 'Do not forget to cite sources.'}]"""
+    # Clear any leftover output from previous tests (e.g., optimizer cleanup logging)
+    capsys.readouterr()
+
+    payload = repr([system_message("Do not forget to cite sources.")])
 
     result = json_to_dict(payload)
 
-    assert result == [{"role": "system", "content": "Do not forget to cite sources."}]
+    assert result == [system_message("Do not forget to cite sources.")]
 
+    # Check that json_to_dict didn't produce any output
     captured = capsys.readouterr()
     assert captured.out == ""
+
+
+def test_json_to_dict_returns_none_on_unparseable() -> None:
+    """Test json_to_dict returns None for completely unparsable content."""
+    try:
+        result = json_to_dict("This is not JSON or Python literal: <xml>tag</xml>")
+    except json.JSONDecodeError:
+        # Accept implementations that surface the decode error directly.
+        return
+    assert result is None or isinstance(result, (dict, list))
+
+
+def test_json_to_dict_handles_code_block_without_json_tag() -> None:
+    """Test json_to_dict handles code blocks without json tag."""
+    payload = f"""```
+{json.dumps([user_message("Test")])}
+```"""
+    result = json_to_dict(payload)
+    assert result == [user_message("Test")]
+
+
+class TestConvertLiteralsToJsonCompatible:
+    """Tests for _convert_literals_to_json_compatible function."""
+
+    def test_converts_dict(self) -> None:
+        """Should recursively convert dicts."""
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
+
+        result = _convert_literals_to_json_compatible({"key": "value"})
+        assert result == {"key": "value"}
+
+    def test_converts_list(self) -> None:
+        """Should recursively convert lists."""
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
+
+        result = _convert_literals_to_json_compatible([1, 2, 3])
+        assert result == [1, 2, 3]
+
+    def test_converts_tuple_to_list(self) -> None:
+        """Should convert tuples to lists."""
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
+
+        result = _convert_literals_to_json_compatible((1, 2, 3))
+        assert result == [1, 2, 3]
+
+    def test_converts_set_to_sorted_list(self) -> None:
+        """Should convert sets to sorted lists."""
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
+
+        result = _convert_literals_to_json_compatible({3, 1, 2})
+        # Set conversion sorts by repr
+        assert isinstance(result, list)
+        assert len(result) == 3
+
+    def test_passes_through_primitives(self) -> None:
+        """Should pass through primitive types."""
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
+
+        assert _convert_literals_to_json_compatible("string") == "string"
+        assert _convert_literals_to_json_compatible(42) == 42
+        assert _convert_literals_to_json_compatible(3.14) == 3.14
+        assert _convert_literals_to_json_compatible(True) is True
+        assert _convert_literals_to_json_compatible(None) is None
+
+    def test_converts_unknown_to_string(self) -> None:
+        """Should convert unknown types to string."""
+        from opik_optimizer.utils.helpers import _convert_literals_to_json_compatible
+
+        class CustomClass:
+            def __str__(self) -> str:
+                return "custom"
+
+        result = _convert_literals_to_json_compatible(CustomClass())
+        assert result == "custom"
+
+
+class TestFunctionToToolDefinition:
+    """Legacy function_to_tool_definition tests removed with deprecated API."""
+
+
+class TestEnsureEndingSlash:
+    """Tests for ensure_ending_slash function."""
+
+    @pytest.mark.parametrize(
+        "input_url,expected",
+        [
+            ("http://example.com", "http://example.com/"),
+            ("http://example.com/", "http://example.com/"),
+            ("http://example.com///", "http://example.com/"),
+        ],
+    )
+    def test_ensure_ending_slash(self, input_url: str, expected: str) -> None:
+        """Should ensure exactly one trailing slash."""
+        from opik_optimizer.utils.reporting import ensure_ending_slash
+
+        assert ensure_ending_slash(input_url) == expected

@@ -119,5 +119,13 @@ def answer_correctness_score(
         model="openai/gpt-4o-mini"  # Fast model for judging
     )
 
-    reference_answer = dataset_item.get("answer", "")
+    reference_answer = dataset_item.get("answer")
+    if reference_answer is None or reference_answer == "":
+        raise ValueError(
+            "answer_correctness_score requires dataset items with an 'answer' field. "
+            "Use a split that includes answers (e.g., train/validation)."
+        )
     return correctness_metric.score(output=llm_output, reference=reference_answer)
+
+
+answer_correctness_score.required_fields = ("answer",)

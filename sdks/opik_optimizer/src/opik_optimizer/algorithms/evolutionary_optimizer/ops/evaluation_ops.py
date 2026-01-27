@@ -1,51 +1,91 @@
-from typing import Any, TYPE_CHECKING
-from collections.abc import Callable
+from typing import Any, TYPE_CHECKING, cast
 
 
-from .... import task_evaluator, helpers
+from ....core import evaluation as task_evaluator
+from ....core.state import prepare_experiment_config
+from ....base_optimizer import _OPTIMIZER_VERSION
+from .... import helpers
 from ....api_objects import chat_prompt
-from ....mcp_utils.mcp_workflow import MCPExecutionConfig
+from ....api_objects.types import MetricFunction
 import opik
-from opik import opik_context
-import copy
+from .... import constants
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .. import evolutionary_optimizer  # noqa: F401
 
 
-def evaluate_prompt(
+def evaluate_bundle(
     optimizer: "evolutionary_optimizer.EvolutionaryOptimizer",
-    prompt: chat_prompt.ChatPrompt,
-    messages: list[dict[str, str]],
+    bundle_messages: dict[str, list[dict[str, Any]]],
+    prompts_metadata: dict[str, dict[str, Any]],
     dataset: opik.Dataset,
-    metric: Callable,
-    n_samples: int | None = None,
+    metric: MetricFunction,
+    n_samples: int | float | str | None = None,
     dataset_item_ids: list[str] | None = None,
     experiment_config: dict | None = None,
     optimization_id: str | None = None,
     verbose: int = 0,
     **kwargs: Any,
 ) -> float:
-    """Evaluate a single prompt (individual) against the dataset and return the score."""
+    """
+    Evaluate a bundle of prompts (multi-prompt individual) against the dataset.
+
+    Args:
+        optimizer: The evolutionary optimizer instance.
+        bundle_messages: Dict mapping prompt names to their messages.
+        prompts_metadata: Dict mapping prompt names to their metadata (tools, function_map, name).
+        dataset: The dataset to evaluate on.
+        metric: The metric function to score the output.
+        n_samples: Optional number of samples to evaluate.
+        dataset_item_ids: Optional list of specific dataset item IDs to evaluate.
+        experiment_config: Optional experiment configuration.
+        optimization_id: Optional optimization ID for tracking.
+        verbose: Verbosity level.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        The evaluation score.
+    """
     total_items = len(dataset.get_items())
 
-    new_prompt = prompt.copy()
-    new_prompt.set_messages(messages)
-    tools = getattr(messages, "tools", None)
-    if tools is not None:
-        new_prompt.tools = copy.deepcopy(tools)
+    # Reconstruct ChatPrompt objects from messages and metadata
+    prompts_bundle: dict[str, chat_prompt.ChatPrompt] = {}
+    for name, messages in bundle_messages.items():
+        metadata = prompts_metadata.get(name, {})
+        prompts_bundle[name] = chat_prompt.ChatPrompt(
+            messages=messages,
+            tools=metadata.get("tools"),
+            function_map=metadata.get("function_map"),
+            name=metadata.get("name", name),
+            model=cast(str, metadata.get("model") or optimizer.model),
+            model_parameters=metadata.get("model_kwargs"),
+        )
+
+    sampling_plan = optimizer._prepare_sampling_plan(
+        dataset=dataset,
+        n_samples=n_samples,
+        dataset_item_ids=dataset_item_ids,
+        phase="trial",
+        seed_override=optimizer.seed,
+        strategy=getattr(optimizer, "n_samples_strategy", None),
+    )
+    resolved_ids = sampling_plan.dataset_item_ids
+    effective_n_samples = None if resolved_ids is not None else sampling_plan.nb_samples
 
     configuration_updates = helpers.drop_none(
         {
             "n_samples_for_eval": (
-                len(dataset_item_ids) if dataset_item_ids is not None else n_samples
+                len(resolved_ids) if resolved_ids is not None else effective_n_samples
             ),
             "total_dataset_items": total_items,
+            "bundle_mode": True,
+            "num_prompts_in_bundle": len(prompts_bundle),
+            "sampling_mode": sampling_plan.mode,
         }
     )
     evaluation_details = helpers.drop_none(
         {
-            "dataset_item_ids": dataset_item_ids,
+            "dataset_item_ids": resolved_ids,
             "optimization_id": optimization_id,
         }
     )
@@ -53,95 +93,48 @@ def evaluate_prompt(
         {"evaluation": evaluation_details} if evaluation_details else None
     )
 
-    experiment_config = optimizer._prepare_experiment_config(
-        prompt=new_prompt,
+    experiment_config = prepare_experiment_config(
+        optimizer=optimizer,
+        prompt=prompts_bundle,
         dataset=dataset,
         metric=metric,
+        agent=optimizer.agent,
         experiment_config=experiment_config,
         configuration_updates=configuration_updates,
         additional_metadata=additional_metadata,
+        validation_dataset=None,
+        is_single_prompt_optimization=False,
+        build_optimizer_version=_OPTIMIZER_VERSION,
     )
-    try:
-        agent = optimizer._instantiate_agent(new_prompt)
-    except Exception:
-        return 0.0
 
-    mcp_execution_config: MCPExecutionConfig | None = kwargs.get("mcp_config")
+    if optimizer.agent is None:
+        raise ValueError("EvolutionaryOptimizer requires an agent to run evaluations.")
+
+    agent = optimizer.agent
+    optimizer._set_agent_trace_phase(agent, "Evaluation")
 
     def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-        messages = new_prompt.get_messages(dataset_item)
-
-        if mcp_execution_config is None:
-            model_output = agent.invoke(messages)
-
-            # Add tags to trace for optimization tracking
-            if (
-                hasattr(optimizer, "current_optimization_id")
-                and optimizer.current_optimization_id
-            ):
-                opik_context.update_current_trace(
-                    tags=[optimizer.current_optimization_id, "Evaluation"]
-                )
-
-            return {"llm_output": model_output}
-
-        coordinator = mcp_execution_config.coordinator
-        coordinator.reset()
-
-        raw_model_output = agent.llm_invoke(
-            messages=messages,
-            seed=getattr(optimizer, "seed", None),
-            allow_tool_use=True,
-        )
-
-        second_pass_messages = coordinator.build_second_pass_messages(
-            base_messages=messages,
+        # Pass full bundle to the agent
+        model_output = agent.invoke_agent(
+            prompts=prompts_bundle,
             dataset_item=dataset_item,
         )
 
-        if (
-            second_pass_messages is None
-            and mcp_execution_config.fallback_invoker is not None
-        ):
-            fallback_args = mcp_execution_config.fallback_arguments(dataset_item)
-            if fallback_args:
-                summary_override = mcp_execution_config.fallback_invoker(fallback_args)
-                second_pass_messages = coordinator.build_second_pass_messages(
-                    base_messages=messages,
-                    dataset_item=dataset_item,
-                    summary_override=summary_override,
-                )
+        optimizer._tag_trace(phase="Evaluation", extra_tags=["Bundle"])
 
-        if second_pass_messages is not None:
-            final_response = agent.llm_invoke(
-                messages=second_pass_messages,
-                seed=getattr(optimizer, "seed", None),
-                allow_tool_use=mcp_execution_config.allow_tool_use_on_second_pass,
-            )
-        else:
-            final_response = raw_model_output
-
-        # Add tags to trace for optimization tracking
-        if (
-            hasattr(optimizer, "current_optimization_id")
-            and optimizer.current_optimization_id
-        ):
-            opik_context.update_current_trace(
-                tags=[optimizer.current_optimization_id, "Evaluation"]
-            )
-
-        return {"llm_output": final_response.strip()}
+        return {"llm_output": model_output}
 
     score = task_evaluator.evaluate(
         dataset=dataset,
-        dataset_item_ids=dataset_item_ids,
+        dataset_item_ids=resolved_ids,
         metric=metric,
         evaluated_task=llm_task,
         num_threads=optimizer.n_threads,
         project_name=optimizer.project_name,
-        n_samples=n_samples if dataset_item_ids is None else None,
+        n_samples=effective_n_samples,
         experiment_config=experiment_config,
         optimization_id=optimization_id,
         verbose=verbose,
+        use_evaluate_on_dict_items=constants.ENABLE_EVALUATE_ON_DICT_ITEMS,
     )
     return score

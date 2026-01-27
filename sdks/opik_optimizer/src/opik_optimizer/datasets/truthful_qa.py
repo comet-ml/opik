@@ -4,7 +4,7 @@ import opik
 from typing import Any
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle
+from opik_optimizer.utils.dataset import DatasetHandle, FilterBy
 
 
 def _truthful_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -47,19 +47,19 @@ def _truthful_custom_loader(
 ) -> list[dict[str, Any]]:
     import datasets as ds
 
-    download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
+    download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)  # type: ignore[arg-type]
     gen_dataset = ds.load_dataset(
-        "truthful_qa", "generation", download_config=download_config
-    )[source_split]
+        "truthfulqa/truthful_qa", "generation", download_config=download_config
+    )[source_split]  # type: ignore[index]
     mc_dataset = ds.load_dataset(
-        "truthful_qa", "multiple_choice", download_config=download_config
-    )[source_split]
+        "truthfulqa/truthful_qa", "multiple_choice", download_config=download_config
+    )[source_split]  # type: ignore[index]
     available = max(0, len(gen_dataset) - start)
     total = available if count is None else min(count, available)
     pairs = list(
         zip(
-            gen_dataset.select(range(start, start + total)),
-            mc_dataset.select(range(start, start + total)),
+            gen_dataset.select(range(start, start + total)),  # type: ignore[union-attr]
+            mc_dataset.select(range(start, start + total)),  # type: ignore[union-attr]
         )
     )
     return [{"gen": gen, "mc": mc} for gen, mc in pairs]
@@ -67,7 +67,7 @@ def _truthful_custom_loader(
 
 TRUTHFUL_QA_SPEC = DatasetSpec(
     name="truthful_qa",
-    hf_path="truthful_qa",
+    hf_path="truthfulqa/truthful_qa",
     hf_name="generation",
     default_source_split="validation",
     prefer_presets=True,
@@ -107,6 +107,7 @@ def truthful_qa(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """TruthfulQA slices combining generation and multiple-choice views."""
     return _TRUTHFUL_QA_HANDLE.load(
@@ -117,4 +118,5 @@ def truthful_qa(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
+        filter_by=filter_by,
     )

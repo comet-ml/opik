@@ -14,23 +14,21 @@ fields for effective root cause analysis.
 import opik  # noqa: E402
 from opik_optimizer import ChatPrompt, HRPO  # noqa: E402
 from opik_optimizer.datasets import hotpot  # noqa: E402
-from opik_optimizer.utils import search_wikipedia  # noqa: E402
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia  # noqa: E402
 
 from utils.metrics import answer_correctness_score
 
 
 # Load dataset
-dataset = hotpot(count=300)
+dataset = hotpot(split="train", count=50)
+validation_dataset = hotpot(split="validation", count=25)
 
 # Define initial prompt
-system_prompt = """Answer the question with a direct, accurate response.
-You have access to a Wikipedia search tool - use it to find relevant information before answering.
-Provide concise answers based on the search results."""
-
-
-@opik.track(type="tool")
-def search_wikipedia_tool(query: str) -> list[str]:
-    return search_wikipedia(query, use_api=True)
+system_prompt = (
+    "Answer the question with a direct, accurate response."
+    + " You have access to a Wikipedia search tool, use it to find relevant information before answering."
+    + " Provide concise answers based on the search results."
+)
 
 
 prompt = ChatPrompt(
@@ -55,7 +53,11 @@ prompt = ChatPrompt(
             },
         },
     ],
-    function_map={"search_wikipedia": search_wikipedia_tool},
+    function_map={
+        "search_wikipedia": opik.track(type="tool")(
+            lambda query: search_wikipedia(query, search_type="api")
+        )
+    },
 )
 
 # Define the metric to optimize
@@ -75,6 +77,7 @@ optimizer = HRPO(
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
+    validation_dataset=validation_dataset,
     metric=answer_correctness_score,
     max_trials=5,
     n_samples=10,

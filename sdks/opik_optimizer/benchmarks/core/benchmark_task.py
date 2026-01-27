@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import opik_optimizer
 
@@ -60,7 +60,9 @@ class EvaluationStage(BaseModel):
     stage: str
     split: str | None = None
     evaluation: TaskEvaluationResult | None = None
-    prompt_snapshot: opik_optimizer.ChatPrompt | None = None
+    prompt_snapshot: (
+        opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None
+    ) = None
     step_ref: str | None = None
     notes: str | None = None
 
@@ -75,11 +77,15 @@ class TaskResult(BaseModel):
     model_parameters: dict[str, Any] | None = None
     timestamp_start: float
     status: TaskStatus
-    initial_prompt: opik_optimizer.ChatPrompt | None = None
-    optimized_prompt: opik_optimizer.ChatPrompt | None = None
+    initial_prompt: (
+        opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None
+    ) = None
+    optimized_prompt: (
+        opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None
+    ) = None
     evaluations: dict[str, EvaluationSet] = Field(default_factory=dict)
     stages: list[EvaluationStage] = Field(default_factory=list)
-    optimization_history: dict[str, Any] = Field(default_factory=dict)
+    optimization_history: dict[str, Any] = Field(default_factory=lambda: {"rounds": []})
     error_message: str | None = None
     timestamp_end: float | None = None
     llm_calls_total_optimization: int | None = None
@@ -90,6 +96,22 @@ class TaskResult(BaseModel):
     requested_split: str | None = None
     optimizer_prompt_params_used: dict[str, Any] | None = None
     optimizer_params_used: dict[str, Any] | None = None
+
+    @field_validator("optimization_history", mode="before")
+    @classmethod
+    def _validate_optimization_history(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            rounds = value.get("rounds")
+            if rounds is None:
+                raise ValueError("optimization_history must contain 'rounds'")
+            if not isinstance(rounds, list):
+                raise TypeError("optimization_history['rounds'] must be a list")
+            for entry in rounds:
+                if not isinstance(entry, dict):
+                    raise TypeError(
+                        "optimization_history['rounds'] entries must be dicts"
+                    )
+        return value
 
     @classmethod
     def model_validate(
@@ -103,16 +125,40 @@ class TaskResult(BaseModel):
         by_name: bool | None = None,
     ) -> "TaskResult":
         """Custom validation method to handle nested objects during deserialization."""
-        # Handle ChatPrompt objects
-        if obj.get("initial_prompt") and isinstance(obj["initial_prompt"], dict):
-            obj["initial_prompt"] = opik_optimizer.ChatPrompt.model_validate(
-                obj["initial_prompt"]
-            )
 
-        if obj.get("optimized_prompt") and isinstance(obj["optimized_prompt"], dict):
-            obj["optimized_prompt"] = opik_optimizer.ChatPrompt.model_validate(
-                obj["optimized_prompt"]
-            )
+        def _deserialize_prompt(
+            prompt_data: Any,
+        ) -> opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None:
+            """Deserialize a prompt which can be single ChatPrompt or dict of ChatPrompts."""
+            if prompt_data is None:
+                return None
+            if isinstance(prompt_data, opik_optimizer.ChatPrompt):
+                return prompt_data
+            if isinstance(prompt_data, dict):
+                # Check if this is a dict of prompts (keys are prompt names)
+                # or a serialized single ChatPrompt (has 'messages' key)
+                if "messages" in prompt_data or "system" in prompt_data:
+                    # Single ChatPrompt serialized as dict
+                    return opik_optimizer.ChatPrompt.model_validate(prompt_data)
+                else:
+                    # Dict of prompts - deserialize each
+                    result: dict[str, opik_optimizer.ChatPrompt] = {}
+                    for key, value in prompt_data.items():
+                        if isinstance(value, opik_optimizer.ChatPrompt):
+                            result[key] = value
+                        elif isinstance(value, dict):
+                            result[key] = opik_optimizer.ChatPrompt.model_validate(
+                                value
+                            )
+                    return result
+            return prompt_data
+
+        # Handle ChatPrompt objects (single or dict)
+        if obj.get("initial_prompt"):
+            obj["initial_prompt"] = _deserialize_prompt(obj["initial_prompt"])
+
+        if obj.get("optimized_prompt"):
+            obj["optimized_prompt"] = _deserialize_prompt(obj["optimized_prompt"])
 
         if obj.get("evaluations") and isinstance(obj["evaluations"], dict):
             normalized: dict[str, EvaluationSet] = {}
@@ -130,13 +176,10 @@ class TaskResult(BaseModel):
                         entry["evaluation"] = TaskEvaluationResult.model_validate(
                             entry["evaluation"]
                         )
-                    if entry.get("prompt_snapshot") and isinstance(
-                        entry["prompt_snapshot"], dict
-                    ):
-                        entry["prompt_snapshot"] = (
-                            opik_optimizer.ChatPrompt.model_validate(  # type: ignore[attr-defined]
-                                entry["prompt_snapshot"]
-                            )
+                    if entry.get("prompt_snapshot"):
+                        # Use _deserialize_prompt to handle both single and dict prompts
+                        entry["prompt_snapshot"] = _deserialize_prompt(
+                            entry["prompt_snapshot"]
                         )
                     normalized_stages.append(EvaluationStage.model_validate(entry))
                 else:
@@ -148,6 +191,11 @@ class TaskResult(BaseModel):
                 key: DatasetMetadata.model_validate(value)
                 for key, value in obj["dataset_metadata"].items()
             }
+
+        if isinstance(obj, dict) and "optimization_history" in obj:
+            obj["optimization_history"] = cls._validate_optimization_history(
+                obj["optimization_history"]
+            )
 
         # Use the parent class's model_validate method to create the instance
         return super().model_validate(

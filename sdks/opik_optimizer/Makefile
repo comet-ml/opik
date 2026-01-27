@@ -22,7 +22,7 @@ endef
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test precommit build clean modal-worker modal-coord modal-deploy modal-logs modal-list modal-check-results
+.PHONY: help setup-venv install install-dev test test-all precommit build clean modal-worker modal-coord modal-deploy modal-logs modal-list modal-check-results
 .PHONY: modal-list
 
 help:
@@ -32,6 +32,7 @@ help:
 	@echo "  install      Install package"
 	@echo "  install-dev  Install package with dev dependencies"
 	@echo "  test         Run tests"
+	@echo "  test-all     Run tests including integration markers"
 	@echo "  profile      Profile unit tests (cProfile via pytest-profiling)"
 	@echo "  precommit    Run pre-commit hooks on all files"
 	@echo "  build        Build sdist and wheel"
@@ -63,6 +64,7 @@ test:
 	PYTHONPATH=src \
 	LITELLM_CACHE_TYPE=memory \
 	LITELLM_LOGGING_DISABLED=1 \
+	LITELLM_USE_QUEUE_LOGGING=false \
 	$(PYTHON) -m pytest \
 		-n auto \
 		--dist loadfile \
@@ -71,7 +73,29 @@ test:
 		--cov=opik_optimizer \
 		--cov-report=term-missing \
 		--cov-report=xml \
-		--cov-report=html
+		--cov-report=html \
+		-m "not integration and not e2e" \
+		tests/unit
+
+test-all:
+	$(call warn_if_no_venv)
+	HF_HUB_ENABLE_PROGRESS_BARS=0 \
+	HF_HUB_DISABLE_TELEMETRY=1 \
+	PYTHONPATH=src \
+	LITELLM_CACHE_TYPE=memory \
+	LITELLM_LOGGING_DISABLED=1 \
+	LITELLM_USE_QUEUE_LOGGING=false \
+	$(PYTHON) -m pytest \
+		-n auto \
+		--dist loadfile \
+		-vv -rA \
+		--maxfail=1 \
+		--cov=opik_optimizer \
+		--cov-report=term-missing \
+		--cov-report=xml \
+		--cov-report=html \
+		-m "integration or e2e or not integration" \
+		tests tests/e2e
 
 profile:
 	$(call warn_if_no_venv)
@@ -82,6 +106,7 @@ profile:
 	PYTHONPATH=src \
 	LITELLM_CACHE_TYPE=memory \
 	LITELLM_LOGGING_DISABLED=1 \
+	LITELLM_USE_QUEUE_LOGGING=false \
 	$(PYTHON) -m pytest -n auto --dist loadfile tests/unit -vv -rA --profile --maxfail=1
 
 precommit:
@@ -104,7 +129,10 @@ clean:
 	@find . -type d -name ".litellm_cache" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	@find . -type f -name "*.pyo" -delete 2>/dev/null || true
-	@find . -type f -name ".coverage" -delete 2>/dev/null || true
+	@find . -type f -name ".coverage*" -delete 2>/dev/null || true
+	@rm -rf .hf_home
+	@rm -rf .hf_datasets
+	@rm -rf .hf_cache
 	@rm -rf htmlcov coverage.xml
 	@rm -rf $(VENV)
 	@echo "Clean complete."

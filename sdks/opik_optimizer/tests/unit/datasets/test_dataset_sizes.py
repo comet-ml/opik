@@ -6,13 +6,14 @@ from collections.abc import Callable
 import pytest
 
 import opik_optimizer
-from opik_optimizer.utils import dataset_utils
+from opik_optimizer.utils import dataset as dataset_utils
 
 
 DATASET_SIZES = {
     "tiny_test": 5,
     "gsm8k": 300,
     "ai2_arc": 300,
+    "arc_agi2": 200,
     "truthful_qa": 300,
     "cnn_dailymail": 100,
     "ragbench_sentence_relevance": 300,

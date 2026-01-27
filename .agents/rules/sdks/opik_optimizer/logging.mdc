@@ -10,8 +10,8 @@ Use consistent logging so optimisation runs can be monitored locally and inside 
 ## Logger Setup
 
 - Declare a module-level logger with `logger = logging.getLogger(__name__)`.
-- Call `logging_config.setup_logging()` (or expect callers to do so) before emitting logs; it wires the Rich handler and propagates `OPIK_LOG_LEVEL` overrides.
-- Access progress bars via `opik.environment.get_tqdm_for_current_environment()` instead of printing raw status lines.
+- Call `utils.logging.setup_logging()` (or expect callers to do so) before emitting logs; it wires the Rich handler and propagates `OPIK_OPTIMIZER_LOG_LEVEL` overrides.
+- Set `OPIK_OPTIMIZER_NO_BANNER=1` to suppress the startup banner in automated runs.
 
 ## Log Levels
 
@@ -27,5 +27,5 @@ Use consistent logging so optimisation runs can be monitored locally and inside 
 
 ## Reporting vs Logging
 
-- Reserve logging for machine-readable diagnostics. Use `reporting_utils` context managers for user-facing console output; they already respect the `verbose` flag.
+- Reserve logging for machine-readable diagnostics. Use `utils/display` helpers for user-facing console output; they already respect the `verbose` flag.
 - Avoid mixing `print` statements with logging. If temporary prints are necessary during debugging, remove them before committing.

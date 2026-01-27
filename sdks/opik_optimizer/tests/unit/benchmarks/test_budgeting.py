@@ -13,5 +13,5 @@ def test_budgeting_falls_back_to_one_trial_when_budget_small() -> None:
 
 
 def test_budgeting_returns_none_when_no_budget_defined() -> None:
-    params = derive_budgeted_optimize_params("hotpot_300", "few_shot")
+    params = derive_budgeted_optimize_params("custom_dataset", "few_shot")
     assert params is None
