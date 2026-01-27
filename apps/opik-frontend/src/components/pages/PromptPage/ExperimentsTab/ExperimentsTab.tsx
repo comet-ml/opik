@@ -422,12 +422,14 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
             config={filtersAndGroupsConfig as never}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
           <GroupsButton
             columns={FILTER_AND_GROUP_COLUMNS}
             config={filtersAndGroupsConfig as never}
             groups={groups}
             onChange={setGroups}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">

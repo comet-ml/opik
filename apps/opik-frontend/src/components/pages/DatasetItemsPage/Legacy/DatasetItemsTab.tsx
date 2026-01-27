@@ -484,6 +484,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
             columns={filtersColumnData}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">

@@ -294,6 +294,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
             columns={FILTER_COLUMNS}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
             config={{
               rowsMap: {
                 metadata: {

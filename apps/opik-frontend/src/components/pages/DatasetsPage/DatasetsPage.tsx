@@ -331,6 +331,7 @@ const DatasetsPage: React.FunctionComponent = () => {
             columns={FILTERS_COLUMNS}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">

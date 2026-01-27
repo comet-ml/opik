@@ -340,6 +340,7 @@ const PromptsPage: React.FunctionComponent = () => {
             columns={FILTER_COLUMNS}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">

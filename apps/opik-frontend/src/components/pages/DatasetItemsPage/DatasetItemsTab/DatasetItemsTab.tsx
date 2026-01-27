@@ -549,6 +549,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
                 filters={filters}
                 onChange={setFilters}
                 disabled={isDraftMode}
+                layout="icon"
               />
             </div>
           </TooltipWrapper>
