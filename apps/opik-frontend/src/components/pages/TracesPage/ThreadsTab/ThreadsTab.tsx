@@ -42,7 +42,6 @@ import {
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoThreadsPage from "@/components/pages/TracesPage/ThreadsTab/NoThreadsPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -80,6 +79,8 @@ import {
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import LogsTypeToggle from "@/components/pages/TracesPage/LogsTab/LogsTypeToggle";
+import { LOGS_TYPE } from "@/constants/traces";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -261,11 +262,15 @@ const ROW_HEIGHT_KEY = "threads-row-height";
 type ThreadsTabProps = {
   projectId: string;
   projectName: string;
+  logsType: LOGS_TYPE;
+  onLogsTypeChange: (type: LOGS_TYPE) => void;
 };
 
 export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   projectId,
   projectName,
+  logsType,
+  onLogsTypeChange,
 }) => {
   const truncationEnabled = useTruncationEnabled();
 
@@ -643,18 +648,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads]}
-        />
-      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
       >
         <div className="flex items-center gap-2">
+          <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
