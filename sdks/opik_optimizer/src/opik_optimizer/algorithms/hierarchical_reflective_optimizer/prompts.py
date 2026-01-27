@@ -33,6 +33,7 @@ Provide a list of failure modes, each with a name, description, and root cause."
 
 
 # Prompt template for synthesizing multiple batch analyses
+# FIXME: If single batch then this results on a failure mode saying you asked batch but gave single
 SYNTHESIS_PROMPT = """You are synthesizing root cause analyses from multiple batches of evaluation results.
 
 BATCH ANALYSES:
