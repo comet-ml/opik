@@ -98,6 +98,7 @@ const useLoadPlayground = () => {
         promptVersionId?: string;
         autoImprove?: boolean;
         templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
+        initPrompt?: Partial<ReturnType<typeof generateDefaultPrompt>>;
       } = {},
     ) => {
       const {
@@ -105,9 +106,11 @@ const useLoadPlayground = () => {
         promptVersionId,
         autoImprove = false,
         templateStructure,
+        initPrompt,
       } = options;
 
       const newPrompt = generateDefaultPrompt({
+        initPrompt,
         setupProviders: providerKeys,
         lastPickedModel,
         providerResolver: calculateModelProvider,
@@ -192,6 +195,7 @@ const useLoadPlayground = () => {
         const prompts = namedPrompts.map((np) =>
           createPromptFromContent(np.content, {
             templateStructure: PROMPT_TEMPLATE_STRUCTURE.CHAT,
+            initPrompt: { name: np.name },
           }),
         );
         promptIds = prompts.map((p) => p.id);
