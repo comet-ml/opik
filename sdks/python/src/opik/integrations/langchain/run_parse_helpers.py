@@ -58,7 +58,10 @@ def extract_tool_description(run_dict: Dict[str, Any]) -> Optional[str]:
 
 
 def get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
-    metadata = run_dict["extra"].get("metadata", {}).copy()
+    extra = run_dict.get("extra") or {}
+    if not isinstance(extra, dict):
+        extra = {}
+    metadata = extra.get("metadata", {}).copy()
 
     # Extract tool description for tool runs and add to metadata
     if run_dict.get("run_type") == "tool":
