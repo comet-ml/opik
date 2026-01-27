@@ -95,7 +95,9 @@ class SpanDAO {
                 error_info,
                 created_by,
                 last_updated_by,
-                truncation_threshold
+                truncation_threshold,
+                input_slim,
+                output_slim
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -123,7 +125,9 @@ class SpanDAO {
                         :error_info<item.index>,
                         :created_by<item.index>,
                         :last_updated_by<item.index>,
-                        :truncation_threshold<item.index>
+                        :truncation_threshold<item.index>,
+                        :input_slim<item.index>,
+                        :output_slim<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -159,7 +163,9 @@ class SpanDAO {
                 created_at,
                 created_by,
                 last_updated_by,
-                truncation_threshold
+                truncation_threshold,
+                input_slim,
+                output_slim
             )
             SELECT
                 new_span.id as id,
@@ -244,7 +250,15 @@ class SpanDAO {
                     new_span.created_by
                 ) as created_by,
                 new_span.last_updated_by as last_updated_by,
-                new_span.truncation_threshold as truncation_threshold
+                new_span.truncation_threshold as truncation_threshold,
+                multiIf(
+                    notEmpty(old_span.input) AND notEmpty(old_span.input_slim), old_span.input_slim,
+                    new_span.input_slim
+                ) as input_slim,
+                multiIf(
+                    notEmpty(old_span.output) AND notEmpty(old_span.output_slim), old_span.output_slim,
+                    new_span.output_slim
+                ) as output_slim
             FROM (
                 SELECT
                     :id as id,
@@ -269,11 +283,13 @@ class SpanDAO {
                     now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by,
-                    :truncation_threshold as truncation_threshold
+                    :truncation_threshold as truncation_threshold,
+                    :input_slim as input_slim,
+                    :output_slim as output_slim
             ) as new_span
             LEFT JOIN (
                 SELECT
-                    *
+                    *, truncated_input, truncated_output
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND id = :id
@@ -313,7 +329,9 @@ class SpanDAO {
             	created_at,
             	created_by,
             	last_updated_by,
-            	truncation_threshold
+            	truncation_threshold,
+            	input_slim,
+            	output_slim
             )
             SELECT
             	id,
@@ -338,7 +356,9 @@ class SpanDAO {
             	created_at,
             	created_by,
                 :user_name as last_updated_by,
-                :truncation_threshold
+                :truncation_threshold,
+                <if(input)> :input_slim <else> input_slim <endif> as input_slim,
+                <if(output)> :output_slim <else> output_slim <endif> as output_slim
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -362,7 +382,7 @@ class SpanDAO {
             INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
                 start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, error_info, created_at,
-                created_by, last_updated_by, truncation_threshold
+                created_by, last_updated_by, truncation_threshold, input_slim, output_slim
             )
             SELECT
                 new_span.id as id,
@@ -460,7 +480,17 @@ class SpanDAO {
                     new_span.created_by
                 ) as created_by,
                 new_span.last_updated_by as last_updated_by,
-                new_span.truncation_threshold as truncation_threshold
+                new_span.truncation_threshold as truncation_threshold,
+                multiIf(
+                    notEmpty(new_span.input_slim), new_span.input_slim,
+                    notEmpty(old_span.input) AND notEmpty(old_span.input_slim), old_span.input_slim,
+                    new_span.input_slim
+                ) as input_slim,
+                multiIf(
+                    notEmpty(new_span.output_slim), new_span.output_slim,
+                    notEmpty(old_span.output) AND notEmpty(old_span.output_slim), old_span.output_slim,
+                    new_span.output_slim
+                ) as output_slim
             FROM (
                 SELECT
                     :id as id,
@@ -485,11 +515,13 @@ class SpanDAO {
                     now64(9) as created_at,
                     :user_name as created_by,
                     :user_name as last_updated_by,
-                    :truncation_threshold as truncation_threshold
+                    :truncation_threshold as truncation_threshold,
+                    <if(input)> :input_slim <else> '' <endif> as input_slim,
+                    <if(output)> :output_slim <else> '' <endif> as output_slim
             ) as new_span
             LEFT JOIN (
                 SELECT
-                    *
+                    *, truncated_input, truncated_output
                 FROM spans
                 WHERE id = :id
                 AND workspace_id = :workspace_id
@@ -1442,6 +1474,8 @@ class SpanDAO {
 
             int i = 0;
             for (Span span : spans) {
+                String inputValue = TruncationUtils.toJsonString(span.input());
+                String outputValue = TruncationUtils.toJsonString(span.output());
 
                 statement.bind("id" + i, span.id())
                         .bind("project_id" + i, span.projectId())
@@ -1450,8 +1484,8 @@ class SpanDAO {
                         .bind("type" + i, Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
                         .bind("start_time" + i, span.startTime().toString())
                         .bind("parent_span_id" + i, span.parentSpanId() != null ? span.parentSpanId() : "")
-                        .bind("input" + i, span.input() != null ? span.input().toString() : "")
-                        .bind("output" + i, span.output() != null ? span.output().toString() : "")
+                        .bind("input" + i, inputValue)
+                        .bind("output" + i, outputValue)
                         .bind("metadata" + i, span.metadata() != null ? span.metadata().toString() : "")
                         .bind("model" + i, StringUtils.defaultIfBlank(span.model(), ""))
                         .bind("provider" + i, StringUtils.defaultIfBlank(span.provider(), ""))
@@ -1459,7 +1493,9 @@ class SpanDAO {
                         .bind("error_info" + i,
                                 span.errorInfo() != null ? JsonUtils.readTree(span.errorInfo()).toString() : "")
                         .bind("created_by" + i, userName)
-                        .bind("last_updated_by" + i, userName);
+                        .bind("last_updated_by" + i, userName)
+                        .bind("input_slim" + i, TruncationUtils.createSlimJsonString(inputValue))
+                        .bind("output_slim" + i, TruncationUtils.createSlimJsonString(outputValue));
 
                 if (span.endTime() != null) {
                     statement.bind("end_time" + i, span.endTime().toString());
@@ -1510,6 +1546,8 @@ class SpanDAO {
     private Publisher<? extends Result> insert(Span span, Connection connection) {
         return makeFluxContextAware((userName, workspaceId) -> {
             var template = newInsertTemplate(span, workspaceId);
+            String inputValue = TruncationUtils.toJsonString(span.input());
+            String outputValue = TruncationUtils.toJsonString(span.output());
             var statement = connection.createStatement(template.render())
                     .bind("id", span.id())
                     .bind("project_id", span.projectId())
@@ -1517,11 +1555,13 @@ class SpanDAO {
                     .bind("name", StringUtils.defaultIfBlank(span.name(), ""))
                     .bind("type", Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
                     .bind("start_time", span.startTime().toString())
-                    .bind("input", Objects.toString(span.input(), ""))
-                    .bind("output", Objects.toString(span.output(), ""))
+                    .bind("input", inputValue)
+                    .bind("output", outputValue)
                     .bind("metadata", Objects.toString(span.metadata(), ""))
                     .bind("model", StringUtils.defaultIfBlank(span.model(), ""))
-                    .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""));
+                    .bind("provider", StringUtils.defaultIfBlank(span.provider(), ""))
+                    .bind("input_slim", TruncationUtils.createSlimJsonString(inputValue))
+                    .bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
             if (span.parentSpanId() != null) {
                 statement.bind("parent_span_id", span.parentSpanId());
             } else {
@@ -1656,9 +1696,17 @@ class SpanDAO {
         Optional.ofNullable(spanUpdate.type())
                 .ifPresent(type -> statement.bind("type", type.toString()));
         Optional.ofNullable(spanUpdate.input())
-                .ifPresent(input -> statement.bind("input", input.toString()));
+                .ifPresent(input -> {
+                    String inputValue = input.toString();
+                    statement.bind("input", inputValue);
+                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
+                });
         Optional.ofNullable(spanUpdate.output())
-                .ifPresent(output -> statement.bind("output", output.toString()));
+                .ifPresent(output -> {
+                    String outputValue = output.toString();
+                    statement.bind("output", outputValue);
+                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+                });
         Optional.ofNullable(spanUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
         Optional.ofNullable(spanUpdate.usage())
@@ -2383,7 +2431,9 @@ class SpanDAO {
                 created_at,
                 created_by,
                 last_updated_by,
-                truncation_threshold
+                truncation_threshold,
+                input_slim,
+                output_slim
             )
             SELECT
                 s.id,
@@ -2408,7 +2458,9 @@ class SpanDAO {
                 s.created_at,
                 s.created_by,
                 :user_name as last_updated_by,
-                :truncation_threshold
+                :truncation_threshold,
+                <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
+                <if(output)> :output_slim <else> s.output_slim <endif> as output_slim
             FROM spans s
             WHERE s.id IN :ids AND s.workspace_id = :workspace_id
             ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
@@ -2489,9 +2541,17 @@ class SpanDAO {
         Optional.ofNullable(spanUpdate.type())
                 .ifPresent(type -> statement.bind("type", type.toString()));
         Optional.ofNullable(spanUpdate.input())
-                .ifPresent(input -> statement.bind("input", input.toString()));
+                .ifPresent(input -> {
+                    String inputValue = input.toString();
+                    statement.bind("input", inputValue);
+                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
+                });
         Optional.ofNullable(spanUpdate.output())
-                .ifPresent(output -> statement.bind("output", output.toString()));
+                .ifPresent(output -> {
+                    String outputValue = output.toString();
+                    statement.bind("output", outputValue);
+                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+                });
         Optional.ofNullable(spanUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
         Optional.ofNullable(spanUpdate.usage())
