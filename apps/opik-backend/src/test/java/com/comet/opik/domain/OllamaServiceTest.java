@@ -130,74 +130,9 @@ class OllamaServiceTest {
     }
 
     @Test
-    @DisplayName("Should reject Ollama version incompatible with API v1")
-    void testConnection__incompatibleVersion() {
-        // Given - Old version before API v1 (0.0.9)
-        String versionResponse = "{\"version\":\"0.0.9\"}";
-        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl);
-
-        // Then
-        assertThat(response).isNotNull();
-        assertThat(response.connected()).isFalse();
-        assertThat(response.version()).isEqualTo("0.0.9");
-        assertThat(response.errorMessage()).isNotNull();
-        assertThat(response.errorMessage()).contains("not compatible with API v1");
-        assertThat(response.errorMessage()).contains("0.1.0 or higher");
-    }
-
-    @Test
-    @DisplayName("Should accept Ollama version 1.0.0 and higher")
-    void testConnection__v1AndHigher() {
-        // Given - Version 1.0.0
-        String versionResponse = "{\"version\":\"1.0.0\"}";
-        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl);
-
-        // Then
-        assertThat(response).isNotNull();
-        assertThat(response.connected()).isTrue();
-        assertThat(response.version()).isEqualTo("1.0.0");
-    }
-
-    @Test
-    @DisplayName("Should handle invalid version format gracefully")
-    void testConnection__invalidVersionFormat() {
-        // Given - Invalid version format
-        String versionResponse = "{\"version\":\"invalid-version\"}";
-        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl);
-
-        // Then
-        assertThat(response).isNotNull();
-        assertThat(response.connected()).isFalse();
-        assertThat(response.version()).isEqualTo("invalid-version");
-        assertThat(response.errorMessage()).isNotNull();
-        assertThat(response.errorMessage()).contains("not compatible with API v1");
-    }
-
-    @Test
-    @DisplayName("Should successfully list models from Ollama instance")
-    void listModels__success() {
-        // Given - Stub version check first (listModels now validates version)
+    @DisplayName("Should normalize URL by removing /v1 suffix")
+    void testConnection__normalizeUrlWithV1() {
+        // Given
         String versionResponse = "{\"version\":\"0.1.27\"}";
         wireMockServer.stubFor(get(urlEqualTo("/api/version"))
                 .willReturn(aResponse()
@@ -205,6 +140,37 @@ class OllamaServiceTest {
                         .withHeader("Content-Type", "application/json")
                         .withBody(versionResponse)));
 
+        // When - URL with /v1 suffix (as frontend sends)
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + "/v1");
+
+        // Then
+        assertThat(response.connected()).isTrue();
+        assertThat(response.version()).isEqualTo("0.1.27");
+    }
+
+    @Test
+    @DisplayName("Should normalize URL by removing /v1 suffix and trailing slash")
+    void testConnection__normalizeUrlWithV1AndTrailingSlash() {
+        // Given
+        String versionResponse = "{\"version\":\"0.1.27\"}";
+        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(versionResponse)));
+
+        // When - URL with /v1 suffix and trailing slash
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + "/v1/");
+
+        // Then
+        assertThat(response.connected()).isTrue();
+        assertThat(response.version()).isEqualTo("0.1.27");
+    }
+
+    @Test
+    @DisplayName("Should successfully list models from Ollama instance")
+    void listModels__success() {
+        // Given
         String modelsResponse = """
                 {
                   "models": [
@@ -252,14 +218,7 @@ class OllamaServiceTest {
     @Test
     @DisplayName("Should return empty list when model listing fails")
     void listModels__httpError() {
-        // Given - Stub version check first
-        String versionResponse = "{\"version\":\"0.1.27\"}";
-        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
+        // Given
         wireMockServer.stubFor(get(urlEqualTo("/api/tags"))
                 .willReturn(aResponse()
                         .withStatus(500)));
@@ -270,6 +229,38 @@ class OllamaServiceTest {
         // Then
         assertThat(models).isNotNull();
         assertThat(models).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should normalize URL by removing /v1 suffix when listing models")
+    void listModels__normalizeUrlWithV1() {
+        // Given
+        String modelsResponse = """
+                {
+                  "models": [
+                    {
+                      "name": "llama2:latest",
+                      "size": 3826793677,
+                      "digest": "sha256:78e26419b4469263f75331927a00a0284ef6544c1975b826b15abdaef17bb962",
+                      "modified_at": "2024-01-15T10:30:00Z"
+                    }
+                  ]
+                }
+                """;
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/tags"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(modelsResponse)));
+
+        // When - URL with /v1 suffix (as frontend sends)
+        List<OllamaModel> models = ollamaService.listModels(baseUrl + "/v1");
+
+        // Then
+        assertThat(models).isNotNull();
+        assertThat(models).hasSize(1);
+        assertThat(models.get(0).name()).isEqualTo("llama2:latest");
     }
 
     @Test
@@ -289,14 +280,7 @@ class OllamaServiceTest {
     @Test
     @DisplayName("Should handle empty model list")
     void listModels__emptyList() {
-        // Given - Stub version check first
-        String versionResponse = "{\"version\":\"0.1.27\"}";
-        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
+        // Given
         String modelsResponse = "{\"models\": []}";
         wireMockServer.stubFor(get(urlEqualTo("/api/tags"))
                 .willReturn(aResponse()
@@ -312,22 +296,4 @@ class OllamaServiceTest {
         assertThat(models).isEmpty();
     }
 
-    @Test
-    @DisplayName("Should return empty list when Ollama version is incompatible with API v1")
-    void listModels__incompatibleVersion() {
-        // Given - Old version before API v1
-        String versionResponse = "{\"version\":\"0.0.9\"}";
-        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        // When
-        List<OllamaModel> models = ollamaService.listModels(baseUrl);
-
-        // Then
-        assertThat(models).isNotNull();
-        assertThat(models).isEmpty();
-    }
 }

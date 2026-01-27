@@ -13,13 +13,7 @@ import dev.langchain4j.model.chat.ChatModel;
 import lombok.NonNull;
 
 /**
- * Service provider for Ollama API v1 LLM provider.
- *
- * <p>Ollama provides two types of API endpoints:
- * <ul>
- *   <li>Native API (/api/version, /api/tags): Used for connection testing and model discovery</li>
- *   <li>OpenAI-compatible API (/v1/chat/completions): Used for LLM inference</li>
- * </ul>
+ * Service provider for Ollama LLM provider with OpenAI-compatible API support.
  *
  * <p>This provider delegates to {@link CustomLlmClientGenerator} for client creation
  * since Ollama's /v1 endpoints are OpenAI-compatible. The base URL configured by users

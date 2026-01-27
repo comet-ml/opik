@@ -33,7 +33,7 @@ public class OllamaService {
     private final @NonNull Client httpClient;
 
     /**
-     * Tests connection to an Ollama instance and retrieves server version.
+     * Tests connection to an Ollama instance and retrieves a server version.
      *
      * @param baseUrl Base URL of the Ollama instance (without /v1 suffix, e.g., http://localhost:11434)
      * @return Connection test response with status and version

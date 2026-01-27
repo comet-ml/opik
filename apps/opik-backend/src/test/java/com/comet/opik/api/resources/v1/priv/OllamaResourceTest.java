@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.OllamaConnectionTestRequest;
 import com.comet.opik.api.OllamaConnectionTestResponse;
+import com.comet.opik.api.OllamaInstanceBaseUrlRequest;
 import com.comet.opik.api.OllamaModel;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -103,6 +103,38 @@ class OllamaResourceTest {
     }
 
     @Test
+    @DisplayName("Should successfully test connection to Ollama instance with URL containing /v1 suffix")
+    void testConnection__successWithV1Suffix(ClientSupport client) {
+        // Given - URL with /v1 suffix (as frontend sends)
+        String versionResponse = "{\"version\":\"0.1.27\"}";
+        ollamaWireMock.stubFor(get(urlEqualTo("/api/version"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(versionResponse)));
+
+        OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
+                .baseUrl(ollamaBaseUrl + "/v1")
+                .build();
+
+        // When
+        var response = client.target("/v1/private/ollama/test-connection")
+                .request()
+                .header(RequestContext.WORKSPACE_HEADER, "test-workspace")
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .post(jakarta.ws.rs.client.Entity.json(request));
+
+        // Then
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+        OllamaConnectionTestResponse result = response.readEntity(OllamaConnectionTestResponse.class);
+        assertThat(result).isNotNull();
+        assertThat(result.connected()).isTrue();
+        assertThat(result.version()).isEqualTo("0.1.27");
+        assertThat(result.errorMessage()).isNull();
+    }
+
+    @Test
     @DisplayName("Should successfully test connection to Ollama instance")
     void testConnection__success(ClientSupport client) {
         // Given
@@ -113,7 +145,7 @@ class OllamaResourceTest {
                         .withHeader("Content-Type", "application/json")
                         .withBody(versionResponse)));
 
-        OllamaConnectionTestRequest request = OllamaConnectionTestRequest.builder()
+        OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
                 .baseUrl(ollamaBaseUrl)
                 .build();
 
@@ -142,7 +174,7 @@ class OllamaResourceTest {
                 .willReturn(aResponse()
                         .withStatus(500)));
 
-        OllamaConnectionTestRequest request = OllamaConnectionTestRequest.builder()
+        OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
                 .baseUrl(ollamaBaseUrl)
                 .build();
 
@@ -165,8 +197,7 @@ class OllamaResourceTest {
     @Test
     @DisplayName("Should require authentication for test connection")
     void testConnection__unauthorized(ClientSupport client) {
-        // Given
-        OllamaConnectionTestRequest request = OllamaConnectionTestRequest.builder()
+        OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
                 .baseUrl(ollamaBaseUrl)
                 .build();
 
@@ -183,7 +214,7 @@ class OllamaResourceTest {
     @DisplayName("Should validate required fields for test connection")
     void testConnection__missingBaseUrl(ClientSupport client) {
         // Given - Empty request
-        OllamaConnectionTestRequest request = OllamaConnectionTestRequest.builder()
+        OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
                 .baseUrl("")
                 .build();
 
@@ -201,15 +232,7 @@ class OllamaResourceTest {
     @Test
     @DisplayName("Should successfully list models from Ollama instance")
     void listModels__success(ClientSupport client) {
-        // Given - Stub version check first (listModels now validates version)
-        String versionResponse = "{\"version\":\"0.1.27\"}";
-        ollamaWireMock.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        // Using actual Ollama API response format with RFC3339 timestamps
+        // Given - Using actual Ollama API response format with RFC3339 timestamps
         String modelsResponse = """
                 {
                   "models": [
@@ -237,7 +260,7 @@ class OllamaResourceTest {
                         .withHeader("Content-Type", "application/json")
                         .withBody(modelsResponse)));
 
-        OllamaConnectionTestRequest request = OllamaConnectionTestRequest.builder()
+        OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
                 .baseUrl(ollamaBaseUrl)
                 .build();
 
@@ -273,14 +296,7 @@ class OllamaResourceTest {
     @Test
     @DisplayName("Should handle empty model list")
     void listModels__emptyList(ClientSupport client) {
-        // Given - Stub version check first
-        String versionResponse = "{\"version\":\"0.1.27\"}";
-        ollamaWireMock.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
+        // Given
         String modelsResponse = "{\"models\": []}";
 
         ollamaWireMock.stubFor(get(urlEqualTo("/api/tags"))
@@ -289,7 +305,7 @@ class OllamaResourceTest {
                         .withHeader("Content-Type", "application/json")
                         .withBody(modelsResponse)));
 
-        OllamaConnectionTestRequest request = OllamaConnectionTestRequest.builder()
+        OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
                 .baseUrl(ollamaBaseUrl)
                 .build();
 
@@ -312,8 +328,7 @@ class OllamaResourceTest {
     @Test
     @DisplayName("Should require authentication for list models")
     void listModels__unauthorized(ClientSupport client) {
-        // Given
-        OllamaConnectionTestRequest request = OllamaConnectionTestRequest.builder()
+        OllamaInstanceBaseUrlRequest request = OllamaInstanceBaseUrlRequest.builder()
                 .baseUrl(ollamaBaseUrl)
                 .build();
 
@@ -324,70 +339,5 @@ class OllamaResourceTest {
 
         // Then - Expecting 403 Forbidden (not 401 Unauthorized)
         assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
-    }
-
-    @Test
-    @DisplayName("Should reject Ollama version incompatible with API v1 in connection test")
-    void testConnection__incompatibleVersion(ClientSupport client) {
-        // Given - Old version before API v1
-        String versionResponse = "{\"version\":\"0.0.9\"}";
-        ollamaWireMock.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        OllamaConnectionTestRequest request = OllamaConnectionTestRequest.builder()
-                .baseUrl(ollamaBaseUrl)
-                .build();
-
-        // When
-        var response = client.target("/v1/private/ollama/test-connection")
-                .request()
-                .header(RequestContext.WORKSPACE_HEADER, "test-workspace")
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .post(jakarta.ws.rs.client.Entity.json(request));
-
-        // Then
-        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-        OllamaConnectionTestResponse result = response.readEntity(OllamaConnectionTestResponse.class);
-        assertThat(result).isNotNull();
-        assertThat(result.connected()).isFalse();
-        assertThat(result.version()).isEqualTo("0.0.9");
-        assertThat(result.errorMessage()).isNotNull();
-        assertThat(result.errorMessage()).contains("not compatible with API v1");
-        assertThat(result.errorMessage()).contains("0.1.0 or higher");
-    }
-
-    @Test
-    @DisplayName("Should return empty list when Ollama version is incompatible with API v1")
-    void listModels__incompatibleVersion(ClientSupport client) {
-        // Given - Old version before API v1
-        String versionResponse = "{\"version\":\"0.0.9\"}";
-        ollamaWireMock.stubFor(get(urlEqualTo("/api/version"))
-                .willReturn(aResponse()
-                        .withStatus(200)
-                        .withHeader("Content-Type", "application/json")
-                        .withBody(versionResponse)));
-
-        OllamaConnectionTestRequest request = OllamaConnectionTestRequest.builder()
-                .baseUrl(ollamaBaseUrl)
-                .build();
-
-        // When
-        var response = client.target("/v1/private/ollama/models")
-                .request()
-                .header(RequestContext.WORKSPACE_HEADER, "test-workspace")
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .post(jakarta.ws.rs.client.Entity.json(request));
-
-        // Then
-        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
-
-        List<OllamaModel> models = response.readEntity(new jakarta.ws.rs.core.GenericType<List<OllamaModel>>() {
-        });
-        assertThat(models).isNotNull();
-        assertThat(models).isEmpty();
     }
 }
