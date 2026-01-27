@@ -22,6 +22,7 @@ export type PROVIDER_OPTION_TYPE = {
   defaultModel: PROVIDER_MODEL_TYPE | "";
   description?: string;
   apiKeyURL?: string;
+  defaultUrl?: string;
   /** If true, this provider is system-managed and users cannot configure it */
   readOnly?: boolean;
 };
@@ -95,6 +96,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     description:
       "Run open-source LLMs locally with Ollama. Connect to your local or cloud Ollama instance.",
     apiKeyURL: "https://github.com/ollama/ollama",
+    defaultUrl: "http://localhost:11434/v1",
   },
   [PROVIDER_TYPE.CUSTOM]: {
     label: "vLLM / Custom provider",

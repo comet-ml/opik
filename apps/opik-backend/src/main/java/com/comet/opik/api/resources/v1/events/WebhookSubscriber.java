@@ -110,9 +110,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
     private Mono<Void> validateEvent(@NonNull WebhookEvent<?> event) {
         return Mono.fromRunnable(() -> {
-            if (event.getUrl() == null || event.getUrl().trim().isEmpty()) {
-                throw new IllegalArgumentException("Webhook URL cannot be null or empty");
-            }
+            com.comet.opik.utils.ValidationUtils.validateHttpUrl(event.getUrl(), "Webhook URL");
 
             if (event.getId() == null || event.getId().trim().isEmpty()) {
                 throw new IllegalArgumentException("Webhook event ID cannot be null or empty");
@@ -120,10 +118,6 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
             if (event.getEventType() == null) {
                 throw new IllegalArgumentException("Webhook event type cannot be null");
-            }
-
-            if (!event.getUrl().startsWith("http://") && !event.getUrl().startsWith("https://")) {
-                throw new IllegalArgumentException("Webhook URL must start with http:// or https://");
             }
 
             log.debug("Webhook event validation passed for event: '{}'", event.getId());

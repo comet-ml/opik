@@ -125,8 +125,9 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
   };
 
   const getDefaultUrl = () => {
-    // Default to localhost for most common use case
-    return "http://localhost:11434/v1";
+    return (
+      PROVIDERS[PROVIDER_TYPE.OLLAMA].defaultUrl || "http://localhost:11434/v1"
+    );
   };
 
   return (
