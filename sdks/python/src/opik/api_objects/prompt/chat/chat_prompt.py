@@ -6,10 +6,11 @@ from typing_extensions import override
 
 from opik.rest_api import types as rest_api_types
 from opik.validation import chat_prompt_messages, validator
-from . import chat_prompt_template
+
+from .. import base_prompt
 from .. import client as prompt_client
 from .. import types as prompt_types
-from .. import base_prompt
+from . import chat_prompt_template
 
 
 class ChatPrompt(base_prompt.BasePrompt):
@@ -136,6 +137,26 @@ class ChatPrompt(base_prompt.BasePrompt):
     def type(self) -> prompt_types.PromptType:
         """The prompt type of the prompt."""
         return self._type
+
+    @property
+    def id(self) -> Optional[str]:
+        """The unique identifier (UUID) of the prompt."""
+        return self._id
+
+    @property
+    def description(self) -> Optional[str]:
+        """The description of the prompt."""
+        return self._description
+
+    @property
+    def change_description(self) -> Optional[str]:
+        """The description of changes in this version."""
+        return self._change_description
+
+    @property
+    def tags(self) -> Optional[List[str]]:
+        """The list of tags associated with the prompt."""
+        return copy.deepcopy(self._tags) if self._tags is not None else None
 
     @override
     def format(
