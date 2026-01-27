@@ -8,19 +8,7 @@ When optimizing prompts, single-sample evaluation can be noisy - a good prompt m
 
 ## How It Works
 
-When you set `n > 1` in your prompt's `model_parameters`, the optimizer:
-
-1. Requests N completions from the LLM in a single API call (pass@N)
-2. Scores each candidate output using your metric
-3. Selects the best candidate (`best_by_metric` policy)
-4. Logs all scores and selection info to the Opik trace
-
-In optimizers that already generate multiple prompt variants per round, `n` is
-applied per evaluation, so total candidate evaluations scale by `prompts_per_round * n`.
-
-For tasks that execute generated code (like ARC-AGI or tool-driven agents), this means
-each prompt produces multiple candidate programs that are executed and scored, and the
-best candidate is used for optimization feedback.
+When you set `n > 1` in your prompt's `model_parameters`, the optimizer requests N completions per evaluation, scores each candidate, selects the best one, and logs all scores to the trace. The full explanation of how the `n` parameter works is maintained in [Sampling controls](/agent_optimization/advanced/n_samples#multiple-completions-per-example-n-parameter).
 
 ```mermaid
 sequenceDiagram
