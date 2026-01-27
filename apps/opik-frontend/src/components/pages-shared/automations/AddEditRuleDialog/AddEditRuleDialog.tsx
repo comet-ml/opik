@@ -623,11 +623,13 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
                                   Trace
                                 </SelectItem>
-                                <SelectItem
-                                  value={EVALUATORS_RULE_SCOPE.thread}
-                                >
-                                  Thread
-                                </SelectItem>
+                                {!isCommonMetric && (
+                                  <SelectItem
+                                    value={EVALUATORS_RULE_SCOPE.thread}
+                                  >
+                                    Thread
+                                  </SelectItem>
+                                )}
                                 {(isSpanLlmAsJudgeEnabled ||
                                   isSpanPythonCodeEnabled) && (
                                   <SelectItem
@@ -689,7 +691,20 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               ) => {
                                 if (!value) return;
 
-                                const { scope } = form.getValues();
+                                let { scope } = form.getValues();
+
+                                // If switching to common metric and scope is thread, change to trace
+                                if (
+                                  value ===
+                                    UI_EVALUATORS_RULE_TYPE.common_metric &&
+                                  scope === EVALUATORS_RULE_SCOPE.thread
+                                ) {
+                                  scope = EVALUATORS_RULE_SCOPE.trace;
+                                  form.setValue("scope", scope);
+                                  // Reset filters when scope changes as columns are different
+                                  form.setValue("filters", []);
+                                }
+
                                 const type = getBackendRuleType(scope, value);
 
                                 field.onChange(value);
