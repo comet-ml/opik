@@ -51,7 +51,6 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -2486,20 +2485,14 @@ class TraceDAOImpl implements TraceDAO {
     }
 
     private Statement buildInsertStatement(Trace trace, Connection connection, ST template) {
-        String inputValue = TruncationUtils.toJsonString(trace.input());
-        String outputValue = TruncationUtils.toJsonString(trace.output());
-
         Statement statement = connection.createStatement(template.render())
                 .bind("id", trace.id())
                 .bind("project_id", trace.projectId())
                 .bind("name", StringUtils.defaultIfBlank(trace.name(), ""))
                 .bind("start_time", trace.startTime().toString())
-                .bind("input", inputValue)
-                .bind("output", outputValue)
-                .bind("metadata", Objects.toString(trace.metadata(), ""))
-                .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""))
-                .bind("input_slim", TruncationUtils.createSlimJsonString(inputValue))
-                .bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+                .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
+
+        bindInputOutputAndSlim(statement, trace, null);
 
         if (trace.endTime() != null) {
             statement.bind("end_time", trace.endTime().toString());
@@ -2526,6 +2519,28 @@ class TraceDAOImpl implements TraceDAO {
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
         return statement;
+    }
+
+    /**
+     * Binds input, output, metadata, and their slim versions to a statement.
+     * Centralizes the conversion and binding logic for consistency.
+     *
+     * @param statement the statement to bind to
+     * @param trace the trace containing the values
+     * @param index optional index suffix for batch operations (null for single insert)
+     */
+    private void bindInputOutputAndSlim(Statement statement, Trace trace, Integer index) {
+        String suffix = index != null ? String.valueOf(index) : "";
+
+        String inputValue = TruncationUtils.toJsonString(trace.input());
+        String outputValue = TruncationUtils.toJsonString(trace.output());
+        String metadataValue = TruncationUtils.toJsonString(trace.metadata());
+
+        statement.bind("input" + suffix, inputValue)
+                .bind("output" + suffix, outputValue)
+                .bind("metadata" + suffix, metadataValue)
+                .bind("input_slim" + suffix, TruncationUtils.createSlimJsonString(inputValue))
+                .bind("output_slim" + suffix, TruncationUtils.createSlimJsonString(outputValue));
     }
 
     private ST buildInsertTemplate(Trace trace, String workspaceId) {
@@ -3087,23 +3102,16 @@ class TraceDAOImpl implements TraceDAO {
 
             int i = 0;
             for (Trace trace : traces) {
-
-                String inputValue = TruncationUtils.toJsonString(trace.input());
-                String outputValue = TruncationUtils.toJsonString(trace.output());
-
                 statement.bind("id" + i, trace.id())
                         .bind("project_id" + i, trace.projectId())
                         .bind("name" + i, StringUtils.defaultIfBlank(trace.name(), ""))
                         .bind("start_time" + i, trace.startTime().toString())
-                        .bind("input" + i, inputValue)
-                        .bind("output" + i, outputValue)
-                        .bind("metadata" + i, TruncationUtils.toJsonString(trace.metadata()))
                         .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
                                 trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
-                        .bind("thread_id" + i, StringUtils.defaultIfBlank(trace.threadId(), ""))
-                        .bind("input_slim" + i, TruncationUtils.createSlimJsonString(inputValue))
-                        .bind("output_slim" + i, TruncationUtils.createSlimJsonString(outputValue));
+                        .bind("thread_id" + i, StringUtils.defaultIfBlank(trace.threadId(), ""));
+
+                bindInputOutputAndSlim(statement, trace, i);
 
                 if (trace.endTime() != null) {
                     statement.bind("end_time" + i, trace.endTime().toString());
