@@ -737,3 +737,34 @@ def test_prompt__create_with_additional_parameters__happyflow(opik_client: opik.
     retrieved_prompt = opik_client.get_prompt(name=prompt_name)
     assert retrieved_prompt is not None
     assert retrieved_prompt.name == prompt_name
+
+
+def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
+    """Test that create_prompt() accepts tags parameter and tags can be accessed from search results."""
+    unique_identifier = str(uuid.uuid4())[-6:]
+
+    prompt_name = f"prompt-with-tags-{unique_identifier}"
+    prompt_template = f"some-prompt-text-{unique_identifier}"
+    tags = ["text-tag1", "text-tag2", "production"]
+
+    # Create text prompt with tags
+    prompt = opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        tags=tags,
+    )
+
+    # Verify prompt was created
+    verifiers.verify_prompt_version(
+        prompt,
+        name=prompt_name,
+        template=prompt_template,
+    )
+
+    # Verify tags were set by searching for the prompt and accessing tags property
+    filtered_prompts = opik_client.search_prompts(
+        filter_string=f'name = "{prompt_name}" AND tags contains "text-tag1"',
+    )
+    assert len(filtered_prompts) == 1
+    assert filtered_prompts[0].name == prompt_name
+    assert filtered_prompts[0].tags == tags
