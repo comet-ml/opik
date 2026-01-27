@@ -20,17 +20,9 @@ The optimizer SDK layers iterative search loops on top of Opik's evaluation stac
 
 ## Package Layout
 
-Each algorithm sits in its own package under `algorithms/` (`evolutionary_optimizer/`, `few_shot_bayesian_optimizer/`, `gepa_optimizer/`, `hierarchical_reflective_optimizer/`, `meta_prompt_optimizer/`, `parameter_optimizer/`).
+Each algorithm sits in its own package under `algorithms/` (e.g. `evolutionary_optimizer/`, `few_shot_bayesian_optimizer/`, `gepa_optimizer/`, `hierarchical_reflective_optimizer/`, `meta_prompt_optimizer/`, `parameter_optimizer/`).
 
-**All algorithms MUST follow the standardized structure** (see `code-structure.mdc` for details):
-- `__init__.py` - Required: exports optimizer class
-- `{algorithm_name}.py` - Required: main optimizer implementation
-- `helpers.py` - Required: utility functions
-- `types.py` - Required: type definitions
-- `prompts.py` - Required: prompt templates
-- `reporting.py` - Required: reporting utilities
-- `adapter.py` - Optional: only if algorithm needs adapter
-- `ops/` - Optional: only if algorithm has discrete operations
+Refer to `code-structure.mdc` for the canonical per-algorithm directory and file layout; avoid restating the structure here so updates only need to be made in one place.
 
 ## Execution Flow
 
