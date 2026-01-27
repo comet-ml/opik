@@ -133,15 +133,50 @@ def get_recommendation(topic: str, user_level: str) -> str:
     else:
         return f"For {topic} at {user_level} level: Focus on fundamentals, practice regularly, and build projects to apply your knowledge."
 
-agent = Agent(
-    name="ProgrammingTutor",
-    instructions="You are an expert programming tutor. Use your tools to help users.",
-    model="gpt-4o-mini",
-    tools=[calculate_average, get_recommendation]
-)
+def create_advanced_agent():
+    """Create an advanced agent with tools and comprehensive instructions."""
+    instructions = """
+    You are an expert programming tutor and learning advisor. You have access to tools that help you:
+    1. Calculate averages for performance metrics, grades, or other numerical data
+    2. Provide personalized learning recommendations based on topics and user experience levels
+    
+    Your role:
+    - Help users learn programming concepts effectively
+    - Provide clear, beginner-friendly explanations when needed
+    - Use your tools when appropriate to give concrete help
+    - Offer structured learning paths and resources
+    - Be encouraging and supportive
+    
+    When users ask about:
+    - Programming languages: Use get_recommendation to provide tailored advice
+    - Performance or scores: Use calculate_average if numbers are involved
+    - Learning paths: Combine your knowledge with tool-based recommendations
+    
+    Always explain your reasoning and make your responses educational.
+    """
+    
+    return Agent(
+        name="AdvancedProgrammingTutor",
+        instructions=instructions,
+        model="gpt-4o-mini",
+        tools=[calculate_average, get_recommendation]
+    )
 
-result = Runner.run_sync(agent, "I'm new to Python. What should I learn first?")
-print(result.final_output)
+# Create and use the advanced agent
+advanced_agent = create_advanced_agent()
+
+# Example queries
+queries = [
+    "I'm new to Python programming. Can you tell me about it?",
+    "I got these test scores: 85, 92, 78, 96, 88. What's my average and how am I doing?",
+    "I know some Python basics but want to learn machine learning. What should I do next?",
+]
+
+for i, query in enumerate(queries, 1):
+    print(f"\n📝 Query {i}: {query}")
+    result = Runner.run_sync(advanced_agent, query)
+    print(f"🤖 Response: {result.final_output}")
+    print("=" * 80)
 ```
 
 ### Adding granularity with the `@track` decorator
