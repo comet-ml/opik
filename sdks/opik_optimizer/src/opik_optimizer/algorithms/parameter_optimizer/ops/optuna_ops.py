@@ -53,6 +53,37 @@ def build_optuna_objective(
     n_samples_strategy: str | None,
     total_trials: int,
 ) -> Callable[[Trial], float]:
+    """
+    Build an Optuna objective function for parameter optimization.
+
+    This function creates a callable that Optuna will use to evaluate trial configurations.
+    For each trial, it samples parameter values from the search space, applies them to the
+    base prompts, evaluates the resulting prompts using the provided metric, and tracks
+    the best state.
+
+    Args:
+        optimizer: The ParameterOptimizer instance managing the optimization.
+        context: The OptimizationContext containing optimization state and configuration.
+        current_space_ref: Dictionary containing the ParameterSearchSpace to sample from.
+        stage_ref: Dictionary containing stage metadata (name, type, search scales, etc.).
+        stage_counts: Dictionary tracking trial counts per stage (mutated during execution).
+        best_state: Dictionary tracking the best score and prompts found (mutated during execution).
+        base_prompts: Base prompts to apply parameter variations to.
+        base_model_kwargs: Base model keyword arguments to use.
+        evaluation_dataset: Dataset to evaluate prompts against.
+        metric: Metric function to score prompt performance.
+        agent: Optional agent to use for evaluation.
+        experiment_config: Optional experiment configuration overrides.
+        n_samples: Number of samples per evaluation (for pass@k evaluation).
+        n_samples_strategy: Strategy for selecting samples.
+        total_trials: Total number of trials in this optimization phase.
+
+    Returns:
+        A callable that takes an Optuna Trial and returns a float score. The objective
+        function samples parameters, evaluates prompts, updates best_state, records trial
+        data, and returns the evaluation score.
+    """
+
     def objective(trial: Trial) -> float:
         sampled_values = current_space_ref["space"].suggest(trial)
 

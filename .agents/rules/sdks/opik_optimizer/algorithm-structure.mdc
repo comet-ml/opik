@@ -9,37 +9,7 @@ All optimizer algorithms in the Opik Optimizer SDK must follow a standardized st
 
 ## Required Structure
 
-Every optimizer algorithm package MUST have the following structure:
-
-```
-{algorithm_name}/
-├── __init__.py              # Required: exports optimizer class
-├── {algorithm_name}.py      # Required: main optimizer implementation
-├── helpers.py               # Required: utility functions
-├── types.py                 # Required: type definitions
-├── prompts.py               # Required: prompt templates
-├── reporting.py             # Required: reporting utilities
-├── adapter.py               # Optional: only if algorithm needs adapter
-└── ops/                     # Optional: only if algorithm has discrete operations
-    ├── __init__.py
-    └── {operation}.py
-```
-
-- `__init__.py` (Required) which must export the optimizer class and use `__all__` to explicitly list exports
-
-### `{algorithm_name}.py` (Required)
-- Main optimizer class inheriting from `BaseOptimizer`
-- Must implement `run_optimization(context: OptimizationContext) -> AlgorithmResult`
-- Optionally implement: `pre_optimize()`, `post_optimize()`, `get_config()`, `get_metadata()`, `_should_stop_context()`
-- Define `DEFAULT_PROMPTS: dict[str, str]` class attribute
-- Must implement `helpers.py`, utility functions used by the optimizer, and can be minimal/empty if no utilities needed
-- Must implement `types.py`, type definitions, enums, and data classes, and can be minimal/empty if no custom types needed
-- Must implement `prompts.py`, LLM prompt templates used by the algorithm, and can be minimal/empty if algorithm doesn't use LLM prompts
-- Must implement `reporting.py`, reporting utilities and context managers, and can import from `...reporting_utils` for standard reporting
-
-### Optional Files
-- `adapter.py` - Only if algorithm needs adapter pattern
-- `ops/` - Only if algorithm has discrete operations
+See `code-structure.mdc` for the canonical algorithm file layout. This file links to the canonical documentation to ensure consistency across all optimizer algorithm implementations.
 
 ## Other contracts and guidance
 - `run_optimization()` must return `AlgorithmResult`. The base class wraps it into `OptimizationResult`.

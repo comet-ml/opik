@@ -181,7 +181,14 @@ def _build_synthesis_prompts(
             if current_prompt.user:
                 user_text = current_prompt.user
             elif current_prompt.messages is not None:
-                user_text = current_prompt.messages[-1]["content"]
+                # Handle both string and list[ContentPart] content types
+                content = current_prompt.messages[-1]["content"]
+                if isinstance(content, list):
+                    from ....api_objects.types import extract_text_from_content
+
+                    user_text = extract_text_from_content(content)
+                else:
+                    user_text = content
             else:
                 raise Exception("User content not found in chat-prompt!")
 

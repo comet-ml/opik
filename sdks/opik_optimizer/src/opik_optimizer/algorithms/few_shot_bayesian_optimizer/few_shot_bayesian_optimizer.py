@@ -826,7 +826,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         context.current_best_score = baseline_score
         context.current_best_prompt = optimizable_prompts
 
-        prompts_with_placeholder, fewshot_template = (
+        prompts_with_placeholder, few_shot_template = (
             self._create_few_shot_prompt_template(
                 model=self.model,
                 prompts=optimizable_prompts,
@@ -851,7 +851,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             context=context,
             prompts=prompts_with_placeholder,
             original_prompts=optimizable_prompts,
-            few_shot_prompt_template=fewshot_template,
+            few_shot_prompt_template=few_shot_template,
             agent=agent,
             dataset=dataset,
             validation_dataset=validation_dataset,
