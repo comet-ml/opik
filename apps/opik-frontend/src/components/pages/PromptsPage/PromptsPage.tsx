@@ -21,11 +21,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import useLocalStorageState from "use-local-storage-state";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import usePromptsList from "@/api/prompts/usePromptsList";
@@ -50,13 +46,25 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 
 export const getRowId = (p: Prompt) => p.id;
 
-const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
+const SELECTED_COLUMNS_KEY = "prompts-selected-columns-v2";
 const COLUMNS_WIDTH_KEY = "prompts-columns-width";
 const COLUMNS_ORDER_KEY = "prompts-columns-order";
 const COLUMNS_SORT_KEY = "prompts-columns-sort";
 const PAGINATION_SIZE_KEY = "prompts-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    sortable: true,
+    customMeta: {
+      nameKey: "name",
+      idKey: "id",
+      resource: RESOURCE_TYPE.prompt,
+    },
+  },
   {
     id: "id",
     label: "ID",
@@ -162,11 +170,12 @@ export const FILTER_COLUMNS: ColumnData<Prompt>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "template_structure",
   "description",
   "version_count",
@@ -255,18 +264,6 @@ const PromptsPage: React.FunctionComponent = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Prompt>(),
-      mapColumnDataFields<Prompt, Prompt>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.prompt,
-        },
-        sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-      }),
       ...convertColumnDataToColumn<Prompt, Prompt>(DEFAULT_COLUMNS, {
         columnsOrder,
         selectedColumns,

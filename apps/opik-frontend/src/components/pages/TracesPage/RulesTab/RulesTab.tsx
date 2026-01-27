@@ -17,7 +17,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { EvaluatorsRule } from "@/types/automations";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { convertColumnDataToColumn } from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -51,6 +51,12 @@ import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRul
 const getRowId = (d: EvaluatorsRule) => d.id;
 
 const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    sortable: true,
+  },
   {
     id: COLUMN_ID_ID,
     label: "ID",
@@ -97,11 +103,12 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "last_updated_at",
   "created_by",
   "created_at",
@@ -110,7 +117,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "enabled",
 ];
 
-const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
+const SELECTED_COLUMNS_KEY = "project-rules-selected-columns-v2";
 const COLUMNS_WIDTH_KEY = "project-rules-columns-width";
 const COLUMNS_ORDER_KEY = "project-rules-columns-order";
 const PAGINATION_SIZE_KEY = "project-rules-pagination-size";
@@ -225,11 +232,6 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<EvaluatorsRule>(),
-      mapColumnDataFields<EvaluatorsRule, EvaluatorsRule>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-      }),
       ...convertColumnDataToColumn<EvaluatorsRule, EvaluatorsRule>(
         DEFAULT_COLUMNS,
         {
