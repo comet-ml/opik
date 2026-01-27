@@ -49,10 +49,10 @@ def _truthful_custom_loader(
 
     download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)  # type: ignore[arg-type]
     gen_dataset = ds.load_dataset(
-        "truthful_qa", "generation", download_config=download_config
+        "truthfulqa/truthful_qa", "generation", download_config=download_config
     )[source_split]  # type: ignore[index]
     mc_dataset = ds.load_dataset(
-        "truthful_qa", "multiple_choice", download_config=download_config
+        "truthfulqa/truthful_qa", "multiple_choice", download_config=download_config
     )[source_split]  # type: ignore[index]
     available = max(0, len(gen_dataset) - start)
     total = available if count is None else min(count, available)
