@@ -154,11 +154,10 @@ def _get_class_docstring(cls: Type) -> str:
             break
         description_lines.append(stripped)
 
-    # Join and clean up
-    description = " ".join(description_lines)
-    # Remove extra whitespace
-    description = " ".join(description.split())
-    return description
+    # Join lines with newlines to preserve structure
+    description = "\n".join(description_lines)
+    # Remove trailing empty lines
+    return description.rstrip()
 
 
 def _parse_args_from_docstring(docstring: str) -> Dict[str, str]:
