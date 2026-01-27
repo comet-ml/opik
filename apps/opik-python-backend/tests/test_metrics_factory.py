@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
+from opik.evaluation.metrics.score_result import ScoreResult
 from opik_backend.studio.metrics import MetricFactory
 from opik_backend.studio.exceptions import InvalidMetricError
 from opik_backend.studio.types import _convert_template_syntax, OptimizationConfig
@@ -191,6 +192,194 @@ class TestMetricReasons:
         assert result.reason is not None
         assert "similarity" in result.reason.lower()
         assert "%" in result.reason
+
+
+class TestCodeMetric:
+    """Tests for code metric functionality.
+    
+    Code metrics use the same executor infrastructure as automations (evaluation metrics),
+    executed via ProcessExecutor or DockerExecutor based on PYTHON_CODE_EXECUTOR_STRATEGY.
+    
+    Only BaseMetric class pattern is supported (same as automations).
+    """
+
+    def test_code_metric_basic_class_works(self):
+        """Test that a basic class metric works."""
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MyMetric(BaseMetric):
+    def __init__(self, name: str = "test"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=0.5, reason="Class metric")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        
+        result = metric_fn({}, "test output")
+        assert result.value == 0.5
+        assert result.name == "test"
+
+    def test_code_metric_uses_json(self):
+        """Test that json module can be used."""
+        code = '''
+import json
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class JsonMetric(BaseMetric):
+    def __init__(self, name: str = "json_test"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        data = json.loads(output) if output.startswith("{") else {}
+        return ScoreResult(name=self.name, value=1.0, reason="Used json")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, '{"key": "value"}')
+        assert result.value == 1.0
+
+    def test_code_metric_uses_re(self):
+        """Test that re module can be used."""
+        code = '''
+import re
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class RegexMetric(BaseMetric):
+    def __init__(self, name: str = "regex_test"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        match = re.search(r"\\d+", output)
+        return ScoreResult(name=self.name, value=1.0 if match else 0.0, reason="Used re")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test 123")
+        assert result.value == 1.0
+
+    def test_code_metric_uses_math(self):
+        """Test that math module can be used."""
+        code = '''
+import math
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MathMetric(BaseMetric):
+    def __init__(self, name: str = "math_test"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=math.sqrt(0.25), reason="Used math")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test")
+        assert result.value == 0.5
+
+    def test_code_metric_receives_dataset_fields_as_kwargs(self):
+        """Test that dataset_item fields are passed as kwargs to score method."""
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class KwargsMetric(BaseMetric):
+    def __init__(self, name: str = "kwargs_test"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        expected = kwargs.get("expected_value", "")
+        score = 1.0 if output == expected else 0.0
+        return ScoreResult(name=self.name, value=score, reason=f"Expected: {expected}")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        
+        # Test with matching expected_value
+        result = metric_fn({"expected_value": "correct"}, "correct")
+        assert result.value == 1.0
+        
+        # Test with non-matching expected_value
+        result = metric_fn({"expected_value": "correct"}, "wrong")
+        assert result.value == 0.0
+
+    def test_code_metric_preserves_custom_name(self):
+        """Test that the metric name defined by user is preserved."""
+        code = '''
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class CustomNamedMetric(BaseMetric):
+    def __init__(self, name: str = "my_custom_metric_name"):
+        super().__init__(name=name)
+    
+    def score(self, output, **kwargs):
+        return ScoreResult(name=self.name, value=1.0, reason="Test")
+'''
+        metric_fn = MetricFactory.build("code", {"code": code}, "model")
+        result = metric_fn({}, "test output")
+        
+        assert result.name == "my_custom_metric_name"
+
+    def test_code_metric_missing_code_raises_error(self):
+        """Test that missing code parameter raises error."""
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {}, "model")
+        
+        assert "Missing 'code' parameter" in str(exc_info.value)
+
+    def test_code_metric_empty_code_raises_error(self):
+        """Test that empty code raises error."""
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": ""}, "model")
+        
+        assert "Missing 'code' parameter" in str(exc_info.value)
+
+    def test_code_metric_invalid_syntax_raises_error(self):
+        """Test that invalid Python syntax raises error."""
+        code = '''
+class MyMetric(BaseMetric)
+    def score(self, output, **kwargs):
+        return ScoreResult(name="test", value=1.0, reason="OK")
+'''
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "Invalid Python code" in str(exc_info.value)
+
+    def test_code_metric_no_basemetric_class_raises_error(self):
+        """Test that code without a BaseMetric subclass raises error at build time.
+        
+        With executor infrastructure, code must define a BaseMetric subclass.
+        Validation at build time provides fail-fast behavior.
+        """
+        code = '''
+# Just a comment, no BaseMetric class
+x = 1
+'''
+        # Should raise InvalidMetricError during build (validation step)
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "BaseMetric" in str(exc_info.value)
+
+    def test_code_metric_function_only_raises_error(self):
+        """Test that function-only code (no BaseMetric class) raises error at build time.
+        
+        Function-based metrics are not supported - only BaseMetric class pattern.
+        Validation at build time provides fail-fast behavior.
+        """
+        code = '''
+from opik.evaluation.metrics.score_result import ScoreResult
+
+def my_metric(dataset_item, llm_output):
+    return ScoreResult(name="test", value=1.0, reason="Function")
+'''
+        # Should raise InvalidMetricError during build (validation step)
+        with pytest.raises(InvalidMetricError) as exc_info:
+            MetricFactory.build("code", {"code": code}, "model")
+        
+        assert "BaseMetric" in str(exc_info.value)
 
 
 class TestTemplateSyntaxConversion:

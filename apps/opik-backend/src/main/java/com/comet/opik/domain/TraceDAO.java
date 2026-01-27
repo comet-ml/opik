@@ -333,7 +333,19 @@ class TraceDAOImpl implements TraceDAO {
     // Format: if span_id exists, use 'author_spanId', otherwise use 'author'.
     // The tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
     private static final String SELECT_BY_IDS = """
-            WITH feedback_scores_combined_raw AS (
+            WITH target_projects AS (
+                SELECT DISTINCT project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id IN :ids
+            ), target_spans AS (
+                SELECT id, trace_id, type
+                FROM spans FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id IN (SELECT project_id FROM target_projects)
+                AND trace_id IN :ids
+            ),
+            feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -349,8 +361,8 @@ class TraceDAOImpl implements TraceDAO {
                    feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
-                   AND workspace_id = :workspace_id
-                   AND entity_id IN :ids
+                AND workspace_id = :workspace_id
+                AND entity_id IN :ids
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -452,8 +464,8 @@ class TraceDAOImpl implements TraceDAO {
                        feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'span'
-                   AND workspace_id = :workspace_id
-                   AND entity_id IN (SELECT id FROM spans WHERE workspace_id = :workspace_id AND trace_id IN :ids)
+                AND workspace_id = :workspace_id
+                AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -471,7 +483,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT id FROM spans WHERE workspace_id = :workspace_id AND trace_id IN :ids)
+                  AND entity_id IN (SELECT id FROM target_spans)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -524,14 +536,7 @@ class TraceDAOImpl implements TraceDAO {
                        author,
                        s.type AS span_type
                 FROM span_feedback_scores_combined sfs
-                INNER JOIN (
-                    SELECT id, trace_id, type
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                      AND trace_id IN :ids
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS s ON sfs.entity_id = s.id
+                INNER JOIN target_spans s ON sfs.entity_id = s.id
             ), span_feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
@@ -603,6 +608,7 @@ class TraceDAOImpl implements TraceDAO {
                             NULL) AS duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
+                AND project_id IN (SELECT project_id FROM target_projects)
                 AND id IN :ids
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -617,7 +623,8 @@ class TraceDAOImpl implements TraceDAO {
                     provider
                 FROM spans
                 WHERE workspace_id = :workspace_id
-                  AND trace_id IN :ids
+                AND project_id IN (SELECT project_id FROM target_projects)
+                AND trace_id IN :ids
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
@@ -636,6 +643,7 @@ class TraceDAOImpl implements TraceDAO {
                         entity_id
                     FROM comments
                     WHERE workspace_id = :workspace_id
+                    AND project_id IN (SELECT project_id FROM target_projects)
                     AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -875,7 +883,15 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
-            ), span_feedback_scores_combined_raw AS (
+            ), target_spans AS (
+                SELECT id, trace_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+            ),
+            span_feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -893,8 +909,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -913,8 +928,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (SELECT id FROM target_spans)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -965,16 +979,7 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_at,
                        author
                 FROM span_feedback_scores_combined sfs
-                INNER JOIN (
-                    SELECT id, trace_id
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
-                      <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS s ON sfs.entity_id = s.id
+                INNER JOIN target_spans s ON sfs.entity_id = s.id
             ), span_feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
@@ -1040,7 +1045,7 @@ class TraceDAOImpl implements TraceDAO {
                     toInt64(countIf(type = 'llm')) as llm_span_count,
                     countIf(type = 'tool') > 0 as has_tool_spans,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans final
+                FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
@@ -1359,7 +1364,15 @@ class TraceDAOImpl implements TraceDAO {
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
-            ), span_feedback_scores_combined_raw AS (
+            ), target_spans AS (
+                SELECT id, trace_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+            ),
+            span_feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1377,8 +1390,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -1397,8 +1409,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (SELECT id FROM target_spans)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -1449,16 +1460,7 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_at,
                        author
                 FROM span_feedback_scores_combined sfs
-                INNER JOIN (
-                    SELECT id, trace_id
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
-                      <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS s ON sfs.entity_id = s.id
+                INNER JOIN target_spans s ON sfs.entity_id = s.id
             ), span_feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
@@ -1631,6 +1633,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM spans
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    AND trace_id IN (SELECT trace_id FROM target_spans)
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS s ON t.id = s.trace_id
@@ -1815,9 +1818,9 @@ class TraceDAOImpl implements TraceDAO {
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
-                    COUNT(DISTINCT id) as span_count,
+                    COUNT(id) as span_count,
                     toInt64(countIf(type = 'llm')) as llm_span_count
-                FROM spans final
+                FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id IN :project_ids
                 <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
@@ -1972,7 +1975,15 @@ class TraceDAOImpl implements TraceDAO {
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
-            ), span_feedback_scores_combined_raw AS (
+            ), target_spans AS (
+                SELECT id, trace_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+            ),
+            span_feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1990,14 +2001,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  AND entity_id IN (
-                    SELECT id
-                    FROM spans
-                    WHERE workspace_id = :workspace_id
-                      AND project_id IN :project_ids
-                      <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
-                  )
+                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -2016,14 +2020,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  AND entity_id IN (
-                    SELECT id
-                    FROM spans
-                    WHERE workspace_id = :workspace_id
-                      AND project_id IN :project_ids
-                      <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
-                  )
+                  AND entity_id IN (SELECT id FROM target_spans)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -2074,30 +2071,7 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_at,
                        author
                 FROM span_feedback_scores_combined sfs
-                INNER JOIN (
-                    SELECT id, trace_id
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                      AND project_id IN :project_ids
-                      AND trace_id IN (
-                          SELECT id
-                          FROM traces final
-                          <if(guardrails_filters)>
-                          LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
-                          <endif>
-                          <if(annotation_queue_filters)>
-                          LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
-                          <endif>
-                          WHERE workspace_id = :workspace_id
-                          AND project_id IN :project_ids
-                          <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                          <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
-                          <if(filters)> AND <filters> <endif>
-                          <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
-                      )
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS s ON sfs.entity_id = s.id
+                INNER JOIN target_spans s ON sfs.entity_id = s.id
             ), span_feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,

@@ -117,9 +117,12 @@ class RawExperimentsClient:
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
+        project_deleted: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         experiment_ids: typing.Optional[str] = None,
+        force_sorting: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ExperimentPagePublic]:
         """
@@ -143,11 +146,17 @@ class RawExperimentsClient:
 
         prompt_id : typing.Optional[str]
 
+        project_id : typing.Optional[str]
+
+        project_deleted : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         filters : typing.Optional[str]
 
         experiment_ids : typing.Optional[str]
+
+        force_sorting : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -169,9 +178,12 @@ class RawExperimentsClient:
                 "name": name,
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
+                "project_id": project_id,
+                "project_deleted": project_deleted,
                 "sorting": sorting,
                 "filters": filters,
                 "experiment_ids": experiment_ids,
+                "force_sorting": force_sorting,
             },
             request_options=request_options,
         )
@@ -547,6 +559,7 @@ class RawExperimentsClient:
         groups: typing.Optional[str] = None,
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ExperimentGroupResponse]:
@@ -560,6 +573,8 @@ class RawExperimentsClient:
         types : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -578,6 +593,7 @@ class RawExperimentsClient:
                 "groups": groups,
                 "types": types,
                 "name": name,
+                "project_id": project_id,
                 "filters": filters,
             },
             request_options=request_options,
@@ -614,6 +630,7 @@ class RawExperimentsClient:
         groups: typing.Optional[str] = None,
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ExperimentGroupAggregationsResponse]:
@@ -627,6 +644,8 @@ class RawExperimentsClient:
         types : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -645,6 +664,7 @@ class RawExperimentsClient:
                 "groups": groups,
                 "types": types,
                 "name": name,
+                "project_id": project_id,
                 "filters": filters,
             },
             request_options=request_options,
@@ -1113,9 +1133,12 @@ class AsyncRawExperimentsClient:
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
         prompt_id: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
+        project_deleted: typing.Optional[bool] = None,
         sorting: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         experiment_ids: typing.Optional[str] = None,
+        force_sorting: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ExperimentPagePublic]:
         """
@@ -1139,11 +1162,17 @@ class AsyncRawExperimentsClient:
 
         prompt_id : typing.Optional[str]
 
+        project_id : typing.Optional[str]
+
+        project_deleted : typing.Optional[bool]
+
         sorting : typing.Optional[str]
 
         filters : typing.Optional[str]
 
         experiment_ids : typing.Optional[str]
+
+        force_sorting : typing.Optional[bool]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1165,9 +1194,12 @@ class AsyncRawExperimentsClient:
                 "name": name,
                 "dataset_deleted": dataset_deleted,
                 "prompt_id": prompt_id,
+                "project_id": project_id,
+                "project_deleted": project_deleted,
                 "sorting": sorting,
                 "filters": filters,
                 "experiment_ids": experiment_ids,
+                "force_sorting": force_sorting,
             },
             request_options=request_options,
         )
@@ -1543,6 +1575,7 @@ class AsyncRawExperimentsClient:
         groups: typing.Optional[str] = None,
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ExperimentGroupResponse]:
@@ -1556,6 +1589,8 @@ class AsyncRawExperimentsClient:
         types : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -1574,6 +1609,7 @@ class AsyncRawExperimentsClient:
                 "groups": groups,
                 "types": types,
                 "name": name,
+                "project_id": project_id,
                 "filters": filters,
             },
             request_options=request_options,
@@ -1610,6 +1646,7 @@ class AsyncRawExperimentsClient:
         groups: typing.Optional[str] = None,
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ExperimentGroupAggregationsResponse]:
@@ -1623,6 +1660,8 @@ class AsyncRawExperimentsClient:
         types : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -1641,6 +1680,7 @@ class AsyncRawExperimentsClient:
                 "groups": groups,
                 "types": types,
                 "name": name,
+                "project_id": project_id,
                 "filters": filters,
             },
             request_options=request_options,

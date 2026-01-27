@@ -1,81 +1,65 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
-from collections.abc import Callable, Iterable
+from typing import Any, TYPE_CHECKING
+from collections.abc import Iterable
+import random
 
 import logging
 
 from gepa.core.adapter import EvaluationBatch, GEPAAdapter
 from opik import Dataset
 
-from ... import helpers, task_evaluator
+from ... import helpers
+from ...core.state import prepare_experiment_config
+from ...base_optimizer import _OPTIMIZER_VERSION
+from ...core import evaluation as task_evaluator
+from ...core import runtime
 from ...api_objects import chat_prompt
-from ...utils import create_litellm_agent_class
+from ...api_objects.types import MetricFunction
+from ...agents import OptimizableAgent
+from ...utils.candidate_selection import select_candidate
+from .types import OpikDataInst
+
+if TYPE_CHECKING:
+    from ...core.state import OptimizationContext
 
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class OpikDataInst:
-    """Data instance handed to GEPA.
-
-    We keep the original Opik dataset item so metrics and prompt formatting can use it
-    directly without duplicated bookkeeping.
-    """
-
-    input_text: str
-    answer: str
-    additional_context: dict[str, str]
-    opik_item: dict[str, Any]
-
-
-def _extract_system_text(candidate: dict[str, str], fallback: str) -> str:
-    for key in ("system_prompt", "system", "prompt"):
-        value = candidate.get(key)
-        if isinstance(value, str) and value.strip():
-            return value
-    return fallback
-
-
-def _apply_system_text(
-    prompt_obj: chat_prompt.ChatPrompt, system_text: str
-) -> chat_prompt.ChatPrompt:
-    updated = prompt_obj.copy()
-    if updated.messages is not None:
-        messages = updated.get_messages()
-        if messages and messages[0].get("role") == "system":
-            messages[0]["content"] = system_text
-        else:
-            messages.insert(0, {"role": "system", "content": system_text})
-        updated.set_messages(messages)
-    else:
-        updated.system = system_text
-    return updated
-
-
 class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]]):
-    """Minimal GEPA adapter that routes evaluation through Opik's metric."""
+    """GEPA adapter that supports multi-prompt, multi-message optimization.
+
+    This adapter handles optimization of all message types (system, user, assistant)
+    across multiple prompts in a dict.
+    """
 
     def __init__(
         self,
-        base_prompt: chat_prompt.ChatPrompt,
+        base_prompts: dict[str, chat_prompt.ChatPrompt],
+        agent: OptimizableAgent,
         optimizer: Any,
-        metric: Callable[[dict[str, Any], str], Any],
-        system_fallback: str,
+        context: OptimizationContext,
+        metric: MetricFunction,
         dataset: Dataset,
         experiment_config: dict[str, Any] | None,
         validation_dataset: Dataset | None = None,
     ) -> None:
-        self._base_prompt = base_prompt
+        self._base_prompts = base_prompts
+        self._agent = agent
         self._optimizer = optimizer
+        self._context = context
         self._metric = metric
-        self._system_fallback = system_fallback
         self._dataset = dataset
         self._validation_dataset = validation_dataset
         self._experiment_config = experiment_config
-        self._metric_name = getattr(metric, "__name__", str(metric))
+        self._metric_name = metric.__name__
+        self._allowed_roles = (
+            context.extra_params.get("optimizable_roles")
+            if context.extra_params
+            else None
+        )
+        # TODO: Replace with native GEPA adapter once available; role constraints may drop candidate edits.
 
         # Pre-compute item ID sets for fast lookup during evaluate()
         self._train_item_ids: set[str] = {
@@ -106,6 +90,102 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         return self._dataset
 
+    def _collect_candidates(
+        self,
+        prompt_variants: dict[str, chat_prompt.ChatPrompt],
+        dataset_item: dict[str, Any],
+    ) -> list[str]:
+        """Invoke the agent and normalize candidate outputs for scoring."""
+        if hasattr(self._agent, "invoke_agent_candidates"):
+            candidates = self._agent.invoke_agent_candidates(
+                prompts=prompt_variants,
+                dataset_item=dataset_item,
+            )
+        else:
+            candidates = [
+                self._agent.invoke_agent(
+                    prompts=prompt_variants,
+                    dataset_item=dataset_item,
+                )
+            ]
+        return [str(c).strip() for c in candidates if c is not None and str(c).strip()]
+
+    def _record_adapter_metric_call(self) -> None:
+        """Increment adapter metric counters while tolerating missing attributes."""
+        try:
+            self._optimizer._adapter_metric_calls += 1
+        except Exception:
+            pass
+
+    def _record_and_post_candidate(
+        self,
+        *,
+        prompt_variants: dict[str, chat_prompt.ChatPrompt],
+        score: float,
+        candidate_id: str | None = None,
+        metrics: dict[str, Any] | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        """Record adapter metric call and post candidate/round to history."""
+        self._record_adapter_metric_call()
+        merged_extra = {"score_label": "per_item"}
+        if extra:
+            merged_extra.update(extra)
+        merged_metrics = dict(metrics or {})
+        merged_metrics.setdefault("per_item_score", score)
+        round_handle = self._optimizer.pre_round(self._context)
+        runtime.record_and_post_trial(
+            optimizer=self._optimizer,
+            context=self._context,
+            prompt_or_payload=prompt_variants,
+            score=None,
+            candidate_id=candidate_id,
+            metrics=merged_metrics,
+            extra=merged_extra,
+            round_handle=round_handle,
+        )
+        self._optimizer.post_round(
+            round_handle,
+            context=self._context,
+            best_score=None,
+            best_prompt=prompt_variants,
+            extras={"score_label": "per_item"},
+        )
+
+    def _rebuild_prompts_from_candidate(
+        self, candidate: dict[str, str]
+    ) -> dict[str, chat_prompt.ChatPrompt]:
+        """Rebuild prompts with optimized messages, preserving tools/function_map/model."""
+        rebuilt: dict[str, chat_prompt.ChatPrompt] = {}
+        dropped_components = 0
+        for prompt_name, prompt_obj in self._base_prompts.items():
+            original_messages = prompt_obj.get_messages()
+            new_messages = []
+            for idx, msg in enumerate(original_messages):
+                component_key = f"{prompt_name}_{msg['role']}_{idx}"
+                # Use optimized content if available, otherwise keep original
+                original_content = msg.get("content", "")
+                if (
+                    self._allowed_roles is not None
+                    and msg.get("role") not in self._allowed_roles
+                ):
+                    optimized_content = original_content
+                    dropped_components += 1
+                else:
+                    optimized_content = candidate.get(component_key, original_content)
+                new_messages.append({"role": msg["role"], "content": optimized_content})
+
+            # prompt.copy() preserves tools, function_map, model, model_kwargs
+            new_prompt = prompt_obj.copy()
+            new_prompt.set_messages(new_messages)
+            rebuilt[prompt_name] = new_prompt
+        if dropped_components:
+            logger.warning(
+                "GEPA adapter dropped %s component(s) due to optimize_prompt constraints.",
+                dropped_components,
+            )
+        return rebuilt
+
     def evaluate(
         self,
         batch: list[OpikDataInst],
@@ -115,16 +195,11 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         """
         Evaluate a GEPA candidate against a batch of Opik items.
 
-        We first try to delegate evaluation to Opik's evaluator so every trace/span
-        lands under the optimizer's project/trace. If that isn't possible (missing
-        dataset IDs or evaluator failure), we fallback to the original inline
-        evaluation logic so GEPA continues to function.
+        Rebuilds all prompts with optimized message content from the candidate,
+        then uses the agent to evaluate each item.
         """
-
-        # TODO(opik-gepa): replace this adapter patch with a native GEPA <-> Opik bridge
-        # once GEPA exposes a public opik adapter for tracing + evaluation.
-        system_text = _extract_system_text(candidate, self._system_fallback)
-        prompt_variant = _apply_system_text(self._base_prompt, system_text)
+        # Rebuild prompts with optimized components from candidate
+        prompt_variants = self._rebuild_prompts_from_candidate(candidate)
 
         dataset_item_ids: list[str] = []
         missing_ids = False
@@ -137,7 +212,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         # Resolve which dataset to use based on item IDs (train vs validation)
         target_dataset = self._resolve_dataset_for_batch(dataset_item_ids)
-
         # Attach GEPA-specific metadata without disturbing the caller's experiment config.
         configuration_updates = helpers.drop_none(
             {
@@ -150,57 +224,74 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 )
             }
         )
-        experiment_config = self._optimizer._prepare_experiment_config(
-            prompt=prompt_variant,
+        experiment_config = prepare_experiment_config(
+            optimizer=self._optimizer,
+            prompt=prompt_variants,
             dataset=target_dataset,
             metric=self._metric,
             experiment_config=self._experiment_config,
             configuration_updates=configuration_updates,
+            additional_metadata=None,
+            validation_dataset=None,
+            is_single_prompt_optimization=isinstance(
+                prompt_variants, chat_prompt.ChatPrompt
+            ),
+            agent=None,
+            build_optimizer_version=_OPTIMIZER_VERSION,
         )
         project_name = experiment_config.get("project_name") or getattr(
             self._optimizer, "project_name", None
         )
 
-        agent_class = create_litellm_agent_class(
-            prompt_variant, optimizer_ref=self._optimizer
-        )
-        instantiate_kwargs: dict[str, Any] = {}
-        if project_name is not None:
-            instantiate_kwargs["project_name"] = project_name
-
-        try:
-            agent = self._optimizer._instantiate_agent(
-                prompt_variant, agent_class=agent_class, **instantiate_kwargs
-            )
-        except TypeError:
-            agent = self._optimizer._instantiate_agent(
-                prompt_variant, agent_class=agent_class
-            )
-
         def _local_evaluation() -> EvaluationBatch[dict[str, Any], dict[str, Any]]:
+            """Fallback to direct evaluation without task_evaluator."""
+            # TODO(opik_optimizer/#gepa-adapter): Remove this local scoring path once GEPA provides a native Opik adapter.
             outputs: list[dict[str, Any]] = []
             scores: list[float] = []
             trajectories: list[dict[str, Any]] | None = [] if capture_traces else None
 
+            def _score_candidates(
+                dataset_item: dict[str, Any], candidates: list[str]
+            ) -> tuple[str, float]:
+                """Pick the best candidate using the optimizer metric for pass@k evaluation."""
+                # FIXME: Align this selection with GEPA's Pareto/multi-metric scoring once integrated.
+                selection = select_candidate(
+                    candidates=candidates,
+                    policy="best_by_metric",
+                    metric=lambda item, output: self._metric(item, output),
+                    dataset_item=dataset_item,
+                    candidate_logprobs=None,
+                    rng=random.Random(0),
+                )
+                if (
+                    selection.candidate_scores is not None
+                    and selection.chosen_index is not None
+                ):
+                    best_score = selection.candidate_scores[selection.chosen_index]
+                else:
+                    metric_result = self._metric(dataset_item, selection.output)
+                    if hasattr(metric_result, "value"):
+                        best_score = float(metric_result.value)  # type: ignore[arg-type]
+                    elif hasattr(metric_result, "score"):
+                        best_score = float(metric_result.score)  # type: ignore[arg-type]
+                    else:
+                        best_score = float(metric_result)  # type: ignore[arg-type]
+                return selection.output, best_score
+
             for inst in batch:
                 dataset_item = inst.opik_item
-                messages = prompt_variant.get_messages(dataset_item)
-                raw_output = agent.invoke(messages).strip()
-
-                metric_result = self._metric(dataset_item, raw_output)
-                if hasattr(metric_result, "value"):
-                    score = float(metric_result.value)
-                elif hasattr(metric_result, "score"):
-                    score = float(metric_result.score)
-                else:
-                    score = float(metric_result)
+                candidates = self._collect_candidates(prompt_variants, dataset_item)
+                raw_output, score = _score_candidates(dataset_item, candidates)
 
                 outputs.append({"output": raw_output})
                 scores.append(score)
-                try:
-                    self._optimizer._gepa_live_metric_calls += 1
-                except Exception:
-                    pass
+                self._record_and_post_candidate(
+                    prompt_variants=prompt_variants,
+                    score=score,
+                    metrics={"adapter_metric": score},
+                )
+                if self._context.should_stop:
+                    break
 
                 if trajectories is not None:
                     trajectories.append(
@@ -224,9 +315,26 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             return _local_evaluation()
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-            messages = prompt_variant.get_messages(dataset_item)
-            raw_output = agent.invoke(messages).strip()
-            return {"llm_output": raw_output}
+            # Choose the best candidate output before passing into Opik evaluation.
+            candidates = self._collect_candidates(prompt_variants, dataset_item)
+            if not candidates:
+                raise RuntimeError("No candidates produced by agent")
+
+            best_output = candidates[0]
+            best_score = float("-inf")
+            for candidate in candidates:
+                metric_result = self._metric(dataset_item, candidate)
+                if hasattr(metric_result, "value"):
+                    score = float(metric_result.value)  # type: ignore[arg-type]
+                elif hasattr(metric_result, "score"):
+                    score = float(metric_result.score)  # type: ignore[arg-type]
+                else:
+                    score = float(metric_result)  # type: ignore[arg-type]
+                if score > best_score:
+                    best_score = score
+                    best_output = candidate
+
+            return {"llm_output": best_output}
 
         try:
             _, eval_result = task_evaluator.evaluate_with_result(
@@ -292,10 +400,15 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
             outputs.append({"output": output_text})
             scores.append(score_value)
-            try:
-                self._optimizer._gepa_live_metric_calls += 1
-            except Exception:
-                pass
+            self._record_and_post_candidate(
+                prompt_variants=prompt_variants,
+                score=score_value,
+                candidate_id=candidate.get("id"),
+                metrics={self._metric_name: score_value, "opik_score": score_value},
+                extra={"output": output_text, "candidate": candidate},
+            )
+            if self._context.should_stop:
+                break
 
             if trajectories is not None:
                 trajectories.append(
@@ -318,7 +431,24 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         eval_batch: EvaluationBatch[dict[str, Any], dict[str, Any]],
         components_to_update: list[str],
     ) -> dict[str, list[dict[str, Any]]]:
-        components = components_to_update or ["system_prompt"]
+        """Create reflective dataset for GEPA's learning process.
+
+        Uses the component keys from the candidate (e.g., "prompt_name_role_idx")
+        to organize feedback for each optimizable component.
+        """
+        # If no specific components requested, use all component keys from candidate
+        # that match our prompt structure
+        if not components_to_update:
+            components_to_update = [
+                key
+                for key in candidate.keys()
+                if not key.startswith("_") and key not in ("source", "id")
+            ]
+
+        if not components_to_update:
+            # Fallback to legacy behavior
+            components_to_update = ["system_prompt"]
+
         trajectories = eval_batch.trajectories or []
 
         def _records() -> Iterable[dict[str, Any]]:
@@ -344,4 +474,4 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             )
             reflective_records = []
 
-        return {component: reflective_records for component in components}
+        return {component: reflective_records for component in components_to_update}

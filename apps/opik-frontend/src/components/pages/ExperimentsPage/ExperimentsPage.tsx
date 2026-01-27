@@ -35,10 +35,11 @@ import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_METADATA_ID,
+  COLUMN_PROJECT_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { DELETED_DATASET_LABEL } from "@/constants/groups";
+import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
@@ -88,6 +89,7 @@ const COLUMNS_SORT_KEY = "experiments-columns-sort";
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_DATASET_ID,
+  COLUMN_PROJECT_ID,
   "created_at",
   "duration.p50",
   "trace_count",
@@ -181,6 +183,18 @@ const ExperimentsPage: React.FC = () => {
             },
           ]
         : []),
+      {
+        id: COLUMN_PROJECT_ID,
+        label: "Project",
+        type: COLUMN_TYPE.string,
+        cell: ResourceCell as never,
+        accessorFn: (row) => row.project_id,
+        customMeta: {
+          nameKey: "project_name",
+          idKey: "project_id",
+          resource: RESOURCE_TYPE.project,
+        },
+      },
       {
         id: "created_at",
         label: "Created",
@@ -430,15 +444,20 @@ const ExperimentsPage: React.FC = () => {
     [setGroupLimit],
   );
 
-  // Filter out dataset column when grouping by dataset
+  // Filter out dataset/project columns when grouping by dataset/project
   const availableColumns = useMemo(() => {
     const isGroupingByDataset = groups.some(
       (g) => g.field === COLUMN_DATASET_ID,
     );
-    if (isGroupingByDataset) {
-      return columnsDef.filter((col) => col.id !== COLUMN_DATASET_ID);
-    }
-    return columnsDef;
+    const isGroupingByProject = groups.some(
+      (g) => g.field === COLUMN_PROJECT_ID,
+    );
+
+    return columnsDef.filter((col) => {
+      if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
+      if (isGroupingByProject && col.id === COLUMN_PROJECT_ID) return false;
+      return true;
+    });
   }, [groups, columnsDef]);
 
   const chartsData = useMemo(() => {
@@ -502,7 +521,7 @@ const ExperimentsPage: React.FC = () => {
                 return {
                   label: calculateGroupLabel(groups[index]),
                   value:
-                    label === DELETED_DATASET_LABEL
+                    label === DELETED_ENTITY_LABEL
                       ? "Deleted dataset"
                       : label || value || "Undefined",
                 };

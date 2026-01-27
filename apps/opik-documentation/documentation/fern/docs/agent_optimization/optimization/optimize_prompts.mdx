@@ -21,7 +21,7 @@ Use this playbook whenever you need to improve a prompt (single-turn or agentic)
 | Scenario | Recommended optimizer |
 | --- | --- |
 | General prompt copy edits | [MetaPrompt](/agent_optimization/algorithms/metaprompt_optimizer) |
-| Complex failure analysis | [HRPO](/agent_optimization/algorithms/hierarchical_adaptive_optimizer) |
+| Complex failure analysis | [HRPO](/agent_optimization/algorithms/hierarchical_reflective_optimizer) |
 | Need diverse candidates | [Evolutionary](/agent_optimization/algorithms/evolutionary_optimizer) |
 | Few-shot heavy prompts | [Few-Shot Bayesian](/agent_optimization/algorithms/fewshot_bayesian_optimizer) |
 | Tune sampling params | [Parameter optimizer](/agent_optimization/algorithms/parameter_optimizer) |
@@ -45,9 +45,46 @@ result = optimizer.optimize_prompt(
 )
 ```
 
-- Set `project_name` on the `ChatPrompt` to group runs by team or initiative.
+- Set `project_name` on the optimizer to group runs by team or initiative.
 - Start with `max_trials` = 3–5. Increase once you confirm the metric is reliable.
 - Use `n_samples` to limit cost during early exploration; rerun on the full dataset before promoting a prompt.
+- For optimizers with inner-loop evaluations (HRPO, GEPA), set `n_samples_minibatch` to keep those steps lightweight.
+- Use `n_samples_strategy` to keep subsampling deterministic (default: `"random_sorted"`).
+
+### Optimize multiple prompts together
+
+You can pass a dict of `ChatPrompt` objects to optimize a coordinated prompt bundle (for example, a multi-agent setup or system/user prompt pair that must stay in sync). Each key names a prompt and is preserved through optimization.
+
+```python
+from opik_optimizer import MetaPromptOptimizer, ChatPrompt
+
+prompts = {
+    "researcher": ChatPrompt(
+        name="researcher",
+        messages=[
+            {"role": "system", "content": "Gather facts and cite sources."},
+            {"role": "user", "content": "{question}"},
+        ],
+    ),
+    "synthesizer": ChatPrompt(
+        name="synthesizer",
+        messages=[
+            {"role": "system", "content": "Summarize findings clearly."},
+            {"role": "user", "content": "{question}"},
+        ],
+    ),
+}
+
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o-mini", prompts_per_round=2)
+result = optimizer.optimize_prompt(
+    prompt=prompts,
+    dataset=my_dataset,
+    metric=answer_quality,
+    max_trials=3,
+)
+```
+
+`result.prompt` returns a dict keyed by the same names so you can update each agent prompt together.
 
 ## 4. Evaluate outcomes
 
@@ -71,6 +108,7 @@ result = optimizer.optimize_prompt(
 
 ## Related guides
 
+- [Optimization Studio](/agent_optimization/optimization/optimization_studio)
 - [Define datasets](/agent_optimization/optimization/define_datasets)
 - [Define metrics](/agent_optimization/optimization/define_metrics)
 - [Chaining optimizers](/agent_optimization/advanced/chaining_optimizers)

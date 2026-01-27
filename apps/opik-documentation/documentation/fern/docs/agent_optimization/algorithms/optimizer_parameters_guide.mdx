@@ -32,7 +32,9 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 - **`validation_dataset`** (Dataset, optional): Validation dataset for evaluating and ranking candidate prompts. When provided, the optimizer uses `dataset` for understanding failure modes and generating improvements, then evaluates candidates on `validation_dataset` to select the best one. This helps prevent overfitting. If not provided, the same dataset is used for both training and validation.
 - **`metric`** (Callable): Metric function to optimize
 - **`experiment_config`** (dict, optional): Optional configuration metadata
-- **`n_samples`** (int, optional): Number of dataset samples to use per evaluation
+- **`n_samples`** (int, float, percent string, or "all"/"full"/`None`, optional): Number of dataset items to use per evaluation (uses the validation dataset when provided). Use counts (e.g., `50`), fractions (e.g., `0.1`), percentages (e.g., `"10%"`), or `"all"`/`"full"`/`None` for the full dataset.
+- **`n_samples_minibatch`** (int, optional): Optional number of samples for inner-loop minibatches (defaults to `n_samples`).
+- **`n_samples_strategy`** (str, optional): Sampling strategy for subsampling (default: `"random_sorted"`).
 - **`project_name`** (str, default: "Optimization"): Opik project name for logging
 - **`optimization_id`** (str, optional): Optional UUIDv7 string for the optimization run
 
@@ -273,6 +275,6 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 
 ## Next Steps
 
-1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+1. Explore specific [Optimizers](/agent_optimization/algorithms/overview) for algorithm details.
 2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
-3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.
+3. Refer to the [API Reference](/agent_optimization/advanced/api_reference) for detailed configuration options.

@@ -81,6 +81,11 @@ pip-log.txt
 
 # Claude Code
 .claude/
+.mcp.json
+
+# Cursor
+.cursor
+!tests_end_to_end/.cursor/
 
 # charts
 deployment/helm_chart/opik/charts
