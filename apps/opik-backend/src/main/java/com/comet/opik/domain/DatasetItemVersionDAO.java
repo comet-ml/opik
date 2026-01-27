@@ -591,35 +591,31 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 LIMIT 1 BY id
             )
             SELECT
-                arrayFold(
-                    (acc, x) -> mapFromArrays(
-                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                        arrayMap(
-                            key -> arrayDistinct(arrayConcat(acc[key], x[key])),
-                            arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))
-                        )
-                    ),
-                    arrayDistinct(
-                        arrayFlatten(
-                            groupArray(
-                                arrayMap(
-                                    key_type -> map(tupleElement(key_type, 1), [tupleElement(key_type, 2)]),
-                                    output_keys
-                                )
-                            )
-                        )
-                    ),
-                    CAST(map(), 'Map(String, Array(String))')
+                mapFromArrays(
+                    groupArray(key),
+                    groupArray(types)
                 ) AS columns
-            FROM experiment_items_scope AS ei
-            INNER JOIN (
+            FROM (
                 SELECT
-                    id,
-                    output_keys
-                FROM traces FINAL
-                WHERE workspace_id = :workspace_id
-                AND id IN (SELECT trace_id FROM experiment_items_scope)
-            ) AS t ON t.id = ei.trace_id
+                    tupleElement(key_type, 1) AS key,
+                    arrayDistinct(groupArray(tupleElement(key_type, 2))) AS types
+                FROM (
+                    SELECT
+                        ei.trace_id,
+                        t.output_keys
+                    FROM experiment_items_scope AS ei
+                    INNER JOIN (
+                        SELECT
+                            id,
+                            output_keys
+                        FROM traces FINAL
+                        WHERE workspace_id = :workspace_id
+                        AND id IN (SELECT trace_id FROM experiment_items_scope)
+                    ) AS t ON t.id = ei.trace_id
+                ) AS traces_with_keys
+                ARRAY JOIN output_keys AS key_type
+                GROUP BY key
+            )
             """;
 
     // Query to fetch versioned dataset items with their associated experiment items
