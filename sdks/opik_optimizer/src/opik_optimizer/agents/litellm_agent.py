@@ -23,6 +23,10 @@ from ..utils.logging import debug_tool_call
 from ..constants import tool_call_max_iterations
 from ..utils.candidate_selection import extract_choice_logprob
 from ..utils import prompt_tracing
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from litellm.types.utils import Choices, Usage
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +47,7 @@ def _patch_litellm_choices_logprobs() -> None:
         if not hasattr(Choices, "_opik_patched_delattr"):
             original_delattr = Choices.__delattr__
 
-            def patched_delattr(self, name: str) -> None:
+            def patched_delattr(self: "Choices", name: str) -> None:
                 # If trying to delete logprobs and it doesn't exist, just return
                 if name == "logprobs" and not hasattr(self, "logprobs"):
                     return
@@ -64,7 +68,7 @@ def _patch_litellm_choices_logprobs() -> None:
         if not hasattr(Choices.__init__, "_opik_patched"):
             original_init = Choices.__init__
 
-            def patched_init(self, *args, **kwargs):
+            def patched_init(self: "Choices", *args: Any, **kwargs: Any) -> None:
                 try:
                     original_init(self, *args, **kwargs)
                 except AttributeError as e:
@@ -97,7 +101,7 @@ def _patch_litellm_usage_server_tool_use() -> None:
         if not hasattr(Usage, "_opik_patched_delattr"):
             original_delattr = Usage.__delattr__
 
-            def patched_delattr(self, name: str) -> None:
+            def patched_delattr(self: "Usage", name: str) -> None:
                 # If trying to delete server_tool_use and it doesn't exist, just return
                 if name == "server_tool_use" and not hasattr(self, "server_tool_use"):
                     return
@@ -118,7 +122,7 @@ def _patch_litellm_usage_server_tool_use() -> None:
         if not hasattr(Usage.__init__, "_opik_patched"):
             original_init = Usage.__init__
 
-            def patched_init(self, *args, **kwargs):
+            def patched_init(self: "Usage", *args: Any, **kwargs: Any) -> None:
                 try:
                     original_init(self, *args, **kwargs)
                 except AttributeError as e:
