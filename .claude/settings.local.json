@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch:*)",
+      "Bash(git rebase:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(git push:*)",
+      "Bash(gh run list:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(op run -- gh pr create:*)",
+      "Bash(op run -- gh pr view:*)",
+      "Bash(git pull:*)",
+      "Bash(git branch:*)",
+      "Bash(op run:*)",
+      "Bash(git remote add:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git merge-base:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
