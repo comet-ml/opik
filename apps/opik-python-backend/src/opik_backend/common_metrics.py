@@ -23,11 +23,13 @@ common_metrics_bp = Blueprint(
 )
 
 # Metrics to exclude from the common metrics registry
-# These require heavy ML models or special dependencies not available in the container
 EXCLUDED_METRICS: Set[str] = {
     "BERTScore",  # Requires bert-score package + PyTorch + transformer models
     "LanguageAdherenceMetric",  # Requires fasttext which has C++ compilation issues
     "BaseBLEU",  # Base class for BLEU metrics
+    "SpearmanRanking", # Requires iterable input, not supported yet
+    "CorpusBLEU", # Requires iterable input, not supported yet
+    "METEOR", # Requires iterable input, not supported yet
 }
 
 # Parameters that should be excluded from the user-configurable init parameters
