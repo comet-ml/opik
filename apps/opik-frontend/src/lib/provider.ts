@@ -21,6 +21,10 @@ export const getProviderDisplayName = (providerKey: ProviderObject) => {
     return provider_name ?? PROVIDERS[provider]?.label ?? "";
   }
 
+  if (provider === PROVIDER_TYPE.OLLAMA) {
+    return provider_name ?? PROVIDERS[provider]?.label ?? "";
+  }
+
   return PROVIDERS[provider]?.label ?? "";
 };
 
@@ -34,7 +38,11 @@ export const buildComposedProviderKey = (
 ): COMPOSED_PROVIDER_TYPE => {
   if (
     providerName &&
-    [PROVIDER_TYPE.CUSTOM, PROVIDER_TYPE.BEDROCK].includes(providerType)
+    [
+      PROVIDER_TYPE.CUSTOM,
+      PROVIDER_TYPE.BEDROCK,
+      PROVIDER_TYPE.OLLAMA,
+    ].includes(providerType)
   ) {
     return `${providerType}:${providerName}`;
   }
@@ -47,6 +55,9 @@ export const parseComposedProviderType = (provider: COMPOSED_PROVIDER_TYPE) => {
   }
   if (provider.startsWith(PROVIDER_TYPE.BEDROCK)) {
     return PROVIDER_TYPE.BEDROCK;
+  }
+  if (provider.startsWith(PROVIDER_TYPE.OLLAMA)) {
+    return PROVIDER_TYPE.OLLAMA;
   }
   return provider as PROVIDER_TYPE;
 };

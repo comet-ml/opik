@@ -144,7 +144,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       ?.filter(
         (p) =>
           p.provider === PROVIDER_TYPE.CUSTOM ||
-          p.provider === PROVIDER_TYPE.BEDROCK,
+          p.provider === PROVIDER_TYPE.BEDROCK ||
+          p.provider === PROVIDER_TYPE.OLLAMA,
       )
       .map((p) => p.provider_name)
       .filter(Boolean) as string[];
@@ -198,7 +199,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
 
   const customProviderName =
     selectedProviderType === PROVIDER_TYPE.CUSTOM ||
-    selectedProviderType === PROVIDER_TYPE.BEDROCK
+    selectedProviderType === PROVIDER_TYPE.BEDROCK ||
+    selectedProviderType === PROVIDER_TYPE.OLLAMA
       ? calculatedProviderKey?.provider_name || providerKey?.provider_name
       : undefined;
 
@@ -288,7 +290,8 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const isVertex = provider === PROVIDER_TYPE.VERTEX_AI;
     const isCustom = provider === PROVIDER_TYPE.CUSTOM;
     const isBedrock = provider === PROVIDER_TYPE.BEDROCK;
-    const isCustomLike = isCustom || isBedrock;
+    const isOllama = provider === PROVIDER_TYPE.OLLAMA;
+    const isCustomLike = isCustom || isBedrock || isOllama;
 
     const configuration =
       isVertex || isCustomLike
