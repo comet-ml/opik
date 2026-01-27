@@ -1197,7 +1197,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   return (
     <>
       <PageBodyStickyContainer
-        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
+        className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
       >
