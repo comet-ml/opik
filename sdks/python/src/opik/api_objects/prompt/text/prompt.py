@@ -24,6 +24,10 @@ class Prompt(base_prompt.BasePrompt):
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         validate_placeholders: bool = True,
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -35,6 +39,10 @@ class Prompt(base_prompt.BasePrompt):
             metadata: Optional metadata for the prompt.
             type: The template type (MUSTACHE or JINJA2).
             validate_placeholders: Whether to validate template placeholders.
+            id: Optional unique identifier (UUID) for the prompt.
+            description: Optional description of the prompt (up to 255 characters).
+            change_description: Optional description of changes in this version.
+            tags: Optional list of tags to associate with the prompt.
 
         Raises:
             PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
@@ -46,6 +54,10 @@ class Prompt(base_prompt.BasePrompt):
         self._name = name
         self._metadata = metadata
         self._type = type
+        self._id = id
+        self._description = description
+        self._change_description = change_description
+        self._tags = tags
 
         self._sync_with_backend()
 
@@ -59,6 +71,10 @@ class Prompt(base_prompt.BasePrompt):
             prompt=self._template.text,
             metadata=self._metadata,
             type=self._type,
+            id=self._id,
+            description=self._description,
+            change_description=self._change_description,
+            tags=self._tags,
         )
 
         self._commit = prompt_version.commit
@@ -93,6 +109,30 @@ class Prompt(base_prompt.BasePrompt):
     def type(self) -> prompt_types.PromptType:
         """The prompt type of the prompt."""
         return self._type
+
+    @property
+    @override
+    def id(self) -> Optional[str]:
+        """The unique identifier (UUID) of the prompt."""
+        return self._id
+
+    @property
+    @override
+    def description(self) -> Optional[str]:
+        """The description of the prompt."""
+        return self._description
+
+    @property
+    @override
+    def change_description(self) -> Optional[str]:
+        """The description of changes in this version."""
+        return self._change_description
+
+    @property
+    @override
+    def tags(self) -> Optional[List[str]]:
+        """The list of tags associated with the prompt."""
+        return copy.deepcopy(self._tags) if self._tags is not None else None
 
     @override
     def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:

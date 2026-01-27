@@ -5,7 +5,7 @@ Defines abstract interface that both string and chat prompt variants must implem
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from . import types as prompt_types
 
@@ -40,6 +40,30 @@ class BasePrompt(ABC):
     @abstractmethod
     def type(self) -> prompt_types.PromptType:
         """The prompt type (MUSTACHE or JINJA2)."""
+        pass
+
+    @property
+    @abstractmethod
+    def id(self) -> Optional[str]:
+        """The unique identifier (UUID) of the prompt."""
+        pass
+
+    @property
+    @abstractmethod
+    def description(self) -> Optional[str]:
+        """The description of the prompt."""
+        pass
+
+    @property
+    @abstractmethod
+    def change_description(self) -> Optional[str]:
+        """The description of changes in this version."""
+        pass
+
+    @property
+    @abstractmethod
+    def tags(self) -> Optional[List[str]]:
+        """The list of tags associated with the prompt."""
         pass
 
     # Internal API fields for backend synchronization
