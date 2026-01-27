@@ -601,11 +601,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     arrayDistinct(groupArray(tupleElement(key_type, 2))) AS types
                 FROM (
                     SELECT
-                        t.output_keys
-                    FROM experiment_items_scope AS ei
-                    INNER JOIN traces AS t FINAL
-                        ON t.id = ei.trace_id
-                        AND t.workspace_id = :workspace_id
+                        output_keys
+                    FROM traces FINAL
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_scope)
                 ) AS traces_with_keys
                 ARRAY JOIN output_keys AS key_type
                 GROUP BY key
