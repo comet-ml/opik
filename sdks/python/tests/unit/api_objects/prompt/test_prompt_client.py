@@ -7,14 +7,16 @@ import pytest
 
 from opik.api_objects.prompt import client as prompt_client
 from opik.api_objects.prompt import types as prompt_types
-from opik.rest_api import client as rest_client
+from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
 
 
 @pytest.fixture
 def mock_rest_client():
     """Create a mock REST client."""
-    return mock.MagicMock(spec=rest_client.OpikApi)
+    client = mock.Mock()
+    client.prompts = mock.Mock()
+    return client
 
 
 @pytest.fixture
@@ -40,6 +42,12 @@ def _make_mock_version(
     )
 
 
+def _make_404_error() -> rest_api_core.ApiError:
+    """Helper to create a 404 ApiError."""
+    error = rest_api_core.ApiError(status_code=404, body=None)
+    return error
+
+
 class TestPromptClientEndpointSelection:
     """Tests to verify that PromptClient calls the correct REST endpoint based on parameters."""
 
@@ -49,8 +57,9 @@ class TestPromptClientEndpointSelection:
         """When creating a new prompt with id/description/tags, should call create_prompt endpoint."""
         # Mock that no existing version exists (new prompt)
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            Exception("404"),  # First call in _get_latest_version returns 404
-            _make_mock_version(),  # Second call after create_prompt succeeds
+            _make_404_error(),  # First call in create_prompt's _get_latest_version
+            _make_404_error(),  # Second call in _create_new_version's _get_latest_version
+            _make_mock_version(),  # Third call after create_prompt to retrieve created version
         ]
 
         # Create a new prompt with container-level parameters
@@ -80,7 +89,7 @@ class TestPromptClientEndpointSelection:
     ):
         """When creating a new prompt without id/description/tags, should call create_prompt_version."""
         # Mock that no existing version exists (new prompt)
-        mock_rest_client.prompts.retrieve_prompt_version.side_effect = Exception("404")
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
         mock_rest_client.prompts.create_prompt_version.return_value = (
             _make_mock_version()
         )
@@ -130,8 +139,9 @@ class TestPromptClientEndpointSelection:
         """When creating a new prompt with only id parameter, should call create_prompt."""
         # Mock that no existing version exists (new prompt)
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            Exception("404"),
-            _make_mock_version(),
+            _make_404_error(),  # First call in create_prompt's _get_latest_version
+            _make_404_error(),  # Second call in _create_new_version's _get_latest_version
+            _make_mock_version(),  # Third call after create_prompt to retrieve created version
         ]
 
         # Create with only id parameter (no description or tags)
@@ -153,8 +163,9 @@ class TestPromptClientEndpointSelection:
         """When creating a new prompt with only description parameter, should call create_prompt."""
         # Mock that no existing version exists (new prompt)
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            Exception("404"),
-            _make_mock_version(),
+            _make_404_error(),  # First call in create_prompt's _get_latest_version
+            _make_404_error(),  # Second call in _create_new_version's _get_latest_version
+            _make_mock_version(),  # Third call after create_prompt to retrieve created version
         ]
 
         # Create with only description parameter
@@ -176,8 +187,9 @@ class TestPromptClientEndpointSelection:
         """When creating a new prompt with only tags parameter, should call create_prompt."""
         # Mock that no existing version exists (new prompt)
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            Exception("404"),
-            _make_mock_version(),
+            _make_404_error(),  # First call in create_prompt's _get_latest_version
+            _make_404_error(),  # Second call in _create_new_version's _get_latest_version
+            _make_mock_version(),  # Third call after create_prompt to retrieve created version
         ]
 
         # Create with only tags parameter
