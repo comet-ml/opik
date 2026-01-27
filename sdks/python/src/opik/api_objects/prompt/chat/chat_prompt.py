@@ -244,4 +244,10 @@ class ChatPrompt(base_prompt.BasePrompt):
         chat_prompt._commit = prompt_version.commit
         chat_prompt._metadata = prompt_version.metadata
         chat_prompt._type = prompt_version.type
+        chat_prompt._id = prompt_version.id
+        chat_prompt._description = (
+            None  # description is stored at prompt level, not version level
+        )
+        chat_prompt._change_description = prompt_version.change_description
+        chat_prompt._tags = prompt_version.tags
         return chat_prompt

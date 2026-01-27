@@ -211,4 +211,10 @@ class Prompt(base_prompt.BasePrompt):
         prompt._commit = prompt_version.commit
         prompt._metadata = prompt_version.metadata
         prompt._type = prompt_version.type
+        prompt._id = prompt_version.id
+        prompt._description = (
+            None  # description is stored at prompt level, not version level
+        )
+        prompt._change_description = prompt_version.change_description
+        prompt._tags = prompt_version.tags
         return prompt
