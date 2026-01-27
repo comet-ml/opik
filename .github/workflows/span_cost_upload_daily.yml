@@ -9,6 +9,9 @@ jobs:
   update-span-cost:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write       # To push the branch
+      pull-requests: write  # To create the PR
 
     steps:
       - name: Checkout Repository
@@ -37,7 +40,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.COMET_ACTION_CREATE_PR }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ env.BRANCH_NAME }}
           title: "[NA] [BE] Update model prices file"
           body: |
