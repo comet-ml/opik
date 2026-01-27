@@ -29,6 +29,119 @@ logger = logging.getLogger(__name__)
 _WARNED_NO_LOGPROBS = False
 
 
+def _patch_litellm_choices_logprobs() -> None:
+    """
+    Workaround for LiteLLM bug where Choices.__init__ tries to delete
+    a non-existent 'logprobs' attribute, causing AttributeError.
+
+    This patches both __delattr__ and __init__ to safely handle missing logprobs.
+    """
+    try:
+        from litellm.types.utils import Choices
+
+        # Patch __delattr__ to ignore deletion of non-existent logprobs
+        if not hasattr(Choices, "_opik_patched_delattr"):
+            original_delattr = Choices.__delattr__
+
+            def patched_delattr(self, name: str) -> None:
+                # If trying to delete logprobs and it doesn't exist, just return
+                if name == "logprobs" and not hasattr(self, "logprobs"):
+                    return
+                # Otherwise, call the original __delattr__
+                try:
+                    original_delattr(self, name)
+                except AttributeError as e:
+                    # If the error is specifically about logprobs, ignore it
+                    if "'Choices' object has no attribute 'logprobs'" in str(e):
+                        return
+                    # Otherwise, re-raise
+                    raise
+
+            Choices.__delattr__ = patched_delattr  # type: ignore[assignment]
+            Choices._opik_patched_delattr = True  # type: ignore[attr-defined]
+
+        # Also patch __init__ to catch any AttributeError during initialization
+        if not hasattr(Choices.__init__, "_opik_patched"):
+            original_init = Choices.__init__
+
+            def patched_init(self, *args, **kwargs):
+                try:
+                    original_init(self, *args, **kwargs)
+                except AttributeError as e:
+                    # If the error is about logprobs, set it to None and continue
+                    if "'Choices' object has no attribute 'logprobs'" in str(e):
+                        # Ensure logprobs exists before continuing
+                        if not hasattr(self, "logprobs"):
+                            object.__setattr__(self, "logprobs", None)
+                    else:
+                        raise
+
+            patched_init._opik_patched = True  # type: ignore[attr-defined]
+            Choices.__init__ = patched_init
+    except (ImportError, AttributeError):
+        # If we can't patch it, that's okay - the error will surface elsewhere
+        pass
+
+
+def _patch_litellm_usage_server_tool_use() -> None:
+    """
+    Workaround for LiteLLM bug where Usage.__init__ tries to delete
+    a non-existent 'server_tool_use' attribute, causing AttributeError.
+
+    This patches both __delattr__ and __init__ to safely handle missing server_tool_use.
+    """
+    try:
+        from litellm.types.utils import Usage
+
+        # Patch __delattr__ to ignore deletion of non-existent server_tool_use
+        if not hasattr(Usage, "_opik_patched_delattr"):
+            original_delattr = Usage.__delattr__
+
+            def patched_delattr(self, name: str) -> None:
+                # If trying to delete server_tool_use and it doesn't exist, just return
+                if name == "server_tool_use" and not hasattr(self, "server_tool_use"):
+                    return
+                # Otherwise, call the original __delattr__
+                try:
+                    original_delattr(self, name)
+                except AttributeError as e:
+                    # If the error is specifically about server_tool_use, ignore it
+                    if "'Usage' object has no attribute 'server_tool_use'" in str(e):
+                        return
+                    # Otherwise, re-raise
+                    raise
+
+            Usage.__delattr__ = patched_delattr  # type: ignore[assignment]
+            Usage._opik_patched_delattr = True  # type: ignore[attr-defined]
+
+        # Also patch __init__ to catch any AttributeError during initialization
+        if not hasattr(Usage.__init__, "_opik_patched"):
+            original_init = Usage.__init__
+
+            def patched_init(self, *args, **kwargs):
+                try:
+                    original_init(self, *args, **kwargs)
+                except AttributeError as e:
+                    # If the error is about server_tool_use, set it to None and continue
+                    if "'Usage' object has no attribute 'server_tool_use'" in str(e):
+                        # Ensure server_tool_use exists before continuing
+                        if not hasattr(self, "server_tool_use"):
+                            object.__setattr__(self, "server_tool_use", None)
+                    else:
+                        raise
+
+            patched_init._opik_patched = True  # type: ignore[attr-defined]
+            Usage.__init__ = patched_init
+    except (ImportError, AttributeError):
+        # If we can't patch it, that's okay - the error will surface elsewhere
+        pass
+
+
+# Apply the patches at module import time
+_patch_litellm_choices_logprobs()
+_patch_litellm_usage_server_tool_use()
+
+
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 

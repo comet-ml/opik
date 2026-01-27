@@ -438,7 +438,15 @@ def display_evaluation_progress(
 
     for name, prompt in prompts.items():
         display_text_block(f"│         {name}:")
-        display_messages(prompt.get_messages(), "│         ")
+        messages = prompt.get_messages()
+        display_messages(messages, "│         ")
+        # Check if user messages are missing and show a note
+        has_user_message = any(msg.get("role") == "user" for msg in messages)
+        if not has_user_message:
+            display_text_block(
+                "│         (Note: No user message in this prompt)",
+                style="dim",
+            )
 
     display_text_block(f"│         Score: {score_text}", style=style)
     display_text_block("│")
