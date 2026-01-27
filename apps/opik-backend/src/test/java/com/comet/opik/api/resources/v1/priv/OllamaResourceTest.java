@@ -199,24 +199,25 @@ class OllamaResourceTest {
     }
 
     @Test
-    @org.junit.jupiter.api.Disabled("TODO: Fix WireMock model list deserialization in integration test")
     @DisplayName("Should successfully list models from Ollama instance")
     void listModels__success(ClientSupport client) {
-        // Given
+        // Given - Using actual Ollama API response format with RFC3339 timestamps
         String modelsResponse = """
                 {
                   "models": [
                     {
                       "name": "llama2:latest",
+                      "model": "llama2:latest",
                       "size": 3826793677,
                       "digest": "sha256:78e26419b4469263f75331927a00a0284ef6544c1975b826b15abdaef17bb962",
-                      "modified_at": "2024-01-15T10:30:00Z"
+                      "modified_at": "2024-01-15T10:30:00.123456789Z"
                     },
                     {
                       "name": "codellama:13b",
+                      "model": "codellama:13b",
                       "size": 7365960935,
                       "digest": "sha256:9f438cb9cd581fc025612d27f7c1a6669ff83a8bb0ed86c94fcf4c5440555697",
-                      "modified_at": "2024-01-16T14:20:00Z"
+                      "modified_at": "2024-01-16T14:20:00.987654321Z"
                     }
                   ]
                 }
@@ -246,6 +247,19 @@ class OllamaResourceTest {
         });
         assertThat(models).isNotNull();
         assertThat(models).hasSize(2);
+
+        // Verify first model
+        OllamaModel firstModel = models.get(0);
+        assertThat(firstModel.name()).isEqualTo("llama2:latest");
+        assertThat(firstModel.size()).isEqualTo(3826793677L);
+        assertThat(firstModel.digest())
+                .isEqualTo("sha256:78e26419b4469263f75331927a00a0284ef6544c1975b826b15abdaef17bb962");
+        assertThat(firstModel.modifiedAt()).isNotNull();
+
+        // Verify second model
+        OllamaModel secondModel = models.get(1);
+        assertThat(secondModel.name()).isEqualTo("codellama:13b");
+        assertThat(secondModel.size()).isEqualTo(7365960935L);
     }
 
     @Test
