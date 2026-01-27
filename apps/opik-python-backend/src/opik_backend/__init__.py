@@ -83,7 +83,11 @@ def create_app(test_config=None, should_init_executor=True):
         init_executor(app)
 
     # Initialize the common metrics registry at startup
-    init_common_metrics_registry(app)
+    try:
+        init_common_metrics_registry(app)
+    except Exception as e:
+        # We can still start the app even if the common metrics registry initialization fails
+        app.logger.warning(f"Error initializing common metrics registry: {e}")
 
     app.register_blueprint(healthcheck)
     app.register_blueprint(evaluator)
