@@ -1,5 +1,6 @@
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any, Dict, Literal, Optional, cast
 
 from opik import _logging
@@ -196,14 +197,18 @@ def extract_command_update(outputs: Dict[str, Any]) -> Dict[str, Any]:
         # Duck-type check for Command object
         if hasattr(output_value, "update") and hasattr(output_value, "goto"):
             try:
-                update_dict = output_value.update
-                if isinstance(update_dict, dict):
+                update_value = output_value.update
+                # Handle None - skip extraction
+                if update_value is None:
+                    return outputs
+                # Accept any Mapping type and convert to dict for JSON serialization
+                if isinstance(update_value, Mapping):
                     _logging.log_once_at_level(
                         logging.DEBUG,
                         "Extracted state update from LangGraph Command object",
                         LOGGER,
                     )
-                    return update_dict
+                    return dict(update_value)
             except Exception as e:
                 LOGGER.warning(
                     f"Failed to extract update from Command-like object: {e}",

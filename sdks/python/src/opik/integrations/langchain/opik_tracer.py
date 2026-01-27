@@ -201,7 +201,8 @@ class OpikTracer(BaseTracer):
             else:
                 outputs = ERROR_SKIPPED_OUTPUTS
         elif (outputs := run_dict.get("outputs")) is not None:
-            outputs = run_parse_helpers.extract_command_update(outputs)
+            if isinstance(outputs, dict):
+                outputs = run_parse_helpers.extract_command_update(outputs)
 
         if not self._opik_context_read_only_mode:
             self._ensure_no_hanging_opik_tracer_spans()
