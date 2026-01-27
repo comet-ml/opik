@@ -44,7 +44,7 @@ const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
   return newDatasetItem;
 };
 
-const transformMessageIntoProviderMessage = (
+export const transformMessageIntoProviderMessage = (
   message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
 ): ProviderMessageType => {
@@ -76,7 +76,7 @@ const transformMessageIntoProviderMessage = (
     );
   } else {
     // Array with images/videos/audios: render mustache in text and media URLs
-    processedContent = message.content.map((part) => {
+    processedContent = message.content.flatMap((part) => {
       if (part.type === "text") {
         return {
           type: "text",
@@ -89,41 +89,71 @@ const transformMessageIntoProviderMessage = (
         } as TextPart;
       } else if (part.type === "image_url") {
         // Render mustache variables in image URLs
+        const renderedUrl = mustache.render(
+          part.image_url.url,
+          serializedDatasetItem,
+          {},
+          { escape: (val: string) => val },
+        );
+
+        // Handle array results (e.g., {{images}} resolves to ["url1", "url2"])
+        if (Array.isArray(renderedUrl)) {
+          return renderedUrl.map((url) => ({
+            type: "image_url",
+            image_url: { url },
+          } as ImagePart));
+        }
+
         return {
           type: "image_url",
           image_url: {
-            url: mustache.render(
-              part.image_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
+            url: renderedUrl,
           },
         } as ImagePart;
       } else if (part.type === "video_url") {
         // Render mustache variables in video URLs
+        const renderedUrl = mustache.render(
+          part.video_url.url,
+          serializedDatasetItem,
+          {},
+          { escape: (val: string) => val },
+        );
+
+        // Handle array results (e.g., {{videos}} resolves to ["url1", "url2"])
+        if (Array.isArray(renderedUrl)) {
+          return renderedUrl.map((url) => ({
+            type: "video_url",
+            video_url: { url },
+          } as VideoPart));
+        }
+
         return {
           type: "video_url",
           video_url: {
-            url: mustache.render(
-              part.video_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
+            url: renderedUrl,
           },
         } as VideoPart;
       } else {
         // Render mustache variables in audio URLs
+        const renderedUrl = mustache.render(
+          part.audio_url.url,
+          serializedDatasetItem,
+          {},
+          { escape: (val: string) => val },
+        );
+
+        // Handle array results (e.g., {{audios}} resolves to ["url1", "url2"])
+        if (Array.isArray(renderedUrl)) {
+          return renderedUrl.map((url) => ({
+            type: "audio_url",
+            audio_url: { url },
+          } as AudioPart));
+        }
+
         return {
           type: "audio_url",
           audio_url: {
-            url: mustache.render(
-              part.audio_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
+            url: renderedUrl,
           },
         } as AudioPart;
       }
