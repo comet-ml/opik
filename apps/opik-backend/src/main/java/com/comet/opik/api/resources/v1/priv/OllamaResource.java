@@ -33,7 +33,8 @@ import java.util.List;
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-@Tag(name = "Ollama", description = "Ollama provider configuration endpoints")
+@Tag(name = "Ollama", description = "Ollama API v1 provider configuration endpoints. "
+        + "Compatible with Ollama native API (/api/version, /api/tags) and OpenAI-compatible API (/v1/chat/completions).")
 public class OllamaResource {
 
     private final @NonNull OllamaService ollamaService;
@@ -41,11 +42,13 @@ public class OllamaResource {
 
     @POST
     @Path("/test-connection")
-    @Operation(summary = "Test connection to Ollama instance", description = "Validates that the provided Ollama URL is reachable and returns server information", responses = {
-            @ApiResponse(responseCode = "200", description = "Connection test successful", content = @Content(schema = @Schema(implementation = OllamaConnectionTestResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Invalid request"),
-            @ApiResponse(responseCode = "500", description = "Connection test failed")
-    })
+    @Operation(summary = "Test connection to Ollama API v1 instance", description = "Validates that the provided Ollama URL is reachable and returns server information. "
+            + "Uses Ollama native API endpoint /api/version to verify connectivity. "
+            + "Base URL should be provided without /v1 suffix (e.g., http://localhost:11434).", responses = {
+                    @ApiResponse(responseCode = "200", description = "Connection test successful", content = @Content(schema = @Schema(implementation = OllamaConnectionTestResponse.class))),
+                    @ApiResponse(responseCode = "400", description = "Invalid request"),
+                    @ApiResponse(responseCode = "500", description = "Connection test failed")
+            })
     public Response testConnection(
             @NotNull @Valid OllamaConnectionTestRequest request) {
         log.info("Testing Ollama connection for workspace '{}' to URL: {}",
@@ -58,11 +61,14 @@ public class OllamaResource {
 
     @POST
     @Path("/models")
-    @Operation(summary = "List available Ollama models", description = "Fetches the list of models available from the Ollama instance", responses = {
-            @ApiResponse(responseCode = "200", description = "Models retrieved successfully", content = @Content(schema = @Schema(implementation = OllamaModel.class))),
-            @ApiResponse(responseCode = "400", description = "Invalid request"),
-            @ApiResponse(responseCode = "500", description = "Failed to fetch models")
-    })
+    @Operation(summary = "List available Ollama API v1 models", description = "Fetches the list of models available from the Ollama instance. "
+            + "Uses Ollama native API endpoint /api/tags to retrieve model information. "
+            + "Base URL should be provided without /v1 suffix (e.g., http://localhost:11434). "
+            + "For actual LLM inference, use the base URL with /v1 suffix for OpenAI-compatible endpoints.", responses = {
+                    @ApiResponse(responseCode = "200", description = "Models retrieved successfully", content = @Content(schema = @Schema(implementation = OllamaModel.class))),
+                    @ApiResponse(responseCode = "400", description = "Invalid request"),
+                    @ApiResponse(responseCode = "500", description = "Failed to fetch models")
+            })
     public Response listModels(
             @NotNull @Valid OllamaConnectionTestRequest request) {
         log.info("Fetching Ollama models for workspace '{}' from URL: {}",
