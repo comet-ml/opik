@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Play, RotateCw, X } from "lucide-react";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
@@ -52,12 +52,15 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
 
   const canStop = isStudioOptimization && optimizationId && isInProgress;
 
-  // Extract prompt data from best experiment
-  const extractedPrompt = bestExperiment
-    ? extractPromptData(
-        get(bestExperiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, null),
-      )
-    : null;
+  const extractedPrompt = useMemo(
+    () =>
+      bestExperiment
+        ? extractPromptData(
+            get(bestExperiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, null),
+          )
+        : null,
+    [bestExperiment],
+  );
 
   const canDeploy = Boolean(extractedPrompt) && !isInProgress;
 
