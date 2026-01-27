@@ -2554,6 +2554,95 @@ class ProjectsResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Get Token Usage names")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetTokenUsageNames {
+
+        @Test
+        @DisplayName("when get token usage names, then return token usage names")
+        void findTokenUsageNames() {
+            // given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // when
+            String projectName = UUID.randomUUID().toString();
+
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            // Create traces with spans that have token usage
+            List<Trace> traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Create spans with token usage
+            traces.forEach(trace -> {
+                List<Span> spans = PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                        .map(span -> span.toBuilder()
+                                .usage(spanResourceClient.getTokenUsage())
+                                .model(spanResourceClient.randomModel().toString())
+                                .provider(spanResourceClient.provider())
+                                .traceId(trace.id())
+                                .projectName(projectName)
+                                .totalEstimatedCost(null)
+                                .build())
+                        .toList();
+
+                spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            });
+
+            // then
+            var actualEntity = projectResourceClient.findTokenUsageNames(projectId, apiKey, workspaceName);
+            assertThat(actualEntity.names()).isNotEmpty();
+            assertThat(actualEntity.names()).contains("completion_tokens", "prompt_tokens", "total_tokens");
+        }
+
+        @Test
+        @DisplayName("when project has no spans with token usage, then return empty list")
+        void findTokenUsageNames__whenNoTokenUsage__thenReturnEmptyList() {
+            // given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // when
+            String projectName = UUID.randomUUID().toString();
+            UUID projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+            // then
+            var actualEntity = projectResourceClient.findTokenUsageNames(projectId, apiKey, workspaceName);
+            assertThat(actualEntity.names()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("when project not found, then return 404")
+        void findTokenUsageNames__whenProjectNotFound__thenReturn404() {
+            // given
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            UUID nonExistentProjectId = UUID.randomUUID();
+
+            // then
+            var actualEntity = projectResourceClient.findTokenUsageNames(
+                    nonExistentProjectId, apiKey, workspaceName, HttpStatus.SC_NOT_FOUND);
+            assertThat(actualEntity).isNull();
+        }
+    }
+
     private List<Project> prepareProjectsListWithOnePublic() {
         var projects = PodamFactoryUtils.manufacturePojoList(factory, Project.class).stream()
                 .map(project -> project.toBuilder()
