@@ -46,13 +46,13 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
             kwargs, KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
         metadata.update(metadata_from_kwargs)
-        
+
         # Add default parameters for Anthropic models
         model = kwargs.get("model")
         default_params = model_defaults.get_anthropic_default_params(model, kwargs)
         if default_params:
             metadata.update(default_params)
-        
+
         metadata["created_from"] = "anthropic"
         tags = ["anthropic"]
 

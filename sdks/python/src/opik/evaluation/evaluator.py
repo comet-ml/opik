@@ -75,14 +75,14 @@ def _extract_model_config_from_trace(
 ) -> Optional[Dict[str, Any]]:
     """
     Extract model configuration from a trace by inspecting its spans.
-    
+
     This function looks for LLM spans (spans with provider and model info) and
     extracts model parameters from their metadata.
-    
+
     Args:
         client: Opik client instance
         trace_id: ID of the trace to inspect
-        
+
     Returns:
         Dictionary with model configuration, or None if no LLM spans found
     """
@@ -92,9 +92,9 @@ def _extract_model_config_from_trace(
             trace_id=trace_id,
             max_results=10,  # Get up to 10 spans
         )
-        
+
         config: Dict[str, Any] = {}
-        
+
         # Look for the first LLM span (span with provider and model)
         for span_data in spans:
             # Check if this is an LLM span (has provider and model)
@@ -102,7 +102,7 @@ def _extract_model_config_from_trace(
                 # Add model and provider
                 config["model"] = span_data.model
                 config["provider"] = span_data.provider
-                
+
                 # Extract parameters from metadata
                 if span_data.metadata and isinstance(span_data.metadata, dict):
                     # Look for common model parameters (snake_case from Python SDK)
@@ -116,16 +116,16 @@ def _extract_model_config_from_trace(
                         "max_tokens",
                         "max_completion_tokens",
                     ]
-                    
+
                     for param in model_params:
                         if param in span_data.metadata:
                             config[param] = span_data.metadata[param]
-                
+
                 # We found an LLM span, use it and stop
                 break
-        
+
         return config if config else None
-        
+
     except Exception as e:
         LOGGER.debug(
             "Failed to extract model config from trace %s: %s",
@@ -142,21 +142,21 @@ def _extract_model_config_from_test_results(
 ) -> Optional[Dict[str, Any]]:
     """
     Extract model configuration from test results by inspecting the first trace.
-    
+
     Args:
         client: Opik client instance
         test_results: List of test results from evaluation
-        
+
     Returns:
         Dictionary with model configuration, or None if extraction fails
     """
     if not test_results:
         return None
-    
+
     # Get the first test result's trace
     first_test = test_results[0]
     trace_id = first_test.test_case.trace_id
-    
+
     return _extract_model_config_from_trace(client, trace_id)
 
 
@@ -341,18 +341,20 @@ def _evaluate_task(
         )
 
     total_time = time.time() - start_time
-    
+
     # Auto-populate experiment config if it wasn't provided by user
     if not experiment_config_was_provided:
         try:
             if test_results:
                 # Flush to ensure all spans are written to backend
                 client.flush()
-                
+
                 # Give backend a moment to process the spans
                 time.sleep(0.5)
-                
-                extracted_config = _extract_model_config_from_test_results(client, test_results)
+
+                extracted_config = _extract_model_config_from_test_results(
+                    client, test_results
+                )
                 if extracted_config:
                     # Update experiment with extracted model configuration
                     client._rest_client.experiments.update_experiment(

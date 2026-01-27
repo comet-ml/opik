@@ -67,16 +67,16 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
         metadata = dict_utils.deepmerge(metadata, new_metadata)
-        
+
         # Add default parameters based on provider
         if self.provider == "google_vertexai":
             default_params = model_defaults.get_vertex_ai_default_params(model, kwargs)
         else:  # google_ai (Gemini)
             default_params = model_defaults.get_gemini_default_params(model, kwargs)
-        
+
         if default_params:
             metadata = dict_utils.deepmerge(metadata, default_params)
-        
+
         metadata.update({"created_from": "genai"})
 
         tags = ["genai"]
