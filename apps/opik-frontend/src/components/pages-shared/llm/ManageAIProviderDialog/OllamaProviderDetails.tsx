@@ -200,9 +200,14 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
               </FormControl>
               <FormMessage />
               <Description>
-                <strong>Important:</strong> URL must end with <code className="text-xs">/v1</code> for OpenAI API compatibility.
-                {" "}For local Ollama: <code className="text-xs">http://localhost:11434/v1</code>.
-                {" "}For remote: <code className="text-xs">http://ollama-test:11434/v1</code> or your server URL with <code className="text-xs">/v1</code> suffix.
+                <strong>Important:</strong> URL must end with{" "}
+                <code className="text-xs">/v1</code> for OpenAI API
+                compatibility. For local Ollama:{" "}
+                <code className="text-xs">http://localhost:11434/v1</code>. For
+                remote:{" "}
+                <code className="text-xs">http://ollama-test:11434/v1</code> or
+                your server URL with <code className="text-xs">/v1</code>{" "}
+                suffix.
               </Description>
             </FormItem>
           );

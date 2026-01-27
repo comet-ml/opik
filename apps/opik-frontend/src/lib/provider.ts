@@ -13,7 +13,7 @@ import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
 
 export const getProviderDisplayName = (providerKey: ProviderObject) => {
   const { provider, provider_name } = providerKey;
-  
+
   if (provider === PROVIDER_TYPE.CUSTOM) {
     return provider_name ? provider_name : LEGACY_CUSTOM_PROVIDER_NAME;
   }
