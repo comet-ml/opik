@@ -2,14 +2,17 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import relativeTime from "dayjs/plugin/relativeTime";
 import duration from "dayjs/plugin/duration";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import isString from "lodash/isString";
 import round from "lodash/round";
 import isUndefined from "lodash/isUndefined";
 import isNull from "lodash/isNull";
+import { getDateFormatFromLocalStorage } from "@/hooks/useDateFormat";
 
 dayjs.extend(utc);
 dayjs.extend(relativeTime);
 dayjs.extend(duration);
+dayjs.extend(customParseFormat);
 
 const FORMATTED_DATE_STRING_REGEXP =
   /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/(\d{2}|\d{4})\s(0[1-9]|1[0-2]):([0-5][0-9])\s(AM|PM)$/;
@@ -17,15 +20,22 @@ const FORMATTED_DATE_STRING_REGEXP =
 type FormatDateConfig = {
   utc?: boolean;
   includeSeconds?: boolean;
+  format?: string;
 };
 
 export const formatDate = (
   value: string,
-  { utc = false, includeSeconds = false }: FormatDateConfig = {},
+  { utc = false, includeSeconds = false, format }: FormatDateConfig = {},
 ) => {
-  const dateTimeFormat = includeSeconds
-    ? "MM/DD/YY hh:mm:ss A"
-    : "MM/DD/YY hh:mm A";
+  const storedFormat = getDateFormatFromLocalStorage();
+
+  let dateTimeFormat = format || storedFormat;
+
+  if (!format && includeSeconds) {
+    dateTimeFormat = includeSeconds
+      ? "MM/DD/YY hh:mm:ss A"
+      : "MM/DD/YY hh:mm A";
+  }
 
   if (isString(value) && dayjs(value).isValid()) {
     if (utc) {

@@ -5,6 +5,7 @@ import {
   OptimizerParameters,
   MetricParameters,
 } from "@/types/optimizations";
+import { extractMetricNameFromPythonCode } from "@/lib/rules";
 import {
   DEFAULT_GEPA_OPTIMIZER_CONFIGS,
   DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS,
@@ -13,6 +14,7 @@ import {
   DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS,
   DEFAULT_G_EVAL_METRIC_CONFIGS,
   DEFAULT_LEVENSHTEIN_METRIC_CONFIGS,
+  DEFAULT_CODE_METRIC_CONFIGS,
   OPTIMIZER_OPTIONS,
 } from "@/constants/optimizations";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
@@ -31,6 +33,10 @@ import { Filters } from "@/types/filters";
 
 export const getOptimizerLabel = (type: string): string => {
   return OPTIMIZER_OPTIONS.find((opt) => opt.value === type)?.label || type;
+};
+
+export const extractMetricNameFromCode = (code: string): string => {
+  return extractMetricNameFromPythonCode(code) || "code";
 };
 
 export const IN_PROGRESS_OPTIMIZATION_STATUSES: OPTIMIZATION_STATUS[] = [
@@ -116,6 +122,10 @@ export const getDefaultMetricConfig = (
       return {
         case_sensitive: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.CASE_SENSITIVE,
         reference_key: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.REFERENCE_KEY,
+      };
+    case METRIC_TYPE.CODE:
+      return {
+        code: DEFAULT_CODE_METRIC_CONFIGS.CODE,
       };
     default:
       return {};
