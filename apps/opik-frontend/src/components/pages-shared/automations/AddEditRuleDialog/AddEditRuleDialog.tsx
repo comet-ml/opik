@@ -204,7 +204,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       if ("common_metric_id" in code && code.common_metric_id) {
         return {
           metricId: code.common_metric_id,
-          initConfig: code.init_config || {},
+          // Clone initConfig to prevent mutations to the original rule data
+          initConfig: code.init_config ? cloneDeep(code.init_config) : {},
         };
       }
     }

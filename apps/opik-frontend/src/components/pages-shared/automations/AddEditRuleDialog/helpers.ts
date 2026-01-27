@@ -8,6 +8,7 @@ import {
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
+import { isPythonCodeRuleType } from "@/lib/rules";
 
 /**
  * Determines the UI rule type from the backend rule type and optionally the code object.
@@ -18,12 +19,7 @@ export const getUIRuleType = (
   code?: unknown,
 ): UI_EVALUATORS_RULE_TYPE => {
   // Check if this is a Python code rule that's actually a common metric
-  const isPythonCodeType =
-    ruleType === EVALUATORS_RULE_TYPE.python_code ||
-    ruleType === EVALUATORS_RULE_TYPE.thread_python_code ||
-    ruleType === EVALUATORS_RULE_TYPE.span_python_code;
-
-  if (isPythonCodeType && code) {
+  if (isPythonCodeRuleType(ruleType) && code) {
     const pythonCode = code as PythonCodeObject;
     if ("common_metric_id" in pythonCode && pythonCode.common_metric_id) {
       return UI_EVALUATORS_RULE_TYPE.common_metric;
