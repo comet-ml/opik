@@ -1356,6 +1356,12 @@ class BaseOptimizer(ABC):
                     "run_optimization must return AlgorithmResult (legacy OptimizationResult is no longer supported)"
                 )
 
+            # Check if optimization failed (finish_reason = "error")
+            # This can happen if evaluation fails but run_optimization() catches and returns
+            if context.finish_reason == "error":
+                logger.error("Optimization failed with error finish_reason")
+                result = self._build_final_result(raw_result, context)
+                result_prompt = runtime.select_result_display_prompt(result.prompt)
                 runtime.show_final_result(
                     optimizer=self,
                     initial_score=(
