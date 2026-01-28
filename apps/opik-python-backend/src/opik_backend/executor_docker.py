@@ -278,12 +278,19 @@ class DockerExecutor(CodeExecutorBase):
         if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
         
-        # Record payload sizes for correlation with timeouts
+        # Record code payload size early (string encoding is safe)
         code_size = len(code.encode('utf-8')) if code else 0
-        data_json = json.dumps(data)
-        data_size = len(data_json.encode('utf-8')) if data else 0
         payload_code_size_histogram.record(code_size, attributes={"payload_type": payload_type or "unknown"})
-        payload_data_size_histogram.record(data_size, attributes={"payload_type": payload_type or "unknown"})
+        
+        # Serialize data payload - can fail if data contains non-serializable objects
+        try:
+            data_json = json.dumps(data)
+            data_size = len(data_json.encode('utf-8'))
+            payload_data_size_histogram.record(data_size, attributes={"payload_type": payload_type or "unknown"})
+        except (TypeError, ValueError) as e:
+            self._record_execution_outcome("serialization_error", payload_type)
+            logger.error(f"Failed to serialize data payload: {e}")
+            return {"code": 400, "error": f"Data serialization failed: {e}"}
         
         start_time = time.time()
         container = self.get_container()
