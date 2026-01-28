@@ -1,9 +1,9 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { ATTACHMENT_TYPE, ParsedMediaData } from "@/types/attachments";
-import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { PrettyLLMMessageImageBlockProps } from "./types";
-import { useMediaContext } from "@/components/shared/SyntaxHighlighter/llmMessages";
+import { useMediaContext } from "@/components/shared/SyntaxHighlighter/llmMessages/MediaContext";
 
 /**
  * Pure presentation component for displaying images in LLM messages.

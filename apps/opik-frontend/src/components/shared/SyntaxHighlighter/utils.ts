@@ -8,7 +8,7 @@ import {
   PrettifyConfig,
   CodeOutput,
 } from "@/components/shared/SyntaxHighlighter/types";
-import { detectLLMMessages } from "@/components/shared/SyntaxHighlighter/llmMessages";
+import { detectLLMMessages } from "@/components/shared/SyntaxHighlighter/llmMessages/detectLLMMessages";
 
 export const generateSyntaxHighlighterCode = (
   data: object,
