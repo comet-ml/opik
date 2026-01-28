@@ -23,6 +23,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_4O_MINI_2024_07_18 = "gpt-4o-mini-2024-07-18",
   GPT_4O_2024_08_06 = "gpt-4o-2024-08-06",
   GPT_4O_2024_05_13 = "gpt-4o-2024-05-13",
+  GPT_4O_2024_11_20 = "gpt-4o-2024-11-20",
   GPT_4_1 = "gpt-4.1",
   GPT_4_1_MINI = "gpt-4.1-mini",
   GPT_4_1_NANO = "gpt-4.1-nano",
