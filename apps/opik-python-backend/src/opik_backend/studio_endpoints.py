@@ -1,11 +1,13 @@
 """Flask endpoints for Optimization Studio."""
 
 import logging
+import time
 from uuid6 import uuid7
 
 from flask import request, abort, Blueprint, Response, jsonify
 
 from werkzeug.exceptions import HTTPException
+from opentelemetry.metrics import get_meter
 
 from opik_backend.studio import (
     OptimizationCodeGenerator,
@@ -20,6 +22,19 @@ from opik_backend.studio.exceptions import (
 from opik_backend.http_utils import build_error_response
 
 logger = logging.getLogger(__name__)
+
+# Metrics setup
+meter = get_meter(__name__)
+generate_code_latency_histogram = meter.create_histogram(
+    name="studio.generate_code.latency",
+    description="End-to-end latency for generate_code endpoint in milliseconds",
+    unit="ms",
+)
+generate_code_failure_counter = meter.create_counter(
+    name="studio.generate_code.failures",
+    description="Total number of generate_code endpoint failures",
+    unit="1",
+)
 
 # Maximum request body size in bytes (1 MB)
 MAX_REQUEST_SIZE_BYTES = 1 * 1024 * 1024
@@ -107,36 +122,148 @@ def generate_code():
             "code": "generated Python code string"
         }
     """
-    if request.method != "POST":
-        abort(405, "Method not allowed")
+    start_time = time.time()
+    route = "/v1/private/studio/code"
+    status = "success"
+    status_code = 200
+    error_type = None
 
-    if (
-        request.content_length is not None
-        and request.content_length > MAX_REQUEST_SIZE_BYTES
-    ):
-        abort(413, "Request body too large")
+    try:
+        if request.method != "POST":
+            abort(405, "Method not allowed")
 
-    config_dict = request.get_json(force=True)
+        if (
+            request.content_length is not None
+            and request.content_length > MAX_REQUEST_SIZE_BYTES
+        ):
+            abort(413, "Request body too large")
 
-    if not config_dict:
-        abort(400, "Request body is required")
+        config_dict = request.get_json(force=True)
 
-    # Convert to OptimizationConfig
-    config = OptimizationConfig.from_dict(config_dict)
+        if not config_dict:
+            abort(400, "Request body is required")
 
-    # Create minimal context (optimization_id is placeholder for code generation)
-    context = OptimizationJobContext(
-        optimization_id=str(uuid7()),
-        workspace_id="",  # Not needed for code generation
-        workspace_name="",  # Not needed for code generation
-        config=config_dict,
-        opik_api_key=None,  # Not needed for code generation
-    )
+        # Convert to OptimizationConfig
+        config = OptimizationConfig.from_dict(config_dict)
 
-    # Generate code using user download template
-    code = OptimizationCodeGenerator.generate(config, context, for_user_download=True)
+        # Create minimal context (optimization_id is placeholder for code generation)
+        context = OptimizationJobContext(
+            optimization_id=str(uuid7()),
+            workspace_id="",  # Not needed for code generation
+            workspace_name="",  # Not needed for code generation
+            config=config_dict,
+            opik_api_key=None,  # Not needed for code generation
+        )
 
-    # Return as JSON with download headers
-    response = jsonify({"code": code})
-    response.headers["Content-Disposition"] = 'attachment; filename="optimization.py"'
-    return response
+        # Generate code using user download template
+        code = OptimizationCodeGenerator.generate(
+            config, context, for_user_download=True
+        )
+
+        # Return as JSON with download headers
+        response = jsonify({"code": code})
+        response.headers["Content-Disposition"] = (
+            'attachment; filename="optimization.py"'
+        )
+        return response
+
+    except HTTPException as e:
+        # Handle Flask abort() calls and HTTP exceptions
+        status = "error"
+        status_code = e.code
+        error_type = type(e).__name__
+        error_msg = str(e)
+
+        logger.error(
+            f"HTTP error in generate_code: {error_type} (status={status_code}): {error_msg}",
+            exc_info=True,
+        )
+
+        # Increment failure counter with structured labels
+        generate_code_failure_counter.add(
+            1,
+            {
+                "route": route,
+                "error_type": error_type,
+                "status_code": str(status_code),
+            },
+        )
+
+        # Re-raise to let Flask error handlers process it
+        raise
+
+    except (
+        KeyError,
+        ValueError,
+        InvalidOptimizerError,
+        InvalidMetricError,
+        OptimizationError,
+    ) as e:
+        # Handle exceptions that have Flask error handlers registered (they return 400)
+        status = "error"
+        status_code = 400
+        error_type = type(e).__name__
+        error_msg = str(e)
+
+        logger.error(
+            f"Validation error in generate_code: {error_type}: {error_msg}",
+            exc_info=True,
+        )
+
+        # Increment failure counter with structured labels
+        generate_code_failure_counter.add(
+            1,
+            {
+                "route": route,
+                "error_type": error_type,
+                "status_code": str(status_code),
+            },
+        )
+
+        # Re-raise to let Flask error handlers process it
+        raise
+
+    except Exception as e:
+        # Handle all other exceptions (unhandled exceptions -> 500)
+        status = "error"
+        status_code = 500
+        error_type = type(e).__name__
+        error_msg = str(e)
+
+        logger.error(
+            f"Error in generate_code: {error_type}: {error_msg}",
+            exc_info=True,
+        )
+
+        # Increment failure counter with structured labels
+        generate_code_failure_counter.add(
+            1,
+            {
+                "route": route,
+                "error_type": error_type,
+                "status_code": str(status_code),
+            },
+        )
+
+        # Return structured error response
+        return (
+            jsonify(
+                {
+                    "error": "Internal server error",
+                    "error_type": error_type,
+                    "error_message": error_msg,
+                }
+            ),
+            status_code,
+        )
+
+    finally:
+        # Always record latency histogram
+        latency_ms = (time.time() - start_time) * 1000
+        generate_code_latency_histogram.record(
+            latency_ms,
+            {
+                "route": route,
+                "status": status,
+            },
+        )
