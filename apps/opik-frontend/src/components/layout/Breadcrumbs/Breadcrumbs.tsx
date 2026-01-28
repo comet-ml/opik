@@ -10,7 +10,9 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import WorkspaceSelector from "@/components/layout/Breadcrumbs/WorkspaceSelector/WorkspaceSelector";
+import usePluginsStore from "@/store/PluginsStore";
+import useAppStore from "@/store/AppStore";
+import { calculateWorkspaceName } from "@/lib/utils";
 
 type CustomRouteStaticData = {
   title?: string;
@@ -20,6 +22,10 @@ type CustomRouteStaticData = {
 
 const Breadcrumbs = () => {
   const params = useBreadcrumbsStore((state) => state.params);
+  const WorkspaceSelectorComponent = usePluginsStore(
+    (state) => state.WorkspaceSelector,
+  );
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const breadcrumbs = useRouterState({
     select: (state) => {
@@ -77,12 +83,28 @@ const Breadcrumbs = () => {
     return items;
   };
 
+  const renderWorkspaceItem = () => {
+    if (WorkspaceSelectorComponent) {
+      return <WorkspaceSelectorComponent />;
+    }
+
+    return (
+      <BreadcrumbLink asChild>
+        <Link
+          className="pl-0.5"
+          to="/$workspaceName"
+          params={{ workspaceName }}
+        >
+          {calculateWorkspaceName(workspaceName)}
+        </Link>
+      </BreadcrumbLink>
+    );
+  };
+
   return (
     <Breadcrumb>
       <BreadcrumbList>
-        <BreadcrumbItem>
-          <WorkspaceSelector />
-        </BreadcrumbItem>
+        <BreadcrumbItem>{renderWorkspaceItem()}</BreadcrumbItem>
         <BreadcrumbSeparator />
         {renderBreadcrumbs()}
       </BreadcrumbList>
