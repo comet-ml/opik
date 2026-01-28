@@ -4,9 +4,9 @@ import { AxiosError } from "axios";
 
 export type OllamaModel = {
   name: string;
-  size: number;
-  digest: string;
-  modified_at: string;
+  size?: number | null;
+  digest?: string | null;
+  modified_at?: string | null;
 };
 
 export type OllamaListModelsRequest = {
