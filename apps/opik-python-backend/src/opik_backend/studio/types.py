@@ -18,8 +18,14 @@ def _convert_template_syntax(text: str) -> str:
     Returns:
         String with {{variable}} or {{ name }} converted to {variable} or {name}
     """
-    # Convert {{variable}} to {variable}, handling spaces, dots, and hyphens
-    return re.sub(r'\{\{\s*([^}]+?)\s*\}\}', r'{\1}', text)
+    # Convert {{variable}} to {variable}
+    # Uses greedy matching ([^}]+) instead of non-greedy ([^}]+?) to avoid ReDoS attacks
+    # Whitespace is stripped from the captured variable name
+    def replace_match(match):
+        var_name = match.group(1).strip()
+        return f"{{{var_name}}}"
+    
+    return re.sub(r'\{\{([^}]+)\}\}', replace_match, text)
 
 
 @dataclass

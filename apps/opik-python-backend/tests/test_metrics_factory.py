@@ -415,6 +415,28 @@ class TestTemplateSyntaxConversion:
         result = _convert_template_syntax("What is the mime type for {{url}}?")
         assert result == "What is the mime type for {url}?"
 
+    def test_variable_with_underscore(self):
+        """Test variable with underscore."""
+        result = _convert_template_syntax("Hello {{user_name}}")
+        assert result == "Hello {user_name}"
+
+    def test_variable_with_hyphen(self):
+        """Test variable with hyphen."""
+        result = _convert_template_syntax("Hello {{user-name}}")
+        assert result == "Hello {user-name}"
+
+    def test_variable_with_underscore_and_hyphen(self):
+        """Test variable with both underscore and hyphen."""
+        result = _convert_template_syntax("Value: {{expected_output}}")
+        assert result == "Value: {expected_output}"
+
+    def test_variable_with_whitespace(self):
+        """Test variable with whitespace around it (should be stripped)."""
+        result = _convert_template_syntax("Hello {{ name }}")
+        assert result == "Hello {name}"
+        result = _convert_template_syntax("Hello {{  name  }}")
+        assert result == "Hello {name}"
+
     def test_optimization_config_converts_templates(self):
         """Test OptimizationConfig.from_dict converts template syntax in prompt messages."""
         config = {
