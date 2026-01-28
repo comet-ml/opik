@@ -36,7 +36,7 @@ EXCLUDED_METRICS: Set[str] = {
 
 # Parameters that should be excluded from the user-configurable init parameters
 # These are internal parameters handled by the system
-EXCLUDED_INIT_PARAMS = {"self", "name", "track", "project_name"}
+EXCLUDED_INIT_PARAMS = {"self", "track", "project_name"}
 
 # Parameters that should be excluded from the score method parameters
 # These are internal parameters
