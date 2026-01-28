@@ -12,7 +12,7 @@ export class DatasetItemsPage {
   }
 
   async removeDefaultColumns() {
-    await this.page.getByRole('button', { name: 'Columns' }).click();
+    await this.page.getByTestId('columns-button').click();
 
     const createdToggle = this.page
       .getByRole('button', { name: 'Created', exact: true })
