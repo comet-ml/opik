@@ -116,6 +116,7 @@ export interface Experiment {
     "id" | "version_hash" | "version_name" | "tags" | "change_description"
   >;
   project_id?: string;
+  project_name?: string;
   optimization_id?: string;
   type: EXPERIMENT_TYPE;
   status: string;

@@ -4,7 +4,7 @@ import opik
 from typing import Any
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle, add_record_index
+from opik_optimizer.utils.dataset import DatasetHandle, FilterBy, add_record_index
 
 
 def _halu_records_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -52,7 +52,7 @@ HALU_EVAL_SPEC = DatasetSpec(
 _HALU_EVAL_HANDLE = DatasetHandle(HALU_EVAL_SPEC)
 
 
-def halu_eval_300(
+def halu_eval(
     *,
     split: str | None = None,
     count: int | None = None,
@@ -61,11 +61,12 @@ def halu_eval_300(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """
     Load slices of the HaluEval dataset (user query, ChatGPT response, label).
 
-    The default call returns the 300-example slice used in our demos. Override
+    The default call returns the curated slice used in our demos. Override
     ``split``/``count``/``start``/``dataset_name`` to stream other sections of the
     dataset.
     """
@@ -77,4 +78,5 @@ def halu_eval_300(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
+        filter_by=filter_by,
     )

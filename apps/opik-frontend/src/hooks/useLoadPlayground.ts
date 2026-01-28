@@ -24,6 +24,11 @@ import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { formatDatasetVersionKey } from "@/utils/datasetVersionStorage";
 
+interface NamedPromptContent {
+  name: string;
+  content: MessageContent;
+}
+
 interface LoadPlaygroundOptions {
   promptContent?: MessageContent;
   promptId?: string;
@@ -32,6 +37,7 @@ interface LoadPlaygroundOptions {
   datasetId?: string;
   datasetVersionId?: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
+  namedPrompts?: NamedPromptContent[];
 }
 
 const useLoadPlayground = () => {
@@ -84,6 +90,90 @@ const useLoadPlayground = () => {
     return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
   }, [providerKeysData]);
 
+  const createPromptFromContent = useCallback(
+    (
+      content: MessageContent,
+      options: {
+        promptId?: string;
+        promptVersionId?: string;
+        autoImprove?: boolean;
+        templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
+        initPrompt?: Partial<ReturnType<typeof generateDefaultPrompt>>;
+      } = {},
+    ) => {
+      const {
+        promptId,
+        promptVersionId,
+        autoImprove = false,
+        templateStructure,
+        initPrompt,
+      } = options;
+
+      const newPrompt = generateDefaultPrompt({
+        initPrompt,
+        setupProviders: providerKeys,
+        lastPickedModel,
+        providerResolver: calculateModelProvider,
+        modelResolver: calculateDefaultModel,
+      });
+
+      if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
+        if (promptId) {
+          newPrompt.loadedChatPromptId = promptId;
+        }
+
+        try {
+          const contentString = getTextFromMessageContent(content);
+          const parsedMessages = parseChatTemplateToLLMMessages(contentString, {
+            promptId,
+            promptVersionId,
+            useTimestamp: true,
+          });
+
+          if (parsedMessages.length > 0) {
+            newPrompt.messages = parsedMessages;
+          } else {
+            newPrompt.messages = [
+              generateDefaultLLMPromptMessage({
+                content,
+                promptId,
+                promptVersionId,
+                autoImprove,
+              }),
+            ];
+          }
+        } catch (error) {
+          console.error("Failed to parse chat prompt:", error);
+          newPrompt.messages = [
+            generateDefaultLLMPromptMessage({
+              content,
+              promptId,
+              promptVersionId,
+              autoImprove,
+            }),
+          ];
+        }
+      } else {
+        newPrompt.messages = [
+          generateDefaultLLMPromptMessage({
+            content,
+            promptId,
+            promptVersionId,
+            autoImprove,
+          }),
+        ];
+      }
+
+      return newPrompt;
+    },
+    [
+      calculateDefaultModel,
+      calculateModelProvider,
+      lastPickedModel,
+      providerKeys,
+    ],
+  );
+
   const loadPlayground = useCallback(
     (options: LoadPlaygroundOptions = {}) => {
       const {
@@ -94,83 +184,45 @@ const useLoadPlayground = () => {
         datasetId,
         datasetVersionId,
         templateStructure,
+        namedPrompts,
       } = options;
 
-      const newPrompt = generateDefaultPrompt({
-        setupProviders: providerKeys,
-        lastPickedModel,
-        providerResolver: calculateModelProvider,
-        modelResolver: calculateDefaultModel,
-      });
+      let promptIds: string[];
+      let promptMap: Record<string, ReturnType<typeof generateDefaultPrompt>>;
 
-      // For chat prompts, parse the JSON and create multiple messages
-      if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
-        // Set the loaded chat prompt ID for the dropdown to display
-        if (promptId) {
-          newPrompt.loadedChatPromptId = promptId;
-        }
-
-        try {
-          const contentString = getTextFromMessageContent(promptContent);
-          const parsedMessages = parseChatTemplateToLLMMessages(contentString, {
-            promptId,
-            promptVersionId,
-            useTimestamp: true,
-          });
-
-          if (parsedMessages.length > 0) {
-            newPrompt.messages = parsedMessages;
-          } else {
-            // Fallback to single message if parsing fails
-            newPrompt.messages = [
-              generateDefaultLLMPromptMessage({
-                content: promptContent,
-                promptId,
-                promptVersionId,
-                autoImprove,
-              }),
-            ];
-          }
-        } catch (error) {
-          console.error("Failed to parse chat prompt:", error);
-          // Fallback to single message if parsing fails, preserving full content
-          newPrompt.messages = [
-            generateDefaultLLMPromptMessage({
-              content: promptContent,
-              promptId,
-              promptVersionId,
-              autoImprove,
-            }),
-          ];
-        }
-      } else {
-        // For text prompts, create a single message preserving full content (including media)
-        newPrompt.messages = [
-          generateDefaultLLMPromptMessage({
-            content: promptContent,
-            promptId,
-            promptVersionId,
-            autoImprove,
+      if (namedPrompts && namedPrompts.length > 0) {
+        // Multi-agent: create a separate Playground prompt for each named prompt
+        const prompts = namedPrompts.map((np) =>
+          createPromptFromContent(np.content, {
+            templateStructure: PROMPT_TEMPLATE_STRUCTURE.CHAT,
+            initPrompt: { name: np.name },
           }),
-        ];
+        );
+        promptIds = prompts.map((p) => p.id);
+        promptMap = Object.fromEntries(prompts.map((p) => [p.id, p]));
+      } else {
+        const newPrompt = createPromptFromContent(promptContent, {
+          promptId,
+          promptVersionId,
+          autoImprove,
+          templateStructure,
+        });
+        promptIds = [newPrompt.id];
+        promptMap = { [newPrompt.id]: newPrompt };
       }
 
-      setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
+      setPromptMap(promptIds, promptMap);
 
       if (datasetId) {
         if (isVersioningEnabled && datasetVersionId) {
-          // Use versioned storage format: "datasetId::versionId"
           const versionKey = formatDatasetVersionKey(
             datasetId,
             datasetVersionId,
           );
           setDatasetVersionKey(versionKey);
-          // Clear legacy storage to avoid conflicts
           setDatasetId(null);
         } else {
-          // Use legacy storage format: "datasetId"
           setDatasetId(datasetId);
-          // Clear versioned storage to avoid conflicts
           setDatasetVersionKey(null);
         }
       }
@@ -183,11 +235,8 @@ const useLoadPlayground = () => {
       });
     },
     [
-      calculateDefaultModel,
-      calculateModelProvider,
-      lastPickedModel,
+      createPromptFromContent,
       navigate,
-      providerKeys,
       setPromptMap,
       setDatasetId,
       setDatasetVersionKey,

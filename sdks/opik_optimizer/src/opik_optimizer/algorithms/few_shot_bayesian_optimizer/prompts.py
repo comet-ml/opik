@@ -10,36 +10,61 @@ import textwrap
 FEW_SHOT_EXAMPLE_PLACEHOLDER = "FEW_SHOT_EXAMPLE_PLACEHOLDER"
 
 # System prompt for generating few-shot prompt templates
-SYSTEM_PROMPT_TEMPLATE = (
-    textwrap.dedent(
-        """
-    You are a prompt editor that modifies a message list to support few-shot learning. Your job is to insert a placeholder where few-shot examples can be inserted and generate a reusable string template for formatting those examples.
+SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
+    """
+    You are a prompt editor that modifies prompts to support few-shot learning. Your job is to insert a placeholder where few-shot examples can be inserted and generate a reusable string template for formatting those examples.
 
     You will receive a JSON object with the following fields:
 
-    - "message_list": a list of messages, each with a role (system, user, or assistant) and a content field.
-    - "examples": a list of example pairs, each with input and output fields.
+    - "prompts": a list of prompt objects, each containing:
+        - "name": the identifier for this prompt (e.g., "chat-prompt")
+        - "messages": a list of messages, each with a role (system, user, or assistant) and a content field
+    - "examples": a list of example objects from the dataset with their actual keys (e.g., {{"text": "...", "label": "..."}})
 
     Your task:
 
-    - Insert the string "{FEW_SHOT_EXAMPLE_PLACEHOLDER}" into one of the messages in the list. Make sure to:
-        - Insert it at the most logical point for including few-shot examples — typically as part of the system message
-        - Add a section title in XML or markdown format. The examples will be provided as `example_1\nexample_2\n...` with each example following the example template.
-    - Analyze the examples to infer a consistent structure, and create a single string few_shot_example_template using the Python .format() style. Make sure to follow the following instructions:
-        - Unless absolutely relevant, do not return an object but instead a string that can be inserted as part of {FEW_SHOT_EXAMPLE_PLACEHOLDER}
-        - Make sure to include the variables as part of this string so we can before string formatting with actual examples. Only variables available in the examples can be used.
-        - Do not apply any transformations to the variables either, only the variable name should be included in the format `{{<variable_name>}}`
-        - The few shot examples should include the expected response as the goal is to provide examples of the response.
-        - Ensure the format of the few shot examples are consistent with how the model will be called
+    1. For EACH prompt in the "prompts" list, insert the string "{placeholder}" into one of its messages:
+        - Insert it at the most logical point for including few-shot examples — typically in the system message
+        - Add a section title like "<!-- FEW-SHOT EXAMPLES -->" before the placeholder
+
+    2. Create a simple "template" string for formatting each example. This template:
+        - Should be a simple format string like "Q: {text}\\nA: {label}" using single curly braces for variable placeholders
+        - CRITICAL: Must use ONLY the EXACT key names that appear in the provided examples - check the "examples" field to see what keys are available
+        - Must ONLY contain the format for a single example, NOT the entire prompt structure
+        - Must NOT contain the string "{placeholder}" - the template is what REPLACES the placeholder
+        - Should include relevant fields from the examples to demonstrate the expected input/output format
 
     Return your output as a JSON object with:
+    - One field for each prompt name (e.g., "chat-prompt") containing the updated messages list with the placeholder inserted
+    - A "template" field containing ONLY the simple example format string
 
-    - message_list_with_placeholder: the updated list with "FEW_SHOT_EXAMPLE_PLACEHOLDER" inserted.
-    - example_template: a string template using the fields provided in the examples (you don't need to use all of them)
+    Example output structure:
+    {{
+        "chat-prompt": [
+            {{"role": "system", "content": "Instructions...\\n\\n<!-- FEW-SHOT EXAMPLES -->\\n{placeholder}"}},
+            {{"role": "user", "content": "{{text}}"}}
+        ],
+        "template": "Question: {text}\\nAnswer: {label}"
+    }}
+
+    IMPORTANT: The "template" field must be a simple format string for examples only. Do NOT include "{placeholder}" or the full prompt structure in the template.
 
     Respond only with the JSON object. Do not include any explanation or extra text.
     """
-    )
-    .strip()
-    .format(FEW_SHOT_EXAMPLE_PLACEHOLDER=FEW_SHOT_EXAMPLE_PLACEHOLDER)
-)
+).strip()
+
+
+def build_system_prompt_template(
+    template: str = SYSTEM_PROMPT_TEMPLATE,
+    placeholder: str = FEW_SHOT_EXAMPLE_PLACEHOLDER,
+) -> str:
+    """Build the system prompt template with placeholder substitution.
+
+    Args:
+        template: The system prompt template string (defaults to SYSTEM_PROMPT_TEMPLATE)
+        placeholder: The placeholder string to substitute (defaults to FEW_SHOT_EXAMPLE_PLACEHOLDER)
+
+    Returns:
+        The template with {placeholder} replaced by the actual placeholder value
+    """
+    return template.replace("{placeholder}", placeholder)

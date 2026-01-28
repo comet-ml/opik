@@ -850,3 +850,48 @@ def test_extract_and_replace_nested_mixed_types(extractor, files_to_remove):
     assert bool(pattern.fullmatch(data["mixed"]["image"])) is True
     assert bool(pattern.fullmatch(data["mixed"]["list"][2])) is True
     assert bool(pattern.fullmatch(data["mixed"]["dict"]["nested_pdf"])) is True
+
+
+def test_extract_and_replace_top_level_list(extractor, files_to_remove):
+    """Test extraction when data is a list at the top level (not nested in a dict)."""
+    data = [
+        constants.PNG_BASE64,
+        "regular text",
+        constants.JPEG_BASE64,
+        {"nested_image": constants.PDF_BASE64},
+    ]
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="trace",
+        entity_id="trace-top-level-list",
+        context="input",
+        project_name="test",
+    )
+
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
+
+    # Should extract 3 attachments (PNG, JPEG, PDF)
+    assert len(result) == 3
+    content_types = [r.attachment_data.content_type for r in result]
+    assert "image/png" in content_types
+    assert "image/jpeg" in content_types
+    assert "application/pdf" in content_types
+
+    # Verify list data was sanitized
+    assert constants.PNG_BASE64 not in data[0]
+    assert data[1] == "regular text"
+    assert constants.JPEG_BASE64 not in data[2]
+    assert constants.PDF_BASE64 not in data[3]["nested_image"]
+
+    # Check that the attachment placeholders are present and have a correct format
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert bool(pattern.fullmatch(data[0])) is True
+    assert bool(pattern.fullmatch(data[2])) is True
+    assert bool(pattern.fullmatch(data[3]["nested_image"])) is True
+
+    # Verify the list structure is preserved
+    assert len(data) == 4
+    assert isinstance(data[3], dict)

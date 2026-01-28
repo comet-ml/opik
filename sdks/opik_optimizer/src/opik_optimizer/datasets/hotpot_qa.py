@@ -1,46 +1,24 @@
 from __future__ import annotations
 
+import warnings
+
 import opik
 
 from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
-from opik_optimizer.utils.dataset_utils import DatasetHandle, warn_deprecated_dataset
-
-
-def hotpot_300(test_mode: bool = False) -> opik.Dataset:
-    """
-    Dataset containing the first 300 samples of the HotpotQA dataset.
-    """
-    warn_deprecated_dataset("hotpot_300", "hotpot(count=300)")
-    dataset_name = "hotpot_300_train" if not test_mode else "hotpot_300_sample"
-    return hotpot(
-        split="train",
-        start=0,
-        count=300,
-        dataset_name=dataset_name,
-        test_mode=test_mode,
-    )
-
-
-def hotpot_500(test_mode: bool = False) -> opik.Dataset:
-    """
-    Dataset containing the first 500 samples of the HotpotQA dataset.
-    """
-    warn_deprecated_dataset("hotpot_500", "hotpot(count=500)")
-    dataset_name = "hotpot_500" if not test_mode else "hotpot_500_test"
-    return hotpot(
-        split="train",
-        start=0,
-        count=500,
-        dataset_name=dataset_name,
-        test_mode=test_mode,
-    )
+from opik_optimizer.utils.dataset import DatasetHandle, FilterBy
 
 
 HOT_POT_SPEC = DatasetSpec(
     name="hotpot",
-    hf_path="hotpot_qa",
+    hf_path="hotpotqa/hotpot_qa",
     hf_name="fullwiki",
     default_source_split="train",
+    load_kwargs_resolver=lambda split: {
+        "path": "hotpotqa/hotpot_qa",
+        "name": "fullwiki",
+        "split": split,
+        "revision": "main",
+    },
     presets={
         "train": DatasetSplitPreset(
             source_split="train",
@@ -75,8 +53,16 @@ def hotpot(
     test_mode: bool = False,
     seed: int | None = None,
     test_mode_count: int | None = None,
+    filter_by: FilterBy | None = None,
 ) -> opik.Dataset:
     """General-purpose HotpotQA loader."""
+    if split == "test":
+        warnings.warn(
+            "Hotpot test split does not include gold answers. "
+            "Metrics that require answers (e.g., answer_correctness_score) will fail. "
+            "Use split='train' or split='validation' for scoring.",
+            stacklevel=2,
+        )
     return _HOT_POT_HANDLE.load(
         split=split,
         count=count,
@@ -85,5 +71,12 @@ def hotpot(
         test_mode=test_mode,
         seed=seed,
         test_mode_count=test_mode_count,
-        prefer_presets=split is not None,
+        prefer_presets=(
+            split is not None
+            and filter_by is None
+            and count is None
+            and start is None
+            and dataset_name is None
+        ),
+        filter_by=filter_by,
     )

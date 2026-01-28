@@ -13,6 +13,7 @@ import com.comet.opik.api.ExperimentScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.filter.FieldType;
@@ -41,6 +42,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.METADATA;
+import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 import static com.comet.opik.api.grouping.GroupingFactory.TAGS;
 
 @UtilityClass
@@ -52,9 +54,14 @@ public class ExperimentsTestUtils {
      * Helper function to build expected ExperimentGroupResponse for testing.
      * This function groups experiments according to the provided GroupBy criteria and
      * builds the nested response structure similar to how ExperimentService does it.
+     *
+     * @param groups the grouping criteria
+     * @param experiments the list of experiments to group
+     * @param projectMap map of project IDs to Project objects for enrichment (use Map.of() if not needed)
+     * @return the expected group response
      */
     public static ExperimentGroupResponse buildExpectedGroupResponse(List<GroupBy> groups,
-            List<Experiment> experiments) {
+            List<Experiment> experiments, Map<UUID, Project> projectMap) {
         // Explode experiments by LIST fields (like arrayJoin in ClickHouse)
         // Each experiment with LIST fields will appear in multiple groups
         List<ExperimentWithGroupValues> explodedExperiments = explodeExperimentsByListFields(experiments, groups);
@@ -81,10 +88,12 @@ public class ExperimentsTestUtils {
                 })
                 .toList();
 
-        // Build enrichment info (dataset mapping)
+        // Build enrichment info (dataset and project mapping)
         Map<UUID, Dataset> datasetMap = getDatasetMapFromExperiments(experiments);
+        Map<UUID, Project> resolvedProjectMap = getProjectMapFromExperiments(experiments, projectMap);
         var enrichInfoHolder = ExperimentGroupEnrichInfoHolder.builder()
                 .datasetMap(datasetMap)
+                .projectMap(resolvedProjectMap)
                 .build();
 
         // Build the nested response structure using the production builder
@@ -96,13 +105,22 @@ public class ExperimentsTestUtils {
      * Build expected ExperimentGroupAggregationsResponse for testing.
      * This function groups experiments and calculates aggregations based on the provided criteria.
      * Uses the actual production ExperimentResponseBuilder class to ensure consistency between test and production code.
+     *
+     * @param groups the grouping criteria
+     * @param experiments the list of experiments
+     * @param experimentToItems mapping from experiment ID to its experiment items
+     * @param traceToSpans mapping from trace ID to its spans
+     * @param traces the list of traces
+     * @param projectMap map of project IDs to Project objects for enrichment (use Map.of() if not needed)
+     * @return the expected group aggregations response
      */
     public static ExperimentGroupAggregationsResponse buildExpectedGroupAggregationsResponse(
             List<GroupBy> groups,
             List<Experiment> experiments,
             Map<UUID, List<ExperimentItem>> experimentToItems,
             Map<UUID, List<Span>> traceToSpans,
-            List<Trace> traces) {
+            List<Trace> traces,
+            Map<UUID, Project> projectMap) {
 
         // Explode experiments by LIST fields (like arrayJoin in ClickHouse)
         // Each experiment with LIST fields will appear in multiple groups
@@ -132,10 +150,12 @@ public class ExperimentsTestUtils {
                 })
                 .toList();
 
-        // Build enrichment info (dataset mapping)
+        // Build enrichment info (dataset and project mapping)
         Map<UUID, Dataset> datasetMap = getDatasetMapFromExperiments(experiments);
+        Map<UUID, Project> resolvedProjectMap = getProjectMapFromExperiments(experiments, projectMap);
         var enrichInfoHolder = ExperimentGroupEnrichInfoHolder.builder()
                 .datasetMap(datasetMap)
+                .projectMap(resolvedProjectMap)
                 .build();
 
         // Build the nested response structure using the production builder
@@ -374,6 +394,35 @@ public class ExperimentsTestUtils {
     }
 
     /**
+     * Build project mapping from experiments for enrichment.
+     * If a projectMap is provided, uses the real project names from it.
+     * Otherwise, falls back to placeholder names.
+     *
+     * @param experiments the list of experiments to extract project IDs from
+     * @param projectMap optional map of project IDs to Project objects with real names
+     * @return map of project IDs to Project objects for enrichment
+     */
+    private static Map<UUID, Project> getProjectMapFromExperiments(List<Experiment> experiments,
+            Map<UUID, Project> projectMap) {
+        return experiments.stream()
+                .filter(exp -> exp.projectId() != null)
+                .collect(Collectors.toMap(
+                        Experiment::projectId,
+                        exp -> {
+                            // Use project from provided map if available, otherwise create placeholder
+                            if (projectMap != null && projectMap.containsKey(exp.projectId())) {
+                                return projectMap.get(exp.projectId());
+                            }
+                            return Project.builder()
+                                    .id(exp.projectId())
+                                    .name("project-" + exp.projectId())
+                                    .build();
+                        },
+                        (existing, replacement) -> existing // Keep first one in case of duplicates
+                ));
+    }
+
+    /**
      * Explode experiments by LIST fields (simulating arrayJoin in ClickHouse).
      * For experiments with LIST fields in grouping criteria, create multiple entries
      * (one for each value in the LIST field).
@@ -483,11 +532,16 @@ public class ExperimentsTestUtils {
     /**
      * Extract a single field value from an experiment based on a GroupBy criterion.
      * Note: This should not be called for LIST fields when they are being exploded.
+     * For PROJECT_ID grouping, tests must set projectId on the Experiment objects.
      */
     private static String extractFieldValue(Experiment experiment, GroupBy group) {
         return switch (group.field()) {
             case DATASET_ID -> experiment.datasetId().toString();
             case METADATA -> extractFromJsonMetadata(experiment.metadata(), group.key());
+            case PROJECT_ID -> {
+                UUID projectId = experiment.projectId();
+                yield projectId != null ? projectId.toString() : "";
+            }
             case TAGS -> throw new IllegalArgumentException(
                     "TAGS field should be handled by explodeExperimentsByListFields, not extractFieldValue");
             default -> throw new IllegalArgumentException("Unsupported grouping field: " + group.field());

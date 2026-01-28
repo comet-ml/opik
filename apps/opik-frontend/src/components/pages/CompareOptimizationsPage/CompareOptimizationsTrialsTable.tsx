@@ -5,7 +5,6 @@ import { ROW_HEIGHT, OnChangeFn } from "@/types/shared";
 import { Experiment } from "@/types/datasets";
 import { Card } from "@/components/ui/card";
 import DataTable from "@/components/shared/DataTable/DataTable";
-import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { DataTableWrapperProps } from "@/components/shared/DataTable/DataTableWrapper";
 import { TABLE_WRAPPER_ATTRIBUTE } from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -62,7 +61,7 @@ const CompareOptimizationsTrialsTable: React.FC<
   const getRowClassName = useCallback(
     (row: Row<Experiment>) => {
       if (highlightedTrialId && row.id === highlightedTrialId) {
-        return "[&_td]:bg-[#e6f7ed] [&:hover_td]:!bg-[#d0f0dc]";
+        return "comet-table-row-best";
       }
       return "";
     },
@@ -91,7 +90,6 @@ const CompareOptimizationsTrialsTable: React.FC<
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={StickyTableWrapperWithBorder}
-        TableBody={DataTableVirtualBody}
         stickyHeader
       />
     </Card>

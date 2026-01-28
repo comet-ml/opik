@@ -59,7 +59,7 @@ class OpikTracer:
         self.metadata = metadata or {}
         self.metadata["created_from"] = "google-adk"
         self.project_name = project_name
-        self.distributed_headers = distributed_headers
+        self._distributed_headers = distributed_headers
 
         self._init_internal_attributes()
 
@@ -69,7 +69,9 @@ class OpikTracer:
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
         self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
 
-        patchers.patch_adk(self._opik_client)
+        patchers.patch_adk(
+            self._opik_client, distributed_headers=self._distributed_headers
+        )
 
     def _has_response_content(self, llm_response: models.LlmResponse) -> bool:
         """

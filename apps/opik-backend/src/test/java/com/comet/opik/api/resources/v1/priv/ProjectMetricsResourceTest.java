@@ -999,9 +999,13 @@ class ProjectMetricsResourceTest {
 
             // Verify response contains all metric names
             assertThat(response.results()).hasSizeGreaterThanOrEqualTo(names.size());
-            // With no interval_end, WITH FILL is omitted, so only actual data points are returned
+            // With interval_end defaulting to Instant.now(), WITH FILL is applied, so all time buckets are returned
             response.results().forEach(result -> {
-                assertThat(result.data()).hasSizeGreaterThanOrEqualTo(1);
+                assertThat(result.data()).hasSizeGreaterThanOrEqualTo(3);
+                // Verify that empty buckets have value=0 for count metrics
+                result.data().forEach(dataPoint -> {
+                    assertThat(dataPoint.value()).isNotNull();
+                });
             });
         }
 
@@ -1218,8 +1222,12 @@ class ProjectMetricsResourceTest {
             // Verify response
             assertThat(response.results()).hasSize(1);
             assertThat(response.results().getFirst().name()).isEqualTo(ProjectMetricsDAO.NAME_COST);
-            // With no interval_end, WITH FILL is omitted, so only actual data points are returned
+            // With interval_end defaulting to Instant.now(), WITH FILL is applied, so all time buckets are returned
             assertThat(response.results().getFirst().data()).hasSizeGreaterThanOrEqualTo(3);
+            // Verify that empty buckets have value=0 for cost metrics
+            response.results().getFirst().data().forEach(dataPoint -> {
+                assertThat(dataPoint.value()).isNotNull();
+            });
         }
 
         @ParameterizedTest
@@ -1803,11 +1811,11 @@ class ProjectMetricsResourceTest {
             var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, Long.class, API_KEY,
                     WORKSPACE_NAME);
 
-            // When interval_end is omitted, WITH FILL is not used, so only actual data points are returned (no nulls for gaps)
+            // When interval_end is omitted, it defaults to Instant.now(), so WITH FILL is applied and all time buckets are returned
             assertThat(response.results()).hasSize(1);
             var result = response.results().getFirst();
             assertThat(result.name()).isEqualTo(ProjectMetricsDAO.NAME_THREADS);
-            assertThat(result.data()).hasSize(3); // Only 3 actual data points, no filled null values
+            assertThat(result.data()).hasSizeGreaterThanOrEqualTo(5); // All time buckets filled, including empty ones with value=0
 
             // Verify the actual data points exist
             var dataPointTimes = result.data().stream().map(dp -> dp.time()).toList();
@@ -1817,7 +1825,9 @@ class ProjectMetricsResourceTest {
                     marker);
 
             var dataPointValues = result.data().stream().map(dp -> dp.value()).toList();
-            assertThat(dataPointValues).containsExactlyInAnyOrder(threadCountMinus3, threadCountMinus1, threadCountNow);
+            assertThat(dataPointValues).contains(threadCountMinus3, threadCountMinus1, threadCountNow);
+            // Empty buckets should have value=0
+            assertThat(dataPointValues).allMatch(value -> value != null);
         }
 
         @ParameterizedTest
@@ -2188,7 +2198,8 @@ class ProjectMetricsResourceTest {
         var response = projectMetricsResourceClient.getProjectMetrics(projectId, request, aClass, API_KEY,
                 WORKSPACE_NAME);
 
-        var expected = createExpected(marker, request.interval(), names, minus3, minus1, current);
+        var expected = createExpected(marker, request.interval(), names, minus3, minus1, current, request.metricType(),
+                aClass);
 
         // assertions
         assertThat(response.projectId()).isEqualTo(projectId);
@@ -2204,17 +2215,44 @@ class ProjectMetricsResourceTest {
                 .isEqualTo(expected);
     }
 
+    @SuppressWarnings("unchecked")
     private static <T extends Number> List<ProjectMetricResponse.Results<T>> createExpected(
             Instant marker, TimeInterval interval, List<String> names, Map<String, T> dataMinus3,
-            Map<String, T> dataMinus1, Map<String, T> dataNow) {
+            Map<String, T> dataMinus1, Map<String, T> dataNow, MetricType metricType, Class<T> valueClass) {
+        // Count/accumulation metrics should return 0 instead of null for empty buckets
+        boolean shouldReturnZero = metricType == MetricType.TRACE_COUNT ||
+                metricType == MetricType.THREAD_COUNT ||
+                metricType == MetricType.SPAN_COUNT ||
+                metricType == MetricType.GUARDRAILS_FAILED_COUNT ||
+                metricType == MetricType.TOKEN_USAGE ||
+                metricType == MetricType.COST ||
+                metricType == MetricType.SPAN_TOKEN_USAGE;
+
         return names.stream()
                 .map(name -> {
+                    T valueMinus3 = dataMinus3 == null ? null : dataMinus3.get(name);
+                    T valueMinus1 = dataMinus1 == null ? null : dataMinus1.get(name);
+                    T valueNow = dataNow == null ? null : dataNow.get(name);
+
+                    // Determine the zero value based on the expected class type
+                    T zeroValue = null;
+                    if (shouldReturnZero) {
+                        if (valueClass == Long.class) {
+                            zeroValue = (T) Long.valueOf(0L);
+                        } else if (valueClass == Integer.class) {
+                            zeroValue = (T) Integer.valueOf(0);
+                        } else if (valueClass == BigDecimal.class) {
+                            zeroValue = (T) BigDecimal.ZERO;
+                        }
+                    }
+
+                    T zero = zeroValue;
                     var expectedUsage = Arrays.asList(
-                            null,
-                            dataMinus3 == null ? null : dataMinus3.get(name),
-                            null,
-                            dataMinus1 == null ? null : dataMinus1.get(name),
-                            dataNow == null ? null : dataNow.get(name));
+                            shouldReturnZero ? zero : null,
+                            valueMinus3 == null && shouldReturnZero ? zero : valueMinus3,
+                            shouldReturnZero ? zero : null,
+                            valueMinus1 == null && shouldReturnZero ? zero : valueMinus1,
+                            valueNow == null && shouldReturnZero ? zero : valueNow);
 
                     return ProjectMetricResponse.Results.<T>builder()
                             .name(name)
@@ -2728,17 +2766,17 @@ class ProjectMetricsResourceTest {
             List<BigDecimal> durationsCurrent = createSpansWithDuration(projectName, marker);
 
             var durationMinus3 = Map.of(
-                    "duration.p50", durationsMinus3.get(0),
-                    "duration.p90", durationsMinus3.get(1),
-                    "duration.p99", durationsMinus3.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsMinus3.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsMinus3.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsMinus3.getLast());
             var durationMinus1 = Map.of(
-                    "duration.p50", durationsMinus1.get(0),
-                    "duration.p90", durationsMinus1.get(1),
-                    "duration.p99", durationsMinus1.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsMinus1.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsMinus1.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    "duration.p50", durationsCurrent.get(0),
-                    "duration.p90", durationsCurrent.get(1),
-                    "duration.p99", durationsCurrent.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsCurrent.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsCurrent.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsCurrent.getLast());
 
             getMetricsAndAssert(
                     projectId,
@@ -2749,7 +2787,9 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of("duration.p50", "duration.p90", "duration.p99"),
+                    List.of(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99),
                     BigDecimal.class,
                     durationMinus3,
                     durationMinus1,
@@ -2799,25 +2839,26 @@ class ProjectMetricsResourceTest {
             List<BigDecimal> durationsAllSpans = calculateQuantiles(spans);
 
             var durationFirstSpan = Map.of(
-                    "duration.p50", durationsFirstSpan.get(0),
-                    "duration.p90", durationsFirstSpan.get(1),
-                    "duration.p99", durationsFirstSpan.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsFirstSpan.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsFirstSpan.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsFirstSpan.getLast());
             var durationOtherSpans = Map.of(
-                    "duration.p50", durationsOtherSpans.get(0),
-                    "duration.p90", durationsOtherSpans.get(1),
-                    "duration.p99", durationsOtherSpans.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsOtherSpans.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsOtherSpans.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99,
+                    durationsOtherSpans.getLast());
             var durationAllSpans = Map.of(
-                    "duration.p50", durationsAllSpans.get(0),
-                    "duration.p90", durationsAllSpans.get(1),
-                    "duration.p99", durationsAllSpans.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsAllSpans.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsAllSpans.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsAllSpans.getLast());
             var durationMinus1 = Map.of(
-                    "duration.p50", durationsMinus1.get(0),
-                    "duration.p90", durationsMinus1.get(1),
-                    "duration.p99", durationsMinus1.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsMinus1.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsMinus1.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsMinus1.getLast());
             var durationCurrent = Map.of(
-                    "duration.p50", durationsCurrent.get(0),
-                    "duration.p90", durationsCurrent.get(1),
-                    "duration.p99", durationsCurrent.getLast());
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, durationsCurrent.get(0),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, durationsCurrent.get(1),
+                    ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, durationsCurrent.getLast());
 
             var expectedValues = Arrays.asList(
                     durationFirstSpan, // 0: first span only
@@ -2837,7 +2878,9 @@ class ProjectMetricsResourceTest {
                             .spanFilters(List.of(getFilter.apply(spans.getFirst())))
                             .build(),
                     marker,
-                    List.of("duration.p50", "duration.p90", "duration.p99"),
+                    List.of(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99),
                     BigDecimal.class,
                     expectedValues.get(expectedIndexes.get(0)),
                     expectedValues.get(expectedIndexes.get(1)),
@@ -2860,9 +2903,9 @@ class ProjectMetricsResourceTest {
 
             Map<String, BigDecimal> empty = new HashMap<>() {
                 {
-                    put("duration.p50", null);
-                    put("duration.p90", null);
-                    put("duration.p99", null);
+                    put(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50, null);
+                    put(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90, null);
+                    put(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99, null);
                 }
             };
 
@@ -2875,7 +2918,9 @@ class ProjectMetricsResourceTest {
                             .intervalEnd(Instant.now())
                             .build(),
                     marker,
-                    List.of("duration.p50", "duration.p90", "duration.p99"),
+                    List.of(ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P50,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P90,
+                            ProjectMetricsDAO.SPAN_DURATION_PREFIX + "." + ProjectMetricsDAO.P99),
                     BigDecimal.class,
                     empty,
                     empty,
