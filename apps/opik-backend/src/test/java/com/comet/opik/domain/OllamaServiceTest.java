@@ -76,7 +76,7 @@ class OllamaServiceTest {
                         .withBody(versionResponse)));
 
         // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, null);
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, null).block();
 
         // Then
         assertThat(response).isNotNull();
@@ -94,7 +94,7 @@ class OllamaServiceTest {
                         .withStatus(404)));
 
         // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, null);
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, null).block();
 
         // Then
         assertThat(response).isNotNull();
@@ -111,7 +111,7 @@ class OllamaServiceTest {
         String unreachableUrl = "http://localhost:99999";
 
         // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(unreachableUrl, null);
+        OllamaConnectionTestResponse response = ollamaService.testConnection(unreachableUrl, null).block();
 
         // Then
         assertThat(response).isNotNull();
@@ -137,7 +137,7 @@ class OllamaServiceTest {
                         .withBody(versionResponse)));
 
         // When - URL with various suffixes
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + urlSuffix, null);
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + urlSuffix, null).block();
 
         // Then
         assertThat(response.connected()).isTrue();
@@ -187,7 +187,7 @@ class OllamaServiceTest {
                         .withBody(modelsResponse)));
 
         // When
-        List<OllamaModel> models = ollamaService.listModels(baseUrl, null);
+        List<OllamaModel> models = ollamaService.listModels(baseUrl, null).block();
 
         // Then
         assertThat(models).isNotNull();
@@ -213,7 +213,7 @@ class OllamaServiceTest {
                         .withStatus(500)));
 
         // When
-        List<OllamaModel> models = ollamaService.listModels(baseUrl, null);
+        List<OllamaModel> models = ollamaService.listModels(baseUrl, null).block();
 
         // Then
         assertThat(models).isNotNull();
@@ -250,7 +250,7 @@ class OllamaServiceTest {
                         .withBody(modelsResponse)));
 
         // When - URL with /v1 suffix (as frontend sends)
-        List<OllamaModel> models = ollamaService.listModels(baseUrl + "/v1", null);
+        List<OllamaModel> models = ollamaService.listModels(baseUrl + "/v1", null).block();
 
         // Then
         assertThat(models).isNotNull();
@@ -265,7 +265,7 @@ class OllamaServiceTest {
         String unreachableUrl = "http://localhost:99999";
 
         // When
-        List<OllamaModel> models = ollamaService.listModels(unreachableUrl, null);
+        List<OllamaModel> models = ollamaService.listModels(unreachableUrl, null).block();
 
         // Then
         assertThat(models).isNotNull();
@@ -284,7 +284,7 @@ class OllamaServiceTest {
                         .withBody(modelsResponse)));
 
         // When
-        List<OllamaModel> models = ollamaService.listModels(baseUrl, null);
+        List<OllamaModel> models = ollamaService.listModels(baseUrl, null).block();
 
         // Then
         assertThat(models).isNotNull();
@@ -308,7 +308,7 @@ class OllamaServiceTest {
                         .withBody(versionResponse)));
 
         // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, apiKey);
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, apiKey).block();
 
         // Then
         assertThat(response).isNotNull();
@@ -334,7 +334,7 @@ class OllamaServiceTest {
                         .withBody(modelsResponse)));
 
         // When
-        List<OllamaModel> models = ollamaService.listModels(baseUrl, apiKey);
+        List<OllamaModel> models = ollamaService.listModels(baseUrl, apiKey).block();
 
         // Then
         assertThat(models).isNotNull();
