@@ -30,28 +30,24 @@ def attachment_to_message(
         file_path = _write_file_like_to_temp_file(attachment_data.data)
         # make sure the temporary file is deleted after upload
         attachment_data.create_temp_copy = False
-        if file_path is not None:
-            delete_after_upload = True
-        else:
-            delete_after_upload = False
+        delete_after_upload = True
     else:
         file_path = attachment_data.data
 
     file_name = attachment_data.file_name
     should_delete_after_upload = delete_after_upload
 
-    if file_path is not None:
-        if file_name is None:
-            file_name = os.path.basename(file_path)
+    if file_name is None:
+        file_name = os.path.basename(file_path)
 
-        # Try to create a temporary copy if requested
-        if attachment_data.create_temp_copy:
-            tmp_file_path = _try_create_temp_copy(file_path)
-            if tmp_file_path is not None:
-                file_path = tmp_file_path
-                should_delete_after_upload = True
-            else:
-                should_delete_after_upload = False
+    # Try to create a temporary copy if requested
+    if attachment_data.create_temp_copy:
+        tmp_file_path = _try_create_temp_copy(file_path)
+        if tmp_file_path is not None:
+            file_path = tmp_file_path
+            should_delete_after_upload = True
+        else:
+            should_delete_after_upload = False
 
     return messages.CreateAttachmentMessage(
         file_path=file_path,
@@ -65,7 +61,7 @@ def attachment_to_message(
     )
 
 
-def _write_file_like_to_temp_file(file_like: bytes) -> Optional[str]:
+def _write_file_like_to_temp_file(file_like: bytes) -> str:
     temp_file = tempfile.NamedTemporaryFile(mode="wb", delete=False)
     try:
         temp_file.write(file_like)
@@ -81,7 +77,7 @@ def _write_file_like_to_temp_file(file_like: bytes) -> Optional[str]:
             e,
             exc_info=True,
         )
-        return None
+        raise
 
     return temp_file.name
 

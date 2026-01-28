@@ -381,8 +381,8 @@ def test_attachment_to_message__bytes_data_default_mime_type():
     os.unlink(message.file_path)
 
 
-def test_attachment_to_message__bytes_data_write_fails():
-    """Test behavior when _write_file_like_to_temp_file fails and returns None."""
+def test_attachment_to_message__bytes_data_write_fails__error_reraised():
+    """Test behavior when _write_file_like_to_temp_file fails and error reraised."""
     url_override = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
@@ -396,19 +396,13 @@ def test_attachment_to_message__bytes_data_write_fails():
 
     with mock.patch(
         "opik.api_objects.attachment.converters._write_file_like_to_temp_file",
-        return_value=None,
+        side_effect=OSError("Disk full"),
     ):
-        message = converters.attachment_to_message(
-            attachment_data=attachment_data,
-            entity_type="trace",
-            entity_id=entity_id,
-            project_name=project_name,
-            url_override=url_override,
-        )
-
-    # When write fails, file_path is None, and delete_after_upload is False,
-    # but other fields are preserved
-    assert message.file_path is None
-    assert message.delete_after_upload is False
-    assert message.file_name == "test.bin"
-    assert message.mime_type == "application/octet-stream"
+        with pytest.raises(OSError):
+            converters.attachment_to_message(
+                attachment_data=attachment_data,
+                entity_type="trace",
+                entity_id=entity_id,
+                project_name=project_name,
+                url_override=url_override,
+            )
