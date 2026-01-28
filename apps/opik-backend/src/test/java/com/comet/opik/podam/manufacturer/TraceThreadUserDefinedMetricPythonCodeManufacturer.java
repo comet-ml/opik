@@ -41,16 +41,16 @@ public class TraceThreadUserDefinedMetricPythonCodeManufacturer
     }
 
     /**
-     * Generates a random serializable value (String, Integer, Double, or Boolean)
-     * that Jackson can properly serialize.
+     * Generates a random serializable value (String, Integer, or Boolean)
+     * that Jackson can properly serialize without precision issues.
+     * Avoids Double to prevent floating-point precision issues during JSON serialization.
      */
     private Object generateSerializableValue() {
-        int type = random.nextInt(4);
+        int type = random.nextInt(3);
         return switch (type) {
             case 0 -> RandomStringUtils.insecure().nextAlphanumeric(15);
             case 1 -> random.nextInt(1000);
-            case 2 -> random.nextDouble() * 100;
-            case 3 -> random.nextBoolean();
+            case 2 -> random.nextBoolean();
             default -> RandomStringUtils.insecure().nextAlphanumeric(15);
         };
     }

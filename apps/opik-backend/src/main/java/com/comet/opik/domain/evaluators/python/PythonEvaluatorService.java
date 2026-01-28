@@ -51,7 +51,7 @@ public class PythonEvaluatorService {
     public List<PythonScoreResult> evaluateCommonMetric(
             @NonNull String metricId,
             Map<String, Object> initConfig,
-            Map<String, String> scoringKwargs) {
+            Map<String, Object> scoringKwargs) {
         Preconditions.checkArgument(MapUtils.isNotEmpty(scoringKwargs), "Argument 'scoringKwargs' must not be empty");
 
         var request = CommonMetricEvaluatorRequest.builder()

@@ -58,7 +58,7 @@ public record UserDefinedMetricPythonAutomationRuleEvaluatorModel(
             Map<String, String> arguments,
             String commonMetricId,
             Map<String, Object> initConfig,
-            Map<String, String> scoreConfig) {
+            Map<String, Object> scoreConfig) {
 
         /**
          * Returns true if this is a common metric (from the SDK) rather than custom Python code.

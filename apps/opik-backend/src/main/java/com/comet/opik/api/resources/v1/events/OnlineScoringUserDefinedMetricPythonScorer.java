@@ -93,7 +93,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                             message.code().commonMetricId(), trace.id());
 
                     // Build scoring_kwargs: merge mappable args (from trace fields) with scoreConfig (static values)
-                    Map<String, String> scoringKwargs = new java.util.HashMap<>(data);
+                    Map<String, Object> scoringKwargs = new java.util.HashMap<>(data);
                     if (message.code().scoreConfig() != null) {
                         scoringKwargs.putAll(message.code().scoreConfig());
                     }
