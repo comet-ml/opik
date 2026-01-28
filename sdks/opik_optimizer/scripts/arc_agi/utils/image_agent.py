@@ -17,6 +17,8 @@ def _first_nonempty(values: Iterable[str | None]) -> str | None:
     return None
 
 
+# TODO: Migrate ARC-AGI agents to `call_model` + `response_model` once multimodal
+# structured outputs are supported end-to-end in the LiteLLM path.
 class ArcAgiImageAgent(LiteLLMAgent):
     """
     Extends ``LiteLLMAgent`` to attach ARC-AGI train/test images to the prompt.

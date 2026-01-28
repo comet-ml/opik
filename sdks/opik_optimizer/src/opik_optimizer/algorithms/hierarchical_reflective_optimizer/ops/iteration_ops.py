@@ -94,9 +94,15 @@ def improve_over_failure_modes(
     optimization_id: str | None,
     round_handle: Any,
 ) -> tuple[dict[str, chat_prompt.ChatPrompt], float]:
-    for root_cause in hierarchical_analysis.unified_failure_modes:
+    failure_modes = hierarchical_analysis.unified_failure_modes
+    total_modes = len(failure_modes)
+
+    for idx, root_cause in enumerate(failure_modes, 1):
         with reporting.display_prompt_improvement(
-            root_cause.name, verbose=optimizer.verbose
+            root_cause.name,
+            failure_mode_index=idx,
+            total_failure_modes=total_modes,
+            verbose=optimizer.verbose,
         ):
             max_attempts = max_retries + 1
             improved_chat_prompts = None
