@@ -22,9 +22,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import useCommonMetricsQuery from "@/api/automations/useCommonMetricsQuery";
 import {
   CommonMetric,
+  CommonMetricList,
   EVALUATORS_RULE_SCOPE,
   InitParameter,
   ScoreParameter,
@@ -37,14 +37,19 @@ type CommonMetricRuleDetailsProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
   projectName?: string;
   datasetColumnNames?: string[];
+  metricsData?: CommonMetricList;
+  isLoading?: boolean;
+  error?: Error | null;
 };
 
 const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
   form,
   projectName,
   datasetColumnNames,
+  metricsData,
+  isLoading = false,
+  error = null,
 }) => {
-  const { data: metricsData, isLoading, error } = useCommonMetricsQuery();
 
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;

@@ -49,6 +49,7 @@ import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
+import useCommonMetricsQuery from "@/api/automations/useCommonMetricsQuery";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
@@ -177,6 +178,15 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const { isOpen, setIsOpen, requestConfirm, confirm, cancel } =
     useConfirmAction();
   const { toast } = useToast();
+
+  // Load common metrics when dialog opens
+  const {
+    data: commonMetricsData,
+    isLoading: isCommonMetricsLoading,
+    error: commonMetricsError,
+  } = useCommonMetricsQuery({
+    enabled: open, // Only fetch when dialog is open
+  });
 
   // Pass the code to getUIRuleType to properly detect common metrics
   const formUIRuleType = defaultRule?.type
@@ -794,6 +804,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     form={form}
                     projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
+                    metricsData={commonMetricsData}
+                    isLoading={isCommonMetricsLoading}
+                    error={commonMetricsError}
                   />
                 ) : (
                   <PythonCodeRuleDetails
