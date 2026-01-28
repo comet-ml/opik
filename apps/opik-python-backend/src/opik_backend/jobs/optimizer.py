@@ -178,77 +178,67 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
                     {"message": f"Configuration validation failed: {error_msg}"}
                 )
 
-                # Ensure log collector is closed before re-raising
-                try:
-                    log_collector.close()
-                except Exception as close_error:
-                    logger.warning(
-                        f"Error closing log collector after validation failure: {close_error}"
-                    )
-
                 # Re-raise exception so RQ marks job as failed
                 # This allows Java backend to detect failure and update optimization status/metrics
                 # Cancellation handle will auto-unregister on exit
+                # Log collector will be closed in finally block
                 raise
 
-            # Write generated code to temporary file
-            temp_file = None
+            # Write generated code to temporary file and execute optimization
+            # The 'with' block ensures the file is automatically deleted when done
             try:
                 with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".py", delete=False
+                    mode="w", suffix=".py", delete=True
                 ) as f:
                     f.write(generated_code)
                     temp_file = f.name
+                    # Flush to ensure content is written before execution
+                    f.flush()
 
-                logger.debug(f"Generated code written to temporary file: {temp_file}")
-
-                logger.info(
-                    f"Starting optimization subprocess for optimization {context.optimization_id}"
-                )
-
-                # Execute optimization in isolated subprocess using generated code
-                result = executor.execute(
-                    file_path=temp_file,
-                    data=job_message,
-                    env_vars=env_vars,
-                    payload_type=PAYLOAD_TYPE_OPTIMIZATION,
-                    optimization_id=str(context.optimization_id),
-                    job_id=str(context.optimization_id),
-                )
-
-                # Check if cancelled - don't treat as error (thread-safe check)
-                if cancellation_handle.was_cancelled:
-                    logger.info(
-                        f"Optimization was cancelled: {context.optimization_id}"
+                    logger.debug(
+                        f"Generated code written to temporary file: {temp_file}"
                     )
-                    # Write cancellation message to optimization logs (visible in UI)
-                    log_collector.emit({"message": "Execution cancelled by the user."})
-                    return {
-                        "status": "cancelled",
-                        "optimization_id": str(context.optimization_id),
-                    }
 
-                # Check for errors (only if not cancelled)
-                if "error" in result:
-                    logger.error(f"Optimization failed: {result.get('error')}")
-                    raise Exception(result.get("error", "Unknown error"))
+                    logger.info(
+                        f"Starting optimization subprocess for optimization {context.optimization_id}"
+                    )
 
-                logger.info(
-                    f"Optimization completed successfully: {context.optimization_id}"
-                )
-                return result
+                    # Execute optimization in isolated subprocess using generated code
+                    result = executor.execute(
+                        file_path=temp_file,
+                        data=job_message,
+                        env_vars=env_vars,
+                        payload_type=PAYLOAD_TYPE_OPTIMIZATION,
+                        optimization_id=str(context.optimization_id),
+                        job_id=str(context.optimization_id),
+                    )
+
+                    # Check if cancelled - don't treat as error (thread-safe check)
+                    if cancellation_handle.was_cancelled:
+                        logger.info(
+                            f"Optimization was cancelled: {context.optimization_id}"
+                        )
+                        # Write cancellation message to optimization logs (visible in UI)
+                        log_collector.emit(
+                            {"message": "Execution cancelled by the user."}
+                        )
+                        return {
+                            "status": "cancelled",
+                            "optimization_id": str(context.optimization_id),
+                        }
+
+                    # Check for errors (only if not cancelled)
+                    if "error" in result:
+                        logger.error(f"Optimization failed: {result.get('error')}")
+                        raise Exception(result.get("error", "Unknown error"))
+
+                    logger.info(
+                        f"Optimization completed successfully: {context.optimization_id}"
+                    )
+                    return result
+                    # File is automatically deleted when exiting the 'with' block
 
             finally:
-                # Clean up temporary file
-                if temp_file and Path(temp_file).exists():
-                    try:
-                        Path(temp_file).unlink()
-                        logger.debug(f"Cleaned up temporary file: {temp_file}")
-                    except Exception as e:
-                        logger.warning(
-                            f"Error cleaning up temporary file {temp_file}: {e}"
-                        )
-
                 # Ensure log collector is closed (flushes remaining logs)
                 try:
                     log_collector.close()

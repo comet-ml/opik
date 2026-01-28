@@ -21,14 +21,18 @@ def test_successful_code_generation(client):
     response = client.post(STUDIO_CODE_URL, json=VALID_CONFIG)
 
     assert response.status_code == 200
-    assert response.content_type == "text/plain; charset=utf-8"
+    assert response.content_type == "application/json"
     assert (
         response.headers["Content-Disposition"]
         == 'attachment; filename="optimization.py"'
     )
 
-    # Verify the response contains Python code
-    code = response.get_data(as_text=True)
+    # Verify the response is JSON with code field
+    data = response.get_json()
+    assert "code" in data
+    code = data["code"]
+
+    # Verify the code contains Python code
     assert "import" in code
     assert "opik" in code
     assert "optimizer" in code.lower()
@@ -61,18 +65,17 @@ def test_delete_method_returns_method_not_allowed(client):
 def test_missing_request_body_returns_bad_request(client):
     """Test missing request body returns 400 Bad Request."""
     response = client.post(STUDIO_CODE_URL, json=None)
-    # Flask raises BadRequest when json=None, which gets caught and returns 500
-    # The error handler catches it and returns 500 with generic error message
-    assert response.status_code == 500
-    assert "Internal server error" in response.json["error"]
+    # Flask raises BadRequest when json=None, which is handled by error handler
+    assert response.status_code == 400
+    assert "error" in response.json
 
 
 def test_empty_request_body_returns_bad_request(client):
     """Test empty request body returns error."""
     response = client.post(STUDIO_CODE_URL, json={})
-    # Empty dict triggers abort() which raises BadRequest, caught by generic handler -> 500
-    assert response.status_code == 500
-    assert "Internal server error" in response.json["error"]
+    # Empty dict triggers abort() which raises BadRequest, handled by error handler
+    assert response.status_code == 400
+    assert "error" in response.json
 
 
 def test_missing_dataset_name_returns_bad_request(client):
@@ -220,9 +223,11 @@ def test_code_generation_with_all_optimizer_types(client):
 
         response = client.post(STUDIO_CODE_URL, json=config)
         assert response.status_code == 200
-        assert response.content_type == "text/plain; charset=utf-8"
+        assert response.content_type == "application/json"
 
-        code = response.get_data(as_text=True)
+        data = response.get_json()
+        assert "code" in data
+        code = data["code"]
         assert len(code) > 0
 
 
@@ -238,7 +243,9 @@ def test_code_generation_with_different_metrics(client):
         response = client.post(STUDIO_CODE_URL, json=config)
         assert response.status_code == 200
 
-        code = response.get_data(as_text=True)
+        data = response.get_json()
+        assert "code" in data
+        code = data["code"]
         assert len(code) > 0
 
 
@@ -250,7 +257,8 @@ def test_code_generation_with_template_syntax(client):
     response = client.post(STUDIO_CODE_URL, json=config)
     assert response.status_code == 200
 
-    code = response.get_data(as_text=True)
+    data = response.get_json()
+    code = data["code"]
     # Verify template syntax was converted ({{question}} -> {question})
     assert "{question}" in code
     assert "{{question}}" not in code
@@ -264,7 +272,8 @@ def test_code_generation_with_model_parameters(client):
     response = client.post(STUDIO_CODE_URL, json=config)
     assert response.status_code == 200
 
-    code = response.get_data(as_text=True)
+    data = response.get_json()
+    code = data["code"]
     assert "temperature" in code.lower() or "0.7" in code
 
 
@@ -300,7 +309,8 @@ def test_code_generation_for_user_download(client):
     response = client.post(STUDIO_CODE_URL, json=VALID_CONFIG)
     assert response.status_code == 200
 
-    code = response.get_data(as_text=True)
+    data = response.get_json()
+    code = data["code"]
     # User download code should NOT have stdin reading
     assert "sys.stdin.read()" not in code
     # User download code should have proper structure for standalone execution
@@ -322,8 +332,10 @@ def test_content_disposition_header(client):
     )
 
 
-def test_response_is_plain_text(client):
-    """Test response content type is text/plain."""
+def test_response_is_json(client):
+    """Test response content type is application/json."""
     response = client.post(STUDIO_CODE_URL, json=VALID_CONFIG)
     assert response.status_code == 200
-    assert response.content_type == "text/plain; charset=utf-8"
+    assert response.content_type == "application/json"
+    data = response.get_json()
+    assert "code" in data
