@@ -1,4 +1,5 @@
 import { StringParam, useQueryParam } from "use-query-params";
+import { useNavigate } from "@tanstack/react-router";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
@@ -12,9 +13,10 @@ import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesT
 import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/DashboardsTab";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Construction } from "lucide-react";
+import { Construction, Eye } from "lucide-react";
 import { useState } from "react";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import useAppStore from "@/store/AppStore";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import ViewSelector, {
@@ -32,6 +34,8 @@ enum PROJECT_TAB {
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
+  const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
@@ -119,6 +123,16 @@ const TracesPage = () => {
 
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
 
+  const handleNavigateToCustomView = () => {
+    navigate({
+      to: "/$workspaceName/projects/$projectId/custom-view-demo",
+      params: {
+        projectId,
+        workspaceName,
+      },
+    });
+  };
+
   const renderContent = () => {
     if (view === VIEW_TYPE.DETAILS) {
       return (
@@ -188,6 +202,15 @@ const TracesPage = () => {
             {projectName}
           </h1>
           <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNavigateToCustomView}
+            >
+              <Eye className="mr-1.5 size-3.5" />
+              Custom View Demo
+            </Button>
+            <Separator orientation="vertical" className="h-4" />
             {isGuardrailsEnabled && (
               <>
                 <Button

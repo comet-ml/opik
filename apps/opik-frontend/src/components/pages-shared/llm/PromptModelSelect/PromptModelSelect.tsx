@@ -44,6 +44,11 @@ interface PromptModelSelectProps {
   onAddProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   disabled?: boolean;
+  /** Filter function to limit which models are shown */
+  modelFilter?: (
+    model: PROVIDER_MODEL_TYPE,
+    provider: PROVIDER_TYPE,
+  ) => boolean;
 }
 
 const STALE_TIME = 1000;
@@ -57,6 +62,7 @@ const PromptModelSelect = ({
   onAddProvider,
   onDeleteProvider,
   disabled = false,
+  modelFilter,
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,7 +93,12 @@ const PromptModelSelect = ({
     filteredFreeModel,
     filteredGroups,
     modelProviderMapRef,
-  } = useModelOptions(configuredProvidersList, getProviderModels, filterValue);
+  } = useModelOptions(
+    configuredProvidersList,
+    getProviderModels,
+    filterValue,
+    modelFilter,
+  );
 
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {
