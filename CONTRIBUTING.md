@@ -414,7 +414,30 @@ scripts\dev-runner.ps1 --lint-fe  # Windows
 cd apps/opik-frontend
 npm run lint
 npm run typecheck # TypeScript type checking
+npm run deps:validate # Dependency architecture validation
 ````
+
+#### Dependency Architecture
+
+The frontend uses [dependency-cruiser](https://github.com/sverweij/dependency-cruiser) to enforce architectural boundaries. Run `npm run deps:validate` before committing component changes.
+
+**Layer hierarchy (one-way imports only):**
+```
+ui → shared → pages-shared → pages
+```
+
+Key rules:
+- **No circular dependencies** - Components must not create import cycles
+- **Layer isolation** - Lower layers cannot import from higher layers
+- **Plugin isolation** - Project code cannot import from plugins (only PluginsStore can)
+- **API isolation** - API layer cannot import React components (except `use-toast.ts`)
+
+If `deps:validate` fails with a NEW violation:
+1. Refactor to follow the layer hierarchy
+2. Move shared code to the appropriate layer
+3. Extract utilities to `lib/` folder
+
+See `.dependency-cruiser-known-violations.README.md` for existing violations that need fixing.
 
 #### Testing
 

@@ -60,4 +60,9 @@ const Component: React.FunctionComponent<Props> = ({ ...props }) => {
 - **Consider testing**: Custom hooks with complex state, components with significant conditional rendering
 - **Don't test**: Simple UI components without logic, third-party library integrations
 
+### Dependency Architecture
+**After modifying imports, run:** `cd apps/opik-frontend && npm run deps:validate`
+- Layer: `ui → shared → pages-shared → pages` (one-way only)
+- No circular deps, cross-page imports, or importing from plugins
+
 When building components, always follow the established patterns and refer to the detailed rules for comprehensive guidelines.
