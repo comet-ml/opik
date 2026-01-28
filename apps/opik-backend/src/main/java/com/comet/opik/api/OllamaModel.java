@@ -3,7 +3,9 @@ package com.comet.opik.api;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
+import lombok.NonNull;
 
 import java.time.Instant;
 
@@ -11,7 +13,7 @@ import java.time.Instant;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Schema(description = "Ollama model information")
 public record OllamaModel(
-        @Schema(description = "Model name", example = "llama2") String name,
+        @NonNull @NotBlank @Schema(description = "Model name", example = "llama2") String name,
 
         @Schema(description = "Model size in bytes") Long size,
 
