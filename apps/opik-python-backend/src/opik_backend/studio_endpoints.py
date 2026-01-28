@@ -245,17 +245,8 @@ def generate_code():
             },
         )
 
-        # Return structured error response
-        return (
-            jsonify(
-                {
-                    "error": "Internal server error",
-                    "error_type": error_type,
-                    "error_message": error_msg,
-                }
-            ),
-            status_code,
-        )
+        # Re-raise to let Flask error handlers process it (will return safe generic 500)
+        raise
 
     finally:
         # Always record latency histogram
