@@ -322,12 +322,23 @@ function Invoke-FrontendLint {
         
         Write-LogInfo "Typechecking frontend..."
         npm run typecheck
-        
+
         if ($LASTEXITCODE -eq 0) {
             Write-LogSuccess "Frontend typechecking completed successfully"
         }
         else {
             Write-LogError "Frontend typechecking failed"
+            exit 1
+        }
+
+        Write-LogInfo "Validating frontend dependencies..."
+        npm run deps:validate
+
+        if ($LASTEXITCODE -eq 0) {
+            Write-LogSuccess "Frontend dependency validation completed successfully"
+        }
+        else {
+            Write-LogError "Frontend dependency validation failed"
             exit 1
         }
     }

@@ -197,6 +197,14 @@ lint_frontend() {
         log_error "Frontend typechecking failed"
         exit 1
     fi
+
+    log_info "Validating frontend dependencies..."
+    if npm run deps:validate; then
+        log_success "Frontend dependency validation completed successfully"
+    else
+        log_error "Frontend dependency validation failed"
+        exit 1
+    fi
 }
 
 # Function to lint backend
