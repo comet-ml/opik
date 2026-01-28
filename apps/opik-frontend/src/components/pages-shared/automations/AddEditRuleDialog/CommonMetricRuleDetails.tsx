@@ -234,7 +234,7 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
           </div>
 
           {/* Configuration Parameters (Init Parameters only) */}
-          {selectedMetric.init_parameters.length > 0 && (
+          {(selectedMetric.init_parameters?.length ?? 0) > 0 && (
             <div className="space-y-4">
               <div className="flex items-center gap-1">
                 <Label className="text-sm font-medium">Configuration</Label>
@@ -250,7 +250,7 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
               </div>
               <div className="grid gap-4">
                 {/* Render init parameters */}
-                {selectedMetric.init_parameters.map((param: InitParameter) => (
+                {(selectedMetric.init_parameters ?? []).map((param: InitParameter) => (
                   <InitParameterInput
                     key={param.name}
                     param={param}
