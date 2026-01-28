@@ -12,9 +12,16 @@ from opik_backend.studio import (
     OptimizationConfig,
     OptimizationJobContext,
 )
+from opik_backend.studio.exceptions import (
+    InvalidOptimizerError,
+    InvalidMetricError,
+)
 from opik_backend.http_utils import build_error_response
 
 logger = logging.getLogger(__name__)
+
+# Maximum request body size in bytes (1 MB)
+MAX_REQUEST_SIZE_BYTES = 1 * 1024 * 1024
 
 studio = Blueprint("studio", __name__, url_prefix="/v1/private/studio")
 
@@ -41,6 +48,20 @@ def handle_value_error(exception: ValueError):
     """Handle ValueError exceptions (invalid configuration)."""
     logger.error(f"Invalid configuration: {exception}", exc_info=True)
     return jsonify({"error": f"Invalid configuration: {exception}"}), 400
+
+
+@studio.errorhandler(InvalidOptimizerError)
+def handle_invalid_optimizer_error(exception: InvalidOptimizerError):
+    """Handle InvalidOptimizerError exceptions (invalid optimizer type or configuration)."""
+    logger.error(f"Invalid optimizer: {exception}", exc_info=True)
+    return jsonify({"error": str(exception)}), 400
+
+
+@studio.errorhandler(InvalidMetricError)
+def handle_invalid_metric_error(exception: InvalidMetricError):
+    """Handle InvalidMetricError exceptions (invalid metric type or configuration)."""
+    logger.error(f"Invalid metric: {exception}", exc_info=True)
+    return jsonify({"error": str(exception)}), 400
 
 
 @studio.errorhandler(Exception)
@@ -81,10 +102,9 @@ def generate_code():
     if request.method != "POST":
         abort(405, "Method not allowed")
 
-    max_request_size_bytes = 1 * 1024 * 1024  # 1 MB limit for JSON body
     if (
         request.content_length is not None
-        and request.content_length > max_request_size_bytes
+        and request.content_length > MAX_REQUEST_SIZE_BYTES
     ):
         abort(413, "Request body too large")
 
