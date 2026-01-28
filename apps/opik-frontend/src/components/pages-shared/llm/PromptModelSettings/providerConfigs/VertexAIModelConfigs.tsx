@@ -11,6 +11,7 @@ import isUndefined from "lodash/isUndefined";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Label } from "@/components/ui/label";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { supportsVertexAIThinkingLevel } from "@/lib/modelUtils";
 
 interface VertexAIModelConfigsProps {
   configs: LLMVertexAIConfigsType;
@@ -23,7 +24,7 @@ const VertexAIModelConfigs = ({
   model,
   onChange,
 }: VertexAIModelConfigsProps) => {
-  const isGemini3Pro = model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO;
+  const hasThinkingLevel = supportsVertexAIThinkingLevel(model);
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -75,7 +76,7 @@ const VertexAIModelConfigs = ({
         />
       )}
 
-      {isGemini3Pro && (
+      {hasThinkingLevel && (
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             <Label htmlFor="thinkingLevel" className="text-sm font-medium">

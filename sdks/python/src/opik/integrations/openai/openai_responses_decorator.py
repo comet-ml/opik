@@ -16,6 +16,7 @@ import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
+from opik.integrations import model_defaults
 from openai.types import responses as openai_responses
 
 from . import stream_patchers
@@ -65,6 +66,13 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
             kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
         metadata = dict_utils.deepmerge(metadata, new_metadata)
+
+        # Add default parameters for OpenAI models (merge defaults first so user metadata takes precedence)
+        model = kwargs.get("model", None)
+        default_params = model_defaults.get_openai_default_params(model, kwargs)
+        if default_params:
+            metadata = dict_utils.deepmerge(default_params, metadata)
+
         metadata.update(
             {
                 "created_from": "openai",
@@ -73,7 +81,6 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
         )
 
         tags = ["openai"]
-        model = kwargs.get("model", None)
         result = arguments_helpers.StartSpanParameters(
             name=name,
             input=input,
