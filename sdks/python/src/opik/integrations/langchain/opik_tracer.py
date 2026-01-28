@@ -1,15 +1,12 @@
 import logging
 import datetime
-import re
 from typing import (
     Any,
     Dict,
     List,
-    Literal,
     Optional,
     Set,
     TYPE_CHECKING,
-    cast,
     Callable,
     NamedTuple,
 )
@@ -27,7 +24,7 @@ from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
 from . import (
     base_llm_patcher,
-    helpers as langchain_helpers,
+    run_parse_helpers,
     opik_encoder_extension,
     provider_usage_extractors,
 )
@@ -43,8 +40,6 @@ LOGGER = logging.getLogger(__name__)
 opik_encoder_extension.register()
 
 language_models.BaseLLM.dict = base_llm_patcher.base_llm_dict_patched()
-
-SpanType = Literal["llm", "tool", "general"]
 
 # A callable that receives an error string and returns True if the error should be skipped,
 # or False otherwise.
@@ -64,135 +59,6 @@ LANGGRAPH_INTERRUPT_METADATA_KEY = "_langgraph_interrupt"
 class TrackRootRunResult(NamedTuple):
     new_trace_data: Optional[trace.TraceData]
     new_span_data: Optional[span.SpanData]
-
-
-def _get_span_type(run: Dict[str, Any]) -> SpanType:
-    if run.get("run_type") in ["llm", "tool"]:
-        return cast(SpanType, run.get("run_type"))
-
-    if run.get("run_type") in ["prompt"]:
-        return cast(SpanType, "tool")
-
-    return cast(SpanType, "general")
-
-
-def _is_root_run(run_dict: Dict[str, Any]) -> bool:
-    return run_dict.get("parent_run_id") is None
-
-
-def _get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
-    return run_dict["extra"].get("metadata", {})
-
-
-def _parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
-    """
-    Parse GraphInterrupt error traceback to extract the interrupt value as a string.
-
-    The function extracts the value from the Interrupt object representation in the traceback.
-    It handles both string values (with quotes) and non-string values, including nested structures.
-    For string values, escape sequences are decoded (e.g., \\n becomes a newline character).
-
-    Args:
-        error_traceback: The error traceback string containing GraphInterrupt information.
-
-    Returns:
-        The interrupt value as a string if found, None otherwise.
-    """
-    # Search for GraphInterrupt( anywhere in the traceback
-    match = re.search(
-        r"GraphInterrupt\(.*?Interrupt\(value=",
-        error_traceback,
-        re.DOTALL,
-    )
-    if not match:
-        return None
-
-    # Start parsing from after "value="
-    start_pos = match.end()
-    value_str = error_traceback[start_pos:]
-
-    # Extract the value, handling nested parentheses and brackets
-    paren_depth = 0
-    bracket_depth = 0
-    brace_depth = 0
-    in_string = False
-    string_char = None
-    i = 0
-
-    for i, char in enumerate(value_str):
-        # Handle string boundaries
-        if char in ('"', "'") and (i == 0 or value_str[i - 1] != "\\"):
-            if not in_string:
-                in_string = True
-                string_char = char
-            elif char == string_char:
-                in_string = False
-                string_char = None
-
-        # Skip counting brackets/parens inside strings
-        if in_string:
-            continue
-
-        # Track nesting depth
-        if char == "(":
-            paren_depth += 1
-        elif char == ")":
-            if paren_depth > 0:
-                paren_depth -= 1
-            else:
-                # Found the closing paren of Interrupt(...), stop here
-                break
-        elif char == "[":
-            bracket_depth += 1
-        elif char == "]":
-            bracket_depth -= 1
-        elif char == "{":
-            brace_depth += 1
-        elif char == "}":
-            brace_depth -= 1
-        elif (
-            char == "," and paren_depth == 0 and bracket_depth == 0 and brace_depth == 0
-        ):
-            # Found a comma at the top level, stop here
-            break
-
-    # Extract and clean the value
-    value = value_str[:i].strip()
-
-    # Check if the value was originally a quoted string
-    was_quoted_string = False
-    if len(value) >= 2 and value[0] in ('"', "'") and value[-1] == value[0]:
-        was_quoted_string = True
-        value = value[1:-1]
-
-    # Decode escape sequences for string values
-    if was_quoted_string:
-        try:
-            value = value.encode("utf-8").decode("unicode_escape")
-        except (UnicodeDecodeError, AttributeError):
-            # If decoding fails, return the original value
-            pass
-
-    return value
-
-
-def _extract_resume_value_from_command(obj: Any) -> Optional[str]:
-    """
-    Extract the resume value from a LangGraph Command object or serialized Command dict.
-
-    Args:
-        obj: A Command object or dict representing a serialized Command object (from run.dict()).
-
-    Returns:
-        The resume value as a string if found, None otherwise.
-    """
-    # Check if it's a Command object (has a resume attribute)
-    if hasattr(obj, "resume") and obj.resume is not None:
-        return str(obj.resume)
-    # Check if it's a serialized Command dict
-    if obj is not None and isinstance(obj, dict) and "resume" in obj:
-        return str(obj["resume"])
-    return None
 
 
 class OpikTracer(BaseTracer):
@@ -323,7 +189,9 @@ class OpikTracer(BaseTracer):
 
         if error_str is not None:
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
-            if interrupt_value := _parse_graph_interrupt_value(error_str):
+            if interrupt_value := run_parse_helpers.parse_graph_interrupt_value(
+                error_str
+            ):
                 outputs = {LANGGRAPH_INTERRUPT_OUTPUT_KEY: interrupt_value}
                 trace_additional_metadata[LANGGRAPH_INTERRUPT_METADATA_KEY] = True
                 # Don't set error_info - this is not an error
@@ -335,7 +203,8 @@ class OpikTracer(BaseTracer):
             else:
                 outputs = ERROR_SKIPPED_OUTPUTS
         elif (outputs := run_dict.get("outputs")) is not None:
-            outputs = langchain_helpers.extract_command_update(outputs)
+            if isinstance(outputs, dict):
+                outputs = run_parse_helpers.extract_command_update(outputs)
 
         if not self._opik_context_read_only_mode:
             self._ensure_no_hanging_opik_tracer_spans()
@@ -373,7 +242,9 @@ class OpikTracer(BaseTracer):
             trace_data.input = run_dict["inputs"]
         elif isinstance(trace_data.input, dict) and "input" in trace_data.input:
             input_value = trace_data.input.get("input")
-            if resume_value := _extract_resume_value_from_command(input_value):
+            if resume_value := run_parse_helpers.extract_resume_value_from_command(
+                input_value
+            ):
                 trace_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
         # Check if any child span has a GraphInterrupt output and use it for trace output
@@ -419,7 +290,7 @@ class OpikTracer(BaseTracer):
     def _track_root_run(
         self, run_dict: Dict[str, Any], allow_duplicating_root_span: bool
     ) -> TrackRootRunResult:
-        run_metadata = _get_run_metadata(run_dict)
+        run_metadata = run_parse_helpers.get_run_metadata(run_dict)
         root_metadata = dict_utils.deepmerge(self._trace_default_metadata, run_metadata)
 
         # Track the parent span ID for LangGraph cleanup later
@@ -436,7 +307,7 @@ class OpikTracer(BaseTracer):
         start_span_arguments = arguments_helpers.StartSpanParameters(
             name=run_dict["name"],
             input=run_dict["inputs"],
-            type=_get_span_type(run_dict),
+            type=run_parse_helpers.get_span_type(run_dict),
             tags=self._trace_default_tags,
             metadata=root_metadata,
             project_name=self._project_name,
@@ -462,7 +333,7 @@ class OpikTracer(BaseTracer):
 
         should_skip_root_span_creation = (
             span_creation_result.trace_data is not None
-            and _is_root_run(run_dict)
+            and run_parse_helpers.is_root_run(run_dict)
             and not allow_duplicating_root_span
         )
         if should_skip_root_span_creation:
@@ -592,9 +463,9 @@ class OpikTracer(BaseTracer):
             trace_id=parent_span_data.trace_id,
             parent_span_id=parent_span_data.id,
             input=run_dict["inputs"],
-            metadata=_get_run_metadata(run_dict),
+            metadata=run_parse_helpers.get_run_metadata(run_dict),
             name=run_dict["name"],
-            type=_get_span_type(run_dict),
+            type=run_parse_helpers.get_span_type(run_dict),
             project_name=project_name,
         )
         new_span_data.update(metadata={"created_from": "langchain"})
@@ -639,9 +510,9 @@ class OpikTracer(BaseTracer):
                 trace_id=trace_data.id,
                 parent_span_id=None,  # Direct child of trace
                 input=run_dict["inputs"],
-                metadata=_get_run_metadata(run_dict),
+                metadata=run_parse_helpers.get_run_metadata(run_dict),
                 name=run_dict["name"],
-                type=_get_span_type(run_dict),
+                type=run_parse_helpers.get_span_type(run_dict),
                 project_name=project_name,
             )
             if new_span_data.trace_id not in self._externally_created_traces_ids:
@@ -654,10 +525,10 @@ class OpikTracer(BaseTracer):
                 parent_span_id=self._distributed_headers["opik_parent_span_id"],
                 name=run_dict["name"],
                 input=run_dict["inputs"],
-                metadata=_get_run_metadata(run_dict),
+                metadata=run_parse_helpers.get_run_metadata(run_dict),
                 tags=self._trace_default_tags,
                 project_name=self._project_name,
-                type=_get_span_type(run_dict),
+                type=run_parse_helpers.get_span_type(run_dict),
             )
             self._externally_created_traces_ids.add(new_span_data.trace_id)
 
@@ -675,10 +546,10 @@ class OpikTracer(BaseTracer):
                 parent_span_id=None,
                 name=run_dict["name"],
                 input=run_dict["inputs"],
-                metadata=_get_run_metadata(run_dict),
+                metadata=run_parse_helpers.get_run_metadata(run_dict),
                 tags=self._trace_default_tags,
                 project_name=project_name,
-                type=_get_span_type(run_dict),
+                type=run_parse_helpers.get_span_type(run_dict),
             )
 
             if not self._is_opik_trace_created_by_this_tracer(current_trace_data.id):
@@ -731,12 +602,14 @@ class OpikTracer(BaseTracer):
                 span_data.input = run_dict["inputs"]
             elif isinstance(span_data.input, dict):
                 input_value = span_data.input.get("input")
-                if resume_value := _extract_resume_value_from_command(input_value):
+                if resume_value := run_parse_helpers.extract_resume_value_from_command(
+                    input_value
+                ):
                     span_data.input = {LANGGRAPH_RESUME_INPUT_KEY: resume_value}
 
             run_dict_outputs = run_dict.get("outputs")
             span_output = (
-                langchain_helpers.extract_command_update(run_dict_outputs)
+                run_parse_helpers.extract_command_update(run_dict_outputs)
                 if isinstance(run_dict_outputs, dict)
                 else {"output": run_dict_outputs}
             )
@@ -787,7 +660,9 @@ class OpikTracer(BaseTracer):
             error_str = run_dict["error"]
 
             # GraphInterrupt is not an error - it's a normal control flow for LangGraph
-            if interrupt_value := _parse_graph_interrupt_value(error_str):
+            if interrupt_value := run_parse_helpers.parse_graph_interrupt_value(
+                error_str
+            ):
                 span_data.init_end_time().update(
                     metadata={LANGGRAPH_INTERRUPT_METADATA_KEY: True},
                     output={LANGGRAPH_INTERRUPT_OUTPUT_KEY: interrupt_value},
