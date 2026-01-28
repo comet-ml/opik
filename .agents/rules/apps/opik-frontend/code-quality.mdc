@@ -504,3 +504,25 @@ const UserManagement: React.FC = () => {
   );
 };
 ```
+
+## Dependency Architecture Rules
+
+**IMPORTANT: After modifying component imports, always run:**
+```bash
+cd apps/opik-frontend && npm run deps:validate
+```
+
+### Layer Hierarchy (one-way only)
+`ui → shared → pages-shared → pages`
+
+### Key Rules
+- No circular dependencies
+- No importing from higher layers (e.g., shared cannot import from pages)
+- No cross-page imports (pages/PageA cannot import from pages/PageB)
+- No project code importing from plugins (except PluginsStore)
+- API layer cannot import components (except use-toast.ts)
+
+### If Validation Fails
+1. Refactor imports to follow layer hierarchy
+2. Move shared code to appropriate layer
+3. Extract utilities to `lib/` folder

@@ -1,0 +1,873 @@
+[
+  {
+    "type": "dependency",
+    "from": "src/api/projects/useProjectMetric.ts",
+    "to": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-api-importing-components"
+    }
+  },
+  {
+    "type": "cycle",
+    "from": "src/api/provider-keys/useProviderKeys.ts",
+    "to": "src/lib/provider.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/lib/provider.ts",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/hooks/useLLMProviderModelsData.ts",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/hooks/useOpenAICompatibleModels.ts",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/api/provider-keys/useProviderKeys.ts",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/AuthorCell.tsx",
+    "to": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/constants.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/AuthorCell.tsx",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/ReasonCell.tsx",
+    "to": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/constants.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/ReasonCell.tsx",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/SourceCell.tsx",
+    "to": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/constants.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/SourceCell.tsx",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/TypeCell.tsx",
+    "to": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/constants.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/TypeCell.tsx",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/ValueCell.tsx",
+    "to": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/constants.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/cells/ValueCell.tsx",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/components/pages/DatasetItemsPage/DatasetItemEditor/hooks/useDatasetItemData.ts",
+    "to": "src/components/pages/DatasetItemsPage/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/components/pages/DatasetItemsPage/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages/DatasetItemsPage/DatasetItemEditor/hooks/useDatasetItemData.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/components/pages/DatasetItemsPage/Legacy/DatasetItemEditor/hooks/useDatasetItemData.ts",
+    "to": "src/components/pages/DatasetItemsPage/Legacy/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/components/pages/DatasetItemsPage/Legacy/DatasetItemEditor/hooks/useDatasetItemFormHelpers.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages/DatasetItemsPage/Legacy/DatasetItemEditor/hooks/useDatasetItemData.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/MetricTag.tsx",
+    "to": "src/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScores.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScores.tsx",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/MetricTag.tsx",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/hooks/useLLMProviderModelsData.ts",
+    "to": "src/lib/provider.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/lib/provider.ts",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/hooks/useLLMProviderModelsData.ts",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "src/hooks/useOpenAICompatibleModels.ts",
+    "to": "src/lib/provider.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-circular"
+    },
+    "cycle": [
+      {
+        "name": "src/lib/provider.ts",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/hooks/useLLMProviderModelsData.ts",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "src/hooks/useOpenAICompatibleModels.ts",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages/HomePage/GetStartedSection.tsx",
+    "to": "src/components/pages/HomePageShared/SetGuardrailDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-cross-page-imports"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages/HomePage/ObservabilitySection.tsx",
+    "to": "src/components/pages/ProjectsPage/AddEditProjectDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-cross-page-imports"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages/HomePage/OptimizationRunsSection.tsx",
+    "to": "src/components/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-cross-page-imports"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages/HomePage/OptimizationRunsSection.tsx",
+    "to": "src/components/pages/OptimizationsPage/OptimizationStatusCell.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-cross-page-imports"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages/TracesPage/TracesPage.tsx",
+    "to": "src/components/pages/HomePageShared/SetGuardrailDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-cross-page-imports"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/hooks/useProviderOptions.ts",
+    "to": "src/components/pages-shared/llm/SetupProviderDialog/ProviderGrid.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-hooks-importing-components"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages-shared/experiments/ExperimentsRadarChart/ExperimentsRadarChart.tsx",
+    "to": "src/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-pages-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox.tsx",
+    "to": "src/components/pages/DatasetsPage/AddEditDatasetDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-pages-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog.tsx",
+    "to": "src/components/pages/DatasetsPage/AddEditDatasetDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-pages-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages-shared/traces/ThreadDetailsPanel/SetInactiveConfirmDialog.tsx",
+    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-pages-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages-shared/traces/ThreadDetailsPanel/SetInactiveConfirmDialog.tsx",
+    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/types.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-pages-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel.tsx",
+    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-pages-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel.tsx",
+    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/types.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-pages-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/PromptsTab.tsx",
+    "to": "src/components/pages/PromptPage/TryInPlaygroundButton.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-pages-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidgetEditor.tsx",
+    "to": "src/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidgetEditor.tsx",
+    "to": "src/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidgetEditor.tsx",
+    "to": "src/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ExperimentsLeaderboardWidget/ExperimentsLeaderboardWidgetEditor.tsx",
+    "to": "src/components/pages-shared/experiments/useExperimentsFeedbackScores.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ExperimentsLeaderboardWidget/helpers.ts",
+    "to": "src/components/pages-shared/experiments/scoresUtils.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsBreakdownSection.tsx",
+    "to": "src/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsEditor.tsx",
+    "to": "src/components/pages-shared/automations/ProjectsSelectBox.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsEditor.tsx",
+    "to": "src/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsEditor.tsx",
+    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/constants.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx",
+    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/constants.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx",
+    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/utils.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx",
+    "to": "src/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx",
+    "to": "src/components/pages/TracesPage/MetricsTab/utils.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectStatsCardWidget/ProjectStatsCardEditor.tsx",
+    "to": "src/components/pages-shared/automations/ProjectsSelectBox.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectStatsCardWidget/ProjectStatsCardWidget.tsx",
+    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/constants.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/ProjectStatsCardWidget/ProjectStatsCardWidget.tsx",
+    "to": "src/components/pages-shared/traces/MetricDateRangeSelect/utils.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/shared/ExperimentWidgetDataSection/ExperimentWidgetDataSection.tsx",
+    "to": "src/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/shared/ExperimentWidgetDataSection/ExperimentWidgetDataSection.tsx",
+    "to": "src/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection.tsx",
+    "to": "src/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection.tsx",
+    "to": "src/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DatasetVersionSelectBox/DatasetVersionSelectBox.tsx",
+    "to": "src/components/pages/DatasetsPage/AddEditDatasetDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/CommentsCell.tsx",
+    "to": "src/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/CommentsCell.tsx",
+    "to": "src/components/pages-shared/traces/UserComment/UserComment.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/CommentsCell.tsx",
+    "to": "src/components/pages-shared/traces/UserComment/UserCommentAvatar.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/CommentsCell.tsx",
+    "to": "src/components/pages-shared/traces/UserComment/UserCommentAvatarList.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/CommentsCell.tsx",
+    "to": "src/components/pages-shared/traces/UserComment/UserCommentHoverList.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/CostCell.tsx",
+    "to": "src/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/DurationCell.tsx",
+    "to": "src/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/MediaCell.tsx",
+    "to": "src/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/SpanTypeCell.tsx",
+    "to": "src/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/DataTableCells/TraceCountCell.tsx",
+    "to": "src/components/pages-shared/experiments/useExperimentsTraceCountNavigation.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer.tsx",
+    "to": "src/components/pages-shared/traces/FeedbackScoresEditor/FeedbackScoresEditor.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer.tsx",
+    "to": "src/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/types.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/ExperimentFeedbackScoresViewer/ExperimentFeedbackScoresViewer.tsx",
+    "to": "src/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/FeedbackScoreTable.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/PromptImprovementDialog/PromptImprovementDialog.tsx",
+    "to": "src/components/pages-shared/llm/PromptModelSelect/PromptModelSelect.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/TruncationConfigPopover/TruncationConfigPopover.tsx",
+    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/TruncationConfigPopover/TruncationConfigPopover.tsx",
+    "to": "src/components/pages/ConfigurationPage/WorkspacePreferencesTab/types.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/types/dashboard.ts",
+    "to": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-types-with-side-effects"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/types/dashboard.ts",
+    "to": "src/components/shared/DateRangeSelect/index.ts",
+    "rule": {
+      "severity": "error",
+      "name": "no-types-with-side-effects"
+    }
+  },
+  {
+    "type": "module",
+    "from": "src/components/pages-shared/onboarding/HelpResources/HelpResources.tsx",
+    "to": "src/components/pages-shared/onboarding/HelpResources/HelpResources.tsx",
+    "rule": {
+      "severity": "info",
+      "name": "no-orphans"
+    }
+  },
+  {
+    "type": "module",
+    "from": "src/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/utils.ts",
+    "to": "src/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/utils.ts",
+    "rule": {
+      "severity": "info",
+      "name": "no-orphans"
+    }
+  },
+  {
+    "type": "module",
+    "from": "src/components/pages/DatasetItemsPage/DatasetItemEditorLegacy/hooks/useDatasetItemNavigation.ts",
+    "to": "src/components/pages/DatasetItemsPage/DatasetItemEditorLegacy/hooks/useDatasetItemNavigation.ts",
+    "rule": {
+      "severity": "info",
+      "name": "no-orphans"
+    }
+  }
+]
