@@ -96,6 +96,7 @@ const CompareOptimizationsPage: React.FC = () => {
           optimizationId={optimization?.id}
           isStudioOptimization={isStudioOptimization}
           canRerun={canRerun}
+          bestExperiment={bestExperiment}
         />
       </PageBodyStickyContainer>
 

@@ -153,3 +153,34 @@ export const getOptimizationDefaultConfigByProvider = (
 
   return {};
 };
+
+export const convertOptimizationVariableFormat = (
+  content: string | unknown,
+): string | unknown => {
+  if (typeof content === "string") {
+    // Replace {var} with {{var}} for playground compatibility
+    // Use negative lookbehind and lookahead to avoid matching already-converted {{var}}
+    // This regex matches { that is not preceded by { and followed by content and } not followed by }
+    return content.replace(/(?<!\{)\{([^{}]+)\}(?!\})/g, "{{$1}}");
+  }
+
+  // If content is an array (multimodal content), process each text part
+  if (Array.isArray(content)) {
+    return content.map((part) => {
+      if (
+        part &&
+        typeof part === "object" &&
+        part.type === "text" &&
+        typeof part.text === "string"
+      ) {
+        return {
+          ...part,
+          text: part.text.replace(/(?<!\{)\{([^{}]+)\}(?!\})/g, "{{$1}}"),
+        };
+      }
+      return part;
+    });
+  }
+
+  return content;
+};
