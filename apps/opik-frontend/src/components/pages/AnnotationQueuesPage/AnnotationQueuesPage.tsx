@@ -435,6 +435,7 @@ export const AnnotationQueuesPage: React.FC = () => {
             config={FILTERS_CONFIG as never}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">

@@ -6,6 +6,7 @@ from benchmarks.utils import task_runner
 from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_task import TaskResult
 from opik_optimizer import ChatPrompt
+from tests.unit.fixtures import user_message
 
 
 class DummyOptimizer:
@@ -18,7 +19,7 @@ class DummyOptimizer:
         # Return an object with a prompt attribute and llm_calls to mimic optimizers
         class Result:
             def __init__(self) -> None:
-                self.prompt = [{"role": "user", "content": "hi"}]
+                self.prompt = [user_message("hi")]
                 self.llm_calls = 0
 
         return Result()
@@ -74,7 +75,7 @@ def test_chatprompt_uses_optimizer_model(monkeypatch: pytest.MonkeyPatch) -> Non
         optimizer_prompt_params_override=None,
         datasets=None,
         metrics=["builtins.abs"],
-        prompt_messages=[{"role": "user", "content": "{text}"}],
+        prompt_messages=[user_message("{text}")],
     )
 
     assert isinstance(result, TaskResult)

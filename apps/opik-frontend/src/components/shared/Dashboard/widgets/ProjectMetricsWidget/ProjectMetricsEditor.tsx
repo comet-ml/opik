@@ -36,10 +36,8 @@ import {
 
 import get from "lodash/get";
 
-import useProjectMetric, {
-  METRIC_NAME_TYPE,
-} from "@/api/projects/useProjectMetric";
-import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
+import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import useProjectTokenUsageNames from "@/api/projects/useProjectTokenUsageNames";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import {
   DashboardWidget,
@@ -189,12 +187,6 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
   });
   const projectId = localProjectId || globalConfig.projectId || "";
 
-  // Calculate interval config for API calls (same as widget preview)
-  const { interval, intervalStart, intervalEnd } = useMemo(
-    () => calculateIntervalConfig(globalConfig.dateRange),
-    [globalConfig.dateRange],
-  );
-
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
   const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";
   const isThreadMetric = metricType && selectedMetric?.filterType === "thread";
@@ -211,42 +203,27 @@ const ProjectMetricsEditor = forwardRef<WidgetEditorHandle>((_, ref) => {
     metricType === METRIC_NAME_TYPE.TOKEN_USAGE ||
     metricType === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE;
 
-  // Fetch usage metric data to extract usage key options (same API call as widget preview)
-  const { data: usageMetricData, isPending: isLoadingUsageKeys } =
-    useProjectMetric(
+  const { data: tokenUsageNamesData, isPending: isLoadingUsageKeys } =
+    useProjectTokenUsageNames(
       {
         projectId,
-        metricName:
-          metricType === METRIC_NAME_TYPE.SPAN_TOKEN_USAGE
-            ? METRIC_NAME_TYPE.SPAN_TOKEN_USAGE
-            : METRIC_NAME_TYPE.TOKEN_USAGE,
-        interval,
-        intervalStart,
-        intervalEnd,
       },
       {
         enabled: isTokenUsageMetric && !!projectId,
       },
     );
 
-  // Extract unique usage key names from the metric results
+  // Map token usage names to select options
   const usageKeyOptions = useMemo(() => {
-    if (!usageMetricData?.results) return [];
+    if (!tokenUsageNamesData?.names) return [];
 
-    const uniqueNames = new Set<string>();
-    usageMetricData.results.forEach((result) => {
-      if (result.name) {
-        uniqueNames.add(result.name);
-      }
-    });
-
-    return Array.from(uniqueNames)
+    return tokenUsageNamesData.names
       .sort((a, b) => a.localeCompare(b))
       .map((name) => ({
         value: name,
         label: name,
       }));
-  }, [usageMetricData?.results]);
+  }, [tokenUsageNamesData?.names]);
 
   // For feedback score metrics, group by is only allowed when exactly one metric is selected
   const hasExactlyOneFeedbackScoreSelected = feedbackScores.length === 1;

@@ -13,6 +13,7 @@ import { createFilter, isFilterValid } from "@/lib/filters";
 import FiltersContent from "@/components/shared/FiltersContent/FiltersContent";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { cn } from "@/lib/utils";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type FilterButtonConfig = {
   rowsMap: Record<string, FilterRowConfig>;
@@ -71,26 +72,28 @@ const FiltersButton = <TColumnData,>({
 
   return (
     <Popover onOpenChange={setOpen} open={open}>
-      <PopoverTrigger asChild>
-        <Button
-          variant={variant}
-          size="sm"
-          className={cn(
-            isIconLayout && !validFilters.length && "size-8 px-0",
-            isIconLayout && validFilters.length && "px-3",
-          )}
-          disabled={disabled}
-        >
-          <FilterIcon className="size-3.5 shrink-0" />
-          {isIconLayout ? (
-            validFilters.length ? (
-              <span className="ml-1.5">{validFilters.length}</span>
-            ) : null
-          ) : (
-            <span className="ml-1.5">{`Filters (${validFilters.length})`}</span>
-          )}
-        </Button>
-      </PopoverTrigger>
+      <TooltipWrapper content={isIconLayout ? "Filters" : undefined}>
+        <PopoverTrigger asChild>
+          <Button
+            variant={variant}
+            size="sm"
+            className={cn(
+              isIconLayout && !validFilters.length && "size-8 px-0",
+              isIconLayout && validFilters.length && "px-3",
+            )}
+            disabled={disabled}
+          >
+            <FilterIcon className="size-3.5 shrink-0" />
+            {isIconLayout ? (
+              validFilters.length ? (
+                <span className="ml-1.5">{validFilters.length}</span>
+              ) : null
+            ) : (
+              <span className="ml-1.5">{`Filters (${validFilters.length})`}</span>
+            )}
+          </Button>
+        </PopoverTrigger>
+      </TooltipWrapper>
       <PopoverContent className="min-w-[540px] px-8 py-6" align={align}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between pb-1">

@@ -493,3 +493,45 @@ def test_extraction__backend_reinjects_extracted_attachments(
         input=span_input,
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
     )
+
+
+def test_extraction__input_as_top_level_list(
+    opik_client: opik.Opik,
+):
+    """Test that top-level lists are extracted and uploaded as separate attachments."""
+    trace_id = id_helpers.generate_id()
+    span_id = id_helpers.generate_id()
+
+    # Create trace first
+    trace = opik_client.trace(
+        id=trace_id,
+        name="test-trace-for-attachment-list-extraction",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+    # Create a span with end_time and a top-level list in the input with attachments
+    data = [
+        {"image": constants.JPEG_BASE64},
+        {"pdf": constants.PDF_BASE64},
+    ]
+
+    trace.span(
+        id=span_id,
+        name="test-span-extraction",
+        input=data,
+        end_time=datetime_helpers.local_timestamp(),
+    )
+
+    opik_client.flush()
+
+    # Verify attachments were extracted and uploaded
+    expected_sizes = [
+        len(base64.b64decode(constants.JPEG_BASE64)),
+        len(base64.b64decode(constants.PDF_BASE64)),
+    ]
+    verifiers.verify_auto_extracted_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=span_id,
+        expected_sizes=expected_sizes,
+    )
