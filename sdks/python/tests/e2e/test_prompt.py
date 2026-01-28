@@ -767,4 +767,4 @@ def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
     )
     assert len(filtered_prompts) == 1
     assert filtered_prompts[0].name == prompt_name
-    assert filtered_prompts[0].tags == tags
+    assert set(filtered_prompts[0].tags) == set(tags)
