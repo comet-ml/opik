@@ -1,8 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronsUpDown, Shield } from "lucide-react";
+import { ChevronLeft, ChevronsUpDown, Shield } from "lucide-react";
 import sortBy from "lodash/sortBy";
-import toLower from "lodash/toLower";
 
 import {
   DropdownMenu,
@@ -11,7 +10,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
@@ -29,59 +27,49 @@ interface OrganizationSelectorProps {
 }
 
 interface DropdownContentProps {
-  filteredOrganizations: Organization[];
+  organizations: Organization[];
   currentOrganization: Organization;
   isOrganizationAdmin: boolean;
   handleChangeOrganization: (org: Organization) => void;
   handleManageOrganization: () => void;
-  search: string;
-  setSearch: (search: string) => void;
   align?: "start" | "center" | "end";
   side?: "top" | "right" | "bottom" | "left";
 }
 
 const DropdownContent: React.FC<DropdownContentProps> = ({
-  filteredOrganizations,
+  organizations,
   currentOrganization,
   isOrganizationAdmin,
   handleChangeOrganization,
   handleManageOrganization,
-  search,
-  setSearch,
   align = "start",
   side,
 }) => {
   return (
     <DropdownMenuContent
-      className="w-60 p-1 pt-12"
+      className="w-60 p-1"
       align={align}
       side={side}
       onCloseAutoFocus={(e) => e.preventDefault()}
     >
       <div
-        className="absolute inset-x-1 top-1 h-11"
+        className="comet-body-s-accented flex items-center gap-2 p-2 text-foreground"
         onKeyDown={(e) => e.stopPropagation()}
       >
-        <SearchInput
-          searchText={search}
-          setSearchText={setSearch}
-          placeholder="Find organization"
-          variant="ghost"
-        />
-        <Separator className="mt-1" />
+        <ChevronLeft className="size-4 shrink-0 text-muted-slate" />
+        <span>Switch organization</span>
       </div>
       <div className="max-h-[200px] overflow-auto">
-        {filteredOrganizations.length > 0 ? (
-          sortBy(filteredOrganizations, "name").map((org) => (
+        {organizations.length > 0 ? (
+          sortBy(organizations, "name").map((org) => (
             <DropdownMenuCheckboxItem
-              checked={currentOrganization.name === org.name}
-              key={org.name}
+              checked={currentOrganization.id === org.id}
+              key={org.id}
               onClick={() => handleChangeOrganization(org)}
+              className="flex items-center"
             >
               <TooltipWrapper content={org.name}>
-                <span
-                  className={side === "right" ? "truncate" : "min-w-0 truncate"}
-                >
+                <span className="min-w-0 flex-1 truncate text-left">
                   {org.name}
                 </span>
               </TooltipWrapper>
@@ -134,7 +122,6 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
   expanded,
 }) => {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -179,15 +166,6 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
     }
   };
 
-  // Filter organizations by search query (before early return)
-  const filteredOrganizations = useMemo(() => {
-    if (!organizations || !search) return organizations || [];
-    const searchLower = toLower(search);
-    return organizations.filter((org) =>
-      toLower(org.name).includes(searchLower),
-    );
-  }, [organizations, search]);
-
   if (
     !user?.loggedIn ||
     isLoading ||
@@ -224,9 +202,6 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
 
   const handleOpenChange = (open: boolean) => {
     setIsDropdownOpen(open);
-    if (!open) {
-      setSearch("");
-    }
   };
 
   const handleManageOrganization = () => {
@@ -281,13 +256,11 @@ const OrganizationSelector: React.FC<OrganizationSelectorProps> = ({
         <DropdownMenu open={isDropdownOpen} onOpenChange={handleOpenChange}>
           <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
           <DropdownContent
-            filteredOrganizations={filteredOrganizations}
+            organizations={organizations}
             currentOrganization={currentOrganization}
             isOrganizationAdmin={isOrganizationAdmin}
             handleChangeOrganization={handleChangeOrganization}
             handleManageOrganization={handleManageOrganization}
-            search={search}
-            setSearch={setSearch}
             align="start"
           />
         </DropdownMenu>
