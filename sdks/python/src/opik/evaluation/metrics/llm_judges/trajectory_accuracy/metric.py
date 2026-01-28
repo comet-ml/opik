@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List, Union
+from typing import Any
 import logging
 import pydantic
 
@@ -59,12 +59,12 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "trajectory_accuracy_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
-        seed: Optional[int] = None,
-        temperature: Optional[float] = None,
+        project_name: str | None = None,
+        seed: int | None = None,
+        temperature: float | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
         self._seed = seed
@@ -72,8 +72,8 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
 
     def _init_model(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]],
-        temperature: Optional[float],
+        model: str | base_model.OpikBaseModel | None,
+        temperature: float | None,
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
@@ -91,7 +91,7 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
     def score(
         self,
         goal: str,
-        trajectory: List[Dict[str, Any]],
+        trajectory: list[dict[str, Any]],
         final_result: str,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
@@ -133,7 +133,7 @@ class TrajectoryAccuracy(base_metric.BaseMetric):
     async def ascore(
         self,
         goal: str,
-        trajectory: List[Dict[str, Any]],
+        trajectory: list[dict[str, Any]],
         final_result: str,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:

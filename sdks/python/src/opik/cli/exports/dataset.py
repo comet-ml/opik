@@ -3,7 +3,6 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -24,7 +23,7 @@ console = Console()
 def export_single_dataset(
     dataset: opik.Dataset,
     output_dir: Path,
-    max_results: Optional[int],
+    max_results: int | None,
     force: bool,
     debug: bool,
     format: str,
@@ -83,11 +82,11 @@ def export_dataset_by_name(
     name: str,
     workspace: str,
     output_path: str,
-    max_results: Optional[int],
+    max_results: int | None,
     force: bool,
     debug: bool,
     format: str,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> None:
     """Export a dataset by exact name."""
     try:
@@ -263,7 +262,7 @@ def export_experiment_datasets(
 def export_dataset_command(
     ctx: click.Context,
     name: str,
-    max_results: Optional[int],
+    max_results: int | None,
     path: str,
     force: bool,
     debug: bool,

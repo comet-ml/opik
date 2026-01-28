@@ -1,6 +1,5 @@
 import pytest
 import threading
-from typing import Dict, List
 from opik import dict_utils
 
 
@@ -95,7 +94,7 @@ def test_deepmerge__recursion_limit_not_exceeded__merging_performed_as_usual():
     ],
 )
 def test_split_dict_by_keys(
-    input_dict: Dict, keys: List, expected_subset: Dict, expected_remaining: Dict
+    input_dict: dict, keys: list, expected_subset: dict, expected_remaining: dict
 ):
     subset, remaining = dict_utils.split_dict_by_keys(input_dict, keys)
     assert subset == expected_subset

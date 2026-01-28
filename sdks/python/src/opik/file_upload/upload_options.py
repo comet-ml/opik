@@ -1,6 +1,5 @@
 import dataclasses
 import os
-from typing import Optional
 
 from ..message_processing import messages
 from ..types import AttachmentEntityType
@@ -11,7 +10,7 @@ class FileUploadOptions:
     file_path: str
     file_name: str
     file_size: int
-    mime_type: Optional[str]
+    mime_type: str | None
     entity_type: AttachmentEntityType
     entity_id: str
     project_name: str

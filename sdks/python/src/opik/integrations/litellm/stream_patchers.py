@@ -1,6 +1,7 @@
 import logging
 import functools
-from typing import Any, List, Optional, Callable, TypeVar
+from typing import Any, TypeVar
+from collections.abc import Callable
 
 from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers, error_info_collector
@@ -125,8 +126,8 @@ def _create_async_next_wrapper(
 def patch_stream(
     stream: litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
-    generations_aggregator: Callable[[List[StreamItem]], Optional[AggregatedResult]],
+    trace_to_end: trace.TraceData | None,
+    generations_aggregator: Callable[[list[StreamItem]], AggregatedResult | None],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper:
     litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper.__next__ = (

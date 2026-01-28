@@ -1,9 +1,9 @@
 """Statistics calculation functions for usage report module."""
 
-from typing import Any, Dict
+from typing import Any
 
 
-def calculate_statistics(data: Dict[str, Any]) -> Dict[str, Any]:
+def calculate_statistics(data: dict[str, Any]) -> dict[str, Any]:
     """
     Calculate summary statistics from the usage data.
 

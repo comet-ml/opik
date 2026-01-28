@@ -1,6 +1,7 @@
 import inspect
 import logging
-from typing import List, Dict, Any, Optional, Callable, Tuple
+from typing import Any
+from collections.abc import Callable
 
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
@@ -32,12 +33,12 @@ def _has_evaluation_span_parameter(func: Callable) -> bool:
 
 
 def _compute_metric_scores(
-    scoring_metrics: List[base_metric.BaseMetric],
-    mapped_scoring_inputs: Dict[str, Any],
-    scoring_key_mapping: Optional[ScoringKeyMappingType],
-    dataset_item_content: Dict[str, Any],
-    task_output: Dict[str, Any],
-) -> List[score_result.ScoreResult]:
+    scoring_metrics: list[base_metric.BaseMetric],
+    mapped_scoring_inputs: dict[str, Any],
+    scoring_key_mapping: ScoringKeyMappingType | None,
+    dataset_item_content: dict[str, Any],
+    task_output: dict[str, Any],
+) -> list[score_result.ScoreResult]:
     """
     Compute scores using given metrics.
 
@@ -51,7 +52,7 @@ def _compute_metric_scores(
     Returns:
         List of computed score results
     """
-    score_results: List[score_result.ScoreResult] = []
+    score_results: list[score_result.ScoreResult] = []
 
     for metric in scoring_metrics:
         try:
@@ -126,12 +127,12 @@ class MetricsEvaluator:
 
     def __init__(
         self,
-        scoring_metrics: List[base_metric.BaseMetric],
-        scoring_key_mapping: Optional[ScoringKeyMappingType],
+        scoring_metrics: list[base_metric.BaseMetric],
+        scoring_key_mapping: ScoringKeyMappingType | None,
     ):
         self._scoring_key_mapping = scoring_key_mapping
-        self._regular_metrics: List[base_metric.BaseMetric] = []
-        self._task_span_metrics: List[base_metric.BaseMetric] = []
+        self._regular_metrics: list[base_metric.BaseMetric] = []
+        self._task_span_metrics: list[base_metric.BaseMetric] = []
 
         self._analyze_metrics(scoring_metrics)
 
@@ -141,18 +142,18 @@ class MetricsEvaluator:
         return len(self._task_span_metrics) > 0
 
     @property
-    def task_span_metrics(self) -> List[base_metric.BaseMetric]:
+    def task_span_metrics(self) -> list[base_metric.BaseMetric]:
         """Get list of task span scoring metrics."""
         return self._task_span_metrics
 
     @property
-    def regular_metrics(self) -> List[base_metric.BaseMetric]:
+    def regular_metrics(self) -> list[base_metric.BaseMetric]:
         """Get list of regular scoring metrics."""
         return self._regular_metrics
 
     def _analyze_metrics(
         self,
-        scoring_metrics: List[base_metric.BaseMetric],
+        scoring_metrics: list[base_metric.BaseMetric],
     ) -> None:
         """Separate metrics into regular and task-span categories."""
         for metric in scoring_metrics:
@@ -169,9 +170,9 @@ class MetricsEvaluator:
 
     def compute_regular_scores(
         self,
-        dataset_item_content: Dict[str, Any],
-        task_output: Dict[str, Any],
-    ) -> Tuple[List[score_result.ScoreResult], Dict[str, Any]]:
+        dataset_item_content: dict[str, Any],
+        task_output: dict[str, Any],
+    ) -> tuple[list[score_result.ScoreResult], dict[str, Any]]:
         """
         Compute scores using regular metrics.
 
@@ -200,10 +201,10 @@ class MetricsEvaluator:
 
     def compute_task_span_scores(
         self,
-        dataset_item_content: Dict[str, Any],
-        task_output: Dict[str, Any],
+        dataset_item_content: dict[str, Any],
+        task_output: dict[str, Any],
         task_span: models.SpanModel,
-    ) -> Tuple[List[score_result.ScoreResult], Dict[str, Any]]:
+    ) -> tuple[list[score_result.ScoreResult], dict[str, Any]]:
         """
         Compute scores using task span metrics.
 

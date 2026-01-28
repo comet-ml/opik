@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Literal, Mapping, Optional, Union, Set
+from typing import Any, Literal, Optional, Union
+from collections.abc import Callable, Mapping
 
 import enum
 
@@ -11,12 +12,12 @@ class PromptType(str, enum.Enum):
 
 
 # Core multimodal/chat prompt related types
-MessageContent = Union[str, List[Dict[str, Any]]]
-ContentPart = Dict[str, Any]
-RendererFn = Callable[[ContentPart, Dict[str, Any], PromptType], Optional[ContentPart]]
+MessageContent = Union[str, list[dict[str, Any]]]
+ContentPart = dict[str, Any]
+RendererFn = Callable[[ContentPart, dict[str, Any], PromptType], Optional[ContentPart]]
 ModalityName = Literal["vision", "video"]
 SupportedModalities = Mapping[ModalityName, bool]
-ModalitySet = Set[ModalityName]
+ModalitySet = set[ModalityName]
 
 __all__ = [
     "PromptType",

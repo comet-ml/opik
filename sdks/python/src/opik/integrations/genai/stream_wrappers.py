@@ -2,13 +2,8 @@ import functools
 import logging
 from typing import (
     Any,
-    AsyncIterator,
-    Callable,
-    Dict,
-    Iterator,
-    List,
-    Optional,
 )
+from collections.abc import AsyncIterator, Callable, Iterator
 
 from google.genai import types as genai_types
 
@@ -22,16 +17,16 @@ LOGGER = logging.getLogger(__name__)
 def wrap_sync_iterator(
     stream: Iterator[genai_types.GenerateContentResponse],
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
+    trace_to_end: trace.TraceData | None,
     generations_aggregator: Callable[
-        [List[genai_types.GenerateContentResponse]], genai_types.GenerateContentResponse
+        [list[genai_types.GenerateContentResponse]], genai_types.GenerateContentResponse
     ],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> Iterator[genai_types.GenerateContentResponse]:
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
 
     try:
-        error_info: Optional[ErrorInfoDict] = None
+        error_info: ErrorInfoDict | None = None
         for item in stream:
             items.append(item)
 
@@ -59,16 +54,16 @@ def wrap_sync_iterator(
 async def wrap_async_iterator(
     stream: AsyncIterator[genai_types.GenerateContentResponse],
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
+    trace_to_end: trace.TraceData | None,
     generations_aggregator: Callable[
-        [List[genai_types.GenerateContentResponse]], genai_types.GenerateContentResponse
+        [list[genai_types.GenerateContentResponse]], genai_types.GenerateContentResponse
     ],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> AsyncIterator[genai_types.GenerateContentResponse]:
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
 
     try:
-        error_info: Optional[ErrorInfoDict] = None
+        error_info: ErrorInfoDict | None = None
         async for item in stream:
             items.append(item)
 

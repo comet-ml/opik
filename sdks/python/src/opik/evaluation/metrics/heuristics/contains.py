@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from .. import base_metric, score_result
 
@@ -49,10 +49,10 @@ class Contains(base_metric.BaseMetric):
     def __init__(
         self,
         case_sensitive: bool = False,
-        reference: Optional[str] = None,
+        reference: str | None = None,
         name: str = "contains_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(
             name=name,
@@ -63,7 +63,7 @@ class Contains(base_metric.BaseMetric):
         self._default_reference = reference
 
     def score(
-        self, output: str, reference: Optional[str] = None, **ignored_kwargs: Any
+        self, output: str, reference: str | None = None, **ignored_kwargs: Any
     ) -> score_result.ScoreResult:
         """
         Calculate the score based on whether the reference string is contained in the output string.

@@ -6,7 +6,7 @@ This example demonstrates how to use Opik's TrajectoryAccuracy metric
 to evaluate ReAct-style agent trajectories within the evaluation framework.
 """
 
-from typing import Dict, Any
+from typing import Any
 from opik.evaluation.metrics import TrajectoryAccuracy
 from opik.evaluation import evaluate
 from opik import Opik, track
@@ -108,7 +108,7 @@ def create_trajectory_dataset():
 
 
 @track()
-def trajectory_evaluation_task(item: Dict[str, Any]) -> Dict[str, Any]:
+def trajectory_evaluation_task(item: dict[str, Any]) -> dict[str, Any]:
     """
     Task that simulates evaluating an agent trajectory.
     In practice, this would be where your agent generates the trajectory.

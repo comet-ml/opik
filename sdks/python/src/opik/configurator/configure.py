@@ -1,7 +1,7 @@
 import getpass
 import logging
 import os
-from typing import Final, Optional
+from typing import Final
 
 import httpx
 import opik.config
@@ -26,9 +26,9 @@ OPIK_BASE_URL_LOCAL: Final[str] = "http://localhost:5173/"
 class OpikConfigurator:
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        workspace: Optional[str] = None,
-        url: Optional[str] = None,
+        api_key: str | None = None,
+        workspace: str | None = None,
+        url: str | None = None,
         use_local: bool = False,
         force: bool = False,
         self_hosted_comet: bool = False,
@@ -474,7 +474,7 @@ class OpikConfigurator:
 
 
 def _set_environment_variables_for_integrations(
-    api_key: Optional[str], workspace: Optional[str]
+    api_key: str | None, workspace: str | None
 ) -> None:
     """
     Environment variables are set for use by some integrations (liteLLM, etc.) when both the API key and workspace name
@@ -488,7 +488,7 @@ def _set_environment_variables_for_integrations(
         os.environ["OPIK_WORKSPACE"] = workspace
 
 
-def _extract_base_url_from_api_key(api_key: str) -> Optional[str]:
+def _extract_base_url_from_api_key(api_key: str) -> str | None:
     opik_api_key_ = opik_api_key.parse_api_key(api_key)
 
     if opik_api_key_ is not None and opik_api_key_.base_url is not None:
@@ -498,9 +498,9 @@ def _extract_base_url_from_api_key(api_key: str) -> Optional[str]:
 
 
 def configure(
-    api_key: Optional[str] = None,
-    workspace: Optional[str] = None,
-    url: Optional[str] = None,
+    api_key: str | None = None,
+    workspace: str | None = None,
+    url: str | None = None,
     use_local: bool = False,
     force: bool = False,
     automatic_approvals: bool = False,

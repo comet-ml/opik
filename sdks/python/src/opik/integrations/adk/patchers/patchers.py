@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from opik import semantic_version
 from opik.api_objects import opik_client
@@ -18,7 +17,7 @@ LOGGER = logging.getLogger(__name__)
 
 def patch_adk(
     opik_client: opik_client.Opik,
-    distributed_headers: Optional[DistributedTraceHeadersDict] = None,
+    distributed_headers: DistributedTraceHeadersDict | None = None,
 ) -> None:
     _patch_adk_lite_llm()
     if semantic_version.SemanticVersion.parse(google.adk.__version__) >= "1.3.0":  # type: ignore
@@ -62,7 +61,7 @@ def _patch_adk_lite_llm() -> None:
 
 def _patch_adk_opentelemetry_tracers(
     opik_client: opik_client.Opik,
-    distributed_headers: Optional[DistributedTraceHeadersDict],
+    distributed_headers: DistributedTraceHeadersDict | None,
 ) -> None:
     no_op_opik_tracer = opik_adk_otel_tracer.OpikADKOtelTracer(
         opik_client, distributed_headers=distributed_headers

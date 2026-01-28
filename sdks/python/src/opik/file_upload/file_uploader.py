@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Optional
 
 import httpx
 
@@ -20,7 +19,7 @@ def upload_attachment(
     upload_options: file_upload_options.FileUploadOptions,
     rest_client: rest_api_client.OpikApi,
     upload_httpx_client: httpx.Client,
-    monitor: Optional[file_upload_monitor.FileUploadMonitor] = None,
+    monitor: file_upload_monitor.FileUploadMonitor | None = None,
 ) -> None:
     try:
         _do_upload_attachment(
@@ -57,7 +56,7 @@ def _do_upload_attachment(
     upload_options: file_upload_options.FileUploadOptions,
     rest_client: rest_api_client.OpikApi,
     httpx_client: httpx.Client,
-    monitor: Optional[file_upload_monitor.FileUploadMonitor],
+    monitor: file_upload_monitor.FileUploadMonitor | None,
 ) -> None:
     file_parts = file_parts_strategy.FilePartsStrategy(
         file_path=upload_options.file_path,
@@ -114,7 +113,7 @@ def upload_to_s3_directly(
     file_parts: file_parts_strategy.FilePartsStrategy,
     upload_metadata: upload_client.MultipartUploadMetadata,
     upload_options: file_upload_options.FileUploadOptions,
-    monitor: Optional[file_upload_monitor.FileUploadMonitor],
+    monitor: file_upload_monitor.FileUploadMonitor | None,
 ) -> None:
     s3_uploader = s3_file_uploader.S3FileDataUploader(
         file_parts=file_parts,

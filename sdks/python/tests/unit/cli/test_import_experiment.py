@@ -4,7 +4,7 @@ import json
 import sys
 import types
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 from unittest.mock import Mock, MagicMock, patch
 import pytest
 
@@ -105,7 +105,7 @@ class TestTranslateTraceId:
 
     def test_translate_trace_id_empty_map(self) -> None:
         """Test translating trace ID with empty map."""
-        trace_id_map: Dict[str, str] = {}
+        trace_id_map: dict[str, str] = {}
 
         result = utils_translate_trace_id("old-trace-1", trace_id_map)
 
@@ -115,7 +115,7 @@ class TestTranslateTraceId:
         """Test that translate_trace_id requires Dict, not Optional."""
         # This test verifies the type signature is correct
         # If someone tries to pass None, type checker should catch it
-        trace_id_map: Dict[str, str] = {}  # Required, not Optional
+        trace_id_map: dict[str, str] = {}  # Required, not Optional
 
         result = utils_translate_trace_id("trace-1", trace_id_map)
 
@@ -199,11 +199,11 @@ class TestRecreateExperiment:
     ) -> None:
         """Test that recreate_experiment requires trace_id_map (not Optional)."""
         # This test verifies the type signature
-        trace_id_map: Dict[str, str] = {
+        trace_id_map: dict[str, str] = {
             "trace-1": "new-trace-1",
             "trace-2": "new-trace-2",
         }
-        dataset_item_id_map: Dict[str, str] = {
+        dataset_item_id_map: dict[str, str] = {
             "ds-item-1": "new-ds-item-1",
             "ds-item-2": "new-ds-item-2",
         }
@@ -268,12 +268,12 @@ class TestRecreateExperiment:
             elif hasattr(call_args, "args") and call_args.args:
                 experiment_items_arg = call_args.args[0]
 
-            assert (
-                experiment_items_arg is not None
-            ), f"Could not find experiment_items in call_args: {call_args}"
-            assert (
-                len(experiment_items_arg) == 2
-            ), f"Expected 2 items in batch, got {len(experiment_items_arg)}"
+            assert experiment_items_arg is not None, (
+                f"Could not find experiment_items in call_args: {call_args}"
+            )
+            assert len(experiment_items_arg) == 2, (
+                f"Expected 2 items in batch, got {len(experiment_items_arg)}"
+            )
 
     def test_recreate_experiment_uses_module_names_correctly(
         self, mock_client: Mock, experiment_data: ExperimentData
@@ -302,8 +302,8 @@ class TestRecreateExperiment:
         self, mock_client: Mock, experiment_data: ExperimentData
     ) -> None:
         """Test that empty trace_id_map is handled correctly."""
-        trace_id_map: Dict[str, str] = {}  # Empty but valid
-        dataset_item_id_map: Dict[str, str] = {}  # Empty but valid
+        trace_id_map: dict[str, str] = {}  # Empty but valid
+        dataset_item_id_map: dict[str, str] = {}  # Empty but valid
 
         recreate_experiment(
             mock_client,
@@ -360,7 +360,7 @@ class TestImportTracesWithSpans:
         mock_spans = []
         for i in range(3):
             mock_span = Mock()
-            mock_span.id = f"new-span-{i+1}"
+            mock_span.id = f"new-span-{i + 1}"
             mock_spans.append(mock_span)
 
         client.span = Mock(side_effect=mock_spans)

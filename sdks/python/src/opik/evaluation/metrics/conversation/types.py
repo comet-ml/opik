@@ -1,9 +1,9 @@
-from typing import Dict, List, Literal, Optional
+from typing import Literal
 
 import pydantic
 
-ConversationDict = Dict[Literal["role", "content"], str]
-Conversation = List[ConversationDict]
+ConversationDict = dict[Literal["role", "content"], str]
+Conversation = list[ConversationDict]
 
 
 class ConversationTurn(pydantic.BaseModel):
@@ -23,9 +23,9 @@ class ConversationTurn(pydantic.BaseModel):
     """
 
     input: ConversationDict
-    output: Optional[ConversationDict]
+    output: ConversationDict | None
 
-    def as_list(self) -> List[ConversationDict]:
+    def as_list(self) -> list[ConversationDict]:
         if self.output is None:
             return [self.input]
         return [self.input, self.output]

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from .. import usage_converters
 from .base import ChunkAggregator
@@ -23,7 +23,7 @@ class MistralAggregator(ChunkAggregator):
     - amazon-bedrock-invocationMetrics: Bedrock metrics
     """
 
-    def aggregate(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def aggregate(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         """Aggregate Mistral chunks into native Mistral output with Bedrock usage."""
         LOGGER.debug("Mistral aggregator processing %d items", len(items))
 

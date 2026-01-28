@@ -1,6 +1,6 @@
 import dataclasses
 import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import opik.api_objects.attachment as attachment
 import opik.datetime_helpers as datetime_helpers
@@ -24,26 +24,26 @@ class TraceData(ObservationData):
     """
 
     id: str = dataclasses.field(default_factory=id_helpers.generate_id)
-    created_by: Optional[CreatedByType] = None
-    thread_id: Optional[str] = None
+    created_by: CreatedByType | None = None
+    thread_id: str | None = None
 
     def create_child_span_data(
         self,
-        name: Optional[str] = None,
+        name: str | None = None,
         type: SpanType = "general",
-        start_time: Optional[datetime.datetime] = None,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
-        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
-        model: Optional[str] = None,
-        provider: Optional[Union[str, LLMProvider]] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        total_cost: Optional[float] = None,
-        attachments: Optional[List[attachment.Attachment]] = None,
+        start_time: datetime.datetime | None = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+        feedback_scores: list[FeedbackScoreDict] | None = None,
+        model: str | None = None,
+        provider: str | LLMProvider | None = None,
+        error_info: ErrorInfoDict | None = None,
+        total_cost: float | None = None,
+        attachments: list[attachment.Attachment] | None = None,
     ) -> span.SpanData:
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
@@ -70,9 +70,9 @@ class TraceData(ObservationData):
         )
 
     @property
-    def as_start_parameters(self) -> Dict[str, Any]:
+    def as_start_parameters(self) -> dict[str, Any]:
         """Returns parameters of this trace to be sent to the server when starting a new trace."""
-        start_parameters: Dict[str, Any] = {
+        start_parameters: dict[str, Any] = {
             "id": self.id,
             "start_time": self.start_time,
             "project_name": self.project_name,
@@ -89,7 +89,7 @@ class TraceData(ObservationData):
         return start_parameters
 
     @property
-    def as_parameters(self) -> Dict[str, Any]:
+    def as_parameters(self) -> dict[str, Any]:
         """Returns all parameters of this trace to be sent to the server."""
         return {
             "id": self.id,

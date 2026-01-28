@@ -1,5 +1,5 @@
 import abc
-from typing import Dict, Any, Optional
+from typing import Any
 
 from . import base_metric, arguments_helpers
 from .. import types as evaluation_types
@@ -13,8 +13,8 @@ class ScoreArgumentsValidator(abc.ABC):
     @abc.abstractmethod
     def validate_score_arguments(
         self,
-        score_kwargs: Dict[str, Any],
-        key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
+        score_kwargs: dict[str, Any],
+        key_mapping: evaluation_types.ScoringKeyMappingType | None,
     ) -> None:
         """The subclasses must implement this method to provide actual validation logic."""
         pass
@@ -22,8 +22,8 @@ class ScoreArgumentsValidator(abc.ABC):
 
 def validate_score_arguments(
     metric: base_metric.BaseMetric,
-    kwargs: Dict[str, Any],
-    scoring_key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
+    kwargs: dict[str, Any],
+    scoring_key_mapping: evaluation_types.ScoringKeyMappingType | None,
 ) -> None:
     if isinstance(metric, ScoreArgumentsValidator):
         metric.validate_score_arguments(

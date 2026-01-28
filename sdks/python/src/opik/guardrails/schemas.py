@@ -1,6 +1,6 @@
 import pydantic
 import enum
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from opik.rest_api.types.check_public_result import CheckPublicResult
 
@@ -13,12 +13,12 @@ class ValidationType(str, enum.Enum):
 class ValidationResult(pydantic.BaseModel):
     validation_passed: bool
     type: ValidationType
-    validation_config: Dict[str, Any]
-    validation_details: Dict[str, Any]
+    validation_config: dict[str, Any]
+    validation_details: dict[str, Any]
 
 
 class ValidationResponse(pydantic.BaseModel):
     validation_passed: bool
-    validations: List[ValidationResult]
+    validations: list[ValidationResult]
     # This is client side injected
-    guardrail_result: Optional[CheckPublicResult] = None
+    guardrail_result: CheckPublicResult | None = None

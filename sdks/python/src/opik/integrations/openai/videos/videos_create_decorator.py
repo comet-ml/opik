@@ -9,13 +9,10 @@ This decorator is used only for LLM spans that generate videos.
 import logging
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     Optional,
-    Tuple,
     TYPE_CHECKING,
 )
+from collections.abc import Callable
 
 from typing_extensions import override
 
@@ -69,8 +66,8 @@ class VideosCreateTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         assert kwargs is not None, "Expected kwargs to be not None in videos API calls"
 
@@ -128,7 +125,7 @@ class VideosCreateTrackDecorator(base_track_decorator.BaseTrackDecorator):
                 provider=self.provider,
             )
 
-        result_dict: Dict[str, Any] = output.model_dump(mode="json")
+        result_dict: dict[str, Any] = output.model_dump(mode="json")
 
         output_data, metadata = dict_utils.split_dict_by_keys(
             result_dict, VIDEO_RESPONSE_KEYS_TO_LOG_AS_OUTPUT
@@ -153,7 +150,7 @@ class VideosCreateTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Optional[Any]:
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> Any | None:
         NOT_A_STREAM = None
         return NOT_A_STREAM

@@ -1,5 +1,5 @@
 import contextlib
-from typing import Iterator, Optional
+from collections.abc import Iterator
 
 import opik.context_storage as context_storage
 from opik.api_objects import trace, opik_client
@@ -12,7 +12,7 @@ def evaluate_llm_conversation_context(
     trace_data: trace.TraceData,
     client: opik_client.Opik,
 ) -> Iterator[None]:
-    error_info: Optional[ErrorInfoDict] = None
+    error_info: ErrorInfoDict | None = None
     try:
         context_storage.set_trace_data(trace_data)
         yield

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, List
+from typing import Any
 
 import openai
 import pytest
@@ -42,7 +42,7 @@ OPENAI_OLDER_THAN_1_92_0 = (
 )
 
 
-def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
+def _assert_metadata_contains_required_keys(metadata: dict[str, Any]):
     REQUIRED_METADATA_KEYS = [
         "usage",
         "model",
@@ -504,7 +504,7 @@ def test_openai_client_chat_completions_parse__happyflow(
     class CalendarEvent(BaseModel):
         name: str
         date: str
-        participants: List[str]
+        participants: list[str]
 
     messages = [
         {"role": "system", "content": "Extract the event information."},
@@ -571,7 +571,7 @@ def test_async_openai_client_chat_completions_parse__happyflow(fake_backend):
     class CalendarEvent(BaseModel):
         name: str
         date: str
-        participants: List[str]
+        participants: list[str]
 
     messages = [
         {"role": "system", "content": "Extract the event information."},

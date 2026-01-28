@@ -1,7 +1,7 @@
 import logging
 import re
 from collections.abc import Mapping
-from typing import Any, Dict, Literal, Optional, cast
+from typing import Any, Literal, cast
 
 from opik import _logging
 
@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 SpanType = Literal["llm", "tool", "general"]
 
 
-def get_span_type(run: Dict[str, Any]) -> SpanType:
+def get_span_type(run: dict[str, Any]) -> SpanType:
     if run.get("run_type") in ["llm", "tool"]:
         return cast(SpanType, run.get("run_type"))
 
@@ -20,11 +20,11 @@ def get_span_type(run: Dict[str, Any]) -> SpanType:
     return cast(SpanType, "general")
 
 
-def is_root_run(run_dict: Dict[str, Any]) -> bool:
+def is_root_run(run_dict: dict[str, Any]) -> bool:
     return run_dict.get("parent_run_id") is None
 
 
-def extract_tool_description(run_dict: Dict[str, Any]) -> Optional[str]:
+def extract_tool_description(run_dict: dict[str, Any]) -> str | None:
     """
     Extract tool description/docstring from a tool Run object.
 
@@ -57,7 +57,7 @@ def extract_tool_description(run_dict: Dict[str, Any]) -> Optional[str]:
     return None
 
 
-def get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
+def get_run_metadata(run_dict: dict[str, Any]) -> dict[str, Any]:
     extra = run_dict.get("extra") or {}
     if not isinstance(extra, dict):
         extra = {}
@@ -72,7 +72,7 @@ def get_run_metadata(run_dict: Dict[str, Any]) -> Dict[str, Any]:
     return metadata
 
 
-def parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
+def parse_graph_interrupt_value(error_traceback: str) -> str | None:
     """
     Parse GraphInterrupt error traceback to extract the interrupt value as a string.
 
@@ -164,7 +164,7 @@ def parse_graph_interrupt_value(error_traceback: str) -> Optional[str]:
     return value
 
 
-def extract_resume_value_from_command(obj: Any) -> Optional[str]:
+def extract_resume_value_from_command(obj: Any) -> str | None:
     """
     Extract the resume value from a LangGraph Command object or serialized Command dict.
 
@@ -183,7 +183,7 @@ def extract_resume_value_from_command(obj: Any) -> Optional[str]:
     return None
 
 
-def extract_command_update(outputs: Dict[str, Any]) -> Dict[str, Any]:
+def extract_command_update(outputs: dict[str, Any]) -> dict[str, Any]:
     """Extract state updates from LangGraph Command objects.
 
     When a LangGraph node returns a Command, LangChain wraps it in {"output": Command(...)}.

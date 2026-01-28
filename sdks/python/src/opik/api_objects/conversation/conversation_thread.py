@@ -1,5 +1,3 @@
-from typing import Dict, List
-
 import pydantic
 
 
@@ -31,7 +29,7 @@ class ConversationThread(pydantic.BaseModel):
             representing the dialogue between the roles.
     """
 
-    discussion: List[ConversationThreadItem] = pydantic.Field(default_factory=list)
+    discussion: list[ConversationThreadItem] = pydantic.Field(default_factory=list)
 
     def add_item(self, item: ConversationThreadItem) -> None:
         self.discussion.append(item)
@@ -45,5 +43,5 @@ class ConversationThread(pydantic.BaseModel):
     def add_system_message(self, message: str) -> None:
         self.add_item(ConversationThreadItem(role="system", content=message))
 
-    def as_json_list(self) -> List[Dict[str, str]]:
+    def as_json_list(self) -> list[dict[str, str]]:
         return [item.model_dump() for item in self.discussion]

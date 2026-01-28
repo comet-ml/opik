@@ -1,9 +1,9 @@
 """Shared usage conversion utilities for Bedrock models."""
 
-from typing import Any, Dict
+from typing import Any
 
 
-def anthropic_to_bedrock_usage(anthropic_usage: Dict[str, Any]) -> Dict[str, Any]:
+def anthropic_to_bedrock_usage(anthropic_usage: dict[str, Any]) -> dict[str, Any]:
     """
     Convert Anthropic-style usage schema into Bedrock-style usage schema.
 
@@ -34,7 +34,7 @@ def anthropic_to_bedrock_usage(anthropic_usage: Dict[str, Any]) -> Dict[str, Any
     }
 
 
-def llama_to_bedrock_usage(llama_usage: Dict[str, Any]) -> Dict[str, Any]:
+def llama_to_bedrock_usage(llama_usage: dict[str, Any]) -> dict[str, Any]:
     """
     Convert Llama-style usage schema into Bedrock-style usage schema.
 
@@ -52,7 +52,7 @@ def llama_to_bedrock_usage(llama_usage: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def openai_to_bedrock_usage(openai_usage: Dict[str, Any]) -> Dict[str, Any]:
+def openai_to_bedrock_usage(openai_usage: dict[str, Any]) -> dict[str, Any]:
     """
     Convert OpenAI-style usage schema into Bedrock-style usage schema.
     Used by Mistral/Pixtral models.
@@ -72,7 +72,7 @@ def openai_to_bedrock_usage(openai_usage: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def nova_to_bedrock_usage(nova_usage: Dict[str, Any]) -> Dict[str, Any]:
+def nova_to_bedrock_usage(nova_usage: dict[str, Any]) -> dict[str, Any]:
     """
     Convert Nova-style usage (already in Bedrock format) - pass through.
     Nova already uses Bedrock format (inputTokens, outputTokens).

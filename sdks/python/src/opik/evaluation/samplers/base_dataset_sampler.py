@@ -1,5 +1,4 @@
 import abc
-from typing import List
 
 
 from opik.api_objects.dataset import dataset_item
@@ -21,8 +20,8 @@ class BaseDatasetSampler(abc.ABC):
 
     @abc.abstractmethod
     def sample(
-        self, data_item: List[dataset_item.DatasetItem]
-    ) -> List[dataset_item.DatasetItem]:
+        self, data_item: list[dataset_item.DatasetItem]
+    ) -> list[dataset_item.DatasetItem]:
         """
         Samples and filters a list of dataset items according to a specific implementation.
 

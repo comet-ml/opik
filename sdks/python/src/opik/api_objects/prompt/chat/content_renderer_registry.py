@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Tuple, Union
+from typing import Any
+from collections.abc import Mapping, MutableMapping
 
 from .. import types as prompt_types
 
@@ -11,15 +12,15 @@ class ChatContentRendererRegistry:
     def __init__(self) -> None:
         self._part_renderers: MutableMapping[str, prompt_types.RendererFn] = {}
         self._part_modalities: MutableMapping[
-            str, Optional[prompt_types.ModalityName]
+            str, prompt_types.ModalityName | None
         ] = {}
         self._modality_placeholders: MutableMapping[
-            prompt_types.ModalityName, Tuple[str, str]
+            prompt_types.ModalityName, tuple[str, str]
         ] = {
             "vision": ("<<<image>>>", "<<</image>>>"),
             "video": ("<<<video>>>", "<<</video>>>"),
         }
-        self._default_placeholder: Tuple[str, str] = ("<<<media>>>", "<<</media>>>")
+        self._default_placeholder: tuple[str, str] = ("<<<media>>>", "<<</media>>>")
         self._placeholder_value_limit = 500
 
     def register_part_renderer(
@@ -27,8 +28,8 @@ class ChatContentRendererRegistry:
         part_type: str,
         renderer: prompt_types.RendererFn,
         *,
-        modality: Optional[prompt_types.ModalityName] = None,
-        placeholder: Optional[Tuple[str, str]] = None,
+        modality: prompt_types.ModalityName | None = None,
+        placeholder: tuple[str, str] | None = None,
     ) -> None:
         """
         Register or override the renderer responsible for a structured content part.
@@ -43,13 +44,13 @@ class ChatContentRendererRegistry:
     def render_content(
         self,
         content: prompt_types.MessageContent,
-        variables: Dict[str, Any],
+        variables: dict[str, Any],
         template_type: prompt_types.PromptType,
         *,
-        supported_modalities: Optional[prompt_types.SupportedModalities] = None,
+        supported_modalities: prompt_types.SupportedModalities | None = None,
     ) -> prompt_types.MessageContent:
         if supported_modalities is None:
-            modality_flags: Dict[str, bool] = {}
+            modality_flags: dict[str, bool] = {}
         else:
             modality_flags = {
                 modality: bool(is_supported)
@@ -79,7 +80,7 @@ class ChatContentRendererRegistry:
         return rendered_parts
 
     def normalize_template_type(
-        self, template_type: Union[str, prompt_types.PromptType]
+        self, template_type: str | prompt_types.PromptType
     ) -> prompt_types.PromptType:
         if isinstance(template_type, prompt_types.PromptType):
             return template_type
@@ -105,11 +106,11 @@ class ChatContentRendererRegistry:
 
     def _render_structured_content(
         self,
-        content: List[Any],
-        variables: Dict[str, Any],
+        content: list[Any],
+        variables: dict[str, Any],
         template_type: prompt_types.PromptType,
-    ) -> List[prompt_types.ContentPart]:
-        rendered_parts: List[prompt_types.ContentPart] = []
+    ) -> list[prompt_types.ContentPart]:
+        rendered_parts: list[prompt_types.ContentPart] = []
         for part in content:
             if not isinstance(part, dict):
                 continue
@@ -124,7 +125,7 @@ class ChatContentRendererRegistry:
         return rendered_parts
 
     def _should_flatten(
-        self, parts: List[prompt_types.ContentPart], modality_flags: Mapping[str, bool]
+        self, parts: list[prompt_types.ContentPart], modality_flags: Mapping[str, bool]
     ) -> bool:
         for part in parts:
             modality = self._part_modalities.get(part.get("type", "").lower())
@@ -133,9 +134,9 @@ class ChatContentRendererRegistry:
         return False
 
     def _flatten_parts_to_text(
-        self, parts: List[prompt_types.ContentPart], modality_flags: Mapping[str, bool]
+        self, parts: list[prompt_types.ContentPart], modality_flags: Mapping[str, bool]
     ) -> str:
-        segments: List[str] = []
+        segments: list[str] = []
         for part in parts:
             part_type = part.get("type", "").lower()
             if part_type == "text":
@@ -185,8 +186,8 @@ def register_default_chat_part_renderer(
     part_type: str,
     renderer: prompt_types.RendererFn,
     *,
-    modality: Optional[prompt_types.ModalityName] = None,
-    placeholder: Optional[Tuple[str, str]] = None,
+    modality: prompt_types.ModalityName | None = None,
+    placeholder: tuple[str, str] | None = None,
 ) -> None:
     DEFAULT_CHAT_RENDERER_REGISTRY.register_part_renderer(
         part_type,

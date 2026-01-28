@@ -1,4 +1,5 @@
-from typing import List, Any, Optional, Dict, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 import logging
 import pytest_deepassert
@@ -17,7 +18,7 @@ def assert_equal(expected: Any, actual: Any) -> None:
 def assert_dicts_equal(
     dict1: Mapping[str, Any],
     dict2: Mapping[str, Any],
-    ignore_keys: Optional[List[str]] = None,
+    ignore_keys: list[str] | None = None,
 ) -> None:
     __tracebackhide__ = True
 
@@ -32,7 +33,7 @@ def assert_dicts_equal(
     pytest_deepassert.equal(dict1_copy, dict2_copy)
 
 
-def assert_dict_has_keys(dic: Dict[str, Any], keys: List[str]) -> None:
+def assert_dict_has_keys(dic: dict[str, Any], keys: list[str]) -> None:
     dict_has_keys = all(key in dic for key in keys)
 
     if dict_has_keys:
@@ -43,7 +44,7 @@ def assert_dict_has_keys(dic: Dict[str, Any], keys: List[str]) -> None:
     )
 
 
-def assert_dict_keys_in_list(dic: Dict[str, Any], keys: List[str]) -> None:
+def assert_dict_keys_in_list(dic: dict[str, Any], keys: list[str]) -> None:
     """
     Asserts that all keys in the dictionary are present in the given list.
 

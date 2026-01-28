@@ -4,7 +4,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any
 
 import click
 from rich.console import Console
@@ -57,7 +57,7 @@ def _get_template_structure(prompt: Any) -> str:
     return "text"
 
 
-def _get_prompt_type_string(prompt: Any) -> Optional[str]:
+def _get_prompt_type_string(prompt: Any) -> str | None:
     """Get prompt type as uppercase string.
 
     Args:
@@ -82,9 +82,9 @@ def _get_prompt_type_string(prompt: Any) -> Optional[str]:
 
 def export_single_prompt(
     client: opik.Opik,
-    prompt: Union[Prompt, ChatPrompt],
+    prompt: Prompt | ChatPrompt,
     output_dir: Path,
-    max_results: Optional[int],
+    max_results: int | None,
     force: bool,
     debug: bool,
     format: str,
@@ -103,7 +103,7 @@ def export_single_prompt(
             return 0
 
         # Get prompt history - use appropriate method based on prompt type
-        prompt_history: List[Union[Prompt, ChatPrompt]]
+        prompt_history: list[Prompt | ChatPrompt]
         if isinstance(prompt, ChatPrompt):
             prompt_history = list(client.get_chat_prompt_history(prompt.name))
         else:
@@ -151,11 +151,11 @@ def export_prompt_by_name(
     name: str,
     workspace: str,
     output_path: str,
-    max_results: Optional[int],
+    max_results: int | None,
     force: bool,
     debug: bool,
     format: str,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> None:
     """Export a prompt by exact name."""
     try:
@@ -177,7 +177,7 @@ def export_prompt_by_name(
 
         # Try to get prompt by exact name
         # Try ChatPrompt first, then regular Prompt
-        prompt: Optional[Union[Prompt, ChatPrompt]] = None
+        prompt: Prompt | ChatPrompt | None = None
         try:
             prompt = client.get_chat_prompt(name)
             if debug and prompt:
@@ -254,7 +254,7 @@ def export_prompts_by_ids(
     for prompt_id in prompt_ids:
         try:
             # Get the prompt - try ChatPrompt first, then regular Prompt
-            prompt: Optional[Union[Prompt, ChatPrompt]] = None
+            prompt: Prompt | ChatPrompt | None = None
             try:
                 prompt = client.get_chat_prompt(prompt_id)
             except Exception:
@@ -295,7 +295,7 @@ def export_prompts_by_ids(
                 continue
 
             # Get prompt history - use appropriate method based on prompt type
-            prompt_history: List[Union[Prompt, ChatPrompt]]
+            prompt_history: list[Prompt | ChatPrompt]
             if isinstance(prompt, ChatPrompt):
                 prompt_history = list(client.get_chat_prompt_history(prompt.name))
             else:
@@ -429,7 +429,7 @@ def export_related_prompts_by_name(
                 debug_print(f"Exporting prompt: {prompt_name}", debug)
 
                 # Try to get the prompt - try ChatPrompt first, then regular Prompt
-                prompt: Optional[Union[Prompt, ChatPrompt]] = None
+                prompt: Prompt | ChatPrompt | None = None
                 try:
                     prompt = client.get_chat_prompt(prompt_name)
                 except Exception:
@@ -451,7 +451,7 @@ def export_related_prompts_by_name(
                     continue
 
                 # Get prompt history - use appropriate method based on prompt type
-                prompt_history: List[Union[Prompt, ChatPrompt]]
+                prompt_history: list[Prompt | ChatPrompt]
                 if isinstance(prompt, ChatPrompt):
                     prompt_history = list(client.get_chat_prompt_history(prompt.name))
                 else:
@@ -563,7 +563,7 @@ def export_related_prompts_by_name(
 def export_prompt_command(
     ctx: click.Context,
     name: str,
-    max_results: Optional[int],
+    max_results: int | None,
     path: str,
     force: bool,
     debug: bool,

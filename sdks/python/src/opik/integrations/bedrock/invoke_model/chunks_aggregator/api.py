@@ -5,14 +5,14 @@ This module contains the main public functions for aggregating streaming chunks
 from different Bedrock model formats into structured responses.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from . import format_detector
 from .. import response_types
 
 
 def aggregate_chunks_to_dataclass(
-    items: List[Dict[str, Any]],
+    items: list[dict[str, Any]],
 ) -> response_types.BedrockAggregatedResponse:
     """
     Aggregate chunks directly to structured dataclass (used by stream wrapper).

@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Any
 
 import opik
 from opik import Prompt
@@ -15,7 +15,7 @@ class TaskSpanTestMetric(BaseMetric):
         self,
         name: str = "task_span_test_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
@@ -37,7 +37,7 @@ class TaskSpanInputTestMetric(BaseMetric):
         self,
         name: str = "task_span_input_test_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
@@ -80,7 +80,7 @@ def test_evaluate__with_task_span_metrics__single_metric__happy_flow(
         ]
     )
 
-    def task(item: Dict[str, Any]):
+    def task(item: dict[str, Any]):
         if item["input"] == {"question": "What is the capital of France?"}:
             return {"output": "Paris"}
         if item["input"] == {"question": "What is the capital of Germany?"}:
@@ -160,7 +160,7 @@ def test_evaluate__with_task_span_metrics__multiple_task_span_metrics__happyflow
         ]
     )
 
-    def task(item: Dict[str, Any]):
+    def task(item: dict[str, Any]):
         if item["input"] == {"question": "What is the capital of Spain?"}:
             return {"output": "Madrid"}
 
@@ -229,7 +229,7 @@ def test_evaluate__with_task_span_metrics__only_task_span_metrics__no_regular_me
         ]
     )
 
-    def task(item: Dict[str, Any]):
+    def task(item: dict[str, Any]):
         if item["input"] == {"question": "What is the capital of Italy?"}:
             return {"output": "Rome"}
 
@@ -291,7 +291,7 @@ def test_evaluate__with_task_span_metrics__mixed_with_regular_metrics__multiple_
         ]
     )
 
-    def task(item: Dict[str, Any]):
+    def task(item: dict[str, Any]):
         if item["input"] == {"question": "What is the capital of Japan?"}:
             return {"output": "Tokyo"}
         if item["input"] == {"question": "What is the capital of Canada?"}:
@@ -379,14 +379,14 @@ class TaskSpanWithMultipleParametersMetric(BaseMetric):
         self,
         name: str = "task_span_multi_param_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
     def score(
         self,
         task_span: models.SpanModel,
-        input: Dict[str, Any],
+        input: dict[str, Any],
         output: str,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
@@ -414,7 +414,7 @@ def test_evaluate__with_task_span_metrics__metric_with_multiple_parameters__happ
 
     dataset.insert([{"input": {"question": "What is 2+2?"}}])
 
-    def task(item: Dict[str, Any]):
+    def task(item: dict[str, Any]):
         return {"output": "4"}
 
     multi_param_metric = TaskSpanWithMultipleParametersMetric()

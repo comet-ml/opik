@@ -1,10 +1,10 @@
-from typing import List, TypedDict, Optional
+from typing import TypedDict
 
 
 class FewShotExampleHallucination(TypedDict):
     title: str
     input: str
-    context: List[str]
+    context: list[str]
     output: str
     score: float
     reason: str
@@ -80,8 +80,8 @@ Reasons amount is not restricted. Output must be JSON format only.
 def generate_query(
     input: str,
     output: str,
-    context: Optional[List[str]] = None,
-    few_shot_examples: Optional[List[FewShotExampleHallucination]] = None,
+    context: list[str] | None = None,
+    few_shot_examples: list[FewShotExampleHallucination] | None = None,
 ) -> str:
     if few_shot_examples is None:
         examples_str = ""

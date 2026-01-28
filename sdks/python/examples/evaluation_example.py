@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Any
 
 from opik.evaluation.metrics import IsJson, Hallucination, score_result
 from opik.evaluation import evaluate, test_result
@@ -47,7 +47,7 @@ dataset.insert_from_json(json_array=json, keys_mapping={"Model inputs": "input"}
 
 
 @track()
-def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
+def llm_task(item: dict[str, Any]) -> dict[str, Any]:
     response = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": item["input"]["message"]}],
@@ -60,8 +60,8 @@ def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def compute_hallucination_stats(
-    test_results: List[test_result.TestResult],
-) -> List[score_result.ScoreResult]:
+    test_results: list[test_result.TestResult],
+) -> list[score_result.ScoreResult]:
     # Extract scores safely, checking for empty score_results
     scores = [
         x.score_results[0].value

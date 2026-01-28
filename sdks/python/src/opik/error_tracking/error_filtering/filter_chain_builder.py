@@ -1,4 +1,3 @@
-from typing import List
 from . import (
     filter_by_count,
     filter_chain,
@@ -23,7 +22,7 @@ def build_filter_chain() -> filter_chain.FilterChain:
         )
     )
 
-    chain: List[event_filter.EventFilter] = [
+    chain: list[event_filter.EventFilter] = [
         filter_error_count_handler,
         filter_warning_count_handler,
         filter_by_response_status_code_handler,

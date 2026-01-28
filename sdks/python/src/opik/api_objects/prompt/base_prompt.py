@@ -5,7 +5,7 @@ Defines abstract interface that both string and chat prompt variants must implem
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 from . import types as prompt_types
 
@@ -26,13 +26,13 @@ class BasePrompt(ABC):
 
     @property
     @abstractmethod
-    def commit(self) -> Optional[str]:
+    def commit(self) -> str | None:
         """The commit hash of the prompt version."""
         pass
 
     @property
     @abstractmethod
-    def metadata(self) -> Optional[Dict[str, Any]]:
+    def metadata(self) -> dict[str, Any] | None:
         """The metadata dictionary associated with the prompt."""
         pass
 
@@ -59,7 +59,7 @@ class BasePrompt(ABC):
         pass
 
     @abstractmethod
-    def __internal_api__to_info_dict__(self) -> Dict[str, Any]:
+    def __internal_api__to_info_dict__(self) -> dict[str, Any]:
         """
         Convert the prompt to an info dictionary for serialization.
 

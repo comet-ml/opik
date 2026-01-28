@@ -1,6 +1,5 @@
 import contextlib
-from typing import Iterator, List
-from typing import Optional
+from collections.abc import Iterator
 
 from . import opik_client
 from ..message_processing.emulation import local_emulator_message_processor, models
@@ -23,19 +22,19 @@ class _LocalRecordingHandle:
         self._local = local_processor
 
     @property
-    def span_trees(self) -> List[models.SpanModel]:
+    def span_trees(self) -> list[models.SpanModel]:
         self._client.flush()
         return self._local.span_trees
 
     @property
-    def trace_trees(self) -> List[models.TraceModel]:
+    def trace_trees(self) -> list[models.TraceModel]:
         self._client.flush()
         return self._local.trace_trees
 
 
 @contextlib.contextmanager
 def record_traces_locally(
-    client: Optional[opik_client.Opik] = None,
+    client: opik_client.Opik | None = None,
 ) -> Iterator[_LocalRecordingHandle]:
     """Enable local recording of traces/spans within the context.
 

@@ -1,5 +1,3 @@
-from typing import Dict, List, Optional
-
 from opik.file_upload import base_upload_manager
 from opik.message_processing import messages
 
@@ -13,11 +11,11 @@ class FileUploadManagerEmulator(base_upload_manager.BaseFileUploadManager):
     """
 
     def __init__(self) -> None:
-        self.current_uploads: List[messages.BaseMessage] = []
+        self.current_uploads: list[messages.BaseMessage] = []
         # Store attachments by entity_id for lookup
-        self.attachments_by_span: Dict[str, List[messages.CreateAttachmentMessage]] = {}
-        self.attachments_by_trace: Dict[
-            str, List[messages.CreateAttachmentMessage]
+        self.attachments_by_span: dict[str, list[messages.CreateAttachmentMessage]] = {}
+        self.attachments_by_trace: dict[
+            str, list[messages.CreateAttachmentMessage]
         ] = {}
 
     def upload(self, message: messages.BaseMessage) -> None:
@@ -39,7 +37,7 @@ class FileUploadManagerEmulator(base_upload_manager.BaseFileUploadManager):
             uploads=len(self.current_uploads), bytes=-1, total_size=-1
         )
 
-    def flush(self, timeout: Optional[float], sleep_time: int = 5) -> bool:
+    def flush(self, timeout: float | None, sleep_time: int = 5) -> bool:
         self.current_uploads = []
         return True
 

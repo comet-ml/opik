@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import opik
 from opik.api_objects.dataset import dataset_item as dataset_item_module  # noqa: F401
@@ -44,12 +44,12 @@ class ExperimentData:
     Matches the export format from create_experiment_data_structure.
     """
 
-    experiment: Dict[str, Any]
-    items: List[Dict[str, Any]]
-    downloaded_at: Optional[str] = None
+    experiment: dict[str, Any]
+    items: list[dict[str, Any]]
+    downloaded_at: str | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ExperimentData":
+    def from_dict(cls, data: dict[str, Any]) -> "ExperimentData":
         """Create ExperimentData from a dictionary (e.g., loaded from JSON)."""
         return cls(
             experiment=data.get("experiment", {}),
@@ -65,18 +65,18 @@ def find_experiment_files(data_dir: Path) -> list[Path]:
 
 def load_experiment_data(experiment_file: Path) -> ExperimentData:
     """Load experiment data from JSON file."""
-    with open(experiment_file, "r", encoding="utf-8") as f:
+    with open(experiment_file, encoding="utf-8") as f:
         data = json.load(f)
         return ExperimentData.from_dict(data)
 
 
 def _build_dataset_item_id_map(
     client: opik.Opik,
-    experiment_files: List[Path],
+    experiment_files: list[Path],
     datasets_dir: Path,
     dry_run: bool,
     debug: bool,
-) -> tuple[Dict[str, str], Dict[str, int]]:
+) -> tuple[dict[str, str], dict[str, int]]:
     """Build a mapping from original dataset_item_id to new dataset_item_id.
 
     This function:
@@ -96,8 +96,8 @@ def _build_dataset_item_id_map(
         - dataset_item_id_map: Dictionary mapping original dataset_item_id to new dataset_item_id
         - dataset_stats: Dictionary with 'datasets', 'datasets_skipped', 'datasets_errors' keys
     """
-    dataset_item_id_map: Dict[str, str] = {}
-    dataset_stats: Dict[str, int] = {
+    dataset_item_id_map: dict[str, str] = {}
+    dataset_stats: dict[str, int] = {
         "datasets": 0,
         "datasets_skipped": 0,
         "datasets_errors": 0,
@@ -109,7 +109,7 @@ def _build_dataset_item_id_map(
     # Step 1: Collect all dataset_item_id and dataset_item_data from experiment files
     # Map: content_hash -> list of (original_dataset_item_id, dataset_item_data)
     # Multiple original IDs can have the same content (they should all map to the same new item)
-    content_to_original_ids: Dict[str, List[tuple[str, Dict[str, Any]]]] = {}
+    content_to_original_ids: dict[str, list[tuple[str, dict[str, Any]]]] = {}
 
     for experiment_file in experiment_files:
         try:
@@ -232,7 +232,7 @@ def _build_dataset_item_id_map(
 
     for dataset_file in dataset_files:
         try:
-            with open(dataset_file, "r", encoding="utf-8") as f:
+            with open(dataset_file, encoding="utf-8") as f:
                 dataset_data = json.load(f)
 
             dataset_name = dataset_data.get("name") or (
@@ -367,8 +367,8 @@ def recreate_experiment(
     client: opik.Opik,
     experiment_data: ExperimentData,
     project_name: str,
-    trace_id_map: Dict[str, str],
-    dataset_item_id_map: Optional[Dict[str, str]] = None,
+    trace_id_map: dict[str, str],
+    dataset_item_id_map: dict[str, str] | None = None,
     dry_run: bool = False,
     debug: bool = False,
 ) -> bool:
@@ -640,9 +640,9 @@ def recreate_experiments(
     project_dir: Path,
     project_name: str,
     dry_run: bool = False,
-    name_pattern: Optional[str] = None,
-    trace_id_map: Optional[Dict[str, str]] = None,
-    dataset_item_id_map: Optional[Dict[str, str]] = None,
+    name_pattern: str | None = None,
+    trace_id_map: dict[str, str] | None = None,
+    dataset_item_id_map: dict[str, str] | None = None,
     debug: bool = False,
 ) -> int:
     """Recreate experiments from JSON files.
@@ -717,7 +717,7 @@ def _import_traces_from_projects_directory(
     workspace_root: Path,
     dry_run: bool,
     debug: bool,
-) -> tuple[Dict[str, str], Dict[str, int]]:
+) -> tuple[dict[str, str], dict[str, int]]:
     """Import traces from projects directory and return trace_id_map and statistics.
 
     Returns:
@@ -725,7 +725,7 @@ def _import_traces_from_projects_directory(
         - trace_id_map: mapping from original trace ID to new trace ID
         - stats_dict: dictionary with 'traces' and 'traces_errors' keys
     """
-    trace_id_map: Dict[str, str] = {}
+    trace_id_map: dict[str, str] = {}
     traces_imported = 0
     traces_errors = 0
     projects_dir = workspace_root / "projects"
@@ -763,7 +763,7 @@ def _import_traces_from_projects_directory(
 
         for trace_file in trace_files:
             try:
-                with open(trace_file, "r", encoding="utf-8") as f:
+                with open(trace_file, encoding="utf-8") as f:
                     trace_data = json.load(f)
 
                 trace_info = trace_data.get("trace", {})
@@ -827,7 +827,7 @@ def _import_traces_from_projects_directory(
 
                 # Create spans with full data, preserving parent-child relationships
                 # Build span_id_map to translate parent_span_id references
-                span_id_map: Dict[str, str] = {}  # Maps original span ID to new span ID
+                span_id_map: dict[str, str] = {}  # Maps original span ID to new span ID
 
                 # First pass: create all spans and build span_id_map
                 # We need to create spans in order so parent spans exist before children
@@ -926,9 +926,9 @@ def import_experiments_from_directory(
     client: opik.Opik,
     source_dir: Path,
     dry_run: bool,
-    name_pattern: Optional[str],
+    name_pattern: str | None,
     debug: bool,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Import experiments from a directory.
 
     This function will first import prompts and traces from their respective directories
@@ -980,8 +980,8 @@ def import_experiments_from_directory(
 
         # Import datasets first to build dataset_item_id_map
         datasets_dir = workspace_root / "datasets"
-        dataset_item_id_map: Dict[str, str] = {}
-        datasets_stats: Dict[str, int] = {
+        dataset_item_id_map: dict[str, str] = {}
+        datasets_stats: dict[str, int] = {
             "datasets": 0,
             "datasets_skipped": 0,
             "datasets_errors": 0,
@@ -1040,7 +1040,7 @@ def import_experiments_from_directory(
             )
 
         # Build a map of trace_id -> project_name from trace files for project inference
-        trace_to_project_map: Dict[str, str] = {}
+        trace_to_project_map: dict[str, str] = {}
         projects_dir = workspace_root / "projects"
         if projects_dir.exists():
             for project_dir in projects_dir.iterdir():
@@ -1049,7 +1049,7 @@ def import_experiments_from_directory(
                 project_name = project_dir.name
                 for trace_file in project_dir.glob("trace_*.json"):
                     try:
-                        with open(trace_file, "r", encoding="utf-8") as f:
+                        with open(trace_file, encoding="utf-8") as f:
                             trace_data = json.load(f)
                         original_trace_id = trace_data.get("trace", {}).get("id")
                         if original_trace_id:

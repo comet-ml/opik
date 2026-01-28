@@ -1,5 +1,5 @@
 import dataclasses
-from typing import List, Optional, Iterable
+from collections.abc import Iterable
 
 import httpx
 
@@ -16,7 +16,7 @@ LOCAL_UPLOAD_MAGIC_ID = "BEMinIO"
 @dataclasses.dataclass
 class MultipartUploadMetadata:
     upload_id: str
-    urls: List[str]
+    urls: list[str]
 
     def should_use_s3_uploader(self) -> bool:
         """Allows to check if upload should go directly to S3 or use local backend endpoint."""
@@ -63,7 +63,7 @@ class RestFileUploadClient:
         self,
         upload_options: file_upload_options.FileUploadOptions,
         upload_metadata: MultipartUploadMetadata,
-        file_parts: List[rest_api_types.MultipartUploadPart],
+        file_parts: list[rest_api_types.MultipartUploadPart],
     ) -> None:
         """Invoked to finalize direct S3 file upload operation on the backend. It is invoked after all file parts
         was successfully uploaded to S3."""
@@ -83,7 +83,7 @@ class RestFileUploadClient:
         self,
         upload_url: str,
         file_path: str,
-        monitor: Optional[file_upload_monitor.FileUploadMonitor],
+        monitor: file_upload_monitor.FileUploadMonitor | None,
         chunk_size: int = -1,
     ) -> None:
         """Invoked to upload a file to the local backend using httpx client configured with necessary authorization
@@ -104,7 +104,7 @@ class RestFileUploadClient:
 
 def _data_generator(
     file_path: str,
-    monitor: Optional[file_upload_monitor.FileUploadMonitor],
+    monitor: file_upload_monitor.FileUploadMonitor | None,
     chunk_size: int = -1,
 ) -> Iterable[bytes]:
     with open(file_path, "rb") as file:

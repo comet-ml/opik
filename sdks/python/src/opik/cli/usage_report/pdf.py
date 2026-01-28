@@ -2,7 +2,7 @@
 
 import os
 import traceback
-from typing import Any, Dict
+from typing import Any
 
 from rich.console import Console
 
@@ -12,7 +12,7 @@ from .statistics import calculate_statistics
 console = Console()
 
 
-def create_pdf_report(data: Dict[str, Any], output_dir: str = ".") -> str:
+def create_pdf_report(data: dict[str, Any], output_dir: str = ".") -> str:
     """
     Create a PDF report with statistics page and individual chart pages.
 

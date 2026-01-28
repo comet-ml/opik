@@ -1,6 +1,6 @@
 import enum
 import sys
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import StrictStr
 from typing_extensions import TypedDict
@@ -73,10 +73,10 @@ class FeedbackScoreDict(TypedDict):
     value: Required[float]
     """The numerical value of the feedback score."""
 
-    category_name: NotRequired[Optional[str]]
+    category_name: NotRequired[str | None]
     """An optional category name for the given score."""
 
-    reason: NotRequired[Optional[str]]
+    reason: NotRequired[str | None]
     """An optional explanation or justification for the given score."""
 
 
@@ -101,17 +101,17 @@ class BatchFeedbackScoreDict(TypedDict):
     value: Required[float]
     """The numerical value of the feedback score."""
 
-    project_name: NotRequired[Optional[StrictStr]]
+    project_name: NotRequired[StrictStr | None]
     """
     The name of the project for this specific score.
     If not provided, falls back to the project_name parameter in the method call,
     or the default project name configured in the Opik instance.
     """
 
-    category_name: NotRequired[Optional[str]]
+    category_name: NotRequired[str | None]
     """An optional category name for the given score."""
 
-    reason: NotRequired[Optional[str]]
+    reason: NotRequired[str | None]
     """An optional explanation or justification for the given score."""
 
 

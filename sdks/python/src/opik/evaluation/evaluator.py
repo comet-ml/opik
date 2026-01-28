@@ -1,6 +1,7 @@
 import logging
 import time
-from typing import Any, Callable, Dict, List, Optional, Union, cast
+from typing import Any, cast
+from collections.abc import Callable
 
 from ..api_objects.prompt import base_prompt
 from ..api_objects import opik_client
@@ -43,14 +44,14 @@ def _try_notifying_about_experiment_completion(
 
 
 def _compute_experiment_scores(
-    experiment_scoring_functions: List[ExperimentScoreFunction],
-    test_results: List[test_result.TestResult],
-) -> List[score_result.ScoreResult]:
+    experiment_scoring_functions: list[ExperimentScoreFunction],
+    test_results: list[test_result.TestResult],
+) -> list[score_result.ScoreResult]:
     """Compute experiment-level scores from test results."""
     if not experiment_scoring_functions or not test_results:
         return []
 
-    all_scores: List[score_result.ScoreResult] = []
+    all_scores: list[score_result.ScoreResult] = []
     for score_function in experiment_scoring_functions:
         try:
             scores = score_function(test_results)
@@ -72,23 +73,23 @@ def _compute_experiment_scores(
 def evaluate(
     dataset: dataset.Dataset,
     task: LLMTask,
-    scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
-    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
-    experiment_name_prefix: Optional[str] = None,
-    experiment_name: Optional[str] = None,
-    project_name: Optional[str] = None,
-    experiment_config: Optional[Dict[str, Any]] = None,
+    scoring_metrics: list[base_metric.BaseMetric] | None = None,
+    scoring_functions: list[scorer_function.ScorerFunction] | None = None,
+    experiment_name_prefix: str | None = None,
+    experiment_name: str | None = None,
+    project_name: str | None = None,
+    experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
-    nb_samples: Optional[int] = None,
+    nb_samples: int | None = None,
     task_threads: int = 16,
-    prompt: Optional[base_prompt.BasePrompt] = None,
-    prompts: Optional[List[base_prompt.BasePrompt]] = None,
-    scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
-    dataset_item_ids: Optional[List[str]] = None,
-    dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    prompt: base_prompt.BasePrompt | None = None,
+    prompts: list[base_prompt.BasePrompt] | None = None,
+    scoring_key_mapping: ScoringKeyMappingType | None = None,
+    dataset_item_ids: list[str] | None = None,
+    dataset_sampler: samplers.BaseDatasetSampler | None = None,
     trial_count: int = 1,
-    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
-    experiment_tags: Optional[List[str]] = None,
+    experiment_scoring_functions: list[ExperimentScoreFunction] | None = None,
+    experiment_tags: list[str] | None = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -215,16 +216,16 @@ def _evaluate_task(
     experiment: experiment.Experiment,
     dataset: dataset.Dataset,
     task: LLMTask,
-    scoring_metrics: List[base_metric.BaseMetric],
-    project_name: Optional[str],
+    scoring_metrics: list[base_metric.BaseMetric],
+    project_name: str | None,
     verbose: int,
-    nb_samples: Optional[int],
+    nb_samples: int | None,
     task_threads: int,
-    scoring_key_mapping: Optional[ScoringKeyMappingType],
-    dataset_item_ids: Optional[List[str]],
-    dataset_sampler: Optional[samplers.BaseDatasetSampler],
+    scoring_key_mapping: ScoringKeyMappingType | None,
+    dataset_item_ids: list[str] | None,
+    dataset_sampler: samplers.BaseDatasetSampler | None,
     trial_count: int,
-    experiment_scoring_functions: List[ExperimentScoreFunction],
+    experiment_scoring_functions: list[ExperimentScoreFunction],
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -297,13 +298,13 @@ def _evaluate_task(
 
 def evaluate_experiment(
     experiment_name: str,
-    scoring_metrics: List[base_metric.BaseMetric],
-    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    scoring_metrics: list[base_metric.BaseMetric],
+    scoring_functions: list[scorer_function.ScorerFunction] | None = None,
     scoring_threads: int = 16,
     verbose: int = 1,
-    scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
-    experiment_id: Optional[str] = None,
-    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
+    scoring_key_mapping: ScoringKeyMappingType | None = None,
+    experiment_id: str | None = None,
+    experiment_scoring_functions: list[ExperimentScoreFunction] | None = None,
 ) -> evaluation_result.EvaluationResult:
     """Update the existing experiment with new evaluation metrics. You can use either `scoring_metrics` or `scorer_functions` to calculate
     evaluation metrics. The scorer functions doesn't require `scoring_key_mapping` and use reserved parameters
@@ -438,8 +439,8 @@ def evaluate_experiment(
 
 
 def _build_prompt_evaluation_task(
-    model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
-) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+    model: base_model.OpikBaseModel, messages: list[dict[str, Any]]
+) -> Callable[[dict[str, Any]], dict[str, Any]]:
     supported_modalities = cast(
         prompt_types.SupportedModalities,
         {
@@ -473,7 +474,7 @@ def _build_prompt_evaluation_task(
             MODALITY_SUPPORT_DOC_URL,
         )
 
-    def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
+    def _prompt_evaluation_task(prompt_variables: dict[str, Any]) -> dict[str, Any]:
         template_type_override = prompt_variables.get("type")
         processed_messages = chat_prompt_template_.format(
             variables=prompt_variables,
@@ -494,23 +495,23 @@ def _build_prompt_evaluation_task(
 
 def evaluate_prompt(
     dataset: dataset.Dataset,
-    messages: List[Dict[str, Any]],
-    model: Optional[Union[str, base_model.OpikBaseModel]] = None,
-    scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
-    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
-    experiment_name_prefix: Optional[str] = None,
-    experiment_name: Optional[str] = None,
-    project_name: Optional[str] = None,
-    experiment_config: Optional[Dict[str, Any]] = None,
+    messages: list[dict[str, Any]],
+    model: str | base_model.OpikBaseModel | None = None,
+    scoring_metrics: list[base_metric.BaseMetric] | None = None,
+    scoring_functions: list[scorer_function.ScorerFunction] | None = None,
+    experiment_name_prefix: str | None = None,
+    experiment_name: str | None = None,
+    project_name: str | None = None,
+    experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
-    nb_samples: Optional[int] = None,
+    nb_samples: int | None = None,
     task_threads: int = 16,
-    prompt: Optional[base_prompt.BasePrompt] = None,
-    dataset_item_ids: Optional[List[str]] = None,
-    dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    prompt: base_prompt.BasePrompt | None = None,
+    dataset_item_ids: list[str] | None = None,
+    dataset_sampler: samplers.BaseDatasetSampler | None = None,
     trial_count: int = 1,
-    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
-    experiment_tags: Optional[List[str]] = None,
+    experiment_scoring_functions: list[ExperimentScoreFunction] | None = None,
+    experiment_tags: list[str] | None = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -683,23 +684,23 @@ def evaluate_optimization_trial(
     optimization_id: str,
     dataset: dataset.Dataset,
     task: LLMTask,
-    scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
-    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
-    experiment_name_prefix: Optional[str] = None,
-    experiment_name: Optional[str] = None,
-    project_name: Optional[str] = None,
-    experiment_config: Optional[Dict[str, Any]] = None,
+    scoring_metrics: list[base_metric.BaseMetric] | None = None,
+    scoring_functions: list[scorer_function.ScorerFunction] | None = None,
+    experiment_name_prefix: str | None = None,
+    experiment_name: str | None = None,
+    project_name: str | None = None,
+    experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
-    nb_samples: Optional[int] = None,
+    nb_samples: int | None = None,
     task_threads: int = 16,
-    prompt: Optional[base_prompt.BasePrompt] = None,
-    prompts: Optional[List[base_prompt.BasePrompt]] = None,
-    scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
-    dataset_item_ids: Optional[List[str]] = None,
-    dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
+    prompt: base_prompt.BasePrompt | None = None,
+    prompts: list[base_prompt.BasePrompt] | None = None,
+    scoring_key_mapping: ScoringKeyMappingType | None = None,
+    dataset_item_ids: list[str] | None = None,
+    dataset_sampler: samplers.BaseDatasetSampler | None = None,
     trial_count: int = 1,
-    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
-    experiment_tags: Optional[List[str]] = None,
+    experiment_scoring_functions: list[ExperimentScoreFunction] | None = None,
+    experiment_tags: list[str] | None = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -825,13 +826,13 @@ def evaluate_optimization_trial(
 
 
 def evaluate_on_dict_items(
-    items: List[Dict[str, Any]],
+    items: list[dict[str, Any]],
     task: LLMTask,
-    scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
-    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
-    project_name: Optional[str] = None,
+    scoring_metrics: list[base_metric.BaseMetric] | None = None,
+    scoring_functions: list[scorer_function.ScorerFunction] | None = None,
+    project_name: str | None = None,
     verbose: int = 0,
-    scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
+    scoring_key_mapping: ScoringKeyMappingType | None = None,
     scoring_threads: int = 16,
 ) -> evaluation_result.EvaluationResultOnDictItems:
     """
@@ -939,10 +940,10 @@ def evaluate_on_dict_items(
 
 
 def _wrap_scoring_functions(
-    scoring_functions: Optional[List[scorer_function.ScorerFunction]],
-    scoring_metrics: Optional[List[base_metric.BaseMetric]],
-    project_name: Optional[str],
-) -> List[base_metric.BaseMetric]:
+    scoring_functions: list[scorer_function.ScorerFunction] | None,
+    scoring_metrics: list[base_metric.BaseMetric] | None,
+    project_name: str | None,
+) -> list[base_metric.BaseMetric]:
     if scoring_functions:
         function_metrics = scorer_wrapper_metric.wrap_scorer_functions(
             scoring_functions, project_name=project_name
@@ -956,8 +957,8 @@ def _wrap_scoring_functions(
 
 
 def _use_or_create_experiment_name(
-    experiment_name: Optional[str], experiment_name_prefix: Optional[str]
-) -> Optional[str]:
+    experiment_name: str | None, experiment_name_prefix: str | None
+) -> str | None:
     if experiment_name:
         return experiment_name
 

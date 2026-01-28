@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
-Event = Dict[str, Any]
-Hint = Dict[str, Any]
+Event = dict[str, Any]
+Hint = dict[str, Any]

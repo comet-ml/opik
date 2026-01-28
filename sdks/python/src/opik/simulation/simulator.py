@@ -1,6 +1,7 @@
 """Multi-turn simulation functionality."""
 
-from typing import Callable, Optional, Dict, Any, List
+from typing import Any
+from collections.abc import Callable
 from opik import id_helpers, track
 from .simulated_user import SimulatedUser
 
@@ -8,12 +9,12 @@ from .simulated_user import SimulatedUser
 def run_simulation(
     app: Callable,
     user_simulator: SimulatedUser,
-    initial_message: Optional[str] = None,
+    initial_message: str | None = None,
     max_turns: int = 5,
-    thread_id: Optional[str] = None,
-    project_name: Optional[str] = None,
+    thread_id: str | None = None,
+    project_name: str | None = None,
     **app_kwargs: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run a multi-turn conversation simulation between a simulated user and an app.
 
@@ -48,7 +49,7 @@ def run_simulation(
         app = track(name=app_name)(app)
 
     # Track conversation for simulator (app manages its own history internally)
-    conversation_history: List[Dict[str, str]] = []
+    conversation_history: list[dict[str, str]] = []
 
     # Generate initial message if needed
     if initial_message is None:

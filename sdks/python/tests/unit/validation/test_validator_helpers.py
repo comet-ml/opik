@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any
 
 from opik.validation import validator_helpers
 from opik.validation import parameter
@@ -158,7 +158,7 @@ def test_validate_type_dict(value: Any, allow_empty: bool, expected: bool):
     ],
 )
 def test_validate_parameter_type_str(
-    value: Any, possible_values: Optional[List], allow_empty: bool, expected: bool
+    value: Any, possible_values: list | None, allow_empty: bool, expected: bool
 ):
     param = parameter.create_str_parameter(
         name="parameter_type_str",
@@ -183,7 +183,7 @@ def test_validate_parameter_type_str(
     ],
 )
 def test_validate_parameter_type_int(
-    value: Any, possible_values: Optional[List], allow_empty: bool, expected: bool
+    value: Any, possible_values: list | None, allow_empty: bool, expected: bool
 ):
     param = parameter.create_int_parameter(
         name="parameter_type_int",
@@ -209,7 +209,7 @@ def test_validate_parameter_type_int(
     ],
 )
 def test_validate_parameter_type_float(
-    value: Any, possible_values: Optional[List], allow_empty: bool, expected: bool
+    value: Any, possible_values: list | None, allow_empty: bool, expected: bool
 ):
     param = parameter.create_float_parameter(
         name="parameter_type_float",
@@ -237,7 +237,7 @@ def test_validate_parameter_type_float(
     ],
 )
 def test_validate_parameter_type_numeric(
-    value: Any, possible_values: Optional[List], allow_empty: bool, expected: bool
+    value: Any, possible_values: list | None, allow_empty: bool, expected: bool
 ):
     param = parameter.create_numeric_parameter(
         name="parameter_type_numeric",
@@ -340,10 +340,12 @@ def _check_validate_parameter(test_parameter: parameter.Parameter, expected: boo
                 )
             )
         else:
-            expected_msg = "parameter %r must be one of [%s] but %r was given" % (
-                test_parameter.name,
-                ", ".join(possible_values_str),
-                test_parameter.value,
+            expected_msg = (
+                "parameter {!r} must be one of [{}] but {!r} was given".format(
+                    test_parameter.name,
+                    ", ".join(possible_values_str),
+                    test_parameter.value,
+                )
             )
     elif value_not_empty:
         param_type = (
@@ -362,15 +364,19 @@ def _check_validate_parameter(test_parameter: parameter.Parameter, expected: boo
                 )
             )
         else:
-            expected_msg = "parameter %r must be of type(s) %r but %r was given" % (
-                test_parameter.name,
-                validator_helpers.types_list(test_parameter.types),
-                param_type,
+            expected_msg = (
+                "parameter {!r} must be of type(s) {!r} but {!r} was given".format(
+                    test_parameter.name,
+                    validator_helpers.types_list(test_parameter.types),
+                    param_type,
+                )
             )
     else:
-        expected_msg = "parameter %r must have non empty value but %r was given" % (
-            test_parameter.name,
-            test_parameter.value,
+        expected_msg = (
+            "parameter {!r} must have non empty value but {!r} was given".format(
+                test_parameter.name,
+                test_parameter.value,
+            )
         )
 
     assert expected_msg == msg

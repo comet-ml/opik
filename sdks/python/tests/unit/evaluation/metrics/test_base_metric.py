@@ -1,6 +1,6 @@
 import asyncio
 import pytest
-from typing import Any, List, Union
+from typing import Any
 
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -8,7 +8,7 @@ from opik.evaluation.metrics import base_metric, score_result
 class DummyMetric(base_metric.BaseMetric):
     def score(
         self, *args: Any, **kwargs: Any
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
         return score_result.ScoreResult(
             value=0.5, name=self.name, reason="Test metric score"
         )

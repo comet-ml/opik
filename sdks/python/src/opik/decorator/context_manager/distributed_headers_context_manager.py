@@ -1,6 +1,7 @@
 import logging
 from contextlib import contextmanager
-from typing import Generator, Any
+from typing import Any
+from collections.abc import Generator
 
 from opik import context_storage
 from opik.api_objects import span, trace

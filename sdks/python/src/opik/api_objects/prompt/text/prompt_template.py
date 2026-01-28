@@ -1,5 +1,5 @@
 import re
-from typing import Any, Set
+from typing import Any
 from typing_extensions import override
 import jinja2
 
@@ -28,7 +28,7 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
         if self._type == prompt_types.PromptType.MUSTACHE:
             template = self._template
             placeholders = _extract_mustache_placeholder_keys(self._template)
-            kwargs_keys: Set[str] = set(kwargs.keys())
+            kwargs_keys: set[str] = set(kwargs.keys())
 
             if kwargs_keys != placeholders and self._validate_placeholders:
                 raise exceptions.PromptPlaceholdersDontMatchFormatArguments(
@@ -50,6 +50,6 @@ class PromptTemplate(base_prompt_template.BasePromptTemplate):
         return self._template
 
 
-def _extract_mustache_placeholder_keys(prompt_template: str) -> Set[str]:
+def _extract_mustache_placeholder_keys(prompt_template: str) -> set[str]:
     pattern = r"\{\{(.*?)\}\}"
     return set(re.findall(pattern, prompt_template))

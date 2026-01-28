@@ -1,5 +1,3 @@
-from typing import List, Dict
-
 from opik.evaluation.metrics.conversation import types as conversation_types
 
 
@@ -89,7 +87,7 @@ def evaluate_conversation(sliding_window: conversation_types.Conversation) -> st
 """
 
 
-def generate_reason(score: float, frustrations: List[Dict[str, str]]) -> str:
+def generate_reason(score: float, frustrations: list[dict[str, str]]) -> str:
     return f"""Below is a list of user frustrations drawn from some messages in a conversation, which you have minimal knowledge of. It is a list of strings explaining why the 'assistant' messages caused the 'user' to be frustrated.
 Given the frustration score, which is a 0-1 score indicating how frustrating the OVERALL AI 'assistant' messages are in a conversation (higher the more frustrating).
 

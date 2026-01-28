@@ -1,15 +1,11 @@
 import logging
 from typing import (
     Any,
-    AsyncGenerator,
-    Callable,
-    Generator,
-    List,
-    Optional,
     Protocol,
     TypeVar,
     Generic,
 )
+from collections.abc import AsyncGenerator, Callable, Generator
 
 import opik.context_storage as context_storage
 import opik.logging_messages as logging_messages
@@ -28,10 +24,10 @@ class FinishGeneratorCallback(Protocol):
     def __call__(
         self,
         output: Any,
-        error_info: Optional[ErrorInfoDict],
+        error_info: ErrorInfoDict | None,
         capture_output: bool,
-        generators_span_to_end: Optional[span.SpanData] = None,
-        generators_trace_to_end: Optional[trace.TraceData] = None,
+        generators_span_to_end: span.SpanData | None = None,
+        generators_trace_to_end: trace.TraceData | None = None,
     ) -> None: ...
 
 
@@ -39,7 +35,7 @@ class BaseTrackedGenerator(Generic[YieldType]):
     def __init__(
         self,
         start_span_arguments: arguments_helpers.StartSpanParameters,
-        opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
+        opik_distributed_trace_headers: DistributedTraceHeadersDict | None,
         track_options: arguments_helpers.TrackOptions,
         finally_callback: FinishGeneratorCallback,
     ):
@@ -47,10 +43,10 @@ class BaseTrackedGenerator(Generic[YieldType]):
         self._opik_distributed_trace_headers = opik_distributed_trace_headers
         self._track_options = track_options
 
-        self._created_span_data: Optional[span.SpanData] = None
-        self._created_trace_data: Optional[trace.TraceData] = None
+        self._created_span_data: span.SpanData | None = None
+        self._created_trace_data: trace.TraceData | None = None
 
-        self._accumulated_values: List[YieldType] = []
+        self._accumulated_values: list[YieldType] = []
 
         self._finally_callback = finally_callback
 
@@ -99,7 +95,7 @@ class SyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         self,
         generator: Generator[YieldType, None, None],
         start_span_arguments: arguments_helpers.StartSpanParameters,
-        opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
+        opik_distributed_trace_headers: DistributedTraceHeadersDict | None,
         track_options: arguments_helpers.TrackOptions,
         finally_callback: FinishGeneratorCallback,
     ) -> None:
@@ -138,7 +134,7 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
         self,
         generator: AsyncGenerator[YieldType, None],
         start_span_arguments: arguments_helpers.StartSpanParameters,
-        opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
+        opik_distributed_trace_headers: DistributedTraceHeadersDict | None,
         track_options: arguments_helpers.TrackOptions,
         finally_callback: FinishGeneratorCallback,
     ) -> None:
@@ -173,7 +169,7 @@ class AsyncTrackedGenerator(BaseTrackedGenerator[YieldType]):
 
 
 def _try_aggregate_items(
-    items: List[Any], generations_aggregator: Optional[Callable[[List[Any]], str]]
+    items: list[Any], generations_aggregator: Callable[[list[Any]], str] | None
 ) -> str:
     if generations_aggregator is not None:
         try:

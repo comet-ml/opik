@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Union
 import logging
 
 import dspy
@@ -29,15 +29,15 @@ class OpikCallback(dspy_callback.BaseCallback):
 
     def __init__(
         self,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         log_graph: bool = False,
     ):
-        self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
-        self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
+        self._map_call_id_to_span_data: dict[str, span.SpanData] = {}
+        self._map_call_id_to_trace_data: dict[str, trace.TraceData] = {}
         # Store (lm_instance, expected_messages) for extracting usage and verifying correct history entry
-        self._map_call_id_to_lm_info: Dict[str, Tuple[Any, Optional[Any]]] = {}
+        self._map_call_id_to_lm_info: dict[str, tuple[Any, Any | None]] = {}
 
-        self._origins_metadata: Dict[str, Any] = {"created_from": "dspy"}
+        self._origins_metadata: dict[str, Any] = {"created_from": "dspy"}
 
         self._context_storage = context_storage.get_current_context_instance()
 
@@ -53,7 +53,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self,
         call_id: str,
         instance: Any,
-        inputs: Dict[str, Any],
+        inputs: dict[str, Any],
     ) -> None:
         if self._skip_tracking():
             return
@@ -101,7 +101,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         call_id: str,
         current_span_data: span.SpanData,
         instance: Any,
-        inputs: Dict[str, Any],
+        inputs: dict[str, Any],
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
             parent_project_name=current_span_data.project_name,
@@ -125,7 +125,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         call_id: str,
         current_trace_data: trace.TraceData,
         instance: Any,
-        inputs: Dict[str, Any],
+        inputs: dict[str, Any],
     ) -> None:
         project_name = helpers.resolve_child_span_project_name(
             current_trace_data.project_name,
@@ -158,7 +158,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self,
         call_id: str,
         instance: Any,
-        inputs: Dict[str, Any],
+        inputs: dict[str, Any],
     ) -> None:
         trace_data = trace.TraceData(
             name=instance.__class__.__name__,
@@ -178,8 +178,8 @@ class OpikCallback(dspy_callback.BaseCallback):
     def on_module_end(
         self,
         call_id: str,
-        outputs: Optional[Any],
-        exception: Optional[Exception] = None,
+        outputs: Any | None,
+        exception: Exception | None = None,
     ) -> None:
         self._end_span(
             call_id=call_id,
@@ -199,13 +199,13 @@ class OpikCallback(dspy_callback.BaseCallback):
     def _end_span(
         self,
         call_id: str,
-        outputs: Optional[Any],
-        exception: Optional[Exception] = None,
-        usage: Optional[llm_usage.OpikUsage] = None,
-        extra_metadata: Optional[Dict[str, Any]] = None,
-        actual_provider: Optional[str] = None,
-        actual_model: Optional[str] = None,
-        total_cost: Optional[float] = None,
+        outputs: Any | None,
+        exception: Exception | None = None,
+        usage: llm_usage.OpikUsage | None = None,
+        extra_metadata: dict[str, Any] | None = None,
+        actual_provider: str | None = None,
+        actual_model: str | None = None,
+        total_cost: float | None = None,
     ) -> None:
         if span_data := self._map_call_id_to_span_data.pop(call_id, None):
             if exception:
@@ -213,7 +213,7 @@ class OpikCallback(dspy_callback.BaseCallback):
                 span_data.update(error_info=error_info)
 
             # Prepare the update dict
-            update_kwargs: Dict[str, Any] = {
+            update_kwargs: dict[str, Any] = {
                 "output": {"output": outputs},
                 "usage": usage,
                 "total_cost": total_cost,
@@ -256,7 +256,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             self._context_storage.pop_span_data(ensure_id=span_data.id)
 
     def _collect_common_span_data(
-        self, instance: Any, inputs: Dict[str, Any]
+        self, instance: Any, inputs: dict[str, Any]
     ) -> span.SpanData:
         current_callback_context_data = self._get_current_context_data()
         assert current_callback_context_data is not None
@@ -293,7 +293,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self,
         call_id: str,
         instance: Any,
-        inputs: Dict[str, Any],
+        inputs: dict[str, Any],
     ) -> None:
         span_data = self._collect_common_span_data(instance, inputs)
 
@@ -317,8 +317,8 @@ class OpikCallback(dspy_callback.BaseCallback):
     def on_lm_end(
         self,
         call_id: str,
-        outputs: Optional[Dict[str, Any]],
-        exception: Optional[Exception] = None,
+        outputs: dict[str, Any] | None,
+        exception: Exception | None = None,
     ) -> None:
         lm_info = self._extract_lm_info_from_history(call_id)
 
@@ -342,7 +342,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self,
         call_id: str,
         instance: Any,
-        inputs: Dict[str, Any],
+        inputs: dict[str, Any],
     ) -> None:
         span_data = self._collect_common_span_data(instance, inputs)
         self._map_call_id_to_span_data[call_id] = span_data
@@ -351,8 +351,8 @@ class OpikCallback(dspy_callback.BaseCallback):
     def on_tool_end(
         self,
         call_id: str,
-        outputs: Optional[Dict[str, Any]],
-        exception: Optional[Exception] = None,
+        outputs: dict[str, Any] | None,
+        exception: Exception | None = None,
     ) -> None:
         self._end_span(
             call_id=call_id,
@@ -372,7 +372,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         else:
             raise ValueError(f"Invalid context type: {type(value)}")
 
-    def _get_current_context_data(self) -> Optional[SpanOrTraceData]:
+    def _get_current_context_data(self) -> SpanOrTraceData | None:
         if span_data := self._context_storage.top_span_data():
             return span_data
         return self._context_storage.get_trace_data()
@@ -408,7 +408,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         lm_instance, expected_messages = lm_info
         return extract_lm_info_from_history(lm_instance, expected_messages)
 
-    def _get_opik_metadata(self, instance: Any) -> Dict[str, Any]:
+    def _get_opik_metadata(self, instance: Any) -> dict[str, Any]:
         graph = None
         if self.log_graph and isinstance(instance, dspy.Module):
             try:

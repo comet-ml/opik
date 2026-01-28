@@ -1,5 +1,4 @@
 import logging
-from typing import List, Optional
 
 from openai.types import responses as openai_responses
 
@@ -9,8 +8,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 def aggregate(
-    items: List[openai_responses.ResponseStreamEvent],
-) -> Optional[openai_responses.Response]:
+    items: list[openai_responses.ResponseStreamEvent],
+) -> openai_responses.Response | None:
     try:
         completed_event = [
             event

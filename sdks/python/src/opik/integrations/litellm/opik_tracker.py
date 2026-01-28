@@ -1,4 +1,5 @@
-from typing import Callable, Optional, TypeVar
+from typing import TypeVar
+from collections.abc import Callable
 
 from . import litellm_completion_decorator
 from . import completion_chunks_aggregator
@@ -7,7 +8,7 @@ F = TypeVar("F", bound=Callable)
 
 
 def track_completion(
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> Callable[[F], F]:
     """Decorator for tracking LiteLLM function calls with Opik.
 

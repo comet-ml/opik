@@ -309,9 +309,9 @@ def test_prompt__search_prompts__by_name__happyflow(opik_client: opik.Opik):
     # Search by name substring via OQL (no additional filters) to retrieve only two matching prompts
     results = opik_client.search_prompts(filter_string='name contains "common-prefix"')
 
-    names = set(p.name for p in results if isinstance(p, opik.Prompt))
+    names = {p.name for p in results if isinstance(p, opik.Prompt)}
     assert len(results) == 2
-    assert names == set([prompt_name_1, prompt_name_2])
+    assert names == {prompt_name_1, prompt_name_2}
 
 
 def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):

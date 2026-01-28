@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 from opik.rest_api import client as rest_api_client
 
@@ -75,7 +74,7 @@ def toggle_local_emulator_message_processor(
 
 def get_local_emulator_message_processor(
     chain: message_processors.ChainedMessageProcessor,
-) -> Optional[local_emulator_message_processor.LocalEmulatorMessageProcessor]:
+) -> local_emulator_message_processor.LocalEmulatorMessageProcessor | None:
     """
     Retrieves the local emulator message processor from a given chain of message processors.
 

@@ -1,4 +1,4 @@
-from typing import Optional, List, Callable
+from collections.abc import Callable
 
 from .. import asyncio_support
 from ...api_objects import opik_client
@@ -10,9 +10,9 @@ from opik.rest_api import JsonListStringPublic
 
 def evaluate_threads(
     project_name: str,
-    filter_string: Optional[str],
-    eval_project_name: Optional[str],
-    metrics: List[conversation_thread_metric.ConversationThreadMetric],
+    filter_string: str | None,
+    eval_project_name: str | None,
+    metrics: list[conversation_thread_metric.ConversationThreadMetric],
     trace_input_transform: Callable[[JsonListStringPublic], str],
     trace_output_transform: Callable[[JsonListStringPublic], str],
     verbose: int = 1,

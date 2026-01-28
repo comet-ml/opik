@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Any
 import pydantic
 import json
 import hashlib
@@ -18,16 +18,16 @@ class DatasetItem(pydantic.BaseModel):
     )
     """The unique identifier for this dataset item."""
 
-    trace_id: Optional[str] = None
+    trace_id: str | None = None
     """The ID of the trace associated with this dataset item."""
 
-    span_id: Optional[str] = None
+    span_id: str | None = None
     """The ID of the span associated with this dataset item."""
 
     source: str = constants.DATASET_SOURCE_SDK
     """The source of the dataset item. Defaults to DATASET_SOURCE_SDK."""
 
-    def get_content(self, include_id: bool = False) -> Dict[str, Any]:
+    def get_content(self, include_id: bool = False) -> dict[str, Any]:
         content = {**self.model_extra}
         if include_id:
             content["id"] = self.id

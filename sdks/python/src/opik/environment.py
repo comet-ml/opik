@@ -6,7 +6,7 @@ import platform
 import socket
 import sys
 from importlib import metadata
-from typing import Dict, Literal
+from typing import Literal
 import tqdm
 from tqdm.utils import Comparable
 
@@ -134,7 +134,7 @@ def in_colab() -> bool:
 
 
 @functools.lru_cache
-def get_installed_packages() -> Dict[str, str]:
+def get_installed_packages() -> dict[str, str]:
     """
     Retrieve a dictionary of installed packages with their versions.
     """

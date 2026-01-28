@@ -1,5 +1,4 @@
 import datetime
-from typing import Optional
 
 
 def local_timestamp() -> datetime.datetime:
@@ -11,7 +10,7 @@ def datetime_to_iso8601(value: datetime.datetime) -> str:
     return value.isoformat()
 
 
-def parse_iso_timestamp(timestamp_str: Optional[str]) -> Optional[datetime.datetime]:
+def parse_iso_timestamp(timestamp_str: str | None) -> datetime.datetime | None:
     """Parse an ISO 8601 timestamp string to datetime."""
     if timestamp_str is None:
         return None

@@ -1,6 +1,6 @@
 import functools
 import importlib.metadata
-from typing import Any, Dict
+from typing import Any
 
 import haystack.dataclasses
 
@@ -9,7 +9,7 @@ import opik.semantic_version as semantic_version
 
 def convert_message_to_openai_format(
     message: haystack.dataclasses.ChatMessage,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if _haystack_version_less_than_2_9_0():
         # 2.8.1 and less use _convert_message_to_openai_format function
         from haystack.components.generators.openai import (

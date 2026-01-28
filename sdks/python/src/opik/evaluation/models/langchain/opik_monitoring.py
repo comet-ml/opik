@@ -1,7 +1,7 @@
-from typing import Dict, Any
+from typing import Any
 
 
-def add_opik_tracer_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
+def add_opik_tracer_to_params(params: dict[str, Any]) -> dict[str, Any]:
     from opik.integrations.langchain import OpikTracer
 
     opik_tracer = OpikTracer()

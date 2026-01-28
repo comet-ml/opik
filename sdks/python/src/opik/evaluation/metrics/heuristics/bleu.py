@@ -1,6 +1,7 @@
 import warnings
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional, Tuple, Union
+from typing import Any
+from collections.abc import Iterator
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -41,8 +42,8 @@ class BaseBLEU(base_metric.BaseMetric):
         track: bool,
         n_grams: int,
         smoothing_method: str,
-        weights: Optional[List[float]],
-        project_name: Optional[str],
+        weights: list[float] | None,
+        project_name: str | None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
@@ -71,7 +72,7 @@ class BaseBLEU(base_metric.BaseMetric):
     def _get_smoothing_func(self) -> "nltk_bleu_score.SmoothingFunction":
         return getattr(self._smoother, self.smoothing_method, self._smoother.method0)
 
-    def _truncate_weights(self, max_len: int) -> Tuple[float, ...]:
+    def _truncate_weights(self, max_len: int) -> tuple[float, ...]:
         used_order = min(self.n_grams, max_len)
         used_weights = self.weights[:used_order]
         total = sum(used_weights) or 1.0
@@ -109,8 +110,8 @@ class SentenceBLEU(BaseBLEU):
         track: bool = True,
         n_grams: int = 4,
         smoothing_method: str = "method1",
-        weights: Optional[List[float]] = None,
-        project_name: Optional[str] = None,
+        weights: list[float] | None = None,
+        project_name: str | None = None,
     ):
         super().__init__(
             name=name,
@@ -124,7 +125,7 @@ class SentenceBLEU(BaseBLEU):
     def score(
         self,
         output: str,
-        reference: Union[str, List[str]],
+        reference: str | list[str],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
@@ -213,8 +214,8 @@ class CorpusBLEU(BaseBLEU):
         track: bool = True,
         n_grams: int = 4,
         smoothing_method: str = "method1",
-        weights: Optional[List[float]] = None,
-        project_name: Optional[str] = None,
+        weights: list[float] | None = None,
+        project_name: str | None = None,
     ):
         super().__init__(
             name=name,
@@ -227,8 +228,8 @@ class CorpusBLEU(BaseBLEU):
 
     def score(
         self,
-        output: List[str],
-        reference: List[Union[str, List[str]]],
+        output: list[str],
+        reference: list[str | list[str]],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
@@ -255,8 +256,8 @@ class CorpusBLEU(BaseBLEU):
                 "Mismatch: number of candidates != number of references (corpus BLEU)."
             )
 
-        all_candidates: List[List[str]] = []
-        all_references: List[List[List[str]]] = []
+        all_candidates: list[list[str]] = []
+        all_references: list[list[list[str]]] = []
 
         for candidate_str, ref_item in zip(output, reference):
             if not candidate_str.strip():

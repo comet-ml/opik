@@ -1,4 +1,4 @@
-from typing import List, TypedDict
+from typing import TypedDict
 
 
 class FewShotExampleModeration(TypedDict):
@@ -9,7 +9,7 @@ class FewShotExampleModeration(TypedDict):
 
 def generate_query(
     output: str,
-    few_shot_examples: List[FewShotExampleModeration],
+    few_shot_examples: list[FewShotExampleModeration],
 ) -> str:
     examples_str = ""
     if few_shot_examples:

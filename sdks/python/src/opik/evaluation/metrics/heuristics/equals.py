@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from .. import base_metric, score_result
 
@@ -32,7 +32,7 @@ class Equals(base_metric.BaseMetric):
         case_sensitive: bool = False,
         name: str = "equals_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(
             name=name,

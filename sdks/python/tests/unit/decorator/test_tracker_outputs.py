@@ -1,7 +1,6 @@
 import asyncio
 import functools
 import threading
-from typing import Dict
 
 from unittest import mock
 import pytest
@@ -489,7 +488,7 @@ def test_track__one_async_function__error_raised__trace_and_span_finished_correc
 
 
 def test_track__nested_calls_in_separate_threads__3_traces_in_result(fake_backend):
-    ID_STORAGE: Dict[str, str] = {}
+    ID_STORAGE: dict[str, str] = {}
 
     @tracker.track
     def f_inner(y, thread_id):
@@ -612,8 +611,7 @@ def test_track__single_generator_function_tracked__generator_exhausted__happyflo
     @tracker.track
     def f(x):
         values = ["yielded-1", " yielded-2", " yielded-3"]
-        for value in values:
-            yield value
+        yield from values
 
     generator = f("generator-input")
     for _ in generator:
@@ -712,8 +710,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
     @tracker.track
     def gen_f(y):
         values = ["yielded-1", " yielded-2", " yielded-3"]
-        for value in values:
-            yield value
+        yield from values
 
     @tracker.track
     def f_outer(x):
@@ -788,8 +785,7 @@ def test_track__generator_function_tracked__generator_exhausted_in_another_track
     def gen_f(y):
         f_called_inside_generator()
         values = ["yielded-1", " yielded-2", " yielded-3"]
-        for value in values:
-            yield value
+        yield from values
 
     @tracker.track
     def f_outer(x):

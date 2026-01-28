@@ -23,7 +23,8 @@ Or enable tracking globally (for CLI usage):
 
 import functools
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Optional
+from collections.abc import Callable
 from typing_extensions import override
 
 from harbor.job import Job
@@ -56,8 +57,8 @@ class HarborTrialRunDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         """Extract trial config and set trace name, input, metadata, and tags."""
         # Extract Trial instance from args (Trial.run is an instance method)
@@ -82,7 +83,7 @@ class HarborTrialRunDecorator(base_track_decorator.BaseTrackDecorator):
         trace_name = f"{config.agent.name}/{config.trial_name}"
 
         # Build input dict
-        input_dict: Dict[str, Any] = {
+        input_dict: dict[str, Any] = {
             "trial_name": config.trial_name,
             "task": {
                 "name": config.task.name
@@ -136,21 +137,21 @@ class HarborTrialRunDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Optional[Any]:
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> Any | None:
         """No stream handling needed for Trial.run."""
         return None
 
 
 def _rewards_to_feedback_scores(
-    rewards: Optional[Dict[str, Any]],
-    error: Optional[str] = None,
-) -> List[FeedbackScoreDict]:
+    rewards: dict[str, Any] | None,
+    error: str | None = None,
+) -> list[FeedbackScoreDict]:
     """Convert Harbor verifier rewards to Opik feedback scores."""
     if rewards is None:
         return []
 
-    feedback_scores: List[FeedbackScoreDict] = []
+    feedback_scores: list[FeedbackScoreDict] = []
     for name, value in rewards.items():
         try:
             float_value = float(value)
@@ -195,7 +196,7 @@ def _patch_step_class() -> None:
         try:
             client = opik_client.get_client_cached()
 
-            input_dict: Dict[str, Any] = {}
+            input_dict: dict[str, Any] = {}
             if self.message:
                 input_dict["message"] = self.message
             if self.tool_calls:
@@ -208,7 +209,7 @@ def _patch_step_class() -> None:
                     for tc in self.tool_calls
                 ]
 
-            output_dict: Optional[Dict[str, Any]] = None
+            output_dict: dict[str, Any] | None = None
             if self.observation and self.observation.results:
                 output_dict = {
                     "results": [
@@ -216,15 +217,15 @@ def _patch_step_class() -> None:
                     ]
                 }
 
-            metadata: Dict[str, Any] = {
+            metadata: dict[str, Any] = {
                 "source": self.source,
                 "created_from": "harbor",
             }
             if self.reasoning_content:
                 metadata["reasoning"] = self.reasoning_content
 
-            usage: Optional[Dict[str, Any]] = None
-            total_cost: Optional[float] = None
+            usage: dict[str, Any] | None = None
+            total_cost: float | None = None
             if self.metrics:
                 usage = {}
                 if self.metrics.prompt_tokens is not None:
@@ -262,7 +263,7 @@ def _patch_step_class() -> None:
     setattr(_patch_step_class, "_patched", True)
 
 
-def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
+def _enable_harbor_tracking(project_name: str | None = None) -> None:
     """Internal: Enable Opik tracking for Harbor by patching classes.
 
     This patches Harbor's Trial and Verifier classes to add tracing.
@@ -302,7 +303,7 @@ def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
 
 def track_harbor(
     job: Optional["Job"] = None,
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> Optional["Job"]:
     """Enable Opik tracking for Harbor.
 
@@ -327,7 +328,7 @@ def track_harbor(
     return job
 
 
-def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable:
+def _wrap_trial_run(original: Callable, project_name: str | None) -> Callable:
     """Wrap Trial.run with tracing, feedback scores, and experiment linking."""
 
     decorator = HarborTrialRunDecorator()
@@ -350,7 +351,7 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
                     f"harbor-job-{str(config.job_id)[:8]}" if config.job_id else None
                 )
                 # Build experiment config with agent/model info
-                experiment_config: Dict[str, Any] = {
+                experiment_config: dict[str, Any] = {
                     "agent_name": config.agent.name,
                 }
                 model_name = getattr(config.agent, "model_name", None)
@@ -371,7 +372,7 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
         result: TrialResult = await original(self)
 
         # Update trace with output and feedback scores
-        output_dict: Dict[str, Any] = {
+        output_dict: dict[str, Any] = {
             "trial_name": result.trial_name,
             "task_name": result.task_name,
         }
@@ -426,9 +427,7 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
     return wrapped
 
 
-def _wrap_setup_environment(
-    original: Callable, project_name: Optional[str]
-) -> Callable:
+def _wrap_setup_environment(original: Callable, project_name: str | None) -> Callable:
     """Wrap Trial._setup_environment with tracing."""
 
     @track(name="setup_environment", tags=["harbor"], project_name=project_name)
@@ -444,7 +443,7 @@ def _wrap_setup_environment(
     return wrapped
 
 
-def _wrap_setup_agent(original: Callable, project_name: Optional[str]) -> Callable:
+def _wrap_setup_agent(original: Callable, project_name: str | None) -> Callable:
     """Wrap Trial._setup_agent with tracing."""
 
     @track(name="setup_agent", tags=["harbor"], project_name=project_name)
@@ -460,7 +459,7 @@ def _wrap_setup_agent(original: Callable, project_name: Optional[str]) -> Callab
     return wrapped
 
 
-def _wrap_execute_agent(original: Callable, project_name: Optional[str]) -> Callable:
+def _wrap_execute_agent(original: Callable, project_name: str | None) -> Callable:
     """Wrap Trial._execute_agent with tracing."""
 
     @track(name="execute_agent", tags=["harbor"], project_name=project_name)
@@ -479,7 +478,7 @@ def _wrap_execute_agent(original: Callable, project_name: Optional[str]) -> Call
     return wrapped
 
 
-def _wrap_run_verification(original: Callable, project_name: Optional[str]) -> Callable:
+def _wrap_run_verification(original: Callable, project_name: str | None) -> Callable:
     """Wrap Trial._run_verification with tracing."""
 
     @track(name="run_verification", tags=["harbor"], project_name=project_name)
@@ -495,7 +494,7 @@ def _wrap_run_verification(original: Callable, project_name: Optional[str]) -> C
     return wrapped
 
 
-def _wrap_verify(original: Callable, project_name: Optional[str]) -> Callable:
+def _wrap_verify(original: Callable, project_name: str | None) -> Callable:
     """Wrap Verifier.verify with tracing."""
 
     @track(name="verify", tags=["harbor"], project_name=project_name)
@@ -507,7 +506,7 @@ def _wrap_verify(original: Callable, project_name: Optional[str]) -> Callable:
         )
         result: VerifierResult = await original(self)
 
-        output_dict: Dict[str, Any] = {}
+        output_dict: dict[str, Any] = {}
         if result.rewards:
             output_dict["rewards"] = result.rewards
         opik_context.update_current_span(

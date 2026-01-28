@@ -1,7 +1,5 @@
 """Download command for Opik CLI."""
 
-from typing import Optional
-
 import click
 
 from .dataset import export_dataset_command
@@ -22,7 +20,7 @@ EXPORT_CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
     help="Opik API key. If not provided, will use OPIK_API_KEY environment variable or configuration.",
 )
 @click.pass_context
-def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> None:
+def export_group(ctx: click.Context, workspace: str, api_key: str | None) -> None:
     """Export data from Opik workspace.
 
     This command allows you to export specific data from an Opik workspace to local files.

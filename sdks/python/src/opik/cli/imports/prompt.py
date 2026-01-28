@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-from typing import Dict, Optional
 
 import opik
 from opik.api_objects.prompt import Prompt, ChatPrompt
@@ -18,9 +17,9 @@ def import_prompts_from_directory(
     client: opik.Opik,
     source_dir: Path,
     dry_run: bool,
-    name_pattern: Optional[str],
+    name_pattern: str | None,
     debug: bool,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Import prompts from a directory.
 
     Returns:
@@ -38,7 +37,7 @@ def import_prompts_from_directory(
         error_count = 0
         for prompt_file in prompt_files:
             try:
-                with open(prompt_file, "r", encoding="utf-8") as f:
+                with open(prompt_file, encoding="utf-8") as f:
                     prompt_data = json.load(f)
 
                 # Handle two export formats:

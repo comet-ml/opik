@@ -1,5 +1,4 @@
 import logging
-from typing import List
 
 from ..types import Event, Hint
 from . import event_filter
@@ -8,7 +7,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class FilterChain:
-    def __init__(self, filters: List[event_filter.EventFilter]) -> None:
+    def __init__(self, filters: list[event_filter.EventFilter]) -> None:
         self._filters = filters
 
     def validate(self, event: Event, hint: Hint) -> bool:

@@ -1,11 +1,11 @@
 import re
-from typing import Dict, Any, Literal, List, NamedTuple, Union
+from typing import Any, Literal, NamedTuple
 
 from . import attachment, attachment_context, decoder_base64
 
 
 class ExtractionResult(NamedTuple):
-    attachments: List[attachment.Attachment]
+    attachments: list[attachment.Attachment]
     sanitized_data: Any
 
 
@@ -44,12 +44,12 @@ class AttachmentsExtractor:
 
     def extract_and_replace(
         self,
-        data: Union[Dict[str, Any], List[Any]],
+        data: dict[str, Any] | list[Any],
         entity_type: Literal["span", "trace"],
         entity_id: str,
         project_name: str,
         context: Literal["input", "output", "metadata"],
-    ) -> List[attachment_context.AttachmentWithContext]:
+    ) -> list[attachment_context.AttachmentWithContext]:
         """
         Extract attachments from data and replace with placeholders.
 
@@ -66,7 +66,7 @@ class AttachmentsExtractor:
         Returns:
             List of extracted attachments with context
         """
-        attachments: List[attachment_context.AttachmentWithContext] = []
+        attachments: list[attachment_context.AttachmentWithContext] = []
 
         if isinstance(data, dict):
             # For dicts, iterate over items and extract attachments from values
@@ -155,7 +155,7 @@ class AttachmentsExtractor:
             # skip short strings
             return ExtractionResult(attachments=[], sanitized_data=data)
 
-        attachments: List[attachment.Attachment] = []
+        attachments: list[attachment.Attachment] = []
         sanitized_data = data
         for match in self.pattern.finditer(data):
             to_decode = match.group()
@@ -169,10 +169,10 @@ class AttachmentsExtractor:
         return ExtractionResult(attachments=attachments, sanitized_data=sanitized_data)
 
     def _extract_from_dict(
-        self, data: Dict[str, Any], context: Literal["input", "output", "metadata"]
+        self, data: dict[str, Any], context: Literal["input", "output", "metadata"]
     ) -> ExtractionResult:
         """Recursively extract attachments from a dictionary."""
-        all_attachments: List[attachment.Attachment] = []
+        all_attachments: list[attachment.Attachment] = []
         sanitized_dict = {}
 
         for key, value in data.items():
@@ -185,10 +185,10 @@ class AttachmentsExtractor:
         )
 
     def _extract_from_list(
-        self, data: List[Any], context: Literal["input", "output", "metadata"]
+        self, data: list[Any], context: Literal["input", "output", "metadata"]
     ) -> ExtractionResult:
         """Recursively extract attachments from a list."""
-        all_attachments: List[attachment.Attachment] = []
+        all_attachments: list[attachment.Attachment] = []
         sanitized_list = []
 
         for item in data:

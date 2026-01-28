@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
+from collections.abc import Iterable
 
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -33,7 +34,7 @@ class LLMJuriesJudge(BaseMetric):
         judges: Iterable[BaseMetric],
         name: str = "llm_juries_judge",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self._judges = list(judges)
@@ -41,10 +42,10 @@ class LLMJuriesJudge(BaseMetric):
             raise ValueError("LLMJuriesJudge requires at least one judge metric.")
 
     def score(self, *args: Any, **kwargs: Any) -> ScoreResult:
-        precomputed: Optional[Dict[BaseMetric, ScoreResult]] = kwargs.pop(
+        precomputed: dict[BaseMetric, ScoreResult] | None = kwargs.pop(
             "precomputed", None
         )
-        scores: List[ScoreResult] = []
+        scores: list[ScoreResult] = []
         for judge in self._judges:
             if precomputed is not None and judge in precomputed:
                 raw_result: Any = precomputed[judge]

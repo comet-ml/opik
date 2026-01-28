@@ -8,7 +8,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Optional
+from collections.abc import Iterator
 from unittest.mock import patch
 
 import click
@@ -140,7 +140,7 @@ def _temporary_client_context(client: opik.Opik) -> Iterator[None]:
 def run_smoke_test(
     workspace: str,
     project_name: str = "smoke-test-project",
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     debug: bool = False,
 ) -> None:
     """
@@ -161,9 +161,9 @@ def run_smoke_test(
     Raises:
         click.ClickException: If the smoke test failed.
     """
-    temp_image_path: Optional[Path] = None
-    client: Optional[opik.Opik] = None
-    original_exception: Optional[Exception] = None
+    temp_image_path: Path | None = None
+    client: opik.Opik | None = None
+    original_exception: Exception | None = None
 
     # Generate a unique trace name for this run to avoid false positives
     # from older traces with the same name. This ensures deterministic usage

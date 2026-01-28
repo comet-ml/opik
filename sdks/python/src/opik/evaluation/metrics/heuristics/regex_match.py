@@ -1,5 +1,5 @@
 import re
-from typing import Any, Union, Optional
+from typing import Any
 
 from .. import base_metric, score_result
 
@@ -30,10 +30,10 @@ class RegexMatch(base_metric.BaseMetric):
 
     def __init__(
         self,
-        regex: Union[str, re.Pattern],
+        regex: str | re.Pattern,
         name: str = "regex_match_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(
             name=name,

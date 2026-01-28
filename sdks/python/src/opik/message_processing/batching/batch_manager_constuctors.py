@@ -1,5 +1,3 @@
-from typing import Type, Dict
-
 from . import base_batcher, batchers, batch_manager
 from .. import messages, message_queue
 
@@ -64,8 +62,8 @@ def create_batch_manager(
         flush_callback=queue.put,
     )
 
-    message_to_batcher_mapping: Dict[
-        Type[messages.BaseMessage], base_batcher.BaseBatcher
+    message_to_batcher_mapping: dict[
+        type[messages.BaseMessage], base_batcher.BaseBatcher
     ] = {
         messages.CreateSpanMessage: create_span_message_batcher_,
         messages.CreateTraceMessage: create_trace_message_batcher_,

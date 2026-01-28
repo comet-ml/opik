@@ -1,5 +1,3 @@
-from typing import Optional, Tuple
-
 import httpx
 from rich.console import Console
 
@@ -8,7 +6,7 @@ import opik
 console = Console()
 
 
-def get_backend_workspace_availability() -> Tuple[bool, Optional[str]]:
+def get_backend_workspace_availability() -> tuple[bool, str | None]:
     is_available = False
     err_msg = None
 

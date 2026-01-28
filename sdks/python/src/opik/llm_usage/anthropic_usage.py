@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Any
 from . import base_original_provider_usage
 
 
@@ -11,15 +11,15 @@ class AnthropicUsage(base_original_provider_usage.BaseOriginalProviderUsage):
     output_tokens: int
     """The number of output tokens which were used."""
 
-    cache_creation_input_tokens: Optional[int] = None
+    cache_creation_input_tokens: int | None = None
     """The number of input tokens used to create the cache entry."""
 
-    cache_read_input_tokens: Optional[int] = None
+    cache_read_input_tokens: int | None = None
     """The number of input tokens read from the cache."""
 
-    def to_backend_compatible_flat_dict(self, parent_key_prefix: str) -> Dict[str, int]:
+    def to_backend_compatible_flat_dict(self, parent_key_prefix: str) -> dict[str, int]:
         return super().to_backend_compatible_flat_dict(parent_key_prefix)
 
     @classmethod
-    def from_original_usage_dict(cls, usage: Dict[str, Any]) -> "AnthropicUsage":
+    def from_original_usage_dict(cls, usage: dict[str, Any]) -> "AnthropicUsage":
         return cls(**usage)

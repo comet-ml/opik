@@ -1,4 +1,4 @@
-from typing import Union, Optional, Any
+from typing import Any
 import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
@@ -39,12 +39,12 @@ class Usefulness(base_metric.BaseMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "UsefulnessMetric",
         track: bool = True,
-        project_name: Optional[str] = None,
-        seed: Optional[int] = None,
-        temperature: Optional[float] = None,
+        project_name: str | None = None,
+        seed: int | None = None,
+        temperature: float | None = None,
     ):
         super().__init__(
             name=name,
@@ -56,8 +56,8 @@ class Usefulness(base_metric.BaseMetric):
 
     def _init_model(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]],
-        temperature: Optional[float],
+        model: str | base_model.OpikBaseModel | None,
+        temperature: float | None,
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model

@@ -1,6 +1,7 @@
 import json
 
-from typing import List, Callable, Any, Dict, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import Callable
 import importlib.util
 import logging
 
@@ -23,7 +24,7 @@ def _raise_if_pandas_is_unavailable() -> None:
 
 
 def to_pandas(
-    items: List[dataset_item.DatasetItem], keys_mapping: Dict[str, str]
+    items: list[dataset_item.DatasetItem], keys_mapping: dict[str, str]
 ) -> "pd.DataFrame":
     _raise_if_pandas_is_unavailable()
 
@@ -42,10 +43,10 @@ def to_pandas(
 
 
 def from_jsonl_file(
-    file_path: str, keys_mapping: Dict[str, str], ignore_keys: List[str]
-) -> List[dataset_item.DatasetItem]:
+    file_path: str, keys_mapping: dict[str, str], ignore_keys: list[str]
+) -> list[dataset_item.DatasetItem]:
     items = []
-    with open(file_path, "r", encoding="utf-8") as file:
+    with open(file_path, encoding="utf-8") as file:
         for line in file:
             json_object = line.strip()
             if json_object:  # Skip empty lines
@@ -57,9 +58,9 @@ def from_jsonl_file(
 
 def from_pandas(
     dataframe: "pd.DataFrame",
-    keys_mapping: Dict[str, str],
-    ignore_keys: List[str],
-) -> List[dataset_item.DatasetItem]:
+    keys_mapping: dict[str, str],
+    ignore_keys: list[str],
+) -> list[dataset_item.DatasetItem]:
     _raise_if_pandas_is_unavailable()
 
     result = []
@@ -75,7 +76,7 @@ def from_pandas(
     return result
 
 
-def to_json(items: List[dataset_item.DatasetItem], keys_mapping: Dict[str, str]) -> str:
+def to_json(items: list[dataset_item.DatasetItem], keys_mapping: dict[str, str]) -> str:
     new_item_dicts = []
 
     for item in items:
@@ -90,10 +91,10 @@ def to_json(items: List[dataset_item.DatasetItem], keys_mapping: Dict[str, str])
 
 
 def from_json(
-    value: str, keys_mapping: Dict[str, str], ignore_keys: List[str]
-) -> List[dataset_item.DatasetItem]:
+    value: str, keys_mapping: dict[str, str], ignore_keys: list[str]
+) -> list[dataset_item.DatasetItem]:
     result = []
-    item_dicts: List[Dict[str, Any]] = json.loads(value)
+    item_dicts: list[dict[str, Any]] = json.loads(value)
 
     for item_dict in item_dicts:
         item_kwargs = {

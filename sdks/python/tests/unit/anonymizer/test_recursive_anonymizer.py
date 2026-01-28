@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from unittest.mock import Mock
 
@@ -62,7 +62,7 @@ class TestRecursiveAnonymizer:
             "metadata": {"api_key": "secret123"},
         }
 
-        result: Dict[str, Any] = anonymizer.anonymize(
+        result: dict[str, Any] = anonymizer.anonymize(
             nested_data, field_name="trace", object_type="TraceMessage"
         )
 
@@ -124,7 +124,7 @@ class TestRecursiveAnonymizer:
             ["list item 1", "list item 2"],
         ]
 
-        result: List[Any] = anonymizer.anonymize(
+        result: list[Any] = anonymizer.anonymize(
             list_data, field_name="input", object_type="SpanMessage"
         )
 
@@ -211,7 +211,7 @@ class TestRecursiveAnonymizer:
             },
         }
 
-        result: Dict[str, Any] = anonymizer.anonymize(
+        result: dict[str, Any] = anonymizer.anonymize(
             complex_data,
             field_name="output",
             object_type="TraceMessage",
@@ -284,7 +284,7 @@ class TestRecursiveAnonymizer:
             },
         }
 
-        result: Dict[str, Any] = anonymizer.anonymize(deeply_nested, field_name="root")
+        result: dict[str, Any] = anonymizer.anonymize(deeply_nested, field_name="root")
 
         field_names = [call["field_name"] for call in calls_log]
 
@@ -332,7 +332,7 @@ class TestRecursiveAnonymizer:
             },
         }
 
-        result: Dict[str, Any] = anonymizer.anonymize(
+        result: dict[str, Any] = anonymizer.anonymize(
             mixed_types_data, field_name="data"
         )
 
@@ -378,7 +378,7 @@ class TestRecursiveAnonymizer:
             },
         }
 
-        result: Dict[str, Any] = anonymizer.anonymize(
+        result: dict[str, Any] = anonymizer.anonymize(
             empty_structures, field_name="test"
         )
 
@@ -436,7 +436,7 @@ class TestRecursiveAnonymizer:
             ],
         }
 
-        result: Dict[str, Any] = anonymizer.anonymize(user_data, field_name="input")
+        result: dict[str, Any] = anonymizer.anonymize(user_data, field_name="input")
 
         # Verify field-specific anonymization
         assert result["user"]["email"] == "[EMAIL_REDACTED]"
@@ -520,7 +520,7 @@ class TestRecursiveAnonymizer:
             },
         }
 
-        result: Dict[str, Any] = anonymizer.anonymize(deep_structure, field_name="root")
+        result: dict[str, Any] = anonymizer.anonymize(deep_structure, field_name="root")
 
         # With max_depth=3, strings at depth 1, 2, 3 should be processed, but depth 4+ should not
 

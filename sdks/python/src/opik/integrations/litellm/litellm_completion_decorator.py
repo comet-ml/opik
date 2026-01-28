@@ -1,13 +1,8 @@
 import logging
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Union,
 )
+from collections.abc import Callable
 from typing_extensions import override
 
 import opik.dict_utils as dict_utils
@@ -24,7 +19,7 @@ from . import stream_patchers, completion_chunks_aggregator
 
 LOGGER = logging.getLogger(__name__)
 
-KWARGS_KEYS_TO_LOG_AS_INPUTS: List[str] = [
+KWARGS_KEYS_TO_LOG_AS_INPUTS: list[str] = [
     "messages",
     "functions",
     "function_call",
@@ -33,10 +28,10 @@ KWARGS_KEYS_TO_LOG_AS_INPUTS: List[str] = [
     "response_format",
     "stop",
 ]
-RESPONSE_KEYS_TO_LOG_AS_OUTPUT: List[str] = ["choices"]
+RESPONSE_KEYS_TO_LOG_AS_OUTPUT: list[str] = ["choices"]
 
 # Sensitive parameters that should never be logged
-SENSITIVE_PARAMS_TO_EXCLUDE: List[str] = [
+SENSITIVE_PARAMS_TO_EXCLUDE: list[str] = [
     "api_key",
     "aws_access_key_id",
     "aws_secret_access_key",
@@ -59,7 +54,7 @@ SENSITIVE_PARAMS_TO_EXCLUDE: List[str] = [
     "openrouter_api_key",
 ]
 
-PROVIDER_MAPPING: Dict[str, LLMProvider] = {
+PROVIDER_MAPPING: dict[str, LLMProvider] = {
     "openai": LLMProvider.OPENAI,
     "vertex_ai": LLMProvider.GOOGLE_VERTEXAI,
     "vertex_ai-language-models": LLMProvider.GOOGLE_VERTEXAI,
@@ -72,7 +67,7 @@ PROVIDER_MAPPING: Dict[str, LLMProvider] = {
 }
 
 
-def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
+def _extract_provider_from_model(model_name: str) -> LLMProvider | None:
     try:
         provider_info = litellm.get_llm_provider(model_name)
         provider_name = provider_info[1] if len(provider_info) > 1 else None
@@ -84,11 +79,8 @@ def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
 
 
 def _convert_response_to_dict(
-    output: Union[
-        litellm.types.utils.ModelResponse,
-        Dict[str, Any],
-    ],
-) -> Dict[str, Any]:
+    output: (litellm.types.utils.ModelResponse | dict[str, Any]),
+) -> dict[str, Any]:
     if hasattr(output, "model_dump"):
         return output.model_dump(mode="json")
     elif isinstance(output, dict):
@@ -98,8 +90,8 @@ def _convert_response_to_dict(
 
 
 def _extract_usage_from_response(
-    response_dict: Dict[str, Any],
-) -> Optional[llm_usage.OpikUsage]:
+    response_dict: dict[str, Any],
+) -> llm_usage.OpikUsage | None:
     usage_data = response_dict.get("usage")
     if usage_data is None:
         return None
@@ -120,11 +112,8 @@ def _extract_usage_from_response(
 
 
 def _calculate_completion_cost(
-    output: Union[
-        litellm.types.utils.ModelResponse,
-        Dict[str, Any],
-    ],
-) -> Optional[float]:
+    output: (litellm.types.utils.ModelResponse | dict[str, Any]),
+) -> float | None:
     try:
         return litellm.completion_cost(completion_response=output)
     except Exception as exception:
@@ -142,8 +131,8 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         name = track_options.name if track_options.name is not None else func.__name__
         metadata = track_options.metadata if track_options.metadata is not None else {}
@@ -214,16 +203,17 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[
+        generations_aggregator: None
+        | (
             Callable[
-                [List[litellm.types.utils.ModelResponse]],
-                Optional[litellm.types.utils.ModelResponse],
+                [list[litellm.types.utils.ModelResponse]],
+                litellm.types.utils.ModelResponse | None,
             ]
-        ],
-    ) -> Optional[litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper]:
-        assert (
-            generations_aggregator is not None
-        ), "LiteLLM decorator will always get aggregator function as input"
+        ),
+    ) -> litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper | None:
+        assert generations_aggregator is not None, (
+            "LiteLLM decorator will always get aggregator function as input"
+        )
 
         is_litellm_stream = isinstance(
             output, litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper

@@ -1,13 +1,14 @@
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Union
+from collections.abc import Callable
 
 from . import test_result
 from .metrics import score_result
 
-LLMTask = Callable[[Dict[str, Any]], Dict[str, Any]]
+LLMTask = Callable[[dict[str, Any]], dict[str, Any]]
 
-ScoringKeyMappingType = Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
+ScoringKeyMappingType = dict[str, Union[str, Callable[[dict[str, Any]], Any]]]
 
 ExperimentScoreFunction = Callable[
-    [List[test_result.TestResult]],
-    Union[score_result.ScoreResult, List[score_result.ScoreResult]],
+    [list[test_result.TestResult]],
+    Union[score_result.ScoreResult, list[score_result.ScoreResult]],
 ]

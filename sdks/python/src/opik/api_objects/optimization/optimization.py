@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Literal
+from typing import Literal
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
@@ -22,10 +22,9 @@ class Optimization:
 
     def update(
         self,
-        name: Optional[str] = None,
-        status: Optional[
-            Literal["running", "completed", "cancelled", "initialized", "error"]
-        ] = None,
+        name: str | None = None,
+        status: None
+        | (Literal["running", "completed", "cancelled", "initialized", "error"]) = None,
     ) -> None:
         LOGGER.debug(
             f"Updating optimization {self.id} with name {name} and status {status}"

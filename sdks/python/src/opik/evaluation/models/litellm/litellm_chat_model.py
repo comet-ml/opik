@@ -2,7 +2,7 @@ import importlib.metadata
 import logging
 import warnings
 from functools import cached_property
-from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING, Type
+from typing import Any, TYPE_CHECKING
 import pydantic
 import tenacity
 
@@ -34,7 +34,7 @@ def _log_warning(message: str, *args: Any) -> None:
         root_logger.log(logging.WARNING, message, *args)
 
 
-def _extract_message_content(choice: Dict[str, Any]) -> Optional[str]:
+def _extract_message_content(choice: dict[str, Any]) -> str | None:
     message = choice.get("message")
     if isinstance(message, dict):
         content = message.get("content")
@@ -45,7 +45,7 @@ def _extract_message_content(choice: Dict[str, Any]) -> Optional[str]:
     return content
 
 
-def _first_choice(response: Any) -> Dict[str, Any]:
+def _first_choice(response: Any) -> dict[str, Any]:
     choices = getattr(response, "choices", None)
     if not isinstance(choices, list) or not choices:
         raise exceptions.BaseLLMError(
@@ -58,7 +58,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
     def __init__(
         self,
         model_name: str = "gpt-5-nano",
-        must_support_arguments: Optional[List[str]] = None,
+        must_support_arguments: list[str] | None = None,
         track: bool = True,
         **completion_kwargs: Any,
     ) -> None:
@@ -85,9 +85,9 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         self._check_model_name()
         self._check_must_support_arguments(must_support_arguments)
 
-        self._unsupported_warned: Set[str] = set()
+        self._unsupported_warned: set[str] = set()
 
-        self._completion_kwargs: Dict[str, Any] = (
+        self._completion_kwargs: dict[str, Any] = (
             self._remove_unnecessary_not_supported_params(completion_kwargs)
         )
 
@@ -117,7 +117,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             self._litellm_acompletion = litellm.acompletion
 
     @cached_property
-    def supported_params(self) -> Set[str]:
+    def supported_params(self) -> set[str]:
         import litellm
 
         supported_params = set(
@@ -127,7 +127,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
         return supported_params
 
-    def _ensure_supported_params(self, params: Set[str]) -> None:
+    def _ensure_supported_params(self, params: set[str]) -> None:
         """
         LiteLLM may have broken support for some parameters. If we detect it, we
         can add custom filtering to ensure that model call will not fail.
@@ -156,7 +156,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         except litellm.exceptions.BadRequestError:
             raise ValueError(f"Unsupported model: '{self.model_name}'!")
 
-    def _check_must_support_arguments(self, args: Optional[List[str]]) -> None:
+    def _check_must_support_arguments(self, args: list[str] | None) -> None:
         if args is None:
             return
 
@@ -165,8 +165,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
                 raise ValueError(f"Unsupported parameter: '{key}'!")
 
     def _remove_unnecessary_not_supported_params(
-        self, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, params: dict[str, Any]
+    ) -> dict[str, Any]:
         filtered_params = {**params}
 
         # Fix for impacted providers like Groq and OpenAI
@@ -229,7 +229,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
     def generate_string(
         self,
         input: str,
-        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        response_format: type[pydantic.BaseModel] | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -267,7 +267,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
 
     def generate_provider_response(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         **kwargs: Any,
     ) -> "ModelResponse":
         """
@@ -313,7 +313,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
     async def agenerate_string(
         self,
         input: str,
-        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        response_format: type[pydantic.BaseModel] | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -348,7 +348,7 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
             return base_model.check_model_output_string(content)
 
     async def agenerate_provider_response(
-        self, messages: List[Dict[str, Any]], **kwargs: Any
+        self, messages: list[dict[str, Any]], **kwargs: Any
     ) -> "ModelResponse":
         """
         Do not use this method directly. It is intended to be used within `base_model.aget_provider_response()` method.

@@ -3,14 +3,14 @@ Decorator for HttpxBinaryResponseContent.write_to_file method.
 """
 
 import functools
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import opik
 from opik.api_objects import attachment
 
 
 def create_write_to_file_decorator(
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> Callable[[Callable[[str], None]], Callable[[str], None]]:
     """
     Create a decorator that tracks write_to_file calls.

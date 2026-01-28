@@ -3,7 +3,7 @@ import logging
 import os
 import shutil
 import tempfile
-from typing import Literal, Optional
+from typing import Literal
 
 from ...file_upload import mime_type
 from ...message_processing import messages
@@ -52,7 +52,7 @@ def attachment_to_message(
     )
 
 
-def _try_create_temp_copy(file_path: str) -> Optional[str]:
+def _try_create_temp_copy(file_path: str) -> str | None:
     """
     Create a temporary copy of a file.
 
@@ -89,7 +89,7 @@ def _try_create_temp_copy(file_path: str) -> Optional[str]:
         return None
 
 
-def guess_attachment_type(attachment_data: attachment.Attachment) -> Optional[str]:
+def guess_attachment_type(attachment_data: attachment.Attachment) -> str | None:
     if attachment_data.content_type is not None:
         return attachment_data.content_type
 

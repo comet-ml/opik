@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional, Union, Any, List, Dict
+from typing import Any
 
 import pydantic
 
@@ -69,11 +69,11 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "conversational_coherence_score",
         include_reason: bool = True,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         window_size: int = 10,
         temperature: float = 1e-8,
     ):
@@ -88,7 +88,7 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         self._init_model(model, temperature=temperature)
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
+        self, model: str | base_model.OpikBaseModel | None, temperature: float
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
@@ -180,9 +180,9 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
             )
 
     def _reason_from_verdicts(
-        self, score: float, verdicts: List[schema.EvaluateConversationCoherenceResponse]
+        self, score: float, verdicts: list[schema.EvaluateConversationCoherenceResponse]
     ) -> str:
-        irrelevancies: List[Dict[str, str]] = _extract_irrelevancies_from_verdicts(
+        irrelevancies: list[dict[str, str]] = _extract_irrelevancies_from_verdicts(
             verdicts
         )
         llm_query = templates.generate_reason(score=score, irrelevancies=irrelevancies)
@@ -192,9 +192,9 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         return _generate_reason_from_model_output(model_output=model_output)
 
     async def _a_reason_from_verdicts(
-        self, score: float, verdicts: List[schema.EvaluateConversationCoherenceResponse]
+        self, score: float, verdicts: list[schema.EvaluateConversationCoherenceResponse]
     ) -> str:
-        irrelevancies: List[Dict[str, str]] = _extract_irrelevancies_from_verdicts(
+        irrelevancies: list[dict[str, str]] = _extract_irrelevancies_from_verdicts(
             verdicts
         )
         llm_query = templates.generate_reason(score=score, irrelevancies=irrelevancies)
@@ -243,8 +243,8 @@ def _generate_reason_from_model_output(model_output: str) -> str:
 
 
 def _extract_irrelevancies_from_verdicts(
-    verdicts: List[schema.EvaluateConversationCoherenceResponse],
-) -> List[Dict[str, str]]:
+    verdicts: list[schema.EvaluateConversationCoherenceResponse],
+) -> list[dict[str, str]]:
     return [
         {"message_number": f"{index + 1}", "reason": verdict.reason}
         for index, verdict in enumerate(verdicts)
@@ -267,7 +267,7 @@ def _evaluate_conversation_from_model_output(
 
 
 def _score_from_verdicts(
-    verdicts: List[schema.EvaluateConversationCoherenceResponse],
+    verdicts: list[schema.EvaluateConversationCoherenceResponse],
 ) -> float:
     if len(verdicts) == 0:
         return 0.0

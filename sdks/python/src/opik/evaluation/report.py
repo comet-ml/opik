@@ -1,5 +1,4 @@
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
 
 from rich import align, console, panel, table, text
 
@@ -15,12 +14,12 @@ def _format_time(seconds: float) -> str:
 
 
 def _compute_average_scores(
-    test_results: List[test_result.TestResult],
-) -> Tuple[Dict[str, str], Dict[str, int]]:
+    test_results: list[test_result.TestResult],
+) -> tuple[dict[str, str], dict[str, int]]:
     # Calculate average scores
-    score_totals: Dict[str, float] = defaultdict(float)
-    score_counts: Dict[str, int] = defaultdict(int)
-    score_failed: Dict[str, int] = defaultdict(int)
+    score_totals: dict[str, float] = defaultdict(float)
+    score_counts: dict[str, int] = defaultdict(int)
+    score_failed: dict[str, int] = defaultdict(int)
 
     for result in test_results:
         for score in result.score_results:
@@ -44,8 +43,8 @@ def _compute_average_scores(
 def display_experiment_results(
     dataset_name: str,
     total_time: float,
-    test_results: List[test_result.TestResult],
-    experiment_scores: Optional[List[score_result.ScoreResult]] = None,
+    test_results: list[test_result.TestResult],
+    experiment_scores: list[score_result.ScoreResult] | None = None,
 ) -> None:
     average_scores, failed_scores = _compute_average_scores(test_results)
     nb_items = len(test_results)

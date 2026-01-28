@@ -1,5 +1,5 @@
 import types
-from typing import TypeVar, List, Any, Set
+from typing import TypeVar, Any
 from . import opik_tracer
 import logging
 
@@ -14,7 +14,7 @@ ADKAgent = TypeVar("ADKAgent", bound=agents.BaseAgent)
 class RecursiveCallbackInjector:
     def __init__(self, tracer: opik_tracer.OpikTracer) -> None:
         self._opik_tracer = tracer
-        self._seen_instance_ids: Set[int] = set()
+        self._seen_instance_ids: set[int] = set()
 
     def inject(
         self,
@@ -102,7 +102,7 @@ class RecursiveCallbackInjector:
 
         return False
 
-    def _contains_opik_tracer_callback(self, callbacks: List) -> bool:
+    def _contains_opik_tracer_callback(self, callbacks: list) -> bool:
         return any(self._is_opik_callback_function(callback) for callback in callbacks)
 
 

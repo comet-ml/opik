@@ -1,6 +1,6 @@
 """Common utilities for import functionality."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import opik
 from opik.types import FeedbackScoreDict
@@ -16,7 +16,7 @@ def debug_print(message: str, debug: bool) -> None:
         console.print(f"[blue]{message}[/blue]")
 
 
-def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
+def matches_name_pattern(name: str, pattern: str | None) -> bool:
     """Check if a name matches the given pattern using case-insensitive substring matching."""
     if pattern is None:
         return True
@@ -25,8 +25,8 @@ def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
 
 
 def translate_trace_id(
-    original_trace_id: str, trace_id_map: Dict[str, str]
-) -> Optional[str]:
+    original_trace_id: str, trace_id_map: dict[str, str]
+) -> str | None:
     """Translate an original trace id from export to the newly created id.
 
     Args:
@@ -40,8 +40,8 @@ def translate_trace_id(
 
 
 def find_dataset_item_by_content(
-    dataset: opik.Dataset, expected_content: Dict[str, Any]
-) -> Optional[str]:
+    dataset: opik.Dataset, expected_content: dict[str, Any]
+) -> str | None:
     """Find a dataset item by matching its content.
 
     Compares all fields in expected_content (excluding 'id') with dataset items.
@@ -61,7 +61,7 @@ def find_dataset_item_by_content(
     return None
 
 
-def create_dataset_item(dataset: opik.Dataset, item_data: Dict[str, Any]) -> str:
+def create_dataset_item(dataset: opik.Dataset, item_data: dict[str, Any]) -> str:
     """Create a dataset item and return its ID.
 
     Uses all fields from item_data (except 'id') to support flexible dataset schemas.
@@ -90,11 +90,11 @@ def create_dataset_item(dataset: opik.Dataset, item_data: Dict[str, Any]) -> str
     dataset_name = getattr(dataset, "name", None)
     dataset_info = f", Dataset: {dataset_name!r}" if dataset_name else ""
     raise Exception(
-        f"Failed to create dataset item. " f"Content: {new_item!r}{dataset_info}"
+        f"Failed to create dataset item. Content: {new_item!r}{dataset_info}"
     )
 
 
-def handle_trace_reference(item_data: Dict[str, Any]) -> Optional[str]:
+def handle_trace_reference(item_data: dict[str, Any]) -> str | None:
     """Handle trace references from deduplicated exports."""
     trace_reference = item_data.get("trace_reference")
     if trace_reference:
@@ -106,8 +106,8 @@ def handle_trace_reference(item_data: Dict[str, Any]) -> Optional[str]:
 
 
 def clean_usage_for_import(
-    usage: Optional[Dict[str, Any]],
-) -> Optional[Dict[str, Any]]:
+    usage: dict[str, Any] | None,
+) -> dict[str, Any] | None:
     """Return usage data as-is for import.
 
     When exporting, usage data is already in backend-compatible format with:
@@ -130,8 +130,8 @@ def clean_usage_for_import(
 
 
 def clean_feedback_scores(
-    feedback_scores: Optional[List[Dict[str, Any]]],
-) -> Optional[List[FeedbackScoreDict]]:
+    feedback_scores: list[dict[str, Any]] | None,
+) -> list[FeedbackScoreDict] | None:
     """Clean feedback scores by removing fields that are not allowed when creating them.
 
     Exported feedback scores include read-only fields like 'source', 'created_at', etc.
@@ -142,7 +142,7 @@ def clean_feedback_scores(
     if not feedback_scores:
         return None
 
-    cleaned_scores: List[FeedbackScoreDict] = []
+    cleaned_scores: list[FeedbackScoreDict] = []
     for score in feedback_scores:
         if not isinstance(score, dict):
             continue
@@ -172,7 +172,7 @@ def clean_feedback_scores(
     return cleaned_scores if cleaned_scores else None
 
 
-def print_import_summary(stats: Dict[str, int]) -> None:
+def print_import_summary(stats: dict[str, int]) -> None:
     """Print a nice summary table of import statistics."""
     table = Table(
         title="📥 Import Summary", show_header=True, header_style="bold magenta"

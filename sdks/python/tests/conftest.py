@@ -261,7 +261,7 @@ def ensure_vertexai_configured(ensure_google_project_and_location_configured):
 
     try:
         gcp_credentials = os.environ["GCP_CREDENTIALS_JSON"]
-        with open(GOOGLE_APPLICATION_CREDENTIALS_PATH, mode="wt") as output_file:
+        with open(GOOGLE_APPLICATION_CREDENTIALS_PATH, mode="w") as output_file:
             output_file.write(gcp_credentials)
 
         with testlib.patch_environ(

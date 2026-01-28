@@ -1,10 +1,8 @@
-from typing import List
-
 from google.genai import types as genai_types
 
 
 def aggregate_response_content_items(
-    items: List[genai_types.GenerateContentResponse],
+    items: list[genai_types.GenerateContentResponse],
 ) -> genai_types.GenerateContentResponse:
     full_text = "".join([item.text for item in items if item.text is not None])
     last_item_with_metadata = items[-1].model_copy(deep=True)

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from typing import Any, Callable, Dict, Iterable, List, Optional, Protocol, Sequence
+from typing import Any, Protocol
+from collections.abc import Callable, Iterable, Sequence
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -15,9 +16,8 @@ class _JSDistanceFn(Protocol):
         self,
         p: Sequence[float],
         q: Sequence[float],
-        base: Optional[
-            float
-        ] = ...,  # matches scipy signature allowing positional or keyword use
+        base: None
+        | (float) = ...,  # matches scipy signature allowing positional or keyword use
     ) -> float: ...
 
 
@@ -51,10 +51,10 @@ class _DistributionMetricBase(base_metric.BaseMetric):
 
     def __init__(
         self,
-        tokenizer: Optional[TokenizeFn],
+        tokenizer: TokenizeFn | None,
         name: str,
         track: bool,
-        project_name: Optional[str],
+        project_name: str | None,
         normalize: bool,
         smoothing: float = 0.0,
     ) -> None:
@@ -63,7 +63,7 @@ class _DistributionMetricBase(base_metric.BaseMetric):
         self._normalize = normalize
         self._smoothing = max(0.0, smoothing)
 
-    def _build_distribution(self, text: str) -> Dict[str, float]:
+    def _build_distribution(self, text: str) -> dict[str, float]:
         tokens = list(self._tokenizer(text))
         if len(tokens) == 0:
             raise MetricComputationError(
@@ -111,12 +111,12 @@ class JSDivergence(_DistributionMetricBase):
 
     def __init__(
         self,
-        tokenizer: Optional[TokenizeFn] = None,
+        tokenizer: TokenizeFn | None = None,
         base: float = 2.0,
         normalize: bool = True,
         name: str = "js_divergence_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         if base <= 1.0:
             raise ValueError("base must be greater than 1.0")
@@ -167,8 +167,8 @@ class JSDivergence(_DistributionMetricBase):
 
     def _js_divergence(
         self,
-        p_dist: Dict[str, float],
-        q_dist: Dict[str, float],
+        p_dist: dict[str, float],
+        q_dist: dict[str, float],
     ) -> float:
         vocabulary = sorted(set(p_dist) | set(q_dist))
         if not vocabulary:
@@ -183,7 +183,7 @@ class JSDivergence(_DistributionMetricBase):
         distance = float(self._js_distance_fn(p_probs, q_probs, base=self._base))
         return distance**2
 
-    def _ensure_probability_vector(self, values: Sequence[float]) -> List[float]:
+    def _ensure_probability_vector(self, values: Sequence[float]) -> list[float]:
         total = sum(values)
         if total <= 0.0:
             raise MetricComputationError(
@@ -214,12 +214,12 @@ class JSDistance(JSDivergence):
 
     def __init__(
         self,
-        tokenizer: Optional[TokenizeFn] = None,
+        tokenizer: TokenizeFn | None = None,
         base: float = 2.0,
         normalize: bool = True,
         name: str = "js_distance_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         super().__init__(
             tokenizer=tokenizer,
@@ -275,13 +275,13 @@ class KLDivergence(_DistributionMetricBase):
 
     def __init__(
         self,
-        tokenizer: Optional[TokenizeFn] = None,
+        tokenizer: TokenizeFn | None = None,
         direction: str = "pq",
         normalize: bool = True,
         smoothing: float = 1e-12,
         name: str = "kl_divergence_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         if direction not in {"pq", "qp", "avg"}:
             raise ValueError("direction must be one of {'pq', 'qp', 'avg'}")
@@ -322,7 +322,7 @@ class KLDivergence(_DistributionMetricBase):
             reason=f"KL divergence ({self._direction}): {divergence:.4f}",
         )
 
-    def _kl(self, p_dist: Dict[str, float], q_dist: Dict[str, float]) -> float:
+    def _kl(self, p_dist: dict[str, float], q_dist: dict[str, float]) -> float:
         divergence = 0.0
         for token, p_val in p_dist.items():
             p_val = self._smooth(p_val)

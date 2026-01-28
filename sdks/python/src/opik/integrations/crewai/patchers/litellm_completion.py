@@ -6,7 +6,6 @@ CrewAI v0.x uses LiteLLM internally for LLM calls.
 """
 
 import logging
-from typing import Optional
 
 import litellm
 
@@ -15,7 +14,7 @@ import opik.integrations.litellm
 LOGGER = logging.getLogger(__name__)
 
 
-def patch_litellm_completion(project_name: Optional[str] = None) -> None:
+def patch_litellm_completion(project_name: str | None = None) -> None:
     """
     Patches LiteLLM completion functions used by CrewAI.
 

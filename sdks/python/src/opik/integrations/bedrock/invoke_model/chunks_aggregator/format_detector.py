@@ -1,7 +1,8 @@
 """Format detection and aggregator registry."""
 
 import json
-from typing import Any, Callable, Dict, List
+from typing import Any
+from collections.abc import Callable
 
 from .base import ChunkAggregator
 from . import claude
@@ -11,25 +12,25 @@ from . import nova
 
 
 # Format detection functions
-FormatDetector = Callable[[Dict[str, Any]], bool]
+FormatDetector = Callable[[dict[str, Any]], bool]
 
 
-def _is_nova_format(chunk_data: Dict[str, Any]) -> bool:
+def _is_nova_format(chunk_data: dict[str, Any]) -> bool:
     """Check if chunk is Nova format (camelCase fields)."""
     return "contentBlockDelta" in chunk_data or "messageStart" in chunk_data
 
 
-def _is_claude_format(chunk_data: Dict[str, Any]) -> bool:
+def _is_claude_format(chunk_data: dict[str, Any]) -> bool:
     """Check if chunk is Claude format (snake_case fields with type)."""
     return "type" in chunk_data
 
 
-def _is_llama_format(chunk_data: Dict[str, Any]) -> bool:
+def _is_llama_format(chunk_data: dict[str, Any]) -> bool:
     """Check if chunk is Llama format (generation field)."""
     return "generation" in chunk_data
 
 
-def _is_mistral_format(chunk_data: Dict[str, Any]) -> bool:
+def _is_mistral_format(chunk_data: dict[str, Any]) -> bool:
     """Check if chunk is Mistral/Pixtral format (OpenAI-like with choices and object)."""
     return (
         "object" in chunk_data
@@ -41,7 +42,7 @@ def _is_mistral_format(chunk_data: Dict[str, Any]) -> bool:
 
 
 # Format detectors registry (ordered by specificity - most specific first)
-_DETECTORS: Dict[str, FormatDetector] = {
+_DETECTORS: dict[str, FormatDetector] = {
     "mistral": _is_mistral_format,  # Specific (has object field)
     "llama": _is_llama_format,  # Specific (has generation field)
     "nova": _is_nova_format,  # Specific (has contentBlockDelta)
@@ -49,7 +50,7 @@ _DETECTORS: Dict[str, FormatDetector] = {
 }
 
 # Aggregators registry
-_AGGREGATORS: Dict[str, ChunkAggregator] = {
+_AGGREGATORS: dict[str, ChunkAggregator] = {
     "claude": claude.ClaudeAggregator(),
     "llama": llama.LlamaAggregator(),
     "mistral": mistral.MistralAggregator(),
@@ -57,7 +58,7 @@ _AGGREGATORS: Dict[str, ChunkAggregator] = {
 }
 
 
-def detect_format(items: List[Dict[str, Any]]) -> str:
+def detect_format(items: list[dict[str, Any]]) -> str:
     """
     Detect streaming format from the first chunk.
 

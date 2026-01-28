@@ -1,7 +1,6 @@
 """Main CLI entry point for Opik."""
 
 from importlib import metadata
-from typing import Optional
 
 import click
 
@@ -30,7 +29,7 @@ CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
     help="Opik API key. If not provided, will use OPIK_API_KEY environment variable or configuration.",
 )
 @click.pass_context
-def cli(ctx: click.Context, api_key: Optional[str]) -> None:
+def cli(ctx: click.Context, api_key: str | None) -> None:
     """
     CLI tool for Opik.
     """

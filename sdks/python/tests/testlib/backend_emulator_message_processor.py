@@ -1,5 +1,5 @@
 import datetime
-from typing import List, Dict, Optional, Any, TYPE_CHECKING
+from typing import Optional, Any, TYPE_CHECKING
 
 from opik.message_processing.emulation import emulator_message_processor
 from opik.types import ErrorInfoDict, SpanType
@@ -35,18 +35,18 @@ class BackendEmulatorMessageProcessor(
         self,
         trace_id: str,
         start_time: datetime.datetime,
-        name: Optional[str],
+        name: str | None,
         project_name: str,
         input: Any,
         output: Any,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        end_time: Optional[datetime.datetime],
-        spans: Optional[List[models.SpanModel]],
-        feedback_scores: Optional[List[models.FeedbackScoreModel]],
-        error_info: Optional[ErrorInfoDict],
-        thread_id: Optional[str],
-        last_updated_at: Optional[datetime.datetime] = None,
+        tags: list[str] | None,
+        metadata: dict[str, Any] | None,
+        end_time: datetime.datetime | None,
+        spans: list[models.SpanModel] | None,
+        feedback_scores: list[models.FeedbackScoreModel] | None,
+        error_info: ErrorInfoDict | None,
+        thread_id: str | None,
+        last_updated_at: datetime.datetime | None = None,
     ) -> models.TraceModel:
         if spans is None:
             spans = []
@@ -74,22 +74,22 @@ class BackendEmulatorMessageProcessor(
         self,
         span_id: str,
         start_time: datetime.datetime,
-        name: Optional[str],
+        name: str | None,
         input: Any,
         output: Any,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
+        tags: list[str] | None,
+        metadata: dict[str, Any] | None,
         type: SpanType,
-        usage: Optional[Dict[str, Any]],
-        end_time: Optional[datetime.datetime],
+        usage: dict[str, Any] | None,
+        end_time: datetime.datetime | None,
         project_name: str,
-        spans: Optional[List[models.SpanModel]],
-        feedback_scores: Optional[List[models.FeedbackScoreModel]],
-        model: Optional[str],
-        provider: Optional[str],
-        error_info: Optional[ErrorInfoDict],
-        total_cost: Optional[float],
-        last_updated_at: Optional[datetime.datetime],
+        spans: list[models.SpanModel] | None,
+        feedback_scores: list[models.FeedbackScoreModel] | None,
+        model: str | None,
+        provider: str | None,
+        error_info: ErrorInfoDict | None,
+        total_cost: float | None,
+        last_updated_at: datetime.datetime | None,
     ) -> models.SpanModel:
         if spans is None:
             spans = []
@@ -122,8 +122,8 @@ class BackendEmulatorMessageProcessor(
         score_id: str,
         name: str,
         value: float,
-        category_name: Optional[str],
-        reason: Optional[str],
+        category_name: str | None,
+        reason: str | None,
     ) -> models.FeedbackScoreModel:
         return models.FeedbackScoreModel(
             id=score_id,
@@ -134,7 +134,7 @@ class BackendEmulatorMessageProcessor(
         )
 
     @property
-    def trace_trees(self) -> List[models.TraceModel]:
+    def trace_trees(self) -> list[models.TraceModel]:
         """
         Override to add attachments from the file upload manager.
 
@@ -150,7 +150,7 @@ class BackendEmulatorMessageProcessor(
 
         return traces
 
-    def _add_attachments_to_traces(self, traces: List[models.TraceModel]) -> None:
+    def _add_attachments_to_traces(self, traces: list[models.TraceModel]) -> None:
         """Add attachments from file upload manager to traces and their spans."""
         for trace in traces:
             # Add trace-level attachments
@@ -170,7 +170,7 @@ class BackendEmulatorMessageProcessor(
             # Add span-level attachments recursively
             self._add_attachments_to_spans(trace.spans)
 
-    def _add_attachments_to_spans(self, spans: List[models.SpanModel]) -> None:
+    def _add_attachments_to_spans(self, spans: list[models.SpanModel]) -> None:
         """Recursively add attachments to spans."""
         for span in spans:
             span_attachments = self._file_upload_manager.attachments_by_span.get(

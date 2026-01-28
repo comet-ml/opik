@@ -1,6 +1,7 @@
 import copy
 import logging
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any
+from collections.abc import Mapping
 
 from opik import id_helpers
 import opik.jsonable_encoder as jsonable_encoder
@@ -10,14 +11,14 @@ from ..prompt import base_prompt
 
 LOGGER = logging.getLogger(__name__)
 
-PromptVersion = Dict[str, str]
+PromptVersion = dict[str, str]
 
 
 def build_metadata_and_prompt_versions(
-    experiment_config: Optional[Dict[str, Any]],
-    prompts: Optional[List[base_prompt.BasePrompt]],
-) -> Tuple[Optional[Dict[str, Any]], Optional[List[PromptVersion]]]:
-    prompt_versions: Optional[List[PromptVersion]] = None
+    experiment_config: dict[str, Any] | None,
+    prompts: list[base_prompt.BasePrompt] | None,
+) -> tuple[dict[str, Any] | None, list[PromptVersion] | None]:
+    prompt_versions: list[PromptVersion] | None = None
 
     if experiment_config is None:
         experiment_config = {}
@@ -65,9 +66,9 @@ def build_metadata_and_prompt_versions(
 
 
 def handle_prompt_args(
-    prompt: Optional[base_prompt.BasePrompt] = None,
-    prompts: Optional[List[base_prompt.BasePrompt]] = None,
-) -> Optional[List[base_prompt.BasePrompt]]:
+    prompt: base_prompt.BasePrompt | None = None,
+    prompts: list[base_prompt.BasePrompt] | None = None,
+) -> list[base_prompt.BasePrompt] | None:
     if prompts is not None and len(prompts) > 0 and prompt is not None:
         LOGGER.warning(
             "Arguments `prompt` and `prompts` are mutually exclusive, `prompts` will be used`."
@@ -80,7 +81,7 @@ def handle_prompt_args(
     return prompts
 
 
-def generate_unique_experiment_name(experiment_name_prefix: Optional[str]) -> str:
+def generate_unique_experiment_name(experiment_name_prefix: str | None) -> str:
     if experiment_name_prefix is None:
         return id_helpers.generate_random_alphanumeric_string(12)
 

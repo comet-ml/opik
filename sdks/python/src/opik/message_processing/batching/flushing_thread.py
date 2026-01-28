@@ -1,6 +1,5 @@
 import threading
 import time
-from typing import List
 
 from . import base_batcher
 
@@ -8,7 +7,7 @@ from . import base_batcher
 class FlushingThread(threading.Thread):
     def __init__(
         self,
-        batchers: List[base_batcher.BaseBatcher],
+        batchers: list[base_batcher.BaseBatcher],
         probe_interval_seconds: float = 0.1,
     ) -> None:
         threading.Thread.__init__(self, daemon=True)

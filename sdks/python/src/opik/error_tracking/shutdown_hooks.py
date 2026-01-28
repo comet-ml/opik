@@ -1,7 +1,7 @@
 import atexit
 import sys
 import sentry_sdk
-from typing import Optional, Type, Any
+from typing import Any
 from types import TracebackType
 
 import opik.exceptions
@@ -18,9 +18,9 @@ def register_exception_hook() -> None:
     original_exception_hook = sys.excepthook
 
     def exception_hook(
-        exception_type: Type[BaseException],
+        exception_type: type[BaseException],
         exception_value: BaseException,
-        traceback: Optional[TracebackType],
+        traceback: TracebackType | None,
     ) -> Any:
         client = sentry_sdk.Hub.current.client
         if client is None:

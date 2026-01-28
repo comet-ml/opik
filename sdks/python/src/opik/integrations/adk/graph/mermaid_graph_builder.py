@@ -1,10 +1,8 @@
-from typing import List, Dict
-
 from . import nodes, subgraph_edges_builders
 import google.adk.agents
 import functools
 
-CLASS_STYLES: Dict[nodes.GraphNodeType, str] = {
+CLASS_STYLES: dict[nodes.GraphNodeType, str] = {
     nodes.GraphNodeType.SEQUENTIAL_AGENT: "fill:#d9f2d9,stroke:#339933",
     nodes.GraphNodeType.LOOP_AGENT: "fill:#e6ccff,stroke:#6600cc",
     nodes.GraphNodeType.PARALLEL_AGENT: "fill:#ffcccc,stroke:#cc0000",
@@ -21,9 +19,9 @@ NODE_TYPES_TO_BUILD_SUBGRAPHS = [
 
 class MermaidGraphBuilder:
     def __init__(self, root_name: str):
-        self.subgraphs_definitions: List[str] = []
-        self.edges_definitions: List[str] = []
-        self.style_definitions: List[str] = []
+        self.subgraphs_definitions: list[str] = []
+        self.edges_definitions: list[str] = []
+        self.style_definitions: list[str] = []
         self.root_name = root_name
 
     def build_node_graph(self, node: nodes.AgentNode) -> None:

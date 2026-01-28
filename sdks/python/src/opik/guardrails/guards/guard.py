@@ -1,5 +1,5 @@
 import abc
-from typing import List, Dict, Any
+from typing import Any
 
 
 class Guard(abc.ABC):
@@ -7,7 +7,7 @@ class Guard(abc.ABC):
     remote = False
 
     @abc.abstractmethod
-    def get_validation_configs(self) -> List[Dict[str, Any]]:
+    def get_validation_configs(self) -> list[dict[str, Any]]:
         """
         Get the validation configuration for this guard.
 

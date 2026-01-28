@@ -6,7 +6,7 @@ Each provider has its own patching function that handles missing dependencies gr
 """
 
 import logging
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import crewai
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-def patch_llm_client(crew: crewai.Crew, project_name: Optional[str]) -> None:
+def patch_llm_client(crew: crewai.Crew, project_name: str | None) -> None:
     """
     Patches LLM clients used by CrewAI agents with Opik tracking.
 
@@ -33,7 +33,7 @@ def patch_llm_client(crew: crewai.Crew, project_name: Optional[str]) -> None:
         _patch_single_llm_client(agent.llm, project_name)
 
 
-def _patch_single_llm_client(llm: Any, project_name: Optional[str]) -> None:
+def _patch_single_llm_client(llm: Any, project_name: str | None) -> None:
     """
     Patches an LLM client based on its provider type.
 
@@ -128,7 +128,7 @@ def _is_bedrock_llm(llm: Any) -> bool:
 
 
 def _patch_openai_client(
-    llm: "openai_completion.OpenAICompletion", project_name: Optional[str]
+    llm: "openai_completion.OpenAICompletion", project_name: str | None
 ) -> None:
     """
     Patches OpenAI client for the given LLM.
@@ -148,7 +148,7 @@ def _patch_openai_client(
 
 
 def _patch_anthropic_client(
-    llm: "anthropic_completion.AnthropicCompletion", project_name: Optional[str]
+    llm: "anthropic_completion.AnthropicCompletion", project_name: str | None
 ) -> None:
     """
     Patches Anthropic client for the given LLM.
@@ -168,7 +168,7 @@ def _patch_anthropic_client(
 
 
 def _patch_gemini_client(
-    llm: "gemini_completion.GeminiCompletion", project_name: Optional[str]
+    llm: "gemini_completion.GeminiCompletion", project_name: str | None
 ) -> None:
     """
     Patches Gemini client for the given LLM.
@@ -188,7 +188,7 @@ def _patch_gemini_client(
 
 
 def _patch_bedrock_client(
-    llm: "bedrock_completion.BedrockCompletion", project_name: Optional[str]
+    llm: "bedrock_completion.BedrockCompletion", project_name: str | None
 ) -> None:
     """
     Patches Bedrock client for the given LLM.

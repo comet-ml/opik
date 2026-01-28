@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import litellm.types.utils
 
@@ -8,7 +8,7 @@ LOGGER = logging.getLogger(__name__)
 
 def _initialize_aggregated_response(
     first_chunk: litellm.types.utils.ModelResponse,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "choices": [{"index": 0, "message": {"role": "", "content": ""}}],
         "created": getattr(first_chunk, "created", 0),
@@ -26,13 +26,13 @@ def _extract_role_from_delta(delta: Any, current_role: str) -> str:
     return current_role
 
 
-def _extract_content_from_delta(delta: Any) -> Optional[str]:
+def _extract_content_from_delta(delta: Any) -> str | None:
     if hasattr(delta, "content") and delta.content:
         return delta.content
     return None
 
 
-def _extract_finish_reason_from_choice(choice: Any) -> Optional[str]:
+def _extract_finish_reason_from_choice(choice: Any) -> str | None:
     if hasattr(choice, "finish_reason") and choice.finish_reason:
         return choice.finish_reason
     return None
@@ -40,7 +40,7 @@ def _extract_finish_reason_from_choice(choice: Any) -> Optional[str]:
 
 def _extract_usage_from_chunk(
     chunk: litellm.types.utils.ModelResponse,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     if not hasattr(chunk, "usage") or chunk.usage is None:
         return None
 
@@ -68,14 +68,14 @@ def _extract_usage_from_chunk(
 
 
 def aggregate(
-    items: List[litellm.types.utils.ModelResponse],
-) -> Optional[litellm.types.utils.ModelResponse]:
+    items: list[litellm.types.utils.ModelResponse],
+) -> litellm.types.utils.ModelResponse | None:
     try:
         if not items:
             return None
 
         aggregated_response = _initialize_aggregated_response(items[0])
-        text_chunks: List[str] = []
+        text_chunks: list[str] = []
 
         for chunk in items:
             if not hasattr(chunk, "choices") or not chunk.choices:

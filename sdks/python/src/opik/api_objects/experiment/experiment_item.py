@@ -1,6 +1,6 @@
 import dataclasses
 
-from typing import Dict, Any, List, Optional
+from typing import Any
 from opik.types import FeedbackScoreDict
 from opik.rest_api.types import experiment_item_compare
 
@@ -16,18 +16,18 @@ class ExperimentItemContent:
     id: str
     dataset_item_id: str
     trace_id: str
-    dataset_item_data: Optional[Dict[str, Any]]
-    evaluation_task_output: Optional[Dict[str, Any]]
-    feedback_scores: List[FeedbackScoreDict]
+    dataset_item_data: dict[str, Any] | None
+    evaluation_task_output: dict[str, Any] | None
+    feedback_scores: list[FeedbackScoreDict]
 
     @classmethod
     def from_rest_experiment_item_compare(
         cls,
         value: experiment_item_compare.ExperimentItemCompare,
-        dataset_item_data: Optional[Dict[str, Any]] = None,
+        dataset_item_data: dict[str, Any] | None = None,
     ) -> "ExperimentItemContent":
         if value.feedback_scores is None:
-            feedback_scores: List[FeedbackScoreDict] = []
+            feedback_scores: list[FeedbackScoreDict] = []
         else:
             feedback_scores = [
                 {

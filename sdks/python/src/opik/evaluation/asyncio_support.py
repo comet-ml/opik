@@ -2,7 +2,7 @@ import httpcore
 import functools
 import contextlib
 
-from typing import Iterator, Callable
+from collections.abc import Iterator, Callable
 
 
 @contextlib.contextmanager

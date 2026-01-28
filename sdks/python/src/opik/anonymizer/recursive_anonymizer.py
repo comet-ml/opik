@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Optional
+from typing import Any
 
 from . import anonymizer
 
@@ -35,7 +35,7 @@ class RecursiveAnonymizer(anonymizer.Anonymizer):
         self,
         data: anonymizer.AnonymizerDataType,
         depth: int = 0,
-        field_name: Optional[str] = None,
+        field_name: str | None = None,
         **kwargs: Any,
     ) -> anonymizer.AnonymizerDataType:
         if depth >= self.max_depth:

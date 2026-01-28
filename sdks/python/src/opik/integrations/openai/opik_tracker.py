@@ -1,4 +1,4 @@
-from typing import Optional, TypeVar
+from typing import TypeVar
 
 import openai
 import opik
@@ -21,7 +21,7 @@ def _get_provider(openai_client: OpenAIClient) -> str:
 
 def track_openai(
     openai_client: OpenAIClient,
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> OpenAIClient:
     """Adds Opik tracking wrappers to an OpenAI client.
 
@@ -66,7 +66,7 @@ def track_openai(
 
 def _patch_openai_chat_completions(
     openai_client: OpenAIClient,
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> None:
     chat_completions_decorator_factory = (
         openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator()
@@ -122,7 +122,7 @@ def _patch_openai_chat_completions(
 
 def _patch_openai_responses(
     openai_client: OpenAIClient,
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> None:
     from . import (
         response_events_aggregator,
@@ -159,7 +159,7 @@ def _patch_openai_responses(
 
 def _patch_openai_videos(
     openai_client: OpenAIClient,
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> None:
     from . import videos
 

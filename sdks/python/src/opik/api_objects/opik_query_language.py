@@ -5,7 +5,7 @@ simple filters without "and" or "or" operators.
 
 import json
 
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any
 
 COLUMNS = {
     "id": "string",
@@ -153,7 +153,7 @@ class OpikQueryLanguage:
     The parse method works by iterating over the string character by character and extracting / validating the tokens.
     """
 
-    def __init__(self, query_string: Optional[str]):
+    def __init__(self, query_string: str | None):
         self.query_string = query_string or ""
 
         self._cursor = 0
@@ -162,7 +162,7 @@ class OpikQueryLanguage:
         if self._filter_expressions is not None:
             self.parsed_filters = json.dumps(self._filter_expressions)
 
-    def get_filter_expressions(self) -> Optional[List[Dict[str, Any]]]:
+    def get_filter_expressions(self) -> list[dict[str, Any]] | None:
         return self._filter_expressions
 
     def _is_valid_field_char(self, char: str) -> bool:
@@ -178,7 +178,7 @@ class OpikQueryLanguage:
         ):
             self._cursor += 1
 
-    def _check_escaped_key(self) -> Tuple[bool, str]:
+    def _check_escaped_key(self) -> tuple[bool, str]:
         if self.query_string[self._cursor] in ('"', "'"):
             is_quoted_key = True
             quote_type = self.query_string[self._cursor]
@@ -219,7 +219,7 @@ class OpikQueryLanguage:
         connector = self.query_string[start : self._cursor]
         return connector
 
-    def _parse_field(self) -> Dict[str, Any]:
+    def _parse_field(self) -> dict[str, Any]:
         # Skip whitespace
         self._skip_whitespace()
 
@@ -285,7 +285,7 @@ class OpikQueryLanguage:
             # defaults to string
             return {"field": field, "key": "", "type": "string"}
 
-    def _parse_operator(self, parsed_field: str) -> Dict[str, Any]:
+    def _parse_operator(self, parsed_field: str) -> dict[str, Any]:
         # Skip whitespace
         self._skip_whitespace()
 
@@ -335,7 +335,7 @@ class OpikQueryLanguage:
             self._cursor += 1
         return self.query_string[start : self._cursor]
 
-    def _parse_value(self) -> Dict[str, Any]:
+    def _parse_value(self) -> dict[str, Any]:
         self._skip_whitespace()
 
         start = self._cursor
@@ -373,7 +373,7 @@ class OpikQueryLanguage:
                 f'Invalid value {self.query_string[start : self._cursor]}, expected an string in double quotes("value") or a number'
             )
 
-    def _parse_expressions(self) -> Optional[List[Dict[str, Any]]]:
+    def _parse_expressions(self) -> list[dict[str, Any]] | None:
         if len(self.query_string) == 0:
             return None
 

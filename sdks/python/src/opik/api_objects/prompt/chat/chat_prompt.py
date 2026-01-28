@@ -1,6 +1,6 @@
 import copy
 import json
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any
 
 from typing_extensions import override
 
@@ -18,15 +18,15 @@ class ChatPrompt(base_prompt.BasePrompt):
     Similar to Prompt but uses a list of chat messages instead of a string template.
     """
 
-    _parameter_validators: List[Tuple[str, Type[validator.RaisableValidator]]] = [
+    _parameter_validators: list[tuple[str, type[validator.RaisableValidator]]] = [
         ("messages", chat_prompt_messages.ChatPromptMessagesValidator),
     ]
 
     def __init__(
         self,
         name: str,
-        messages: List[Dict[str, prompt_types.MessageContent]],
-        metadata: Optional[Dict[str, Any]] = None,
+        messages: list[dict[str, prompt_types.MessageContent]],
+        metadata: dict[str, Any] | None = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         validate_placeholders: bool = False,
     ) -> None:
@@ -58,7 +58,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         self._metadata = metadata
         self._type = type
         self._messages = messages
-        self._commit: Optional[str] = None
+        self._commit: str | None = None
         self.__internal_api__prompt_id__: str
         self.__internal_api__version_id__: str
 
@@ -99,19 +99,19 @@ class ChatPrompt(base_prompt.BasePrompt):
         return self._name
 
     @property
-    def template(self) -> List[Dict[str, prompt_types.MessageContent]]:
+    def template(self) -> list[dict[str, prompt_types.MessageContent]]:
         """The chat messages template."""
         return copy.deepcopy(self._messages)
 
     @property
     @override
-    def commit(self) -> Optional[str]:
+    def commit(self) -> str | None:
         """The commit hash of the prompt."""
         return self._commit
 
     @property
     @override
-    def metadata(self) -> Optional[Dict[str, Any]]:
+    def metadata(self) -> dict[str, Any] | None:
         """The metadata dictionary associated with the prompt"""
         return copy.deepcopy(self._metadata)
 
@@ -124,9 +124,9 @@ class ChatPrompt(base_prompt.BasePrompt):
     @override
     def format(
         self,
-        variables: Dict[str, Any],
-        supported_modalities: Optional[prompt_types.SupportedModalities] = None,
-    ) -> List[Dict[str, prompt_types.MessageContent]]:
+        variables: dict[str, Any],
+        supported_modalities: prompt_types.SupportedModalities | None = None,
+    ) -> list[dict[str, prompt_types.MessageContent]]:
         """
         Renders the chat template with provided variables.
 
@@ -157,14 +157,14 @@ class ChatPrompt(base_prompt.BasePrompt):
         )
 
     @override
-    def __internal_api__to_info_dict__(self) -> Dict[str, Any]:
+    def __internal_api__to_info_dict__(self) -> dict[str, Any]:
         """
         Convert the prompt to an info dictionary for serialization.
 
         Returns:
             Dictionary containing prompt metadata and version information.
         """
-        info_dict: Dict[str, Any] = {
+        info_dict: dict[str, Any] = {
             "name": self.name,
             "version": {
                 "template": self.template,

@@ -1,7 +1,7 @@
 """Response types for Bedrock invoke_model operations."""
 
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 
 
 @dataclass
@@ -14,19 +14,19 @@ class BedrockAggregatedResponse:
     """
 
     # Provider-native response structure
-    native_response: Dict[str, Any]
+    native_response: dict[str, Any]
 
     # Standardized Bedrock usage format
-    usage: Dict[str, Any]  # {inputTokens, outputTokens, totalTokens}
+    usage: dict[str, Any]  # {inputTokens, outputTokens, totalTokens}
 
     # Response metadata from Bedrock
-    response_metadata: Dict[str, Any]
+    response_metadata: dict[str, Any]
 
-    def to_output_format(self) -> Dict[str, Any]:
+    def to_output_format(self) -> dict[str, Any]:
         """Convert to output format for span logging."""
         return {"body": self.native_response}
 
-    def to_metadata_format(self) -> Dict[str, Any]:
+    def to_metadata_format(self) -> dict[str, Any]:
         """Convert to metadata format for span logging."""
         return {
             "created_from": "bedrock",

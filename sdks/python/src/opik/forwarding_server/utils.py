@@ -6,7 +6,6 @@ from rich.text import Text
 from rich import box
 from rich.align import Align
 import httpx
-from typing import List
 
 console = Console()
 
@@ -21,7 +20,7 @@ def check_llm_server_running(url: str) -> bool:
         return False
 
 
-def get_model_list(local_url: str) -> List[str]:
+def get_model_list(local_url: str) -> list[str]:
     """Get a list of available models."""
     try:
         with httpx.Client() as client:

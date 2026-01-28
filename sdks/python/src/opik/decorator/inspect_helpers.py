@@ -1,12 +1,13 @@
 import inspect
 import functools
 
-from typing import Callable, Tuple, Any, Dict
+from typing import Any
+from collections.abc import Callable
 
 
 def extract_inputs(
-    func: Callable, args: Tuple, kwargs: Dict[str, Any]
-) -> Dict[str, Any]:
+    func: Callable, args: tuple, kwargs: dict[str, Any]
+) -> dict[str, Any]:
     sig = inspect.signature(func)
 
     try:

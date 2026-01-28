@@ -1,5 +1,4 @@
 from typing import (
-    Optional,
     NamedTuple,
 )
 
@@ -27,15 +26,15 @@ class SpanCreationResult(NamedTuple):
             after it was created (saved, logged, etc.).
     """
 
-    trace_data: Optional[trace.TraceData]
+    trace_data: trace.TraceData | None
     span_data: span.SpanData
     should_process_span_data: bool
 
 
 def create_span_respecting_context(
     start_span_arguments: arguments_helpers.StartSpanParameters,
-    distributed_trace_headers: Optional[DistributedTraceHeadersDict],
-    opik_context_storage: Optional[context_storage.OpikContextStorage] = None,
+    distributed_trace_headers: DistributedTraceHeadersDict | None,
+    opik_context_storage: context_storage.OpikContextStorage | None = None,
     should_create_duplicate_root_span: bool = True,
 ) -> SpanCreationResult:
     """

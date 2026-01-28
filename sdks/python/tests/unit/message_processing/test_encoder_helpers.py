@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Any
+from typing import Any
 
 from opik.anonymizer import anonymizer, recursive_anonymizer
 
@@ -143,7 +143,7 @@ class TestEncodeAndAnonymize:
             name: str
             email: str
             age: int
-            address: Dict[str, str] = dataclasses.field(default_factory=dict)
+            address: dict[str, str] = dataclasses.field(default_factory=dict)
 
         person = Person(name="John Doe", email="john@example.com", age=30)
         person.address["street"] = "123 Main Street"
@@ -341,7 +341,7 @@ class TestEncodeAndAnonymize:
 
         class SSNAnonymizer(recursive_anonymizer.RecursiveAnonymizer):
             def anonymize_text(
-                self, data: str, field_name: Optional[str] = None, **kwargs: Any
+                self, data: str, field_name: str | None = None, **kwargs: Any
             ) -> str:
                 object_type = kwargs.get("object_type")
                 if field_name == "input.ssn" and object_type == "span":

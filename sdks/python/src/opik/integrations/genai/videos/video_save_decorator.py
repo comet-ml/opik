@@ -5,7 +5,8 @@ Tracks video saves with attachments.
 """
 
 import functools
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import Callable
 
 import opik
 from opik.api_objects import attachment
@@ -16,9 +17,9 @@ if TYPE_CHECKING:
 
 def patch_videos_save(
     operation: "GenerateVideosOperation",
-    project_name: Optional[str],
-    tags: Optional[List[str]],
-    metadata: Optional[Dict[str, Any]],
+    project_name: str | None,
+    tags: list[str] | None,
+    metadata: dict[str, Any] | None,
     upload_video: bool,
 ) -> None:
     """Patch save method on all videos in the operation response."""
@@ -51,9 +52,9 @@ def patch_videos_save(
 
 
 def _create_video_save_decorator(
-    project_name: Optional[str],
-    tags: Optional[List[str]],
-    metadata: Optional[Dict[str, Any]],
+    project_name: str | None,
+    tags: list[str] | None,
+    metadata: dict[str, Any] | None,
     upload_video: bool,
 ) -> Callable[[Callable[[str], None]], Callable[[str], None]]:
     """Create a decorator that tracks Video.save calls."""

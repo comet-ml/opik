@@ -3,7 +3,6 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
@@ -30,8 +29,8 @@ def export_traces(
     project_name: str,
     project_dir: Path,
     max_results: int,
-    filter_string: Optional[str],
-    project_name_filter: Optional[str] = None,
+    filter_string: str | None,
+    project_name_filter: str | None = None,
     format: str = "json",
     debug: bool = False,
     force: bool = False,
@@ -275,12 +274,12 @@ def export_project_by_name(
     name: str,
     workspace: str,
     output_path: str,
-    filter_string: Optional[str],
-    max_results: Optional[int],
+    filter_string: str | None,
+    max_results: int | None,
     force: bool,
     debug: bool,
     format: str,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> None:
     """Export a project by exact name."""
     try:
@@ -446,8 +445,8 @@ def export_single_project(
     client: opik.Opik,
     project: ProjectPublic,
     output_dir: Path,
-    filter_string: Optional[str],
-    max_results: Optional[int],
+    filter_string: str | None,
+    max_results: int | None,
     force: bool,
     debug: bool,
     format: str,
@@ -525,12 +524,12 @@ def export_project_by_name_or_id(
     name_or_id: str,
     workspace: str,
     output_path: str,
-    filter_string: Optional[str],
-    max_results: Optional[int],
+    filter_string: str | None,
+    max_results: int | None,
     force: bool,
     debug: bool,
     format: str,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> None:
     """Export a project by name or ID.
 
@@ -666,8 +665,8 @@ def export_project_by_name_or_id(
 def export_project_command(
     ctx: click.Context,
     name_or_id: str,
-    filter: Optional[str],
-    max_results: Optional[int],
+    filter: str | None,
+    max_results: int | None,
     path: str,
     force: bool,
     debug: bool,

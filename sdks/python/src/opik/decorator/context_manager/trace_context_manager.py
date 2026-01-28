@@ -1,6 +1,7 @@
 import logging
 from contextlib import contextmanager
-from typing import Any, Generator, Optional, Dict, List
+from typing import Any
+from collections.abc import Generator
 
 from opik import datetime_helpers
 from opik.api_objects import trace, opik_client, helpers
@@ -12,12 +13,12 @@ LOGGER = logging.getLogger(__name__)
 @contextmanager
 def start_as_current_trace(
     name: str,
-    input: Optional[Dict[str, Any]] = None,
-    output: Optional[Dict[str, Any]] = None,
-    tags: Optional[List[str]] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    project_name: Optional[str] = None,
-    thread_id: Optional[str] = None,
+    input: dict[str, Any] | None = None,
+    output: dict[str, Any] | None = None,
+    tags: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+    project_name: str | None = None,
+    thread_id: str | None = None,
     flush: bool = False,
 ) -> Generator[trace.TraceData, Any, None]:
     """

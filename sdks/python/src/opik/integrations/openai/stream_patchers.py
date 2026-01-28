@@ -1,5 +1,6 @@
 import logging
-from typing import Iterator, AsyncIterator, List, Optional, Callable, TypeVar
+from typing import TypeVar
+from collections.abc import Iterator, AsyncIterator, Callable
 
 from opik.types import ErrorInfoDict
 from opik.api_objects import trace, span
@@ -30,8 +31,8 @@ AggregatedResult = TypeVar("AggregatedResult")
 def patch_sync_stream(
     stream: openai.Stream,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
-    generations_aggregator: Callable[[List[StreamItem]], Optional[AggregatedResult]],
+    trace_to_end: trace.TraceData | None,
+    generations_aggregator: Callable[[list[StreamItem]], AggregatedResult | None],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> openai.Stream:
     """
@@ -50,8 +51,8 @@ def patch_sync_stream(
             self: openai.Stream,
         ) -> Iterator[StreamItem]:
             try:
-                accumulated_items: List[StreamItem] = []
-                error_info: Optional[ErrorInfoDict] = None
+                accumulated_items: list[StreamItem] = []
+                error_info: ErrorInfoDict | None = None
                 for item in dunder_iter_func(self):
                     accumulated_items.append(item)
                     yield item
@@ -95,8 +96,8 @@ def patch_sync_stream(
 def patch_async_stream(
     stream: openai.AsyncStream,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
-    generations_aggregator: Callable[[List[StreamItem]], Optional[AggregatedResult]],
+    trace_to_end: trace.TraceData | None,
+    generations_aggregator: Callable[[list[StreamItem]], AggregatedResult | None],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> openai.Stream:
     """
@@ -114,8 +115,8 @@ def patch_async_stream(
             self: openai.AsyncStream,
         ) -> AsyncIterator[StreamItem]:
             try:
-                accumulated_items: List[StreamItem] = []
-                error_info: Optional[ErrorInfoDict] = None
+                accumulated_items: list[StreamItem] = []
+                error_info: ErrorInfoDict | None = None
 
                 async for item in dunder_aiter_func(self):
                     accumulated_items.append(item)
@@ -162,8 +163,8 @@ def patch_async_stream(
 def patch_sync_chat_completion_stream_manager(
     chat_completion_stream_manager: openai.lib.streaming.chat.ChatCompletionStreamManager,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
-    generations_aggregator: Callable[[List[StreamItem]], Optional[AggregatedResult]],
+    trace_to_end: trace.TraceData | None,
+    generations_aggregator: Callable[[list[StreamItem]], AggregatedResult | None],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> openai.lib.streaming.chat.ChatCompletionStreamManager:
     """
@@ -213,8 +214,8 @@ def patch_sync_chat_completion_stream_manager(
 def patch_async_chat_completion_stream_manager(
     async_chat_completion_stream_manager: openai.lib.streaming.chat.AsyncChatCompletionStreamManager,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
-    generations_aggregator: Callable[[List[StreamItem]], Optional[AggregatedResult]],
+    trace_to_end: trace.TraceData | None,
+    generations_aggregator: Callable[[list[StreamItem]], AggregatedResult | None],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> openai.lib.streaming.chat.AsyncChatCompletionStreamManager:
     """

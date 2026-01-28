@@ -1,6 +1,7 @@
 import asyncio
 import importlib
-from typing import Any, Generator
+from typing import Any
+from collections.abc import Generator
 from unittest import mock
 
 import pytest
@@ -96,8 +97,7 @@ def test_track_decorator__async_function__respects_runtime_flag():
 
 @opik.track(name="gen_numbers")
 def gen_numbers(limit: int):
-    for i in range(limit):
-        yield i
+    yield from range(limit)
 
 
 def test_track_decorator__generator_function__respects_runtime_flag():

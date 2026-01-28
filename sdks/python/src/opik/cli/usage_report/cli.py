@@ -7,7 +7,6 @@ import sys
 import traceback
 import webbrowser
 from pathlib import Path
-from typing import List, Optional
 
 import click
 from rich.console import Console
@@ -65,8 +64,8 @@ console = Console()
 def usage_report(
     ctx: click.Context,
     workspaces: tuple,
-    start_date: Optional[str],
-    end_date: Optional[str],
+    start_date: str | None,
+    end_date: str | None,
     unit: str,
     output: str,
     open_pdf: bool,
@@ -130,7 +129,7 @@ def usage_report(
             end_date_obj = datetime.datetime.strptime(end_date, "%Y-%m-%d")
 
         # Determine which workspaces to process
-        workspaces_list: List[str] = list(workspaces) if workspaces else []
+        workspaces_list: list[str] = list(workspaces) if workspaces else []
 
         # If no workspaces provided, fetch all workspaces
         if not workspaces_list:
@@ -159,11 +158,11 @@ def usage_report(
 
         # Process each workspace
         for idx, workspace in enumerate(workspaces_list, 1):
-            console.print(f"\n[cyan]{'='*60}[/cyan]")
+            console.print(f"\n[cyan]{'=' * 60}[/cyan]")
             console.print(
                 f"[blue]Processing workspace {idx}/{len(workspaces_list)}: {workspace}[/blue]"
             )
-            console.print(f"[cyan]{'='*60}[/cyan]\n")
+            console.print(f"[cyan]{'=' * 60}[/cyan]\n")
 
             try:
                 # Generate output filename for this workspace
@@ -192,7 +191,7 @@ def usage_report(
                         )
                         continue
 
-                    with open(workspace_output, "r") as f:
+                    with open(workspace_output) as f:
                         data = json.load(f)
 
                     # Verify workspace matches
@@ -222,7 +221,7 @@ def usage_report(
                     data["statistics"] = stats
 
                     # Save to JSON file
-                    console.print(f"\n[cyan]{'='*60}[/cyan]")
+                    console.print(f"\n[cyan]{'=' * 60}[/cyan]")
                     console.print(f"[blue]Saving data to {workspace_output}...[/blue]")
                     with open(workspace_output, "w") as f:
                         json.dump(data, f, indent=2, default=str)
@@ -232,7 +231,7 @@ def usage_report(
                     )
 
                 # Generate PDF report
-                console.print(f"\n[cyan]{'='*60}[/cyan]")
+                console.print(f"\n[cyan]{'=' * 60}[/cyan]")
                 console.print("[blue]Generating PDF report...[/blue]")
                 try:
                     output_path = Path(workspace_output)

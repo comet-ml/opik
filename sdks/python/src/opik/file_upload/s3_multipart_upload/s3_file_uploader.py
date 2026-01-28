@@ -1,7 +1,7 @@
 import dataclasses
 import logging
 import pathlib
-from typing import List, Optional, IO
+from typing import IO
 
 import httpx
 
@@ -26,19 +26,19 @@ class S3FileDataUploader:
     def __init__(
         self,
         file_parts: file_parts_strategy.FilePartsStrategy,
-        pre_sign_urls: List[str],
+        pre_sign_urls: list[str],
         httpx_client: httpx.Client,
-        monitor: Optional[file_upload_monitor.FileUploadMonitor] = None,
+        monitor: file_upload_monitor.FileUploadMonitor | None = None,
     ) -> None:
         self._file_parts = file_parts
         self._pre_sign_urls = pre_sign_urls
         self._httpx_client = httpx_client
         self._monitor = monitor
 
-        self.uploaded_parts: List[PartMetadata] = []
+        self.uploaded_parts: list[PartMetadata] = []
         self.bytes_sent = 0
 
-    def upload(self) -> List[PartMetadata]:
+    def upload(self) -> list[PartMetadata]:
         self._file_parts.calculate()
         file_to_upload = pathlib.Path(self._file_parts.file)
         try:

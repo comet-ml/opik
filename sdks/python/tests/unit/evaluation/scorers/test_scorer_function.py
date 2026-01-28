@@ -1,5 +1,5 @@
 import pytest
-from typing import Any, Dict, Optional
+from typing import Any
 
 from opik.evaluation.metrics import score_result
 from opik.evaluation.scorers.scorer_function import validate_scorer_function
@@ -10,7 +10,7 @@ def test_validate_scorer_function_valid_function():
     """Test that a valid scorer function passes validation"""
 
     def valid_scorer(
-        dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]
+        dataset_item: dict[str, Any], task_outputs: dict[str, Any]
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
 
@@ -22,8 +22,8 @@ def test_validate_scorer_function_valid_with_extra_params():
     """Test that a function with required params plus extras passes validation"""
 
     def valid_scorer_with_extras(
-        dataset_item: Dict[str, Any],
-        task_outputs: Dict[str, Any],
+        dataset_item: dict[str, Any],
+        task_outputs: dict[str, Any],
         extra_param: str = "default",
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
@@ -59,7 +59,7 @@ def test_validate_scorer_function_no_parameters__raises_error():
 def test_validate_scorer_function_wrong_parameter_names__raises_error():
     """Test that function with wrong parameter names raises ValueError"""
 
-    def wrong_names(input_data: Dict[str, Any], output_data: Dict[str, Any]):
+    def wrong_names(input_data: dict[str, Any], output_data: dict[str, Any]):
         return score_result.ScoreResult(name="test", value=1.0)
 
     with pytest.raises(
@@ -72,7 +72,7 @@ def test_validate_scorer_function_wrong_parameter_names__raises_error():
 def test_validate_scorer_function_missing_dataset_item__raises_error():
     """Test that function missing dataset_item parameter raises ValueError"""
 
-    def missing_dataset_item(task_outputs: Dict[str, Any], other_param: str):
+    def missing_dataset_item(task_outputs: dict[str, Any], other_param: str):
         return score_result.ScoreResult(name="test", value=1.0)
 
     with pytest.raises(
@@ -85,7 +85,7 @@ def test_validate_scorer_function_missing_dataset_item__raises_error():
 def test_validate_scorer_function_missing_task_outputs__raises_error():
     """Test that function missing task_outputs parameter raises ValueError"""
 
-    def missing_task_outputs(dataset_item: Dict[str, Any], other_param: str):
+    def missing_task_outputs(dataset_item: dict[str, Any], other_param: str):
         return score_result.ScoreResult(name="test", value=1.0)
 
     with pytest.raises(
@@ -99,7 +99,7 @@ def test_validate_scorer_function_with_kwargs():
     """Test that function with **kwargs passes validation"""
 
     def scorer_with_kwargs(
-        dataset_item: Dict[str, Any], task_outputs: Dict[str, Any], **kwargs
+        dataset_item: dict[str, Any], task_outputs: dict[str, Any], **kwargs
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
 
@@ -111,7 +111,7 @@ def test_validate_scorer_function_with_args_and_kwargs():
     """Test that function with *args and **kwargs passes validation"""
 
     def scorer_with_args_kwargs(
-        dataset_item: Dict[str, Any], task_outputs: Dict[str, Any], *args, **kwargs
+        dataset_item: dict[str, Any], task_outputs: dict[str, Any], *args, **kwargs
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
 
@@ -123,7 +123,7 @@ def test_validate_scorer_function_with_task_span_only():
     """Test that function with only the task_span parameter passes validation"""
 
     def scorer_with_task_span_only(
-        task_span: Optional[models.SpanModel],
+        task_span: models.SpanModel | None,
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
 
@@ -135,7 +135,7 @@ def test_validate_scorer_function_with_task_span_and_other_params():
     """Test that function with task_span and other parameters passes validation"""
 
     def scorer_with_task_span_and_extras(
-        task_span: Optional[models.SpanModel],
+        task_span: models.SpanModel | None,
         extra_param: str = "default",
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
@@ -148,9 +148,9 @@ def test_validate_scorer_function_with_all_params():
     """Test that function with all parameters (dataset_item, task_outputs, task_span) passes validation"""
 
     def scorer_with_all_params(
-        dataset_item: Dict[str, Any],
-        task_outputs: Dict[str, Any],
-        task_span: Optional[models.SpanModel] = None,
+        dataset_item: dict[str, Any],
+        task_outputs: dict[str, Any],
+        task_span: models.SpanModel | None = None,
     ) -> score_result.ScoreResult:
         return score_result.ScoreResult(name="test", value=1.0)
 

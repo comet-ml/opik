@@ -1,4 +1,4 @@
-from typing import List, TypedDict
+from typing import TypedDict
 
 
 class FewShotExampleContextPrecision(TypedDict):
@@ -11,7 +11,7 @@ class FewShotExampleContextPrecision(TypedDict):
     reason: str
 
 
-FEW_SHOT_EXAMPLES: List[FewShotExampleContextPrecision] = [
+FEW_SHOT_EXAMPLES: list[FewShotExampleContextPrecision] = [
     {
         "title": "Low ContextPrecision Score",
         "input": "What is the capital of France?",
@@ -46,8 +46,8 @@ def generate_query(
     input: str,
     output: str,
     expected_output: str,
-    context: List[str],
-    few_shot_examples: List[FewShotExampleContextPrecision] = FEW_SHOT_EXAMPLES,
+    context: list[str],
+    few_shot_examples: list[FewShotExampleContextPrecision] = FEW_SHOT_EXAMPLES,
 ) -> str:
     examples_str = "\n\n".join(
         [

@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Union
+from typing import Any
 from opik.evaluation.metrics.llm_judges.moderation import parser
 import pydantic
 from opik.evaluation.metrics import base_metric, score_result
@@ -39,13 +39,13 @@ class Moderation(base_metric.BaseMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "moderation_metric",
-        few_shot_examples: Optional[List[template.FewShotExampleModeration]] = None,
+        few_shot_examples: list[template.FewShotExampleModeration] | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
-        seed: Optional[int] = None,
-        temperature: Optional[float] = None,
+        project_name: str | None = None,
+        seed: int | None = None,
+        temperature: float | None = None,
     ):
         super().__init__(
             name=name,
@@ -58,8 +58,8 @@ class Moderation(base_metric.BaseMetric):
 
     def _init_model(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]],
-        temperature: Optional[float],
+        model: str | base_model.OpikBaseModel | None,
+        temperature: float | None,
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model

@@ -1,6 +1,7 @@
 import functools
 import logging
-from typing import Any, Callable, Optional, Set
+from typing import Any
+from collections.abc import Callable
 
 from . import config
 
@@ -10,14 +11,14 @@ DEBUG_MSG_FORMAT = "%(asctime)s [%(process)d-%(processName)s:%(thread)d] %(relat
 # when batches are big and payloads are heavy (e.g. base64 encoded data)
 MAX_MESSAGE_LENGTH = 1024 * 1024
 
-LOG_ONCE_CACHE: Set[str] = set()
+LOG_ONCE_CACHE: set[str] = set()
 
 
 class TruncateFormatter(logging.Formatter):
     def __init__(
         self,
         fmt: str,
-        datefmt: Optional[str] = None,
+        datefmt: str | None = None,
         max_length: int = MAX_MESSAGE_LENGTH,
     ) -> None:
         super().__init__(fmt, datefmt)

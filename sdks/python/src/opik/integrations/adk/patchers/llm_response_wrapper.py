@@ -1,6 +1,7 @@
 import dataclasses
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any
+from collections.abc import Callable
 
 from google.adk import models as adk_models
 from google.genai import types as genai_types
@@ -35,13 +36,13 @@ class LlmResponseCreateWrapper:
 @dataclasses.dataclass
 class LLMUsageData:
     opik_usage: opik_usage.OpikUsage
-    model: Optional[str]
-    provider: Optional[str]
+    model: str | None
+    provider: str | None
 
 
 def pop_llm_usage_data(
-    result_dict: Dict[str, Any], provider: Optional[str]
-) -> Optional[LLMUsageData]:
+    result_dict: dict[str, Any], provider: str | None
+) -> LLMUsageData | None:
     """Extracts Opik usage metadata from ADK output and removes it from the result dict."""
     opik_usage_metadata = None
     model = None

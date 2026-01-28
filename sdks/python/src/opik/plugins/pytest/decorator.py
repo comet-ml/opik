@@ -1,4 +1,5 @@
-from typing import Callable, Any, Dict, Tuple
+from typing import Any
+from collections.abc import Callable
 import os
 import functools
 import logging
@@ -46,9 +47,9 @@ def llm_unit(
             try:
                 test_trace_data = opik_context.get_current_trace_data()
                 test_span_data = opik_context.get_current_span_data()
-                assert (
-                    test_trace_data is not None and test_span_data is not None
-                ), "Must not be None here by design assumption"
+                assert test_trace_data is not None and test_span_data is not None, (
+                    "Must not be None here by design assumption"
+                )
 
                 node_id: str = _get_test_nodeid()
                 test_runs_storage.LLM_UNIT_TEST_RUNS.add(node_id)
@@ -99,9 +100,9 @@ def _get_test_nodeid() -> str:
 
 def _get_test_run_content(
     func: Callable,
-    args: Tuple,
-    kwargs: Dict[str, Any],
-    argnames_mapping: Dict[str, str],
+    args: tuple,
+    kwargs: dict[str, Any],
+    argnames_mapping: dict[str, str],
 ) -> test_run_content.TestRunContent:
     test_inputs = inspect_helpers.extract_inputs(func, args, kwargs)
     input = test_inputs.get(argnames_mapping["input"], {})

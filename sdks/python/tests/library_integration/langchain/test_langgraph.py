@@ -1,4 +1,4 @@
-from typing import Dict, Any, Annotated, Optional, Literal
+from typing import Any, Annotated, Literal
 from pydantic import BaseModel
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -55,7 +55,7 @@ def test_langgraph__happyflow(
 
         return response
 
-    def respond_to_greeting(state: State) -> Dict[str, Any]:
+    def respond_to_greeting(state: State) -> dict[str, Any]:
         greeting = state.message
         response = greeting_text_creator(greeting)
         return {"message": state.message, "response": response}
@@ -145,7 +145,7 @@ def test_langgraph__invoked_from_tracked_function__langgraph_span_is_kept(
 
         return response
 
-    def respond_to_greeting(state: State) -> Dict[str, Any]:
+    def respond_to_greeting(state: State) -> dict[str, Any]:
         greeting = state.message
         response = greeting_text_creator(greeting)
         return {"message": state.message, "response": response}
@@ -164,8 +164,8 @@ def test_langgraph__invoked_from_tracked_function__langgraph_span_is_kept(
 
     @opik.track(name="invoke_graph")
     def invoke_graph_from_tracked_function(
-        input_data: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        input_data: dict[str, Any],
+    ) -> dict[str, Any]:
         return graph.invoke(input_data, config={"callbacks": [callback]})
 
     initial_state = {
@@ -458,7 +458,7 @@ def test_langgraph__node_returning_command__output_captured_correctly(
     class State(TypedDict):
         messages: Annotated[list, langgraph_message.add_messages]
 
-    def node_a(state: State) -> Dict[str, Any]:
+    def node_a(state: State) -> dict[str, Any]:
         return {"messages": [AIMessage(content="Node A answer")]}
 
     def node_b_command(state: State) -> Command[Literal["node_c"]]:
@@ -466,7 +466,7 @@ def test_langgraph__node_returning_command__output_captured_correctly(
             update={"messages": [AIMessage(content="Node B answer")]}, goto="node_c"
         )
 
-    def node_c(state: State) -> Dict[str, Any]:
+    def node_c(state: State) -> dict[str, Any]:
         return {"messages": [AIMessage(content="Node C answer")]}
 
     graph_builder = StateGraph(State)
@@ -553,7 +553,7 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
 
     class State(TypedDict):
         messages: Annotated[list, langgraph_message.add_messages]
-        extracted_trace_data: Dict[str, Any]
+        extracted_trace_data: dict[str, Any]
 
     extracted_data_store = {}
 
@@ -561,7 +561,7 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
     def inner_tracked_function(x):
         return x * 2
 
-    async def async_node_with_span_extraction(state: State, config) -> Dict[str, Any]:
+    async def async_node_with_span_extraction(state: State, config) -> dict[str, Any]:
         """Async LangGraph node that extracts current span data."""
         # Extract span data using the helper function
         span_data = extract_current_langgraph_span_data(config)
@@ -703,7 +703,7 @@ def test_langgraph__distributed_headers__langgraph_span_is_kept(
 
         return response
 
-    def respond_to_greeting(state: State) -> Dict[str, Any]:
+    def respond_to_greeting(state: State) -> dict[str, Any]:
         greeting = state.message
         response = greeting_text_creator(greeting)
         return {"message": state.message, "response": response}
@@ -833,7 +833,7 @@ def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is
 
         return response
 
-    def respond_to_greeting(state: State) -> Dict[str, Any]:
+    def respond_to_greeting(state: State) -> dict[str, Any]:
         greeting = state.message
         response = greeting_text_creator(greeting)
         return {"message": state.message, "response": response}
@@ -986,7 +986,7 @@ def test_langgraph__used_when_there_was_already_existing_trace_without_span__lan
 
         return response
 
-    def respond_to_greeting(state: State) -> Dict[str, Any]:
+    def respond_to_greeting(state: State) -> dict[str, Any]:
         greeting = state.message
         response = greeting_text_creator(greeting)
         return {"message": state.message, "response": response}
@@ -1107,11 +1107,11 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
     """
 
     class GraphState(TypedDict):
-        question: Optional[str]
-        selected_option: Optional[str]
-        is_ambiguous: Optional[bool]
-        options: Optional[list]
-        response: Optional[str]
+        question: str | None
+        selected_option: str | None
+        is_ambiguous: bool | None
+        options: list | None
+        response: str | None
 
     def is_ambiguous(question: str) -> bool:
         """Simple check: questions with 'it', 'that', 'this' or very short are ambiguous"""
@@ -1142,7 +1142,7 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
             "Option 4: General information",
         ]
         response = "Please select one of these options:\n" + "\n".join(
-            f"{i+1}. {opt}" for i, opt in enumerate(options)
+            f"{i + 1}. {opt}" for i, opt in enumerate(options)
         )
 
         # Interrupt execution to wait for user input

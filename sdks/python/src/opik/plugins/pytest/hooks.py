@@ -1,6 +1,7 @@
 import logging
 import opik._logging as _logging
-from typing import List, Any, Generator, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import Generator
 from opik.types import BatchFeedbackScoreDict
 
 from opik.api_objects import opik_client
@@ -41,7 +42,7 @@ def pytest_runtest_makereport(item: "pytest.Item") -> Generator:
     logging_level=logging.ERROR,
 )
 def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
-    llm_test_items: List["pytest.Item"] = [
+    llm_test_items: list["pytest.Item"] = [
         test_item
         for test_item in session.items
         if test_item.nodeid in test_runs_storage.LLM_UNIT_TEST_RUNS
@@ -50,7 +51,7 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
         return
 
     try:
-        traces_feedback_scores: List[BatchFeedbackScoreDict] = []
+        traces_feedback_scores: list[BatchFeedbackScoreDict] = []
 
         for item in llm_test_items:
             report: "pytest.TestReport" = item.report
@@ -82,7 +83,7 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
 def pytest_terminal_summary(
     terminalreporter: "_pytest.terminal.TerminalReporter",
 ) -> None:
-    reports: List[pytest.TestReport] = terminalreporter.stats.get(
+    reports: list[pytest.TestReport] = terminalreporter.stats.get(
         "passed", []
     ) + terminalreporter.stats.get("failed", [])
 

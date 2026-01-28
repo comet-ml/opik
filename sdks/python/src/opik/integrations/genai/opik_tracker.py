@@ -1,5 +1,3 @@
-from typing import Optional
-
 import google.genai as genai
 
 from . import (
@@ -17,7 +15,7 @@ def _get_provider(client: genai.Client) -> str:
 
 def track_genai(
     client: genai.Client,
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
     upload_videos: bool = True,
 ) -> genai.Client:
     """
@@ -61,7 +59,7 @@ def track_genai(
 def _patch_generate_content(
     client: genai.Client,
     provider: str,
-    project_name: Optional[str],
+    project_name: str | None,
 ) -> None:
     """Patch generate_content methods with Opik tracking."""
     decorator_factory = generate_content_decorator.GenerateContentTrackDecorator(
@@ -112,7 +110,7 @@ GENAI_VIDEOS_METADATA = {"created_from": "genai", "type": "genai_videos"}
 def _patch_generate_videos(
     client: genai.Client,
     provider: str,
-    project_name: Optional[str],
+    project_name: str | None,
     upload_videos: bool,
 ) -> None:
     """Patch generate_videos and operations.get methods with Opik tracking."""
@@ -147,7 +145,7 @@ def _patch_generate_videos(
 
 
 def _patch_operations_get(
-    client: genai.Client, project_name: Optional[str], upload_videos: bool
+    client: genai.Client, project_name: str | None, upload_videos: bool
 ) -> None:
     """Patch operations.get to track polling and patch Video.save on completed videos."""
     from . import videos

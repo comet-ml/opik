@@ -1,8 +1,8 @@
 import pytest
-from typing import Dict, Any
+from typing import Any
 
 
-def _generate_hint(error) -> Dict[str, Any]:
+def _generate_hint(error) -> dict[str, Any]:
     return {"exc_info": (None, error, None)}
 
 

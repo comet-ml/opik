@@ -1,4 +1,4 @@
-from typing import List, TypedDict
+from typing import TypedDict
 
 
 class FewShotExampleContextRecall(TypedDict):
@@ -11,7 +11,7 @@ class FewShotExampleContextRecall(TypedDict):
     reason: str
 
 
-FEW_SHOT_EXAMPLES: List[FewShotExampleContextRecall] = [
+FEW_SHOT_EXAMPLES: list[FewShotExampleContextRecall] = [
     {
         "title": "Low ContextRecall Score",
         "input": "Provide the name of the capital of a European country.",
@@ -46,8 +46,8 @@ def generate_query(
     input: str,
     output: str,
     expected_output: str,
-    context: List[str],
-    few_shot_examples: List[FewShotExampleContextRecall],
+    context: list[str],
+    few_shot_examples: list[FewShotExampleContextRecall],
 ) -> str:
     examples_str = "\n\n".join(
         [

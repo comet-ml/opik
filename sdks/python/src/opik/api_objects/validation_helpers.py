@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional, cast, Union, Dict
+from typing import Any, cast
 
 from ..types import BatchFeedbackScoreDict
 from ..validation import feedback_score as feedback_score_validator
@@ -7,7 +7,7 @@ from .. import logging_messages, llm_usage
 from opik.types import LLMProvider
 
 
-def _is_already_backend_format(usage: Dict[str, Any]) -> bool:
+def _is_already_backend_format(usage: dict[str, Any]) -> bool:
     """Check if usage dict is already in backend-compatible format.
 
     Backend format has 'original_usage.' prefixed keys for provider-specific data.
@@ -20,8 +20,8 @@ def _is_already_backend_format(usage: Dict[str, Any]) -> bool:
 def validate_and_parse_usage(
     usage: Any,
     logger: logging.Logger,
-    provider: Optional[Union[LLMProvider, str]],
-) -> Optional[Dict[str, int]]:
+    provider: LLMProvider | str | None,
+) -> dict[str, int] | None:
     if isinstance(usage, llm_usage.OpikUsage):
         return usage.to_backend_compatible_full_usage_dict()
 
@@ -54,7 +54,7 @@ def validate_and_parse_usage(
 
 def validate_feedback_score(
     feedback_score: Any, logger: logging.Logger
-) -> Optional[BatchFeedbackScoreDict]:
+) -> BatchFeedbackScoreDict | None:
     feedback_score_validator_ = feedback_score_validator.FeedbackScoreValidator(
         feedback_score
     )

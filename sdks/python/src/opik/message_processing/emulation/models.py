@@ -1,4 +1,4 @@
-from typing import List, Any, Optional, Dict
+from typing import Any
 
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.types import ErrorInfoDict
@@ -26,8 +26,8 @@ class FeedbackScoreModel:
     id: str
     name: str
     value: float
-    category_name: Optional[str] = None
-    reason: Optional[str] = None
+    category_name: str | None = None
+    reason: str | None = None
 
 
 @dataclasses.dataclass
@@ -46,7 +46,7 @@ class AttachmentModel:
 
     file_path: str
     file_name: str
-    content_type: Optional[str] = None
+    content_type: str | None = None
 
 
 @dataclasses.dataclass
@@ -89,23 +89,23 @@ class SpanModel:
 
     id: str
     start_time: datetime.datetime
-    name: Optional[str] = None
-    input: Optional[Dict[str, Any]] = None
-    output: Optional[Dict[str, Any]] = None
-    tags: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    name: str | None = None
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    tags: list[str] | None = None
+    metadata: dict[str, Any] | None = None
     type: str = "general"
-    usage: Optional[Dict[str, Any]] = None
-    end_time: Optional[datetime.datetime] = None
+    usage: dict[str, Any] | None = None
+    end_time: datetime.datetime | None = None
     project_name: str = OPIK_PROJECT_DEFAULT_NAME
-    spans: List["SpanModel"] = dataclasses.field(default_factory=list)
-    feedback_scores: List[FeedbackScoreModel] = dataclasses.field(default_factory=list)
-    model: Optional[str] = None
-    provider: Optional[str] = None
-    error_info: Optional[ErrorInfoDict] = None
-    total_cost: Optional[float] = None
-    last_updated_at: Optional[datetime.datetime] = None
-    attachments: Optional[List[AttachmentModel]] = None
+    spans: list["SpanModel"] = dataclasses.field(default_factory=list)
+    feedback_scores: list[FeedbackScoreModel] = dataclasses.field(default_factory=list)
+    model: str | None = None
+    provider: str | None = None
+    error_info: ErrorInfoDict | None = None
+    total_cost: float | None = None
+    last_updated_at: datetime.datetime | None = None
+    attachments: list[AttachmentModel] | None = None
 
 
 @dataclasses.dataclass
@@ -168,16 +168,16 @@ class TraceModel:
 
     id: str
     start_time: datetime.datetime
-    name: Optional[str]
+    name: str | None
     project_name: str
-    input: Optional[Dict[str, Any]] = None
-    output: Optional[Dict[str, Any]] = None
-    tags: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    end_time: Optional[datetime.datetime] = None
-    spans: List[SpanModel] = dataclasses.field(default_factory=list)
-    feedback_scores: List[FeedbackScoreModel] = dataclasses.field(default_factory=list)
-    error_info: Optional[ErrorInfoDict] = None
-    thread_id: Optional[str] = None
-    last_updated_at: Optional[datetime.datetime] = None
-    attachments: Optional[List[AttachmentModel]] = None
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    tags: list[str] | None = None
+    metadata: dict[str, Any] | None = None
+    end_time: datetime.datetime | None = None
+    spans: list[SpanModel] = dataclasses.field(default_factory=list)
+    feedback_scores: list[FeedbackScoreModel] = dataclasses.field(default_factory=list)
+    error_info: ErrorInfoDict | None = None
+    thread_id: str | None = None
+    last_updated_at: datetime.datetime | None = None
+    attachments: list[AttachmentModel] | None = None

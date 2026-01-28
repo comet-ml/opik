@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from . import invoke_agent_decorator
 from .converse import chunks_aggregator as converse_chunks_aggregator
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 def track_bedrock(
     client: "BedrockRuntimeClient",
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> "BedrockRuntimeClient":
     """Adds Opik tracking to an AWS Bedrock client.
 

@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from .schema import FewShotExampleStructuredOutputCompliance
 
 
@@ -27,8 +25,8 @@ Respond in the following JSON format:
 
 def generate_query(
     output: str,
-    schema: Optional[str] = None,
-    few_shot_examples: Optional[List[FewShotExampleStructuredOutputCompliance]] = None,
+    schema: str | None = None,
+    few_shot_examples: list[FewShotExampleStructuredOutputCompliance] | None = None,
 ) -> str:
     if few_shot_examples is None:
         examples_str = ""

@@ -1,7 +1,7 @@
 import collections
 from queue import Empty
 import threading
-from typing import TypeVar, Optional, Generic
+from typing import TypeVar, Generic
 
 T = TypeVar("T")
 
@@ -26,7 +26,7 @@ class MessageQueue(Generic[T]):
     - empty(): Check if the queue is empty
     """
 
-    def __init__(self, max_length: Optional[int] = None):
+    def __init__(self, max_length: int | None = None):
         self._deque: collections.deque[T] = collections.deque(maxlen=max_length)
         self._not_empty = threading.Condition()
         self.max_size = max_length

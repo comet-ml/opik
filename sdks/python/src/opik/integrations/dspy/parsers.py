@@ -6,7 +6,7 @@ extracting relevant information like usage, provider, and cost data.
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 import logging
 
 import dspy
@@ -38,11 +38,11 @@ class LMHistoryInfo:
             This includes accurate pricing for all token types.
     """
 
-    usage: Optional[llm_usage.OpikUsage]
-    cache_hit: Optional[bool]
-    actual_provider: Optional[str]
-    actual_model: Optional[str]
-    total_cost: Optional[float]
+    usage: llm_usage.OpikUsage | None
+    cache_hit: bool | None
+    actual_provider: str | None
+    actual_model: str | None
+    total_cost: float | None
 
 
 def get_span_type(instance: Any) -> types.SpanType:
@@ -67,7 +67,7 @@ def get_span_type(instance: Any) -> types.SpanType:
 
 def extract_lm_info_from_history(
     lm_instance: Any,
-    expected_messages: Optional[Any],
+    expected_messages: Any | None,
 ) -> LMHistoryInfo:
     """
     Extract token usage, cache status, actual provider, and cost from the LM's history.
@@ -118,8 +118,8 @@ def extract_lm_info_from_history(
         # Extract actual provider and model from response (useful for routers like OpenRouter)
         # The response is a LiteLLM ModelResponse object with 'provider' and 'model' attributes
         # when using routers like OpenRouter
-        actual_provider: Optional[str] = None
-        actual_model: Optional[str] = None
+        actual_provider: str | None = None
+        actual_model: str | None = None
         if response is not None:
             if hasattr(response, "provider"):
                 actual_provider = response.provider
@@ -128,7 +128,7 @@ def extract_lm_info_from_history(
 
         # Extract cost from history entry or usage dict
         # OpenRouter and other providers return accurate cost including all token types
-        total_cost: Optional[float] = None
+        total_cost: float | None = None
         if (cost := last_entry.get("cost") or 0) > 0:
             total_cost = cost
         elif usage_dict and (cost := usage_dict.get("cost") or 0) > 0:

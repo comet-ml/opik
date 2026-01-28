@@ -1,4 +1,5 @@
-from typing import List, Callable, cast
+from typing import cast
+from collections.abc import Callable
 from pytest import Item
 
 import json
@@ -14,7 +15,7 @@ from . import test_runs_storage, test_run_content
 
 
 def get_dataset_item_id_finder(
-    existing_dataset_items: List[dataset_item.DatasetItem],
+    existing_dataset_items: list[dataset_item.DatasetItem],
 ) -> Callable[[test_run_content.TestRunContent], str]:
     """
     Returns a callable that takes TestRunContent as input and checks
@@ -33,7 +34,7 @@ def get_dataset_item_id_finder(
     return callback
 
 
-def run(client: opik_client.Opik, test_items: List[Item]) -> None:
+def run(client: opik_client.Opik, test_items: list[Item]) -> None:
     experiment_name = f"Test-Suite-{datetime_helpers.local_timestamp()}"
 
     try:
@@ -48,8 +49,8 @@ def run(client: opik_client.Opik, test_items: List[Item]) -> None:
 
     experiment = client.create_experiment(name=experiment_name, dataset_name="tests")
 
-    experiment_items: List[experiment_item.ExperimentItemReferences] = []
-    dataset_items_to_create: List[dataset_item.DatasetItem] = []
+    experiment_items: list[experiment_item.ExperimentItemReferences] = []
+    dataset_items_to_create: list[dataset_item.DatasetItem] = []
 
     for test_item in test_items:
         test_run_content = test_runs_storage.TEST_RUNS_CONTENTS[test_item.nodeid]

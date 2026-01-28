@@ -1,7 +1,7 @@
 import copy
 import json
 import logging
-from typing import Any, Dict, Optional, Union, List
+from typing import Any
 from typing_extensions import override
 from opik.rest_api import types as rest_api_types
 from . import prompt_template
@@ -21,7 +21,7 @@ class Prompt(base_prompt.BasePrompt):
         self,
         name: str,
         prompt: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         validate_placeholders: bool = True,
     ) -> None:
@@ -78,13 +78,13 @@ class Prompt(base_prompt.BasePrompt):
 
     @property
     @override
-    def commit(self) -> Optional[str]:
+    def commit(self) -> str | None:
         """The commit hash of the prompt."""
         return self._commit
 
     @property
     @override
-    def metadata(self) -> Optional[Dict[str, Any]]:
+    def metadata(self) -> dict[str, Any] | None:
         """The metadata dictionary associated with the prompt"""
         return copy.deepcopy(self._metadata)
 
@@ -95,7 +95,7 @@ class Prompt(base_prompt.BasePrompt):
         return self._type
 
     @override
-    def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
+    def format(self, **kwargs: Any) -> str | list[dict[str, Any]]:
         """
         Replaces placeholders in the template with provided keyword arguments.
 
@@ -125,14 +125,14 @@ class Prompt(base_prompt.BasePrompt):
         return formatted_string
 
     @override
-    def __internal_api__to_info_dict__(self) -> Dict[str, Any]:
+    def __internal_api__to_info_dict__(self) -> dict[str, Any]:
         """
         Convert the prompt to an info dictionary for serialization.
 
         Returns:
             Dictionary containing prompt metadata and version information.
         """
-        info_dict: Dict[str, Any] = {
+        info_dict: dict[str, Any] = {
             "name": self.name,
             "version": {
                 "template": self.prompt,

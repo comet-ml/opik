@@ -5,7 +5,8 @@ import dataclasses
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 from rich.console import Console
 from rich.table import Table
@@ -16,7 +17,7 @@ from opik.api_objects.experiment.experiment_item import ExperimentItemContent
 console = Console()
 
 
-def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
+def matches_name_pattern(name: str, pattern: str | None) -> bool:
     """Check if a name matches the given pattern using simple string matching."""
     if pattern is None:
         return True
@@ -24,7 +25,7 @@ def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
     return pattern.lower() in name.lower()
 
 
-def serialize_experiment_item(item: ExperimentItemContent) -> Dict[str, Any]:
+def serialize_experiment_item(item: ExperimentItemContent) -> dict[str, Any]:
     """Serialize an ExperimentItemContent dataclass to a dictionary."""
     return dataclasses.asdict(item)
 
@@ -35,9 +36,9 @@ def should_skip_file(file_path: Path, force: bool) -> bool:
 
 
 def write_csv_data(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     file_path: Path,
-    csv_row_converter_func: Callable[[Dict[str, Any]], List[Dict]],
+    csv_row_converter_func: Callable[[dict[str, Any]], list[dict]],
 ) -> None:
     """Write data to CSV file using the provided row converter function."""
     try:
@@ -54,7 +55,7 @@ def write_csv_data(
         raise RuntimeError(f"Failed to write CSV file {file_path}: {e}") from e
 
 
-def write_json_data(data: Dict[str, Any], file_path: Path) -> None:
+def write_json_data(data: dict[str, Any], file_path: Path) -> None:
     """Write data to JSON file."""
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, default=str)
@@ -67,8 +68,8 @@ def debug_print(message: str, debug: bool) -> None:
 
 
 def create_experiment_data_structure(
-    experiment: Any, experiment_items: List[ExperimentItemContent]
-) -> Dict[str, Any]:
+    experiment: Any, experiment_items: list[ExperimentItemContent]
+) -> dict[str, Any]:
     """Create a comprehensive experiment data structure for export."""
     # Get the full experiment data which contains all fields
     experiment_data_obj = experiment.get_experiment_data()
@@ -108,8 +109,8 @@ def dump_to_file(
     data: dict,
     file_path: Path,
     file_format: str,
-    csv_writer: Optional[csv.DictWriter] = None,
-    csv_fieldnames: Optional[List[str]] = None,
+    csv_writer: csv.DictWriter | None = None,
+    csv_fieldnames: list[str] | None = None,
     data_type: str = "trace",
 ) -> tuple:
     """
@@ -166,7 +167,7 @@ def dump_to_file(
         return None, None
 
 
-def trace_to_csv_rows(trace_data: dict) -> List[Dict]:
+def trace_to_csv_rows(trace_data: dict) -> list[dict]:
     """Convert trace data to CSV rows format."""
     trace = trace_data["trace"]
     spans = trace_data.get("spans", [])
@@ -197,7 +198,7 @@ def trace_to_csv_rows(trace_data: dict) -> List[Dict]:
     return rows
 
 
-def dataset_to_csv_rows(dataset_data: dict) -> List[Dict]:
+def dataset_to_csv_rows(dataset_data: dict) -> list[dict]:
     """Convert dataset data to CSV rows format."""
     rows = []
 
@@ -220,7 +221,7 @@ def dataset_to_csv_rows(dataset_data: dict) -> List[Dict]:
     return rows
 
 
-def prompt_to_csv_rows(prompt_data: dict) -> List[Dict]:
+def prompt_to_csv_rows(prompt_data: dict) -> list[dict]:
     """Convert prompt data to CSV rows format."""
     # Flatten prompt data
     prompt_flat = dict_utils.flatten_dict(prompt_data, parent_key="prompt", delim="_")
@@ -229,7 +230,7 @@ def prompt_to_csv_rows(prompt_data: dict) -> List[Dict]:
     return [prompt_flat]
 
 
-def experiment_to_csv_rows(experiment_data: dict) -> List[Dict]:
+def experiment_to_csv_rows(experiment_data: dict) -> list[dict]:
     """Convert experiment data to CSV rows format."""
     rows = []
 
@@ -298,7 +299,7 @@ def experiment_to_csv_rows(experiment_data: dict) -> List[Dict]:
     return rows
 
 
-def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
+def print_export_summary(stats: dict[str, int], format: str = "json") -> None:
     """Print a nice summary table of export statistics."""
     table = Table(
         title="📊 Export Summary", show_header=True, header_style="bold magenta"

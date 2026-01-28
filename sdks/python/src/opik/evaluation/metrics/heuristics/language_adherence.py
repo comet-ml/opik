@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Tuple
+from typing import Any
+from collections.abc import Callable
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics.base_metric import BaseMetric
@@ -14,7 +15,7 @@ except ImportError:  # pragma: no cover
     fasttext = None  # type: ignore
 
 
-DetectorFn = Callable[[str], Tuple[str, float]]
+DetectorFn = Callable[[str], tuple[str, float]]
 
 
 class LanguageAdherenceMetric(BaseMetric):
@@ -57,18 +58,18 @@ class LanguageAdherenceMetric(BaseMetric):
     def __init__(
         self,
         expected_language: str,
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         name: str = "language_adherence_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
-        detector: Optional[DetectorFn] = None,
+        project_name: str | None = None,
+        detector: DetectorFn | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self._expected_language = expected_language
         self._detector_fn: DetectorFn
         self._model_path = model_path
 
-        self._fasttext_model: Optional[Any]
+        self._fasttext_model: Any | None
 
         if detector is not None:
             self._detector_fn = detector

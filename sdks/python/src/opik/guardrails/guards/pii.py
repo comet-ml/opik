@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import Any
 from . import guard
 from .. import schemas
 import functools
@@ -11,7 +11,7 @@ class PII(guard.Guard):
 
     def __init__(
         self,
-        blocked_entities: Optional[List[str]] = None,
+        blocked_entities: list[str] | None = None,
         language: str = "en",
         threshold: float = 0.5,
     ) -> None:
@@ -27,8 +27,8 @@ class PII(guard.Guard):
         self._language = language
         self._threshold = threshold
 
-    @functools.lru_cache()
-    def get_validation_configs(self) -> List[Dict[str, Any]]:
+    @functools.lru_cache
+    def get_validation_configs(self) -> list[dict[str, Any]]:
         """
         Get the validation configuration for PII detection.
 

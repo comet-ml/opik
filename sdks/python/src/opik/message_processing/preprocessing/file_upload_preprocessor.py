@@ -1,5 +1,3 @@
-from typing import Optional
-
 from opik.file_upload import base_upload_manager
 
 from . import preprocessor
@@ -22,8 +20,8 @@ class FileUploadPreprocessor(preprocessor.MessagePreprocessor):
         self.file_upload_manager = file_upload_manager
 
     def preprocess(
-        self, message: Optional[messages.BaseMessage]
-    ) -> Optional[messages.BaseMessage]:
+        self, message: messages.BaseMessage | None
+    ) -> messages.BaseMessage | None:
         if message is None:
             # possibly already processed
             return None
@@ -34,5 +32,5 @@ class FileUploadPreprocessor(preprocessor.MessagePreprocessor):
 
         return message
 
-    def flush(self, timeout: Optional[float], sleep_time: int) -> bool:
+    def flush(self, timeout: float | None, sleep_time: int) -> bool:
         return self.file_upload_manager.flush(timeout=timeout, sleep_time=sleep_time)

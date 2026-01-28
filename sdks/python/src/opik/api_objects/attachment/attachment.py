@@ -1,5 +1,3 @@
-from typing import Optional
-
 import pydantic
 
 
@@ -20,6 +18,6 @@ class Attachment(pydantic.BaseModel):
     """
 
     data: str
-    file_name: Optional[str] = None
-    content_type: Optional[str] = None
+    file_name: str | None = None
+    content_type: str | None = None
     create_temp_copy: bool = True

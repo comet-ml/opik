@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import List, Dict, Optional, Any, Union
+from typing import Any
 
 from opik.types import ErrorInfoDict, SpanType
 from . import models, emulator_message_processor
@@ -23,9 +23,7 @@ class LocalEmulatorMessageProcessor(
 
     def process(
         self,
-        message: Union[
-            messages.BaseMessage, span_write.SpanWrite, trace_write.TraceWrite
-        ],
+        message: (messages.BaseMessage | span_write.SpanWrite | trace_write.TraceWrite),
     ) -> None:
         if not self.is_active():
             return
@@ -41,18 +39,18 @@ class LocalEmulatorMessageProcessor(
         self,
         trace_id: str,
         start_time: datetime.datetime,
-        name: Optional[str],
+        name: str | None,
         project_name: str,
         input: Any,
         output: Any,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        end_time: Optional[datetime.datetime],
-        spans: Optional[List[models.SpanModel]],
-        feedback_scores: Optional[List[models.FeedbackScoreModel]],
-        error_info: Optional[ErrorInfoDict],
-        thread_id: Optional[str],
-        last_updated_at: Optional[datetime.datetime] = None,
+        tags: list[str] | None,
+        metadata: dict[str, Any] | None,
+        end_time: datetime.datetime | None,
+        spans: list[models.SpanModel] | None,
+        feedback_scores: list[models.FeedbackScoreModel] | None,
+        error_info: ErrorInfoDict | None,
+        thread_id: str | None,
+        last_updated_at: datetime.datetime | None = None,
     ) -> models.TraceModel:
         if spans is None:
             spans = []
@@ -80,22 +78,22 @@ class LocalEmulatorMessageProcessor(
         self,
         span_id: str,
         start_time: datetime.datetime,
-        name: Optional[str],
+        name: str | None,
         input: Any,
         output: Any,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
+        tags: list[str] | None,
+        metadata: dict[str, Any] | None,
         type: SpanType,
-        usage: Optional[Dict[str, Any]],
-        end_time: Optional[datetime.datetime],
+        usage: dict[str, Any] | None,
+        end_time: datetime.datetime | None,
         project_name: str,
-        spans: Optional[List[models.SpanModel]],
-        feedback_scores: Optional[List[models.FeedbackScoreModel]],
-        model: Optional[str],
-        provider: Optional[str],
-        error_info: Optional[ErrorInfoDict],
-        total_cost: Optional[float],
-        last_updated_at: Optional[datetime.datetime],
+        spans: list[models.SpanModel] | None,
+        feedback_scores: list[models.FeedbackScoreModel] | None,
+        model: str | None,
+        provider: str | None,
+        error_info: ErrorInfoDict | None,
+        total_cost: float | None,
+        last_updated_at: datetime.datetime | None,
     ) -> models.SpanModel:
         if spans is None:
             spans = []
@@ -128,8 +126,8 @@ class LocalEmulatorMessageProcessor(
         score_id: str,
         name: str,
         value: float,
-        category_name: Optional[str],
-        reason: Optional[str],
+        category_name: str | None,
+        reason: str | None,
     ) -> models.FeedbackScoreModel:
         return models.FeedbackScoreModel(
             id=score_id,

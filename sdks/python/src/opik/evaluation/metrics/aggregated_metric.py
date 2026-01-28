@@ -1,4 +1,5 @@
-from typing import List, Callable, Any, Dict, Optional
+from typing import Any
+from collections.abc import Callable
 
 from .. import types as evaluation_types
 
@@ -50,12 +51,12 @@ class AggregatedMetric(
     def __init__(
         self,
         name: str,
-        metrics: List[base_metric.BaseMetric],
+        metrics: list[base_metric.BaseMetric],
         aggregator: Callable[
-            [List[score_result.ScoreResult]], score_result.ScoreResult
+            [list[score_result.ScoreResult]], score_result.ScoreResult
         ],
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
         self.metrics = metrics
@@ -68,7 +69,7 @@ class AggregatedMetric(
             raise ValueError("No aggregator provided")
 
     def score(self, **kwargs: Any) -> score_result.ScoreResult:
-        score_results: List[score_result.ScoreResult] = []
+        score_results: list[score_result.ScoreResult] = []
         for metric in self.metrics:
             metric_result = metric.score(**kwargs)
             if isinstance(metric_result, list):
@@ -80,8 +81,8 @@ class AggregatedMetric(
 
     def validate_score_arguments(
         self,
-        score_kwargs: Dict[str, Any],
-        key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
+        score_kwargs: dict[str, Any],
+        key_mapping: evaluation_types.ScoringKeyMappingType | None,
     ) -> None:
         for metric in self.metrics:
             arguments_helpers.raise_if_score_arguments_are_missing(

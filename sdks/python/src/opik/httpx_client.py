@@ -1,5 +1,6 @@
 import gzip
-from typing import Optional, Dict, Any, Union, Iterable, AsyncIterable, Mapping
+from typing import Any
+from collections.abc import Iterable, AsyncIterable, Mapping
 import httpx
 import os
 import json as jsonlib
@@ -18,14 +19,14 @@ POOL_TIMEOUT_SECONDS = 20
 
 
 def get(
-    workspace: Optional[str],
-    api_key: Optional[str],
+    workspace: str | None,
+    api_key: str | None,
     check_tls_certificate: bool,
     compress_json_requests: bool,
 ) -> httpx.Client:
     limits = httpx.Limits(keepalive_expiry=KEEPALIVE_EXPIRY_SECONDS)
 
-    verify: Union[bool, CABundlePath] = (
+    verify: bool | CABundlePath = (
         os.environ["SSL_CERT_FILE"]
         if check_tls_certificate is True and "SSL_CERT_FILE" in os.environ
         else check_tls_certificate
@@ -60,9 +61,7 @@ def get(
     return client
 
 
-def _prepare_headers(
-    workspace: Optional[str], api_key: Optional[str]
-) -> Dict[str, Any]:
+def _prepare_headers(workspace: str | None, api_key: str | None) -> dict[str, Any]:
     result = {
         "X-OPIK-DEBUG-SDK-VERSION": package_version.VERSION,
         "X-OPIK-DEBUG-PY-VERSION": platform.python_version(),
@@ -86,12 +85,10 @@ class OpikHttpxClient(httpx.Client):
     def build_request(
         self,
         method: str,
-        url: Union[httpx.URL, str],
+        url: httpx.URL | str,
         *,
-        content: Optional[
-            Union[str, bytes, Iterable[bytes], AsyncIterable[bytes]]
-        ] = None,
-        data: Optional[Mapping[str, Any]] = None,
+        content: None | (str | bytes | Iterable[bytes] | AsyncIterable[bytes]) = None,
+        data: Mapping[str, Any] | None = None,
         files: Any = None,
         json: Any = None,
         params: Any = None,

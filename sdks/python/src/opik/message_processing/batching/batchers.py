@@ -1,4 +1,4 @@
-from typing import Union, cast, List
+from typing import cast
 
 from opik.rest_api.types import span_write, trace_write
 import opik.dict_utils as dict_utils
@@ -10,8 +10,8 @@ from .. import messages, encoder_helpers
 class CreateSpanMessageBatcher(base_batcher.BaseBatcher):
     def _create_batches_from_accumulated_messages(  # type: ignore
         self,
-    ) -> List[messages.CreateSpansBatchMessage]:
-        rest_spans: List[span_write.SpanWrite] = []
+    ) -> list[messages.CreateSpansBatchMessage]:
+        rest_spans: list[span_write.SpanWrite] = []
 
         for item in self._accumulated_messages:
             span_write_kwargs = item.as_payload_dict()
@@ -47,8 +47,8 @@ class CreateSpanMessageBatcher(base_batcher.BaseBatcher):
 class CreateTraceMessageBatcher(base_batcher.BaseBatcher):
     def _create_batches_from_accumulated_messages(  # type: ignore
         self,
-    ) -> List[messages.CreateTraceBatchMessage]:
-        rest_traces: List[trace_write.TraceWrite] = []
+    ) -> list[messages.CreateTraceBatchMessage]:
+        rest_traces: list[trace_write.TraceWrite] = []
 
         for item in self._accumulated_messages:
             trace_write_kwargs = item.as_payload_dict()
@@ -84,22 +84,22 @@ class CreateTraceMessageBatcher(base_batcher.BaseBatcher):
 class BaseAddFeedbackScoresBatchMessageBatcher(base_batcher.BaseBatcher):
     def _create_batches_from_accumulated_messages(  # type: ignore
         self,
-    ) -> List[
-        Union[
-            messages.AddSpanFeedbackScoresBatchMessage,
-            messages.AddTraceFeedbackScoresBatchMessage,
-            messages.AddThreadsFeedbackScoresBatchMessage,
-        ]
+    ) -> list[
+        (
+            messages.AddSpanFeedbackScoresBatchMessage
+            | messages.AddTraceFeedbackScoresBatchMessage
+            | messages.AddThreadsFeedbackScoresBatchMessage
+        )
     ]:
         return super()._create_batches_from_accumulated_messages()  # type: ignore
 
     def add(  # type: ignore
         self,
-        message: Union[
-            messages.AddSpanFeedbackScoresBatchMessage,
-            messages.AddTraceFeedbackScoresBatchMessage,
-            messages.AddThreadsFeedbackScoresBatchMessage,
-        ],
+        message: (
+            messages.AddSpanFeedbackScoresBatchMessage
+            | messages.AddTraceFeedbackScoresBatchMessage
+            | messages.AddThreadsFeedbackScoresBatchMessage
+        ),
     ) -> None:
         new_messages = message.batch
         n_new_messages = len(new_messages)
@@ -123,7 +123,7 @@ class AddSpanFeedbackScoresBatchMessageBatcher(
 ):
     def _create_batches_from_accumulated_messages(  # type: ignore
         self,
-    ) -> List[messages.AddSpanFeedbackScoresBatchMessage]:
+    ) -> list[messages.AddSpanFeedbackScoresBatchMessage]:
         return [
             messages.AddSpanFeedbackScoresBatchMessage(
                 batch=self._accumulated_messages,  # type: ignore
@@ -137,7 +137,7 @@ class AddTraceFeedbackScoresBatchMessageBatcher(
 ):
     def _create_batches_from_accumulated_messages(  # type: ignore
         self,
-    ) -> List[messages.AddTraceFeedbackScoresBatchMessage]:
+    ) -> list[messages.AddTraceFeedbackScoresBatchMessage]:
         return [
             messages.AddTraceFeedbackScoresBatchMessage(
                 batch=self._accumulated_messages,  # type: ignore
@@ -151,7 +151,7 @@ class AddThreadsFeedbackScoresBatchMessageBatcher(
 ):
     def _create_batches_from_accumulated_messages(  # type: ignore
         self,
-    ) -> List[messages.AddThreadsFeedbackScoresBatchMessage]:
+    ) -> list[messages.AddThreadsFeedbackScoresBatchMessage]:
         return [
             messages.AddThreadsFeedbackScoresBatchMessage(
                 batch=self._accumulated_messages,  # type: ignore
@@ -163,7 +163,7 @@ class AddThreadsFeedbackScoresBatchMessageBatcher(
 class GuardrailBatchMessageBatcher(base_batcher.BaseBatcher):
     def _create_batches_from_accumulated_messages(  # type: ignore
         self,
-    ) -> List[messages.GuardrailBatchMessage]:
+    ) -> list[messages.GuardrailBatchMessage]:
         batch = []
 
         for batch_message in self._accumulated_messages:
@@ -181,7 +181,7 @@ class GuardrailBatchMessageBatcher(base_batcher.BaseBatcher):
 class CreateExperimentItemsBatchMessageBatcher(base_batcher.BaseBatcher):
     def _create_batches_from_accumulated_messages(  # type: ignore
         self,
-    ) -> List[messages.CreateExperimentItemsBatchMessage]:
+    ) -> list[messages.CreateExperimentItemsBatchMessage]:
         return [
             messages.CreateExperimentItemsBatchMessage(
                 batch=self._accumulated_messages,  # type: ignore

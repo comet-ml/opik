@@ -2,7 +2,7 @@ import base64
 import binascii
 import logging
 import tempfile
-from typing import Any, Optional, Literal
+from typing import Any, Literal
 
 from . import attachment, decoder, decoder_helpers
 
@@ -20,7 +20,7 @@ class Base64AttachmentDecoder(decoder.AttachmentDecoder):
         raw_data: str,
         context: Literal["input", "output", "metadata"] = "input",
         **kwargs: Any,
-    ) -> Optional[attachment.Attachment]:
+    ) -> attachment.Attachment | None:
         """Decode base64 encoded data into an Attachment object.
 
         Args:

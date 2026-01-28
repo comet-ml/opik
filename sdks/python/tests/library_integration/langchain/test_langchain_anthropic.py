@@ -2,7 +2,7 @@ import langchain_anthropic
 import pytest
 from langchain_core.prompts import PromptTemplate
 
-from typing import Dict, Any
+from typing import Any
 from opik.integrations.langchain.opik_tracer import OpikTracer
 from ...testlib import (
     ANY_BUT_NONE,
@@ -18,7 +18,7 @@ from ...testlib import (
 pytestmark = pytest.mark.usefixtures("ensure_anthropic_configured")
 
 
-def _assert_usage_validity(usage: Dict[str, Any]):
+def _assert_usage_validity(usage: dict[str, Any]):
     REQUIRED_USAGE_KEYS = [
         "completion_tokens",
         "prompt_tokens",

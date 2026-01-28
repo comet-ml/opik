@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Union
+from typing import Any
 
 from haystack import dataclasses as haystack_dataclasses
 from haystack import tracing
@@ -26,7 +26,7 @@ class OpikSpanBridge(tracing.Span):
     """
 
     def __init__(
-        self, span_or_trace_data: Union[opik_span.SpanData, opik_trace.TraceData]
+        self, span_or_trace_data: opik_span.SpanData | opik_trace.TraceData
     ) -> None:
         """
         Initialize a OpikSpan instance.
@@ -36,7 +36,7 @@ class OpikSpanBridge(tracing.Span):
         """
         self._span_or_trace_data = span_or_trace_data
         # locally cache tags
-        self._data: Dict[str, Any] = {}
+        self._data: dict[str, Any] = {}
 
     def set_tag(self, key: str, value: Any) -> None:
         """
@@ -151,7 +151,7 @@ class OpikSpanBridge(tracing.Span):
 
     def get_opik_span_or_trace_data(
         self,
-    ) -> Union[opik_span.SpanData, opik_trace.TraceData]:
+    ) -> opik_span.SpanData | opik_trace.TraceData:
         """
         Get the underlying Opik span or trace data instance.
 
@@ -163,7 +163,7 @@ class OpikSpanBridge(tracing.Span):
         """
         return self._span_or_trace_data
 
-    def get_correlation_data_for_logs(self) -> Dict[str, Any]:
+    def get_correlation_data_for_logs(self) -> dict[str, Any]:
         """
         Get correlation data for logging purposes.
 
@@ -174,7 +174,7 @@ class OpikSpanBridge(tracing.Span):
         """
         return {}
 
-    def set_tags(self, tags: Dict[str, Any]) -> None:
+    def set_tags(self, tags: dict[str, Any]) -> None:
         """
         Set multiple tags on this span.
 
@@ -216,7 +216,7 @@ class OpikSpanBridge(tracing.Span):
 
     def _extract_metadata_from_component_output(
         self, component_type: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Extract metadata dictionary from component output based on component type.
 
         Args:

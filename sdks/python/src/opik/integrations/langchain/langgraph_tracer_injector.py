@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, TypeVar
+from typing import Any, TypeVar
 
 from langchain_core.runnables import base as runnables_base
 
@@ -72,9 +72,9 @@ def track_langgraph(
     opik_tracer.set_graph(graph_structure)
 
     # Inject the callback into the graph's default config
-    config: Dict[str, Any] = getattr(graph, "config", None) or {}
+    config: dict[str, Any] = getattr(graph, "config", None) or {}
     graph.config = config  # type: ignore[attr-defined]
-    callbacks: List[Any] = config.setdefault("callbacks", [])
+    callbacks: list[Any] = config.setdefault("callbacks", [])
 
     if any(isinstance(cb, opik_tracer_module.OpikTracer) for cb in callbacks):
         LOGGER.warning(

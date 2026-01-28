@@ -1,7 +1,7 @@
 import abc
 import logging
 from contextlib import contextmanager, asynccontextmanager
-from typing import Any, List, Dict, Optional, Type
+from typing import Any
 import pydantic
 
 from opik import exceptions
@@ -31,7 +31,7 @@ class OpikBaseModel(abc.ABC):
     def generate_string(
         self,
         input: str,
-        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        response_format: type[pydantic.BaseModel] | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -48,7 +48,7 @@ class OpikBaseModel(abc.ABC):
 
     @abc.abstractmethod
     def generate_provider_response(
-        self, messages: List[Dict[str, Any]], **kwargs: Any
+        self, messages: list[dict[str, Any]], **kwargs: Any
     ) -> Any:
         """
         Do not use this method directly. It is intended to be used within `get_provider_response()` method.
@@ -68,7 +68,7 @@ class OpikBaseModel(abc.ABC):
     async def agenerate_string(
         self,
         input: str,
-        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        response_format: type[pydantic.BaseModel] | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -84,7 +84,7 @@ class OpikBaseModel(abc.ABC):
         raise NotImplementedError("Async generation not implemented for this provider")
 
     async def agenerate_provider_response(
-        self, messages: List[Dict[str, Any]], **kwargs: Any
+        self, messages: list[dict[str, Any]], **kwargs: Any
     ) -> Any:
         """
         Do not use this method directly. It is intended to be used within `aget_provider_response()` method.
@@ -106,7 +106,7 @@ class OpikBaseModel(abc.ABC):
 
 @contextmanager
 def get_provider_response(
-    model_provider: OpikBaseModel, messages: List[Dict[str, Any]], **kwargs: Any
+    model_provider: OpikBaseModel, messages: list[dict[str, Any]], **kwargs: Any
 ) -> Any:
     """
     Provides a context manager for getting and managing the response from a
@@ -137,7 +137,7 @@ def get_provider_response(
 
 @asynccontextmanager
 async def aget_provider_response(
-    model_provider: OpikBaseModel, messages: List[Dict[str, Any]], **kwargs: Any
+    model_provider: OpikBaseModel, messages: list[dict[str, Any]], **kwargs: Any
 ) -> Any:
     """
     Asynchronous context manager for getting a response from a model provider.
@@ -172,7 +172,7 @@ async def aget_provider_response(
         raise exceptions.BaseLLMError(str(e))
 
 
-def check_model_output_string(output: Optional[str]) -> str:
+def check_model_output_string(output: str | None) -> str:
     """
     Checks the output of a model and verifies that it is not None.
 

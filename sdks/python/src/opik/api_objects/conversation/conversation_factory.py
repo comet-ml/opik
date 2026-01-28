@@ -1,11 +1,11 @@
-from typing import List, Callable
+from collections.abc import Callable
 
 from opik.rest_api import TracePublic, JsonListStringPublic
 from . import conversation_thread
 
 
 def create_conversation_from_traces(
-    traces: List[TracePublic],
+    traces: list[TracePublic],
     input_transform: Callable[[JsonListStringPublic], str],
     output_transform: Callable[[JsonListStringPublic], str],
 ) -> conversation_thread.ConversationThread:

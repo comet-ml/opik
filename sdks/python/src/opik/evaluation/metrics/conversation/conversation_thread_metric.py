@@ -1,4 +1,4 @@
-from typing import Union, List, Any
+from typing import Any
 
 from . import types
 from .. import base_metric, score_result
@@ -39,7 +39,7 @@ class ConversationThreadMetric(base_metric.BaseMetric):
 
     def score(
         self, conversation: types.Conversation, **kwargs: Any
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
         """
         Evaluate a conversation and return a score.
 
@@ -58,7 +58,7 @@ class ConversationThreadMetric(base_metric.BaseMetric):
 
     async def ascore(
         self, conversation: types.Conversation, **kwargs: Any
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
         """
         Asynchronously evaluate a conversation and return a score.
 

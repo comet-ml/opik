@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 import httpx
 
 from . import (
@@ -68,13 +66,13 @@ def construct_streamer(
     n_consumers: int,
     use_batching: bool,
     use_attachment_extraction: bool,
-    max_queue_size: Optional[int],
+    max_queue_size: int | None,
 ) -> streamer.Streamer:
     message_queue_: message_queue.MessageQueue[messages.BaseMessage] = (
         message_queue.MessageQueue(max_length=max_queue_size)
     )
 
-    queue_consumers: List[queue_consumer.QueueConsumer] = [
+    queue_consumers: list[queue_consumer.QueueConsumer] = [
         queue_consumer.QueueConsumer(
             queue=message_queue_,
             message_processor=message_processor,

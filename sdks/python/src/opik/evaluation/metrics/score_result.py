@@ -1,11 +1,11 @@
 import dataclasses
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 @dataclasses.dataclass
 class ScoreResult:
     name: str
     value: float
-    reason: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    reason: str | None = None
+    metadata: dict[str, Any] | None = None
     scoring_failed: bool = False

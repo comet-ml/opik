@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional, Type, List, Dict, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 import pydantic
 
 from . import opik_monitoring, message_converters
@@ -36,7 +36,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
     def generate_string(
         self,
         input: str,
-        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        response_format: type[pydantic.BaseModel] | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -66,7 +66,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
 
     def generate_provider_response(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         **kwargs: Any,
     ) -> "langchain_core.messages.AIMessage":
         """
@@ -92,7 +92,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
     async def agenerate_string(
         self,
         input: str,
-        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        response_format: type[pydantic.BaseModel] | None = None,
         **kwargs: Any,
     ) -> str:
         """
@@ -122,7 +122,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
             return base_model.check_model_output_string(response.content)
 
     async def agenerate_provider_response(
-        self, messages: List[Dict[str, Any]], **kwargs: Any
+        self, messages: list[dict[str, Any]], **kwargs: Any
     ) -> "langchain_core.messages.AIMessage":
         """
         Do not use this method directly. It is intended to be used within `base_model.aget_provider_response()` method.

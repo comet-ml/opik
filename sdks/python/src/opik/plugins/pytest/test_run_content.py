@@ -1,13 +1,13 @@
-from typing import Dict, Any, Optional
+from typing import Any
 
 import dataclasses
 
 
 @dataclasses.dataclass(frozen=True, eq=True)
 class TestRunContent:
-    input: Dict[str, Any]
+    input: dict[str, Any]
     """The input data for the test."""
-    expected_output: Optional[Dict[str, Any]] = None
+    expected_output: dict[str, Any] | None = None
     """The expected output for the model used in test."""
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
     """Additional metadata associated with the test run."""

@@ -1,6 +1,6 @@
 import os
 import tempfile
-from typing import Generator
+from collections.abc import Generator
 from unittest import mock
 
 import pytest
@@ -157,7 +157,7 @@ def test_attachment_to_message__create_temp_copy(original_file: str):
     assert message.project_name == project_name
 
     # Verify the temp file has the same content
-    with open(message.file_path, "r") as f:
+    with open(message.file_path) as f:
         assert f.read() == "test content"
 
     # Clean up the temp copy

@@ -1,11 +1,11 @@
-from typing import Optional, Any, Dict
+from typing import Any
 
 from .litellm import litellm_chat_model
 from . import base_model
 
 DEFAULT_GPT_MODEL_NAME = "gpt-5-nano"
 
-_MODEL_CACHE: Dict[Any, base_model.OpikBaseModel] = {}
+_MODEL_CACHE: dict[Any, base_model.OpikBaseModel] = {}
 
 
 def _freeze(value: Any) -> Any:
@@ -18,13 +18,13 @@ def _freeze(value: Any) -> Any:
     return value
 
 
-def _make_cache_key(model_name: str, track: bool, model_kwargs: Dict[str, Any]) -> Any:
+def _make_cache_key(model_name: str, track: bool, model_kwargs: dict[str, Any]) -> Any:
     frozen_kwargs = frozenset((k, _freeze(v)) for k, v in model_kwargs.items())
     return (model_name, track, frozen_kwargs)
 
 
 def get(
-    model_name: Optional[str], track: bool = True, **model_kwargs: Any
+    model_name: str | None, track: bool = True, **model_kwargs: Any
 ) -> base_model.OpikBaseModel:
     """
     Get or create a cached LiteLLM chat model instance.

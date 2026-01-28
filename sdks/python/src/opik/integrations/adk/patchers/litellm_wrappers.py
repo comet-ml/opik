@@ -1,6 +1,7 @@
 import logging
 from functools import wraps
-from typing import Any, Callable, Optional, Tuple, Union, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import Callable
 
 from google.adk import models as adk_models
 
@@ -14,7 +15,7 @@ LOGGER = logging.getLogger(__name__)
 
 def parse_provider_and_model(
     model: str,
-) -> Tuple[Optional[Union[opik.LLMProvider, str]], str]:
+) -> tuple[opik.LLMProvider | str | None, str]:
     parts = model.split("/", 1)
     if len(parts) != 2:
         return None, parts[0]

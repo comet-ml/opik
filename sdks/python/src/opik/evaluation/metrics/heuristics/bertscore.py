@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
+from typing import Any, Union
+from collections.abc import Callable, Sequence
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -12,7 +13,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 
 BertScoreFn = Callable[
-    [Sequence[str], Union[Sequence[str], Sequence[Sequence[str]]]], Tuple[Any, Any, Any]
+    [Sequence[str], Union[Sequence[str], Sequence[Sequence[str]]]], tuple[Any, Any, Any]
 ]
 
 
@@ -33,14 +34,14 @@ class BERTScore(base_metric.BaseMetric):
 
     def __init__(
         self,
-        scorer_fn: Optional[BertScoreFn] = None,
-        model_type: Optional[str] = "bert-base-uncased",
-        lang: Optional[str] = "en",
+        scorer_fn: BertScoreFn | None = None,
+        model_type: str | None = "bert-base-uncased",
+        lang: str | None = "en",
         rescale_with_baseline: bool = False,
-        device: Optional[str] = None,
+        device: str | None = None,
         name: str = "bertscore_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         **scorer_kwargs: Any,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
@@ -56,8 +57,8 @@ class BERTScore(base_metric.BaseMetric):
 
             def _score(
                 candidates: Sequence[str],
-                references: Union[Sequence[str], Sequence[Sequence[str]]],
-            ) -> Tuple[Any, Any, Any]:
+                references: Sequence[str] | Sequence[Sequence[str]],
+            ) -> tuple[Any, Any, Any]:
                 return bert_score_fn(
                     candidates,
                     references,
@@ -73,13 +74,13 @@ class BERTScore(base_metric.BaseMetric):
     def score(
         self,
         output: str,
-        reference: Union[str, Sequence[str], Sequence[Sequence[str]]],
+        reference: str | Sequence[str] | Sequence[Sequence[str]],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         if not output.strip():
             raise MetricComputationError("Candidate is empty (BERTScore metric).")
 
-        references: Union[Sequence[str], Sequence[Sequence[str]]]
+        references: Sequence[str] | Sequence[Sequence[str]]
         if isinstance(reference, str):
             references = [reference]
         else:

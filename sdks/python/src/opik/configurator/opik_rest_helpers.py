@@ -1,5 +1,5 @@
 import logging
-from typing import Final, List, Optional
+from typing import Final
 
 import httpx
 
@@ -13,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 HEALTH_CHECK_TIMEOUT: Final[float] = 1.0
 
 
-def _get_httpx_client(api_key: Optional[str] = None) -> httpx.Client:
+def _get_httpx_client(api_key: str | None = None) -> httpx.Client:
     config_ = config.OpikConfig()
     client = httpx_client.get(
         workspace=None,
@@ -73,7 +73,7 @@ def is_api_key_correct(api_key: str, url: str) -> bool:
         raise ConnectionError(f"Unexpected error occurred: {str(e)}")
 
 
-def is_workspace_name_correct(api_key: Optional[str], workspace: str, url: str) -> bool:
+def is_workspace_name_correct(api_key: str | None, workspace: str, url: str) -> bool:
     """
     Verifies whether the provided workspace name exists in the user's cloud Opik account.
 
@@ -101,5 +101,5 @@ def is_workspace_name_correct(api_key: Optional[str], workspace: str, url: str) 
     if response.status_code != 200:
         raise ConnectionError(f"HTTP error: {response.status_code} - {response.text}")
 
-    workspaces: List[str] = response.json().get("workspaceNames", [])
+    workspaces: list[str] = response.json().get("workspaceNames", [])
     return workspace in workspaces

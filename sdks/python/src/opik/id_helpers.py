@@ -1,12 +1,11 @@
 from datetime import datetime
-from typing import Optional
 import random
 import string
 import uuid
 import uuid6
 
 
-def generate_id(timestamp: Optional[datetime] = None) -> str:
+def generate_id(timestamp: datetime | None = None) -> str:
     if timestamp:
         uuid4 = str(uuid.uuid4())
         return str(uuid4_to_uuid7(timestamp, uuid4))

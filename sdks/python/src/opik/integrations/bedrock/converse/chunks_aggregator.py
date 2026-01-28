@@ -1,10 +1,10 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 
 
-def _handle_message_start(event: Dict[str, Any], result: Dict[str, Any]) -> None:
+def _handle_message_start(event: dict[str, Any], result: dict[str, Any]) -> None:
     """Extract role from messageStart event."""
     message_start = event.get("messageStart")
     if isinstance(message_start, dict):
@@ -13,7 +13,7 @@ def _handle_message_start(event: Dict[str, Any], result: Dict[str, Any]) -> None
             result["output"]["message"]["role"] = role
 
 
-def _handle_content_block_delta(event: Dict[str, Any], result: Dict[str, Any]) -> None:
+def _handle_content_block_delta(event: dict[str, Any], result: dict[str, Any]) -> None:
     """
     Extract content from contentBlockDelta event.
 
@@ -48,7 +48,7 @@ def _handle_content_block_delta(event: Dict[str, Any], result: Dict[str, Any]) -
     LOGGER.debug("Unknown delta type in contentBlockDelta: %s", list(delta.keys()))
 
 
-def _handle_message_stop(event: Dict[str, Any], result: Dict[str, Any]) -> None:
+def _handle_message_stop(event: dict[str, Any], result: dict[str, Any]) -> None:
     """Extract stopReason from messageStop event."""
     message_stop = event.get("messageStop")
     if isinstance(message_stop, dict):
@@ -57,7 +57,7 @@ def _handle_message_stop(event: Dict[str, Any], result: Dict[str, Any]) -> None:
             result["stopReason"] = stop_reason
 
 
-def _handle_metadata(event: Dict[str, Any], result: Dict[str, Any]) -> None:
+def _handle_metadata(event: dict[str, Any], result: dict[str, Any]) -> None:
     """Extract usage and metrics from metadata event."""
     metadata = event.get("metadata")
     if not isinstance(metadata, dict):
@@ -74,7 +74,7 @@ def _handle_metadata(event: Dict[str, Any], result: Dict[str, Any]) -> None:
             result["metrics"] = {"latencyMs": metrics["latencyMs"]}
 
 
-def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+def aggregate_converse_stream_chunks(items: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Aggregate streaming chunks from AWS Bedrock converse_stream API into a single response.
 
@@ -128,7 +128,7 @@ def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, A
         }
     """
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "output": {"message": {"role": "assistant", "content": [{"text": ""}]}}
     }
 
@@ -161,7 +161,7 @@ def aggregate_converse_stream_chunks(items: List[Dict[str, Any]]) -> Dict[str, A
     return result
 
 
-def aggregate_invoke_agent_chunks(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+def aggregate_invoke_agent_chunks(items: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Aggregate streaming chunks from AWS Bedrock invoke_agent API.
 

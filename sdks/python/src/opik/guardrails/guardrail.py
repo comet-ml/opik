@@ -1,8 +1,3 @@
-from typing import (
-    List,
-    Optional,
-)
-
 import httpx
 
 import opik.exceptions as exceptions
@@ -29,8 +24,8 @@ class Guardrail:
 
     def __init__(
         self,
-        guards: List[guards.Guard],
-        guardrail_timeout: Optional[int] = None,
+        guards: list[guards.Guard],
+        guardrail_timeout: int | None = None,
     ) -> None:
         """
         Initialize a Guardrail client.

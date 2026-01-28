@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any
+from collections.abc import Sequence
 
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult

@@ -133,9 +133,7 @@ class TestDetectMimeType:
         # Create SVG content longer than 1024 bytes
         long_content = "x" * 2000
         svg_data = (
-            f'<svg xmlns="http://www.w3.org/2000/svg">{long_content}</svg>'.encode(
-                "utf-8"
-            )
+            f'<svg xmlns="http://www.w3.org/2000/svg">{long_content}</svg>'.encode()
         )
         assert decoder_helpers.detect_mime_type(svg_data) == "image/svg+xml"
 

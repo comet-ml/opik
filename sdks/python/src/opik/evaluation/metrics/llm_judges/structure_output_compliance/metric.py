@@ -1,4 +1,4 @@
-from typing import Union, Optional, List, Any
+from typing import Any
 import logging
 
 from opik.evaluation.models import base_model, models_factory
@@ -40,15 +40,14 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "structured_output_compliance",
-        few_shot_examples: Optional[
-            List[FewShotExampleStructuredOutputCompliance]
-        ] = None,
+        few_shot_examples: None
+        | (list[FewShotExampleStructuredOutputCompliance]) = None,
         track: bool = True,
-        project_name: Optional[str] = None,
-        seed: Optional[int] = None,
-        temperature: Optional[float] = None,
+        project_name: str | None = None,
+        seed: int | None = None,
+        temperature: float | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
         self._seed = seed
@@ -57,8 +56,8 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
 
     def _init_model(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]],
-        temperature: Optional[float],
+        model: str | base_model.OpikBaseModel | None,
+        temperature: float | None,
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
@@ -76,7 +75,7 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
     def score(
         self,
         output: str,
-        schema: Optional[str] = None,
+        schema: str | None = None,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
@@ -112,7 +111,7 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
     async def ascore(
         self,
         output: str,
-        schema: Optional[str] = None,
+        schema: str | None = None,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """

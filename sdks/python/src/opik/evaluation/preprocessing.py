@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 import string
 import unicodedata
-from typing import Callable, Literal
+from typing import Literal
+from collections.abc import Callable
 
 try:  # optional dependency for emoji detection
     import emoji

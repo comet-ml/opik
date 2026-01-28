@@ -1,4 +1,5 @@
-from typing import Set, List, TYPE_CHECKING, Dict, Any, Optional, Sequence
+from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
 
 if TYPE_CHECKING:
     from opik.guardrails import schemas
@@ -26,7 +27,7 @@ class ScoreMethodMissingArguments(OpikException):
         score_name: str,
         missing_required_arguments: Sequence[str],
         available_keys: Sequence[str],
-        unused_mapping_arguments: Optional[Sequence[str]] = None,
+        unused_mapping_arguments: Sequence[str] | None = None,
     ):
         self.score_name = score_name
         self.missing_required_arguments = missing_required_arguments
@@ -65,7 +66,7 @@ class JSONParsingError(OpikException):
 
 
 class PromptPlaceholdersDontMatchFormatArguments(OpikException):
-    def __init__(self, prompt_placeholders: Set[str], format_arguments: Set[str]):
+    def __init__(self, prompt_placeholders: set[str], format_arguments: set[str]):
         self.prompt_placeholders = prompt_placeholders
         self.format_arguments = format_arguments
         self.symmetric_difference = prompt_placeholders.symmetric_difference(
@@ -112,8 +113,8 @@ class GuardrailValidationFailed(OpikException):
     def __init__(
         self,
         message: str,
-        validation_results: List["schemas.ValidationResult"],
-        failed_validations: List["schemas.ValidationResult"],
+        validation_results: list["schemas.ValidationResult"],
+        failed_validations: list["schemas.ValidationResult"],
     ):
         self.message = message
         self.validation_results = validation_results
@@ -127,7 +128,7 @@ class GuardrailValidationFailed(OpikException):
 class OpikCloudRequestsRateLimited(OpikException):
     """Exception raised when the Opik Cloud limits the request rate."""
 
-    def __init__(self, headers: Dict[str, Any], retry_after: float):
+    def __init__(self, headers: dict[str, Any], retry_after: float):
         self.headers = headers
         self.retry_after = retry_after
 
@@ -138,7 +139,7 @@ class OpikCloudRequestsRateLimited(OpikException):
 class ValidationError(OpikException):
     """Exception raised when a validation fails."""
 
-    def __init__(self, prefix: str, failure_reasons: List[str]):
+    def __init__(self, prefix: str, failure_reasons: list[str]):
         self._prefix = prefix
         self._failure_reasons = failure_reasons
 

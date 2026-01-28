@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Any
 from pydantic import BaseModel
 
 from langgraph.graph import END, START, StateGraph
@@ -29,7 +29,7 @@ def test_track_langgraph__happyflow__no_config_passed(
     def process_text(text: str) -> str:
         return f"processed_{text}"
 
-    def processing_node(state: State) -> Dict[str, Any]:
+    def processing_node(state: State) -> dict[str, Any]:
         output = process_text(state.input_text)
         return {"input_text": state.input_text, "output_text": output}
 
@@ -105,7 +105,7 @@ def test_track_langgraph__multiple_invocations__all_tracked(
     class State(BaseModel):
         value: int
 
-    def multiply_by_two(state: State) -> Dict[str, Any]:
+    def multiply_by_two(state: State) -> dict[str, Any]:
         return {"value": state.value * 2}
 
     builder = StateGraph(State)
@@ -205,7 +205,7 @@ def test_track_langgraph__tracked_twice__invoked_once__single_trace_created(
     class State(BaseModel):
         value: int
 
-    def double_value_node(state: State) -> Dict[str, Any]:
+    def double_value_node(state: State) -> dict[str, Any]:
         return {"value": state.value * 2}
 
     builder = StateGraph(State)
@@ -258,7 +258,7 @@ def test_track_langgraph__invoked_from_tracked_function__proper_tracing(
     class State(BaseModel):
         text: str
 
-    def uppercase_node(state: State) -> Dict[str, Any]:
+    def uppercase_node(state: State) -> dict[str, Any]:
         return {"text": state.text.upper()}
 
     builder = StateGraph(State)
@@ -332,7 +332,7 @@ def test_track_langgraph__with_project_name_tags_metadata__all_applied(
     class State(BaseModel):
         value: int
 
-    def increment_node(state: State) -> Dict[str, Any]:
+    def increment_node(state: State) -> dict[str, Any]:
         return {"value": state.value + 1}
 
     builder = StateGraph(State)
@@ -393,10 +393,10 @@ def test_track_langgraph__graph_visualization_included_in_metadata(
     class State(BaseModel):
         text: str
 
-    def append_a_node(state: State) -> Dict[str, Any]:
+    def append_a_node(state: State) -> dict[str, Any]:
         return {"text": state.text + "_A"}
 
-    def append_b_node(state: State) -> Dict[str, Any]:
+    def append_b_node(state: State) -> dict[str, Any]:
         return {"text": state.text + "_B"}
 
     builder = StateGraph(State)

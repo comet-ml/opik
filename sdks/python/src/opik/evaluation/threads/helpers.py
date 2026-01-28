@@ -1,4 +1,4 @@
-from typing import List, Callable, Optional
+from collections.abc import Callable
 
 from . import evaluation_result
 from ...api_objects import opik_client
@@ -9,8 +9,8 @@ from ...api_objects.threads import threads_client
 
 
 def log_feedback_scores(
-    results: List[evaluation_result.ThreadEvaluationResult],
-    project_name: Optional[str],
+    results: list[evaluation_result.ThreadEvaluationResult],
+    project_name: str | None,
     client: threads_client.ThreadsClient,
 ) -> None:
     for result in results:
@@ -35,7 +35,7 @@ def load_conversation_thread(
     trace_input_transform: Callable[[JsonListStringPublic], str],
     trace_output_transform: Callable[[JsonListStringPublic], str],
     max_results: int,
-    project_name: Optional[str],
+    project_name: str | None,
     client: opik_client.Opik,
 ) -> conversation_thread.ConversationThread:
     traces = client.search_traces(

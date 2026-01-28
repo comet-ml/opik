@@ -2,7 +2,6 @@ import logging
 import threading
 import time
 from queue import Empty
-from typing import Optional
 
 from . import message_queue, messages
 from .processors import message_processors
@@ -19,7 +18,7 @@ class QueueConsumer(threading.Thread):
         self,
         queue: message_queue.MessageQueue[messages.BaseMessage],
         message_processor: message_processors.BaseMessageProcessor,
-        name: Optional[str] = None,
+        name: str | None = None,
     ):
         super().__init__(daemon=True, name=name)
         self._message_queue = queue

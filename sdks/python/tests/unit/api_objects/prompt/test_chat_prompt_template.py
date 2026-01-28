@@ -467,9 +467,9 @@ def test_chat_prompt_template__format__passed_arguments_not_in_template__error_r
     ) as exc_info:
         tested.format({"name": "Harry", "city": "London", "nemesis_name": "Voldemort"})
 
-    assert exc_info.value.format_arguments == set(["name", "city", "nemesis_name"])
-    assert exc_info.value.prompt_placeholders == set(["name", "city"])
-    assert exc_info.value.symmetric_difference == set(["nemesis_name"])
+    assert exc_info.value.format_arguments == {"name", "city", "nemesis_name"}
+    assert exc_info.value.prompt_placeholders == {"name", "city"}
+    assert exc_info.value.symmetric_difference == {"nemesis_name"}
 
 
 def test_chat_prompt_template__format__some_placeholders_missing__error_raised():
@@ -485,9 +485,9 @@ def test_chat_prompt_template__format__some_placeholders_missing__error_raised()
     ) as exc_info:
         tested.format({"name": "Harry"})
 
-    assert exc_info.value.format_arguments == set(["name"])
-    assert exc_info.value.prompt_placeholders == set(["name", "city"])
-    assert exc_info.value.symmetric_difference == set(["city"])
+    assert exc_info.value.format_arguments == {"name"}
+    assert exc_info.value.prompt_placeholders == {"name", "city"}
+    assert exc_info.value.symmetric_difference == {"city"}
 
 
 def test_chat_prompt_template__format__placeholders_mismatch_both_ways__error_raised():
@@ -503,9 +503,9 @@ def test_chat_prompt_template__format__placeholders_mismatch_both_ways__error_ra
     ) as exc_info:
         tested.format({"name": "Harry", "nemesis_name": "Voldemort"})
 
-    assert exc_info.value.format_arguments == set(["name", "nemesis_name"])
-    assert exc_info.value.prompt_placeholders == set(["name", "city"])
-    assert exc_info.value.symmetric_difference == set(["city", "nemesis_name"])
+    assert exc_info.value.format_arguments == {"name", "nemesis_name"}
+    assert exc_info.value.prompt_placeholders == {"name", "city"}
+    assert exc_info.value.symmetric_difference == {"city", "nemesis_name"}
 
 
 def test_chat_prompt_template__format__multimodal_placeholders__validates_all():
@@ -528,9 +528,9 @@ def test_chat_prompt_template__format__multimodal_placeholders__validates_all():
     ) as exc_info:
         tested.format({"object": "painting"})
 
-    assert exc_info.value.format_arguments == set(["object"])
-    assert exc_info.value.prompt_placeholders == set(["object", "image_url"])
-    assert exc_info.value.symmetric_difference == set(["image_url"])
+    assert exc_info.value.format_arguments == {"object"}
+    assert exc_info.value.prompt_placeholders == {"object", "image_url"}
+    assert exc_info.value.symmetric_difference == {"image_url"}
 
 
 def test_chat_prompt_template__format__multiple_messages_placeholders__validates_all():
@@ -548,9 +548,9 @@ def test_chat_prompt_template__format__multiple_messages_placeholders__validates
     ) as exc_info:
         tested.format({"location": "London"})
 
-    assert exc_info.value.format_arguments == set(["location"])
-    assert exc_info.value.prompt_placeholders == set(["location", "country"])
-    assert exc_info.value.symmetric_difference == set(["country"])
+    assert exc_info.value.format_arguments == {"location"}
+    assert exc_info.value.prompt_placeholders == {"location", "country"}
+    assert exc_info.value.symmetric_difference == {"country"}
 
 
 def test_chat_prompt_template__format__validation_disabled__no_error():

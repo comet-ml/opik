@@ -1,5 +1,4 @@
 import json
-from typing import List, Optional
 
 from . import rest_operations, experiment_item
 from .. import opik_query_language
@@ -15,11 +14,11 @@ class ExperimentsClient:
     def find_experiment_items_for_dataset(
         self,
         dataset_name: str,
-        experiment_ids: List[str],
+        experiment_ids: list[str],
         truncate: bool = True,
         max_results: int = 1000,
-        filter_string: Optional[str] = None,
-    ) -> List[experiment_item.ExperimentItemContent]:
+        filter_string: str | None = None,
+    ) -> list[experiment_item.ExperimentItemContent]:
         """
         Find experiment items associated with a specific dataset among a list of experiments.
 

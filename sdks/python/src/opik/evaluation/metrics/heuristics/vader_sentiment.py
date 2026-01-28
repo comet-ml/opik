@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -45,8 +45,8 @@ class VADERSentiment(BaseMetric):
         self,
         name: str = "vader_sentiment_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
-        analyzer: Optional[Any] = None,
+        project_name: str | None = None,
+        analyzer: Any | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
 

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional, Union, Any, List, Dict
+from typing import Any
 
 import pydantic
 
@@ -68,11 +68,11 @@ class UserFrustrationMetric(ConversationThreadMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "user_frustration_score",
         include_reason: bool = True,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         window_size: int = 10,
         temperature: float = 1e-8,
     ):
@@ -87,7 +87,7 @@ class UserFrustrationMetric(ConversationThreadMetric):
         self._init_model(model, temperature=temperature)
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
+        self, model: str | base_model.OpikBaseModel | None, temperature: float
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
@@ -205,9 +205,9 @@ class UserFrustrationMetric(ConversationThreadMetric):
         return _evaluate_conversation_from_model_output(model_output=model_output)
 
     def _reason_from_verdicts(
-        self, score: float, verdicts: List[schema.EvaluateUserFrustrationResponse]
+        self, score: float, verdicts: list[schema.EvaluateUserFrustrationResponse]
     ) -> str:
-        frustrations: List[Dict[str, str]] = _extract_frustrations_from_verdicts(
+        frustrations: list[dict[str, str]] = _extract_frustrations_from_verdicts(
             verdicts
         )
 
@@ -219,9 +219,9 @@ class UserFrustrationMetric(ConversationThreadMetric):
         return _generate_reason_from_model_output(model_output=model_output)
 
     async def _a_reason_from_verdicts(
-        self, score: float, verdicts: List[schema.EvaluateUserFrustrationResponse]
+        self, score: float, verdicts: list[schema.EvaluateUserFrustrationResponse]
     ) -> str:
-        frustrations: List[Dict[str, str]] = _extract_frustrations_from_verdicts(
+        frustrations: list[dict[str, str]] = _extract_frustrations_from_verdicts(
             verdicts
         )
 
@@ -248,7 +248,7 @@ def _evaluate_conversation_from_model_output(
 
 
 def _score_from_verdicts(
-    verdicts: List[schema.EvaluateUserFrustrationResponse],
+    verdicts: list[schema.EvaluateUserFrustrationResponse],
 ) -> float:
     if len(verdicts) == 0:
         return 0.0
@@ -258,8 +258,8 @@ def _score_from_verdicts(
 
 
 def _extract_frustrations_from_verdicts(
-    verdicts: List[schema.EvaluateUserFrustrationResponse],
-) -> List[Dict[str, str]]:
+    verdicts: list[schema.EvaluateUserFrustrationResponse],
+) -> list[dict[str, str]]:
     return [
         {"message_number": f"{index + 1}", "reason": verdict.reason}
         for index, verdict in enumerate(verdicts)

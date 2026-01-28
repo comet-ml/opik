@@ -1,5 +1,3 @@
-from typing import List
-
 from opik.evaluation.metrics.conversation import types as conversation_types
 
 
@@ -107,7 +105,7 @@ User wants to tell the assistant something.
 
 
 def generate_reason(
-    score: float, negative_verdicts: List[str], user_goals: List[str]
+    score: float, negative_verdicts: list[str], user_goals: list[str]
 ) -> str:
     return f"""Below is a list of negative verdicts drawn from some messages in a conversation, which you have minimal knowledge of. It is a list of strings explaining why an LLM 'actual_output' is incomplete to satisfy the user `input` for a particular message.
 Given the completeness score, which is a [0, 1] score indicating how incomplete the OVERALL `actual_output`s are to the user intentions found in the `input`s of a conversation (higher the better), CONCISELY summarize the reason of the negative verdicts to justify the score.

@@ -2,8 +2,6 @@
 
 import sys
 from pathlib import Path
-from typing import Dict, Optional
-
 import click
 from rich.console import Console
 
@@ -25,10 +23,10 @@ def _import_by_type(
     path: str,
     workspace: str,
     dry_run: bool,
-    name_pattern: Optional[str],
+    name_pattern: str | None,
     debug: bool,
     recreate_experiments: bool = False,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> None:
     """
     Import data by type (dataset, project, experiment) with pattern matching.
@@ -72,7 +70,7 @@ def _import_by_type(
 
         debug_print(f"Source directory: {source_dir}", debug)
 
-        stats: Dict[str, int] = {}
+        stats: dict[str, int] = {}
 
         if import_type == "dataset":
             stats = import_datasets_from_directory(
@@ -135,7 +133,7 @@ def _import_by_type(
     help="Opik API key. If not provided, will use OPIK_API_KEY environment variable or configuration.",
 )
 @click.pass_context
-def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> None:
+def import_group(ctx: click.Context, workspace: str, api_key: str | None) -> None:
     """Import data to Opik workspace.
 
     This command allows you to import previously exported data back into an Opik workspace.

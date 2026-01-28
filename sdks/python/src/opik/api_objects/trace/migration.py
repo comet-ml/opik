@@ -1,7 +1,6 @@
 from . import trace_data
 from .. import span
 from ... import id_helpers
-from typing import List, Tuple
 import logging
 
 LOGGER = logging.getLogger(__name__)
@@ -9,9 +8,9 @@ LOGGER = logging.getLogger(__name__)
 
 def prepare_traces_and_spans_for_copy(
     destination_project_name: str,
-    traces_data: List[trace_data.TraceData],
-    spans_data: List[span.SpanData],
-) -> Tuple[List[trace_data.TraceData], List[span.SpanData]]:
+    traces_data: list[trace_data.TraceData],
+    spans_data: list[span.SpanData],
+) -> tuple[list[trace_data.TraceData], list[span.SpanData]]:
     trace_id_mapping = {}
     traces_copy = []
     for trace_ in traces_data:

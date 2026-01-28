@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-from typing import Callable, List, Optional, Sequence, Set
+from collections.abc import Callable, Sequence
 
 from opik.evaluation.metrics.conversation import types as conversation_types
 from opik.evaluation.metrics.conversation.conversation_thread_metric import (
@@ -93,7 +93,7 @@ class KnowledgeRetentionMetric(ConversationThreadMetric):
         self,
         name: str = "knowledge_retention_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         turns_to_consider: int = 5,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
@@ -109,8 +109,8 @@ class KnowledgeRetentionMetric(ConversationThreadMetric):
         conversation: conversation_types.Conversation,
         **ignored_kwargs: object,
     ) -> ScoreResult:
-        user_turns: List[str] = []
-        assistant_turns: List[str] = []
+        user_turns: list[str] = []
+        assistant_turns: list[str] = []
         for message in conversation:
             content = message.get("content")
             role = message.get("role")
@@ -152,8 +152,8 @@ class KnowledgeRetentionMetric(ConversationThreadMetric):
             metadata=metadata,
         )
 
-    def _extract_terms(self, texts: Sequence[str]) -> Set[str]:
-        tokens: Set[str] = set()
+    def _extract_terms(self, texts: Sequence[str]) -> set[str]:
+        tokens: set[str] = set()
         for text in texts:
             normalized = self._normalizer(text)
             for token in normalized.split():

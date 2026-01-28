@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any
 
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -23,7 +23,7 @@ class ErrorJudge(BaseMetric):
         raise ValueError("fail")
 
 
-def _conversation(messages: List[str]) -> List[dict]:
+def _conversation(messages: list[str]) -> list[dict]:
     turns = []
     for idx, content in enumerate(messages):
         role = "assistant" if idx % 2 else "user"

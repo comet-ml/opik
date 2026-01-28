@@ -2,7 +2,6 @@ import logging
 import os
 from typing import (
     Any,
-    Dict,
 )
 
 from google.adk.models import LlmResponse
@@ -12,7 +11,7 @@ import pydantic
 LOGGER = logging.getLogger(__name__)
 
 
-def convert_adk_base_model_to_dict(value: pydantic.BaseModel) -> Dict[str, Any]:
+def convert_adk_base_model_to_dict(value: pydantic.BaseModel) -> dict[str, Any]:
     """Most ADK objects are Pydantic Base Models"""
     return value.model_dump(mode="json", exclude_unset=True, fallback=str)
 
