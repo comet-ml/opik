@@ -27,24 +27,63 @@ import isObject from "lodash/isObject";
 import { parseCompletionOutput } from "@/lib/playground";
 import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
 import { getTextFromMessageContent } from "@/lib/llm";
-
+ 
 export interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
   prompt: PlaygroundPromptType;
 }
-
+ 
 const serializeTags = (datasetItem: DatasetItem["data"], tags: string[]) => {
   const newDatasetItem = cloneDeep(datasetItem);
-
+ 
   tags.forEach((tag) => {
     const value = get(newDatasetItem, tag);
     set(newDatasetItem, tag, isObject(value) ? JSON.stringify(value) : value);
   });
-
+ 
   return newDatasetItem;
 };
-
-const transformMessageIntoProviderMessage = (
+ 
+const MUSTACHE_VAR_REGEX = /^\{\{([^}]+)\}\}$/;
+ 
+type MediaType = "image_url" | "video_url" | "audio_url";
+ 
+const expandMediaUrl = (
+  urlTemplate: string,
+  rawDatasetItem: DatasetItem["data"],
+  serializedDatasetItem: DatasetItem["data"],
+  mediaType: MediaType,
+): Array<ImagePart | VideoPart | AudioPart> => {
+  // Check if the URL is a single mustache variable pointing to an array
+  const match = urlTemplate.match(MUSTACHE_VAR_REGEX);
+  if (match) {
+    const varName = match[1];
+    const rawValue = get(rawDatasetItem, varName);
+    if (Array.isArray(rawValue)) {
+      return rawValue.map((url: string) => ({
+        type: mediaType,
+        [mediaType]: { url },
+      })) as Array<ImagePart | VideoPart | AudioPart>;
+    }
+  }
+ 
+  // Not an array — render normally via mustache
+  const renderedUrl = mustache.render(
+    urlTemplate,
+    serializedDatasetItem,
+    {},
+    { escape: (val: string) => val },
+  );
+ 
+  return [
+    {
+      type: mediaType,
+      [mediaType]: { url: renderedUrl },
+    } as ImagePart | VideoPart | AudioPart,
+  ];
+};
+ 
+export const transformMessageIntoProviderMessage = (
   message: LLMMessage,
   datasetItem: DatasetItem["data"] = {},
 ): ProviderMessageType => {
@@ -52,20 +91,20 @@ const transformMessageIntoProviderMessage = (
   const messageTags = getPromptMustacheTags(
     getTextFromMessageContent(message.content),
   );
-
+ 
   // Validate variables exist
   const serializedDatasetItem = serializeTags(datasetItem, messageTags);
   const notDefinedVariables = messageTags.filter((tag) =>
     isUndefined(get(serializedDatasetItem, tag)),
   );
-
+ 
   if (notDefinedVariables.length > 0) {
     throw new Error(`${notDefinedVariables.join(", ")} not defined`);
   }
-
+ 
   // Handle content based on type
   let processedContent: MessageContent;
-
+ 
   if (typeof message.content === "string") {
     // Text-only: render mustache and keep as string
     processedContent = mustache.render(
@@ -76,7 +115,7 @@ const transformMessageIntoProviderMessage = (
     );
   } else {
     // Array with images/videos/audios: render mustache in text and media URLs
-    processedContent = message.content.map((part) => {
+    processedContent = message.content.flatMap((part) => {
       if (part.type === "text") {
         return {
           type: "text",
@@ -88,55 +127,37 @@ const transformMessageIntoProviderMessage = (
           ),
         } as TextPart;
       } else if (part.type === "image_url") {
-        // Render mustache variables in image URLs
-        return {
-          type: "image_url",
-          image_url: {
-            url: mustache.render(
-              part.image_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
-          },
-        } as ImagePart;
+        return expandMediaUrl(
+          part.image_url.url,
+          datasetItem,
+          serializedDatasetItem,
+          "image_url",
+        ) as ImagePart[];
       } else if (part.type === "video_url") {
-        // Render mustache variables in video URLs
-        return {
-          type: "video_url",
-          video_url: {
-            url: mustache.render(
-              part.video_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
-          },
-        } as VideoPart;
+        return expandMediaUrl(
+          part.video_url.url,
+          datasetItem,
+          serializedDatasetItem,
+          "video_url",
+        ) as VideoPart[];
       } else {
-        // Render mustache variables in audio URLs
-        return {
-          type: "audio_url",
-          audio_url: {
-            url: mustache.render(
-              part.audio_url.url,
-              serializedDatasetItem,
-              {},
-              { escape: (val: string) => val },
-            ),
-          },
-        } as AudioPart;
+        return expandMediaUrl(
+          part.audio_url.url,
+          datasetItem,
+          serializedDatasetItem,
+          "audio_url",
+        ) as AudioPart[];
       }
     });
   }
-
+ 
   return {
     role: message.role,
     // Send content as-is (either string or array) to match OpenAI API spec
     content: processedContent,
   };
 };
-
+ 
 interface UsePromptDatasetItemCombinationArgs {
   datasetItems: DatasetItem[];
   isToStopRef: RefObject<boolean>;
@@ -148,7 +169,7 @@ interface UsePromptDatasetItemCombinationArgs {
   deleteAbortController: (key: string) => void;
   throttlingSeconds: number;
 }
-
+ 
 const usePromptDatasetItemCombination = ({
   datasetItems,
   isToStopRef,
@@ -162,14 +183,14 @@ const usePromptDatasetItemCombination = ({
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
-
+ 
   const runStreaming = useCompletionProxyStreaming({
     workspaceName,
   });
-
+ 
   const promptIds = usePromptIds();
   const promptMap = usePromptMap();
-
+ 
   const createCombinations = useCallback((): DatasetItemPromptCombination[] => {
     if (datasetItems.length > 0 && promptIds.length > 0) {
       return datasetItems.flatMap((di) =>
@@ -179,12 +200,12 @@ const usePromptDatasetItemCombination = ({
         })),
       );
     }
-
+ 
     return promptIds.map((promptId) => ({
       prompt: promptMap[promptId],
     }));
   }, [datasetItems, promptMap, promptIds]);
-
+ 
   const processCombination = useCallback(
     async (
       { datasetItem, prompt }: DatasetItemPromptCombination,
@@ -193,25 +214,25 @@ const usePromptDatasetItemCombination = ({
       if (isToStopRef.current) {
         return;
       }
-
+ 
       const controller = new AbortController();
-
+ 
       const datasetItemId = datasetItem?.id || "";
       const datasetItemData = await hydrateDatasetItemData(datasetItem);
       const key = `${datasetItemId}-${prompt.id}`;
-
+ 
       addAbortController(key, controller);
-
+ 
       try {
         updateOutput(prompt.id, datasetItemId, {
           isLoading: true,
           selectedRuleIds,
         });
-
+ 
         const providerMessages = prompt.messages.map((m) =>
           transformMessageIntoProviderMessage(m, datasetItemData),
         );
-
+ 
         const promptLibraryVersions = (
           prompt.messages
             .map((m) => m.promptVersionId)
@@ -219,7 +240,7 @@ const usePromptDatasetItemCombination = ({
         ).map((id) => ({
           id,
         }));
-
+ 
         const run = await runStreaming({
           model: prompt.model,
           messages: providerMessages,
@@ -231,11 +252,11 @@ const usePromptDatasetItemCombination = ({
             });
           },
         });
-
+ 
         updateOutput(prompt.id, datasetItemId, {
           isLoading: false,
         });
-
+ 
         logProcessor.log({
           ...run,
           providerMessages,
@@ -250,7 +271,7 @@ const usePromptDatasetItemCombination = ({
           selectedRuleIds,
           datasetItemData,
         });
-
+ 
         if (
           run.opikError ||
           run.providerError ||
@@ -261,14 +282,14 @@ const usePromptDatasetItemCombination = ({
         }
       } catch (error) {
         const typedError = error as Error;
-
+ 
         updateOutput(prompt.id, datasetItemId, {
           value: typedError.message,
           isLoading: false,
         });
       } finally {
         deleteAbortController(key);
-
+ 
         // Apply throttling delay if configured
         if (throttlingSeconds > 0 && !isToStopRef.current) {
           await new Promise((resolve) =>
@@ -277,7 +298,7 @@ const usePromptDatasetItemCombination = ({
         }
       }
     },
-
+ 
     [
       isToStopRef,
       hydrateDatasetItemData,
@@ -291,11 +312,11 @@ const usePromptDatasetItemCombination = ({
       throttlingSeconds,
     ],
   );
-
+ 
   return {
     createCombinations,
     processCombination,
   };
 };
-
+ 
 export default usePromptDatasetItemCombination;
