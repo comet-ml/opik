@@ -4,10 +4,8 @@ import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
-import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { cn } from "@/lib/utils";
-import { Check, Copy } from "lucide-react";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import { PrettyLLMMessageCodeBlockProps } from "./types";
 
 const PRETTY_CODEMIRROR_SETUP = {
@@ -30,9 +28,6 @@ const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> = ({
   className,
 }) => {
   const theme = useCodemirrorTheme();
-  const { copyToClipboard, showSuccessIcon, isCopying } = useCopyToClipboard({
-    successMessage: "Code copied to clipboard",
-  });
 
   return (
     <div
@@ -41,23 +36,15 @@ const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> = ({
         className,
       )}
     >
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+      <div className="flex items-center justify-between border-b border-border px-3 py-0.5">
         <div className="text-xs text-muted-foreground">{label}</div>
-        <TooltipWrapper content={showSuccessIcon ? "Copied!" : "Copy code"}>
-          <button
-            onClick={() => copyToClipboard(code)}
-            disabled={isCopying}
-            className="flex size-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-            tabIndex={-1}
-            aria-label="Copy code"
-          >
-            {showSuccessIcon ? (
-              <Check className="size-3 text-green-500" />
-            ) : (
-              <Copy className="size-3 text-light-slate" />
-            )}
-          </button>
-        </TooltipWrapper>
+        <CopyButton
+          text={code}
+          message="Code copied to clipboard"
+          tooltipText="Copy code"
+          size="icon-2xs"
+          className="p-0 "
+        />
       </div>
       <div className="[&>div>.absolute]:!hidden [&_.cm-editor]:!bg-primary-foreground [&_.cm-gutters]:!bg-primary-foreground">
         <CodeMirror

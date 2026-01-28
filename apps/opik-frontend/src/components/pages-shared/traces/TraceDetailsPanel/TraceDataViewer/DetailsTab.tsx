@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 import { MediaProvider } from "@/components/shared/SyntaxHighlighter/llmMessages";
@@ -13,13 +13,13 @@ import AttachmentsList from "./AttachmentsList";
 import EventsList from "./EventsList";
 import Loader from "@/components/shared/Loader/Loader";
 
-type InputOutputTabProps = {
+type DetailsTabProps = {
   data: Trace | Span;
   isLoading: boolean;
   search?: string;
 };
 
-const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
+const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
   data,
   isLoading,
   search,
@@ -28,14 +28,24 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
   const hasError = Boolean(data.error_info);
+  const hasMetadata = Boolean(data.metadata);
+  const hasTokenUsage = Boolean(data.usage);
+
+  // Compute default open sections based on what's available
+  const openSections = useMemo(() => {
+    const sections = ["input", "output", "events"];
+    if (hasError) sections.unshift("error");
+    if (hasMetadata) sections.push("metadata");
+    if (hasTokenUsage) sections.push("usage");
+    // Attachments is handled by AttachmentsList which manages its own accordion
+    sections.unshift("attachments");
+    return sections;
+  }, [hasError, hasMetadata, hasTokenUsage]);
 
   return (
     <MediaProvider media={media}>
-      <Accordion
-        type="multiple"
-        className="w-full"
-        defaultValue={["attachments", "error", "input", "output", "events"]}
-      >
+      <Accordion type="multiple" className="w-full" defaultValue={openSections}>
+        {/* Order: Attachments, Error (if exists), Input, Output, Events, Metadata, Token usage (if exists) */}
         <AttachmentsList media={media} />
         {hasError && (
           <AccordionItem className="group" value="error" disabled={isLoading}>
@@ -96,9 +106,39 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
           </AccordionContent>
         </AccordionItem>
         <EventsList data={data} isLoading={isLoading} search={search} />
+        {hasMetadata && (
+          <AccordionItem className="group" value="metadata">
+            <AccordionTrigger>Metadata</AccordionTrigger>
+            <AccordionContent
+              forceMount
+              className="group-data-[state=closed]:hidden"
+            >
+              <SyntaxHighlighter
+                withSearch
+                data={data.metadata}
+                search={search}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        )}
+        {hasTokenUsage && (
+          <AccordionItem className="group" value="usage">
+            <AccordionTrigger>Token usage</AccordionTrigger>
+            <AccordionContent
+              forceMount
+              className="group-data-[state=closed]:hidden"
+            >
+              <SyntaxHighlighter
+                data={data.usage as object}
+                withSearch
+                search={search}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        )}
       </Accordion>
     </MediaProvider>
   );
 };
 
-export default InputOutputTab;
+export default DetailsTab;

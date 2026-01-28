@@ -10,6 +10,7 @@ export type {
   LLMProviderDetectionResult,
   LLMBlockDescriptor,
   LLMMessageDescriptor,
+  LLMMapperResult,
   ProviderDetector,
   ProviderMapper,
   LLMProviderImplementation,

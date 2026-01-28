@@ -16,7 +16,7 @@ const PrettyLLMMessageHeader: React.FC<PrettyLLMMessageHeaderProps> = ({
   return (
     <CustomAccordionTrigger
       className={cn(
-        "flex items-center justify-between gap-1 rounded-sm p-1 transition-colors hover:bg-primary-foreground [&[data-state=open]>div>svg:first-child]:rotate-90",
+        "flex items-center justify-between gap-1 rounded-sm p-1 px-0 transition-colors hover:bg-primary-foreground [&[data-state=open]>div>svg:first-child]:rotate-90",
         className,
       )}
     >

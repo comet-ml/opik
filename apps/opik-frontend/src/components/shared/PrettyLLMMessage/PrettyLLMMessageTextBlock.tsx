@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useTruncation } from "@/hooks/useTruncation";
+import { useHeightTruncation } from "@/hooks/useHeightTruncation";
 import { PrettyLLMMessageTextBlockProps } from "./types";
 import { MarkdownPreview } from "@/components/shared/MarkdownPreview/MarkdownPreview";
 
@@ -14,7 +14,7 @@ const PrettyLLMMessageTextBlock: React.FC<PrettyLLMMessageTextBlockProps> = ({
   className,
 }) => {
   const shouldTruncate = role === "system";
-  const { ref, isTruncated, isExpanded, toggle } = useTruncation(
+  const { ref, isTruncated, isExpanded, toggle } = useHeightTruncation(
     MAX_LINES,
     shouldTruncate,
   );

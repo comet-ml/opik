@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import AudioPlayer from "@/components/shared/AudioPlayer/AudioPlayer";
 import { PrettyLLMMessageAudioPlayerBlockProps } from "./types";
-import { useMediaResolver } from "@/hooks/useMediaResolver";
+import { useMediaContext } from "@/components/shared/SyntaxHighlighter/llmMessages";
 
 /**
  * Pure presentation component for displaying audio in LLM messages.
@@ -12,7 +12,7 @@ import { useMediaResolver } from "@/hooks/useMediaResolver";
 const PrettyLLMMessageAudioPlayerBlock: React.FC<
   PrettyLLMMessageAudioPlayerBlockProps
 > = ({ audios, className }) => {
-  const resolveMedia = useMediaResolver();
+  const { resolveMedia } = useMediaContext();
 
   // Resolve placeholders to actual URLs using centralized resolver
   const resolvedAudioList = useMemo(() => {

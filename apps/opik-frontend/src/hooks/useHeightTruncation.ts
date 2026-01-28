@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 
-interface UseTruncationReturn {
+interface UseHeightTruncationReturn {
   ref: React.RefObject<HTMLDivElement>;
   isTruncated: boolean;
   isExpanded: boolean;
@@ -8,16 +8,16 @@ interface UseTruncationReturn {
 }
 
 /**
- * Custom hook to detect if content is truncated and manage expand/collapse state
+ * Custom hook to detect if content is height-truncated and manage expand/collapse state
  *
  * @param maxLines - Maximum number of lines before truncation
  * @param enabled - Whether truncation detection is enabled
  * @returns Object containing ref, truncation state, expansion state, and toggle function
  */
-export const useTruncation = (
+export const useHeightTruncation = (
   maxLines: number,
   enabled: boolean,
-): UseTruncationReturn => {
+): UseHeightTruncationReturn => {
   const [isTruncated, setIsTruncated] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const ref = useRef<HTMLDivElement>(null);

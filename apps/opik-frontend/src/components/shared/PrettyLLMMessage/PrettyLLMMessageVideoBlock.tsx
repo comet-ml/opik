@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { ATTACHMENT_TYPE, ParsedMediaData } from "@/types/attachments";
 import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { PrettyLLMMessageVideoBlockProps } from "./types";
-import { useMediaResolver } from "@/hooks/useMediaResolver";
+import { useMediaContext } from "@/components/shared/SyntaxHighlighter/llmMessages";
 
 /**
  * Pure presentation component for displaying videos in LLM messages.
@@ -14,7 +14,7 @@ const PrettyLLMMessageVideoBlock: React.FC<PrettyLLMMessageVideoBlockProps> = ({
   videos,
   className,
 }) => {
-  const resolveMedia = useMediaResolver();
+  const { resolveMedia } = useMediaContext();
 
   // Resolve placeholders to actual URLs using centralized resolver
   const mediaData: ParsedMediaData[] = useMemo(() => {
