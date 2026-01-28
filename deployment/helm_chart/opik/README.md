@@ -340,10 +340,12 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage"` |  |
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_ALLOW_NETWORK | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_CPU_SHARES | string | `"512"` | Docker CPU shares for containers (higher = higher priority) |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG | string | `"latest"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256mb"` | Memory limit for executor containers |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
 | component.python-backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |

@@ -57,6 +57,25 @@ get_container_histogram = meter.create_histogram(
     unit="ms",
 )
 
+payload_code_size_histogram = meter.create_histogram(
+    name="payload_code_size",
+    description="Size of the code payload in bytes",
+    unit="bytes",
+)
+
+payload_data_size_histogram = meter.create_histogram(
+    name="payload_data_size",
+    description="Size of the data payload in bytes",
+    unit="bytes",
+)
+
+# Counter for execution outcomes to track failure rates
+execution_outcome_counter = meter.create_counter(
+    name="execution_outcome",
+    description="Count of execution outcomes by status (success, timeout, invalid_code, error)",
+    unit="1",
+)
+
 class DockerExecutor(CodeExecutorBase):
     def __init__(self):
         super().__init__()
@@ -66,6 +85,10 @@ class DockerExecutor(CodeExecutorBase):
         self.docker_tag = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
         self.network_disabled = os.getenv("PYTHON_CODE_EXECUTOR_ALLOW_NETWORK", "false").lower() != "true"
+        # CPU shares: higher value = higher priority. Default 1024 is the Docker default.
+        # Previous value of 2 was too low, causing processes to yield too frequently.
+        self.cpu_shares = int(os.getenv("PYTHON_CODE_EXECUTOR_CPU_SHARES", "512"))
+        self.mem_limit = os.getenv("PYTHON_CODE_EXECUTOR_MEM_LIMIT", "256mb")
 
         self.client = docker.from_env()
         self.instance_id = str(uuid7())
@@ -76,6 +99,11 @@ class DockerExecutor(CodeExecutorBase):
         self.scoring_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel)
 
         self.stop_event = Event()
+
+        # Log container configuration for debugging
+        logger.info(f"Docker executor configuration: cpu_shares={self.cpu_shares}, mem_limit={self.mem_limit}, "
+                    f"exec_timeout={self.exec_timeout}s, max_parallel={self.max_parallel}, "
+                    f"network_disabled={self.network_disabled}")
 
         # Pre-warm the container pool
         self._pre_warm_container_pool()
@@ -168,8 +196,8 @@ class DockerExecutor(CodeExecutorBase):
             new_container = self.client.containers.run(
                 image=f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}",
                 command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
-                mem_limit="256mb",
-                cpu_shares=2,
+                mem_limit=self.mem_limit,
+                cpu_shares=self.cpu_shares,
                 detach=True,
                 network_disabled=self.network_disabled,
                 security_opt=["no-new-privileges"],
@@ -239,20 +267,34 @@ class DockerExecutor(CodeExecutorBase):
 
                     logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Will retry: {e}")
 
+    def _record_execution_outcome(self, status: str, payload_type: Optional[str] = None):
+        """Record execution outcome for monitoring failure rates."""
+        execution_outcome_counter.add(1, attributes={
+            "status": status,
+            "payload_type": payload_type or "unknown"
+        })
+
     def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         if self.stop_event.is_set():
             return {"code": 503, "error": "Service is shutting down"}
         
+        # Record payload sizes for correlation with timeouts
+        code_size = len(code.encode('utf-8')) if code else 0
+        data_json = json.dumps(data)
+        data_size = len(data_json.encode('utf-8')) if data else 0
+        payload_code_size_histogram.record(code_size, attributes={"payload_type": payload_type or "unknown"})
+        payload_data_size_histogram.record(data_size, attributes={"payload_type": payload_type or "unknown"})
+        
         start_time = time.time()
         container = self.get_container()
-        latency = self._calculate_latency_ms(start_time)
-        logger.info(f"Get container latency: {latency:.3f} milliseconds")
-        get_container_histogram.record(latency, attributes={"method": "get_container"})
+        get_container_latency = self._calculate_latency_ms(start_time)
+        logger.info(f"Get container latency: {get_container_latency:.3f} milliseconds")
+        get_container_histogram.record(get_container_latency, attributes={"method": "get_container"})
 
         with self.tracer.start_as_current_span("docker.run_scoring"):
             try:
-                cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.pyc", code, json.dumps(data), payload_type or ""]
-            
+                cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.pyc", code, data_json, payload_type or ""]
+                
                 future = self.scoring_executor.submit(
                     container.exec_run,
                     cmd=cmd,
@@ -262,23 +304,38 @@ class DockerExecutor(CodeExecutorBase):
                 )
 
                 result = future.result(timeout=self.exec_timeout)
+                
                 exec_result = ExecutionResult(
                     exit_code=result.exit_code,
                     output=result.output
                 )
-                latency = self._calculate_latency_ms(start_time)
-                logger.info(f"Scoring executor latency: {latency:.3f} milliseconds")
-
+                total_latency = self._calculate_latency_ms(start_time)
+                
                 # Access ThreadPoolExecutor's internal work queue (private attribute)
                 queue_size = self.scoring_executor._work_queue.qsize()
                 scoring_executor_queue_size_gauge.set(queue_size)
 
-                scoring_executor_histogram.record(latency, attributes={"method": "run_scoring"})
-                return self.parse_execution_result(exec_result)
+                scoring_executor_histogram.record(total_latency, attributes={"method": "run_scoring"})
+                
+                # Parse result and track outcome
+                parsed_result = self.parse_execution_result(exec_result)
+                
+                # Determine outcome status based on result
+                if exec_result.exit_code == 0:
+                    outcome_status = "success"
+                    logger.info(f"Scoring executor latency: {total_latency:.3f} ms (code_size: {code_size} bytes, data_size: {data_size} bytes)")
+                else:
+                    outcome_status = "invalid_code"
+                    logger.warning(f"Execution failed with invalid code/data (exit_code: {exec_result.exit_code}, code_size: {code_size} bytes, data_size: {data_size} bytes)")
+                
+                self._record_execution_outcome(outcome_status, payload_type)
+                return parsed_result
             except concurrent.futures.TimeoutError:
-                logger.error(f"Execution timed out in container {container.id}")
+                self._record_execution_outcome("timeout", payload_type)
+                logger.error(f"Execution timed out in container {container.id} (code_size: {code_size} bytes, data_size: {data_size} bytes)")
                 return {"code": 504, "error": "Server processing exceeded timeout limit."}
             except Exception as e:
+                self._record_execution_outcome("error", payload_type)
                 logger.error(f"An unexpected error occurred: {e}")
                 return {"code": 500, "error": "An unexpected error occurred"}
             finally:
