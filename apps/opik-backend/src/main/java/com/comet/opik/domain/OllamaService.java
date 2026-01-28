@@ -91,13 +91,14 @@ public class OllamaService {
                 .map(response -> {
                     if (response.getStatus() == 200 && response.hasEntity()) {
                         String responseBody = response.readEntity(String.class);
-                        OllamaTagsResponse tagsResponse = JsonUtils.readValue(responseBody, OllamaTagsResponse.class);
+                        OllamaModelsResponse modelsResponse = JsonUtils.readValue(responseBody,
+                                OllamaModelsResponse.class);
 
-                        List<OllamaModelResponse> tagModels = tagsResponse.models() != null
-                                ? tagsResponse.models()
+                        List<OllamaModelResponse> modelResponses = modelsResponse.models() != null
+                                ? modelsResponse.models()
                                 : Collections.emptyList();
 
-                        List<OllamaModel> models = tagModels.stream()
+                        List<OllamaModel> models = modelResponses.stream()
                                 .map(model -> OllamaModel.builder()
                                         .name(model.name())
                                         .size(model.size())
@@ -191,7 +192,7 @@ public class OllamaService {
     private record OllamaVersionResponse(@JsonProperty("version") String version) {
     }
 
-    private record OllamaTagsResponse(@JsonProperty("models") List<OllamaModelResponse> models) {
+    private record OllamaModelsResponse(@JsonProperty("models") List<OllamaModelResponse> models) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
