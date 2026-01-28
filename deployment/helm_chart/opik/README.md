@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.9.90](https://img.shields.io/badge/Version-1.9.90-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.90](https://img.shields.io/badge/AppVersion-1.9.90-informational?style=flat-square)
+![Version: 1.9.101](https://img.shields.io/badge/Version-1.9.101-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.101](https://img.shields.io/badge/AppVersion-1.9.101-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -340,10 +340,12 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.env.OTEL_PROPAGATORS | string | `"tracecontext,baggage"` |  |
 | component.python-backend.env.OTEL_SERVICE_NAME | string | `"opik-python-backend"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_ALLOW_NETWORK | string | `"false"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_CPU_SHARES | string | `"512"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS | string | `"3"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_NAME | string | `"opik-sandbox-executor-python"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY | string | `"ghcr.io/comet-ml/opik"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG | string | `"latest"` |  |
+| component.python-backend.env.PYTHON_CODE_EXECUTOR_MEM_LIMIT | string | `"256m"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_PARALLEL_NUM | string | `"5"` |  |
 | component.python-backend.env.PYTHON_CODE_EXECUTOR_STRATEGY | string | `"process"` |  |
 | component.python-backend.env.REDIS_URL | string | `"redis://:wFSuJX9nDBdCa25sKZG7bh@opik-redis-master:6379/"` |  |
