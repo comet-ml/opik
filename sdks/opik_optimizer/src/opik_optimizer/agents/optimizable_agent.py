@@ -144,6 +144,17 @@ class OptimizableAgent(ABC):
             },
             **effective_kwargs,
         )
+
+        # Normalize span data after LiteLLM call to ensure input/output are dicts
+        # This prevents issues where the LiteLLM integration might set these to lists
+        try:
+            from ..utils import prompt_tracing
+
+            prompt_tracing._normalize_current_span_data()
+        except Exception:
+            # Silently fail - this is a defensive measure
+            pass
+
         return response
 
     # TODO: Deprecate this legacy method. Use invoke_agent() instead for consistency.
