@@ -93,6 +93,8 @@ def _convert_response_to_dict(
         return output.model_dump(mode="json")
     elif isinstance(output, dict):
         return output
+    elif hasattr(output, "__dict__"):
+        return dict(vars(output))
     else:
         return dict(output)
 
@@ -182,13 +184,20 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
-        assert isinstance(
-            output,
-            (
-                litellm.types.utils.ModelResponse,
-                dict,
-            ),
-        ), f"Expected ModelResponse or dict, got {type(output)}"
+        if not (
+            isinstance(
+                output,
+                (
+                    litellm.types.utils.ModelResponse,
+                    dict,
+                ),
+            )
+            or hasattr(output, "model_dump")
+            or hasattr(output, "__dict__")
+        ):
+            raise TypeError(
+                f"Expected ModelResponse, dict, or object with __dict__, got {type(output)}"
+            )
 
         response_dict = _convert_response_to_dict(output)
         output_data, metadata = dict_utils.split_dict_by_keys(
