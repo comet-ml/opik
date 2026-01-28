@@ -17,10 +17,7 @@ export type OllamaListModelsRequest = {
 const useOllamaListModelsMutation = () => {
   return useMutation<OllamaModel[], AxiosError, OllamaListModelsRequest>({
     mutationFn: async (request: OllamaListModelsRequest) => {
-      const { data } = await api.post(
-        `${OLLAMA_REST_ENDPOINT}models`,
-        request,
-      );
+      const { data } = await api.post(`${OLLAMA_REST_ENDPOINT}models`, request);
       return data;
     },
   });
