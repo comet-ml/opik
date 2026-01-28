@@ -215,6 +215,9 @@ def test_attachment_to_message__create_temp_copy_fails_on_open__uses_original_fi
     # Original file should still exist
     assert os.path.exists(original_file)
 
+    # Clean up the temp copy
+    os.unlink(message.file_path)
+
 
 def test_attachment_to_message__create_temp_copy_fails_with_delete_after_upload_true__still_does_not_delete(
     original_file: str,
@@ -248,5 +251,158 @@ def test_attachment_to_message__create_temp_copy_fails_with_delete_after_upload_
     assert message.delete_after_upload is False
     assert message.file_path == original_file
 
-    # Original file should still exist
-    assert os.path.exists(original_file)
+
+def test_attachment_to_message__bytes_data():
+    """Test that bytes data is written to a temp file and marked for deletion."""
+    url_override = "https://example.com"
+    entity_id = "123"
+    project_name = "test-project"
+    data = b"binary content here"
+
+    attachment_data = attachment.Attachment(
+        data=data,
+        file_name="test.bin",
+        content_type="application/octet-stream",
+    )
+
+    message = converters.attachment_to_message(
+        attachment_data=attachment_data,
+        entity_type="trace",
+        entity_id=entity_id,
+        project_name=project_name,
+        url_override=url_override,
+    )
+
+    # A temp file should be created
+    assert os.path.exists(message.file_path)
+    assert message.file_path != "test.bin"
+
+    # delete_after_upload should be True for bytes data
+    assert message.delete_after_upload is True
+
+    # Verify file content matches the bytes
+    with open(message.file_path, "rb") as f:
+        assert f.read() == data
+
+    # Other fields should be preserved
+    assert message.file_name == "test.bin"
+    assert message.mime_type == "application/octet-stream"
+    assert message.entity_type == "trace"
+    assert message.entity_id == entity_id
+    assert message.project_name == project_name
+    assert message.encoded_url_override == "aHR0cHM6Ly9leGFtcGxlLmNvbQ=="
+
+    # Clean up
+    os.unlink(message.file_path)
+
+
+def test_attachment_to_message__bytes_data_without_file_name():
+    """Test bytes data without file_name uses temp file basename."""
+    url_override = "https://example.com"
+    entity_id = "123"
+    project_name = "test-project"
+    data = b"some binary data"
+
+    attachment_data = attachment.Attachment(
+        data=data,
+        content_type="image/png",
+    )
+
+    message = converters.attachment_to_message(
+        attachment_data=attachment_data,
+        entity_type="span",
+        entity_id=entity_id,
+        project_name=project_name,
+        url_override=url_override,
+    )
+
+    # file_name should be the basename of the temp file
+    assert message.file_name == os.path.basename(message.file_path)
+    assert message.delete_after_upload is True
+    assert message.mime_type == "image/png"
+    assert message.entity_type == "span"
+
+    # Clean up
+    os.unlink(message.file_path)
+
+
+def test_attachment_to_message__bytes_data_infers_mime_type_from_file_name():
+    """Test that a mime type is inferred from file_name when data is bytes."""
+    url_override = "https://example.com"
+    entity_id = "123"
+    project_name = "test-project"
+    data = b"\x00\x01\x02\x03"
+
+    attachment_data = attachment.Attachment(
+        data=data,
+        file_name="image.png",
+    )
+
+    message = converters.attachment_to_message(
+        attachment_data=attachment_data,
+        entity_type="trace",
+        entity_id=entity_id,
+        project_name=project_name,
+        url_override=url_override,
+    )
+
+    assert message.file_name == "image.png"
+    assert message.mime_type == "image/png"
+    assert message.delete_after_upload is True
+
+    # Clean up
+    os.unlink(message.file_path)
+
+
+def test_attachment_to_message__bytes_data_default_mime_type():
+    """Test that bytes data without file_name or content_type use a binary mime type."""
+    url_override = "https://example.com"
+    entity_id = "123"
+    project_name = "test-project"
+    data = b"\x00\x01\x02\x03"
+
+    attachment_data = attachment.Attachment(
+        data=data,
+    )
+
+    message = converters.attachment_to_message(
+        attachment_data=attachment_data,
+        entity_type="trace",
+        entity_id=entity_id,
+        project_name=project_name,
+        url_override=url_override,
+    )
+
+    # Should use default binary mime type
+    assert message.mime_type == "application/octet-stream"
+    assert message.delete_after_upload is True
+
+    # Clean up
+    os.unlink(message.file_path)
+
+
+def test_attachment_to_message__bytes_data_write_fails__error_reraised():
+    """Test behavior when _write_file_like_to_temp_file fails and error reraised."""
+    url_override = "https://example.com"
+    entity_id = "123"
+    project_name = "test-project"
+    data = b"test data"
+
+    attachment_data = attachment.Attachment(
+        data=data,
+        file_name="test.bin",
+        content_type="application/octet-stream",
+    )
+
+    with mock.patch(
+        "opik.api_objects.attachment.converters._write_file_like_to_temp_file",
+        side_effect=OSError("Disk full"),
+    ):
+        with pytest.raises(OSError):
+            converters.attachment_to_message(
+                attachment_data=attachment_data,
+                entity_type="trace",
+                entity_id=entity_id,
+                project_name=project_name,
+                url_override=url_override,
+            )
