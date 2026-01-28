@@ -172,6 +172,60 @@ def clean_feedback_scores(
     return cleaned_scores if cleaned_scores else None
 
 
+def sort_spans_topologically(spans_info: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Sort spans in topological order to ensure parents are processed before children.
+
+    This function performs a level-order traversal (breadth-first) of the span tree,
+    ensuring that all parent spans are processed before their children, regardless
+    of how deep the hierarchy goes.
+
+    Args:
+        spans_info: List of span dictionaries, each with 'id' and optional 'parent_span_id'
+
+    Returns:
+        List of spans sorted in topological order (parents before children)
+    """
+    if not spans_info:
+        return []
+
+    # Build children map: parent_id -> list of child spans
+    # Also track all span IDs to detect missing parent references
+    children_map: Dict[str, List[Dict[str, Any]]] = {}
+    root_spans: List[Dict[str, Any]] = []
+    all_span_ids = {span.get("id") for span in spans_info if span.get("id")}
+
+    for span in spans_info:
+        parent_span_id = span.get("parent_span_id")
+
+        if not parent_span_id:
+            # Root span (no parent)
+            root_spans.append(span)
+        elif parent_span_id in all_span_ids:
+            # Child span with valid parent reference - add to children map
+            if parent_span_id not in children_map:
+                children_map[parent_span_id] = []
+            children_map[parent_span_id].append(span)
+        else:
+            # Span references a parent that doesn't exist - treat as root span
+            # This handles corrupted data gracefully
+            root_spans.append(span)
+
+    # Perform level-order traversal (breadth-first)
+    result: List[Dict[str, Any]] = []
+    queue: List[Dict[str, Any]] = root_spans.copy()
+
+    while queue:
+        current = queue.pop(0)
+        result.append(current)
+
+        # Add all children of current span to queue
+        current_id = current.get("id")
+        if current_id and current_id in children_map:
+            queue.extend(children_map[current_id])
+
+    return result
+
+
 def print_import_summary(stats: Dict[str, int]) -> None:
     """Print a nice summary table of import statistics."""
     table = Table(
