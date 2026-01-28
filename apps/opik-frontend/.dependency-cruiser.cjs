@@ -87,16 +87,19 @@ module.exports = {
       name: "no-hooks-importing-components",
       severity: "error",
       comment:
-        "Hooks must not import components (exception: app-level providers, ConfirmDialog)",
+        "Hooks must not import components (exception: app-level providers, useNavigationBlocker UI components)",
       from: { path: "^src/hooks/" },
       to: {
         path: "^src/components/",
-        // Allow importing providers, use-toast (hook), and ConfirmDialog (for useNavigationBlocker)
+        // Allow importing providers, use-toast (hook), and dialog/button (for useNavigationBlocker)
         pathNot: [
           "^src/components/ui/use-toast\\.ts$",
           "^src/components/theme-provider\\.tsx$",
           "^src/components/feature-toggles-provider\\.tsx$",
           "^src/components/shared/ConfirmDialog/",
+          // useNavigationBlocker returns a DialogComponent that uses these UI components
+          "^src/components/ui/dialog\\.tsx$",
+          "^src/components/ui/button\\.tsx$",
         ],
       },
     },
