@@ -207,6 +207,7 @@ class HotpotMultiHopAgent(OptimizableAgent):
             "opik": {
                 "current_span_data": opik_context.get_current_span_data(),
                 "tags": ["streaming-test"],
+                "suppress_call_log": True,
             }
         }
 

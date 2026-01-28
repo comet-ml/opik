@@ -234,6 +234,7 @@ class HotpotMultiHopAgent(OptimizableAgent):
             "opik": {
                 "current_span_data": opik_context.get_current_span_data(),
                 "tags": ["hotpot-multihop"],
+                "suppress_call_log": True,
             }
         }
 
