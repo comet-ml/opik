@@ -13,6 +13,7 @@ from opik_backend.studio import (
     OptimizationJobContext,
 )
 from opik_backend.studio.exceptions import (
+    OptimizationError,
     InvalidOptimizerError,
     InvalidMetricError,
 )
@@ -61,6 +62,13 @@ def handle_invalid_optimizer_error(exception: InvalidOptimizerError):
 def handle_invalid_metric_error(exception: InvalidMetricError):
     """Handle InvalidMetricError exceptions (invalid metric type or configuration)."""
     logger.error(f"Invalid metric: {exception}", exc_info=True)
+    return jsonify({"error": str(exception)}), 400
+
+
+@studio.errorhandler(OptimizationError)
+def handle_optimization_error(exception: OptimizationError):
+    """Handle OptimizationError exceptions (invalid configuration or optimization errors)."""
+    logger.error(f"Optimization error: {exception}", exc_info=True)
     return jsonify({"error": str(exception)}), 400
 
 
