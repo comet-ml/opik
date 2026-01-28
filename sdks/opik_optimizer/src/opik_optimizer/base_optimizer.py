@@ -1355,6 +1355,34 @@ class BaseOptimizer(ABC):
                 raise TypeError(
                     "run_optimization must return AlgorithmResult (legacy OptimizationResult is no longer supported)"
                 )
+
+            # Check if optimization failed (finish_reason = "error")
+            # This can happen if evaluation fails but run_optimization() catches and returns
+            if context.finish_reason == "error":
+                logger.error("Optimization failed with error finish_reason")
+                result = self._build_final_result(raw_result, context)
+                result_prompt = runtime.select_result_display_prompt(result.prompt)
+                runtime.show_final_result(
+                    optimizer=self,
+                    initial_score=(
+                        result.initial_score
+                        if result.initial_score is not None
+                        else baseline_score
+                    ),
+                    best_score=result.score,
+                    prompt=result_prompt,
+                )
+                self._finalize_optimization(context, status="error")
+                debug_log(
+                    "optimize_end",
+                    optimizer=self.__class__.__name__,
+                    best_score=result.score,
+                    trials_completed=context.trials_completed,
+                    stop_reason=context.finish_reason,
+                )
+                runtime.log_final_state(optimizer=self, result=result)
+                return self.post_optimize(context, result)
+
             result = self._build_final_result(raw_result, context)
 
             result_prompt = runtime.select_result_display_prompt(result.prompt)
@@ -1381,10 +1409,18 @@ class BaseOptimizer(ABC):
             return self.post_optimize(context, result)
         except Exception as e:
             logger.error(f"Optimization failed: {e}")
-            # FIXME(opik): Switch to status="error" once Optimization.update allows it.
-            # REST supports "error" via PUT v1/private/optimizations/{id} (status field),
-            # but Optimization.update() currently restricts to running/completed/cancelled.
-            self._finalize_optimization(context, status="cancelled")
+            logger.error(
+                f"Finalizing optimization with error status. "
+                f"Optimization ID: {context.optimization_id}, "
+                f"Optimization object exists: {context.optimization is not None}"
+            )
+            try:
+                self._finalize_optimization(context, status="error")
+            except Exception as finalize_error:
+                logger.error(
+                    f"Failed to finalize optimization status: {finalize_error}",
+                    exc_info=True,
+                )
             raise
 
     # ------------------------------------------------------------------
@@ -1637,18 +1673,35 @@ class BaseOptimizer(ABC):
 
     def _update_optimization(
         self, optimization: optimization.Optimization, status: str
-    ) -> None:
+    ) -> bool:
         # FIXME: remove when a solution is added to opik's optimization.update method
         count = 0
+        last_error = None
         while count < 3:
             try:
                 optimization.update(status=status)
-                break
-            except ApiError:
+                logger.debug(f"Successfully updated optimization status to {status}")
+                return True
+            except ApiError as e:
+                last_error = e
                 count += 1
-                time.sleep(5)
-        if count == 3:
-            logger.warning("Unable to update optimization status; continuing...")
+                logger.warning(
+                    f"Attempt {count}/3 to update optimization status to {status} failed: {e}"
+                )
+                if count < 3:
+                    time.sleep(5)
+            except Exception as e:
+                last_error = e
+                logger.error(
+                    f"Unexpected error updating optimization status to {status}: {e}"
+                )
+                break
+        if count == 3 or last_error:
+            logger.error(
+                f"Unable to update optimization status to {status} after {count} attempts. "
+                f"Last error: {last_error}"
+            )
+        return False
 
     @staticmethod
     def _coerce_score(raw_score: Any) -> float:
@@ -1661,9 +1714,18 @@ class BaseOptimizer(ABC):
         status: str = "completed",
     ) -> None:
         if context.optimization is not None:
-            self._update_optimization(context.optimization, status)
-            logger.debug(
-                f"Optimization {context.optimization_id} status updated to {status}."
+            updated = self._update_optimization(context.optimization, status)
+            if updated:
+                logger.debug(
+                    f"Optimization {context.optimization_id} status updated to {status}."
+                )
+            else:
+                logger.warning(
+                    f"Optimization {context.optimization_id} status update to {status} did not complete."
+                )
+        else:
+            logger.warning(
+                f"Cannot update optimization status to {status}: optimization object is None"
             )
         # No implicit context storage; nothing to clear here.
 
