@@ -13,24 +13,20 @@ Pipeline:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from collections.abc import Callable
 from typing import Any
 
-import litellm
 import opik
 from opik import opik_context
-from opik.integrations.litellm import track_completion
 from pydantic import BaseModel
 
 from opik_optimizer import ChatPrompt, OptimizableAgent
+from opik_optimizer.core.llm_calls import call_model
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 
 logger = logging.getLogger(__name__)
-
-tracked_completion = track_completion()(litellm.completion)
 
 
 class SummaryObject(BaseModel):
@@ -38,6 +34,12 @@ class SummaryObject(BaseModel):
 
     summary: str
     gaps: list[str]
+
+
+class SummaryUpdate(BaseModel):
+    """Structured output for summary update step."""
+
+    summary: str
 
 
 def get_initial_prompts() -> dict[str, ChatPrompt]:
@@ -227,21 +229,22 @@ class HotpotMultiHopAgent(OptimizableAgent):
         opik_context.update_current_trace(
             metadata={"_opik_graph_definition": self.create_agent_graph()}
         )
+        call_metadata = {
+            "opik": {
+                "current_span_data": opik_context.get_current_span_data(),
+                "tags": ["hotpot-multihop"],
+            }
+        }
 
         # Step 1: Generate first search query
         messages = prompts["create_query_1"].get_messages(dataset_item)
-        search_query_1_response = tracked_completion(
-            model=self.model,
+        search_query_1 = call_model(
             messages=messages,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["hotpot-multihop"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            metadata=call_metadata,
         )
-        search_query_1 = search_query_1_response.choices[0].message.content
+        search_query_1 = str(search_query_1 or "").strip()
 
         # Step 2: Execute first Wikipedia search
         search_query_1_result = self.search_fn(search_query_1, self.num_passages)
@@ -253,21 +256,15 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "passages_1": "\n\n".join(search_query_1_result),
             }
         )
-        response = tracked_completion(
-            model=self.model,
+        response = call_model(
             messages=messages,
-            response_format=SummaryObject,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["hotpot-multihop"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            response_model=SummaryObject,
+            metadata=call_metadata,
         )
-        response_content = json.loads(response.choices[0].message.content)
-        summary_1 = response_content["summary"]
-        gaps_1 = response_content["gaps"]
+        summary_1 = response.summary
+        gaps_1 = response.gaps
 
         # Step 4: Generate second search query targeting gaps
         messages = prompts["create_query_2"].get_messages(
@@ -277,18 +274,13 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "gaps_1": "\n\n".join(gaps_1),
             }
         )
-        search_query_2_response = tracked_completion(
-            model=self.model,
+        search_query_2 = call_model(
             messages=messages,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["hotpot-multihop"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            metadata=call_metadata,
         )
-        search_query_2 = search_query_2_response.choices[0].message.content
+        search_query_2 = str(search_query_2 or "").strip()
 
         # Step 5: Execute second Wikipedia search
         search_query_2_result = self.search_fn(search_query_2, self.num_passages)
@@ -301,18 +293,14 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "passages_2": "\n\n".join(search_query_2_result),
             }
         )
-        summary_2_response = tracked_completion(
-            model=self.model,
+        summary_2_response = call_model(
             messages=messages,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["hotpot-multihop"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            response_model=SummaryUpdate,
+            metadata=call_metadata,
         )
-        summary_2 = summary_2_response.choices[0].message.content
+        summary_2 = summary_2_response.summary
 
         # Step 7: Generate final answer
         messages = prompts["final_answer"].get_messages(
@@ -321,15 +309,10 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "summary_2": summary_2,
             }
         )
-        final_answer_response = tracked_completion(
-            model=self.model,
+        final_answer_response = call_model(
             messages=messages,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["hotpot-multihop"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            metadata=call_metadata,
         )
-        return final_answer_response.choices[0].message.content
+        return str(final_answer_response or "").strip()
