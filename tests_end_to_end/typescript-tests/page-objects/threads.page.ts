@@ -3,8 +3,7 @@ import { Page, Locator, expect } from '@playwright/test';
 export class ThreadsPage {
   readonly page: Page;
   readonly searchInput: Locator;
-  readonly logsTab: Locator;
-  readonly threadsToggle: Locator;
+  readonly threadsTab: Locator;
   readonly threadRow: Locator;
   readonly threadContainer: Locator;
   readonly threadContainerDeleteButton: Locator;
@@ -16,8 +15,7 @@ export class ThreadsPage {
   constructor(page: Page) {
     this.page = page;
     this.searchInput = page.getByTestId('search-input');
-    this.logsTab = page.getByRole('tab', { name: 'Logs' });
-    this.threadsToggle = page.getByRole('radio', { name: 'Threads' });
+    this.threadsTab = page.getByRole('tab', { name: 'Threads' });
     this.threadRow = page.locator('tbody tr');
     this.threadContainer = page.getByTestId('thread');
     this.threadContainerDeleteButton = page
@@ -35,10 +33,7 @@ export class ThreadsPage {
   }
 
   async switchToPage(): Promise<void> {
-    // Click the Logs tab first
-    await this.logsTab.click();
-    // Then click the Threads toggle within the Logs tab
-    await this.threadsToggle.click();
+    await this.threadsTab.click();
   }
 
   async getNumberOfThreadsOnPage(): Promise<number> {
