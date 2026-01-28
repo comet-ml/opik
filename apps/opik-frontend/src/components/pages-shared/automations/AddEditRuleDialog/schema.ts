@@ -341,12 +341,9 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   });
 });
 
-export const BasePythonCodeFormSchema = z.object({
-  metric: z
-    .string({
-      required_error: "Code is required",
-    })
-    .min(1, { message: "Code is required" }),
+// Base schema without validation - used as a base for extension
+const BasePythonCodeObjectSchema = z.object({
+  metric: z.string().optional(),
   // Common metric fields (optional - only present for common metrics)
   common_metric_id: z.string().optional(),
   init_config: z
@@ -357,6 +354,21 @@ export const BasePythonCodeFormSchema = z.object({
     .optional(),
   score_config: z.record(z.string(), z.string()).optional(),
 });
+
+// Base schema with validation
+export const BasePythonCodeFormSchema = BasePythonCodeObjectSchema.superRefine(
+  (data, ctx) => {
+    // Either metric code OR common_metric_id must be present
+    // If common_metric_id is not present, metric is required
+    if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Code is required",
+        path: ["metric"],
+      });
+    }
+  },
+);
 
 export const CommonMetricDetailsSchema = z.object({
   metricId: z
@@ -373,7 +385,42 @@ export const CommonMetricDetailsSchema = z.object({
     .optional(),
 });
 
-export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
+export const PythonCodeDetailsTraceFormSchema =
+  BasePythonCodeObjectSchema.extend({
+    arguments: z.record(
+      z.string(),
+      z
+        .string()
+        .min(1, { message: "Key is required" })
+        .regex(/^(input|output|metadata)(\.|$)/, {
+          message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+        }),
+    ),
+    parsingArgumentsError: z.boolean().optional(),
+  }).superRefine((data, ctx) => {
+    // Either metric code OR common_metric_id must be present
+    if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Code is required",
+        path: ["metric"],
+      });
+    }
+  });
+
+export const PythonCodeDetailsThreadFormSchema =
+  BasePythonCodeObjectSchema.superRefine((data, ctx) => {
+    // Either metric code OR common_metric_id must be present
+    if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Code is required",
+        path: ["metric"],
+      });
+    }
+  });
+
+export const PythonCodeDetailsSpanFormSchema = BasePythonCodeObjectSchema.extend(
   {
     arguments: z.record(
       z.string(),
@@ -386,21 +433,15 @@ export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
     ),
     parsingArgumentsError: z.boolean().optional(),
   },
-);
-
-export const PythonCodeDetailsThreadFormSchema = BasePythonCodeFormSchema;
-
-export const PythonCodeDetailsSpanFormSchema = BasePythonCodeFormSchema.extend({
-  arguments: z.record(
-    z.string(),
-    z
-      .string()
-      .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
-      }),
-  ),
-  parsingArgumentsError: z.boolean().optional(),
+).superRefine((data, ctx) => {
+  // Either metric code OR common_metric_id must be present
+  if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Code is required",
+      path: ["metric"],
+    });
+  }
 });
 
 export const BaseEvaluationRuleFormSchema = z.object({
