@@ -224,7 +224,7 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
       {selectedMetric && (
         <>
           <div className="rounded-md border border-border bg-muted/50 p-4">
-            <p className="text-sm text-muted-foreground">
+            <p className="whitespace-pre-line text-sm text-muted-foreground">
               {selectedMetric.description}
             </p>
           </div>
