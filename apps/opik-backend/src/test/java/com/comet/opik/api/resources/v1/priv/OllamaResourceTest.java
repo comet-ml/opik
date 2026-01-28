@@ -171,7 +171,7 @@ class OllamaResourceTest {
                 .post(jakarta.ws.rs.client.Entity.json(request));
 
         // Then
-        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_GATEWAY);
 
         OllamaConnectionTestResponse result = response.readEntity(OllamaConnectionTestResponse.class);
         assertThat(result).isNotNull();

@@ -49,7 +49,7 @@ public class OllamaResource {
             + "For inference, use the URL with /v1 suffix.", responses = {
                     @ApiResponse(responseCode = "200", description = "Connection test successful", content = @Content(schema = @Schema(implementation = OllamaConnectionTestResponse.class))),
                     @ApiResponse(responseCode = "422", description = "Unprocessable Content - Invalid URL format", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-                    @ApiResponse(responseCode = "500", description = "Connection test failed")
+                    @ApiResponse(responseCode = "502", description = "Connection test failed - Ollama instance unreachable", content = @Content(schema = @Schema(implementation = OllamaConnectionTestResponse.class)))
             })
     public Response testConnection(
             @NotNull @Valid OllamaInstanceBaseUrlRequest request) {
@@ -58,6 +58,10 @@ public class OllamaResource {
 
         OllamaConnectionTestResponse response = ollamaService.testConnection(request.baseUrl(), request.apiKey())
                 .block();
+
+        if (response != null && !response.connected()) {
+            return Response.status(Response.Status.BAD_GATEWAY).entity(response).build();
+        }
         return Response.ok(response).build();
     }
 
