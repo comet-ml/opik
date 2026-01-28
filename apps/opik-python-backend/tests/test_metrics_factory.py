@@ -16,32 +16,29 @@ class TestMetricFactory:
         """Test that building an unknown metric type raises InvalidMetricError."""
         with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("unknown_metric", {}, "openai/gpt-4o")
-        
+
         assert "unknown_metric" in str(exc_info.value)
         assert "Available metrics:" in str(exc_info.value)
 
     def test_build_equals_metric(self):
         """Test building an equals metric."""
         metric_fn = MetricFactory.build("equals", {}, "openai/gpt-4o")
-        
+
         assert metric_fn.__name__ == "equals"
         assert callable(metric_fn)
 
     def test_build_equals_metric_with_params(self):
         """Test building an equals metric with custom parameters."""
-        params = {
-            "case_sensitive": False,
-            "reference_key": "expected_output"
-        }
+        params = {"case_sensitive": False, "reference_key": "expected_output"}
         metric_fn = MetricFactory.build("equals", params, "openai/gpt-4o")
-        
+
         assert metric_fn.__name__ == "equals"
         assert callable(metric_fn)
 
     def test_build_levenshtein_metric(self):
         """Test building a levenshtein_ratio metric."""
         metric_fn = MetricFactory.build("levenshtein_ratio", {}, "openai/gpt-4o")
-        
+
         assert metric_fn.__name__ == "levenshtein_ratio"
         assert callable(metric_fn)
 
@@ -49,10 +46,10 @@ class TestMetricFactory:
         """Test building a geval metric."""
         params = {
             "task_introduction": "Evaluate the response quality",
-            "evaluation_criteria": "Is the response helpful?"
+            "evaluation_criteria": "Is the response helpful?",
         }
         metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
-        
+
         assert metric_fn.__name__ == "geval"
         assert callable(metric_fn)
 
@@ -60,26 +57,28 @@ class TestMetricFactory:
         """Test building a json_schema_validator metric."""
         # The metric reads schema from dataset items via schema_key parameter
         metric_fn = MetricFactory.build("json_schema_validator", {}, "openai/gpt-4o")
-        
+
         assert metric_fn.__name__ == "json_schema_validator"
         assert callable(metric_fn)
 
     def test_build_json_schema_validator_metric_with_custom_schema_key(self):
         """Test building a json_schema_validator metric with custom schema_key."""
         params = {"schema_key": "my_schema"}
-        metric_fn = MetricFactory.build("json_schema_validator", params, "openai/gpt-4o")
-        
+        metric_fn = MetricFactory.build(
+            "json_schema_validator", params, "openai/gpt-4o"
+        )
+
         assert metric_fn.__name__ == "json_schema_validator"
         assert callable(metric_fn)
 
     def test_json_schema_validator_missing_schema_returns_zero(self):
         """Test that json_schema_validator returns 0.0 when schema is missing from dataset item."""
         metric_fn = MetricFactory.build("json_schema_validator", {}, "openai/gpt-4o")
-        
+
         # Dataset item without json_schema key
         dataset_item = {"other_field": "value"}
         result = metric_fn(dataset_item, '{"name": "test"}')
-        
+
         assert result.value == 0.0
         assert "Missing schema" in result.reason
 
@@ -90,42 +89,40 @@ class TestEqualsMetricExecution:
     def test_equals_metric_exact_match(self):
         """Test equals metric with exact match."""
         metric_fn = MetricFactory.build("equals", {"case_sensitive": True}, "model")
-        
+
         # Default reference key is "answer"
         dataset_item = {"answer": "hello world"}
         result = metric_fn(dataset_item, "hello world")
-        
+
         assert result.value == 1.0
 
     def test_equals_metric_no_match(self):
         """Test equals metric with no match."""
         metric_fn = MetricFactory.build("equals", {"case_sensitive": True}, "model")
-        
+
         dataset_item = {"answer": "hello world"}
         result = metric_fn(dataset_item, "goodbye world")
-        
+
         assert result.value == 0.0
 
     def test_equals_metric_case_insensitive(self):
         """Test equals metric with case insensitive comparison."""
         metric_fn = MetricFactory.build("equals", {"case_sensitive": False}, "model")
-        
+
         dataset_item = {"answer": "Hello World"}
         result = metric_fn(dataset_item, "hello world")
-        
+
         assert result.value == 1.0
 
     def test_equals_metric_custom_reference_key(self):
         """Test equals metric with custom reference key."""
         metric_fn = MetricFactory.build(
-            "equals", 
-            {"reference_key": "expected"}, 
-            "model"
+            "equals", {"reference_key": "expected"}, "model"
         )
-        
+
         dataset_item = {"expected": "test value"}
         result = metric_fn(dataset_item, "test value")
-        
+
         assert result.value == 1.0
 
 
@@ -135,30 +132,30 @@ class TestLevenshteinMetricExecution:
     def test_levenshtein_metric_exact_match(self):
         """Test levenshtein metric with exact match."""
         metric_fn = MetricFactory.build("levenshtein_ratio", {}, "model")
-        
+
         # Default reference key is "answer"
         dataset_item = {"answer": "hello"}
         result = metric_fn(dataset_item, "hello")
-        
+
         assert result.value == 1.0
 
     def test_levenshtein_metric_partial_match(self):
         """Test levenshtein metric with partial match."""
         metric_fn = MetricFactory.build("levenshtein_ratio", {}, "model")
-        
+
         dataset_item = {"answer": "hello"}
         result = metric_fn(dataset_item, "hallo")
-        
+
         # "hello" vs "hallo" - 1 character difference out of 5
         assert 0.0 < result.value < 1.0
 
     def test_levenshtein_metric_no_match(self):
         """Test levenshtein metric with completely different strings."""
         metric_fn = MetricFactory.build("levenshtein_ratio", {}, "model")
-        
+
         dataset_item = {"answer": "abc"}
         result = metric_fn(dataset_item, "xyz")
-        
+
         assert result.value == 0.0
 
 
@@ -170,7 +167,7 @@ class TestMetricReasons:
         metric_fn = MetricFactory.build("equals", {}, "model")
         dataset_item = {"answer": "test"}
         result = metric_fn(dataset_item, "test")
-        
+
         assert result.reason is not None
         assert "match" in result.reason.lower()
 
@@ -179,7 +176,7 @@ class TestMetricReasons:
         metric_fn = MetricFactory.build("equals", {}, "model")
         dataset_item = {"answer": "test"}
         result = metric_fn(dataset_item, "different")
-        
+
         assert result.reason is not None
         assert "no match" in result.reason.lower()
 
@@ -188,7 +185,7 @@ class TestMetricReasons:
         metric_fn = MetricFactory.build("levenshtein_ratio", {}, "model")
         dataset_item = {"answer": "hello"}
         result = metric_fn(dataset_item, "hallo")
-        
+
         assert result.reason is not None
         assert "similarity" in result.reason.lower()
         assert "%" in result.reason
@@ -196,16 +193,16 @@ class TestMetricReasons:
 
 class TestCodeMetric:
     """Tests for code metric functionality.
-    
+
     Code metrics use the same executor infrastructure as automations (evaluation metrics),
     executed via ProcessExecutor or DockerExecutor based on PYTHON_CODE_EXECUTOR_STRATEGY.
-    
+
     Only BaseMetric class pattern is supported (same as automations).
     """
 
     def test_code_metric_basic_class_works(self):
         """Test that a basic class metric works."""
-        code = '''
+        code = """
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -215,16 +212,16 @@ class MyMetric(BaseMetric):
     
     def score(self, output, **kwargs):
         return ScoreResult(name=self.name, value=0.5, reason="Class metric")
-'''
+"""
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        
+
         result = metric_fn({}, "test output")
         assert result.value == 0.5
         assert result.name == "test"
 
     def test_code_metric_uses_json(self):
         """Test that json module can be used."""
-        code = '''
+        code = """
 import json
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -236,14 +233,14 @@ class JsonMetric(BaseMetric):
     def score(self, output, **kwargs):
         data = json.loads(output) if output.startswith("{") else {}
         return ScoreResult(name=self.name, value=1.0, reason="Used json")
-'''
+"""
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
         result = metric_fn({}, '{"key": "value"}')
         assert result.value == 1.0
 
     def test_code_metric_uses_re(self):
         """Test that re module can be used."""
-        code = '''
+        code = """
 import re
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -255,14 +252,14 @@ class RegexMetric(BaseMetric):
     def score(self, output, **kwargs):
         match = re.search(r"\\d+", output)
         return ScoreResult(name=self.name, value=1.0 if match else 0.0, reason="Used re")
-'''
+"""
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
         result = metric_fn({}, "test 123")
         assert result.value == 1.0
 
     def test_code_metric_uses_math(self):
         """Test that math module can be used."""
-        code = '''
+        code = """
 import math
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -273,14 +270,14 @@ class MathMetric(BaseMetric):
     
     def score(self, output, **kwargs):
         return ScoreResult(name=self.name, value=math.sqrt(0.25), reason="Used math")
-'''
+"""
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
         result = metric_fn({}, "test")
         assert result.value == 0.5
 
     def test_code_metric_receives_dataset_fields_as_kwargs(self):
         """Test that dataset_item fields are passed as kwargs to score method."""
-        code = '''
+        code = """
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -292,20 +289,20 @@ class KwargsMetric(BaseMetric):
         expected = kwargs.get("expected_value", "")
         score = 1.0 if output == expected else 0.0
         return ScoreResult(name=self.name, value=score, reason=f"Expected: {expected}")
-'''
+"""
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
-        
+
         # Test with matching expected_value
         result = metric_fn({"expected_value": "correct"}, "correct")
         assert result.value == 1.0
-        
+
         # Test with non-matching expected_value
         result = metric_fn({"expected_value": "correct"}, "wrong")
         assert result.value == 0.0
 
     def test_code_metric_preserves_custom_name(self):
         """Test that the metric name defined by user is preserved."""
-        code = '''
+        code = """
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -315,70 +312,70 @@ class CustomNamedMetric(BaseMetric):
     
     def score(self, output, **kwargs):
         return ScoreResult(name=self.name, value=1.0, reason="Test")
-'''
+"""
         metric_fn = MetricFactory.build("code", {"code": code}, "model")
         result = metric_fn({}, "test output")
-        
+
         assert result.name == "my_custom_metric_name"
 
     def test_code_metric_missing_code_raises_error(self):
         """Test that missing code parameter raises error."""
         with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("code", {}, "model")
-        
+
         assert "Missing 'code' parameter" in str(exc_info.value)
 
     def test_code_metric_empty_code_raises_error(self):
         """Test that empty code raises error."""
         with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("code", {"code": ""}, "model")
-        
+
         assert "Missing 'code' parameter" in str(exc_info.value)
 
     def test_code_metric_invalid_syntax_raises_error(self):
         """Test that invalid Python syntax raises error."""
-        code = '''
+        code = """
 class MyMetric(BaseMetric)
     def score(self, output, **kwargs):
         return ScoreResult(name="test", value=1.0, reason="OK")
-'''
+"""
         with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("code", {"code": code}, "model")
-        
+
         assert "Invalid Python code" in str(exc_info.value)
 
     def test_code_metric_no_basemetric_class_raises_error(self):
         """Test that code without a BaseMetric subclass raises error at build time.
-        
+
         With executor infrastructure, code must define a BaseMetric subclass.
         Validation at build time provides fail-fast behavior.
         """
-        code = '''
+        code = """
 # Just a comment, no BaseMetric class
 x = 1
-'''
+"""
         # Should raise InvalidMetricError during build (validation step)
         with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("code", {"code": code}, "model")
-        
+
         assert "BaseMetric" in str(exc_info.value)
 
     def test_code_metric_function_only_raises_error(self):
         """Test that function-only code (no BaseMetric class) raises error at build time.
-        
+
         Function-based metrics are not supported - only BaseMetric class pattern.
         Validation at build time provides fail-fast behavior.
         """
-        code = '''
+        code = """
 from opik.evaluation.metrics.score_result import ScoreResult
 
 def my_metric(dataset_item, llm_output):
     return ScoreResult(name="test", value=1.0, reason="Function")
-'''
+"""
         # Should raise InvalidMetricError during build (validation step)
         with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("code", {"code": code}, "model")
-        
+
         assert "BaseMetric" in str(exc_info.value)
 
 
@@ -444,19 +441,23 @@ class TestTemplateSyntaxConversion:
             "prompt": {
                 "messages": [
                     {"role": "system", "content": "Be helpful"},
-                    {"role": "user", "content": "What is {{question}}? Answer: {{answer}}"}
+                    {
+                        "role": "user",
+                        "content": "What is {{question}}? Answer: {{answer}}",
+                    },
                 ]
             },
             "llm_model": {"model": "gpt-4o-mini", "parameters": {}},
             "evaluation": {"metrics": [{"type": "equals", "parameters": {}}]},
-            "optimizer": {"type": "gepa", "parameters": {}}
+            "optimizer": {"type": "gepa", "parameters": {}},
         }
-        
+
         opt_config = OptimizationConfig.from_dict(config)
-        
+
         # System message should be unchanged (no variables)
         assert opt_config.prompt_messages[0]["content"] == "Be helpful"
         # User message should have converted variables
-        assert opt_config.prompt_messages[1]["content"] == "What is {question}? Answer: {answer}"
-
-
+        assert (
+            opt_config.prompt_messages[1]["content"]
+            == "What is {question}? Answer: {answer}"
+        )

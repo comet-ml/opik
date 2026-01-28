@@ -8,49 +8,51 @@ from uuid import UUID
 
 def _convert_template_syntax(text: str) -> str:
     """Convert double curly braces to single curly braces for template variables.
-    
+
     The frontend uses Mustache-style {{variable}} syntax, but the optimizer
     expects Python-style {variable} syntax.
-    
+
     Args:
         text: String that may contain {{variable}} patterns
-        
+
     Returns:
         String with {{variable}} or {{ name }} converted to {variable} or {name}
     """
+
     # Convert {{variable}} to {variable}
     # Uses greedy matching ([^}]+) instead of non-greedy ([^}]+?) to avoid ReDoS attacks
     # Whitespace is stripped from the captured variable name
     def replace_match(match):
         var_name = match.group(1).strip()
         return f"{{{var_name}}}"
-    
-    return re.sub(r'\{\{([^}]+)\}\}', replace_match, text)
+
+    return re.sub(r"\{\{([^}]+)\}\}", replace_match, text)
 
 
 @dataclass
 class OptimizationJobContext:
     """Context for an optimization job.
-    
+
     Contains the core identifiers and configuration needed to process
     an optimization job from the Java backend.
     """
+
     optimization_id: str
     workspace_id: str
     workspace_name: str
     config: Dict[str, Any]
     opik_api_key: Optional[str] = None
-    
+
     @classmethod
     def from_job_message(cls, job_message: Dict[str, Any]) -> "OptimizationJobContext":
         """Create context from job message.
-        
+
         Args:
             job_message: Raw job message from RQ
-            
+
         Returns:
             OptimizationJobContext instance
-            
+
         Raises:
             KeyError: If required fields are missing
         """
@@ -66,38 +68,39 @@ class OptimizationJobContext:
 @dataclass
 class OptimizationConfig:
     """Parsed optimization configuration.
-    
+
     Extracts and structures the nested configuration from the job message
     for easier access.
     """
+
     # Dataset
     dataset_name: str
-    
+
     # Prompt
     prompt_messages: List[Dict[str, str]]
-    
+
     # Model
     model: str
     model_params: Dict[str, Any]
-    
+
     # Metric
     metric_type: str
     metric_params: Dict[str, Any]
-    
+
     # Optimizer
     optimizer_type: str
     optimizer_params: Dict[str, Any]
-    
+
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> "OptimizationConfig":
         """Parse config dict into typed object.
-        
+
         Args:
             config: Configuration dictionary from job message
-            
+
         Returns:
             OptimizationConfig instance
-            
+
         Raises:
             KeyError: If required fields are missing
             ValueError: If metrics list is empty
@@ -106,18 +109,22 @@ class OptimizationConfig:
         metric_config_list = config["evaluation"]["metrics"]
         if not metric_config_list:
             raise ValueError("At least one metric must be defined")
-        
+
         metric_config = metric_config_list[0]
-        
+
         # Convert prompt messages template syntax from {{var}} (FE-style) to {var} (optimizer-style)
         prompt_messages = []
         for msg in config["prompt"]["messages"]:
             converted_msg = {
                 "role": msg["role"],
-                "content": _convert_template_syntax(msg["content"]) if isinstance(msg["content"], str) else msg["content"]
+                "content": (
+                    _convert_template_syntax(msg["content"])
+                    if isinstance(msg["content"], str)
+                    else msg["content"]
+                ),
             }
             prompt_messages.append(converted_msg)
-        
+
         return cls(
             dataset_name=config["dataset_name"],
             prompt_messages=prompt_messages,
@@ -133,15 +140,16 @@ class OptimizationConfig:
 @dataclass
 class OptimizationResult:
     """Result of an optimization run."""
+
     optimization_id: str
     final_score: float
     initial_score: Optional[float]
     metric_name: str
     timestamp: str
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary for API response.
-        
+
         Returns:
             Dictionary representation of the result
         """
@@ -153,4 +161,3 @@ class OptimizationResult:
             "metric_name": self.metric_name,
             "timestamp": self.timestamp,
         }
-
