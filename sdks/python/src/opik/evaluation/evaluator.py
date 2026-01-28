@@ -155,7 +155,16 @@ def _extract_model_config_from_test_results(
 
     # Get the first test result's trace
     first_test = test_results[0]
+
+    # Validate test_case and trace_id exist before attempting extraction
+    if not hasattr(first_test, "test_case") or first_test.test_case is None:
+        LOGGER.debug("First test result has no test_case, skipping config extraction")
+        return None
+
     trace_id = first_test.test_case.trace_id
+    if not trace_id:
+        LOGGER.debug("First test result has no trace_id, skipping config extraction")
+        return None
 
     return _extract_model_config_from_trace(client, trace_id)
 

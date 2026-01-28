@@ -68,11 +68,11 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         )
         metadata = dict_utils.deepmerge(metadata, new_metadata)
 
-        # Add default parameters for OpenAI models
+        # Add default parameters for OpenAI models (merge defaults first so user metadata takes precedence)
         model = kwargs.get("model", None)
         default_params = model_defaults.get_openai_default_params(model, kwargs)
         if default_params:
-            metadata = dict_utils.deepmerge(metadata, default_params)
+            metadata = dict_utils.deepmerge(default_params, metadata)
 
         metadata.update(
             {

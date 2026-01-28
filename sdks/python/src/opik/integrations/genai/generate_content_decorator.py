@@ -69,13 +69,22 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         metadata = dict_utils.deepmerge(metadata, new_metadata)
 
         # Add default parameters based on provider
+        # Merge config dict into kwargs to detect user-provided parameters in both places
+        config = kwargs.get("config") or {}
+        effective_kwargs = {**kwargs, **config} if isinstance(config, dict) else kwargs
+
         if self.provider == "google_vertexai":
-            default_params = model_defaults.get_vertex_ai_default_params(model, kwargs)
+            default_params = model_defaults.get_vertex_ai_default_params(
+                model, effective_kwargs
+            )
         else:  # google_ai (Gemini)
-            default_params = model_defaults.get_gemini_default_params(model, kwargs)
+            default_params = model_defaults.get_gemini_default_params(
+                model, effective_kwargs
+            )
 
         if default_params:
-            metadata = dict_utils.deepmerge(metadata, default_params)
+            # Merge defaults first so user metadata takes precedence
+            metadata = dict_utils.deepmerge(default_params, metadata)
 
         metadata.update({"created_from": "genai"})
 
