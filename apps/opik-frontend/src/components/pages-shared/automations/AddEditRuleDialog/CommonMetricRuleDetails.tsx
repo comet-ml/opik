@@ -121,19 +121,13 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
       const newInitConfig: Record<string, string | boolean | number | null> =
         {};
 
-      // Add init parameters only
+      // Add init parameters with fresh default values for the new metric
       selectedMetric.init_parameters?.forEach((param) => {
-        // Try to preserve existing config values
-        const currentConfig = form.getValues("commonMetricDetails.initConfig");
-        if (currentConfig?.[param.name] !== undefined) {
-          newInitConfig[param.name] = currentConfig[param.name];
-        } else {
-          // Set default value based on type
-          newInitConfig[param.name] = parseDefaultValue(
-            param.default_value,
-            param.type,
-          );
-        }
+        // Always use default values when metric changes to avoid stale data
+        newInitConfig[param.name] = parseDefaultValue(
+          param.default_value,
+          param.type,
+        );
       });
 
       form.setValue("commonMetricDetails.initConfig", newInitConfig);
@@ -250,13 +244,15 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
               </div>
               <div className="grid gap-4">
                 {/* Render init parameters */}
-                {(selectedMetric.init_parameters ?? []).map((param: InitParameter) => (
-                  <InitParameterInput
-                    key={param.name}
-                    param={param}
-                    form={form}
-                  />
-                ))}
+                {(selectedMetric.init_parameters ?? []).map(
+                  (param: InitParameter) => (
+                    <InitParameterInput
+                      key={param.name}
+                      param={param}
+                      form={form}
+                    />
+                  ),
+                )}
               </div>
             </div>
           )}
