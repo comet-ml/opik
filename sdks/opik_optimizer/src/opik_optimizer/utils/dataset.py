@@ -31,14 +31,6 @@ logger = logging.getLogger(__name__)
 
 FilterBy = Mapping[str, Any]
 
-# Suppress noisy HF auth warnings in notebook environments (e.g., Colab).
-warnings.filterwarnings(
-    "ignore",
-    message=r".*HF_TOKEN.*Colab secrets.*",
-    category=UserWarning,
-    module=r"huggingface_hub\.utils\._auth",
-)
-
 
 def _normalize_filter_value(value: Any) -> Any:
     if isinstance(value, (set, frozenset, tuple)):
