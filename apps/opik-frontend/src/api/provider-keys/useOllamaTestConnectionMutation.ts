@@ -1,9 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
-import api, { PROVIDER_KEYS_REST_ENDPOINT } from "@/api/api";
+import api, { OLLAMA_REST_ENDPOINT } from "@/api/api";
 import { AxiosError } from "axios";
 
 export type OllamaInstanceBaseUrlRequest = {
   base_url: string;
+  api_key?: string;
 };
 
 export type OllamaConnectionTestResponse = {
@@ -20,7 +21,7 @@ const useOllamaTestConnectionMutation = () => {
   >({
     mutationFn: async (request: OllamaInstanceBaseUrlRequest) => {
       const { data } = await api.post(
-        `${PROVIDER_KEYS_REST_ENDPOINT}../ollama/test-connection`,
+        `${OLLAMA_REST_ENDPOINT}test-connection`,
         request,
       );
       return data;

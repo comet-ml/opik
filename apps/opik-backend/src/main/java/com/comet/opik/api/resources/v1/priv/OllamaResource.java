@@ -56,7 +56,7 @@ public class OllamaResource {
         log.info("Testing Ollama connection for workspace '{}'",
                 requestContext.get().getWorkspaceName());
 
-        OllamaConnectionTestResponse response = ollamaService.testConnection(request.baseUrl());
+        OllamaConnectionTestResponse response = ollamaService.testConnection(request.baseUrl(), request.apiKey());
         return Response.ok(response).build();
     }
 
@@ -75,7 +75,7 @@ public class OllamaResource {
         log.info("Fetching Ollama models for workspace '{}'",
                 requestContext.get().getWorkspaceName());
 
-        List<OllamaModel> models = ollamaService.listModels(request.baseUrl());
+        List<OllamaModel> models = ollamaService.listModels(request.baseUrl(), request.apiKey());
         return Response.ok(models).build();
     }
 }

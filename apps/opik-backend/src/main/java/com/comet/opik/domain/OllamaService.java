@@ -37,17 +37,23 @@ public class OllamaService {
      * Tests connection to an Ollama instance and retrieves a server version.
      *
      * @param baseUrl Base URL of the Ollama instance (without /v1 suffix, e.g., http://localhost:11434)
+     * @param apiKey  Optional API key for authenticated Ollama instances
      * @return Connection test response with status and version
      */
-    public OllamaConnectionTestResponse testConnection(@NonNull String baseUrl) {
+    public OllamaConnectionTestResponse testConnection(@NonNull String baseUrl, String apiKey) {
         String normalizedUrl = normalizeUrl(baseUrl);
         String versionUrl = normalizedUrl + "/api/version";
         log.debug("Testing Ollama connection at: {}", ValidationUtils.redactCredentialsFromUrl(versionUrl));
 
         try {
-            Response response = httpClient.target(versionUrl)
-                    .request(MediaType.APPLICATION_JSON)
-                    .get();
+            var requestBuilder = httpClient.target(versionUrl)
+                    .request(MediaType.APPLICATION_JSON);
+
+            if (apiKey != null && !apiKey.isBlank()) {
+                requestBuilder.header("Authorization", "Bearer " + apiKey);
+            }
+
+            Response response = requestBuilder.get();
 
             if (response.getStatus() == 200 && response.hasEntity()) {
                 String responseBody = response.readEntity(String.class);
@@ -74,17 +80,23 @@ public class OllamaService {
      * Lists all models available on an Ollama instance.
      *
      * @param baseUrl Base URL of the Ollama instance (without /v1 suffix, e.g., http://localhost:11434)
+     * @param apiKey  Optional API key for authenticated Ollama instances
      * @return List of available models (empty list on error)
      */
-    public List<OllamaModel> listModels(@NonNull String baseUrl) {
+    public List<OllamaModel> listModels(@NonNull String baseUrl, String apiKey) {
         String normalizedUrl = normalizeUrl(baseUrl);
         String tagsUrl = normalizedUrl + "/api/tags";
         log.debug("Fetching models from Ollama instance at: {}", ValidationUtils.redactCredentialsFromUrl(tagsUrl));
 
         try {
-            Response response = httpClient.target(tagsUrl)
-                    .request(MediaType.APPLICATION_JSON)
-                    .get();
+            var requestBuilder = httpClient.target(tagsUrl)
+                    .request(MediaType.APPLICATION_JSON);
+
+            if (apiKey != null && !apiKey.isBlank()) {
+                requestBuilder.header("Authorization", "Bearer " + apiKey);
+            }
+
+            Response response = requestBuilder.get();
 
             if (response.getStatus() == 200 && response.hasEntity()) {
                 String responseBody = response.readEntity(String.class);

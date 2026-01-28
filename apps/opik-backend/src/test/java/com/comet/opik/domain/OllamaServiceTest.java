@@ -20,7 +20,9 @@ import java.time.Instant;
 import java.util.List;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -74,7 +76,7 @@ class OllamaServiceTest {
                         .withBody(versionResponse)));
 
         // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl);
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, null);
 
         // Then
         assertThat(response).isNotNull();
@@ -92,7 +94,7 @@ class OllamaServiceTest {
                         .withStatus(404)));
 
         // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl);
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, null);
 
         // Then
         assertThat(response).isNotNull();
@@ -109,7 +111,7 @@ class OllamaServiceTest {
         String unreachableUrl = "http://localhost:99999";
 
         // When
-        OllamaConnectionTestResponse response = ollamaService.testConnection(unreachableUrl);
+        OllamaConnectionTestResponse response = ollamaService.testConnection(unreachableUrl, null);
 
         // Then
         assertThat(response).isNotNull();
@@ -135,7 +137,7 @@ class OllamaServiceTest {
                         .withBody(versionResponse)));
 
         // When - URL with various suffixes
-        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + urlSuffix);
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl + urlSuffix, null);
 
         // Then
         assertThat(response.connected()).isTrue();
@@ -185,7 +187,7 @@ class OllamaServiceTest {
                         .withBody(modelsResponse)));
 
         // When
-        List<OllamaModel> models = ollamaService.listModels(baseUrl);
+        List<OllamaModel> models = ollamaService.listModels(baseUrl, null);
 
         // Then
         assertThat(models).isNotNull();
@@ -211,7 +213,7 @@ class OllamaServiceTest {
                         .withStatus(500)));
 
         // When
-        List<OllamaModel> models = ollamaService.listModels(baseUrl);
+        List<OllamaModel> models = ollamaService.listModels(baseUrl, null);
 
         // Then
         assertThat(models).isNotNull();
@@ -248,7 +250,7 @@ class OllamaServiceTest {
                         .withBody(modelsResponse)));
 
         // When - URL with /v1 suffix (as frontend sends)
-        List<OllamaModel> models = ollamaService.listModels(baseUrl + "/v1");
+        List<OllamaModel> models = ollamaService.listModels(baseUrl + "/v1", null);
 
         // Then
         assertThat(models).isNotNull();
@@ -263,7 +265,7 @@ class OllamaServiceTest {
         String unreachableUrl = "http://localhost:99999";
 
         // When
-        List<OllamaModel> models = ollamaService.listModels(unreachableUrl);
+        List<OllamaModel> models = ollamaService.listModels(unreachableUrl, null);
 
         // Then
         assertThat(models).isNotNull();
@@ -282,11 +284,64 @@ class OllamaServiceTest {
                         .withBody(modelsResponse)));
 
         // When
-        List<OllamaModel> models = ollamaService.listModels(baseUrl);
+        List<OllamaModel> models = ollamaService.listModels(baseUrl, null);
 
         // Then
         assertThat(models).isNotNull();
         assertThat(models).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should send Authorization header when API key is provided for connection test")
+    void testConnection__withApiKey() {
+        // Given
+        String version = RandomStringUtils.secure().nextAlphanumeric(5) + "."
+                + RandomUtils.secure().randomInt(0, 10) + "."
+                + RandomUtils.secure().randomInt(0, 100);
+        String apiKey = RandomStringUtils.secure().nextAlphanumeric(32);
+        String versionResponse = "{\"version\":\"" + version + "\"}";
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/version"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(versionResponse)));
+
+        // When
+        OllamaConnectionTestResponse response = ollamaService.testConnection(baseUrl, apiKey);
+
+        // Then
+        assertThat(response).isNotNull();
+        assertThat(response.connected()).isTrue();
+        assertThat(response.version()).isEqualTo(version);
+
+        // Verify Authorization header was sent
+        wireMockServer.verify(getRequestedFor(urlEqualTo("/api/version"))
+                .withHeader("Authorization", equalTo("Bearer " + apiKey)));
+    }
+
+    @Test
+    @DisplayName("Should send Authorization header when API key is provided for model listing")
+    void listModels__withApiKey() {
+        // Given
+        String apiKey = RandomStringUtils.secure().nextAlphanumeric(32);
+        String modelsResponse = "{\"models\": []}";
+
+        wireMockServer.stubFor(get(urlEqualTo("/api/tags"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(modelsResponse)));
+
+        // When
+        List<OllamaModel> models = ollamaService.listModels(baseUrl, apiKey);
+
+        // Then
+        assertThat(models).isNotNull();
+
+        // Verify Authorization header was sent
+        wireMockServer.verify(getRequestedFor(urlEqualTo("/api/tags"))
+                .withHeader("Authorization", equalTo("Bearer " + apiKey)));
     }
 
 }

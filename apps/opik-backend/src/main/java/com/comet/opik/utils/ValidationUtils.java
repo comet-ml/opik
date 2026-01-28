@@ -67,7 +67,7 @@ public class ValidationUtils {
      * @throws IllegalArgumentException if the URL is invalid
      */
     public static void validateHttpUrl(String url, String urlType) {
-        if (url == null || url.trim().isEmpty()) {
+        if (StringUtils.isBlank(url)) {
             throw new IllegalArgumentException(urlType + " cannot be null or empty");
         }
 
@@ -84,7 +84,7 @@ public class ValidationUtils {
      * @return URL with credentials redacted, or original URL if no credentials found
      */
     public static String redactCredentialsFromUrl(String url) {
-        if (url == null || url.trim().isEmpty()) {
+        if (StringUtils.isBlank(url)) {
             return url;
         }
 
