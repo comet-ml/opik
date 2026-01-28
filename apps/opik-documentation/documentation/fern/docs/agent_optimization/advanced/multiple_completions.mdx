@@ -6,6 +6,10 @@ description: "Learn how to use the n parameter to generate multiple candidate ou
 
 When optimizing prompts, single-sample evaluation can be noisy - a good prompt might fail on a particular trial due to LLM stochasticity. The `n` parameter lets you generate **multiple candidate outputs per evaluation** and select the best one, introducing variety and reducing evaluation variance.
 
+<Info>
+  Available in Opik Optimizer `v3.0.0+`.
+</Info>
+
 ## How It Works
 
 When you set `n > 1` in your prompt's `model_parameters`, the optimizer requests N completions per evaluation, scores each candidate, selects the best one, and logs all scores to the trace. The full explanation of how the `n` parameter works is maintained in [Sampling controls](/agent_optimization/advanced/n_samples#multiple-completions-per-example-n-parameter).

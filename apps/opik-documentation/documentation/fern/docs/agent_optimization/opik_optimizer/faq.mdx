@@ -43,7 +43,7 @@ title: Optimizer Frequently Asked Questions
 <AccordionGroup>
   <Accordion title="What are the supported optimization algorithms?">
   Opik Agent Optimizer supports a wide range of optimization algorithms including:
-  - [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_reflective_optimizer)
+  - [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
   - [GEPA Optimization](/agent_optimization/algorithms/gepa_optimizer)
   - [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)
   - [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer)
@@ -54,7 +54,7 @@ title: Optimizer Frequently Asked Questions
   </Accordion>
   <Accordion title="How do I choose the right optimizer for my task?">
   Knowing which optimizer to use depends on your specific needs. As a rule of thumb, we recommend
-  starting with [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_reflective_optimizer)
+  starting with [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
   as this has been shown to be a strong baseline for most tasks.
 
   You can also try to use:
@@ -102,100 +102,7 @@ title: Optimizer Frequently Asked Questions
 
 ## Common Errors
 
-<AccordionGroup>
-  <Accordion title="ValueError: Prompt must be a ChatPrompt object">
-    This error occurs when you pass an incorrect type to the optimizer's `optimize_prompt()` method.
-
-    **Solution**: Ensure you're using the `ChatPrompt` class to define your prompt:
-    ```python
-    from opik_optimizer import ChatPrompt
-
-    prompt = ChatPrompt(
-        messages=[
-            {"role": "system", "content": "Your system prompt here"},
-            {"role": "user", "content": "Your user prompt with {variable}"}
-        ],
-        model="gpt-4"
-    )
-    ```
-  </Accordion>
-
-  <Accordion title="ValueError: Dataset must be a Dataset object">
-    This error occurs when the dataset passed to the optimizer is not a proper `Dataset` object.
-
-    **Solution**: Use the `Dataset` class to create your dataset:
-    ```python
-    import opik
-
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(name='your-dataset-name')
-    dataset.insert([
-        {"input": "example 1", "output": "expected 1"},
-        {"input": "example 2", "output": "expected 2"}
-    ])
-    ```
-  </Accordion>
-
-  <Accordion title="ValueError: Metric must be a function">
-    This error occurs when the metric parameter is not callable or doesn't have the correct signature.
-
-    **Solution**: Ensure your metric is a function that takes `dataset_item` and `llm_output` as arguments and returns a `ScoreResult`:
-    ```python
-    from opik.evaluation.metrics import score_result
-
-    def my_metric(dataset_item, llm_output):
-        # Your scoring logic here
-        score = calculate_score(dataset_item, llm_output)
-        return ScoreResult(
-          name="my-metric",
-            value=score,
-            reason="Explanation for the score"
-        )
-    ```
-  </Accordion>
-
-  <Accordion title="ValueError: Missing required key in prompt">
-    This error occurs when your prompt template contains placeholders (e.g., `{variable}`) that don't match your dataset fields.
-
-    **Solution**: Ensure all placeholders in your prompt match the keys in your dataset:
-    ```python
-    # Prompt with {question} placeholder
-    prompt = ChatPrompt(
-        user="Answer: {question}",
-        model="gpt-4"
-    )
-
-    # Dataset must have 'question' field
-    dataset = Dataset.from_list([
-        {"question": "What is AI?", "output": "..."}
-    ])
-    ```
-  </Accordion>
-
-  <Accordion title="ImportError: gepa package is required for GepaOptimizer">
-    This error occurs when trying to use the `GepaOptimizer` without the required `gepa` package installed.
-
-    **Solution**: Install the gepa package:
-    ```bash
-    pip install gepa
-    ```
-  </Accordion>
-
-  <Accordion title="Exception: Make sure you have provider API key set">
-    This error typically occurs when the LLM provider API key is not configured in your environment.
-
-    **Solution**: Set the appropriate environment variable for your LLM provider:
-    ```bash
-    # For OpenAI
-    export OPENAI_API_KEY="your-api-key"
-
-    # For Anthropic
-    export ANTHROPIC_API_KEY="your-api-key"
-
-    # For other providers, check the LiteLLM documentation
-    ```
-  </Accordion>
-</AccordionGroup>
+For frequent setup and usage errors, head to [Known Issues](/agent_optimization/known_issues). We keep the error catalog there so fixes and version notes stay in one place.
 
 ## Open challenges & advanced topics
 
@@ -228,7 +135,7 @@ title: Optimizer Frequently Asked Questions
     Yes—compose metrics using `MultiMetricObjective` or custom heuristics so optimizers weigh multiple goals. For complex trade-offs, capture human preferences in the metric reasons, or explore Pareto-aware optimizers like GEPA that surface trade-offs between accuracy and cost.
   </Accordion>
   <Accordion title="What about multimodal or agent workflows?">
-    Opik supports optimizing prompts that handle images/videos, as well as agents built with LangGraph, Google ADK, or MCP toolchains. Use the [Optimize agents](/agent_optimization/optimization/optimize_agents/overview) and [Optimize multimodal](/agent_optimization/optimization/optimize_multimodal) guides for modality-specific advice.
+    Opik supports optimizing prompts that handle images/videos, as well as agents built with LangGraph, Google ADK, or MCP toolchains. Use the [Optimize agents](/agent_optimization/optimization/optimize_agents) and [Optimize multimodal](/agent_optimization/optimization/optimize_multimodal) guides for modality-specific advice.
   </Accordion>
   <Accordion title="How reliable are optimizer metrics?">
     LLM-based metrics can be noisy. Always include deterministic checks when possible, and ensure your `ScoreResult.reason` is informative so reflective optimizers can identify true failure modes. See [Define metrics](/agent_optimization/optimization/define_metrics) and [Custom metrics](/agent_optimization/advanced/custom_metrics) for best practices.

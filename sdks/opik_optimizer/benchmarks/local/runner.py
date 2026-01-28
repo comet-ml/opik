@@ -352,6 +352,8 @@ class BenchmarkRunner:
                                     status=result.status,
                                 )
                             except Exception:
+                                if self.test_mode:
+                                    raise
                                 result = TaskResult(
                                     id=task_id,
                                     dataset_name=dataset_name,

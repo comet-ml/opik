@@ -15,6 +15,11 @@ specific failure modes in your prompts. It analyzes evaluation results, identifi
 failures, and generates targeted improvements to address each failure mode systematically.
 
 <Note>
+  In code, use the `HRPO` class (for example `from opik_optimizer import HRPO`). The underlying module name still uses
+  `hierarchical_reflective_optimizer` for backwards compatibility.
+</Note>
+
+<Note>
   `HRPO` is ideal when you have a complex prompt that you want to refine
   based on understanding *why* it's failing. Unlike optimizers that generate many random variations,
   this optimizer systematically analyzes failures, identifies root causes, and makes surgical

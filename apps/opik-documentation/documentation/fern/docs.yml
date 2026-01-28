@@ -685,7 +685,7 @@ navigation:
             slug: quickstart
           - page: Quickstart notebook
             icon: fa-regular fa-play
-            path: docs/agent_optimization/getting_started/quickstart_notebook.mdx
+            path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
             slug: quickstart_notebook
           - page: FAQ
             icon: fa-regular fa-question
@@ -784,6 +784,14 @@ navigation:
             icon: fa-regular fa-book
             path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
             slug: synthetic_data_optimizer_cookbook
+          - page: ARC-AGI tutorial
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/arc_agi_optimizer_cookbook.mdx
+            slug: arc_agi_optimizer_cookbook
+          - page: Multimodal agent tutorial
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/multimodal_agent_optimizer_cookbook.mdx
+            slug: multimodal_agent_optimizer_cookbook
       - section: Advanced Topics
         slug: /advanced
         contents:
@@ -1345,6 +1353,15 @@ redirects:
     permanent: true
   - source: "/docs/opik/agent_optimization/reference"
     destination: "/docs/opik/agent_optimization/api-reference"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/quickstart_notebook"
+    destination: "/docs/opik/agent_optimization/cookbooks/optimizer_introduction_cookbook"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/getting_started/quickstart_notebook"
+    destination: "/docs/opik/agent_optimization/cookbooks/optimizer_introduction_cookbook"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/optimization_studio"
+    destination: "/docs/opik/agent_optimization/optimization_studio"
     permanent: true
   # Common redirects
   - source: "/docs/opik/typescript-sdk/opik-query-language"

@@ -10,13 +10,12 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 * **EvolutionaryOptimizer** - Uses genetic algorithms for prompt evolution
 * **FewShotBayesianOptimizer** - Uses few-shot learning with Bayesian optimization
 * **MetaPromptOptimizer** - Employs meta-prompting techniques for optimization
-* **MiproOptimizer** - Implements MIPRO (Multi-Input Prompt Optimization) algorithm
 * **GepaOptimizer** - Leverages GEPA (Genetic-Pareto) optimization approach
 * **ParameterOptimizer** - Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization
 
 ## 🎯 Key Features
 
-* **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
+* **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
 * **Optimizer Chaining**: Results from one optimizer can be used as input for another
 * **MCP Support**: Built-in support for Model Context Protocol tool calling
 * **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
