@@ -252,6 +252,84 @@ def _update_trace(
         raise exc
 
 
+def _normalize_span_data_field(value: Any) -> dict[str, Any] | Any | None:
+    """
+    Normalize span input/output/metadata fields to handle lists safely.
+
+    This prevents issues where lists are passed instead of dicts, which can cause
+    errors in attachment extraction and other processing. Scalars (str, int, bool, etc.)
+    are returned as-is to preserve backward compatibility with equality filters.
+
+    Args:
+        value: The field value to normalize (can be None, dict, list, or scalar)
+
+    Returns:
+        - None if value is None
+        - Original dict if value is a dict
+        - Wrapped dict {"data": value} if value is a list
+        - Original scalar value if value is a scalar (str, int, bool, etc.)
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, list):
+        # Wrap list in a dict with a generic key
+        # This preserves the data while making it compatible with dict-based processing
+        return {"data": value}
+
+    # For scalar types (str, int, bool, float, etc.), return as-is
+    # This preserves backward compatibility with equality filters that expect raw scalars
+    return value
+
+
+def _normalize_current_span_data() -> None:
+    """
+    Normalize the current span's input/output/metadata fields to handle lists safely.
+
+    This is a defensive measure to prevent issues where the LiteLLM integration
+    or other code might set these fields to lists instead of dicts. Only lists are
+    wrapped; scalars are preserved as-is for backward compatibility with equality filters.
+    """
+    try:
+        span_data = opik_context.get_current_span_data()
+        if span_data is None:
+            return
+
+        # Normalize input, output, and metadata if they are lists (not dicts or scalars)
+        updates: dict[str, Any] = {}
+
+        if hasattr(span_data, "input"):
+            current_input = getattr(span_data, "input", None)
+            # Only normalize if it's a list (the problematic case)
+            # Dicts and scalars are left as-is for backward compatibility
+            if isinstance(current_input, list):
+                normalized_input = _normalize_span_data_field(current_input)
+                updates["input"] = normalized_input
+
+        if hasattr(span_data, "output"):
+            current_output = getattr(span_data, "output", None)
+            # Only normalize if it's a list (the problematic case)
+            if isinstance(current_output, list):
+                normalized_output = _normalize_span_data_field(current_output)
+                updates["output"] = normalized_output
+
+        if hasattr(span_data, "metadata"):
+            current_metadata = getattr(span_data, "metadata", None)
+            # Metadata should already be a dict, but normalize lists just in case
+            if isinstance(current_metadata, list):
+                updates["metadata"] = {"_data": current_metadata}
+
+        # Only update if we have changes
+        if updates:
+            opik_context.update_current_span(**updates)
+    except Exception:
+        # Silently fail - this is a defensive measure and shouldn't break the flow
+        logger.debug("Failed to normalize current span data", exc_info=True)
+
+
 def _update_span(
     *,
     metadata: dict[str, Any] | None = None,
