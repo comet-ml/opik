@@ -42,6 +42,39 @@ type CommonMetricRuleDetailsProps = {
   error?: Error | null;
 };
 
+/**
+ * Helper to parse default values from Python strings
+ */
+const parseDefaultValue = (
+  defaultValue: string | null | undefined,
+  type: string,
+): string | boolean | number | null => {
+  // Handle null, undefined, or "None" string
+  if (
+    defaultValue === null ||
+    defaultValue === undefined ||
+    defaultValue === "None"
+  ) {
+    return null;
+  }
+  const lowerType = type.toLowerCase();
+  if (lowerType === "bool" || lowerType === "boolean") {
+    return defaultValue === "True";
+  }
+  if (lowerType === "int" || lowerType === "float" || lowerType === "number") {
+    const num = parseFloat(defaultValue);
+    return isNaN(num) ? null : num;
+  }
+  // For strings, remove quotes if present
+  if (
+    (defaultValue.startsWith('"') && defaultValue.endsWith('"')) ||
+    (defaultValue.startsWith("'") && defaultValue.endsWith("'"))
+  ) {
+    return defaultValue.slice(1, -1);
+  }
+  return defaultValue;
+};
+
 const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
   form,
   projectName,
@@ -133,41 +166,6 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
       form.setValue("commonMetricDetails.initConfig", newInitConfig);
     }
   }, [selectedMetric, form, isThreadScope]);
-
-  // Helper to parse default values from Python strings
-  const parseDefaultValue = (
-    defaultValue: string | null | undefined,
-    type: string,
-  ): string | boolean | number | null => {
-    // Handle null, undefined, or "None" string
-    if (
-      defaultValue === null ||
-      defaultValue === undefined ||
-      defaultValue === "None"
-    ) {
-      return null;
-    }
-    const lowerType = type.toLowerCase();
-    if (lowerType === "bool" || lowerType === "boolean") {
-      return defaultValue === "True";
-    }
-    if (
-      lowerType === "int" ||
-      lowerType === "float" ||
-      lowerType === "number"
-    ) {
-      const num = parseFloat(defaultValue);
-      return isNaN(num) ? null : num;
-    }
-    // For strings, remove quotes if present
-    if (
-      (defaultValue.startsWith('"') && defaultValue.endsWith('"')) ||
-      (defaultValue.startsWith("'") && defaultValue.endsWith("'"))
-    ) {
-      return defaultValue.slice(1, -1);
-    }
-    return defaultValue;
-  };
 
   if (isLoading) {
     return (
