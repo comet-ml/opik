@@ -613,14 +613,20 @@ def call_model(
         choices_count = len(choices) if isinstance(choices, list) else "unknown"
         missing_metadata = not bool(attempt_params.get("metadata"))
         metadata_note = " metadata=missing" if missing_metadata else ""
-        logger.debug(
-            "call_model: model=%s project=%s n=%s choices=%s%s",
-            model,
-            effective_project_name,
-            attempt_params.get("n"),
-            choices_count,
-            metadata_note,
+        suppress_log = (
+            attempt_params.get("metadata", {})
+            .get("opik", {})
+            .get("suppress_call_log", False)
         )
+        if not suppress_log:
+            logger.debug(
+                "call_model: model=%s project=%s n=%s choices=%s%s",
+                model,
+                effective_project_name,
+                attempt_params.get("n"),
+                choices_count,
+                metadata_note,
+            )
         try:
             return _parse_response(response, response_model, wants_all)
         except StructuredOutputParsingError as exc:
