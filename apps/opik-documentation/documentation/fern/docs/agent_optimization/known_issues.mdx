@@ -41,11 +41,11 @@ title: Known Issues
   </Accordion>
 
   <Accordion title="litellm → OpenAI connection errors (1.81.x)">
-    `litellm.InternalServerError: OpenAIException - Connection error.` has been reproducible against LiteLLM `1.81.1`. These releases can break the OpenAI evaluation flow inside Opik Optimizer.
-
+    `litellm.InternalServerError: OpenAIException - Connection error.` has been reproducible against LiteLLM `1.81.*`. These releases can break the OpenAI evaluation flow inside Opik Optimizer.
+ 
     **Workaround**:
     ```bash
-    pip install --upgrade "litellm<1.81.1"
+    pip install --upgrade "litellm<1.81.0"
     ```
 
     **Fixed in**: `3.0.0` (2026-01-26).
