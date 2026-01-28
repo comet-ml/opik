@@ -5,16 +5,41 @@ This test suite verifies that the COMMON_METRIC payload type works correctly
 in both execution environments.
 """
 
+import os
 import pytest
 from opik_backend.executor_docker import DockerExecutor
 from opik_backend.executor_process import ProcessExecutor
 from opik_backend.payload_types import PayloadType
 
 
+def _is_docker_available():
+    """Check if Docker is available and the executor strategy allows Docker tests."""
+    # Skip Docker tests if strategy is explicitly set to 'process'
+    strategy = os.getenv("PYTHON_CODE_EXECUTOR_STRATEGY", "").lower()
+    if strategy == "process":
+        return False
+    
+    # Check if Docker is available
+    try:
+        import docker
+        client = docker.from_env()
+        client.ping()
+        return True
+    except Exception:
+        return False
+
+
 @pytest.fixture(
     params=[
         pytest.param("process", id="ProcessExecutor"),
-        pytest.param("docker", id="DockerExecutor")
+        pytest.param(
+            "docker", 
+            id="DockerExecutor",
+            marks=pytest.mark.skipif(
+                not _is_docker_available(),
+                reason="Docker not available or PYTHON_CODE_EXECUTOR_STRATEGY=process"
+            )
+        )
     ]
 )
 def executor(request):

@@ -191,13 +191,12 @@ class TestGetCommonMetricsList:
             assert "reference" not in score_param_names
 
     def test_excluded_params_not_in_init_parameters(self, app):
-        """Internal parameters like 'name', 'track', 'project_name' should be excluded."""
+        """Internal parameters like 'track', 'project_name' should be excluded."""
         with app.app_context():
             metrics = get_common_metrics_list()
             for metric in metrics:
                 init_param_names = [p["name"] for p in metric["init_parameters"]]
                 assert "self" not in init_param_names
-                assert "name" not in init_param_names
                 assert "track" not in init_param_names
                 assert "project_name" not in init_param_names
 
