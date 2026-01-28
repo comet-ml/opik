@@ -471,11 +471,11 @@
   }
 
   .comet-table-row-best td {
-    background-color: var(--table-best-row-bg);
+    background-color: var(--table-best-row-bg) !important;
   }
 
   .comet-table-row-best:hover td {
-    background-color: var(--table-best-row-hover-bg);
+    background-color: var(--table-best-row-hover-bg) !important;
   }
 
   .comet-table-row-active[data-row-active="true"] td {
