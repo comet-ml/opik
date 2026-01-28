@@ -33,6 +33,25 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
     return scores
 
 
+def _format_metric_error(exc: Exception, error_prefix: str) -> dict:
+    """
+    Format an exception into a standardized error dictionary.
+    
+    Args:
+        exc: The exception to format
+        error_prefix: Prefix message for the error (e.g., "Failed to execute metric")
+    
+    Returns:
+        Dictionary with 'error' key containing formatted error message
+    """
+    # Get full traceback, skip first 3 lines (Traceback header)
+    tb_lines = traceback.format_exc().splitlines()
+    stacktrace = "\\n".join(tb_lines[3:]) if len(tb_lines) > 3 else str(exc)
+    # Ensure we always have an error message
+    error_msg = stacktrace if stacktrace.strip() else str(exc)
+    return {"error": f"{error_prefix}: {error_msg}"}
+
+
 def find_metric_class(metric_id: str) -> Optional[Type[BaseMetric]]:
     """
     Find a common metric class by its snake_case ID.
@@ -104,19 +123,17 @@ def run_common_metric(data: Dict[str, Any]) -> dict:
     if not isinstance(scoring_kwargs, dict):
         return {"error": "Field 'scoring_kwargs' must be a dictionary"}
     
+    if not isinstance(init_config, dict):
+        return {"error": "Field 'init_config' must be a dictionary"}
+    
     try:
         # Find the metric class
         metric_cls = find_metric_class(metric_id)
         if metric_cls is None:
             return {"error": f"Unknown metric: {metric_id}"}
         
-        # Prepare init kwargs
-        init_kwargs = init_config or {}
-        # Always disable tracking for online evaluation
-        init_kwargs["track"] = False
-        
         # Instantiate the metric
-        metric = metric_cls(**init_kwargs)
+        metric = metric_cls(**{**init_config, "track": False})
         
         # Call the score method
         result = metric.score(**scoring_kwargs)
@@ -127,12 +144,7 @@ def run_common_metric(data: Dict[str, Any]) -> dict:
         return {"scores": [score.__dict__ for score in scores]}
     
     except Exception as e:
-        # Get full traceback, skip first 3 lines (Traceback header)
-        tb_lines = traceback.format_exc().splitlines()
-        stacktrace = "\\n".join(tb_lines[3:]) if len(tb_lines) > 3 else str(e)
-        # Ensure we always have an error message
-        error_msg = stacktrace if stacktrace.strip() else str(e)
-        return {"error": f"Failed to execute metric: {error_msg}"}
+        return _format_metric_error(e, "Failed to execute metric")
 
 
 def run_user_metric(
@@ -181,9 +193,8 @@ def run_user_metric(
         
         return {"scores": [score.__dict__ for score in scores]}
     
-    except Exception:
-        stacktrace = "\\n".join(traceback.format_exc().splitlines()[3:])
-        return {"error": f"The provided 'code' and 'data' fields can't be evaluated: {stacktrace}"}
+    except Exception as e:
+        return _format_metric_error(e, "The provided 'code' and 'data' fields can't be evaluated")
 
 
 def main():

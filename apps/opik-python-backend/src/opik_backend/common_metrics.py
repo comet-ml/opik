@@ -384,6 +384,9 @@ def instantiate_metric(
     """
     Instantiate a metric by its ID with the given configuration.
 
+    Tracking is always disabled for online evaluation; any "track" value
+    provided in init_config is ignored and forced to False.
+
     Args:
         metric_id: The ID of the metric to instantiate
         init_config: Optional dictionary of __init__ parameters
