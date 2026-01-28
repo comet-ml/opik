@@ -192,25 +192,25 @@ def test_missing_metric_type_returns_bad_request(client):
 
 
 def test_invalid_optimizer_type_returns_error(client):
-    """Test invalid optimizer type returns error."""
+    """Test invalid optimizer type returns 400 Bad Request."""
     config = copy.deepcopy(VALID_CONFIG)
     config["optimizer"]["type"] = "invalid_optimizer"
 
     response = client.post(STUDIO_CODE_URL, json=config)
-    # InvalidOptimizerError gets caught by generic exception handler -> 500
-    assert response.status_code == 500
-    assert "Internal server error" in response.json["error"]
+    # InvalidOptimizerError gets caught by specific handler -> 400
+    assert response.status_code == 400
+    assert "Invalid optimizer" in response.json["error"]
 
 
 def test_invalid_metric_type_returns_error(client):
-    """Test invalid metric type returns error."""
+    """Test invalid metric type returns 400 Bad Request."""
     config = copy.deepcopy(VALID_CONFIG)
     config["evaluation"]["metrics"][0]["type"] = "invalid_metric"
 
     response = client.post(STUDIO_CODE_URL, json=config)
-    # InvalidMetricError gets caught by generic exception handler -> 500
-    assert response.status_code == 500
-    assert "Internal server error" in response.json["error"]
+    # InvalidMetricError gets caught by specific handler -> 400
+    assert response.status_code == 400
+    assert "Invalid metric" in response.json["error"]
 
 
 def test_code_generation_with_all_optimizer_types(client):
