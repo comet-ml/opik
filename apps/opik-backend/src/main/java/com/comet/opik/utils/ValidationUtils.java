@@ -58,4 +58,41 @@ public class ValidationUtils {
                     "Parameter 'from_time' must be before 'to_time'");
         }
     }
+
+    /**
+     * Validates that a URL is not null/empty and starts with http:// or https://.
+     *
+     * @param url URL to validate
+     * @param urlType Type of URL for error message (e.g., "URL", "Webhook URL", "Base URL")
+     * @throws IllegalArgumentException if the URL is invalid
+     */
+    public static void validateHttpUrl(String url, String urlType) {
+        if (url == null || url.trim().isEmpty()) {
+            throw new IllegalArgumentException(urlType + " cannot be null or empty");
+        }
+
+        if (!url.trim().startsWith("http://") && !url.trim().startsWith("https://")) {
+            throw new IllegalArgumentException(urlType + " must start with http:// or https://");
+        }
+    }
+
+    /**
+     * Redacts credentials from a URL for safe logging.
+     * Replaces user:pass@ with user:***@ to prevent credential leakage.
+     *
+     * @param url URL that may contain credentials
+     * @return URL with credentials redacted, or original URL if no credentials found
+     */
+    public static String redactCredentialsFromUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return url;
+        }
+
+        // Pattern: scheme://user:pass@host or scheme://user@host
+        // Replace user:pass@ with user:***@
+        String redacted = url.replaceAll("://([^:@/]+):([^@/]+)@", "://$1:***@");
+        // Also handle case where only username is present (no password)
+        redacted = redacted.replaceAll("://([^:@/]+)@", "://$1:***@");
+        return redacted;
+    }
 }
