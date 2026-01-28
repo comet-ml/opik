@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Union
 
 import google.adk.agents
 from google.adk.agents import callback_context
@@ -38,11 +38,11 @@ class OpikTracer:
 
     def __init__(
         self,
-        name: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        project_name: Optional[str] = None,
-        distributed_headers: Optional[DistributedTraceHeadersDict] = None,
+        name: str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        project_name: str | None = None,
+        distributed_headers: DistributedTraceHeadersDict | None = None,
     ):
         """
         Initialize OpikTracer.
@@ -64,10 +64,10 @@ class OpikTracer:
         self._init_internal_attributes()
 
     def _init_internal_attributes(self) -> None:
-        self._last_model_output: Optional[Dict[str, Any]] = None
+        self._last_model_output: dict[str, Any] | None = None
         self._opik_client = opik_client.get_client_cached()
         # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
-        self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
+        self._ttft_tracking: dict[str, tuple[float, float | None]] = {}
 
         patchers.patch_adk(
             self._opik_client, distributed_headers=self._distributed_headers
@@ -102,8 +102,8 @@ class OpikTracer:
             return False
 
     def _safe_ttft_tracking(
-        self, span_id: Optional[str], pop: bool = False
-    ) -> Tuple[Optional[float], Optional[float]]:
+        self, span_id: str | None, pop: bool = False
+    ) -> tuple[float | None, float | None]:
         """
         Safely retrieve time-to-first-token tracking data for a span.
 
@@ -262,7 +262,7 @@ class OpikTracer:
             LOGGER.debug("Error checking for partial chunks", exc_info=True)
             is_partial = False
 
-        span_id: Optional[str] = None
+        span_id: str | None = None
         exception_occurred = False
         try:
             model = None
@@ -376,7 +376,7 @@ class OpikTracer:
     def before_tool_callback(
         self,
         tool: base_tool.BaseTool,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         tool_context: tool_context.ToolContext,
         *other_args: Any,
         **kwargs: Any,
@@ -410,7 +410,7 @@ class OpikTracer:
     def after_tool_callback(
         self,
         tool: base_tool.BaseTool,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         tool_context: tool_context.ToolContext,
         tool_response: Any,
         *other_args: Any,
@@ -440,22 +440,22 @@ class OpikTracer:
         except Exception as e:
             LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
 
-    def __getstate__(self) -> Dict[str, Any]:
+    def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         state.pop("_opik_client", None)
         # Don't serialize TTFT tracking as it's runtime state
         state.pop("_ttft_tracking", None)
         return state
 
-    def __setstate__(self, state: Dict[str, Any]) -> None:
+    def __setstate__(self, state: dict[str, Any]) -> None:
         self.__dict__.update(state)
         self._init_internal_attributes()
 
 
 def _try_add_agent_graph_to_metadata(
-    metadata: Dict[str, Any], callback_context: callback_context.CallbackContext
+    metadata: dict[str, Any], callback_context: callback_context.CallbackContext
 ) -> None:
-    current_agent: Optional[google.adk.agents.BaseAgent] = (
+    current_agent: google.adk.agents.BaseAgent | None = (
         callback_context_info_extractors.try_get_current_agent_instance(
             callback_context
         )

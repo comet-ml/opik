@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Union
+from typing import Any
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -49,8 +49,8 @@ class ROUGE(base_metric.BaseMetric):
         rouge_type: str = "rouge1",
         use_stemmer: bool = False,
         split_summaries: bool = False,
-        tokenizer: Optional[Any] = None,
-        project_name: Optional[str] = None,
+        tokenizer: Any | None = None,
+        project_name: str | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
@@ -71,7 +71,7 @@ class ROUGE(base_metric.BaseMetric):
     def score(
         self,
         output: str,
-        reference: Union[str, List[str]],
+        reference: str | list[str],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
@@ -132,8 +132,8 @@ def _build_rouge_backend(
     rouge_type: str,
     use_stemmer: bool,
     split_summaries: bool,
-    tokenizer: Optional[Any],
-) -> Optional[Any]:
+    tokenizer: Any | None,
+) -> Any | None:
     if rouge_scorer is None:
         raise ImportError(
             "`rouge-score` libraries are required for ROUGE score calculation. "

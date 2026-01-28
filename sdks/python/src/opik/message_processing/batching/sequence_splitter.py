@@ -1,5 +1,6 @@
 import logging
-from typing import List, Optional, TypeVar, Sequence, Any
+from typing import TypeVar, Any
+from collections.abc import Sequence
 import opik.jsonable_encoder as jsonable_encoder
 
 T = TypeVar("T")
@@ -58,12 +59,12 @@ def _get_json_size(obj: Any) -> Any:
 
 def split_into_batches(
     items: Sequence[T],
-    max_payload_size_MB: Optional[float] = None,
-    max_length: Optional[int] = None,
-) -> List[List[T]]:
-    assert (max_payload_size_MB is not None) or (
-        max_length is not None
-    ), "At least one limitation must be set for splitting"
+    max_payload_size_MB: float | None = None,
+    max_length: int | None = None,
+) -> list[list[T]]:
+    assert (max_payload_size_MB is not None) or (max_length is not None), (
+        "At least one limitation must be set for splitting"
+    )
 
     if max_length is None:
         max_length = len(items)
@@ -71,8 +72,8 @@ def split_into_batches(
     if max_payload_size_MB is None:
         max_payload_size_MB = float("inf")
 
-    batches: List[List[T]] = []
-    current_batch: List[T] = []
+    batches: list[list[T]] = []
+    current_batch: list[T] = []
     current_batch_size_MB: float = 0.0
 
     for item in items:

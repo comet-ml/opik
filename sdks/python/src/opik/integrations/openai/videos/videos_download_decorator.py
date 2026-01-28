@@ -5,12 +5,8 @@ Decorator for OpenAI video download_content method.
 import logging
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
 )
+from collections.abc import Callable
 
 from openai._legacy_response import HttpxBinaryResponseContent
 from typing_extensions import override
@@ -39,8 +35,8 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         assert kwargs is not None, "Expected kwargs to be not None in videos API calls"
 
@@ -93,15 +89,15 @@ class VideosDownloadTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Optional[Any]:
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> Any | None:
         NOT_A_STREAM = None
         return NOT_A_STREAM
 
 
 def _track_instance_write_to_file(
     instance: HttpxBinaryResponseContent,
-    project_name: Optional[str],
+    project_name: str | None,
 ) -> None:
     """Patch write_to_file on this specific instance to track the download."""
     decorator = binary_response_write_to_file_decorator.create_write_to_file_decorator(

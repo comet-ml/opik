@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 import logging
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, TypeVar
 
 import opik.api_objects.attachment as attachment
 import opik.datetime_helpers as datetime_helpers
@@ -22,19 +22,19 @@ class ObservationData:
     to be defined in the parent class while child classes can have required parameters.
     """
 
-    name: Optional[str] = None
-    start_time: Optional[datetime.datetime] = dataclasses.field(
+    name: str | None = None
+    start_time: datetime.datetime | None = dataclasses.field(
         default_factory=datetime_helpers.local_timestamp
     )
-    end_time: Optional[datetime.datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
-    input: Optional[Dict[str, Any]] = None
-    output: Optional[Dict[str, Any]] = None
-    tags: Optional[List[str]] = None
-    feedback_scores: Optional[List[FeedbackScoreDict]] = None
-    project_name: Optional[str] = None
-    error_info: Optional[ErrorInfoDict] = None
-    attachments: Optional[List[attachment.Attachment]] = None
+    end_time: datetime.datetime | None = None
+    metadata: dict[str, Any] | None = None
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    tags: list[str] | None = None
+    feedback_scores: list[FeedbackScoreDict] | None = None
+    project_name: str | None = None
+    error_info: ErrorInfoDict | None = None
+    attachments: list[attachment.Attachment] | None = None
 
     def update(self: ObservationDataT, **new_data: Any) -> ObservationDataT:
         """
@@ -93,7 +93,7 @@ class ObservationData:
         self.end_time = datetime_helpers.local_timestamp()
         return self
 
-    def _update_attachments(self, attachments: List[attachment.Attachment]) -> None:
+    def _update_attachments(self, attachments: list[attachment.Attachment]) -> None:
         """Merge new attachments with existing ones."""
         if self.attachments is None:
             self.attachments = attachments

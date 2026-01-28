@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pydantic
 from openai.types.chat import chat_completion_chunk
@@ -10,18 +10,18 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ChatCompletionChunksAggregated(pydantic.BaseModel):
-    choices: List[Dict[str, Any]]
+    choices: list[dict[str, Any]]
     created: int
     id: str
     model: str
     object: str
-    system_fingerprint: Optional[str]
-    usage: Optional[Dict[str, Any]]
+    system_fingerprint: str | None
+    usage: dict[str, Any] | None
 
 
 def aggregate(
-    items: List[chat_completion_chunk.ChatCompletionChunk],
-) -> Optional[ChatCompletionChunksAggregated]:
+    items: list[chat_completion_chunk.ChatCompletionChunk],
+) -> ChatCompletionChunksAggregated | None:
     # TODO: check if there are scenarios when stream contains more than one choice
     try:
         first_chunk = items[0]
@@ -36,7 +36,7 @@ def aggregate(
             "usage": None,
         }
 
-        text_chunks: List[str] = []
+        text_chunks: list[str] = []
 
         for chunk in items:
             if chunk.choices and chunk.choices[0].delta:

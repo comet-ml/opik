@@ -1,5 +1,5 @@
 import abc
-from typing import Dict, Any
+from typing import Any
 
 import pydantic
 import opik.dict_utils as dict_utils
@@ -13,7 +13,7 @@ class BaseOriginalProviderUsage(pydantic.BaseModel, abc.ABC):
     """
 
     @abc.abstractmethod
-    def to_backend_compatible_flat_dict(self, parent_key_prefix: str) -> Dict[str, int]:
+    def to_backend_compatible_flat_dict(self, parent_key_prefix: str) -> dict[str, int]:
         result = {**self.__dict__}
 
         return self.flatten_result_and_add_model_extra(
@@ -23,13 +23,13 @@ class BaseOriginalProviderUsage(pydantic.BaseModel, abc.ABC):
     @classmethod
     @abc.abstractmethod
     def from_original_usage_dict(
-        cls, usage: Dict[str, Any]
+        cls, usage: dict[str, Any]
     ) -> "BaseOriginalProviderUsage":
         pass
 
     def flatten_result_and_add_model_extra(
-        self, result: Dict[str, Any], parent_key_prefix: str
-    ) -> Dict[str, int]:
+        self, result: dict[str, Any], parent_key_prefix: str
+    ) -> dict[str, int]:
         result = dict_utils.flatten_dict(
             d=result, delim=".", parent_key=parent_key_prefix
         )

@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, Set, NamedTuple, List, Union
+from typing import Any, NamedTuple
 
 from . import langchain_usage
 
@@ -9,7 +9,7 @@ class LSMetadata(NamedTuple):
     model_type: str
 
 
-def try_get_token_usage(run_dict: Dict[str, Any]) -> langchain_usage.LangChainUsage:
+def try_get_token_usage(run_dict: dict[str, Any]) -> langchain_usage.LangChainUsage:
     if (usage := try_get_streaming_token_usage(run_dict)) is not None:
         return usage
 
@@ -21,8 +21,8 @@ def try_get_token_usage(run_dict: Dict[str, Any]) -> langchain_usage.LangChainUs
 
 
 def try_get_streaming_token_usage(
-    run_dict: Dict[str, Any],
-) -> Optional[langchain_usage.LangChainUsage]:
+    run_dict: dict[str, Any],
+) -> langchain_usage.LangChainUsage | None:
     if "message" in run_dict["outputs"]["generations"][-1][-1]:
         usage_metadata = run_dict["outputs"]["generations"][-1][-1]["message"][
             "kwargs"
@@ -36,7 +36,7 @@ def try_get_streaming_token_usage(
     return None
 
 
-def try_get_ls_metadata(run_dict: Dict[str, Any]) -> Optional[LSMetadata]:
+def try_get_ls_metadata(run_dict: dict[str, Any]) -> LSMetadata | None:
     if metadata := run_dict["extra"].get("metadata"):
         model = metadata.get("ls_model_name")
         provider = metadata.get("ls_provider")
@@ -47,8 +47,8 @@ def try_get_ls_metadata(run_dict: Dict[str, Any]) -> Optional[LSMetadata]:
 
 
 def try_to_get_usage_by_search(
-    run_dict: Dict[str, Any], candidate_keys: Optional[Set[str]]
-) -> Optional[Union[Dict[str, Any], langchain_usage.LangChainUsage]]:
+    run_dict: dict[str, Any], candidate_keys: set[str] | None
+) -> dict[str, Any] | langchain_usage.LangChainUsage | None:
     """
     Attempts to extract usage data from the given dictionary.
 
@@ -87,10 +87,10 @@ def try_to_get_usage_by_search(
 
 
 def find_token_usage_dict(
-    data: Union[Dict[str, Any], List[Any]],
-    candidate_keys: Set[str],
+    data: dict[str, Any] | list[Any],
+    candidate_keys: set[str],
     all_keys_should_match: bool,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Find the first dictionary containing any of the specified candidate keys within a nested data structure.
 

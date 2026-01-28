@@ -1,12 +1,10 @@
-from typing import Optional
-
 import guardrails
 
 from . import guardrails_decorator
 
 
 def track_guardrails(
-    guard: guardrails.Guard, project_name: Optional[str] = None
+    guard: guardrails.Guard, project_name: str | None = None
 ) -> guardrails.Guard:
     """
     Adds Opik tracking to a guardrails Guard instance.

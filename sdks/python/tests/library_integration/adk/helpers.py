@@ -1,4 +1,4 @@
-from typing import Iterator, Optional, Union, AsyncIterator
+from collections.abc import Iterator, AsyncIterator
 
 import google
 import pytest
@@ -33,7 +33,7 @@ def build_sync_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
 
 def extract_final_response_text(
     events_generator: Iterator[adk_events.Event],
-) -> Optional[str]:
+) -> str | None:
     """
     Exhausts the iterator of ADK events and returns the response text
     from the last event (presumably the final root agent response).
@@ -54,7 +54,7 @@ def extract_final_response_text(
 
 
 async def async_build_runner(
-    root_agent: Union[adk_agents.Agent, adk_agents.SequentialAgent],
+    root_agent: adk_agents.Agent | adk_agents.SequentialAgent,
 ) -> adk_runners.Runner:
     session_service = adk_sessions.InMemorySessionService()
     _ = await session_service.create_session(
@@ -68,7 +68,7 @@ async def async_build_runner(
 
 async def async_extract_final_response_text(
     events_generator: AsyncIterator[adk_events.Event],
-) -> Optional[str]:
+) -> str | None:
     """
     Exhausts the async iterator of ADK events and returns the response text
     from the last event (presumably the final root agent response).

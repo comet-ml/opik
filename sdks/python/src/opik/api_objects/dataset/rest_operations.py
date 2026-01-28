@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import List
 from opik.rest_api import OpikApi
 import opik.exceptions as exceptions
 from opik.message_processing import streamer
@@ -12,9 +11,9 @@ from ...rest_api.core.api_error import ApiError
 
 def get_datasets(
     rest_client: OpikApi, max_results: int = 1000, sync_items: bool = True
-) -> List[dataset.Dataset]:
+) -> list[dataset.Dataset]:
     page_size = 100
-    datasets: List[dataset.Dataset] = []
+    datasets: list[dataset.Dataset] = []
 
     page = 1
     while len(datasets) < max_results:
@@ -65,9 +64,9 @@ def get_dataset_experiments(
     max_results: int,
     streamer: streamer.Streamer,
     experiments_client: experiments_client.ExperimentsClient,
-) -> List[experiment.Experiment]:
+) -> list[experiment.Experiment]:
     page_size = 100
-    experiments: List[experiment.Experiment] = []
+    experiments: list[experiment.Experiment] = []
 
     page = 1
     while len(experiments) < max_results:

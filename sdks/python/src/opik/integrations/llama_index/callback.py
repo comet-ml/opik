@@ -1,6 +1,6 @@
 import contextvars
 import logging
-from typing import Optional, Dict, Any, List, Union
+from typing import Any
 import uuid
 
 from llama_index.core.callbacks import schema as llama_index_schema
@@ -18,12 +18,12 @@ INDEX_CONSTRUCTION_TRACE_NAME = "index_construction"
 LLAMA_INDEX_METADATA = {"created_from": "llama_index"}
 
 # Context variable for root trace/span created by LlamaIndex
-_llama_root: contextvars.ContextVar[Optional[Union[span.SpanData, trace.TraceData]]] = (
+_llama_root: contextvars.ContextVar[span.SpanData | trace.TraceData | None] = (
     contextvars.ContextVar("_llama_root", default=None)
 )
 
 
-def _get_last_event(trace_map: Dict[str, List[str]]) -> str:
+def _get_last_event(trace_map: dict[str, list[str]]) -> str:
     def dfs(key: str) -> str:
         if key not in trace_map or not trace_map[key]:
             return key
@@ -36,9 +36,9 @@ def _get_last_event(trace_map: Dict[str, List[str]]) -> str:
 class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
     def __init__(
         self,
-        event_starts_to_ignore: Optional[List[llama_index_schema.CBEventType]] = None,
-        event_ends_to_ignore: Optional[List[llama_index_schema.CBEventType]] = None,
-        project_name: Optional[str] = None,
+        event_starts_to_ignore: list[llama_index_schema.CBEventType] | None = None,
+        event_ends_to_ignore: list[llama_index_schema.CBEventType] | None = None,
+        project_name: str | None = None,
         skip_index_construction_trace: bool = False,
     ):
         """Initialize LlamaIndex callback handler for Opik tracing.
@@ -64,25 +64,23 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         self._opik_context_storage = context_storage.get_current_context_instance()
 
         # Event tracking - shared across contexts, but events have unique IDs
-        self._map_event_id_to_span_data: Dict[str, span.SpanData] = {}
-        self._map_event_id_to_output: Dict[str, Any] = {}
+        self._map_event_id_to_span_data: dict[str, span.SpanData] = {}
+        self._map_event_id_to_output: dict[str, Any] = {}
 
         # For streaming: end_trace may be called before event_end, so we need to
         # defer the trace output update until the event output is available
-        self._pending_root_output_updates: Dict[
-            str, Union[span.SpanData, trace.TraceData]
+        self._pending_root_output_updates: dict[
+            str, span.SpanData | trace.TraceData
         ] = {}
 
-    def _send_root_to_backend(
-        self, root: Union[span.SpanData, trace.TraceData]
-    ) -> None:
+    def _send_root_to_backend(self, root: span.SpanData | trace.TraceData) -> None:
         """Send root trace or span data to the backend."""
         if isinstance(root, span.SpanData):
             self._opik_client.span(**root.as_parameters)
         elif isinstance(root, trace.TraceData):
             self._opik_client.trace(**root.as_parameters)
 
-    def start_trace(self, trace_id: Optional[str] = None) -> None:
+    def start_trace(self, trace_id: str | None = None) -> None:
         if (
             self._skip_index_construction_trace
             and trace_id == INDEX_CONSTRUCTION_TRACE_NAME
@@ -115,8 +113,8 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
 
     def end_trace(
         self,
-        trace_id: Optional[str] = None,
-        trace_map: Optional[Dict[str, List[str]]] = None,
+        trace_id: str | None = None,
+        trace_map: dict[str, list[str]] | None = None,
     ) -> None:
         if not trace_map:
             return
@@ -157,9 +155,9 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
     def on_event_start(
         self,
         event_type: llama_index_schema.CBEventType,
-        payload: Optional[Dict[str, Any]] = None,
-        event_id: Optional[str] = None,
-        parent_id: Optional[str] = None,
+        payload: dict[str, Any] | None = None,
+        event_id: str | None = None,
+        parent_id: str | None = None,
         **kwargs: Any,
     ) -> str:
         if not event_id:
@@ -225,8 +223,8 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
     def on_event_end(
         self,
         event_type: llama_index_schema.CBEventType,
-        payload: Optional[Dict[str, Any]] = None,
-        event_id: Optional[str] = None,
+        payload: dict[str, Any] | None = None,
+        event_id: str | None = None,
         **kwargs: Any,
     ) -> None:
         span_output = event_parsing_utils.get_span_output_from_event(

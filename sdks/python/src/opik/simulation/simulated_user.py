@@ -1,6 +1,5 @@
 """SimulatedUser class for multi-turn conversation simulation."""
 
-from typing import List, Dict, Optional
 from opik.evaluation.models.models_factory import get as get_model
 
 
@@ -16,7 +15,7 @@ class SimulatedUser:
         self,
         persona: str,
         model: str = "gpt-4o-mini",
-        fixed_responses: Optional[List[str]] = None,
+        fixed_responses: list[str] | None = None,
     ):
         """
         Initialize a simulated user.
@@ -34,7 +33,7 @@ class SimulatedUser:
         # Initialize LLM backend using models_factory for consistency
         self._llm = get_model(model_name=model)
 
-    def generate_response(self, conversation_history: List[Dict[str, str]]) -> str:
+    def generate_response(self, conversation_history: list[dict[str, str]]) -> str:
         """
         Generate a response based on the conversation history.
 
@@ -55,7 +54,7 @@ class SimulatedUser:
         # Generate response using LLM
         return self._generate_llm_response(conversation_history)
 
-    def _generate_llm_response(self, conversation_history: List[Dict[str, str]]) -> str:
+    def _generate_llm_response(self, conversation_history: list[dict[str, str]]) -> str:
         """Generate response using the LLM backend."""
         # Build system prompt with persona and clear instructions
         system_prompt = f"""You are a simulated user with the following persona: {self.persona}
@@ -81,7 +80,7 @@ Generate a single user message that fits your persona and the conversation conte
             # Fallback response if LLM fails
             return f"I'm having trouble responding right now. ({str(e)})"
 
-    def _format_messages_as_text(self, messages: List[Dict[str, str]]) -> str:
+    def _format_messages_as_text(self, messages: list[dict[str, str]]) -> str:
         """Convert message list to text format for LLM input."""
         formatted_messages = []
         for message in messages:

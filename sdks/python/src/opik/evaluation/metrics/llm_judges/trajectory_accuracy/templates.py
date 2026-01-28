@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Any
 
 EVALUATION_PROMPT_TEMPLATE = """You are an expert evaluator of ReAct-style agent trajectories. Assess how effectively the agent reasoned through the problem and selected appropriate actions.
 
@@ -30,7 +30,7 @@ Respond in JSON format:
 }}"""
 
 
-def create_evaluation_prompt(example: Dict[str, Any]) -> str:
+def create_evaluation_prompt(example: dict[str, Any]) -> str:
     """Create the evaluation prompt for trajectory assessment."""
 
     goal = example.get("goal", "No goal specified")
@@ -44,7 +44,7 @@ def create_evaluation_prompt(example: Dict[str, Any]) -> str:
     )
 
 
-def _format_trajectory_steps(trajectory: List[Dict[str, Any]]) -> str:
+def _format_trajectory_steps(trajectory: list[dict[str, Any]]) -> str:
     """Format trajectory steps for prompt inclusion."""
     if not trajectory:
         return "No trajectory steps provided"

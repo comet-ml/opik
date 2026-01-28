@@ -5,8 +5,9 @@ import mimetypes
 import httpx
 import json.decoder
 from opik import s3_httpx_client
-from typing import Iterator, List, Literal, Optional
-from typing_extensions import TypeAlias
+from typing import Literal
+from collections.abc import Iterator
+from typing import TypeAlias
 
 from opik.file_upload import file_uploader, upload_options
 from opik.rest_api import client as rest_api_client
@@ -66,7 +67,7 @@ class AttachmentClient:
         project_name: str,
         entity_id: str,
         entity_type: Literal["span", "trace"],
-    ) -> List[RESTAttachmentDetails]:  # type: ignore
+    ) -> list[RESTAttachmentDetails]:  # type: ignore
         """
         Get a list of attachments for a specific entity (trace or span).
 
@@ -118,7 +119,7 @@ class AttachmentClient:
             entity_type=entity_type,
             entity_id=entity_id,
         )
-        attachment_to_download: Optional[RESTAttachmentDetails] = None
+        attachment_to_download: RESTAttachmentDetails | None = None
 
         for attachment_details in attachments_details:
             if (
@@ -143,8 +144,7 @@ class AttachmentClient:
         with httpx_client_upload.stream("GET", attachment_to_download.link) as response:
             try:
                 if 200 <= response.status_code < 300:
-                    for chunk in response.iter_bytes():
-                        yield chunk
+                    yield from response.iter_bytes()
                     return
                 response.read()
                 response_json = response.json()
@@ -166,8 +166,8 @@ class AttachmentClient:
         entity_type: Literal["trace", "span"],
         entity_id: str,
         file_path: str,
-        file_name: Optional[str] = None,
-        mime_type: Optional[str] = None,
+        file_name: str | None = None,
+        mime_type: str | None = None,
     ) -> None:
         """
         Upload an attachment for a specific entity (trace or span).

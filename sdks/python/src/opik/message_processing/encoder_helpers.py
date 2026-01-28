@@ -1,4 +1,4 @@
-from typing import Dict, Any, Set, List, Literal
+from typing import Any, Literal
 
 import opik.hooks
 
@@ -7,10 +7,10 @@ from ..anonymizer import anonymizer
 
 
 def encode_and_anonymize(
-    kwargs_dict: Dict[str, Any],
-    fields_to_anonymize: Set[str],
+    kwargs_dict: dict[str, Any],
+    fields_to_anonymize: set[str],
     object_type: Literal["span", "trace"],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Encodes and anonymizes the data in the given dictionary based on the specified
     fields using registered anonymizers. If no anonymizers are registered, the
@@ -43,11 +43,11 @@ def encode_and_anonymize(
 
 
 def anonymize_encoded_obj(
-    obj: Dict[str, Any],
-    fields_to_anonymize: Set[str],
-    anonymizers: List[anonymizer.Anonymizer],
+    obj: dict[str, Any],
+    fields_to_anonymize: set[str],
+    anonymizers: list[anonymizer.Anonymizer],
     object_type: Literal["span", "trace"],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Anonymizes specified fields in an encoded dictionary using the provided anonymizers.
     This function iterates over the given set of field names and applies each anonymizer

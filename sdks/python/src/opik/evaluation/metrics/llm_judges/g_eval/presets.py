@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
 
 
 @dataclass(frozen=True)
@@ -15,7 +14,7 @@ class GEvalPresetDefinition:
     evaluation_criteria: str
 
 
-GEVAL_PRESETS: Dict[str, GEvalPresetDefinition] = {
+GEVAL_PRESETS: dict[str, GEvalPresetDefinition] = {
     "summarization_consistency": GEvalPresetDefinition(
         name="g_eval_summarization_consistency_metric",
         task_introduction=(

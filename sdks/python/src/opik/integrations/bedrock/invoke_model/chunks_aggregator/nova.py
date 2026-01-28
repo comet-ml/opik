@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from .. import usage_converters
 from .base import ChunkAggregator
@@ -24,7 +24,7 @@ class NovaAggregator(ChunkAggregator):
     - metadata: Contains usage information with inputTokens/outputTokens
     """
 
-    def aggregate(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def aggregate(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         """Aggregate Nova chunks into native Nova output structure with Bedrock usage."""
         LOGGER.debug("Nova aggregator processing %d items", len(items))
 

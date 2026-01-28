@@ -2,7 +2,6 @@ import dataclasses
 import random
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Optional
 
 from opik.message_processing import messages
 from opik.types import ErrorInfoDict
@@ -26,8 +25,8 @@ ONE_MEGABYTE = ONE_KILOBYTE * ONE_KILOBYTE
 def fake_create_trace_message_batch(
     count: int = 1000,
     approximate_trace_size: int = ONE_MEGABYTE,
-    has_ended: Optional[bool] = None,
-) -> List[messages.CreateTraceMessage]:
+    has_ended: bool | None = None,
+) -> list[messages.CreateTraceMessage]:
     """
     Factory method to create a batch with a specified number of
     CreateTraceMessage objects initialized with fake data.
@@ -148,8 +147,8 @@ def fake_create_trace_message_batch(
 def fake_span_create_message_batch(
     count: int = 1000,
     approximate_span_size: int = ONE_MEGABYTE,
-    has_ended: Optional[bool] = None,
-) -> List[messages.CreateSpanMessage]:
+    has_ended: bool | None = None,
+) -> list[messages.CreateSpanMessage]:
     """
     Factory method to create a list with a specified number of
     CreateSpanMessage objects initialized with fake data.

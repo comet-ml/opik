@@ -1,10 +1,9 @@
 import dataclasses
-from typing import Optional
 
 
 @dataclasses.dataclass
 class FileUploadMonitor:
-    total_size: Optional[int] = None
+    total_size: int | None = None
     bytes_sent: int = 0
 
     def update(self, bytes_sent: int) -> None:

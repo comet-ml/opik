@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import threading
-from typing import Optional
 from . import config
 
 
 class TracingRuntimeConfig:
     def __init__(self) -> None:
         self._lock = threading.RLock()
-        self._tracing_active: Optional[bool] = None
+        self._tracing_active: bool | None = None
 
     def set_tracing_active(self, active: bool) -> None:
         with self._lock:

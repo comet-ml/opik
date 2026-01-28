@@ -1,5 +1,5 @@
 from opik import llm_usage
-from typing import Dict, Any, Optional
+from typing import Any
 import logging
 import opik._logging
 
@@ -27,8 +27,8 @@ def extract_subprovider_from_model_id(model_id: str) -> str:
 
 
 def try_extract_usage_from_bedrock_response(
-    subprovider: str, response: Dict[str, Any]
-) -> Optional[llm_usage.OpikUsage]:
+    subprovider: str, response: dict[str, Any]
+) -> llm_usage.OpikUsage | None:
     """
     Since Bedrock's invoke_model response format is not standardized, we need to try different ways to extract the usage.
 

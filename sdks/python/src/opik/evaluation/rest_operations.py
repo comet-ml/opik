@@ -1,5 +1,4 @@
 import logging
-from typing import List, Optional
 
 from opik.api_objects import dataset, experiment, opik_client
 from opik.types import BatchFeedbackScoreDict
@@ -39,8 +38,8 @@ def get_trace_project_name(client: opik_client.Opik, trace_id: str) -> str:
 def get_experiment_test_cases(
     experiment_: experiment.Experiment,
     dataset_: dataset.Dataset,
-    scoring_key_mapping: Optional[ScoringKeyMappingType],
-) -> List[test_case.TestCase]:
+    scoring_key_mapping: ScoringKeyMappingType | None,
+) -> list[test_case.TestCase]:
     experiment_items = experiment_.get_items()
 
     # Fetch dataset items to get input data for bulk-uploaded experiment items
@@ -76,11 +75,11 @@ def get_experiment_test_cases(
 
 def log_test_result_feedback_scores(
     client: opik_client.Opik,
-    score_results: List[score_result.ScoreResult],
+    score_results: list[score_result.ScoreResult],
     trace_id: str,
-    project_name: Optional[str],
+    project_name: str | None,
 ) -> None:
-    all_trace_scores: List[BatchFeedbackScoreDict] = []
+    all_trace_scores: list[BatchFeedbackScoreDict] = []
 
     for score_result_ in score_results:
         if score_result_.scoring_failed:

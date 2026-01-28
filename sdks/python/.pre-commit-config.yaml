@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         files: ^sdks/python
@@ -9,8 +9,16 @@ repos:
         files: ^sdks/python
         exclude: "(sdks/python/src/opik/rest_api/)"
 
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.21.2
+    hooks:
+      - id: pyupgrade
+        args: [--py310-plus]
+        files: ^sdks/python
+        exclude: "(sdks/python/src/opik/rest_api/)"
+
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.9
+    rev: v0.14.14
     hooks:
       - id: ruff
         args: [--fix, --show-fixes]
@@ -21,7 +29,7 @@ repos:
         exclude: "(sdks/python/src/opik/rest_api/)"
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+    rev: v1.19.1
     hooks:
       - id: mypy
         files: ^sdks/python

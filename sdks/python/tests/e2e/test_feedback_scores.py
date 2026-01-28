@@ -1,4 +1,3 @@
-from typing import List
 import opik
 from opik import opik_context
 from opik.types import BatchFeedbackScoreDict, FeedbackScoreDict
@@ -29,7 +28,7 @@ def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Op
 
     opik_client.flush()
 
-    EXPECTED_TRACE_FEEDBACK_SCORES: List[FeedbackScoreDict] = [
+    EXPECTED_TRACE_FEEDBACK_SCORES: list[FeedbackScoreDict] = [
         {
             "id": trace.id,
             "name": "trace-metric-1",
@@ -46,7 +45,7 @@ def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Op
         },
     ]
 
-    EXPECTED_SPAN_FEEDBACK_SCORES: List[FeedbackScoreDict] = [
+    EXPECTED_SPAN_FEEDBACK_SCORES: list[FeedbackScoreDict] = [
         {
             "id": span.id,
             "name": "span-metric-1",
@@ -108,7 +107,7 @@ def test_feedbacks_are_logged_via_trace_and_span__and_deleted(opik_client: opik.
 
     opik_client.flush()
 
-    EXPECTED_TRACE_FEEDBACK_SCORES: List[FeedbackScoreDict] = [
+    EXPECTED_TRACE_FEEDBACK_SCORES: list[FeedbackScoreDict] = [
         {
             "id": trace.id,
             "name": "trace-metric-2",
@@ -140,7 +139,7 @@ def test_feedbacks_are_logged_via_client__happyflow(opik_client: opik.Opik):
     trace = opik_client.trace(name="trace-name-1")
     span = trace.span(name="span-name-1")
 
-    EXPECTED_TRACE_FEEDBACK_SCORES: List[BatchFeedbackScoreDict] = [
+    EXPECTED_TRACE_FEEDBACK_SCORES: list[BatchFeedbackScoreDict] = [
         {
             "id": trace.id,
             "name": "trace-metric-1",
@@ -157,7 +156,7 @@ def test_feedbacks_are_logged_via_client__happyflow(opik_client: opik.Opik):
         },
     ]
 
-    EXPECTED_SPAN_FEEDBACK_SCORES: List[BatchFeedbackScoreDict] = [
+    EXPECTED_SPAN_FEEDBACK_SCORES: list[BatchFeedbackScoreDict] = [
         {
             "id": span.id,
             "name": "span-metric-1",
@@ -241,7 +240,7 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
     f_outer()
     opik.flush_tracker()
 
-    EXPECTED_INNER_SPAN_FEEDBACK_SCORES: List[FeedbackScoreDict] = [
+    EXPECTED_INNER_SPAN_FEEDBACK_SCORES: list[FeedbackScoreDict] = [
         {
             "id": ID_STORAGE["f_inner-span-id"],
             "name": "inner-span-feedback-score",
@@ -251,7 +250,7 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
         },
     ]
 
-    EXPECTED_TRACE_FEEDBACK_SCORES: List[FeedbackScoreDict] = [
+    EXPECTED_TRACE_FEEDBACK_SCORES: list[FeedbackScoreDict] = [
         {
             "id": ID_STORAGE["f_outer-trace-id"],
             "name": "trace-feedback-score",
@@ -298,7 +297,7 @@ def test_log_feedback_scores__project_name_fallback_logic(opik_client: opik.Opik
     opik_client.flush()
 
     # Define scores with different project_name combinations
-    scores: List[BatchFeedbackScoreDict] = [
+    scores: list[BatchFeedbackScoreDict] = [
         # 1. Per-score project_name (highest priority) - should go to project_1
         {
             "id": trace_p1.id,
@@ -397,7 +396,7 @@ def test_log_spans_feedback_scores__project_name_fallback_logic(opik_client: opi
     opik_client.flush()
 
     # Define scores with different project_name combinations
-    scores: List[BatchFeedbackScoreDict] = [
+    scores: list[BatchFeedbackScoreDict] = [
         # 1. Per-score project_name (highest priority) - should go to project_1
         {
             "id": span_p1.id,
@@ -545,7 +544,7 @@ def test_log_threads_feedback_scores__project_name_fallback_logic(
     synchronization.wait_for_done(lambda: check_threads_closed(), timeout=30)
 
     # Define scores with different project_name combinations
-    scores: List[BatchFeedbackScoreDict] = [
+    scores: list[BatchFeedbackScoreDict] = [
         # 1. Per-score project_name (highest priority) - should go to project_1
         {
             "id": thread_id_p1,

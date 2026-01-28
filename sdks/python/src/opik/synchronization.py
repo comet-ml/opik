@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 
 LOGGER = logging.getLogger(__name__)
@@ -8,8 +8,8 @@ LOGGER = logging.getLogger(__name__)
 
 def wait_for_done(
     check_function: Callable[[], bool],
-    timeout: Optional[float],
-    progress_callback: Optional[Callable] = None,
+    timeout: float | None,
+    progress_callback: Callable | None = None,
     sleep_time: float = 1,
 ) -> None:
     """

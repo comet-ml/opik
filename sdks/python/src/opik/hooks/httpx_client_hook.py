@@ -1,13 +1,14 @@
 import logging
 
 import httpx
-from typing import Any, Callable, List, Optional, Dict
+from typing import Any
+from collections.abc import Callable
 
 
-_deprecated_httpx_client_hooks: List[Callable[[httpx.Client], httpx.Client]] = []
+_deprecated_httpx_client_hooks: list[Callable[[httpx.Client], httpx.Client]] = []
 
 # holder for the global httpx client hook
-_httpx_client_hooks: List["HttpxClientHook"] = []
+_httpx_client_hooks: list["HttpxClientHook"] = []
 
 
 LOGGER = logging.getLogger(__name__)
@@ -16,8 +17,8 @@ LOGGER = logging.getLogger(__name__)
 class HttpxClientHook:
     def __init__(
         self,
-        client_modifier: Optional[Callable[[httpx.Client], None]],
-        client_init_arguments: Optional[Dict[str, Any]],
+        client_modifier: Callable[[httpx.Client], None] | None,
+        client_init_arguments: dict[str, Any] | None,
     ) -> None:
         """Provides a means to customize an `httpx.Client` instance used by Opik.
 
@@ -35,7 +36,7 @@ class HttpxClientHook:
         self._hook = client_modifier
         self._httpx_client_arguments = client_init_arguments
 
-    def update_init_arguments(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def update_init_arguments(self, kwargs: dict[str, Any]) -> dict[str, Any]:
         if self._httpx_client_arguments is not None:
             kwargs.update(self._httpx_client_arguments)
 
@@ -62,7 +63,7 @@ def add_httpx_client_hook(hook: HttpxClientHook) -> None:
     _httpx_client_hooks.append(hook)
 
 
-def build_init_arguments(default_kwargs: Dict[str, Any]) -> Dict[str, Any]:
+def build_init_arguments(default_kwargs: dict[str, Any]) -> dict[str, Any]:
     """
     Modifies and returns initialization arguments by applying pre-defined hooks.
 

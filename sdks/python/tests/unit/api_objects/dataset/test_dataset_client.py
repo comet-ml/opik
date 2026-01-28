@@ -16,9 +16,9 @@ def test_insert_deduplication__two_dicts_passed_with_the_same_content__only_one_
     # Insert the identical items
     dataset.insert([item_dict, item_dict])
 
-    assert (
-        mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1
-    ), "create_or_update_dataset_items should be called only once"
+    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1, (
+        "create_or_update_dataset_items should be called only once"
+    )
 
     call_args = mock_rest_client.datasets.create_or_update_dataset_items.call_args
     inserted_items = call_args[1]["items"]
@@ -45,9 +45,9 @@ def test_insert_deduplication__two_dicts_passed_with_the_different_content__both
     # Insert the different items
     dataset.insert([item_dict1, item_dict2])
 
-    assert (
-        mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1
-    ), "create_or_update_dataset_items should be called only once"
+    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1, (
+        "create_or_update_dataset_items should be called only once"
+    )
 
     call_args = mock_rest_client.datasets.create_or_update_dataset_items.call_args
     inserted_items = call_args[1]["items"]
@@ -74,9 +74,9 @@ def test_insert_deduplication__three_dicts_passed__one_unique__two_duplicates__t
     # Insert 3 items: one unique and two duplicates
     dataset.insert([item_dict1, item_dict2, item_dict1])
 
-    assert (
-        mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1
-    ), "create_or_update_dataset_items should be called only once"
+    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1, (
+        "create_or_update_dataset_items should be called only once"
+    )
 
     call_args = mock_rest_client.datasets.create_or_update_dataset_items.call_args
     inserted_rest_items = call_args[1]["items"]
@@ -97,9 +97,9 @@ def test_update__happyflow():
 
     dataset.insert([initial_item])
 
-    assert (
-        mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1
-    ), "create_or_update_dataset_items should be called once for insertion"
+    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 1, (
+        "create_or_update_dataset_items should be called once for insertion"
+    )
 
     insert_call_args = (
         mock_rest_client.datasets.create_or_update_dataset_items.call_args
@@ -120,9 +120,9 @@ def test_update__happyflow():
     dataset.update([updated_item])
 
     # Check that create_or_update_dataset_items was called twice in total (once for insertion, once for update)
-    assert (
-        mock_rest_client.datasets.create_or_update_dataset_items.call_count == 2
-    ), "create_or_update_dataset_items should be called twice in total"
+    assert mock_rest_client.datasets.create_or_update_dataset_items.call_count == 2, (
+        "create_or_update_dataset_items should be called twice in total"
+    )
 
     # Get the arguments passed to create_or_update_dataset_items for update
     update_call_args = (
@@ -134,12 +134,12 @@ def test_update__happyflow():
     assert len(updated_rest_items) == 1, "One item should be updated"
 
     # Verify the content of the updated item
-    assert updated_rest_items[0].data["input"] == {
-        "key": "updated_value"
-    }, "Input should be updated"
-    assert updated_rest_items[0].data["expected_output"] == {
-        "key": "updated_output"
-    }, "Expected output should be updated"
-    assert updated_rest_items[0].data["metadata"] == {
-        "key": "updated_metadata"
-    }, "Metadata should be updated"
+    assert updated_rest_items[0].data["input"] == {"key": "updated_value"}, (
+        "Input should be updated"
+    )
+    assert updated_rest_items[0].data["expected_output"] == {"key": "updated_output"}, (
+        "Expected output should be updated"
+    )
+    assert updated_rest_items[0].data["metadata"] == {"key": "updated_metadata"}, (
+        "Metadata should be updated"
+    )

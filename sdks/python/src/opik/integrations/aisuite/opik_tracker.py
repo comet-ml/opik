@@ -1,5 +1,3 @@
-from typing import Optional
-
 import aisuite
 
 from . import aisuite_decorator
@@ -7,7 +5,7 @@ from . import aisuite_decorator
 
 def track_aisuite(
     aisuite_client: aisuite.Client,
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> aisuite.Client:
     """Adds Opik tracking to an AISuite client.
 

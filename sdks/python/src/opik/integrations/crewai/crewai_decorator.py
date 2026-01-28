@@ -1,15 +1,8 @@
 import logging
 from typing import (
     Any,
-    AsyncGenerator,
-    Callable,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Tuple,
-    Union,
 )
+from collections.abc import AsyncGenerator, Callable, Generator
 from typing_extensions import override
 
 from opik.decorator import arguments_helpers, base_track_decorator
@@ -85,8 +78,8 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         name = track_options.name if track_options.name is not None else func.__name__
         metadata = track_options.metadata if track_options.metadata is not None else {}
@@ -108,13 +101,13 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
 
     def _parse_inputs(
         self,
-        args: Tuple,
-        kwargs: Dict,
-        metadata: Dict,
+        args: tuple,
+        kwargs: dict,
+        metadata: dict,
         name: str,
-    ) -> Tuple[Dict, str, SpanType]:
+    ) -> tuple[dict, str, SpanType]:
         span_type: SpanType = "general"
-        input_dict: Dict[str, Any] = {}
+        input_dict: dict[str, Any] = {}
 
         # Crew
         if name == "kickoff":
@@ -182,15 +175,15 @@ class CrewAITrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Optional[Union[Generator, AsyncGenerator]]:
+        generations_aggregator: Callable[[list[Any]], str] | None,
+    ) -> Generator | AsyncGenerator | None:
         return super()._streams_handler(output, capture_output, generations_aggregator)
 
 
 def _encode_dict_and_keep_keys(
-    dict: Dict[str, Any],
-    keys_to_keep: List[str],
-) -> Dict[str, Any]:
+    dict: dict[str, Any],
+    keys_to_keep: list[str],
+) -> dict[str, Any]:
     encoded_dict = jsonable_encoder.encode(dict)
     encoded_dict, _ = dict_utils.split_dict_by_keys(encoded_dict, keys_to_keep)
     return encoded_dict

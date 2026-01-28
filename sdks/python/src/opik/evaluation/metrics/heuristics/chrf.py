@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Any
+from collections.abc import Callable, Sequence
 
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -58,13 +59,13 @@ class ChrF(BaseMetric):
         self,
         name: str = "chrf_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         beta: float = 2.0,
         ignore_whitespace: bool = False,
         char_order: int = 6,
         word_order: int = 0,
         lowercase: bool = False,
-        chrf_fn: Optional[ChrFFn] = None,
+        chrf_fn: ChrFFn | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self._beta = beta
@@ -100,7 +101,7 @@ class ChrF(BaseMetric):
     def score(
         self,
         output: str,
-        reference: Union[str, Sequence[str]],
+        reference: str | Sequence[str],
         **ignored_kwargs: Any,
     ) -> ScoreResult:
         if not output.strip():

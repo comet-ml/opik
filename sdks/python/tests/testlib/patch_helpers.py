@@ -1,12 +1,12 @@
 import contextlib
 import os
-from typing import Any, Dict, List
+from typing import Any
 
 
 @contextlib.contextmanager
 def patch_environ(
-    add_keys: Dict[str, Any],
-    remove_keys: List[str] = None,
+    add_keys: dict[str, Any],
+    remove_keys: list[str] = None,
 ):
     """
     Temporarily set environment variables inside the context manager and

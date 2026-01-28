@@ -1,5 +1,5 @@
 import functools
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 import opik.config as config
 import opik.opik_context as opik_context
@@ -17,7 +17,7 @@ def lazy_import_OpikLogger() -> Optional["litellm.integrations.opik.opik.OpikLog
         return None
 
 
-def try_add_opik_monitoring_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
+def try_add_opik_monitoring_to_params(params: dict[str, Any]) -> dict[str, Any]:
     if lazy_import_OpikLogger() is None:
         return params
 
@@ -44,7 +44,7 @@ def opik_is_misconfigured() -> bool:
     return config_.check_for_known_misconfigurations()
 
 
-def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
+def _add_span_metadata_to_params(params: dict[str, Any]) -> dict[str, Any]:
     current_span = opik_context.get_current_span_data()
 
     if current_span is None:
@@ -66,7 +66,7 @@ def _add_span_metadata_to_params(params: Dict[str, Any]) -> Dict[str, Any]:
     return {**params, "metadata": metadata}
 
 
-def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
+def _ensure_params_have_callback(params: dict[str, Any]) -> dict[str, Any]:
     import litellm
 
     has_global_opik_logger = False
@@ -94,7 +94,7 @@ def _ensure_params_have_callback(params: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@functools.lru_cache()
+@functools.lru_cache
 def _callback_instance() -> "litellm.integrations.opik.opik.OpikLogger":  # type: ignore
     OpikLoggerClass = lazy_import_OpikLogger()
     assert OpikLoggerClass is not None

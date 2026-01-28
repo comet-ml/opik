@@ -1,5 +1,5 @@
 import abc
-from typing import Any, List, Optional, Union
+from typing import Any
 
 import opik
 import opik.config as opik_config
@@ -36,9 +36,9 @@ class BaseMetric(abc.ABC):
 
     def __init__(
         self,
-        name: Optional[str] = None,
+        name: str | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         self.name = name if name is not None else self.__class__.__name__
         self.track = track
@@ -56,7 +56,7 @@ class BaseMetric(abc.ABC):
     @abc.abstractmethod
     def score(
         self, *args: Any, **kwargs: Any
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
         """
         Public method that can be called independently.
         """
@@ -64,7 +64,7 @@ class BaseMetric(abc.ABC):
 
     async def ascore(
         self, *args: Any, **kwargs: Any
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
         """
         Async public method that can be called independently.
         """

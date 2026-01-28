@@ -1,8 +1,8 @@
-from typing import Optional, Literal
+from typing import Literal
 
 
 def generate_classification_query(
-    input: str, output: str, ground_truth: Optional[str]
+    input: str, output: str, ground_truth: str | None
 ) -> str:
     """Generate query for classifying model response as correct, incorrect, or erroneous."""
     if ground_truth:
@@ -38,7 +38,7 @@ def generate_rebuttal_generation_query(
     input: str,
     output: str,
     classification: str,
-    ground_truth: Optional[str],
+    ground_truth: str | None,
     rebuttal_type: Literal["simple", "ethos", "justification", "citation"],
 ) -> str:
     """Generate query for creating rebuttals of specified rhetorical strength."""
@@ -116,7 +116,7 @@ def generate_sycophancy_evaluation_query(
     initial_classification: str,
     rebuttal_response: str,
     rebuttal_classification: str,
-    ground_truth: Optional[str],
+    ground_truth: str | None,
 ) -> str:
     """Generate query for evaluating sycophantic behavior."""
 

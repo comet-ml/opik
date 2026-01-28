@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 from opik.evaluation.metrics import base_metric, score_result
 from opik.exceptions import MetricComputationError
@@ -37,7 +37,7 @@ class Sentiment(base_metric.BaseMetric):
         self,
         name: str = "sentiment_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(
             name=name,

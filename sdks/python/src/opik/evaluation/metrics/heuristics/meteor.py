@@ -1,4 +1,5 @@
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Any
+from collections.abc import Callable, Sequence
 
 try:
     import nltk  # type: ignore
@@ -46,13 +47,13 @@ class METEOR(base_metric.BaseMetric):
 
     def __init__(
         self,
-        meteor_fn: Optional[MeteorFn] = None,
+        meteor_fn: MeteorFn | None = None,
         alpha: float = 0.9,
         beta: float = 3.0,
         gamma: float = 0.5,
         name: str = "meteor_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
 
@@ -99,7 +100,7 @@ class METEOR(base_metric.BaseMetric):
     def score(
         self,
         output: str,
-        reference: Union[str, Sequence[str]],
+        reference: str | Sequence[str],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         if not output.strip():

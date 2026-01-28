@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from .. import usage_converters
 from .base import ChunkAggregator
@@ -24,7 +24,7 @@ class LlamaAggregator(ChunkAggregator):
     - amazon-bedrock-invocationMetrics: Final metrics
     """
 
-    def aggregate(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def aggregate(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         """Aggregate Llama chunks into native Llama output with Bedrock usage."""
         LOGGER.debug("Llama aggregator processing %d items", len(items))
 

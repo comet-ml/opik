@@ -1,14 +1,14 @@
-from typing import List, TypedDict
+from typing import TypedDict
 
 
 class FewShotExampleFactuality(TypedDict):
     input: str
     output: str
-    context: List[str]
-    result: List[dict]
+    context: list[str]
+    result: list[dict]
 
 
-FEW_SHOT_EXAMPLES: List[FewShotExampleFactuality] = [
+FEW_SHOT_EXAMPLES: list[FewShotExampleFactuality] = [
     {
         "input": "Tell 3 facts about Germany",
         "output": "Germany is well known for their cars. The first contact with aliens happened in Germany in 1974. Most of Germans live on the Moon",
@@ -41,8 +41,8 @@ FEW_SHOT_EXAMPLES: List[FewShotExampleFactuality] = [
 def generate_query(
     input: str,
     output: str,
-    context: List[str],
-    few_shot_examples: List[FewShotExampleFactuality],
+    context: list[str],
+    few_shot_examples: list[FewShotExampleFactuality],
 ) -> str:
     examples_str = "\n\n".join(
         [

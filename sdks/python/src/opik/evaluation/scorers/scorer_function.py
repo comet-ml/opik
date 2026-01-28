@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Dict, Optional, Protocol, Union, List
+from typing import Any, Protocol
 
 from opik.evaluation.metrics import score_result
 from opik.message_processing.emulation import models
@@ -17,10 +17,10 @@ class ScorerFunctionProtocol(Protocol):
 
     def __call__(
         self,
-        dataset_item: Dict[str, Any],
-        task_outputs: Dict[str, Any],
-        task_span: Optional[models.SpanModel] = None,
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]: ...
+        dataset_item: dict[str, Any],
+        task_outputs: dict[str, Any],
+        task_span: models.SpanModel | None = None,
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]: ...
 
 
 ScorerFunction = ScorerFunctionProtocol

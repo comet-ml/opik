@@ -1,7 +1,7 @@
 import contextvars
 import contextlib
 
-from typing import List, Optional, Generator, Tuple
+from collections.abc import Generator
 from opik.api_objects import span, trace
 
 
@@ -37,11 +37,11 @@ class OpikContextStorage:
 
     def __init__(self) -> None:
         self._current_trace_data_context: contextvars.ContextVar[
-            Optional[trace.TraceData]
+            trace.TraceData | None
         ] = contextvars.ContextVar("current_trace_data", default=None)
-        default_span_stack: Tuple[span.SpanData, ...] = tuple()
+        default_span_stack: tuple[span.SpanData, ...] = tuple()
         self._spans_data_stack_context: contextvars.ContextVar[
-            Tuple[span.SpanData, ...]
+            tuple[span.SpanData, ...]
         ] = contextvars.ContextVar("spans_data_stack", default=default_span_stack)
 
     def _has_span_id(self, span_id: str) -> bool:
@@ -67,7 +67,7 @@ class OpikContextStorage:
             return
 
         stack = self._spans_data_stack_context.get()
-        new_stack_list: List[span.SpanData] = []
+        new_stack_list: list[span.SpanData] = []
         for span_data in stack:
             new_stack_list.append(span_data)
             if span_data.id == span_id:
@@ -75,7 +75,7 @@ class OpikContextStorage:
 
         self._spans_data_stack_context.set(tuple(new_stack_list))
 
-    def top_span_data(self) -> Optional[span.SpanData]:
+    def top_span_data(self) -> span.SpanData | None:
         if self.span_data_stack_empty():
             return None
         stack = self._spans_data_stack_context.get()
@@ -83,8 +83,8 @@ class OpikContextStorage:
 
     def pop_span_data(
         self,
-        ensure_id: Optional[str] = None,
-    ) -> Optional[span.SpanData]:
+        ensure_id: str | None = None,
+    ) -> span.SpanData | None:
         """
         Pops the span from the stack.
         Args:
@@ -119,13 +119,11 @@ class OpikContextStorage:
     def span_data_stack_size(self) -> int:
         return len(self._spans_data_stack_context.get())
 
-    def get_trace_data(self) -> Optional[trace.TraceData]:
+    def get_trace_data(self) -> trace.TraceData | None:
         trace_data = self._current_trace_data_context.get()
         return trace_data
 
-    def pop_trace_data(
-        self, ensure_id: Optional[str] = None
-    ) -> Optional[trace.TraceData]:
+    def pop_trace_data(self, ensure_id: str | None = None) -> trace.TraceData | None:
         """
         Pops the trace from the context.
         Args:
@@ -147,7 +145,7 @@ class OpikContextStorage:
         self.set_trace_data(None)
         return trace_data
 
-    def set_trace_data(self, trace: Optional[trace.TraceData]) -> None:
+    def set_trace_data(self, trace: trace.TraceData | None) -> None:
         self._current_trace_data_context.set(trace)
 
     def clear_spans(self) -> None:
@@ -180,7 +178,7 @@ def get_current_context_instance() -> OpikContextStorage:
 
 @contextlib.contextmanager
 def temporary_context(
-    span_data: span.SpanData, trace_data: Optional[trace.TraceData]
+    span_data: span.SpanData, trace_data: trace.TraceData | None
 ) -> Generator[None, None, None]:
     """
     Temporarily adds span and trace data to the context.

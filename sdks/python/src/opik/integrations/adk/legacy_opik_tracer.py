@@ -1,6 +1,6 @@
 import contextvars
 import logging
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Union
 
 import google.adk.agents
 from google.adk.agents import callback_context
@@ -34,11 +34,11 @@ SpanOrTraceData = Union[span.SpanData, trace.TraceData]
 class LegacyOpikTracer:
     def __init__(
         self,
-        name: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        project_name: Optional[str] = None,
-        distributed_headers: Optional[DistributedTraceHeadersDict] = None,
+        name: str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        project_name: str | None = None,
+        distributed_headers: DistributedTraceHeadersDict | None = None,
     ):
         LOGGER.warning(
             "Legacy OpikTracer for google-adk < 1.3.0 is being used. We recommend upgrading to the recent version to automatically get the best experience from Opik integration."
@@ -53,18 +53,18 @@ class LegacyOpikTracer:
         self._init_internal_attributes()
 
     def _init_internal_attributes(self) -> None:
-        self._last_model_output: Optional[Dict[str, Any]] = None
+        self._last_model_output: dict[str, Any] | None = None
 
         # Use OpikContextStorage instance instead of global context storage module
         # in case we need to use different context storage for ADK in the future
         self._context_storage = context_storage.get_current_context_instance()
 
-        self._opik_created_spans: Set[str] = (
+        self._opik_created_spans: set[str] = (
             set()
         )  # TODO: use contextvar set for a more reliable clean-up?
 
         self._current_trace_created_by_opik_tracer: contextvars.ContextVar[
-            Optional[str]
+            str | None
         ] = contextvars.ContextVar("current_trace_created_by_opik_tracer", default=None)
 
         self._opik_client = opik_client.get_client_cached()
@@ -287,7 +287,7 @@ class LegacyOpikTracer:
     def before_tool_callback(
         self,
         tool: base_tool.BaseTool,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         tool_context: tool_context.ToolContext,
         *other_args: Any,
         **kwargs: Any,
@@ -318,7 +318,7 @@ class LegacyOpikTracer:
     def after_tool_callback(
         self,
         tool: base_tool.BaseTool,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         tool_context: tool_context.ToolContext,
         tool_response: Any,
         *other_args: Any,
@@ -340,7 +340,7 @@ class LegacyOpikTracer:
         except Exception as e:
             LOGGER.error(f"Failed during after_tool_callback(): {e}", exc_info=True)
 
-    def __getstate__(self) -> Dict[str, Any]:
+    def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
 
         state.pop("_last_model_output", None)
@@ -351,15 +351,15 @@ class LegacyOpikTracer:
 
         return state
 
-    def __setstate__(self, state: Dict[str, Any]) -> None:
+    def __setstate__(self, state: dict[str, Any]) -> None:
         self.__dict__.update(state)
         self._init_internal_attributes()
 
 
 def _try_add_agent_graph_to_metadata(
-    metadata: Dict[str, Any], callback_context: callback_context.CallbackContext
+    metadata: dict[str, Any], callback_context: callback_context.CallbackContext
 ) -> None:
-    current_agent: Optional[google.adk.agents.BaseAgent] = (
+    current_agent: google.adk.agents.BaseAgent | None = (
         callback_context_info_extractors.try_get_current_agent_instance(
             callback_context
         )

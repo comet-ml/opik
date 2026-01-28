@@ -4,15 +4,9 @@ import inspect
 import logging
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Union,
     NamedTuple,
 )
+from collections.abc import Callable
 
 from .. import context_storage, logging_messages, tracing_runtime_config
 from ..api_objects import opik_client, span, trace
@@ -28,13 +22,13 @@ from . import (
 
 LOGGER = logging.getLogger(__name__)
 
-TRACES_CREATED_BY_DECORATOR: Set[str] = set()
+TRACES_CREATED_BY_DECORATOR: set[str] = set()
 
 
 class TrackingStartOptions(NamedTuple):
     start_span_parameters: arguments_helpers.StartSpanParameters
-    opik_args: Optional[opik_args.OpikArgs]
-    opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict]
+    opik_args: opik_args.OpikArgs | None
+    opik_distributed_trace_headers: DistributedTraceHeadersDict | None
 
 
 class BaseTrackDecorator(abc.ABC):
@@ -53,23 +47,23 @@ class BaseTrackDecorator(abc.ABC):
     """
 
     def __init__(self) -> None:
-        self.provider: Optional[str] = None
+        self.provider: str | None = None
         """ Name of the LLM provider. Used in subclasses in integrations track decorators. """
 
     def track(
         self,
-        name: Optional[Union[Callable, str]] = None,
+        name: Callable | str | None = None,
         type: SpanType = "general",
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
         capture_input: bool = True,
-        ignore_arguments: Optional[List[str]] = None,
+        ignore_arguments: list[str] | None = None,
         capture_output: bool = True,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]] = None,
+        generations_aggregator: Callable[[list[Any]], Any] | None = None,
         flush: bool = False,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         create_duplicate_root_span: bool = True,
-    ) -> Union[Callable, Callable[[Callable], Callable]]:
+    ) -> Callable | Callable[[Callable], Callable]:
         """
         Decorator to track the execution of a function.
 
@@ -190,8 +184,8 @@ class BaseTrackDecorator(abc.ABC):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> TrackingStartOptions:
         opik_distributed_trace_headers = (
             arguments_helpers.extract_distributed_trace_headers(kwargs)
@@ -325,7 +319,7 @@ class BaseTrackDecorator(abc.ABC):
             )
 
             result = None
-            error_info: Optional[ErrorInfoDict] = None
+            error_info: ErrorInfoDict | None = None
             func_exception = None
             try:
                 result = func(*args, **kwargs)
@@ -379,7 +373,7 @@ class BaseTrackDecorator(abc.ABC):
                 kwargs=kwargs,
             )
             result = None
-            error_info: Optional[ErrorInfoDict] = None
+            error_info: ErrorInfoDict | None = None
             func_exception = None
             try:
                 result = await func(*args, **kwargs)
@@ -420,8 +414,8 @@ class BaseTrackDecorator(abc.ABC):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> bool:
         try:
             return self.__before_call_unsafe(
@@ -444,8 +438,8 @@ class BaseTrackDecorator(abc.ABC):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> span_creation_handler.SpanCreationResult:
         track_start_options = self._prepare_tracking_start_options(
             func=func,
@@ -464,11 +458,11 @@ class BaseTrackDecorator(abc.ABC):
 
     def _after_call(
         self,
-        output: Optional[Any],
-        error_info: Optional[ErrorInfoDict],
+        output: Any | None,
+        error_info: ErrorInfoDict | None,
         capture_output: bool,
-        generators_span_to_end: Optional[span.SpanData] = None,
-        generators_trace_to_end: Optional[trace.TraceData] = None,
+        generators_span_to_end: span.SpanData | None = None,
+        generators_trace_to_end: trace.TraceData | None = None,
         flush: bool = False,
         should_process_span_data: bool = True,
     ) -> None:
@@ -492,15 +486,15 @@ class BaseTrackDecorator(abc.ABC):
 
     def __after_call_unsafe(
         self,
-        output: Optional[Any],
-        error_info: Optional[ErrorInfoDict],
+        output: Any | None,
+        error_info: ErrorInfoDict | None,
         capture_output: bool,
-        generators_span_to_end: Optional[span.SpanData],
-        generators_trace_to_end: Optional[trace.TraceData],
+        generators_span_to_end: span.SpanData | None,
+        generators_trace_to_end: trace.TraceData | None,
         flush: bool,
         should_process_span_data: bool,
     ) -> None:
-        span_data_to_end: Optional[span.SpanData] = None
+        span_data_to_end: span.SpanData | None = None
         if generators_span_to_end is None:
             if should_process_span_data:
                 # the span data must be present in the context stack, otherwise something is wrong
@@ -566,8 +560,8 @@ class BaseTrackDecorator(abc.ABC):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Optional[Any]:
+        generations_aggregator: Callable[[list[Any]], str] | None,
+    ) -> Any | None:
         """
         Subclasses must override this method to customize stream-like objects handling.
         Stream objects are usually the objects returned by LLM providers when invoking their API with
@@ -586,8 +580,8 @@ class BaseTrackDecorator(abc.ABC):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         """
         Subclasses must override this method to customize generating
@@ -598,7 +592,7 @@ class BaseTrackDecorator(abc.ABC):
     @abc.abstractmethod
     def _end_span_inputs_preprocessor(
         self,
-        output: Optional[Any],
+        output: Any | None,
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
@@ -609,7 +603,7 @@ class BaseTrackDecorator(abc.ABC):
         pass
 
 
-def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
+def pop_end_candidates() -> tuple[span.SpanData, trace.TraceData | None]:
     """
     Pops span and trace (if trace exists) data created by @track decorator
     from the current context, returns popped objects.
@@ -618,15 +612,15 @@ def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
     they are no longer in the context stack.
     """
     span_data_to_end = context_storage.pop_span_data()
-    assert (
-        span_data_to_end is not None
-    ), "When pop_end_candidates is called, top span data must not be None. Otherwise something is wrong."
+    assert span_data_to_end is not None, (
+        "When pop_end_candidates is called, top span data must not be None. Otherwise something is wrong."
+    )
 
     trace_data_to_end = pop_end_candidate_trace_data()
     return span_data_to_end, trace_data_to_end
 
 
-def pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
+def pop_end_candidate_trace_data() -> trace.TraceData | None:
     """
     Pops the most recently created trace data from the stack if it meets specific criteria.
 
@@ -657,8 +651,8 @@ def pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
 
 def add_start_candidates(
     start_span_parameters: arguments_helpers.StartSpanParameters,
-    opik_distributed_trace_headers: Optional[DistributedTraceHeadersDict],
-    opik_args_data: Optional[opik_args.OpikArgs],
+    opik_distributed_trace_headers: DistributedTraceHeadersDict | None,
+    opik_args_data: opik_args.OpikArgs | None,
     tracing_active: bool,
     create_duplicate_root_span: bool,
 ) -> span_creation_handler.SpanCreationResult:
@@ -713,7 +707,7 @@ def add_start_candidates(
 
 def add_start_trace_candidate(
     trace_data: trace.TraceData,
-    opik_args_data: Optional[opik_args.OpikArgs],
+    opik_args_data: opik_args.OpikArgs | None,
     tracing_active: bool,
 ) -> None:
     """

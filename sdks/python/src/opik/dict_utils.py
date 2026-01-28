@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import Any, Dict, Optional, List, Tuple, TypeVar, Type
+from typing import Any, TypeVar
 
 from . import logging_messages
 
@@ -8,8 +8,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 def flatten_dict(
-    d: Dict[str, Any], parent_key: str, delim: str = "."
-) -> Dict[str, Any]:
+    d: dict[str, Any], parent_key: str, delim: str = "."
+) -> dict[str, Any]:
     """
     The current implementation does not have max depth restrictions or cyclic references handling!
     """
@@ -29,14 +29,14 @@ _ValueType = TypeVar("_ValueType")
 
 
 def keep_only_values_of_type(
-    d: Dict[str, Any], value_type: Type[_ValueType]
-) -> Dict[str, _ValueType]:
+    d: dict[str, Any], value_type: type[_ValueType]
+) -> dict[str, _ValueType]:
     return {key: value for key, value in d.items() if isinstance(value, value_type)}  # type: ignore
 
 
 def deepmerge(
-    dict1: Dict[str, Any], dict2: Dict[str, Any], max_depth: int = 10
-) -> Dict[str, Any]:
+    dict1: dict[str, Any], dict2: dict[str, Any], max_depth: int = 10
+) -> dict[str, Any]:
     merged = copy.copy(dict1)
 
     for key, value in dict2.items():
@@ -60,8 +60,8 @@ def deepmerge(
     return merged
 
 
-def remove_none_from_dict(original: Dict[str, Optional[Any]]) -> Dict[str, Any]:
-    new: Dict[str, Any] = {}
+def remove_none_from_dict(original: dict[str, Any | None]) -> dict[str, Any]:
+    new: dict[str, Any] = {}
 
     for key, value in original.items():
         if value is not None:
@@ -70,7 +70,7 @@ def remove_none_from_dict(original: Dict[str, Optional[Any]]) -> Dict[str, Any]:
     return new
 
 
-def split_dict_by_keys(input_dict: Dict, keys: List) -> Tuple[Dict, Dict]:
+def split_dict_by_keys(input_dict: dict, keys: list) -> tuple[dict, dict]:
     subset_dict = {key: input_dict[key] for key in keys if key in input_dict}
     remaining_dict = {
         key: value for key, value in input_dict.items() if key not in subset_dict

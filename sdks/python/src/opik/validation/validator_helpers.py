@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any
 
 from .parameter import Parameter
 
@@ -34,7 +34,7 @@ def validate_type_list(value: Any, allow_empty: bool = True) -> bool:
     return validate_type(value, (list,), allow_empty=allow_empty)
 
 
-def validate_type_list_of_numbers(value: List[Any]) -> bool:
+def validate_type_list_of_numbers(value: list[Any]) -> bool:
     if not validate_type_list(value, allow_empty=False):
         return False
     res = [validate_type_numeric(n, allow_empty=False) for n in value]
@@ -45,7 +45,7 @@ def validate_type_dict(value: Any, allow_empty: bool = True) -> bool:
     return validate_type(value, (dict,), allow_empty=allow_empty)
 
 
-def validate_type(value: Any, types: Tuple, allow_empty: bool) -> bool:
+def validate_type(value: Any, types: tuple, allow_empty: bool) -> bool:
     if value is None:
         return allow_empty
 
@@ -53,7 +53,7 @@ def validate_type(value: Any, types: Tuple, allow_empty: bool) -> bool:
 
 
 def validate_possible_values(
-    value: Any, possible_values: Optional[List], allow_empty: bool
+    value: Any, possible_values: list | None, allow_empty: bool
 ) -> bool:
     if value is None:
         return allow_empty
@@ -74,7 +74,7 @@ def validate_value(value: Any, allow_empty: bool) -> bool:
     return True
 
 
-def validate_parameter(parameter: Parameter) -> Tuple[bool, Optional[str]]:
+def validate_parameter(parameter: Parameter) -> tuple[bool, str | None]:
     if parameter.possible_values is not None:
         valid_value = validate_possible_values(
             value=parameter.value,
@@ -91,19 +91,19 @@ def validate_parameter(parameter: Parameter) -> Tuple[bool, Optional[str]]:
             possible_values_str = [str(v) for v in parameter.possible_values]
 
             if parameter.allow_empty:
-                msg = "parameter %r must be one of [%s] or None but %r was given" % (
+                msg = "parameter {!r} must be one of [{}] or None but {!r} was given".format(
                     parameter.name,
                     ", ".join(possible_values_str),
                     parameter.value,
                 )
             else:
-                msg = "parameter %r must be one of [%s] but %r was given" % (
+                msg = "parameter {!r} must be one of [{}] but {!r} was given".format(
                     parameter.name,
                     ", ".join(possible_values_str),
                     parameter.value,
                 )
         else:
-            msg = "parameter %r must have non empty value but %r was given" % (
+            msg = "parameter {!r} must have non empty value but {!r} was given".format(
                 parameter.name,
                 parameter.value,
             )
@@ -118,13 +118,13 @@ def validate_parameter(parameter: Parameter) -> Tuple[bool, Optional[str]]:
         param_type = None if parameter.value is None else type(parameter.value).__name__
 
         if parameter.allow_empty:
-            msg = "parameter %r must be of type(s) %r or None but %r was given" % (
+            msg = "parameter {!r} must be of type(s) {!r} or None but {!r} was given".format(
                 parameter.name,
                 types_list(parameter.types),
                 param_type,
             )
         else:
-            msg = "parameter %r must be of type(s) %r but %r was given" % (
+            msg = "parameter {!r} must be of type(s) {!r} but {!r} was given".format(
                 parameter.name,
                 types_list(parameter.types),
                 param_type,
@@ -134,7 +134,7 @@ def validate_parameter(parameter: Parameter) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
-def types_list(types: Union[Tuple, List]) -> Union[str, List[str]]:
+def types_list(types: tuple | list) -> str | list[str]:
     type_names = []
     for t in types:
         type_names.append(t.__name__)

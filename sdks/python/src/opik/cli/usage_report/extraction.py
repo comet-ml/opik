@@ -6,7 +6,7 @@ import os
 import traceback
 from collections import defaultdict
 from datetime import timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import opik
 from rich.console import Console
@@ -25,11 +25,11 @@ console = Console()
 
 def extract_project_data(
     workspace: str,
-    api_key: Optional[str] = None,
-    start_date: Optional[datetime.datetime] = None,
-    end_date: Optional[datetime.datetime] = None,
+    api_key: str | None = None,
+    start_date: datetime.datetime | None = None,
+    end_date: datetime.datetime | None = None,
     unit: str = "month",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Extract project data from Opik for a specific workspace.
 
@@ -100,9 +100,9 @@ def extract_project_data(
     console.print(f"[blue]Found {len(projects)} project(s)[/blue]\n")
 
     # Track all dates collected for auto-detection
-    all_dates: List[datetime.datetime] = []
+    all_dates: list[datetime.datetime] = []
 
-    all_data: Dict[str, Any] = {
+    all_data: dict[str, Any] = {
         "workspace": workspace,
         "extraction_date": datetime.datetime.now().isoformat(),
         "date_range": {"start": None, "end": None},
@@ -114,14 +114,14 @@ def extract_project_data(
     }
 
     # Get experiment counts by unit (workspace-level)
-    experiment_by_unit: Dict[str, int] = defaultdict(int)
+    experiment_by_unit: dict[str, int] = defaultdict(int)
     total_experiments_processed = 0
     total_experiments_in_range = 0
     experiments_without_date = 0
     experiments_outside_range = 0
 
     # Get dataset counts (workspace-level)
-    dataset_by_unit: Dict[str, int] = defaultdict(int)
+    dataset_by_unit: dict[str, int] = defaultdict(int)
     total_datasets_processed = 0
     total_datasets_in_range = 0
     datasets_without_date = 0
@@ -563,7 +563,7 @@ def extract_project_data(
                 )
                 # Token usage has multiple result types (total_tokens, prompt_tokens, etc.)
                 # We'll aggregate all of them
-                token_by_unit: Dict[str, Dict[str, float]] = defaultdict(
+                token_by_unit: dict[str, dict[str, float]] = defaultdict(
                     lambda: defaultdict(float)
                 )
                 if token_response.results:
@@ -593,7 +593,7 @@ def extract_project_data(
                                     all_dates.append(data_point.time)
 
                 # Get span counts by getting all traces and using their span_count field
-                span_by_unit: Dict[str, int] = defaultdict(int)
+                span_by_unit: dict[str, int] = defaultdict(int)
                 try:
                     # Get all traces for this project within the date range
                     # Use a filter string to limit by date range

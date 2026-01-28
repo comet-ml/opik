@@ -2,7 +2,6 @@ import dataclasses
 import math
 import statistics
 from collections import defaultdict
-from typing import List, Optional, Dict
 
 from opik.evaluation import test_result
 
@@ -14,13 +13,13 @@ class ScoreStatistics:
     mean: float
     max: float
     min: float
-    values: List[float]
-    std: Optional[float] = None  # Standard deviation (None if count < 2)
+    values: list[float]
+    std: float | None = None  # Standard deviation (None if count < 2)
 
 
 def calculate_aggregated_statistics(
-    evaluation_results: List[test_result.TestResult],
-) -> Dict[str, ScoreStatistics]:
+    evaluation_results: list[test_result.TestResult],
+) -> dict[str, ScoreStatistics]:
     """
     Calculate mean, max, and min scores for each score name in the evaluation test results.
 

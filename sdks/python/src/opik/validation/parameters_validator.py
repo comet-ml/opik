@@ -1,26 +1,26 @@
 import logging
 import numbers
 from collections.abc import Iterable
-from typing import Any, List, Optional
+from typing import Any
 
 import opik.exceptions as exceptions
 from . import validator_helpers, parameter, result, validator
 
 
 class MethodParametersTypeValidator(validator.Validator):
-    def __init__(self, method_name: str, class_name: Optional[str] = None):
+    def __init__(self, method_name: str, class_name: str | None = None):
         if class_name is not None:
-            self.prefix = "%s.%s" % (class_name, method_name)
+            self.prefix = f"{class_name}.{method_name}"
         else:
             self.prefix = method_name
-        self.parameters: List[parameter.Parameter] = []
-        self.validation_result: Optional[result.ValidationResult] = None
+        self.parameters: list[parameter.Parameter] = []
+        self.validation_result: result.ValidationResult | None = None
 
     def add_str_parameter(
         self,
         value: Any,
         name: str,
-        possible_values: Optional[List[str]] = None,
+        possible_values: list[str] | None = None,
         allow_empty: bool = True,
     ) -> None:
         self.parameters.append(
@@ -45,7 +45,7 @@ class MethodParametersTypeValidator(validator.Validator):
         self,
         value: Any,
         name: str,
-        possible_values: Optional[List[int]] = None,
+        possible_values: list[int] | None = None,
         allow_empty: bool = True,
     ) -> None:
         self.parameters.append(
@@ -61,7 +61,7 @@ class MethodParametersTypeValidator(validator.Validator):
         self,
         value: Any,
         name: str,
-        possible_values: Optional[List[float]] = None,
+        possible_values: list[float] | None = None,
         allow_empty: bool = True,
     ) -> None:
         self.parameters.append(
@@ -77,7 +77,7 @@ class MethodParametersTypeValidator(validator.Validator):
         self,
         value: Any,
         name: str,
-        possible_values: Optional[List[numbers.Number]] = None,
+        possible_values: list[numbers.Number] | None = None,
         allow_empty: bool = True,
     ) -> None:
         self.parameters.append(
@@ -126,7 +126,7 @@ class MethodParametersTypeValidator(validator.Validator):
 
     def validate(self) -> result.ValidationResult:
         try:
-            failures: List[str] = []
+            failures: list[str] = []
             for param in self.parameters:
                 valid, msg = validator_helpers.validate_parameter(param)
                 if not valid:
@@ -170,6 +170,6 @@ class MethodParametersTypeValidator(validator.Validator):
 
 
 def create_validator(
-    method_name: str, class_name: Optional[str] = None
+    method_name: str, class_name: str | None = None
 ) -> MethodParametersTypeValidator:
     return MethodParametersTypeValidator(method_name=method_name, class_name=class_name)

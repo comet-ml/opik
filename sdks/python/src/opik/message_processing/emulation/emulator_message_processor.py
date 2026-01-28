@@ -3,7 +3,8 @@ import collections
 import datetime
 import logging
 import threading
-from typing import List, Dict, Union, Optional, Any, Type, Callable
+from typing import Any
+from collections.abc import Callable
 
 from opik import dict_utils
 from opik.rest_api.types import span_write, trace_write
@@ -61,31 +62,31 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         any previous data.
         """
         with self._rlock:
-            self._trace_trees: List[models.TraceModel] = []
+            self._trace_trees: list[models.TraceModel] = []
 
-            self._traces_to_spans_mapping: Dict[str, List[str]] = (
+            self._traces_to_spans_mapping: dict[str, list[str]] = (
                 collections.defaultdict(list)
             )
             # the same as _trace_trees but without a trace. Useful for distributed tracing.
-            self._span_trees: List[models.SpanModel] = []
-            self._trace_observations: Dict[str, models.TraceModel] = {}
-            self._span_observations: Dict[str, models.SpanModel] = {}
+            self._span_trees: list[models.SpanModel] = []
+            self._trace_observations: dict[str, models.TraceModel] = {}
+            self._span_observations: dict[str, models.SpanModel] = {}
 
-            self._span_to_parent_span: Dict[str, Optional[str]] = {}
-            self._span_to_trace: Dict[str, Optional[str]] = {}
-            self._trace_to_feedback_scores: Dict[
-                str, List[models.FeedbackScoreModel]
+            self._span_to_parent_span: dict[str, str | None] = {}
+            self._span_to_trace: dict[str, str | None] = {}
+            self._trace_to_feedback_scores: dict[
+                str, list[models.FeedbackScoreModel]
             ] = collections.defaultdict(list)
-            self._span_to_feedback_scores: Dict[
-                str, List[models.FeedbackScoreModel]
+            self._span_to_feedback_scores: dict[
+                str, list[models.FeedbackScoreModel]
             ] = collections.defaultdict(list)
-            self._trace_to_attachments: Dict[str, List[models.AttachmentModel]] = (
+            self._trace_to_attachments: dict[str, list[models.AttachmentModel]] = (
                 collections.defaultdict(list)
             )
-            self._span_to_attachments: Dict[str, List[models.AttachmentModel]] = (
+            self._span_to_attachments: dict[str, list[models.AttachmentModel]] = (
                 collections.defaultdict(list)
             )
-            self._experiment_items: List[models.ExperimentItemModel] = []
+            self._experiment_items: list[models.ExperimentItemModel] = []
 
     def is_active(self) -> bool:
         with self._rlock:
@@ -96,7 +97,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             self._active = active
 
     @property
-    def trace_trees(self) -> List[models.TraceModel]:
+    def trace_trees(self) -> list[models.TraceModel]:
         """
         Builds a list of trace trees based on the data from the processed messages.
         Before processing traces, builds span_trees
@@ -141,7 +142,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         self._trace_observations[trace.id] = trace
 
     def _save_span(
-        self, span: models.SpanModel, trace_id: str, parent_span_id: Optional[str]
+        self, span: models.SpanModel, trace_id: str, parent_span_id: str | None
     ) -> None:
         if self.merge_duplicates:
             # merge spans with the same id to keep only the latest one
@@ -162,7 +163,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         self._span_observations[span.id] = span
 
     @property
-    def span_trees(self) -> List[models.SpanModel]:
+    def span_trees(self) -> list[models.SpanModel]:
         self._build_spans_tree()
         return self._span_trees
 
@@ -217,18 +218,18 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         self,
         trace_id: str,
         start_time: datetime.datetime,
-        name: Optional[str],
+        name: str | None,
         project_name: str,
         input: Any,
         output: Any,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
-        end_time: Optional[datetime.datetime],
-        spans: Optional[List[models.SpanModel]],
-        feedback_scores: Optional[List[models.FeedbackScoreModel]],
-        error_info: Optional[ErrorInfoDict],
-        thread_id: Optional[str],
-        last_updated_at: Optional[datetime.datetime] = None,
+        tags: list[str] | None,
+        metadata: dict[str, Any] | None,
+        end_time: datetime.datetime | None,
+        spans: list[models.SpanModel] | None,
+        feedback_scores: list[models.FeedbackScoreModel] | None,
+        error_info: ErrorInfoDict | None,
+        thread_id: str | None,
+        last_updated_at: datetime.datetime | None = None,
     ) -> models.TraceModel:
         """
         Creates a trace model with the specified attributes. The method is abstract and must be
@@ -269,22 +270,22 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         self,
         span_id: str,
         start_time: datetime.datetime,
-        name: Optional[str],
+        name: str | None,
         input: Any,
         output: Any,
-        tags: Optional[List[str]],
-        metadata: Optional[Dict[str, Any]],
+        tags: list[str] | None,
+        metadata: dict[str, Any] | None,
         type: SpanType,
-        usage: Optional[Dict[str, Any]],
-        end_time: Optional[datetime.datetime],
+        usage: dict[str, Any] | None,
+        end_time: datetime.datetime | None,
         project_name: str,
-        spans: Optional[List[models.SpanModel]],
-        feedback_scores: Optional[List[models.FeedbackScoreModel]],
-        model: Optional[str],
-        provider: Optional[str],
-        error_info: Optional[ErrorInfoDict],
-        total_cost: Optional[float],
-        last_updated_at: Optional[datetime.datetime],
+        spans: list[models.SpanModel] | None,
+        feedback_scores: list[models.FeedbackScoreModel] | None,
+        model: str | None,
+        provider: str | None,
+        error_info: ErrorInfoDict | None,
+        total_cost: float | None,
+        last_updated_at: datetime.datetime | None,
     ) -> models.SpanModel:
         """
         Abstract method to create a span model representing a span of a trace.
@@ -325,8 +326,8 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         score_id: str,
         name: str,
         value: float,
-        category_name: Optional[str],
-        reason: Optional[str],
+        category_name: str | None,
+        reason: str | None,
     ) -> models.FeedbackScoreModel:
         """
         Creates a feedback score model with the specified parameters.
@@ -353,7 +354,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         raise NotImplementedError("This method must be implemented in a subclass.")
 
     def _register_handlers(self) -> None:
-        self._handlers: Dict[Type, Callable[[messages.BaseMessage], None]] = {
+        self._handlers: dict[type, Callable[[messages.BaseMessage], None]] = {
             messages.CreateSpanMessage: self._handle_create_span_message,  # type: ignore
             messages.CreateTraceMessage: self._handle_create_trace_message,  # type: ignore
             messages.UpdateSpanMessage: self._handle_update_span_message,  # type: ignore
@@ -589,7 +590,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         pass
 
     @property
-    def experiment_items(self) -> List[models.ExperimentItemModel]:
+    def experiment_items(self) -> list[models.ExperimentItemModel]:
         """Returns the list of experiment items collected."""
         with self._rlock:
             return self._experiment_items
@@ -597,7 +598,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
 
 def _observation_already_stored(
     observation_id: str,
-    observations: Union[List[models.SpanModel], List[models.TraceModel]],
+    observations: list[models.SpanModel] | list[models.TraceModel],
 ) -> bool:
     for observation in observations:
         if observation.id == observation_id:

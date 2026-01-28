@@ -1,5 +1,4 @@
 import threading
-from typing import Type, Dict
 from .. import messages
 from . import base_batcher
 from . import flushing_thread
@@ -8,8 +7,8 @@ from . import flushing_thread
 class BatchManager:
     def __init__(
         self,
-        message_to_batcher_mapping: Dict[
-            Type[messages.BaseMessage], base_batcher.BaseBatcher
+        message_to_batcher_mapping: dict[
+            type[messages.BaseMessage], base_batcher.BaseBatcher
         ],
     ) -> None:
         self._message_to_batcher_mapping = message_to_batcher_mapping

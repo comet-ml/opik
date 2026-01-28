@@ -1,15 +1,8 @@
 import logging
 from typing import (
     Any,
-    AsyncGenerator,
-    Callable,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Tuple,
-    Union,
 )
+from collections.abc import AsyncGenerator, Callable, Generator
 from typing_extensions import override
 
 import aisuite.framework as aisuite_chat_completion
@@ -37,12 +30,12 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in chat.completion.create(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in chat.completion.create(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
         metadata = track_options.metadata if track_options.metadata is not None else {}
@@ -79,9 +72,9 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         **kwargs: Any,
-    ) -> Tuple[Optional[str], Optional[str]]:
-        provider: Optional[str] = None
-        model: Optional[str] = kwargs.get("model", None)
+    ) -> tuple[str | None, str | None]:
+        provider: str | None = None
+        model: str | None = kwargs.get("model", None)
 
         if model is not None and ":" in model:
             provider, model = model.split(":", 1)
@@ -159,6 +152,6 @@ class AISuiteTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Optional[Union[Generator, AsyncGenerator]]:
+        generations_aggregator: Callable[[list[Any]], str] | None,
+    ) -> Generator | AsyncGenerator | None:
         return super()._streams_handler(output, capture_output, generations_aggregator)

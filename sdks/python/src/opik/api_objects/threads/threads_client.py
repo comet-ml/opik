@@ -1,5 +1,4 @@
 import logging
-from typing import List, Optional
 
 import opik
 from opik.rest_api import TraceThread
@@ -32,11 +31,11 @@ class ThreadsClient:
 
     def search_threads(
         self,
-        project_name: Optional[str] = None,
-        filter_string: Optional[str] = None,
+        project_name: str | None = None,
+        filter_string: str | None = None,
         max_results: int = 1000,
         truncate: bool = True,
-    ) -> List[TraceThread]:
+    ) -> list[TraceThread]:
         """Search for threads in a given project based on specific criteria.
 
         This method retrieves a list of TraceThread objects that match the specified
@@ -129,7 +128,7 @@ class ThreadsClient:
         return threads
 
     def log_threads_feedback_scores(
-        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: list[BatchFeedbackScoreDict], project_name: str | None = None
     ) -> None:
         """
         Logs feedback scores for threads in a specific project. This method processes the given

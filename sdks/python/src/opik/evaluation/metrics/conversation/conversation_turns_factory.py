@@ -1,11 +1,9 @@
-from typing import List
-
 from . import types
 
 
 def build_conversation_turns(
     conversation: types.Conversation,
-) -> List[types.ConversationTurn]:
+) -> list[types.ConversationTurn]:
     """
     Builds a list of conversation turns from a given conversation object by grouping
     user and assistant message pairs together. Each turn is represented by a

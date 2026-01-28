@@ -2,16 +2,10 @@ import logging
 import functools
 import time
 from typing import (
-    Optional,
     Any,
-    List,
-    Dict,
-    Sequence,
-    Set,
     TYPE_CHECKING,
-    Callable,
-    Iterator,
 )
+from collections.abc import Sequence, Callable, Iterator
 
 from opik.api_objects import rest_stream_parser
 from opik.rest_api import client as rest_api_client
@@ -87,9 +81,9 @@ class Dataset:
     def __init__(
         self,
         name: str,
-        description: Optional[str],
+        description: str | None,
         rest_client: rest_api_client.OpikApi,
-        dataset_items_count: Optional[int] = None,
+        dataset_items_count: int | None = None,
     ) -> None:
         """
         A Dataset object. This object should not be created directly, instead use :meth:`opik.Opik.create_dataset` or :meth:`opik.Opik.get_dataset`.
@@ -99,8 +93,8 @@ class Dataset:
         self._rest_client = rest_client
         self._dataset_items_count = dataset_items_count
 
-        self._id_to_hash: Dict[str, str] = {}
-        self._hashes: Set[str] = set()
+        self._id_to_hash: dict[str, str] = {}
+        self._hashes: set[str] = set()
 
     @functools.cached_property
     def id(self) -> str:
@@ -115,12 +109,12 @@ class Dataset:
         return self._name
 
     @property
-    def description(self) -> Optional[str]:
+    def description(self) -> str | None:
         """The description of the dataset."""
         return self._description
 
     @property
-    def dataset_items_count(self) -> Optional[int]:
+    def dataset_items_count(self) -> int | None:
         """
         The total number of items in the dataset.
 
@@ -135,7 +129,7 @@ class Dataset:
 
     def _insert_batch_with_retry(
         self,
-        batch: List[rest_dataset_item.DatasetItemWrite],
+        batch: list[rest_dataset_item.DatasetItemWrite],
         batch_group_id: str,
     ) -> None:
         """Insert a batch of dataset items with automatic retry on rate limit errors.
@@ -154,10 +148,10 @@ class Dataset:
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
 
     def __internal_api__insert_items_as_dataclasses__(
-        self, items: List[dataset_item.DatasetItem]
+        self, items: list[dataset_item.DatasetItem]
     ) -> None:
         # Remove duplicates if they already exist
-        deduplicated_items: List[dataset_item.DatasetItem] = []
+        deduplicated_items: list[dataset_item.DatasetItem] = []
         for item in items:
             item_hash = item.content_hash()
 
@@ -195,7 +189,7 @@ class Dataset:
             LOGGER.debug("Sending dataset items batch of size %d", len(batch))
             self._insert_batch_with_retry(batch, batch_group_id=batch_group_id)
 
-    def insert(self, items: Sequence[Dict[str, Any]]) -> None:
+    def insert(self, items: Sequence[dict[str, Any]]) -> None:
         """
         Insert new items into the dataset. A new dataset version will be created.
 
@@ -203,7 +197,7 @@ class Dataset:
             items: List of dicts (which will be converted to dataset items)
                 to add to the dataset.
         """
-        dataset_items: List[dataset_item.DatasetItem] = [  # type: ignore
+        dataset_items: list[dataset_item.DatasetItem] = [  # type: ignore
             (dataset_item.DatasetItem(**item) if isinstance(item, dict) else item)
             for item in items
         ]
@@ -226,7 +220,7 @@ class Dataset:
 
         LOGGER.debug("Finish hash sync in dataset")
 
-    def update(self, items: List[Dict[str, Any]]) -> None:
+    def update(self, items: list[dict[str, Any]]) -> None:
         """
         Update existing items in the dataset.
 
@@ -246,7 +240,7 @@ class Dataset:
 
     def _delete_batch_with_retry(
         self,
-        batch: List[str],
+        batch: list[str],
         batch_group_id: str,
     ) -> None:
         """Delete a batch of dataset items with automatic retry on rate limit errors.
@@ -264,7 +258,7 @@ class Dataset:
         )
         LOGGER.debug("Successfully deleted dataset items batch of size %d", len(batch))
 
-    def delete(self, items_ids: List[str]) -> None:
+    def delete(self, items_ids: list[str]) -> None:
         """
         Delete items from the dataset. A new dataset version will be created.
 
@@ -326,7 +320,7 @@ class Dataset:
 
         return converters.to_json(dataset_items, keys_mapping={})
 
-    def get_items(self, nb_samples: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_items(self, nb_samples: int | None = None) -> list[dict[str, Any]]:
         """
         Retrieve a fixed set number of dataset items dictionaries.
 
@@ -345,9 +339,9 @@ class Dataset:
 
     def __internal_api__stream_items_as_dataclasses__(
         self,
-        nb_samples: Optional[int] = None,
-        batch_size: Optional[int] = None,
-        dataset_item_ids: Optional[List[str]] = None,
+        nb_samples: int | None = None,
+        batch_size: int | None = None,
+        dataset_item_ids: list[str] | None = None,
     ) -> Iterator[dataset_item.DatasetItem]:
         """
         Stream dataset items as a generator instead of loading all at once.
@@ -369,7 +363,7 @@ class Dataset:
         if batch_size is None:
             batch_size = constants.DATASET_STREAM_BATCH_SIZE
 
-        last_retrieved_id: Optional[str] = None
+        last_retrieved_id: str | None = None
         should_retrieve_more_items = True
         items_yielded = 0
         dataset_items_ids_left = set(dataset_item_ids) if dataset_item_ids else None
@@ -377,7 +371,7 @@ class Dataset:
         while should_retrieve_more_items:
             # Wrap the streaming call in retry logic so we can resume from last_retrieved_id
             @retry_decorator.opik_rest_retry
-            def _fetch_batch() -> List[rest_dataset_item_read.DatasetItem]:
+            def _fetch_batch() -> list[rest_dataset_item_read.DatasetItem]:
                 return rest_stream_parser.read_and_parse_stream(
                     stream=self._rest_client.datasets.stream_dataset_items(
                         dataset_name=self._name,
@@ -439,8 +433,8 @@ class Dataset:
     def insert_from_json(
         self,
         json_array: str,
-        keys_mapping: Optional[Dict[str, str]] = None,
-        ignore_keys: Optional[List[str]] = None,
+        keys_mapping: dict[str, str] | None = None,
+        ignore_keys: list[str] | None = None,
     ) -> None:
         """
         Args:
@@ -463,8 +457,8 @@ class Dataset:
     def read_jsonl_from_file(
         self,
         file_path: str,
-        keys_mapping: Optional[Dict[str, str]] = None,
-        ignore_keys: Optional[List[str]] = None,
+        keys_mapping: dict[str, str] | None = None,
+        ignore_keys: list[str] | None = None,
     ) -> None:
         """
         Read JSONL from a file and insert it into the dataset.
@@ -484,8 +478,8 @@ class Dataset:
     def insert_from_pandas(
         self,
         dataframe: "pd.DataFrame",
-        keys_mapping: Optional[Dict[str, str]] = None,
-        ignore_keys: Optional[List[str]] = None,
+        keys_mapping: dict[str, str] | None = None,
+        ignore_keys: list[str] | None = None,
     ) -> None:
         """
         Requires: `pandas` library to be installed.

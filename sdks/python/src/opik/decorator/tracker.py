@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
+from collections.abc import Callable
 from typing_extensions import override
 
 from ..api_objects import opik_client, span
@@ -18,8 +19,8 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         input = (
             inspect_helpers.extract_inputs(func, args, kwargs)
@@ -69,12 +70,12 @@ class OpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Optional[Any]:
+        generations_aggregator: Callable[[list[Any]], str] | None,
+    ) -> Any | None:
         return super()._streams_handler(output, capture_output, generations_aggregator)
 
 
-def flush_tracker(timeout: Optional[int] = None) -> None:
+def flush_tracker(timeout: int | None = None) -> None:
     opik_ = opik_client.get_client_cached()
     opik_.flush(timeout)
 

@@ -1,7 +1,6 @@
 import threading
 import logging
 import time
-from typing import List, Optional
 
 from . import messages, message_queue, queue_consumer
 from .. import _logging
@@ -20,7 +19,7 @@ class Streamer:
     def __init__(
         self,
         queue: message_queue.MessageQueue[messages.BaseMessage],
-        queue_consumers: List[queue_consumer.QueueConsumer],
+        queue_consumers: list[queue_consumer.QueueConsumer],
         attachments_preprocessor: attachments_preprocessor.AttachmentsPreprocessor,
         batch_preprocessor: batching_preprocessor.BatchingPreprocessor,
         upload_preprocessor: file_upload_preprocessor.FileUploadPreprocessor,
@@ -76,7 +75,7 @@ class Streamer:
                 )
             self._idle = True
 
-    def close(self, timeout: Optional[int]) -> bool:
+    def close(self, timeout: int | None) -> bool:
         """
         Stops data processing threads
         """
@@ -95,7 +94,7 @@ class Streamer:
 
         return self._message_queue.empty()
 
-    def flush(self, timeout: Optional[float], upload_sleep_time: int = 5) -> bool:
+    def flush(self, timeout: float | None, upload_sleep_time: int = 5) -> bool:
         # wait for current pending messages processing to be completed
         # this should be done before flushing batch preprocessor because some
         # batch messages may be added to the queue during processing

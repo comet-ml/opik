@@ -2,14 +2,11 @@ import logging
 import datetime
 from typing import (
     Any,
-    Dict,
-    List,
     Optional,
-    Set,
     TYPE_CHECKING,
-    Callable,
     NamedTuple,
 )
+from collections.abc import Callable
 import contextvars
 from uuid import UUID
 
@@ -57,8 +54,8 @@ LANGGRAPH_INTERRUPT_METADATA_KEY = "_langgraph_interrupt"
 
 
 class TrackRootRunResult(NamedTuple):
-    new_trace_data: Optional[trace.TraceData]
-    new_span_data: Optional[span.SpanData]
+    new_trace_data: trace.TraceData | None
+    new_span_data: span.SpanData | None
 
 
 class OpikTracer(BaseTracer):
@@ -66,13 +63,13 @@ class OpikTracer(BaseTracer):
 
     def __init__(
         self,
-        tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
         graph: Optional["Graph"] = None,
-        project_name: Optional[str] = None,
-        distributed_headers: Optional[DistributedTraceHeadersDict] = None,
-        thread_id: Optional[str] = None,
-        skip_error_callback: Optional[SkipErrorCallback] = None,
+        project_name: str | None = None,
+        distributed_headers: DistributedTraceHeadersDict | None = None,
+        thread_id: str | None = None,
+        skip_error_callback: SkipErrorCallback | None = None,
         opik_context_read_only_mode: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -120,20 +117,20 @@ class OpikTracer(BaseTracer):
 
         self._trace_default_tags = tags
 
-        self._span_data_map: Dict[UUID, span.SpanData] = {}
+        self._span_data_map: dict[UUID, span.SpanData] = {}
         """Map from run id to span data."""
 
-        self._created_traces_data_map: Dict[UUID, trace.TraceData] = {}
+        self._created_traces_data_map: dict[UUID, trace.TraceData] = {}
         """Map from run id to trace data."""
 
-        self._created_traces: List[trace.Trace] = []
+        self._created_traces: list[trace.Trace] = []
 
-        self._externally_created_traces_ids: Set[str] = set()
+        self._externally_created_traces_ids: set[str] = set()
 
-        self._skipped_langgraph_root_run_ids: Set[UUID] = set()
+        self._skipped_langgraph_root_run_ids: set[UUID] = set()
         """Set of run IDs for LangGraph root runs where we skip creating the span."""
 
-        self._langgraph_parent_span_ids: Dict[UUID, Optional[str]] = {}
+        self._langgraph_parent_span_ids: dict[UUID, str | None] = {}
         """Map from LangGraph root run ID to parent span ID (None if attached to trace)."""
 
         self._project_name = project_name
@@ -146,9 +143,9 @@ class OpikTracer(BaseTracer):
 
         self._opik_context_storage = context_storage.get_current_context_instance()
 
-        self._root_run_external_parent_span_id: contextvars.ContextVar[
-            Optional[str]
-        ] = contextvars.ContextVar("root_run_external_parent_span_id", default=None)
+        self._root_run_external_parent_span_id: contextvars.ContextVar[str | None] = (
+            contextvars.ContextVar("root_run_external_parent_span_id", default=None)
+        )
 
         self._skip_error_callback = skip_error_callback
 
@@ -178,13 +175,13 @@ class OpikTracer(BaseTracer):
         )
 
     def _persist_run(self, run: Run) -> None:
-        run_dict: Dict[str, Any] = run.dict()
+        run_dict: dict[str, Any] = run.dict()
 
-        error_info: Optional[ErrorInfoDict]
-        trace_additional_metadata: Dict[str, Any] = {}
+        error_info: ErrorInfoDict | None
+        trace_additional_metadata: dict[str, Any] = {}
 
         error_str = run_dict.get("error")
-        outputs: Optional[Dict[str, Any]] = None
+        outputs: dict[str, Any] | None = None
         error_info = None
 
         if error_str is not None:
@@ -225,10 +222,10 @@ class OpikTracer(BaseTracer):
     def _finalize_trace(
         self,
         run_id: UUID,
-        run_dict: Dict[str, Any],
-        trace_additional_metadata: Optional[Dict[str, Any]],
-        outputs: Optional[Dict[str, Any]],
-        error_info: Optional[ErrorInfoDict],
+        run_dict: dict[str, Any],
+        trace_additional_metadata: dict[str, Any] | None,
+        outputs: dict[str, Any] | None,
+        error_info: ErrorInfoDict | None,
     ) -> None:
         trace_data = self._created_traces_data_map.get(run_id)
         if trace_data is None:
@@ -288,7 +285,7 @@ class OpikTracer(BaseTracer):
             )
 
     def _track_root_run(
-        self, run_dict: Dict[str, Any], allow_duplicating_root_span: bool
+        self, run_dict: dict[str, Any], allow_duplicating_root_span: bool
     ) -> TrackRootRunResult:
         run_metadata = run_parse_helpers.get_run_metadata(run_dict)
         root_metadata = dict_utils.deepmerge(self._trace_default_metadata, run_metadata)
@@ -356,7 +353,7 @@ class OpikTracer(BaseTracer):
     def _process_start_span_unsafe(
         self, run: Run, allow_duplicating_root_span: bool
     ) -> None:
-        run_dict: Dict[str, Any] = run.dict()
+        run_dict: dict[str, Any] = run.dict()
 
         if not run.parent_run_id:
             self._create_root_trace_and_span(
@@ -381,7 +378,7 @@ class OpikTracer(BaseTracer):
             )
 
     def _create_root_trace_and_span(
-        self, run_id: UUID, run_dict: Dict[str, Any], allow_duplicating_root_span: bool
+        self, run_id: UUID, run_dict: dict[str, Any], allow_duplicating_root_span: bool
     ) -> None:
         """
         Creates a root trace and span for a given run and stores the relevant trace and span
@@ -443,7 +440,7 @@ class OpikTracer(BaseTracer):
                 )
 
     def _attach_span_to_parent_span(
-        self, run_id: UUID, parent_run_id: UUID, run_dict: Dict[str, Any]
+        self, run_id: UUID, parent_run_id: UUID, run_dict: dict[str, Any]
     ) -> None:
         """
         Attaches child span to a parent span and updates relevant context storage.
@@ -491,7 +488,7 @@ class OpikTracer(BaseTracer):
             self._opik_client.span(**new_span_data.as_start_parameters)
 
     def _attach_span_to_local_or_distributed_trace(
-        self, run_id: UUID, parent_run_id: UUID, run_dict: Dict[str, Any]
+        self, run_id: UUID, parent_run_id: UUID, run_dict: dict[str, Any]
     ) -> None:
         """
         Attaches child span directly to a trace by checking trace data or distributed
@@ -589,7 +586,7 @@ class OpikTracer(BaseTracer):
                 )
                 return
             span_data = self._span_data_map[run.id]
-            run_dict: Dict[str, Any] = run.dict()
+            run_dict: dict[str, Any] = run.dict()
 
             usage_info = provider_usage_extractors.try_extract_provider_usage_data(
                 run_dict
@@ -655,7 +652,7 @@ class OpikTracer(BaseTracer):
 
         span_data = None
         try:
-            run_dict: Dict[str, Any] = run.dict()
+            run_dict: dict[str, Any] = run.dict()
             span_data = self._span_data_map[run.id]
             error_str = run_dict["error"]
 
@@ -694,8 +691,8 @@ class OpikTracer(BaseTracer):
     def _save_span_trace_data_to_local_maps(
         self,
         run_id: UUID,
-        span_data: Optional[span.SpanData],
-        trace_data: Optional[trace.TraceData],
+        span_data: span.SpanData | None,
+        trace_data: trace.TraceData | None,
     ) -> None:
         if span_data is not None:
             self._span_data_map[run_id] = span_data
@@ -709,7 +706,7 @@ class OpikTracer(BaseTracer):
         """
         self._opik_client.flush()
 
-    def created_traces(self) -> List[trace.Trace]:
+    def created_traces(self) -> list[trace.Trace]:
         """
         Get a list of traces created by OpikTracer.
 
@@ -718,7 +715,7 @@ class OpikTracer(BaseTracer):
         """
         return self._created_traces
 
-    def get_current_span_data_for_run(self, run_id: UUID) -> Optional[span.SpanData]:
+    def get_current_span_data_for_run(self, run_id: UUID) -> span.SpanData | None:
         return self._span_data_map.get(run_id)
 
     def _skip_tracking(self) -> bool:
@@ -736,14 +733,14 @@ class OpikTracer(BaseTracer):
 
     def on_chat_model_start(
         self,
-        serialized: Dict[str, Any],
-        messages: List[List["BaseMessage"]],
+        serialized: dict[str, Any],
+        messages: list[list["BaseMessage"]],
         *,
         run_id: UUID,
-        tags: Optional[List[str]] = None,
-        parent_run_id: Optional[UUID] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        name: Optional[str] = None,
+        tags: list[str] | None = None,
+        parent_run_id: UUID | None = None,
+        metadata: dict[str, Any] | None = None,
+        name: str | None = None,
         **kwargs: Any,
     ) -> Run:
         """Start a trace for an LLM run.

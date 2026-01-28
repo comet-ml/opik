@@ -2,10 +2,11 @@
 
 import datetime
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
+from collections.abc import Callable
 
 
-def aggregate_by_unit(metrics_response: Any, unit: str = "month") -> Dict[str, float]:
+def aggregate_by_unit(metrics_response: Any, unit: str = "month") -> dict[str, float]:
     """
     Aggregate metrics by specified time unit.
 
@@ -16,7 +17,7 @@ def aggregate_by_unit(metrics_response: Any, unit: str = "month") -> Dict[str, f
     Returns:
         Dictionary mapping time period key to total value
     """
-    unit_data: Dict[str, float] = defaultdict(float)
+    unit_data: dict[str, float] = defaultdict(float)
 
     if metrics_response.results:
         for result in metrics_response.results:
@@ -66,8 +67,8 @@ def format_datetime_key(dt: datetime.datetime, unit: str) -> str:
 
 
 def parse_and_normalize_datetime(
-    dt_str: Any, reference_tz: Optional[datetime.tzinfo]
-) -> Optional[datetime.datetime]:
+    dt_str: Any, reference_tz: datetime.tzinfo | None
+) -> datetime.datetime | None:
     """
     Parse a datetime string and normalize it with respect to a reference timezone.
 
@@ -114,7 +115,7 @@ def normalize_timezone_for_comparison(
     dt: datetime.datetime,
     query_start_date: datetime.datetime,
     query_end_date: datetime.datetime,
-) -> Tuple[datetime.datetime, datetime.datetime, datetime.datetime]:
+) -> tuple[datetime.datetime, datetime.datetime, datetime.datetime]:
     """
     Normalize timezones for date comparison.
 
@@ -142,11 +143,11 @@ def normalize_timezone_for_comparison(
 
 
 def extract_metric_data(
-    projects: List[Dict[str, Any]],
-    all_periods: List[str],
+    projects: list[dict[str, Any]],
+    all_periods: list[str],
     metric_key: str,
-    aggregation_fn: Optional[Callable[[Any], float]] = None,
-) -> List[List[float]]:
+    aggregation_fn: Callable[[Any], float] | None = None,
+) -> list[list[float]]:
     """
     Extract metric data from projects for all periods.
 
@@ -181,14 +182,14 @@ def extract_metric_data(
 
 
 def process_experiment_for_stats(
-    experiment_dict: Dict[str, Any],
-    experiment_by_unit: Dict[str, int],
-    all_dates: List[datetime.datetime],
+    experiment_dict: dict[str, Any],
+    experiment_by_unit: dict[str, int],
+    all_dates: list[datetime.datetime],
     query_start_date: datetime.datetime,
     query_end_date: datetime.datetime,
     unit: str,
-    start_date: Optional[datetime.datetime],
-) -> Tuple[int, int, int]:
+    start_date: datetime.datetime | None,
+) -> tuple[int, int, int]:
     """
     Process a single experiment dictionary and update statistics.
 

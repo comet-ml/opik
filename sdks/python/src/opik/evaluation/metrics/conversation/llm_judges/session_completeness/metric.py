@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Optional, Any, Union, List
+from typing import Any
 import pydantic
 
 from opik.evaluation.metrics.conversation import types as conversation_types
@@ -58,11 +58,11 @@ class SessionCompletenessQuality(ConversationThreadMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "session_completeness_quality",
         include_reason: bool = True,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 1e-8,
     ):
         super().__init__(
@@ -75,7 +75,7 @@ class SessionCompletenessQuality(ConversationThreadMetric):
         self._init_model(model, temperature=temperature)
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
+        self, model: str | base_model.OpikBaseModel | None, temperature: float
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
@@ -101,7 +101,7 @@ class SessionCompletenessQuality(ConversationThreadMetric):
     def _extract_user_goals(
         self,
         conversation: conversation_types.Conversation,
-    ) -> List[str]:
+    ) -> list[str]:
         llm_query = templates.extract_user_goals(conversation)
         model_output = self._model.generate_string(
             input=llm_query, response_format=schema.UserGoalsResponse
@@ -122,9 +122,9 @@ class SessionCompletenessQuality(ConversationThreadMetric):
     def _generate_reason(
         self,
         score: float,
-        verdicts: List[schema.EvaluateUserGoalResponse],
-        user_goals: List[str],
-    ) -> Optional[str]:
+        verdicts: list[schema.EvaluateUserGoalResponse],
+        user_goals: list[str],
+    ) -> str | None:
         if not self._include_reason:
             return None
 
@@ -167,7 +167,7 @@ class SessionCompletenessQuality(ConversationThreadMetric):
     async def _a_extract_user_goals(
         self,
         conversation: conversation_types.Conversation,
-    ) -> List[str]:
+    ) -> list[str]:
         llm_query = templates.extract_user_goals(conversation)
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=schema.UserGoalsResponse
@@ -188,9 +188,9 @@ class SessionCompletenessQuality(ConversationThreadMetric):
     async def _a_generate_reason(
         self,
         score: float,
-        verdicts: List[schema.EvaluateUserGoalResponse],
-        user_goals: List[str],
-    ) -> Optional[str]:
+        verdicts: list[schema.EvaluateUserGoalResponse],
+        user_goals: list[str],
+    ) -> str | None:
         if not self._include_reason:
             return None
 
@@ -267,7 +267,7 @@ def _evaluate_user_goal_from_model_output(
 
 def _extract_user_goals_from_model_output(
     model_output: str,
-) -> List[str]:
+) -> list[str]:
     try:
         dict_content = parsing_helpers.extract_json_content_or_raise(model_output)
         return schema.UserGoalsResponse.model_validate(dict_content).user_goals
@@ -280,8 +280,8 @@ def _extract_user_goals_from_model_output(
 
 
 def _extract_negative_verdicts(
-    verdicts: List[schema.EvaluateUserGoalResponse],
-) -> List[str]:
+    verdicts: list[schema.EvaluateUserGoalResponse],
+) -> list[str]:
     return [
         v.reason
         for v in verdicts
@@ -289,7 +289,7 @@ def _extract_negative_verdicts(
     ]
 
 
-def _score_from_verdicts(verdicts: List[schema.EvaluateUserGoalResponse]) -> float:
+def _score_from_verdicts(verdicts: list[schema.EvaluateUserGoalResponse]) -> float:
     if len(verdicts) == 0:
         return 0.0
 

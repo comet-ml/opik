@@ -1,6 +1,7 @@
 import functools
 import logging
-from typing import Optional, List, Callable, Dict, Literal
+from typing import Literal
+from collections.abc import Callable
 
 import opik
 import opik.exceptions as exceptions
@@ -22,7 +23,7 @@ class ThreadsEvaluationEngine:
     def __init__(
         self,
         client: threads_client.ThreadsClient,
-        project_name: Optional[str],
+        project_name: str | None,
         number_of_workers: int,
         verbose: int,
     ) -> None:
@@ -35,9 +36,9 @@ class ThreadsEvaluationEngine:
 
     def evaluate_threads(
         self,
-        filter_string: Optional[str],
-        eval_project_name: Optional[str],
-        metrics: List[conversation_thread_metric.ConversationThreadMetric],
+        filter_string: str | None,
+        eval_project_name: str | None,
+        metrics: list[conversation_thread_metric.ConversationThreadMetric],
         trace_input_transform: Callable[[JsonListStringPublic], str],
         trace_output_transform: Callable[[JsonListStringPublic], str],
         max_traces_per_thread: int = 1000,
@@ -68,7 +69,7 @@ class ThreadsEvaluationEngine:
                 f"Some threads are active: {active_threads_ids} with filter_string: {filter_string}. Only closed threads will be evaluated: {inactive_threads_ids}."
             )
 
-        evaluation_tasks: List[
+        evaluation_tasks: list[
             engine_types.EvaluationTask[evaluation_result.ThreadEvaluationResult]
         ] = [
             functools.partial(
@@ -96,8 +97,8 @@ class ThreadsEvaluationEngine:
     def evaluate_thread(
         self,
         thread: TraceThread,
-        eval_project_name: Optional[str],
-        metrics: List[conversation_thread_metric.ConversationThreadMetric],
+        eval_project_name: str | None,
+        metrics: list[conversation_thread_metric.ConversationThreadMetric],
         trace_input_transform: Callable[[JsonListStringPublic], str],
         trace_output_transform: Callable[[JsonListStringPublic], str],
         max_traces_per_thread: int,
@@ -149,10 +150,10 @@ class ThreadsEvaluationEngine:
     @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
     def _evaluate_conversation(
         self,
-        conversation: List[Dict[Literal["role", "content"], str]],
-        metrics: List[conversation_thread_metric.ConversationThreadMetric],
-    ) -> List[score_result.ScoreResult]:
-        score_results: List[score_result.ScoreResult] = []
+        conversation: list[dict[Literal["role", "content"], str]],
+        metrics: list[conversation_thread_metric.ConversationThreadMetric],
+    ) -> list[score_result.ScoreResult]:
+        score_results: list[score_result.ScoreResult] = []
         for metric in metrics:
             try:
                 LOGGER.debug("Metric %s score started", metric.name)

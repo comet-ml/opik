@@ -1,4 +1,5 @@
-from typing import Optional, List, Callable, Any
+from typing import Any
+from collections.abc import Callable
 
 from opik import synchronization
 from opik.api_objects import rest_stream_parser
@@ -9,12 +10,12 @@ from opik.rest_api.types import span_public, trace_public
 
 def search_spans_with_filters(
     rest_client: rest_api_client.OpikApi,
-    trace_id: Optional[str],
+    trace_id: str | None,
     project_name: str,
-    filters: Optional[OptionalFilterParsedItemList],
+    filters: OptionalFilterParsedItemList | None,
     max_results: int,
     truncate: bool,
-) -> List[span_public.SpanPublic]:
+) -> list[span_public.SpanPublic]:
     spans = rest_stream_parser.read_and_parse_full_stream(
         read_source=lambda current_batch_size,
         last_retrieved_id: rest_client.spans.search_spans(
@@ -34,11 +35,11 @@ def search_spans_with_filters(
 
 def search_traces_with_filters(
     rest_client: rest_api_client.OpikApi,
-    project_name: Optional[str],
-    filters: Optional[OptionalFilterParsedItemList],
+    project_name: str | None,
+    filters: OptionalFilterParsedItemList | None,
     max_results: int,
     truncate: bool,
-) -> List[trace_public.TracePublic]:
+) -> list[trace_public.TracePublic]:
     traces = rest_stream_parser.read_and_parse_full_stream(
         read_source=lambda current_batch_size,
         last_retrieved_id: rest_client.traces.search_traces(
@@ -55,11 +56,11 @@ def search_traces_with_filters(
 
 
 def search_and_wait_for_done(
-    search_functor: Callable[[], List[Any]],
+    search_functor: Callable[[], list[Any]],
     wait_for_at_least: int,
     wait_for_timeout: int,
     sleep_time: float,
-) -> List[Any]:
+) -> list[Any]:
     """
     The expected behavior is to keep making repeated calls until either the specified number of
     results is found or the timeout is reached. The function will then return the best possible
@@ -73,9 +74,9 @@ def search_and_wait_for_done(
     Returns:
         The function returns the results of the best possible attempt to meet both waiting conditions.
     """
-    result: List[Any] = []
+    result: list[Any] = []
 
-    def search() -> List[Any]:
+    def search() -> list[Any]:
         nonlocal result
         result = search_functor()
         return result

@@ -1,11 +1,11 @@
-from typing import List, TypedDict
+from typing import TypedDict
 
 
 class FewShotExampleWithContextAnswerRelevance(TypedDict):
     title: str
     input: str
     output: str
-    context: List[str]
+    context: list[str]
     answer_relevance_score: float
     reason: str
 
@@ -18,7 +18,7 @@ class FewShotExampleNoContextAnswerRelevance(TypedDict):
     reason: str
 
 
-FEW_SHOT_EXAMPLES_WITH_CONTEXT: List[FewShotExampleWithContextAnswerRelevance] = [
+FEW_SHOT_EXAMPLES_WITH_CONTEXT: list[FewShotExampleWithContextAnswerRelevance] = [
     {
         "title": "Low Relevance Score",
         "input": "What's the capital of France?",
@@ -54,7 +54,7 @@ FEW_SHOT_EXAMPLES_WITH_CONTEXT: List[FewShotExampleWithContextAnswerRelevance] =
     },
 ]
 
-FEW_SHOT_EXAMPLES_NO_CONTEXT: List[FewShotExampleNoContextAnswerRelevance] = [
+FEW_SHOT_EXAMPLES_NO_CONTEXT: list[FewShotExampleNoContextAnswerRelevance] = [
     {
         "title": "Low Relevance Score",
         "input": "What's the capital of France?",
@@ -82,8 +82,8 @@ FEW_SHOT_EXAMPLES_NO_CONTEXT: List[FewShotExampleNoContextAnswerRelevance] = [
 def generate_query_with_context(
     input: str,
     output: str,
-    context: List[str],
-    few_shot_examples: List[FewShotExampleWithContextAnswerRelevance],
+    context: list[str],
+    few_shot_examples: list[FewShotExampleWithContextAnswerRelevance],
 ) -> str:
     examples_str = "\n\n".join(
         [
@@ -167,7 +167,7 @@ def generate_query_with_context(
 def generate_query_no_context(
     input: str,
     output: str,
-    few_shot_examples: List[FewShotExampleNoContextAnswerRelevance],
+    few_shot_examples: list[FewShotExampleNoContextAnswerRelevance],
 ) -> str:
     examples_str = "\n\n".join(
         [

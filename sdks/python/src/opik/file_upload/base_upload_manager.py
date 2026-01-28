@@ -1,6 +1,5 @@
 import abc
 import dataclasses
-from typing import Optional
 
 from opik.message_processing import messages
 
@@ -31,7 +30,7 @@ class BaseFileUploadManager(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def flush(self, timeout: Optional[float], sleep_time: int = 5) -> bool:
+    def flush(self, timeout: float | None, sleep_time: int = 5) -> bool:
         pass
 
     @abc.abstractmethod

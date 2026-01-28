@@ -3,7 +3,8 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
-from typing import AsyncGenerator, Dict, Callable, Any
+from typing import Any
+from collections.abc import AsyncGenerator, Callable
 import json
 import logging
 from openai import AsyncOpenAI, APIError, APIConnectionError, APITimeoutError
@@ -225,7 +226,7 @@ def create_app(llm_server_host: str) -> FastAPI:
             )
 
     @app.get("/v1/models", response_model=None)
-    async def models(request: Request) -> Dict[str, Any]:
+    async def models(request: Request) -> dict[str, Any]:
         """List available Ollama models."""
         try:
             try:
@@ -277,7 +278,7 @@ def create_app(llm_server_host: str) -> FastAPI:
             )
 
     @app.get("/health", response_model=None)
-    async def health() -> Dict[str, str]:
+    async def health() -> dict[str, str]:
         """Health check endpoint."""
         return {"status": "ok"}
 

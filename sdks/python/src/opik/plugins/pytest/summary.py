@@ -1,5 +1,3 @@
-from typing import List
-
 import opik
 import pytest
 
@@ -11,7 +9,7 @@ import rich.text
 import opik.url_helpers
 
 
-def print(reports: List[pytest.TestReport]) -> None:
+def print(reports: list[pytest.TestReport]) -> None:
     opik_ui_url = opik.url_helpers.get_ui_url()
 
     console = rich.console.Console()

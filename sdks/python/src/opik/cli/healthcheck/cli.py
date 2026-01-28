@@ -1,7 +1,5 @@
 """Healthcheck command for Opik CLI."""
 
-from typing import Optional
-
 import click
 
 import opik.healthcheck as opik_healthcheck
@@ -32,8 +30,8 @@ from opik.cli.healthcheck.smoke_test import run_smoke_test
 def healthcheck(
     ctx: click.Context,
     show_installed_packages: bool,
-    smoke_test: Optional[str],
-    project_name: Optional[str],
+    smoke_test: str | None,
+    project_name: str | None,
 ) -> None:
     """
     Performs a health check of the application, including validation of configuration,

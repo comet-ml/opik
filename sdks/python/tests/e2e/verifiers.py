@@ -1,7 +1,8 @@
 import base64
 import json
 import re
-from typing import Any, Dict, Iterable, List, Literal, Optional, Set, Union
+from typing import Any, Literal, Union
+from collections.abc import Iterable
 from unittest import mock
 
 import pytest
@@ -20,15 +21,15 @@ from opik import url_helpers
 from .. import testlib
 
 InputType = Union[
-    Dict[str, Any],
-    List[Any],
+    dict[str, Any],
+    list[Any],
     str,
 ]
 
 OutputType = InputType
 
 
-def _try_get__dict__(instance: Any) -> Optional[Dict[str, Any]]:
+def _try_get__dict__(instance: Any) -> dict[str, Any] | None:
     if instance is None:
         return None
 
@@ -38,7 +39,7 @@ def _try_get__dict__(instance: Any) -> Optional[Dict[str, Any]]:
     return instance.__dict__
 
 
-def _try_build_set(iterable: Optional[Iterable[Any]]) -> Optional[Set[Any]]:
+def _try_build_set(iterable: Iterable[Any] | None) -> set[Any] | None:
     if iterable is None:
         return iterable
 
@@ -49,15 +50,15 @@ def verify_trace(
     opik_client: opik.Opik,
     trace_id: str,
     name: str = mock.ANY,  # type: ignore
-    metadata: Dict[str, Any] = mock.ANY,  # type: ignore
+    metadata: dict[str, Any] = mock.ANY,  # type: ignore
     input: InputType = mock.ANY,  # type: ignore
-    output: Optional[OutputType] = mock.ANY,  # type: ignore
-    tags: Union[List[str], Set[str]] = mock.ANY,  # type: ignore
-    feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
-    project_name: Optional[str] = mock.ANY,  # type: ignore
-    error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
-    thread_id: Optional[str] = mock.ANY,  # type: ignore
-    guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
+    output: OutputType | None = mock.ANY,  # type: ignore
+    tags: list[str] | set[str] = mock.ANY,  # type: ignore
+    feedback_scores: list[FeedbackScoreDict] = mock.ANY,  # type: ignore
+    project_name: str | None = mock.ANY,  # type: ignore
+    error_info: ErrorInfoDict | None = mock.ANY,  # type: ignore
+    thread_id: str | None = mock.ANY,  # type: ignore
+    guardrails_validations: list[dict[str, Any]] | None = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: (opik_client.get_trace_content(id=trace_id) is not None),
@@ -93,17 +94,17 @@ def verify_trace(
 
     if guardrails_validations is not mock.ANY:
         if trace.guardrails_validations is None:
-            assert (
-                guardrails_validations is None
-            ), f"Expected guardrails validation to be None, but got {guardrails_validations}"
+            assert guardrails_validations is None, (
+                f"Expected guardrails validation to be None, but got {guardrails_validations}"
+            )
             return
 
         actual_guardrails_validations = (
             [] if trace.guardrails_validations is None else trace.guardrails_validations
         )
-        assert (
-            len(actual_guardrails_validations) == len(guardrails_validations)
-        ), f"Expected amount of trace guardrails validation ({len(guardrails_validations)}) is not equal to actual amount ({len(actual_guardrails_validations)})"
+        assert len(actual_guardrails_validations) == len(guardrails_validations), (
+            f"Expected amount of trace guardrails validation ({len(guardrails_validations)}) is not equal to actual amount ({len(actual_guardrails_validations)})"
+        )
 
         actual_guardrails_validations = [
             guardrail.model_dump() for guardrail in trace.guardrails_validations
@@ -125,19 +126,19 @@ def verify_span(
     opik_client: opik.Opik,
     span_id: str,
     trace_id: str,
-    parent_span_id: Optional[str],
+    parent_span_id: str | None,
     name: str = mock.ANY,  # type: ignore
-    metadata: Dict[str, Any] = mock.ANY,  # type: ignore
+    metadata: dict[str, Any] = mock.ANY,  # type: ignore
     input: InputType = mock.ANY,  # type: ignore
-    output: Optional[OutputType] = mock.ANY,  # type: ignore
-    tags: Union[List[str], Set[str]] = mock.ANY,  # type: ignore
+    output: OutputType | None = mock.ANY,  # type: ignore
+    tags: list[str] | set[str] = mock.ANY,  # type: ignore
     type: str = mock.ANY,  # type: ignore
-    feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
-    project_name: Optional[str] = mock.ANY,
-    model: Optional[str] = mock.ANY,  # type: ignore
-    provider: Optional[str] = mock.ANY,  # type: ignore
-    error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
-    total_cost: Optional[float] = mock.ANY,  # type: ignore
+    feedback_scores: list[FeedbackScoreDict] = mock.ANY,  # type: ignore
+    project_name: str | None = mock.ANY,
+    model: str | None = mock.ANY,  # type: ignore
+    provider: str | None = mock.ANY,  # type: ignore
+    error_info: ErrorInfoDict | None = mock.ANY,  # type: ignore
+    total_cost: float | None = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: (opik_client.get_span_content(id=span_id) is not None),
@@ -152,9 +153,9 @@ def verify_span(
     if parent_span_id is None:
         assert span.parent_span_id is None, f"{span.parent_span_id} != {parent_span_id}"
     else:
-        assert (
-            span.parent_span_id == parent_span_id
-        ), f"{span.parent_span_id} != {parent_span_id}"
+        assert span.parent_span_id == parent_span_id, (
+            f"{span.parent_span_id} != {parent_span_id}"
+        )
 
     testlib.assert_equal(name, span.name)
     testlib.assert_equal(type, span.type)
@@ -171,9 +172,9 @@ def verify_span(
 
     assert span.model == model, f"{span.model} != {model}"
     assert span.provider == provider, f"{span.provider} != {provider}"
-    assert (
-        span.total_estimated_cost == total_cost
-    ), f"{span.total_estimated_cost} != {total_cost}"
+    assert span.total_estimated_cost == total_cost, (
+        f"{span.total_estimated_cost} != {total_cost}"
+    )
 
     if project_name is not mock.ANY:
         span_project = opik_client.get_project(span.project_id)
@@ -191,7 +192,7 @@ def verify_dataset(
     opik_client: opik.Opik,
     name: str,
     description: str = mock.ANY,
-    dataset_items: List[dataset_item.DatasetItem] = mock.ANY,
+    dataset_items: list[dataset_item.DatasetItem] = mock.ANY,
 ):
     if not synchronization.until(
         lambda: (opik_client.get_dataset(name=name) is not None),
@@ -205,9 +206,9 @@ def verify_dataset(
     actual_dataset_items = list(
         actual_dataset.__internal_api__stream_items_as_dataclasses__()
     )
-    assert (
-        len(actual_dataset_items) == len(dataset_items)
-    ), f"Amount of actual dataset items ({len(actual_dataset_items)}) is not the same as of expected ones ({len(dataset_items)})"
+    assert len(actual_dataset_items) == len(dataset_items), (
+        f"Amount of actual dataset items ({len(actual_dataset_items)}) is not the same as of expected ones ({len(dataset_items)})"
+    )
 
     actual_dataset_items_dicts = [item.model_dump() for item in actual_dataset_items]
     expected_dataset_items_dicts = [item.model_dump() for item in dataset_items]
@@ -227,12 +228,12 @@ def verify_experiment(
     opik_client: opik.Opik,
     id: str,
     experiment_name: str,
-    experiment_metadata: Optional[Dict[str, Any]],
+    experiment_metadata: dict[str, Any] | None,
     feedback_scores_amount: int,
     traces_amount: int,
-    prompts: Optional[List[Prompt]] = None,
-    experiment_scores: Optional[Dict[str, float]] = None,
-    experiment_tags: Optional[List[str]] = None,
+    prompts: list[Prompt] | None = None,
+    experiment_scores: dict[str, float] | None = None,
+    experiment_tags: list[str] | None = None,
 ):
     rest_client = (
         opik_client._rest_client
@@ -250,25 +251,25 @@ def verify_experiment(
 
     _verify_experiment_metadata(experiment_content, experiment_metadata)
 
-    assert (
-        experiment_content.name == experiment_name
-    ), f"{experiment_content.name} != {experiment_name}"
+    assert experiment_content.name == experiment_name, (
+        f"{experiment_content.name} != {experiment_name}"
+    )
 
     actual_scores_count = (
         0
         if experiment_content.feedback_scores is None
         else len(experiment_content.feedback_scores)
     )
-    assert (
-        actual_scores_count == feedback_scores_amount
-    ), f"{actual_scores_count} != {feedback_scores_amount}"
+    assert actual_scores_count == feedback_scores_amount, (
+        f"{actual_scores_count} != {feedback_scores_amount}"
+    )
 
     actual_trace_count = (
         0 if experiment_content.trace_count is None else experiment_content.trace_count
     )
-    assert (
-        actual_trace_count == traces_amount
-    ), f"{actual_trace_count} != {traces_amount}"
+    assert actual_trace_count == traces_amount, (
+        f"{actual_trace_count} != {traces_amount}"
+    )
 
     _verify_experiment_prompts(experiment_content, prompts)
 
@@ -281,8 +282,8 @@ def verify_attachments(
     opik_client: opik.Opik,
     entity_type: Literal["trace", "span"],
     entity_id: str,
-    attachments: Dict[str, Attachment],
-    data_sizes: Dict[str, int],
+    attachments: dict[str, Attachment],
+    data_sizes: dict[str, int],
     timeout: int = 10,
 ) -> None:
     attachment_list = _wait_for_attachments_list(
@@ -296,29 +297,29 @@ def verify_attachments(
 
     for attachment in attachment_list:
         expected_attachment = attachments.get(attachment.file_name, None)
-        assert (
-            expected_attachment is not None
-        ), f"Attachment {attachment.file_name} not found in expected attachments"
+        assert expected_attachment is not None, (
+            f"Attachment {attachment.file_name} not found in expected attachments"
+        )
 
-        assert (
-            attachment.file_size == data_sizes[expected_attachment.file_name]
-        ), f"Wrong size for attachment {attachment.file_name}: {attachment.file_size} != {data_sizes[expected_attachment.file_name]}"
+        assert attachment.file_size == data_sizes[expected_attachment.file_name], (
+            f"Wrong size for attachment {attachment.file_name}: {attachment.file_size} != {data_sizes[expected_attachment.file_name]}"
+        )
 
-        assert (
-            attachment.mime_type == expected_attachment.content_type
-        ), f"Wrong content type for attachment {attachment.file_name}: {attachment.mime_type} != {expected_attachment.content_type}"
+        assert attachment.mime_type == expected_attachment.content_type, (
+            f"Wrong content type for attachment {attachment.file_name}: {attachment.mime_type} != {expected_attachment.content_type}"
+        )
 
         if not url_helpers.is_aws_presigned_url(attachment.link):
-            assert attachment.link.startswith(
-                url_override
-            ), f"Wrong link for attachment {attachment.file_name}: {attachment.link} does not start with {url_override}"
+            assert attachment.link.startswith(url_override), (
+                f"Wrong link for attachment {attachment.file_name}: {attachment.link} does not start with {url_override}"
+            )
 
 
 def verify_auto_extracted_attachments(
     opik_client: opik.Opik,
     entity_type: Literal["trace", "span"],
     entity_id: str,
-    expected_sizes: List[int],
+    expected_sizes: list[int],
     timeout: int = 10,
 ) -> None:
     attachment_list = _wait_for_attachments_list(
@@ -332,12 +333,12 @@ def verify_auto_extracted_attachments(
     file_name_pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_REGEX)
 
     for attachment in attachment_list:
-        assert (
-            attachment.file_size in expected_sizes
-        ), f"Wrong size for attachment {attachment.file_name}: {attachment.file_size} not in {expected_sizes}"
-        assert file_name_pattern.match(
-            attachment.file_name
-        ), f"Wrong file name for attachment {attachment.file_name} - it does not match {file_name_pattern.pattern}"
+        assert attachment.file_size in expected_sizes, (
+            f"Wrong size for attachment {attachment.file_name}: {attachment.file_size} not in {expected_sizes}"
+        )
+        assert file_name_pattern.match(attachment.file_name), (
+            f"Wrong file name for attachment {attachment.file_name} - it does not match {file_name_pattern.pattern}"
+        )
 
 
 def _wait_for_attachments_list(
@@ -346,7 +347,7 @@ def _wait_for_attachments_list(
     entity_id: str,
     expected_size: int,
     timeout: int,
-) -> List[Attachment]:
+) -> list[Attachment]:
     if not synchronization.until(
         lambda: (
             _get_trace_or_span(
@@ -398,7 +399,7 @@ def _get_attachments(
     entity_id: str,
     project_id: str,
     url_override_path: str,
-) -> List[rest_api_attachment.Attachment]:
+) -> list[rest_api_attachment.Attachment]:
     return opik_client._rest_client.attachments.attachment_list(
         project_id=project_id,
         entity_type=entity_type,
@@ -411,7 +412,7 @@ def _get_trace_or_span(
     opik_client: opik.Opik,
     entity_type: Literal["trace", "span"],
     entity_id: str,
-) -> Union[trace_public.TracePublic, span_public.SpanPublic]:
+) -> trace_public.TracePublic | span_public.SpanPublic:
     if entity_type == "trace":
         return opik_client.get_trace_content(id=entity_id)
     elif entity_type == "span":
@@ -422,7 +423,7 @@ def _get_trace_or_span(
 
 def _verify_experiment_metadata(
     experiment_content: ExperimentPublic,
-    metadata: Optional[Dict[str, Any]],
+    metadata: dict[str, Any] | None,
 ):
     experiment_metadata = experiment_content.metadata
     if experiment_content.metadata is not None:
@@ -435,7 +436,7 @@ def _verify_experiment_metadata(
 
 def _verify_experiment_prompts(
     experiment_content: ExperimentPublic,
-    prompts: Optional[List[Prompt]],
+    prompts: list[Prompt] | None,
 ):
     if prompts is None:
         return
@@ -450,28 +451,32 @@ def _verify_experiment_prompts(
         assert (
             experiment_content_prompt_versions[i].id
             == prompt.__internal_api__version_id__
-        ), f"{experiment_content_prompt_versions[i].id} != {prompt.__internal_api__version_id__}"
+        ), (
+            f"{experiment_content_prompt_versions[i].id} != {prompt.__internal_api__version_id__}"
+        )
         assert (
             experiment_content_prompt_versions[i].prompt_id
             == prompt.__internal_api__prompt_id__
-        ), f"{experiment_content_prompt_versions[i].prompt_id} != {prompt.__internal_api__prompt_id__}"
+        ), (
+            f"{experiment_content_prompt_versions[i].prompt_id} != {prompt.__internal_api__prompt_id__}"
+        )
 
-        assert (
-            experiment_content_prompt_versions[i].commit == prompt.commit
-        ), f"{experiment_content_prompt_versions[i].commit} != {prompt.commit}"
+        assert experiment_content_prompt_versions[i].commit == prompt.commit, (
+            f"{experiment_content_prompt_versions[i].commit} != {prompt.commit}"
+        )
 
     # check that experiment config/metadata contains Prompt's template
     experiment_prompts = experiment_content.metadata["prompts"]
 
     for prompt in prompts:
-        assert (
-            experiment_prompts[prompt.name] == prompt.prompt
-        ), f"{experiment_prompts[prompt.name]} != {prompt.prompt}"
+        assert experiment_prompts[prompt.name] == prompt.prompt, (
+            f"{experiment_prompts[prompt.name]} != {prompt.prompt}"
+        )
 
 
 def _verify_experiment_scores(
     experiment_content: ExperimentPublic,
-    experiment_scores: Optional[Dict[str, float]],
+    experiment_scores: dict[str, float] | None,
 ):
     """Verify experiment-level scores match expected values."""
     if experiment_scores is None:
@@ -511,9 +516,9 @@ def verify_optimization(
     opik_client: opik.Opik,
     optimization_id: str,
     name: str = mock.ANY,  # type: ignore
-    dataset_name: Optional[str] = mock.ANY,  # type: ignore
-    status: Optional[str] = mock.ANY,  # type: ignore
-    objective_name: Optional[str] = mock.ANY,  # type: ignore
+    dataset_name: str | None = mock.ANY,  # type: ignore
+    status: str | None = mock.ANY,  # type: ignore
+    objective_name: str | None = mock.ANY,  # type: ignore
 ) -> None:
     if not synchronization.until(
         lambda: (opik_client.get_optimization_by_id(optimization_id) is not None),
@@ -527,24 +532,24 @@ def verify_optimization(
 
     assert optimization_content.name == name, f"{optimization_content.name} != {name}"
 
-    assert (
-        optimization_content.dataset_name == dataset_name
-    ), f"{optimization_content.dataset_name} != {dataset_name}"
+    assert optimization_content.dataset_name == dataset_name, (
+        f"{optimization_content.dataset_name} != {dataset_name}"
+    )
 
-    assert (
-        optimization_content.status == status
-    ), f"{optimization_content.status} != {status}"
+    assert optimization_content.status == status, (
+        f"{optimization_content.status} != {status}"
+    )
 
-    assert (
-        optimization_content.objective_name == objective_name
-    ), f"{optimization_content.objective_name} != {objective_name}"
+    assert optimization_content.objective_name == objective_name, (
+        f"{optimization_content.objective_name} != {objective_name}"
+    )
 
 
 def verify_thread(
     opik_client: opik.Opik,
     thread_id: str,
-    project_name: Optional[str] = None,
-    feedback_scores: List[FeedbackScoreDict] = mock.ANY,  # type: ignore
+    project_name: str | None = None,
+    feedback_scores: list[FeedbackScoreDict] = mock.ANY,  # type: ignore
 ) -> None:
     threads_client = opik_client.get_threads_client()
     if not synchronization.until(
@@ -567,7 +572,7 @@ def verify_thread(
     thread = threads[0]
     assert thread.id == thread_id
 
-    def _get_feedback_scores() -> Optional[List[Union[FeedbackScore]]]:
+    def _get_feedback_scores() -> list[FeedbackScore] | None:
         return threads_client.search_threads(
             project_name=project_name,
             filter_string=f'id = "{thread_id}"',
@@ -590,21 +595,21 @@ def verify_thread(
 
 def _assert_feedback_scores(
     item_id: str,
-    feedback_scores: Optional[List[Union[FeedbackScore, FeedbackScorePublic]]],
-    expected_feedback_scores: Optional[List[FeedbackScoreDict]],
+    feedback_scores: list[FeedbackScore | FeedbackScorePublic] | None,
+    expected_feedback_scores: list[FeedbackScoreDict] | None,
 ) -> None:
     if feedback_scores is None:
-        assert (
-            expected_feedback_scores is None
-        ), f"Expected feedback scores to be None, but got {expected_feedback_scores}"
+        assert expected_feedback_scores is None, (
+            f"Expected feedback scores to be None, but got {expected_feedback_scores}"
+        )
         return
 
     actual_feedback_scores = [] if feedback_scores is None else feedback_scores
-    assert (
-        len(actual_feedback_scores) == len(expected_feedback_scores)
-    ), f"Expected amount of feedback scores ({len(expected_feedback_scores)}) is not equal to actual amount ({len(actual_feedback_scores)})"
+    assert len(actual_feedback_scores) == len(expected_feedback_scores), (
+        f"Expected amount of feedback scores ({len(expected_feedback_scores)}) is not equal to actual amount ({len(actual_feedback_scores)})"
+    )
 
-    actual_feedback_scores: List[FeedbackScoreDict] = [
+    actual_feedback_scores: list[FeedbackScoreDict] = [
         FeedbackScoreDict(
             category_name=score.category_name,
             id=item_id,
@@ -645,12 +650,12 @@ def verify_prompt_version(
     testlib.assert_equal(template, prompt.prompt)
     testlib.assert_equal(type, prompt.type)
     testlib.assert_equal(metadata, prompt.metadata)
-    assert (
-        version_id == prompt.__internal_api__version_id__
-    ), f"{prompt.__internal_api__version_id__} != {version_id}"
-    assert (
-        prompt_id == prompt.__internal_api__prompt_id__
-    ), f"{prompt.__internal_api__prompt_id__} != {prompt_id}"
+    assert version_id == prompt.__internal_api__version_id__, (
+        f"{prompt.__internal_api__version_id__} != {version_id}"
+    )
+    assert prompt_id == prompt.__internal_api__prompt_id__, (
+        f"{prompt.__internal_api__prompt_id__} != {prompt_id}"
+    )
     assert commit == prompt.commit, f"{prompt.commit} != {commit}"
 
 
@@ -676,10 +681,10 @@ def verify_chat_prompt_version(
     testlib.assert_equal(messages, chat_prompt.template)
     testlib.assert_equal(type, chat_prompt.type)
     testlib.assert_equal(metadata, chat_prompt.metadata)
-    assert (
-        version_id == chat_prompt.__internal_api__version_id__
-    ), f"{chat_prompt.__internal_api__version_id__} != {version_id}"
-    assert (
-        prompt_id == chat_prompt.__internal_api__prompt_id__
-    ), f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
+    assert version_id == chat_prompt.__internal_api__version_id__, (
+        f"{chat_prompt.__internal_api__version_id__} != {version_id}"
+    )
+    assert prompt_id == chat_prompt.__internal_api__prompt_id__, (
+        f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
+    )
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"

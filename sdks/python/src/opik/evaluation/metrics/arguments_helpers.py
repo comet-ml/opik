@@ -1,6 +1,7 @@
 import inspect
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 import opik.exceptions as exceptions
 from .. import types as evaluation_types
@@ -11,14 +12,14 @@ LOGGER = logging.getLogger(__name__)
 def raise_if_score_arguments_are_missing(
     score_function: Callable,
     score_name: str,
-    kwargs: Dict[str, Any],
-    scoring_key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
+    kwargs: dict[str, Any],
+    scoring_key_mapping: evaluation_types.ScoringKeyMappingType | None,
 ) -> None:
     signature = inspect.signature(score_function)
 
     parameters = signature.parameters
 
-    missing_required_arguments: List[str] = []
+    missing_required_arguments: list[str] = []
 
     for name, param in parameters.items():
         if name == "self":
@@ -32,10 +33,10 @@ def raise_if_score_arguments_are_missing(
                 missing_required_arguments.append(name)
 
     if len(missing_required_arguments) > 0:
-        unused_mapping_arguments: List[str] = []
+        unused_mapping_arguments: list[str] = []
         if scoring_key_mapping:
             unused_mapping_arguments = list(
-                set(key for key in scoring_key_mapping.values() if not callable(key))
+                {key for key in scoring_key_mapping.values() if not callable(key)}
                 - set(kwargs.keys())
             )
 
@@ -48,10 +49,10 @@ def raise_if_score_arguments_are_missing(
 
 
 def create_scoring_inputs(
-    dataset_item: Dict[str, Any],
-    task_output: Dict[str, Any],
-    scoring_key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
-) -> Dict[str, Any]:
+    dataset_item: dict[str, Any],
+    task_output: dict[str, Any],
+    scoring_key_mapping: evaluation_types.ScoringKeyMappingType | None,
+) -> dict[str, Any]:
     mapped_inputs = {**dataset_item, **task_output}
 
     if scoring_key_mapping is None:

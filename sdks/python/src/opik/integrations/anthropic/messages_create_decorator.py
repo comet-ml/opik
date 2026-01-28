@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
+from collections.abc import Callable
 
 import anthropic
 from anthropic.types import Message as AnthropicMessage
@@ -32,12 +33,12 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in Antropic.messages.create(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in Antropic.messages.create(**kwargs)"
+        )
         metadata = track_options.metadata if track_options.metadata is not None else {}
         name = track_options.name if track_options.name is not None else func.__name__
 
@@ -63,7 +64,7 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
     @override
     def _end_span_inputs_preprocessor(
         self,
-        output: Union[str, AnthropicMessage],
+        output: str | AnthropicMessage,
         capture_output: bool,
         current_span_data: span.SpanData,
     ) -> arguments_helpers.EndSpanParameters:
@@ -97,10 +98,8 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Union[
-        None, anthropic.MessageStreamManager, anthropic.AsyncMessageStreamManager
-    ]:
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> None | anthropic.MessageStreamManager | anthropic.AsyncMessageStreamManager:
         if isinstance(output, anthropic.MessageStreamManager):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
             return stream_patchers.patch_sync_message_stream_manager(

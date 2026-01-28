@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 import openai
 import pydantic
@@ -27,7 +27,7 @@ def check_openai_configured(ensure_openai_configured):
     pass
 
 
-def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
+def _assert_metadata_contains_required_keys(metadata: dict[str, Any]):
     REQUIRED_METADATA_KEYS = [
         "usage",
         "model",

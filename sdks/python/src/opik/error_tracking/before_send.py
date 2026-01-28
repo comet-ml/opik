@@ -1,4 +1,3 @@
-from typing import Optional
 import sentry_sdk
 from . import user_details
 from .error_filtering import sentry_filter_chain
@@ -6,7 +5,7 @@ from .types import Event, Hint
 from . import environment_details
 
 
-def callback(event: Event, hint: Hint) -> Optional[Event]:
+def callback(event: Event, hint: Hint) -> Event | None:
     """
     Used to filter events and provide them with extra details that could not
     be collected during Sentry client initialization.

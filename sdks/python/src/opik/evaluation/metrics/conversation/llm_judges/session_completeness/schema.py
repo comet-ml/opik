@@ -1,17 +1,15 @@
-from typing import List, Optional
-
 import pydantic
 
 
 class UserGoalsResponse(pydantic.BaseModel):
-    user_goals: List[str]
+    user_goals: list[str]
 
     __hash__ = object.__hash__
 
 
 class EvaluateUserGoalResponse(pydantic.BaseModel):
     verdict: str
-    reason: Optional[str] = pydantic.Field(default=None)
+    reason: str | None = pydantic.Field(default=None)
 
     __hash__ = object.__hash__
 

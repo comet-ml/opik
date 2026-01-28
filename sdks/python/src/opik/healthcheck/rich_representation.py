@@ -1,5 +1,3 @@
-from typing import Dict, Optional
-
 from rich import align
 from rich.console import Console
 from rich.table import Table
@@ -32,7 +30,7 @@ def print_header(text: str) -> None:
     console.print(header_text)
 
 
-def print_installed_packages(packages: Dict[str, str]) -> None:
+def print_installed_packages(packages: dict[str, str]) -> None:
     for name, version in sorted(packages.items()):
         name = make_key_text(name)
         version = make_value_text(version)
@@ -75,7 +73,7 @@ def print_current_config(config: config.OpikConfig) -> None:
 
 
 def print_config_scan_results(
-    misconfiguration_detected: bool, error_message: Optional[str]
+    misconfiguration_detected: bool, error_message: str | None
 ) -> None:
     is_misconfigured_text = Text(
         "found" if misconfiguration_detected else "not found",
@@ -94,7 +92,7 @@ def print_config_scan_results(
 
 def print_backend_workspace_availability(
     is_available: bool,
-    err_msg: Optional[str],
+    err_msg: str | None,
 ) -> None:
     is_available_text = Text(
         "yes" if is_available else "no",

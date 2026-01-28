@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Callable
 from typing_extensions import override
 
 import opik
@@ -31,12 +32,12 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in BedrockRuntime.Client.converse(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in BedrockRuntime.Client.converse(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
         input, metadata = dict_utils.split_dict_by_keys(
@@ -90,11 +91,8 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Union[
-        types.ConverseStreamOutput,
-        None,
-    ]:
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> types.ConverseStreamOutput | None:
         DECORATED_FUNCTION_IS_NOT_EXPECTED_TO_RETURN_GENERATOR = (
             generations_aggregator is None
         )

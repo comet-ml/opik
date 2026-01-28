@@ -1,10 +1,9 @@
-from typing import Optional
 import logging
 
 import anthropic
 from . import messages_create_decorator
 from . import messages_batch_decorator
-from typing import TypeVar, Dict, Any
+from typing import TypeVar, Any
 from opik.types import LLMProvider
 
 AnthropicClient = TypeVar(
@@ -22,7 +21,7 @@ LOGGER = logging.getLogger(__name__)
 
 def track_anthropic(
     anthropic_client: AnthropicClient,
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> AnthropicClient:
     """Adds Opik tracking to an Anthropic client.
 
@@ -110,7 +109,7 @@ def track_anthropic(
     return anthropic_client
 
 
-def _extract_metadata_from_client(client: AnthropicClient) -> Dict[str, Any]:
+def _extract_metadata_from_client(client: AnthropicClient) -> dict[str, Any]:
     metadata = {"base_url": client.base_url}
     if isinstance(
         client, (anthropic.AnthropicBedrock, anthropic.AsyncAnthropicBedrock)

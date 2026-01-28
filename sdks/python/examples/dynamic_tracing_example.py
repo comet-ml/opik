@@ -6,7 +6,7 @@ without modifying your instrumented code or restarting your application.
 """
 
 import time
-from typing import Dict, Any
+from typing import Any
 
 import opik
 from opik.integrations import openai as openai_integration
@@ -46,7 +46,7 @@ def call_llm(prompt: str, user_type: str = "free") -> str:
 
 
 @opik.track(name="data_processing")
-def process_data(data: Dict[str, Any]) -> Dict[str, Any]:
+def process_data(data: dict[str, Any]) -> dict[str, Any]:
     """Simulate data processing that we want to trace."""
     result = {"processed": True, "item_count": len(data)}
     time.sleep(0.01)  # Simulate work
@@ -110,7 +110,7 @@ def main() -> None:
 
     import random
 
-    def handle_request_with_sampling(request_id: int) -> Dict[str, Any]:
+    def handle_request_with_sampling(request_id: int) -> dict[str, Any]:
         """Handle request with 10% sampling rate."""
         should_trace = random.random() < 0.1  # 10% sampling
         opik.set_tracing_active(should_trace)
@@ -144,8 +144,8 @@ def main() -> None:
     opik.set_tracing_active(False)
     time_without_tracing = measure_performance(process_data, test_data, iterations=50)
 
-    print(f"Average time with tracing: {time_with_tracing*1000:.2f}ms")
-    print(f"Average time without tracing: {time_without_tracing*1000:.2f}ms")
+    print(f"Average time with tracing: {time_with_tracing * 1000:.2f}ms")
+    print(f"Average time without tracing: {time_without_tracing * 1000:.2f}ms")
 
     if time_with_tracing > time_without_tracing:
         overhead = (

@@ -1,6 +1,6 @@
 import functools
 import logging
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
@@ -20,13 +20,13 @@ class Experiment:
     def __init__(
         self,
         id: str,
-        name: Optional[str],
+        name: str | None,
         dataset_name: str,
         rest_client: rest_api_client.OpikApi,
         streamer: streamer.Streamer,
         experiments_client: experiments_client.ExperimentsClient,
-        prompts: Optional[List[base_prompt.BasePrompt]] = None,
-        tags: Optional[List[str]] = None,
+        prompts: list[base_prompt.BasePrompt] | None = None,
+        tags: list[str] | None = None,
     ) -> None:
         self._id = id
         self._name = name
@@ -56,7 +56,7 @@ class Experiment:
         return name
 
     @property
-    def tags(self) -> Optional[List[str]]:
+    def tags(self) -> list[str] | None:
         return self._tags
 
     @functools.cached_property
@@ -74,7 +74,7 @@ class Experiment:
 
     def insert(
         self,
-        experiment_items_references: List[experiment_item.ExperimentItemReferences],
+        experiment_items_references: list[experiment_item.ExperimentItemReferences],
     ) -> None:
         """
         Creates a new experiment item by linking the existing trace and dataset item.
@@ -110,9 +110,9 @@ class Experiment:
 
     def get_items(
         self,
-        max_results: Optional[int] = 10000,
+        max_results: int | None = 10000,
         truncate: bool = False,
-    ) -> List[experiment_item.ExperimentItemContent]:
+    ) -> list[experiment_item.ExperimentItemContent]:
         """
         Retrieves and returns a list of experiment items for this experiment.
 
@@ -135,10 +135,10 @@ class Experiment:
 
     def log_experiment_scores(
         self,
-        score_results: List["score_result.ScoreResult"],
+        score_results: list["score_result.ScoreResult"],
     ) -> None:
         """Log experiment-level scores to the backend."""
-        experiment_scores: List[rest_api_types.ExperimentScore] = []
+        experiment_scores: list[rest_api_types.ExperimentScore] = []
 
         for score_result_ in score_results:
             if score_result_.scoring_failed:

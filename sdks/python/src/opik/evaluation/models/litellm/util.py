@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Set
+from typing import Any
+from collections.abc import Callable
 
 
-def normalise_choice(choice: Any) -> Dict[str, Any]:
+def normalise_choice(choice: Any) -> dict[str, Any]:
     """Produce a dict view of a LiteLLM choice regardless of response type.
 
     LiteLLM may return raw dicts, Pydantic models, or dataclasses. Normalising to a
@@ -20,7 +21,7 @@ def normalise_choice(choice: Any) -> Dict[str, Any]:
             return choice.model_dump()
         except TypeError:
             pass
-    normalised: Dict[str, Any] = {}
+    normalised: dict[str, Any] = {}
     message = getattr(choice, "message", None)
     if message is not None:
         normalised["message"] = message
@@ -32,8 +33,8 @@ def normalise_choice(choice: Any) -> Dict[str, Any]:
 
 def apply_model_specific_filters(
     model_name: str,
-    params: Dict[str, Any],
-    already_warned: Set[str],
+    params: dict[str, Any],
+    already_warned: set[str],
     warn: Callable[[str, Any], None],
 ) -> None:
     """Adjust/drop params for specific model families before calling LiteLLM.
@@ -52,8 +53,8 @@ def apply_model_specific_filters(
 
 
 def _apply_gpt5_filters(
-    params: Dict[str, Any],
-    already_warned: Set[str],
+    params: dict[str, Any],
+    already_warned: set[str],
     warn: Callable[[str, Any], None],
 ) -> None:
     """Apply GPT-5 specific parameter filters.
@@ -87,8 +88,8 @@ def _apply_gpt5_filters(
 
 
 def _apply_qwen_dashscope_filters(
-    params: Dict[str, Any],
-    already_warned: Set[str],
+    params: dict[str, Any],
+    already_warned: set[str],
     warn: Callable[[str, Any], None],
 ) -> None:
     """Apply Qwen/DashScope specific parameter filters.
@@ -111,9 +112,9 @@ def _apply_qwen_dashscope_filters(
 
 
 def _drop_unsupported_params_with_warning(
-    params: Dict[str, Any],
+    params: dict[str, Any],
     unsupported_params: list[tuple[str, Any]],
-    already_warned: Set[str],
+    already_warned: set[str],
     warn: Callable[[str, Any], None],
 ) -> None:
     """Remove unsupported params and emit warnings once per param name."""

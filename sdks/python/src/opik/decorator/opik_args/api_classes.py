@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import pydantic
 
@@ -12,8 +12,8 @@ class OpikArgsSpan(pydantic.BaseModel):
     Configuration for span updates passed via opik_args parameter.
     """
 
-    tags: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    tags: list[str] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class OpikArgsTrace(pydantic.BaseModel):
@@ -21,9 +21,9 @@ class OpikArgsTrace(pydantic.BaseModel):
     Configuration for trace updates passed via opik_args parameter.
     """
 
-    thread_id: Optional[str] = None
-    tags: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    thread_id: str | None = None
+    tags: list[str] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class OpikArgs(pydantic.BaseModel):
@@ -34,11 +34,11 @@ class OpikArgs(pydantic.BaseModel):
     Tags and metadata are merged (not overwritten) with existing values.
     """
 
-    span_args: Optional[OpikArgsSpan] = None
-    trace_args: Optional[OpikArgsTrace] = None
+    span_args: OpikArgsSpan | None = None
+    trace_args: OpikArgsTrace | None = None
 
     @classmethod
-    def from_dict(cls, config_dict: Optional[Dict[str, Any]]) -> Optional["OpikArgs"]:
+    def from_dict(cls, config_dict: dict[str, Any] | None) -> Optional["OpikArgs"]:
         """Create OpikArgs from dictionary, with validation."""
         if not isinstance(config_dict, dict):
             LOGGER.warning("opik_args must be a dictionary, got %s", type(config_dict))

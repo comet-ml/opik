@@ -1,15 +1,8 @@
 import logging
 from typing import (
     Any,
-    AsyncIterator,
-    Callable,
-    Dict,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    Union,
 )
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing_extensions import override
 
 from google.genai import types as genai_types
@@ -48,12 +41,12 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in client.models.generate_content(**kwargs), client.aio.models.generate_content(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in client.models.generate_content(**kwargs), client.aio.models.generate_content(**kwargs)"
+        )
 
         model = kwargs.get("model")
 
@@ -129,12 +122,12 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Union[
-        None,
-        Iterator[genai_types.GenerateContentResponse],
-        AsyncIterator[genai_types.GenerateContentResponse],
-    ]:
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> (
+        None
+        | Iterator[genai_types.GenerateContentResponse]
+        | AsyncIterator[genai_types.GenerateContentResponse]
+    ):
         if isinstance(output, Iterator):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
             assert generations_aggregator is not None

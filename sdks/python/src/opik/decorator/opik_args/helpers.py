@@ -1,6 +1,7 @@
 import inspect
 import logging
-from typing import Any, Dict, Optional, Callable
+from typing import Any
+from collections.abc import Callable
 
 from .. import arguments_helpers
 from ...api_objects import trace, data_helpers
@@ -11,8 +12,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 def extract_opik_args(
-    kwargs: Dict[str, Any], func: Callable
-) -> Optional[api_classes.OpikArgs]:
+    kwargs: dict[str, Any], func: Callable
+) -> api_classes.OpikArgs | None:
     """
     Extracts opik_args from kwargs and returns the parsed OpikArgs or None.
 
@@ -49,8 +50,8 @@ def extract_opik_args(
 
 
 def apply_opik_args_to_trace(
-    opik_args: Optional[api_classes.OpikArgs],
-    trace_data: Optional[trace.TraceData],
+    opik_args: api_classes.OpikArgs | None,
+    trace_data: trace.TraceData | None,
 ) -> None:
     """
     Apply opik_args to the trace data, including thread_id, tags, and metadata.
@@ -95,7 +96,7 @@ def apply_opik_args_to_trace(
 
 def apply_opik_args_to_start_span_params(
     params: arguments_helpers.StartSpanParameters,
-    opik_args: Optional[api_classes.OpikArgs],
+    opik_args: api_classes.OpikArgs | None,
 ) -> arguments_helpers.StartSpanParameters:
     """Apply opik_args to StartSpanParameters, merging tags and metadata."""
     if opik_args is None or opik_args.span_args is None:

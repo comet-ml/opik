@@ -1,6 +1,7 @@
 import json
 import logging
-from typing import Callable, Iterable, Type, List, Optional, TypeVar, Any
+from typing import TypeVar, Any
+from collections.abc import Callable, Iterable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -13,12 +14,12 @@ T = TypeVar("T")
 
 
 def read_and_parse_full_stream(
-    read_source: Callable[[int, int], List[Any]],
-    parsed_item_class: Type[T],
-    max_results: Optional[int],
+    read_source: Callable[[int, int | None], list[Any]],
+    parsed_item_class: type[T],
+    max_results: int | None,
     max_endpoint_batch_size: int = MAX_ENDPOINT_BATCH_SIZE,
-) -> List[T]:
-    result: List[T] = []
+) -> list[T]:
+    result: list[T] = []
     while True:
         if max_results is None:
             current_batch_size = max_endpoint_batch_size
@@ -46,10 +47,10 @@ def read_and_parse_full_stream(
 
 def read_and_parse_stream(
     stream: Iterable[bytes],
-    item_class: Type[T],
-    nb_samples: Optional[int] = None,
-) -> List[T]:
-    result: List[T] = []
+    item_class: type[T],
+    nb_samples: int | None = None,
+) -> list[T]:
+    result: list[T] = []
 
     # last record in chunk may be incomplete, we will use this buffer to concatenate strings
     buffer = b""
@@ -81,8 +82,8 @@ def read_and_parse_stream(
 
 def _parse_stream_line(
     line: bytes,
-    item_class: Type[T],
-) -> Optional[T]:
+    item_class: type[T],
+) -> T | None:
     try:
         item_dict = json.loads(line.decode("utf-8"))
         item_obj = item_class(**item_dict)

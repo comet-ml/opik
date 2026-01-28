@@ -1,7 +1,8 @@
 import logging
 import functools
 
-from typing import Callable, Any
+from typing import Any
+from collections.abc import Callable
 
 
 def warning_decorator(message: str, logger: logging.Logger) -> Callable:

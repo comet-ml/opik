@@ -3,7 +3,6 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from typing import Dict, List, Optional
 
 from opik.evaluation.metrics.conversation import types as conversation_types
 from opik.evaluation.metrics.conversation.conversation_thread_metric import (
@@ -14,11 +13,11 @@ from opik.exceptions import MetricComputationError
 from .phrases import DEFAULT_FALLBACK_PHRASES
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     return re.findall(r"\b\w+\b", text.lower())
 
 
-def _ngram_counts(tokens: List[str], n: int) -> Counter:
+def _ngram_counts(tokens: list[str], n: int) -> Counter:
     if len(tokens) < n:
         return Counter()
     return Counter(tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1))
@@ -66,9 +65,9 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
         self,
         name: str = "conversation_degeneration_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         ngram_size: int = 3,
-        fallback_phrases: Optional[List[str]] = None,
+        fallback_phrases: list[str] | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         if ngram_size < 2:
@@ -94,10 +93,10 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
         if not assistant_turns:
             raise MetricComputationError("Conversation contains no assistant messages")
 
-        per_turn_metadata: List[Dict[str, float]] = []
-        degeneracy_scores: List[float] = []
+        per_turn_metadata: list[dict[str, float]] = []
+        degeneracy_scores: list[float] = []
 
-        prev_tokens: Optional[List[str]] = None
+        prev_tokens: list[str] | None = None
         for content in assistant_turns:
             tokens = _tokenize(content)
             if not tokens:
@@ -151,7 +150,7 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
             },
         )
 
-    def _token_entropy(self, tokens: List[str]) -> float:
+    def _token_entropy(self, tokens: list[str]) -> float:
         counts = Counter(tokens)
         total = float(len(tokens))
         entropy = 0.0
@@ -163,7 +162,7 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
             return 0.0
         return min(1.0, entropy / max_entropy)
 
-    def _repetition_ratio(self, tokens: List[str]) -> float:
+    def _repetition_ratio(self, tokens: list[str]) -> float:
         ngram_counts = _ngram_counts(tokens, self._ngram_size)
         total = sum(ngram_counts.values())
         if total == 0:
@@ -172,7 +171,7 @@ class ConversationDegenerationMetric(ConversationThreadMetric):
         return repeated / total
 
     def _overlap_with_previous(
-        self, tokens: List[str], prev_tokens: Optional[List[str]]
+        self, tokens: list[str], prev_tokens: list[str] | None
     ) -> float:
         if not prev_tokens:
             return 0.0

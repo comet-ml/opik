@@ -3,14 +3,14 @@ Decorator for HttpxBinaryResponseContent.write_to_file method.
 """
 
 import functools
-from typing import Callable, Optional, Any
+from collections.abc import Callable
 
 import opik
 from opik.api_objects import attachment
 
 
 def create_write_to_file_decorator(
-    project_name: Optional[str] = None,
+    project_name: str | None = None,
 ) -> Callable[[Callable[[str], None]], Callable[[str], None]]:
     """
     Create a decorator that tracks write_to_file calls.
@@ -21,7 +21,7 @@ def create_write_to_file_decorator(
 
     def decorator(func: Callable[[str], None]) -> Callable[[str], None]:
         @functools.wraps(func)
-        def wrapper(file: str) -> Any:
+        def wrapper(file: str) -> None:
             with opik.start_as_current_span(
                 name="videos.write_to_file",
                 input={"file": str(file)},
@@ -30,13 +30,13 @@ def create_write_to_file_decorator(
                 type="general",
                 project_name=project_name,
             ) as span_data:
-                result = func(file)
+                func(file)
                 span_data.update(
                     attachments=[
                         attachment.Attachment(data=str(file), content_type="video/mp4")
                     ]
                 )
-                return result
+                return None
 
         return wrapper
 

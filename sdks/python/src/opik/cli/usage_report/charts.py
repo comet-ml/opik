@@ -4,7 +4,7 @@ import datetime
 import os
 import time
 import traceback
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from rich.console import Console
 
@@ -14,11 +14,11 @@ console = Console()
 
 
 def _get_top_projects_and_others(
-    projects: List[Dict[str, Any]],
-    project_names: List[str],
-    metric_data: List[List[float]],
+    projects: list[dict[str, Any]],
+    project_names: list[str],
+    metric_data: list[list[float]],
     top_n: int = 12,
-) -> Tuple[List[int], List[float], List[str], List]:
+) -> tuple[list[int], list[float], list[str], list]:
     """
     Identify top N projects by total usage and group the rest as "Others".
 
@@ -109,7 +109,7 @@ def _get_top_projects_and_others(
     return top_indices, others_data, labels, colors_list
 
 
-def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
+def create_charts(data: dict[str, Any], output_dir: str = ".") -> None:
     """
     Create stacked bar charts for trace count, token count, cost, experiment count, and dataset count.
 
@@ -145,7 +145,7 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     all_periods_set = set()
     for project in projects:
         all_periods_set.update(project["metrics_by_unit"].keys())
-    all_periods: List[str] = sorted(all_periods_set)
+    all_periods: list[str] = sorted(all_periods_set)
 
     if not all_periods:
         console.print(f"[yellow]No {unit}ly data available for charting.[/yellow]")
@@ -223,7 +223,7 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     fig, axes = plt.subplots(6, 1, figsize=(14, 20))
     unit_label = unit.capitalize()
     fig.suptitle(
-        f'Opik Usage Metrics - {data["workspace"]} (by {unit_label})',
+        f"Opik Usage Metrics - {data['workspace']} (by {unit_label})",
         fontsize=16,
         fontweight="bold",
     )
@@ -242,7 +242,7 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     for idx, (project_idx, label) in enumerate(
         zip(top_indices, trace_labels[: len(top_indices)])
     ):
-        values: List[float] = [trace_data[j][project_idx] for j in range(n_periods)]
+        values: list[float] = [trace_data[j][project_idx] for j in range(n_periods)]
         ax1.bar(x, values, width, label=label, bottom=bottom, color=trace_colors[idx])
         bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
@@ -283,7 +283,7 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     for idx, (project_idx, label) in enumerate(
         zip(top_indices, token_labels[: len(top_indices)])
     ):
-        values: List[float] = [token_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
+        values: list[float] = [token_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
         ax2.bar(x, values, width, label=label, bottom=bottom, color=token_colors[idx])
         bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
@@ -315,9 +315,9 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     ax2.yaxis.set_major_formatter(
         FuncFormatter(
             lambda x, p: (
-                f"{x/1e6:.2f}M"
+                f"{x / 1e6:.2f}M"
                 if x >= 1e6
-                else f"{x/1e3:.0f}K"
+                else f"{x / 1e3:.0f}K"
                 if x >= 1e3
                 else f"{x:.0f}"
             )
@@ -336,7 +336,7 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     for idx, (project_idx, label) in enumerate(
         zip(top_indices, cost_labels[: len(top_indices)])
     ):
-        values: List[float] = [cost_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
+        values: list[float] = [cost_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
         ax3.bar(x, values, width, label=label, bottom=bottom, color=cost_colors[idx])
         bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
@@ -401,7 +401,7 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     for idx, (project_idx, label) in enumerate(
         zip(top_indices, span_labels[: len(top_indices)])
     ):
-        values: List[float] = [span_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
+        values: list[float] = [span_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
         ax6.bar(x, values, width, label=label, bottom=bottom, color=span_colors[idx])
         bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
@@ -437,10 +437,10 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
 
 
 def create_individual_chart(
-    data: Dict[str, Any],
+    data: dict[str, Any],
     chart_type: str,
     output_dir: str = ".",
-) -> Optional[str]:
+) -> str | None:
     """
     Create an individual chart figure for a specific chart type.
 
@@ -475,7 +475,7 @@ def create_individual_chart(
     all_periods_set = set()
     for project in projects:
         all_periods_set.update(project["metrics_by_unit"].keys())
-    all_periods: List[str] = sorted(all_periods_set)
+    all_periods: list[str] = sorted(all_periods_set)
 
     if not all_periods:
         return None
@@ -532,7 +532,7 @@ def create_individual_chart(
         for idx, (project_idx, label) in enumerate(
             zip(top_indices, labels[: len(top_indices)])
         ):
-            values: List[float] = [trace_data[j][project_idx] for j in range(n_periods)]
+            values: list[float] = [trace_data[j][project_idx] for j in range(n_periods)]
             ax.bar(x, values, width, label=label, bottom=bottom, color=colors[idx])
             bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
@@ -575,7 +575,7 @@ def create_individual_chart(
         for idx, (project_idx, label) in enumerate(
             zip(top_indices, labels[: len(top_indices)])
         ):
-            values: List[float] = [token_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
+            values: list[float] = [token_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
             ax.bar(x, values, width, label=label, bottom=bottom, color=colors[idx])
             bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
@@ -590,9 +590,9 @@ def create_individual_chart(
         ax.yaxis.set_major_formatter(
             FuncFormatter(
                 lambda x, p: (
-                    f"{x/1e6:.2f}M"
+                    f"{x / 1e6:.2f}M"
                     if x >= 1e6
-                    else f"{x/1e3:.0f}K"
+                    else f"{x / 1e3:.0f}K"
                     if x >= 1e3
                     else f"{x:.0f}"
                 )
@@ -612,7 +612,7 @@ def create_individual_chart(
         for idx, (project_idx, label) in enumerate(
             zip(top_indices, labels[: len(top_indices)])
         ):
-            values: List[float] = [cost_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
+            values: list[float] = [cost_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
             ax.bar(x, values, width, label=label, bottom=bottom, color=colors[idx])
             bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
@@ -661,7 +661,7 @@ def create_individual_chart(
         for idx, (project_idx, label) in enumerate(
             zip(top_indices, labels[: len(top_indices)])
         ):
-            values: List[float] = [span_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
+            values: list[float] = [span_data[j][project_idx] for j in range(n_periods)]  # type: ignore[no-redef]
             ax.bar(x, values, width, label=label, bottom=bottom, color=colors[idx])
             bottom = [float(bottom[j] + values[j]) for j in range(n_periods)]  # type: ignore[misc]
 
@@ -760,7 +760,7 @@ def create_individual_chart(
                         if os.access(chart_filename, os.R_OK):
                             file_ready = True
                             break
-                except (OSError, IOError):
+                except OSError:
                     # File may still be writing, wait and retry
                     pass
 

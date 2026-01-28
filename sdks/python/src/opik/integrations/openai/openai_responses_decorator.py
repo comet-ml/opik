@@ -1,12 +1,8 @@
 import logging
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
 )
+from collections.abc import Callable
 from typing_extensions import override
 
 import openai
@@ -50,12 +46,12 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in responses.create(**kwargs) or responses.parse(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in responses.create(**kwargs) or responses.parse(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
 
@@ -128,11 +124,11 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Optional[Any]:
-        assert (
-            generations_aggregator is not None
-        ), "OpenAI decorator will always get aggregator function as input"
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> Any | None:
+        assert generations_aggregator is not None, (
+            "OpenAI decorator will always get aggregator function as input"
+        )
 
         if isinstance(output, openai.Stream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()

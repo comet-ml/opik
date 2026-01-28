@@ -1,12 +1,8 @@
 import logging
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Tuple,
 )
+from collections.abc import Callable
 
 import openai
 import openai.lib.streaming.chat
@@ -48,12 +44,12 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in chat.completion.create(**kwargs), chat.completion.parse(**kwargs) or chat.completion.stream(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in chat.completion.create(**kwargs), chat.completion.parse(**kwargs) or chat.completion.stream(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
         if kwargs.get("stream") is True:
@@ -132,11 +128,11 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Optional[Any]:
-        assert (
-            generations_aggregator is not None
-        ), "OpenAI decorator will always get aggregator function as input"
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> Any | None:
+        assert generations_aggregator is not None, (
+            "OpenAI decorator will always get aggregator function as input"
+        )
 
         if isinstance(output, openai.Stream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
@@ -185,7 +181,7 @@ class OpenaiChatCompletionsTrackDecorator(base_track_decorator.BaseTrackDecorato
         return NOT_A_STREAM
 
 
-def _remove_not_given_sentinel_values(dict_: Dict[str, Any]) -> Dict[str, Any]:
+def _remove_not_given_sentinel_values(dict_: dict[str, Any]) -> dict[str, Any]:
     """
     Under the hood of `stream()` method openai calls `create(..,stream=True,..)`
     and passes a lot of NOT_GIVEN values that we don't want to track.

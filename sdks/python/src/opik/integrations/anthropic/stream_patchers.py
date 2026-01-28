@@ -2,12 +2,9 @@ import anthropic
 import logging
 import functools
 from typing import (
-    Optional,
-    Callable,
-    Iterator,
-    AsyncIterator,
     Any,
 )
+from collections.abc import Callable, Iterator, AsyncIterator
 from opik.types import ErrorInfoDict
 from opik.api_objects import trace, span
 from opik.decorator import generator_wrappers, error_info_collector
@@ -32,7 +29,7 @@ original_async_message_stream_manager_aenter_method = (
 def patch_sync_stream(
     stream: anthropic.Stream,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
+    trace_to_end: trace.TraceData | None,
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> anthropic.Stream:
     """
@@ -51,7 +48,7 @@ def patch_sync_stream(
         ) -> Iterator[Any]:
             try:
                 accumulated_message = None
-                error_info: Optional[ErrorInfoDict] = None
+                error_info: ErrorInfoDict | None = None
 
                 for item in dunder_iter_func(self):
                     accumulated_message = _messages.accumulate_event(
@@ -94,7 +91,7 @@ def patch_sync_stream(
 def patch_async_stream(
     stream: anthropic.AsyncStream,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
+    trace_to_end: trace.TraceData | None,
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> anthropic.Stream:
     """
@@ -113,7 +110,7 @@ def patch_async_stream(
         ) -> AsyncIterator[Any]:
             try:
                 accumulated_message = None
-                error_info: Optional[ErrorInfoDict] = None
+                error_info: ErrorInfoDict | None = None
 
                 async for item in dunder_aiter_func(self):
                     accumulated_message = _messages.accumulate_event(
@@ -158,7 +155,7 @@ def patch_async_stream(
 def patch_sync_message_stream_manager(
     message_stream_manager: anthropic.MessageStreamManager,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
+    trace_to_end: trace.TraceData | None,
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> anthropic.MessageStreamManager:
     """
@@ -189,9 +186,8 @@ def patch_sync_message_stream_manager(
             self: anthropic.MessageStream,
         ) -> Iterator[anthropic.MessageStreamEvent]:
             try:
-                error_info: Optional[ErrorInfoDict] = None
-                for item in dunder_iter_func(self):
-                    yield item
+                error_info: ErrorInfoDict | None = None
+                yield from dunder_iter_func(self)
             except Exception as exception:
                 LOGGER.debug(
                     "Exception raised from anthropic.MessageStream.",
@@ -254,7 +250,7 @@ def patch_sync_message_stream_manager(
 def patch_async_message_stream_manager(
     async_message_stream_manager: anthropic.AsyncMessageStreamManager,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
+    trace_to_end: trace.TraceData | None,
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> anthropic.AsyncMessageStreamManager:
     """
@@ -279,7 +275,7 @@ def patch_async_message_stream_manager(
             self: anthropic.AsyncMessageStream,
         ) -> AsyncIterator[anthropic.MessageStreamEvent]:
             try:
-                error_info: Optional[ErrorInfoDict] = None
+                error_info: ErrorInfoDict | None = None
                 async for item in dunder_aiter_func(self):
                     yield item
             except Exception as exception:

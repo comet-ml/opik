@@ -1,5 +1,3 @@
-from typing import Optional, Dict
-
 from unittest import mock
 
 
@@ -22,7 +20,7 @@ class AnyButNone:
 class AnyDict:
     """A helper object that compares equal to all dicts."""
 
-    def __init__(self, containing: Optional[Dict] = None):
+    def __init__(self, containing: dict | None = None):
         self.containing_items = containing
 
     def __eq__(self, other):
@@ -45,7 +43,7 @@ class AnyDict:
             return "<ANY_DICT>"
         return "<ANY_DICT_WITH_CONTAIN_CONDITION>"
 
-    def containing(self, containing: Dict):
+    def containing(self, containing: dict):
         return AnyDict(containing)
 
 
@@ -68,9 +66,7 @@ class AnyList:
 class AnyString:
     """A helper object that provides partial equality check to strings."""
 
-    def __init__(
-        self, startswith: Optional[str] = None, containing: Optional[str] = None
-    ):
+    def __init__(self, startswith: str | None = None, containing: str | None = None):
         self._startswith = startswith
         self._containing = containing
 

@@ -1,5 +1,3 @@
-from typing import List
-
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -105,7 +103,7 @@ def test_opik_client__log_spans_feedback_scores__happy_path():
     mock_streamer = MagicMock()
     opik_client_._streamer = mock_streamer
 
-    scores: List[BatchFeedbackScoreDict] = [
+    scores: list[BatchFeedbackScoreDict] = [
         {
             "id": "span-1",
             "name": "quality",
@@ -176,7 +174,7 @@ def test_opik_client__log_spans_feedback_scores__with_explicit_project_name():
     mock_streamer = MagicMock()
     opik_client_._streamer = mock_streamer
 
-    scores: List[BatchFeedbackScoreDict] = [
+    scores: list[BatchFeedbackScoreDict] = [
         {"id": "span-1", "name": "quality", "value": 0.85}
     ]
 
@@ -214,7 +212,7 @@ def test_opik_client__log_spans_feedback_scores__no_valid_scores():
     mock_streamer = MagicMock()
     opik_client_._streamer = mock_streamer
 
-    scores: List[BatchFeedbackScoreDict] = [
+    scores: list[BatchFeedbackScoreDict] = [
         {"id": "span-1", "name": "quality"}  # Missing required 'value' field
     ]
 
@@ -242,7 +240,7 @@ def test_opik_client__log_traces_feedback_scores__happy_path():
     mock_streamer = MagicMock()
     opik_client_._streamer = mock_streamer
 
-    scores: List[BatchFeedbackScoreDict] = [
+    scores: list[BatchFeedbackScoreDict] = [
         {
             "id": "trace-1",
             "name": "accuracy",
@@ -293,7 +291,7 @@ def test_opik_client__log_traces_feedback_scores__with_explicit_project_name():
     mock_streamer = MagicMock()
     opik_client_._streamer = mock_streamer
 
-    scores: List[BatchFeedbackScoreDict] = [
+    scores: list[BatchFeedbackScoreDict] = [
         {"id": "trace-1", "name": "accuracy", "value": 0.92}
     ]
 
@@ -331,7 +329,7 @@ def test_opik_client__log_traces_feedback_scores__no_valid_scores():
     mock_streamer = MagicMock()
     opik_client_._streamer = mock_streamer
 
-    scores: List[BatchFeedbackScoreDict] = [
+    scores: list[BatchFeedbackScoreDict] = [
         {"id": "trace-1", "name": "accuracy"}  # Missing required 'value' field
     ]
 

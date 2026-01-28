@@ -1,6 +1,6 @@
 import math
 import os
-from typing import IO, Optional
+from typing import IO
 
 from .s3_upload_error import S3UploadErrorFileIsEmpty, S3UploadErrorFileIsTooLarge
 
@@ -64,7 +64,7 @@ class FilePartsStrategy(BaseFilePartsStrategy):
     def __init__(
         self,
         file_path: str,
-        file_size: Optional[int] = None,
+        file_size: int | None = None,
         max_file_part_size: int = MIN_FILE_PART_SIZE,
     ):
         if file_size is None:

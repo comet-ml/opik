@@ -1,6 +1,7 @@
 import functools
 import logging
-from typing import List, Optional, Any, Dict, Iterator
+from typing import Any
+from collections.abc import Iterator
 
 import opik.logging_messages as logging_messages
 import opik.opik_context as opik_context
@@ -31,9 +32,9 @@ EVALUATION_STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the 
 
 def _calculate_total_items(
     dataset: dataset.Dataset,
-    nb_samples: Optional[int],
-    dataset_item_ids: Optional[List[str]],
-) -> Optional[int]:
+    nb_samples: int | None,
+    dataset_item_ids: list[str] | None,
+) -> int | None:
     """
     Calculate the total number of items that will be evaluated.
 
@@ -55,11 +56,11 @@ class EvaluationEngine:
     def __init__(
         self,
         client: opik_client.Opik,
-        project_name: Optional[str],
-        scoring_metrics: List[base_metric.BaseMetric],
+        project_name: str | None,
+        scoring_metrics: list[base_metric.BaseMetric],
         workers: int,
         verbose: int,
-        scoring_key_mapping: Optional[ScoringKeyMappingType],
+        scoring_key_mapping: ScoringKeyMappingType | None,
     ) -> None:
         self._client = client
         self._project_name = project_name
@@ -108,7 +109,7 @@ class EvaluationEngine:
         trace_id: str,
         task_span: models.SpanModel,
         test_case_: test_case.TestCase,
-    ) -> List[score_result.ScoreResult]:
+    ) -> list[score_result.ScoreResult]:
         score_results, mapped_scoring_inputs = (
             self._metrics_evaluator.compute_task_span_scores(
                 dataset_item_content=test_case_.dataset_item_content,
@@ -132,7 +133,7 @@ class EvaluationEngine:
         item: dataset_item.DatasetItem,
         task: LLMTask,
         trial_id: int,
-        experiment_: Optional[experiment.Experiment],
+        experiment_: experiment.Experiment | None,
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
@@ -183,15 +184,15 @@ class EvaluationEngine:
         self,
         dataset_items: Iterator[dataset_item.DatasetItem],
         task: LLMTask,
-        experiment_: Optional[experiment.Experiment],
+        experiment_: experiment.Experiment | None,
         trial_count: int,
         description: str,
-        total_items: Optional[int] = None,
-    ) -> List[test_result.TestResult]:
-        test_results: List[test_result.TestResult] = []
+        total_items: int | None = None,
+    ) -> list[test_result.TestResult]:
+        test_results: list[test_result.TestResult] = []
 
         # Cache dataset items for multiple trials
-        dataset_items_cache: List[dataset_item.DatasetItem] = []
+        dataset_items_cache: list[dataset_item.DatasetItem] = []
 
         for trial_id in range(trial_count):
             desc = f"{description} trial {trial_id}" if trial_count > 1 else description
@@ -238,7 +239,7 @@ class EvaluationEngine:
     def _update_test_result_with_task_span_metrics(
         self,
         evaluation_task_result: test_result.TestResult,
-        trace_trees: List[models.TraceModel],
+        trace_trees: list[models.TraceModel],
     ) -> test_result.TestResult:
         # find related trace
         trace_id = evaluation_task_result.test_case.trace_id
@@ -288,7 +289,7 @@ class EvaluationEngine:
 
     def _update_test_results_with_task_span_metrics(
         self,
-        test_results: List[test_result.TestResult],
+        test_results: list[test_result.TestResult],
         recording: local_recording._LocalRecordingHandle,
     ) -> None:
         """Evaluate task spans from a local recording."""
@@ -299,7 +300,7 @@ class EvaluationEngine:
             return
 
         # Create span evaluation tasks from LLM tasks evaluation results and evaluate them in parallel
-        span_evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
+        span_evaluation_tasks: list[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
                 self._update_test_result_with_task_span_metrics,
                 evaluation_task_result=test_result_,
@@ -323,12 +324,12 @@ class EvaluationEngine:
         self,
         dataset_: dataset.Dataset,
         task: LLMTask,
-        nb_samples: Optional[int],
-        dataset_item_ids: Optional[List[str]],
-        dataset_sampler: Optional[samplers.BaseDatasetSampler],
+        nb_samples: int | None,
+        dataset_item_ids: list[str] | None,
+        dataset_sampler: samplers.BaseDatasetSampler | None,
         trial_count: int,
-        experiment_: Optional[experiment.Experiment],
-    ) -> List[test_result.TestResult]:
+        experiment_: experiment.Experiment | None,
+    ) -> list[test_result.TestResult]:
         # Can't use streaming with these parameters yet, so fallback to non-streaming
         use_streaming = (
             dataset_sampler is None
@@ -402,9 +403,9 @@ class EvaluationEngine:
 
     def evaluate_llm_task_on_dict_items(
         self,
-        items: List[Dict[str, Any]],
+        items: list[dict[str, Any]],
         task: LLMTask,
-    ) -> List[test_result.TestResult]:
+    ) -> list[test_result.TestResult]:
         """
         Evaluate an LLM task on a list of dict items.
 
@@ -461,9 +462,9 @@ class EvaluationEngine:
 
     def evaluate_test_cases(
         self,
-        test_cases: List[test_case.TestCase],
-    ) -> List[test_result.TestResult]:
-        evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
+        test_cases: list[test_case.TestCase],
+    ) -> list[test_result.TestResult]:
+        evaluation_tasks: list[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
                 self._compute_test_result_for_test_case,
                 test_case_=test_case_,
@@ -471,7 +472,7 @@ class EvaluationEngine:
             for test_case_ in test_cases
         ]
 
-        test_results: List[test_result.TestResult] = evaluation_tasks_executor.execute(
+        test_results: list[test_result.TestResult] = evaluation_tasks_executor.execute(
             evaluation_tasks=evaluation_tasks,
             workers=self._workers,
             verbose=self._verbose,

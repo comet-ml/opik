@@ -1,4 +1,5 @@
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
+from collections.abc import Callable
 
 from typing_extensions import override
 
@@ -22,8 +23,8 @@ class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         if self.start_span_preprocessor_error:
             raise Exception("Some error happened during span creation preprocessing")
@@ -75,8 +76,8 @@ class BrokenOpikTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Optional[Any]:
+        generations_aggregator: Callable[[list[Any]], str] | None,
+    ) -> Any | None:
         return super()._streams_handler(output, capture_output, generations_aggregator)
 
     def flush_tracker(self) -> None:

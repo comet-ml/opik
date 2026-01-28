@@ -1,5 +1,5 @@
 import contextlib
-from typing import Optional, Iterator
+from collections.abc import Iterator
 
 from opik.api_objects import experiment, opik_client, trace
 from opik.api_objects.experiment import experiment_item
@@ -11,12 +11,12 @@ import opik.context_storage as context_storage
 
 @contextlib.contextmanager
 def evaluate_llm_task_context(
-    experiment: Optional[experiment.Experiment],
+    experiment: experiment.Experiment | None,
     dataset_item_id: str,
     trace_data: trace.TraceData,
     client: opik_client.Opik,
 ) -> Iterator[None]:
-    error_info: Optional[ErrorInfoDict] = None
+    error_info: ErrorInfoDict | None = None
     try:
         context_storage.set_trace_data(trace_data)
         yield
@@ -50,7 +50,7 @@ def evaluate_llm_task_result_spans_context(
     trace_data: trace.TraceData,
     client: opik_client.Opik,
 ) -> Iterator[None]:
-    error_info: Optional[ErrorInfoDict] = None
+    error_info: ErrorInfoDict | None = None
     try:
         context_storage.set_trace_data(trace_data)
         yield

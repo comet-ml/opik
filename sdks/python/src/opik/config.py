@@ -5,7 +5,7 @@ import os
 import sys
 import pathlib
 import urllib.parse
-from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
+from typing import Any, Final, Literal, Union
 
 import pydantic
 import pydantic_settings
@@ -18,11 +18,11 @@ from .api_key import opik_api_key
 PathType = Union[
     pathlib.Path,
     str,
-    List[Union[pathlib.Path, str]],
-    Tuple[Union[pathlib.Path, str], ...],
+    list[Union[pathlib.Path, str]],
+    tuple[Union[pathlib.Path, str], ...],
 ]
 
-_SESSION_CACHE_DICT: Dict[str, Any] = {}
+_SESSION_CACHE_DICT: dict[str, Any] = {}
 
 MAX_BATCH_SIZE_MB = 5
 
@@ -44,7 +44,7 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
     def __init__(
         self,
-        settings_cls: Type[BaseSettings],
+        settings_cls: type[BaseSettings],
     ):
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
         expanded_path = pathlib.Path(config_file_path).expanduser()
@@ -56,7 +56,7 @@ class IniConfigSettingsSource(InitSettingsSource, ConfigFileSourceMixin):
 
         super().__init__(settings_cls, self.ini_data)
 
-    def _read_file(self, file_path: pathlib.Path) -> Dict[str, Any]:
+    def _read_file(self, file_path: pathlib.Path) -> dict[str, Any]:
         config = configparser.ConfigParser()
         config.read(file_path)
         config_values = {
@@ -85,12 +85,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
     @classmethod
     def settings_customise_sources(
         cls,
-        settings_cls: Type[pydantic_settings.BaseSettings],
+        settings_cls: type[pydantic_settings.BaseSettings],
         init_settings: pydantic_settings.PydanticBaseSettingsSource,
         env_settings: pydantic_settings.PydanticBaseSettingsSource,
         dotenv_settings: pydantic_settings.PydanticBaseSettingsSource,
         file_secret_settings: pydantic_settings.PydanticBaseSettingsSource,
-    ) -> Tuple[pydantic_settings.PydanticBaseSettingsSource, ...]:
+    ) -> tuple[pydantic_settings.PydanticBaseSettingsSource, ...]:
         return (
             init_settings,
             pydantic_settings.InitSettingsSource(
@@ -111,10 +111,10 @@ class OpikConfig(pydantic_settings.BaseSettings):
     workspace: str = OPIK_WORKSPACE_DEFAULT_NAME
     """Opik workspace"""
 
-    api_key: Optional[str] = None
+    api_key: str | None = None
     """Opik API key. This is not required if you are running against open source Opik installation"""
 
-    default_flush_timeout: Optional[int] = None
+    default_flush_timeout: int | None = None
     """
     Maximum time to wait when flushing Opik messages queues (in seconds).
     In particular waiting happens when calling:
@@ -143,9 +143,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Logging level for console logs.
     """
 
-    file_logging_level: Optional[
-        Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-    ] = None
+    file_logging_level: (
+        None | (Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+    ) = None
     """
     Logging level for file logs. Is not configured - nothing is logged to the file.
     """
@@ -314,7 +314,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
             LOGGER.error(f"Failed to save configuration: {e}")
             raise
 
-    def as_dict(self, mask_api_key: bool) -> Dict[str, Any]:
+    def as_dict(self, mask_api_key: bool) -> dict[str, Any]:
         """
         Retrieves the current configuration with the API key value masked.
         """
@@ -354,7 +354,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         return False
 
-    def get_misconfiguration_detection_results(self) -> Tuple[bool, Optional[str]]:
+    def get_misconfiguration_detection_results(self) -> tuple[bool, str | None]:
         """
         Tries detecting misconfigurations for either cloud or localhost environments.
         The detection will not work for any other kind of installation.
@@ -380,7 +380,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         return False, None
 
-    def _is_misconfigured_for_cloud(self) -> Tuple[bool, Optional[str]]:
+    def _is_misconfigured_for_cloud(self) -> tuple[bool, str | None]:
         """
         Determines if the current Opik configuration is misconfigured for cloud logging.
 
@@ -406,7 +406,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         return False, None
 
-    def _is_misconfigured_for_localhost(self) -> Tuple[bool, Optional[str]]:
+    def _is_misconfigured_for_localhost(self) -> tuple[bool, str | None]:
         """
         Determines if the current setup is misconfigured for a local open-source installation.
 

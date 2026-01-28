@@ -1,6 +1,4 @@
-from typing import List
-
-SUPPORTED_GENERATORS: List[str] = [
+SUPPORTED_GENERATORS: list[str] = [
     "AzureOpenAIGenerator",
     "OpenAIGenerator",
     "AnthropicGenerator",
@@ -9,7 +7,7 @@ SUPPORTED_GENERATORS: List[str] = [
     "CohereGenerator",
 ]
 
-SUPPORTED_CHAT_GENERATORS: List[str] = [
+SUPPORTED_CHAT_GENERATORS: list[str] = [
     "AzureOpenAIChatGenerator",
     "OpenAIChatGenerator",
     "AnthropicChatGenerator",
@@ -18,7 +16,7 @@ SUPPORTED_CHAT_GENERATORS: List[str] = [
     "CohereChatGenerator",
 ]
 
-ALL_SUPPORTED_GENERATORS: List[str] = SUPPORTED_GENERATORS + SUPPORTED_CHAT_GENERATORS
+ALL_SUPPORTED_GENERATORS: list[str] = SUPPORTED_GENERATORS + SUPPORTED_CHAT_GENERATORS
 
 # Haystack component output keys
 COMPONENT_OUTPUT_KEY: str = "haystack.component.output"

@@ -1,5 +1,4 @@
 import abc
-from typing import Optional
 
 from opik.message_processing import messages
 
@@ -16,8 +15,8 @@ class MessagePreprocessor(abc.ABC):
 
     @abc.abstractmethod
     def preprocess(
-        self, message: Optional[messages.BaseMessage]
-    ) -> Optional[messages.BaseMessage]:
+        self, message: messages.BaseMessage | None
+    ) -> messages.BaseMessage | None:
         """
         Processes and preprocesses the given message to prepare it for further operations.
 

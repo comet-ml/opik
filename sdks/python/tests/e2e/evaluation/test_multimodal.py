@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -20,7 +20,7 @@ JPEG_FOX_DATA_URL = (
 )
 
 
-MESSAGES: List[Dict[str, Any]] = [
+MESSAGES: list[dict[str, Any]] = [
     {
         "role": "system",
         "content": [
@@ -121,7 +121,7 @@ def test_evaluate_prompt_supports_multimodal_images(
     experiment_items = experiment.get_items()
     assert len(experiment_items) == len(dataset_items)
 
-    results: Dict[str, str] = {}
+    results: dict[str, str] = {}
     for item in experiment_items:
         reference = str(item.dataset_item_data.get("reference", "")).strip().lower()
         results[reference] = _normalize_output(item.evaluation_task_output["output"])

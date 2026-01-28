@@ -5,10 +5,11 @@
 import collections
 import re
 from functools import wraps
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
+from collections.abc import Callable
 
 VersionPart = Union[int, Optional[str]]
-VersionTuple = Tuple[
+VersionTuple = tuple[
     int,
     int,
     int,
@@ -18,7 +19,7 @@ VersionTuple = Tuple[
 ]
 
 ComparableVersion = Union[
-    "SemanticVersion", Dict[str, VersionPart], List[VersionPart], VersionTuple, str
+    "SemanticVersion", dict[str, VersionPart], list[VersionPart], VersionTuple, str
 ]
 Comparator = Callable[["SemanticVersion", ComparableVersion], bool]
 
@@ -80,9 +81,9 @@ class SemanticVersion:
         major: int,
         minor: int = 0,
         patch: int = 0,
-        feature_branch: Optional[Union[str, int]] = None,
-        pre_release: Optional[Union[str, int]] = None,
-        build: Optional[Union[str, int]] = None,
+        feature_branch: str | int | None = None,
+        pre_release: str | int | None = None,
+        build: str | int | None = None,
     ):
         self._major = major
         self._minor = minor
@@ -104,15 +105,15 @@ class SemanticVersion:
         return self._patch
 
     @property
-    def pre_release(self) -> Optional[str]:
+    def pre_release(self) -> str | None:
         return self._pre_release
 
     @property
-    def build(self) -> Optional[str]:
+    def build(self) -> str | None:
         return self._build
 
     @property
-    def feature_branch(self) -> Optional[str]:
+    def feature_branch(self) -> str | None:
         return self._feature_branch
 
     def to_tuple(self) -> VersionTuple:
@@ -187,8 +188,8 @@ class SemanticVersion:
         return self.compare(other) >= 0
 
     def __repr__(self) -> str:
-        s = ", ".join("%s=%r" % (key, val) for key, val in self.to_dict().items())
-        return "%s(%s)" % (type(self).__name__, s)
+        s = ", ".join(f"{key}={val!r}" for key, val in self.to_dict().items())
+        return f"{type(self).__name__}({s})"
 
     def __str__(self) -> str:
         version = "%d.%d" % (self.major, self.minor)

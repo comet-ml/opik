@@ -6,14 +6,13 @@ This module patches the Flow class to automatically track flow methods and execu
 
 import functools
 import logging
-from typing import Optional
 
 import opik.decorator.tracker as opik_tracker
 
 LOGGER = logging.getLogger(__name__)
 
 
-def patch_flow(project_name: Optional[str] = None) -> None:
+def patch_flow(project_name: str | None = None) -> None:
     """
     Patches CrewAI Flow class to track flow execution.
 
@@ -26,7 +25,7 @@ def patch_flow(project_name: Optional[str] = None) -> None:
     _patch_flow_kickoff_async(project_name)
 
 
-def _patch_flow_init(project_name: Optional[str] = None) -> None:
+def _patch_flow_init(project_name: str | None = None) -> None:
     """
     Patches CrewAI Flow.__init__ to automatically track flow methods.
 
@@ -76,7 +75,7 @@ def _patch_flow_init(project_name: Optional[str] = None) -> None:
         )
 
 
-def _patch_flow_kickoff_async(project_name: Optional[str] = None) -> None:
+def _patch_flow_kickoff_async(project_name: str | None = None) -> None:
     """
     Patches CrewAI Flow.kickoff_async to track flow execution.
 

@@ -1,7 +1,6 @@
 import mimetypes
 import random
 import time
-from typing import Optional
 
 
 # The attachment file name regex
@@ -49,7 +48,7 @@ def get_file_extension(mime_type: str) -> str:
     return "bin"
 
 
-def detect_mime_type(data: bytes) -> Optional[str]:
+def detect_mime_type(data: bytes) -> str | None:
     """Detect MIME type from byte content using magic bytes.
 
     This provides basic MIME type detection similar to Apache Tika in the Java implementation.

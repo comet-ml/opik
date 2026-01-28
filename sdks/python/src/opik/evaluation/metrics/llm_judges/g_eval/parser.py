@@ -1,7 +1,7 @@
 import logging
 import json
 import math
-from typing import Any, Dict, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 import opik.exceptions as exceptions
 from opik.evaluation.metrics import score_result
 from opik.evaluation.metrics.llm_judges import parsing_helpers
@@ -110,13 +110,13 @@ def parse_litellm_model_output(
 
 
 def _extract_score_from_text_content(
-    choice: Dict[str, Any], name: str
+    choice: dict[str, Any], name: str
 ) -> score_result.ScoreResult:
     text_content = _extract_message_content(choice)
     return parse_model_output_string(text_content, name)
 
 
-def _extract_message_content(choice: Dict[str, Any]) -> str:
+def _extract_message_content(choice: dict[str, Any]) -> str:
     message = choice.get("message")
     if isinstance(message, dict):
         content = message.get("content")
@@ -129,7 +129,7 @@ def _extract_message_content(choice: Dict[str, Any]) -> str:
     return content
 
 
-def _normalise_choice(choice: Any) -> Dict[str, Any]:
+def _normalise_choice(choice: Any) -> dict[str, Any]:
     choice_dict = _to_dict(choice)
     if choice_dict:
         return choice_dict
@@ -139,7 +139,7 @@ def _normalise_choice(choice: Any) -> Dict[str, Any]:
     }
 
 
-def _normalise_first_choice(response: Any) -> Dict[str, Any]:
+def _normalise_first_choice(response: Any) -> dict[str, Any]:
     choices = getattr(response, "choices", None)
     if not isinstance(choices, list) or not choices:
         raise exceptions.MetricComputationError(
@@ -148,7 +148,7 @@ def _normalise_first_choice(response: Any) -> Dict[str, Any]:
     return _normalise_choice(choices[0])
 
 
-def _to_dict(value: Any) -> Dict[str, Any]:
+def _to_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     if hasattr(value, "model_dump") and callable(value.model_dump):

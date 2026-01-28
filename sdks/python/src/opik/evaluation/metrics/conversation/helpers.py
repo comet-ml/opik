@@ -1,12 +1,13 @@
-from typing import Any, Generator, List
+from typing import Any
+from collections.abc import Generator
 
 from . import types
 from .conversation_turns_factory import build_conversation_turns
 
 
 def get_turns_in_sliding_window(
-    turns: List[types.ConversationTurn], window_size: int
-) -> Generator[List[types.ConversationTurn], Any, None]:
+    turns: list[types.ConversationTurn], window_size: int
+) -> Generator[list[types.ConversationTurn], Any, None]:
     """
     Generates windows of conversation turns of a fixed size from a list of turns.
     This function creates a sliding window over the list of conversation turns.
@@ -27,7 +28,7 @@ def get_turns_in_sliding_window(
         yield turns[max(0, i - window_size + 1) : i + 1]
 
 
-def merge_turns(turns: List[types.ConversationTurn]) -> types.Conversation:
+def merge_turns(turns: list[types.ConversationTurn]) -> types.Conversation:
     """
     Merges a list of conversation turns into a single conversation.
     This function takes a list of conversation turns and combines them
@@ -48,7 +49,7 @@ def merge_turns(turns: List[types.ConversationTurn]) -> types.Conversation:
 
 def extract_turns_windows_from_conversation(
     conversation: types.Conversation, window_size: int
-) -> List[types.Conversation]:
+) -> list[types.Conversation]:
     """
     Extracts a list of conversation windows based on turns using a sliding window
     approach. This function divides a conversation into consecutive overlapping
@@ -70,7 +71,7 @@ def extract_turns_windows_from_conversation(
     if len(turns) == 0:
         raise ValueError("Conversation has no turns")
 
-    turns_windows: List[types.Conversation] = [
+    turns_windows: list[types.Conversation] = [
         merge_turns(turns_window)
         for turns_window in get_turns_in_sliding_window(turns, window_size)
     ]

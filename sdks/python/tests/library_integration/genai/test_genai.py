@@ -1,6 +1,6 @@
 import asyncio
 
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from google import genai
@@ -49,7 +49,7 @@ retry_with_waiting_on_rate_limit_errors = tenacity.retry(
 )
 
 
-def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
+def _assert_metadata_contains_required_keys(metadata: dict[str, Any]):
     REQUIRED_METADATA_KEYS = [
         "model",
         "created_from",

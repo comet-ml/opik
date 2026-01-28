@@ -1,10 +1,8 @@
-from typing import List
-
 from opik.anonymizer import anonymizer
 
 
 # holder for a global list of anonymizers
-_anonymizers: List[anonymizer.Anonymizer] = []
+_anonymizers: list[anonymizer.Anonymizer] = []
 
 
 def add_anonymizer(anonymizer_hook: anonymizer.Anonymizer) -> None:
@@ -22,7 +20,7 @@ def has_anonymizers() -> bool:
     return len(_anonymizers) > 0
 
 
-def get_anonymizers() -> List[anonymizer.Anonymizer]:
+def get_anonymizers() -> list[anonymizer.Anonymizer]:
     """Get a list of all registered anonymizers."""
     return _anonymizers
 

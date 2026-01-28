@@ -30,7 +30,7 @@ Flow Overview:
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional, Set, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 from opik.api_objects import opik_client
 from opik.api_objects.experiment import experiment_item
@@ -71,7 +71,7 @@ class HarborExperimentService:
     def __init__(
         self,
         experiment_name: str,
-        experiment_config: Optional[Dict[str, Any]] = None,
+        experiment_config: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize the experiment service.
@@ -89,11 +89,11 @@ class HarborExperimentService:
         self._client = opik_client.get_client_cached()
 
         # Lazy-initialized per source (benchmark dataset)
-        self._datasets: Dict[str, "Dataset"] = {}
-        self._experiments: Dict[str, "Experiment"] = {}
+        self._datasets: dict[str, "Dataset"] = {}
+        self._experiments: dict[str, "Experiment"] = {}
 
         # Track which trials have been linked to avoid duplicates
-        self._linked_trials: Set[str] = set()
+        self._linked_trials: set[str] = set()
 
     def _ensure_dataset_and_experiment(self, source: str) -> None:
         """
@@ -140,8 +140,8 @@ class HarborExperimentService:
         self,
         trial_name: str,
         trace_id: str,
-        source: Optional[str] = None,
-        task_name: Optional[str] = None,
+        source: str | None = None,
+        task_name: str | None = None,
     ) -> None:
         """
         Link a Harbor trial's trace to the Opik experiment.
@@ -223,8 +223,8 @@ class HarborExperimentService:
 
 
 def setup_lazy(
-    experiment_name: Optional[str] = None,
-    experiment_config: Optional[Dict[str, Any]] = None,
+    experiment_name: str | None = None,
+    experiment_config: dict[str, Any] | None = None,
 ) -> None:
     """
     Setup the experiment service lazily.
@@ -258,7 +258,7 @@ def setup_lazy(
     LOGGER.info("Experiment service setup for '%s'", experiment_name)
 
 
-def get_service() -> Optional[HarborExperimentService]:
+def get_service() -> HarborExperimentService | None:
     """Get the current experiment service instance, or None if not initialized."""
     return _SERVICE
 

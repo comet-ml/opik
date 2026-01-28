@@ -1,6 +1,5 @@
 import importlib.metadata
 import logging
-from typing import Optional
 
 import crewai
 
@@ -12,8 +11,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 def track_crewai(
-    project_name: Optional[str] = None,
-    crew: Optional[crewai.Crew] = None,
+    project_name: str | None = None,
+    crew: crewai.Crew | None = None,
 ) -> None:
     """
     Tracks CrewAI activities by enabling tracking decorators for various critical methods.

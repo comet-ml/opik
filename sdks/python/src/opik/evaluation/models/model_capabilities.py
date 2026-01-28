@@ -6,12 +6,12 @@ The registry is designed to grow beyond vision support (e.g. audio in the future
 
 from __future__ import annotations
 
-from typing import Callable, Dict, Iterable, Optional, Set
+from collections.abc import Callable, Iterable
 
 CapabilityDetector = Callable[[str], bool]
 
 
-VISION_MODEL_PREFIXES: Set[str] = {
+VISION_MODEL_PREFIXES: set[str] = {
     # OpenAI
     "gpt-4-vision",
     "gpt-4o",
@@ -46,7 +46,7 @@ VISION_MODEL_PREFIXES: Set[str] = {
     "yi-vl",
 }
 VISION_MODEL_PREFIXES = {prefix.lower() for prefix in VISION_MODEL_PREFIXES}
-VISION_MODEL_SUFFIXES: Set[str] = {"-vision", "-vl"}
+VISION_MODEL_SUFFIXES: set[str] = {"-vision", "-vl"}
 
 
 def _strip_provider_prefix(model_name: str) -> str:
@@ -108,7 +108,7 @@ class ModelCapabilitiesRegistry:
     """
 
     def __init__(self) -> None:
-        self._capability_detectors: Dict[str, CapabilityDetector] = {}
+        self._capability_detectors: dict[str, CapabilityDetector] = {}
 
     def register_capability_detector(
         self, capability: str, detector: CapabilityDetector
@@ -118,7 +118,7 @@ class ModelCapabilitiesRegistry:
         """
         self._capability_detectors[capability] = detector
 
-    def supports(self, capability: str, model_name: Optional[str]) -> bool:
+    def supports(self, capability: str, model_name: str | None) -> bool:
         """
         Return True when the supplied model name supports the requested capability.
         """
@@ -134,13 +134,13 @@ class ModelCapabilitiesRegistry:
         except Exception:
             return False
 
-    def supports_vision(self, model_name: Optional[str]) -> bool:
+    def supports_vision(self, model_name: str | None) -> bool:
         """
         Convenience wrapper for vision-capable detection.
         """
         return self.supports("vision", model_name)
 
-    def supports_video(self, model_name: Optional[str]) -> bool:
+    def supports_video(self, model_name: str | None) -> bool:
         """
         Convenience wrapper for video-capable detection.
         """

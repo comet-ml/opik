@@ -1,4 +1,3 @@
-from typing import List
 from unittest import mock
 
 import pytest
@@ -46,7 +45,7 @@ def test_score():
     ]
     metrics_list = [first_metric, second_metric, third_metric]
 
-    def aggregator(results: List[score_result.ScoreResult]) -> score_result.ScoreResult:
+    def aggregator(results: list[score_result.ScoreResult]) -> score_result.ScoreResult:
         value = sum([result.value for result in results])
         return score_result.ScoreResult(name="aggregated_metric_result", value=value)
 

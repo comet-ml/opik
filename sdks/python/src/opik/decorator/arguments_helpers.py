@@ -1,5 +1,6 @@
 import dataclasses
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any
+from collections.abc import Callable
 
 from .. import datetime_helpers, llm_usage
 from ..api_objects import helpers, span, attachment
@@ -8,8 +9,8 @@ from ..types import ErrorInfoDict, SpanType, DistributedTraceHeadersDict
 
 @dataclasses.dataclass
 class BaseArguments:
-    def to_kwargs(self, ignore_keys: Optional[List[str]] = None) -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
+    def to_kwargs(self, ignore_keys: list[str] | None = None) -> dict[str, Any]:
+        result: dict[str, Any] = {}
         ignore_keys = [] if ignore_keys is None else ignore_keys
         for key, value in self.__dict__.items():
             if (value is not None) and (key not in ignore_keys):
@@ -25,17 +26,17 @@ class EndSpanParameters(BaseArguments):
     tracked function is ended.
     """
 
-    name: Optional[str] = None
-    metadata: Optional[Any] = None
-    input: Optional[Dict[str, Any]] = None
-    output: Optional[Dict[str, Any]] = None
-    tags: Optional[List[str]] = None
-    usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None
-    model: Optional[str] = None
-    provider: Optional[str] = None
-    error_info: Optional[ErrorInfoDict] = None
-    total_cost: Optional[float] = None
-    attachments: Optional[List[attachment.Attachment]] = None
+    name: str | None = None
+    metadata: Any | None = None
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    tags: list[str] | None = None
+    usage: dict[str, Any] | llm_usage.OpikUsage | None = None
+    model: str | None = None
+    provider: str | None = None
+    error_info: ErrorInfoDict | None = None
+    total_cost: float | None = None
+    attachments: list[attachment.Attachment] | None = None
 
 
 @dataclasses.dataclass
@@ -47,13 +48,13 @@ class StartSpanParameters(BaseArguments):
 
     type: SpanType
     name: str
-    tags: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    input: Optional[Dict[str, Any]] = None
-    project_name: Optional[str] = None
-    model: Optional[str] = None
-    provider: Optional[str] = None
-    thread_id: Optional[str] = None  # used for traces only
+    tags: list[str] | None = None
+    metadata: dict[str, Any] | None = None
+    input: dict[str, Any] | None = None
+    project_name: str | None = None
+    model: str | None = None
+    provider: str | None = None
+    thread_id: str | None = None  # used for traces only
 
 
 @dataclasses.dataclass
@@ -62,23 +63,23 @@ class TrackOptions(BaseArguments):
     A storage for all arguments passed to the `track` decorator.
     """
 
-    name: Optional[str]
+    name: str | None
     type: SpanType
-    tags: Optional[List[str]]
-    metadata: Optional[Dict[str, Any]]
+    tags: list[str] | None
+    metadata: dict[str, Any] | None
     capture_input: bool
-    ignore_arguments: Optional[List[str]]
+    ignore_arguments: list[str] | None
     capture_output: bool
-    generations_aggregator: Optional[Callable[[List[Any]], Any]]
+    generations_aggregator: Callable[[list[Any]], Any] | None
     flush: bool
-    project_name: Optional[str]
+    project_name: str | None
     create_duplicate_root_span: bool
 
 
 def create_span_data(
     start_span_arguments: StartSpanParameters,
     trace_id: str,
-    parent_span_id: Optional[str] = None,
+    parent_span_id: str | None = None,
 ) -> span.SpanData:
     span_data = span.SpanData(
         id=helpers.generate_id(),
@@ -98,6 +99,6 @@ def create_span_data(
 
 
 def extract_distributed_trace_headers(
-    kwargs: Dict[str, Any],
-) -> Optional[DistributedTraceHeadersDict]:
+    kwargs: dict[str, Any],
+) -> DistributedTraceHeadersDict | None:
     return kwargs.pop("opik_distributed_trace_headers", None)

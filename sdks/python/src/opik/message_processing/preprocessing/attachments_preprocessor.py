@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 from opik.message_processing import messages
 
 from . import constants, preprocessor
@@ -10,8 +8,8 @@ class AttachmentsPreprocessor(preprocessor.MessagePreprocessor):
         self._enabled = enabled
 
     def preprocess(
-        self, message: Optional[messages.BaseMessage]
-    ) -> Optional[messages.BaseMessage]:
+        self, message: messages.BaseMessage | None
+    ) -> messages.BaseMessage | None:
         """
         Processes a given message and ensures that it is converted into a specialized
         message type if applicable. If the message is already pre-processed, it
@@ -56,12 +54,12 @@ def _has_potential_content_with_attachments(message: messages.BaseMessage) -> bo
 
 
 def _message_has_field_of_interest_set(
-    message: Union[
-        messages.UpdateSpanMessage,
-        messages.UpdateTraceMessage,
-        messages.CreateSpanMessage,
-        messages.CreateTraceMessage,
-    ],
+    message: (
+        messages.UpdateSpanMessage
+        | messages.UpdateTraceMessage
+        | messages.CreateSpanMessage
+        | messages.CreateTraceMessage
+    ),
 ) -> bool:
     return (
         message.input is not None

@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 
 import rapidfuzz.distance.Indel
 from .. import base_metric, score_result
@@ -35,7 +35,7 @@ class LevenshteinRatio(base_metric.BaseMetric):
         case_sensitive: bool = False,
         name: str = "levenshtein_ratio_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(
             name=name,

@@ -3,7 +3,7 @@ import logging
 import math
 import time
 from concurrent.futures import Future, CancelledError
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
 import httpx
 
@@ -31,7 +31,7 @@ class UploadResult:
         """Allows to check if wrapped Future successfully finished"""
         return self.future.done()
 
-    def successful(self, timeout: Optional[float] = None) -> bool:
+    def successful(self, timeout: float | None = None) -> bool:
         """Allows to check if wrapped Future completed without raising an exception"""
         try:
             exception = self.future.exception(timeout)
@@ -64,7 +64,7 @@ class FileUploadManagerMonitor:
     ) -> None:
         self.file_upload_manager = file_upload_manager
         self.last_remaining_bytes = 0
-        self.last_remaining_uploads_display: Optional[float] = None
+        self.last_remaining_uploads_display: float | None = None
 
     def log_remaining_uploads(self) -> None:
         remaining = self.file_upload_manager.remaining_data()
@@ -133,7 +133,7 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
         self._rest_client = rest_client
 
         self._executor = thread_pool.get_thread_pool(worker_count=worker_count)
-        self._upload_results: List[UploadResult] = []
+        self._upload_results: list[UploadResult] = []
         self.closed = False
 
     def upload(self, message: messages.BaseMessage) -> None:
@@ -143,9 +143,9 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
             raise ValueError(f"Message {message} is not supported for file upload.")
 
     def upload_attachment(self, attachment: messages.CreateAttachmentMessage) -> None:
-        assert isinstance(
-            attachment, messages.CreateAttachmentMessage
-        ), "Wrong attachment message type"
+        assert isinstance(attachment, messages.CreateAttachmentMessage), (
+            "Wrong attachment message type"
+        )
 
         options = upload_options.file_upload_options_from_attachment(attachment)
         self._submit_upload(
@@ -209,7 +209,7 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
         status_list = [result.ready() for result in self._upload_results]
         return status_list.count(False)
 
-    def failed_uploads(self, timeout: Optional[float]) -> int:
+    def failed_uploads(self, timeout: float | None) -> int:
         """Important - this is blocking method waiting for all remaining uploads to complete or while
         timeout is expired."""
         failed = 0
@@ -219,7 +219,7 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
 
         return failed
 
-    def flush(self, timeout: Optional[float], sleep_time: int = 5) -> bool:
+    def flush(self, timeout: float | None, sleep_time: int = 5) -> bool:
         """Flushes all pending uploads. This is a blocking method that waits for all remaining uploads to complete,
         either until they finish or the specified timeout expires. If no timeout is set, it waits indefinitely.
         Args:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional, Union
 
 from opik.evaluation.metrics.llm_judges.g_eval import metric as g_eval_metric
 from opik.evaluation.models import base_model
@@ -26,9 +25,9 @@ class DemographicBiasJudge(g_eval_metric.GEvalPreset):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
@@ -61,9 +60,9 @@ class PoliticalBiasJudge(g_eval_metric.GEvalPreset):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
@@ -96,9 +95,9 @@ class GenderBiasJudge(g_eval_metric.GEvalPreset):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
@@ -131,9 +130,9 @@ class ReligiousBiasJudge(g_eval_metric.GEvalPreset):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
@@ -166,9 +165,9 @@ class RegionalBiasJudge(g_eval_metric.GEvalPreset):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(

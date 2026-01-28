@@ -8,13 +8,10 @@ to track video saves with attachments.
 import logging
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     Optional,
-    Tuple,
     TYPE_CHECKING,
 )
+from collections.abc import Callable
 
 from typing_extensions import override
 
@@ -38,7 +35,7 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
     to track video saves with attachments.
     """
 
-    def __init__(self, project_name: Optional[str], upload_videos: bool) -> None:
+    def __init__(self, project_name: str | None, upload_videos: bool) -> None:
         super().__init__()
         self._project_name = project_name
         self._upload_videos = upload_videos
@@ -48,8 +45,8 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         name = track_options.name if track_options.name is not None else func.__name__
         input_data = inspect_helpers.extract_inputs(func, args, kwargs)
@@ -86,7 +83,7 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Optional[Any]:
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> Any | None:
         NOT_A_STREAM = None
         return NOT_A_STREAM

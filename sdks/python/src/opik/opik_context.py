@@ -1,5 +1,6 @@
 import contextlib
-from typing import Any, Dict, List, Optional, Iterator, Union
+from typing import Any
+from collections.abc import Iterator
 
 from opik import llm_usage
 from opik.api_objects import span, trace, opik_client, prompt
@@ -17,7 +18,7 @@ from . import context_storage, exceptions
 from .decorator import error_info_collector
 
 
-def get_current_span_data() -> Optional[span.SpanData]:
+def get_current_span_data() -> span.SpanData | None:
     """
     Returns the current span created by track() decorator or None if no span was found.
     """
@@ -28,7 +29,7 @@ def get_current_span_data() -> Optional[span.SpanData]:
     return span.SpanData(**span_data.__dict__)
 
 
-def get_current_trace_data() -> Optional[trace.TraceData]:
+def get_current_trace_data() -> trace.TraceData | None:
     """
     Returns the current trace created by track() decorator or None if no trace was found.
     """
@@ -56,19 +57,19 @@ def get_distributed_trace_headers() -> DistributedTraceHeadersDict:
 
 
 def update_current_span(
-    name: Optional[str] = None,
-    input: Optional[Dict[str, Any]] = None,
-    output: Optional[Dict[str, Any]] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    tags: Optional[List[str]] = None,
-    usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-    feedback_scores: Optional[List[FeedbackScoreDict]] = None,
-    model: Optional[str] = None,
-    provider: Optional[Union[str, LLMProvider]] = None,
-    total_cost: Optional[float] = None,
-    attachments: Optional[List[Attachment]] = None,
-    error_info: Optional[ErrorInfoDict] = None,
-    prompts: Optional[List[prompt.BasePrompt]] = None,
+    name: str | None = None,
+    input: dict[str, Any] | None = None,
+    output: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+    tags: list[str] | None = None,
+    usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+    feedback_scores: list[FeedbackScoreDict] | None = None,
+    model: str | None = None,
+    provider: str | LLMProvider | None = None,
+    total_cost: float | None = None,
+    attachments: list[Attachment] | None = None,
+    error_info: ErrorInfoDict | None = None,
+    prompts: list[prompt.BasePrompt] | None = None,
 ) -> None:
     """
     Update the current span with the provided parameters. This method is usually called within a tracked function.
@@ -122,15 +123,15 @@ def update_current_span(
 
 
 def update_current_trace(
-    name: Optional[str] = None,
-    input: Optional[Dict[str, Any]] = None,
-    output: Optional[Dict[str, Any]] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    tags: Optional[List[str]] = None,
-    feedback_scores: Optional[List[FeedbackScoreDict]] = None,
-    thread_id: Optional[str] = None,
-    attachments: Optional[List[Attachment]] = None,
-    prompts: Optional[List[prompt.BasePrompt]] = None,
+    name: str | None = None,
+    input: dict[str, Any] | None = None,
+    output: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+    tags: list[str] | None = None,
+    feedback_scores: list[FeedbackScoreDict] | None = None,
+    thread_id: str | None = None,
+    attachments: list[Attachment] | None = None,
+    prompts: list[prompt.BasePrompt] | None = None,
 ) -> None:
     """
     Update the current trace with the provided parameters. This method is usually called within a tracked function.
@@ -205,7 +206,7 @@ def trace_context(
     if client.config.log_start_trace_span:
         client.trace(**trace_data.as_start_parameters)
 
-    error_info: Optional[ErrorInfoDict] = None
+    error_info: ErrorInfoDict | None = None
     try:
         context_storage.set_trace_data(trace_data)
         yield

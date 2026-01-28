@@ -48,9 +48,7 @@ SPANS_STREAM_JSON = [
 
 @pytest.fixture
 def spans_stream_source():
-    spans_stream = [
-        f"{json.dumps(span)}\r\n".encode("utf-8") for span in SPANS_STREAM_JSON
-    ]
+    spans_stream = [f"{json.dumps(span)}\r\n".encode() for span in SPANS_STREAM_JSON]
     yield spans_stream
 
 

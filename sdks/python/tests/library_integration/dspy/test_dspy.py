@@ -1,5 +1,3 @@
-from typing import Union
-
 import uuid
 
 import dspy
@@ -33,7 +31,7 @@ ANY_USAGE_DICT = ANY_DICT.containing(
 ANY_METADATA_WITH_CREATED_FROM = ANY_DICT.containing({"created_from": "dspy"})
 
 
-def sort_spans_by_name(tree: Union[SpanModel, TraceModel]) -> None:
+def sort_spans_by_name(tree: SpanModel | TraceModel) -> None:
     """
     Sorts the spans within a trace/span tree by their names in ascending order.
     """

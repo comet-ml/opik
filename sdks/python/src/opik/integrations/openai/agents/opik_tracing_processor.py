@@ -1,4 +1,4 @@
-from typing import Any, Optional, Dict, Union
+from typing import Any
 from agents import tracing
 
 import logging
@@ -19,30 +19,30 @@ OPENAI_SPAN_TYPES_WITH_MEANINGFUL_INPUT_OUTPUT = ["response", "generation", "cus
 class OpikTracingProcessor(tracing.TracingProcessor):
     def __init__(
         self,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         # NOTE: The OpikTracingProcessor maps openai traces/spans to
         # opik traces/spans. Openai traces may be logged as opik spans.
-        self._opik_spans_data_map: Dict[str, span_data.SpanData] = {}
+        self._opik_spans_data_map: dict[str, span_data.SpanData] = {}
         """Map from openai span id to the opik span data created for it."""
-        self._created_opik_traces_data_map: Dict[str, trace_data.TraceData] = {}
+        self._created_opik_traces_data_map: dict[str, trace_data.TraceData] = {}
         """Map from openai trace id to the opik trace data created for it."""
 
         self._project_name = project_name
 
         self._opik_client = opik_client.get_client_cached()
 
-        self._openai_trace_id_to_first_meaningful_input: Dict[str, Dict[str, Any]] = {}
-        self._openai_trace_id_to_last_meaningful_output: Dict[str, Dict[str, Any]] = {}
+        self._openai_trace_id_to_first_meaningful_input: dict[str, dict[str, Any]] = {}
+        self._openai_trace_id_to_last_meaningful_output: dict[str, dict[str, Any]] = {}
         """
         Used to populate opik span/trace corresponding to the openai trace with meaningful inputs and outputs.
         By default inputs and outputs in the openai trace are always empty and it is harder to review in Opik UI.
         """
 
-        self._openai_trace_id_to_external_opik_parent_span_id: Dict[
-            str, Optional[str]
+        self._openai_trace_id_to_external_opik_parent_span_id: dict[
+            str, str | None
         ] = {}
 
         self._opik_context_storage = context_storage.get_current_context_instance()
@@ -196,7 +196,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
 
     def _try_get_span_or_trace(
         self, id: str
-    ) -> Union[span_data.SpanData, trace_data.TraceData, None]:
+    ) -> span_data.SpanData | trace_data.TraceData | None:
         return self._opik_spans_data_map.get(
             id
         ) or self._created_opik_traces_data_map.get(id)
@@ -204,7 +204,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
     def _populate_root_span_or_trace_with_meaningful_input_and_output(
         self,
         openai_trace_id: str,
-        opik_trace_or_span_data: Union[trace_data.TraceData, span_data.SpanData],
+        opik_trace_or_span_data: trace_data.TraceData | span_data.SpanData,
     ) -> None:
         first_meaningful_input = self._openai_trace_id_to_first_meaningful_input.get(
             openai_trace_id

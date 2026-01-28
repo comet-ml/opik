@@ -4,7 +4,6 @@ import sys
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Tuple
 
 import click
 from rich.console import Console
@@ -46,7 +45,7 @@ def _fetch_trace_data(
     trace_id: str,
     project_name_cache: dict[str, str],
     debug: bool,
-) -> Optional[Tuple[str, dict, str]]:
+) -> tuple[str, dict, str] | None:
     """Fetch trace and span data for a single trace ID.
 
     Returns:
@@ -150,9 +149,9 @@ def _write_trace_file(
 
 def export_traces_by_ids(
     client: opik.Opik,
-    trace_ids: List[str],
+    trace_ids: list[str],
     workspace_root: Path,
-    max_traces: Optional[int],
+    max_traces: int | None,
     format: str,
     debug: bool,
     force: bool,
@@ -203,13 +202,13 @@ def export_traces_by_ids(
                 )
 
             # Fetch trace data in parallel
-            fetched_traces: dict[str, Tuple[dict, str]] = {}
+            fetched_traces: dict[str, tuple[dict, str]] = {}
 
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as fetch_executor:
                 # Submit all trace fetch tasks and track trace_id for each future
-                fetch_futures: Dict[Future[Optional[Tuple[str, dict, str]]], str] = {}
+                fetch_futures: dict[Future[tuple[str, dict, str] | None], str] = {}
                 for trace_id in batch_trace_ids:
-                    fetch_future: Future[Optional[Tuple[str, dict, str]]] = (
+                    fetch_future: Future[tuple[str, dict, str] | None] = (
                         fetch_executor.submit(
                             _fetch_trace_data,
                             client,
@@ -240,7 +239,7 @@ def export_traces_by_ids(
             # Write files in parallel
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as write_executor:
                 # Submit all write tasks and track trace_id for each future
-                write_futures: Dict[Future[bool], str] = {}
+                write_futures: dict[Future[bool], str] = {}
                 for trace_id, (trace_data, project_name) in fetched_traces.items():
                     write_future: Future[bool] = write_executor.submit(
                         _write_trace_file,
@@ -286,12 +285,12 @@ def export_experiment_by_id(
     client: opik.Opik,
     output_dir: Path,
     experiment_id: str,
-    max_traces: Optional[int],
+    max_traces: int | None,
     force: bool,
     debug: bool,
     format: str,
-    trace_ids_collector: Optional[set[str]] = None,
-) -> tuple[Dict[str, int], int]:
+    trace_ids_collector: set[str] | None = None,
+) -> tuple[dict[str, int], int]:
     """Export a specific experiment by ID, including related datasets and traces.
 
     Returns:
@@ -386,12 +385,12 @@ def export_experiment_by_name(
     name: str,
     workspace: str,
     output_path: str,
-    dataset: Optional[str],
-    max_traces: Optional[int],
+    dataset: str | None,
+    max_traces: int | None,
     force: bool,
     debug: bool,
     format: str,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> None:
     """Export an experiment by exact name."""
     try:
@@ -586,12 +585,12 @@ def export_experiment_by_name_or_id(
     name_or_id: str,
     workspace: str,
     output_path: str,
-    dataset: Optional[str],
-    max_traces: Optional[int],
+    dataset: str | None,
+    max_traces: int | None,
     force: bool,
     debug: bool,
     format: str,
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
 ) -> None:
     """Export an experiment by name or ID.
 
@@ -765,8 +764,8 @@ def export_experiment_by_name_or_id(
 def export_experiment_command(
     ctx: click.Context,
     name_or_id: str,
-    dataset: Optional[str],
-    max_traces: Optional[int],
+    dataset: str | None,
+    max_traces: int | None,
     path: str,
     force: bool,
     debug: bool,

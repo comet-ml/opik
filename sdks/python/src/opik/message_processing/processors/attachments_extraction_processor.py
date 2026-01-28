@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, NamedTuple, List, Literal, cast
+from typing import NamedTuple, Literal, cast
 
 from opik.api_objects.attachment import (
     attachments_extractor,
@@ -117,7 +117,7 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
             )
 
     def _process_attachments(
-        self, attachments: List[attachment_context.AttachmentWithContext]
+        self, attachments: list[attachment_context.AttachmentWithContext]
     ) -> None:
         for attachment in attachments:
             create_attachment_message = converters.attachment_to_message(
@@ -133,7 +133,7 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
 
 def entity_type_from_attachment_message(
     message: messages.BaseMessage,
-) -> Optional[EntityDetails]:
+) -> EntityDetails | None:
     if isinstance(message, (messages.CreateSpanMessage, messages.UpdateSpanMessage)):
         return EntityDetails("span", message.span_id, project_name=message.project_name)
     elif isinstance(

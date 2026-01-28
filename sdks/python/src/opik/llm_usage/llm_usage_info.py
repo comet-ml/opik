@@ -1,4 +1,4 @@
-from typing import Optional, Union, Dict, Any
+from typing import Any
 
 import pydantic
 
@@ -8,12 +8,12 @@ from . import opik_usage
 
 
 class LLMUsageInfo(pydantic.BaseModel):
-    provider: Optional[Union[LLMProvider, str]] = None
-    model: Optional[str] = None
+    provider: LLMProvider | str | None = None
+    model: str | None = None
     """
     The model name (or model id) that can be used to identify the model for cost calculation.
     """
-    usage: Optional[Union[Dict[str, Any], opik_usage.OpikUsage]] = None
+    usage: dict[str, Any] | opik_usage.OpikUsage | None = None
     """
     The dictionary with token usage in the original format of the provider.
     """

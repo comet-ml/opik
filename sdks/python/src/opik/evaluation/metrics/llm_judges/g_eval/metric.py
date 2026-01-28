@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from threading import Lock
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Tuple
 import pydantic
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -69,12 +69,12 @@ class GEval(base_metric.BaseMetric):
         self,
         task_introduction: str,
         evaluation_criteria: str,
-        model: Optional[Union[str, models.base_model.OpikBaseModel]] = None,
+        model: str | models.base_model.OpikBaseModel | None = None,
         name: str = "g_eval_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
-        seed: Optional[int] = None,
+        seed: int | None = None,
     ):
         super().__init__(
             name=name,
@@ -118,7 +118,7 @@ class GEval(base_metric.BaseMetric):
         return generated
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
+        self, model: str | base_model.OpikBaseModel | None, temperature: float
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
@@ -140,8 +140,8 @@ class GEval(base_metric.BaseMetric):
 
     @classmethod
     def _get_cached_chain_of_thought(
-        cls, cache_key: Tuple[str, str, str, Any]
-    ) -> Optional[str]:
+        cls, cache_key: tuple[str, str, str, Any]
+    ) -> str | None:
         with cls._CHAIN_OF_THOUGHT_LOCK:
             value = cls._CHAIN_OF_THOUGHT_CACHE.get(cache_key)
             if value is not None:
@@ -150,7 +150,7 @@ class GEval(base_metric.BaseMetric):
 
     @classmethod
     def _store_chain_of_thought(
-        cls, cache_key: Tuple[str, str, str, Any], value: str
+        cls, cache_key: tuple[str, str, str, Any], value: str
     ) -> None:
         with cls._CHAIN_OF_THOUGHT_LOCK:
             existing = cls._CHAIN_OF_THOUGHT_CACHE.get(cache_key)
@@ -162,7 +162,7 @@ class GEval(base_metric.BaseMetric):
             while len(cls._CHAIN_OF_THOUGHT_CACHE) > cls._MAX_CHAIN_OF_THOUGHT_CACHE:
                 cls._CHAIN_OF_THOUGHT_CACHE.popitem(last=False)
 
-    def _chain_of_thought_cache_key(self) -> Tuple[str, str, str, Any]:
+    def _chain_of_thought_cache_key(self) -> tuple[str, str, str, Any]:
         model_name = getattr(self._model, "model_name", "unknown")
         return (
             self.task_introduction,
@@ -218,7 +218,7 @@ class GEval(base_metric.BaseMetric):
         ]
 
         if isinstance(self._model, models.LiteLLMChatModel):
-            provider_kwargs: Dict[str, Any] = {
+            provider_kwargs: dict[str, Any] = {
                 "response_format": GEvalScoreFormat,
             }
             if self._log_probs_supported:
@@ -266,7 +266,7 @@ class GEval(base_metric.BaseMetric):
         ]
 
         if isinstance(self._model, models.LiteLLMChatModel):
-            provider_kwargs: Dict[str, Any] = {
+            provider_kwargs: dict[str, Any] = {
                 "response_format": GEvalScoreFormat,
             }
             if self._log_probs_supported:
@@ -314,11 +314,11 @@ class GEvalPreset(GEval):
     def __init__(
         self,
         preset: str,
-        model: Optional[Union[str, models.base_model.OpikBaseModel]] = None,
+        model: str | models.base_model.OpikBaseModel | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
-        name: Optional[str] = None,
+        name: str | None = None,
     ):
         try:
             definition = GEVAL_PRESETS[preset]

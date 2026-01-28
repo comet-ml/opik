@@ -2,7 +2,7 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast
+from typing import Any, TypeVar, Literal, cast
 
 import httpx
 
@@ -71,10 +71,10 @@ T = TypeVar("T")
 class Opik:
     def __init__(
         self,
-        project_name: Optional[str] = None,
-        workspace: Optional[str] = None,
-        host: Optional[str] = None,
-        api_key: Optional[str] = None,
+        project_name: str | None = None,
+        workspace: str | None = None,
+        host: str | None = None,
+        api_key: str | None = None,
         _use_batching: bool = False,
         _show_misconfiguration_message: bool = True,
     ) -> None:
@@ -108,8 +108,8 @@ class Opik:
 
         self._workspace: str = config_.workspace
         self._project_name: str = config_.project_name
-        self._flush_timeout: Optional[int] = config_.default_flush_timeout
-        self._project_name_most_recent_trace: Optional[str] = None
+        self._flush_timeout: int | None = config_.default_flush_timeout
+        self._project_name_most_recent_trace: str | None = None
         self._use_batching = _use_batching
 
         self._initialize_streamer(
@@ -223,19 +223,19 @@ class Opik:
 
     def trace(
         self,
-        id: Optional[str] = None,
-        name: Optional[str] = None,
-        start_time: Optional[datetime.datetime] = None,
-        end_time: Optional[datetime.datetime] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
-        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
-        project_name: Optional[str] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        thread_id: Optional[str] = None,
-        attachments: Optional[List[Attachment]] = None,
+        id: str | None = None,
+        name: str | None = None,
+        start_time: datetime.datetime | None = None,
+        end_time: datetime.datetime | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        feedback_scores: list[FeedbackScoreDict] | None = None,
+        project_name: str | None = None,
+        error_info: ErrorInfoDict | None = None,
+        thread_id: str | None = None,
+        attachments: list[Attachment] | None = None,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
@@ -292,7 +292,7 @@ class Opik:
                 feedback_score["id"] = id
 
             self.log_traces_feedback_scores(
-                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+                cast(list[BatchFeedbackScoreDict], feedback_scores), project_name
             )
 
         if attachments is not None:
@@ -383,25 +383,25 @@ class Opik:
 
     def span(
         self,
-        trace_id: Optional[str] = None,
-        id: Optional[str] = None,
-        parent_span_id: Optional[str] = None,
-        name: Optional[str] = None,
+        trace_id: str | None = None,
+        id: str | None = None,
+        parent_span_id: str | None = None,
+        name: str | None = None,
         type: SpanType = "general",
-        start_time: Optional[datetime.datetime] = None,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
-        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-        feedback_scores: Optional[List[FeedbackScoreDict]] = None,
-        project_name: Optional[str] = None,
-        model: Optional[str] = None,
-        provider: Optional[Union[str, LLMProvider]] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        total_cost: Optional[float] = None,
-        attachments: Optional[List[Attachment]] = None,
+        start_time: datetime.datetime | None = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+        feedback_scores: list[FeedbackScoreDict] | None = None,
+        project_name: str | None = None,
+        model: str | None = None,
+        provider: str | LLMProvider | None = None,
+        error_info: ErrorInfoDict | None = None,
+        total_cost: float | None = None,
+        attachments: list[Attachment] | None = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -469,7 +469,7 @@ class Opik:
                 feedback_score["id"] = id
 
             self.log_spans_feedback_scores(
-                cast(List[BatchFeedbackScoreDict], feedback_scores), project_name
+                cast(list[BatchFeedbackScoreDict], feedback_scores), project_name
             )
 
         return span.span_client.create_span(
@@ -499,19 +499,19 @@ class Opik:
         self,
         id: str,
         trace_id: str,
-        parent_span_id: Optional[str],
+        parent_span_id: str | None,
         project_name: str,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
-        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-        model: Optional[str] = None,
-        provider: Optional[Union[LLMProvider, str]] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        total_cost: Optional[float] = None,
-        attachments: Optional[List[Attachment]] = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+        model: str | None = None,
+        provider: LLMProvider | str | None = None,
+        error_info: ErrorInfoDict | None = None,
+        total_cost: float | None = None,
+        attachments: list[Attachment] | None = None,
     ) -> None:
         """
         Update the attributes of an existing span.
@@ -580,13 +580,13 @@ class Opik:
         self,
         trace_id: str,
         project_name: str,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[Any]] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        thread_id: Optional[str] = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[Any] | None = None,
+        error_info: ErrorInfoDict | None = None,
+        thread_id: str | None = None,
     ) -> None:
         """
         Update the trace attributes.
@@ -639,7 +639,7 @@ class Opik:
         )
 
     def log_spans_feedback_scores(
-        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: list[BatchFeedbackScoreDict], project_name: str | None = None
     ) -> None:
         """
         Log feedback scores for spans.
@@ -688,7 +688,7 @@ class Opik:
             self._streamer.put(add_span_feedback_scores_batch_message)
 
     def log_traces_feedback_scores(
-        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: list[BatchFeedbackScoreDict], project_name: str | None = None
     ) -> None:
         """
         Log feedback scores for traces.
@@ -738,7 +738,7 @@ class Opik:
             self._streamer.put(add_trace_feedback_scores_batch_message)
 
     def log_threads_feedback_scores(
-        self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None
+        self, scores: list[BatchFeedbackScoreDict], project_name: str | None = None
     ) -> None:
         """
         Log feedback scores for threads.
@@ -832,7 +832,7 @@ class Opik:
         self,
         max_results: int = 100,
         sync_items: bool = True,
-    ) -> List[dataset.Dataset]:
+    ) -> list[dataset.Dataset]:
         """
         Returns all datasets up to the specified limit.
 
@@ -853,7 +853,7 @@ class Opik:
         self,
         dataset_name: str,
         max_results: int = 100,
-    ) -> List[experiment.Experiment]:
+    ) -> list[experiment.Experiment]:
         """
         Returns all experiments up to the specified limit.
 
@@ -889,7 +889,7 @@ class Opik:
         self._rest_client.datasets.delete_dataset_by_name(dataset_name=name)
 
     def create_dataset(
-        self, name: str, description: Optional[str] = None
+        self, name: str, description: str | None = None
     ) -> dataset.Dataset:
         """
         Create a new dataset.
@@ -915,7 +915,7 @@ class Opik:
         return result
 
     def get_or_create_dataset(
-        self, name: str, description: Optional[str] = None
+        self, name: str, description: str | None = None
     ) -> dataset.Dataset:
         """
         Get an existing dataset by name or create a new one if it does not exist.
@@ -937,13 +937,13 @@ class Opik:
     def create_experiment(
         self,
         dataset_name: str,
-        name: Optional[str] = None,
-        experiment_config: Optional[Dict[str, Any]] = None,
-        prompt: Optional[prompt_module.base_prompt.BasePrompt] = None,
-        prompts: Optional[List[prompt_module.base_prompt.BasePrompt]] = None,
+        name: str | None = None,
+        experiment_config: dict[str, Any] | None = None,
+        prompt: prompt_module.base_prompt.BasePrompt | None = None,
+        prompts: list[prompt_module.base_prompt.BasePrompt] | None = None,
         type: Literal["regular", "trial", "mini-batch"] = "regular",
-        optimization_id: Optional[str] = None,
-        tags: Optional[List[str]] = None,
+        optimization_id: str | None = None,
+        tags: list[str] | None = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -1001,8 +1001,8 @@ class Opik:
     def update_experiment(
         self,
         id: str,
-        name: Optional[str] = None,
-        experiment_config: Optional[Dict[str, Any]] = None,
+        name: str | None = None,
+        experiment_config: dict[str, Any] | None = None,
     ) -> None:
         """
         Update an experiment's name and/or configuration.
@@ -1026,7 +1026,7 @@ class Opik:
             )
 
         # Only include parameters that are provided to avoid clearing fields
-        request_params: Dict[str, Any] = {}
+        request_params: dict[str, Any] = {}
         if name is not None:
             request_params["name"] = name
         if experiment_config is not None:
@@ -1061,7 +1061,7 @@ class Opik:
             tags=experiment_public.tags,
         )
 
-    def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
+    def get_experiments_by_name(self, name: str) -> list[experiment.Experiment]:
         """
         Returns a list of existing experiments containing the given string in their name.
         Search is case-insensitive.
@@ -1122,7 +1122,7 @@ class Opik:
             tags=experiment_public.tags,
         )
 
-    def end(self, timeout: Optional[int] = None) -> None:
+    def end(self, timeout: int | None = None) -> None:
         """
         End the Opik session and submit all pending messages.
 
@@ -1135,7 +1135,7 @@ class Opik:
         timeout = timeout if timeout is not None else self._flush_timeout
         self._streamer.close(timeout)
 
-    def flush(self, timeout: Optional[int] = None) -> bool:
+    def flush(self, timeout: int | None = None) -> bool:
         """
         Flush the streamer to ensure all messages are sent.
 
@@ -1150,13 +1150,13 @@ class Opik:
 
     def search_traces(
         self,
-        project_name: Optional[str] = None,
-        filter_string: Optional[str] = None,
+        project_name: str | None = None,
+        filter_string: str | None = None,
         max_results: int = 1000,
         truncate: bool = True,
-        wait_for_at_least: Optional[int] = None,
+        wait_for_at_least: int | None = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
-    ) -> List[trace_public.TracePublic]:
+    ) -> list[trace_public.TracePublic]:
         """
         Search for traces in the given project. Optionally, you can wait for at least a certain number of traces
         to be found before returning within the specified timeout. If wait_for_at_least number of traces are not found
@@ -1241,14 +1241,14 @@ class Opik:
 
     def search_spans(
         self,
-        project_name: Optional[str] = None,
-        trace_id: Optional[str] = None,
-        filter_string: Optional[str] = None,
+        project_name: str | None = None,
+        trace_id: str | None = None,
+        filter_string: str | None = None,
         max_results: int = 1000,
         truncate: bool = True,
-        wait_for_at_least: Optional[int] = None,
+        wait_for_at_least: int | None = None,
         wait_for_timeout: int = httpx_client.READ_TIMEOUT_SECONDS,
-    ) -> List[span_public.SpanPublic]:
+    ) -> list[span_public.SpanPublic]:
         """
         Search for spans in the given trace. This allows you to search spans based on the span input, output,
         metadata, tags, etc. or based on the trace ID. Also, you can wait for at least a certain number of spans
@@ -1367,7 +1367,7 @@ class Opik:
         """
         return self._rest_client.projects.get_project_by_id(id)
 
-    def get_project_url(self, project_name: Optional[str] = None) -> str:
+    def get_project_url(self, project_name: str | None = None) -> str:
         """
         Returns a URL to the project in the current workspace.
         This method does not make any requests or perform any checks (e.g. that the project exists).
@@ -1426,7 +1426,7 @@ class Opik:
         self,
         name: str,
         prompt: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
     ) -> prompt_module.Prompt:
         """
@@ -1455,8 +1455,8 @@ class Opik:
     def create_chat_prompt(
         self,
         name: str,
-        messages: List[Dict[str, Any]],
-        metadata: Optional[Dict[str, Any]] = None,
+        messages: list[dict[str, Any]],
+        metadata: dict[str, Any] | None = None,
         type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
     ) -> prompt_module.ChatPrompt:
         """
@@ -1483,8 +1483,8 @@ class Opik:
     def get_prompt(
         self,
         name: str,
-        commit: Optional[str] = None,
-    ) -> Optional[prompt_module.Prompt]:
+        commit: str | None = None,
+    ) -> prompt_module.Prompt | None:
         """
         Retrieve a text prompt by name and optional commit version.
 
@@ -1513,8 +1513,8 @@ class Opik:
     def get_chat_prompt(
         self,
         name: str,
-        commit: Optional[str] = None,
-    ) -> Optional[prompt_module.ChatPrompt]:
+        commit: str | None = None,
+    ) -> prompt_module.ChatPrompt | None:
         """
         Retrieve a chat prompt by name and optional commit version.
 
@@ -1542,7 +1542,7 @@ class Opik:
             name, fern_prompt_version
         )
 
-    def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
+    def get_prompt_history(self, name: str) -> list[prompt_module.Prompt]:
         """
         Retrieve all text prompt versions history for a given prompt name.
 
@@ -1575,7 +1575,7 @@ class Opik:
         ]
         return result
 
-    def get_chat_prompt_history(self, name: str) -> List[prompt_module.ChatPrompt]:
+    def get_chat_prompt_history(self, name: str) -> list[prompt_module.ChatPrompt]:
         """
         Retrieve all chat prompt versions history for a given prompt name.
 
@@ -1608,7 +1608,7 @@ class Opik:
         ]
         return result
 
-    def get_all_prompts(self, name: str) -> List[prompt_module.Prompt]:
+    def get_all_prompts(self, name: str) -> list[prompt_module.Prompt]:
         """
         DEPRECATED: Please use Opik.get_prompt_history() instead.
         Retrieve all the prompt versions history for a given prompt name.
@@ -1625,8 +1625,8 @@ class Opik:
         return self.get_prompt_history(name)
 
     def search_prompts(
-        self, filter_string: Optional[str] = None
-    ) -> List[Union[prompt_module.Prompt, prompt_module.ChatPrompt]]:
+        self, filter_string: str | None = None
+    ) -> list[prompt_module.Prompt | prompt_module.ChatPrompt]:
         """
         Retrieve the latest prompt versions (both string and chat prompts) for the given search parameters.
 
@@ -1668,7 +1668,7 @@ class Opik:
         search_results = prompt_client_.search_prompts(parsed_filters=parsed_filters)
 
         # Convert to Prompt or ChatPrompt objects based on template_structure
-        prompts: List[Union[prompt_module.Prompt, prompt_module.ChatPrompt]] = []
+        prompts: list[prompt_module.Prompt | prompt_module.ChatPrompt] = []
         for result in search_results:
             if result.template_structure == "chat":
                 prompts.append(
@@ -1689,9 +1689,9 @@ class Opik:
         self,
         dataset_name: str,
         objective_name: str,
-        name: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        optimization_id: Optional[str] = None,
+        name: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        optimization_id: str | None = None,
     ) -> optimization.Optimization:
         id = optimization_id or id_helpers.generate_id()
 
@@ -1709,7 +1709,7 @@ class Opik:
         )
         return optimization_client
 
-    def delete_optimizations(self, ids: List[str]) -> None:
+    def delete_optimizations(self, ids: list[str]) -> None:
         self._rest_client.optimizations.delete_optimizations_by_id(ids=ids)
 
     def get_optimization_by_id(self, id: str) -> optimization.Optimization:
@@ -1726,7 +1726,7 @@ class Opik:
         return experiments_client.ExperimentsClient(self._rest_client)
 
 
-@functools.lru_cache()
+@functools.lru_cache
 def get_client_cached() -> Opik:
     client = Opik(_use_batching=True)
 

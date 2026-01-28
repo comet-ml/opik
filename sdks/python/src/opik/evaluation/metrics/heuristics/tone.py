@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable, Optional, Sequence
+from typing import Any
+from collections.abc import Iterable, Sequence
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics.base_metric import BaseMetric
@@ -75,24 +76,24 @@ class Tone(BaseMetric):
         self,
         name: str = "tone_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         min_sentiment: float = -0.2,
         max_upper_ratio: float = 0.3,
         max_exclamations: int = 3,
-        positive_lexicon: Optional[Iterable[str]] = None,
-        negative_lexicon: Optional[Iterable[str]] = None,
-        forbidden_phrases: Optional[Sequence[str]] = None,
+        positive_lexicon: Iterable[str] | None = None,
+        negative_lexicon: Iterable[str] | None = None,
+        forbidden_phrases: Sequence[str] | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self._min_sentiment = min_sentiment
         self._max_upper_ratio = max_upper_ratio
         self._max_exclamations = max_exclamations
-        self._positive = set(
+        self._positive = {
             word.lower() for word in (positive_lexicon or _POSITIVE_LEXICON)
-        )
-        self._negative = set(
+        }
+        self._negative = {
             word.lower() for word in (negative_lexicon or _NEGATIVE_LEXICON)
-        )
+        }
         phrases = forbidden_phrases or _FORBIDDEN_PHRASES
         self._forbidden = [phrase.lower() for phrase in phrases]
 

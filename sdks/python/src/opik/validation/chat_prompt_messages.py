@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any
 
 import opik.exceptions as exceptions
 from . import validator, result
@@ -19,10 +19,10 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
 
     def __init__(self, messages: Any):
         self.messages = messages
-        self.validation_result: Optional[result.ValidationResult] = None
+        self.validation_result: result.ValidationResult | None = None
 
     def validate(self) -> result.ValidationResult:
-        failure_reasons: List[str] = []
+        failure_reasons: list[str] = []
 
         # Validate messages is a list
         if not self._validate_messages_is_list(failure_reasons):
@@ -46,7 +46,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
 
         return self.validation_result
 
-    def _validate_messages_is_list(self, failure_reasons: List[str]) -> bool:
+    def _validate_messages_is_list(self, failure_reasons: list[str]) -> bool:
         """Validate that messages is a list. Returns False if validation fails."""
         if not isinstance(self.messages, list):
             msg = (
@@ -57,7 +57,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
         return True
 
     def _validate_message(
-        self, prefix: str, message: Any, failure_reasons: List[str]
+        self, prefix: str, message: Any, failure_reasons: list[str]
     ) -> None:
         """Validate a single message structure, role, and content."""
         if not self._validate_message_structure(prefix, message, failure_reasons):
@@ -67,7 +67,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
         self._validate_content(prefix, message, failure_reasons)
 
     def _validate_message_structure(
-        self, prefix: str, message: Any, failure_reasons: List[str]
+        self, prefix: str, message: Any, failure_reasons: list[str]
     ) -> bool:
         """Validate that message is a dict with exactly 'role' and 'content' keys. Returns False if validation fails."""
         # Validate message is a dict
@@ -97,7 +97,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
         return True
 
     def _validate_role(
-        self, prefix: str, message: dict, failure_reasons: List[str]
+        self, prefix: str, message: dict, failure_reasons: list[str]
     ) -> None:
         """Validate the role field of a message."""
         role = message.get("role")
@@ -110,7 +110,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
             failure_reasons.append(msg)
 
     def _validate_content(
-        self, prefix: str, message: dict, failure_reasons: List[str]
+        self, prefix: str, message: dict, failure_reasons: list[str]
     ) -> None:
         """Validate the content field of a message."""
         content = message.get("content")
@@ -127,7 +127,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
             self._validate_content_list(prefix, content, failure_reasons)
 
     def _validate_content_list(
-        self, prefix: str, content: list, failure_reasons: List[str]
+        self, prefix: str, content: list, failure_reasons: list[str]
     ) -> None:
         """Validate content when it is a list of content parts."""
         for content_idx, content_part in enumerate(content):
@@ -135,7 +135,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
             self._validate_content_part(content_prefix, content_part, failure_reasons)
 
     def _validate_content_part(
-        self, content_prefix: str, content_part: Any, failure_reasons: List[str]
+        self, content_prefix: str, content_part: Any, failure_reasons: list[str]
     ) -> None:
         """Validate a single content part in the content list."""
         if not isinstance(content_part, dict):
@@ -162,7 +162,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
         content_prefix: str,
         content_type: Any,
         content_part: dict,
-        failure_reasons: List[str],
+        failure_reasons: list[str],
     ) -> None:
         """Validate type-specific requirements for content parts."""
         if content_type in self.URL_BASED_CONTENT_TYPES:
@@ -184,7 +184,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
         content_part: dict,
         key_name: str,
         type_name: str,
-        failure_reasons: List[str],
+        failure_reasons: list[str],
     ) -> None:
         """Validate that a required key exists and is a string."""
         if key_name not in content_part:
@@ -203,7 +203,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
         content_part: dict,
         key_name: str,
         type_name: str,
-        failure_reasons: List[str],
+        failure_reasons: list[str],
     ) -> None:
         """Validate that a required key exists and is a dict with a 'url' key that is a string."""
         if key_name not in content_part:

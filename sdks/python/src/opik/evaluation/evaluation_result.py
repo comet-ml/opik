@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING
 from collections import defaultdict
 import logging
 
@@ -17,8 +17,8 @@ LOGGER = logging.getLogger(__name__)
 class DatasetItemResults:
     """Results for a single dataset item across all trials."""
 
-    test_results: List[test_result.TestResult]
-    scores: Dict[str, score_statistics.ScoreStatistics]
+    test_results: list[test_result.TestResult]
+    scores: dict[str, score_statistics.ScoreStatistics]
 
 
 @dataclasses.dataclass
@@ -27,10 +27,10 @@ class EvaluationResultGroupByDatasetItemsView:
 
     experiment_id: str
     dataset_id: str
-    experiment_name: Optional[str]
-    experiment_url: Optional[str]
+    experiment_name: str | None
+    experiment_url: str | None
     trial_count: int
-    dataset_items: Dict[str, DatasetItemResults]
+    dataset_items: dict[str, DatasetItemResults]
 
 
 @dataclasses.dataclass
@@ -57,22 +57,22 @@ class EvaluationResultAggregatedScoresView:
 
     experiment_id: str
     dataset_id: str
-    experiment_name: Optional[str]
-    experiment_url: Optional[str]
+    experiment_name: str | None
+    experiment_url: str | None
     trial_count: int
-    test_results: List[test_result.TestResult]
-    aggregated_scores: Dict[str, score_statistics.ScoreStatistics]
+    test_results: list[test_result.TestResult]
+    aggregated_scores: dict[str, score_statistics.ScoreStatistics]
 
 
 @dataclasses.dataclass
 class EvaluationResult:
     experiment_id: str
     dataset_id: str
-    experiment_name: Optional[str]
-    test_results: List[test_result.TestResult]
-    experiment_url: Optional[str]
+    experiment_name: str | None
+    test_results: list[test_result.TestResult]
+    experiment_url: str | None
     trial_count: int
-    experiment_scores: List[score_result.ScoreResult] = dataclasses.field(
+    experiment_scores: list[score_result.ScoreResult] = dataclasses.field(
         default_factory=list
     )
 
@@ -122,7 +122,7 @@ class EvaluationResult:
             dataset_items=dataset_items,
         )
 
-    def _build_results_per_dataset_item(self) -> Dict[str, DatasetItemResults]:
+    def _build_results_per_dataset_item(self) -> dict[str, DatasetItemResults]:
         """
         Build dataset item results with aggregated score statistics.
 
@@ -165,11 +165,11 @@ class EvaluationResultOnDictItems:
         test_results: Collection of test results from the evaluation.
     """
 
-    test_results: List[test_result.TestResult]
+    test_results: list[test_result.TestResult]
 
     def aggregate_evaluation_scores(
         self,
-    ) -> Dict[str, score_statistics.ScoreStatistics]:
+    ) -> dict[str, score_statistics.ScoreStatistics]:
         """
         Aggregates evaluation scores from test results.
 

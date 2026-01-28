@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any, List, TypeVar, Type, Union
+from typing import Optional, Any, TypeVar, Union
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
@@ -26,18 +26,18 @@ FilterParsedItemT = TypeVar(
         trace_thread_filter.TraceThreadFilter,
     ],
 )
-OptionalFilterParsedItemList = Optional[List[FilterParsedItemT]]
+OptionalFilterParsedItemList = Optional[list[FilterParsedItemT]]
 
 ScoreMessageT = TypeVar(
     "ScoreMessageT",
     bound=Union[messages.FeedbackScoreMessage, messages.ThreadsFeedbackScoreMessage],
 )
-OptionalScoreMessageList = Optional[List[ScoreMessageT]]
+OptionalScoreMessageList = Optional[list[ScoreMessageT]]
 
 
 def datetime_to_iso8601_if_not_None(
-    value: Optional[datetime.datetime],
-) -> Optional[str]:
+    value: datetime.datetime | None,
+) -> str | None:
     if value is None:
         return None
 
@@ -45,10 +45,10 @@ def datetime_to_iso8601_if_not_None(
 
 
 def resolve_child_span_project_name(
-    parent_project_name: Optional[str],
-    child_project_name: Optional[str],
+    parent_project_name: str | None,
+    child_project_name: str | None,
     show_warning: bool = True,
-) -> Optional[str]:
+) -> str | None:
     if parent_project_name != child_project_name:
         # if the user has specified a project name -> print warning
         if show_warning and child_project_name is not None:
@@ -77,10 +77,10 @@ def resolve_child_span_project_name(
 
 
 def add_usage_to_metadata(
-    usage: Optional[Dict[str, Any]],
-    metadata: Optional[Dict[str, Any]],
+    usage: dict[str, Any] | None,
+    metadata: dict[str, Any] | None,
     create_metadata: bool = False,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     if usage is None:
         return metadata
 
@@ -103,8 +103,8 @@ def add_usage_to_metadata(
 
 
 def parse_filter_expressions(
-    filter_string: Optional[str],
-    parsed_item_class: Type[FilterParsedItemT],
+    filter_string: str | None,
+    parsed_item_class: type[FilterParsedItemT],
 ) -> OptionalFilterParsedItemList:
     """
     Parses filter expressions from a filter string using a specified class for parsed items.
@@ -135,8 +135,8 @@ def parse_filter_expressions(
 
 
 def parse_search_expressions(
-    filter_expressions: Optional[List[Dict[str, Any]]],
-    parsed_item_class: Type[FilterParsedItemT],
+    filter_expressions: list[dict[str, Any]] | None,
+    parsed_item_class: type[FilterParsedItemT],
 ) -> OptionalFilterParsedItemList:
     if filter_expressions is None:
         return None
@@ -145,9 +145,9 @@ def parse_search_expressions(
 
 
 def parse_feedback_score_messages(
-    scores: List[BatchFeedbackScoreDict],
+    scores: list[BatchFeedbackScoreDict],
     project_name: str,
-    parsed_item_class: Type[ScoreMessageT],
+    parsed_item_class: type[ScoreMessageT],
     logger: logging.Logger,
 ) -> OptionalScoreMessageList:
     valid_scores = [

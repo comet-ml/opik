@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import opik.api_objects.span as span
 import opik.integrations.langchain.opik_tracer as opik_tracer_module
@@ -8,8 +8,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 def extract_current_langgraph_span_data(
-    runnable_config: Dict[str, Any],
-) -> Optional[span.SpanData]:
+    runnable_config: dict[str, Any],
+) -> span.SpanData | None:
     """
     Extract current span data for async LangGraph nodes.
 
@@ -115,7 +115,7 @@ def extract_current_langgraph_span_data(
 
 def _find_opik_tracer(
     handlers: list,
-) -> Optional[opik_tracer_module.OpikTracer]:
+) -> opik_tracer_module.OpikTracer | None:
     """
     Find OpikTracer instance in the list of handlers.
 

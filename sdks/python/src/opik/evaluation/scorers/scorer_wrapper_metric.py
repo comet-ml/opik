@@ -1,4 +1,5 @@
-from typing import Any, Callable, Dict, Optional, List, Union
+from typing import Any
+from collections.abc import Callable
 
 from opik.evaluation.metrics import base_metric, score_result
 
@@ -35,7 +36,7 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
         scorer: scorer_function.ScorerFunction,
         name: str,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self.scorer = scorer
@@ -45,10 +46,10 @@ class ScorerWrapperMetric(base_metric.BaseMetric):
 
     def score(
         self,
-        dataset_item: Dict[str, Any],
-        task_outputs: Dict[str, Any],
+        dataset_item: dict[str, Any],
+        task_outputs: dict[str, Any],
         **kwargs: Any,
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
         """
         Score using the wrapped ScorerFunction.
 
@@ -69,7 +70,7 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
         scorer: scorer_function.ScorerFunction,
         name: str,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         super().__init__(
             scorer=scorer, name=name, track=track, project_name=project_name
@@ -77,11 +78,11 @@ class ScorerWrapperMetricTaskSpan(ScorerWrapperMetric):
 
     def score(
         self,
-        dataset_item: Dict[str, Any],
-        task_outputs: Dict[str, Any],
-        task_span: Optional[models.SpanModel] = None,
+        dataset_item: dict[str, Any],
+        task_outputs: dict[str, Any],
+        task_span: models.SpanModel | None = None,
         **kwargs: Any,
-    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
         """
         Score using the wrapped ScorerFunction.
 
@@ -111,9 +112,9 @@ def _scorer_name(scorer: Callable) -> str:
 
 
 def wrap_scorer_functions(
-    scorer_functions: List[scorer_function.ScorerFunction], project_name: Optional[str]
-) -> List[base_metric.BaseMetric]:
-    metrics: List[base_metric.BaseMetric] = []
+    scorer_functions: list[scorer_function.ScorerFunction], project_name: str | None
+) -> list[base_metric.BaseMetric]:
+    metrics: list[base_metric.BaseMetric] = []
     for f in scorer_functions:
         name = _scorer_name(f)
         if scorer_function.has_task_span_in_parameters(f):

@@ -1,12 +1,12 @@
 """Base types and protocols for chunk aggregators."""
 
-from typing import Any, Dict, List, Protocol
+from typing import Any, Protocol
 
 
 class ChunkAggregator(Protocol):
     """Protocol for chunk aggregators."""
 
-    def aggregate(self, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def aggregate(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Aggregate streaming chunks in the format native to the provider.
 

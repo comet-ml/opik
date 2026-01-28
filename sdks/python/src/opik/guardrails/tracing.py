@@ -1,14 +1,7 @@
 from typing import (
-    List,
-    Optional,
-    Callable,
-    AsyncGenerator,
-    Generator,
-    Union,
     Any,
-    Dict,
-    Tuple,
 )
+from collections.abc import Callable, AsyncGenerator, Generator
 
 
 from opik.decorator import (
@@ -27,8 +20,8 @@ class GuardrailsTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Optional[Tuple],
-        kwargs: Optional[Dict[str, Any]],
+        args: tuple | None,
+        kwargs: dict[str, Any] | None,
     ) -> arguments_helpers.StartSpanParameters:
         assert isinstance(kwargs, dict)
 
@@ -56,6 +49,6 @@ class GuardrailsTrackDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Optional[Union[Generator, AsyncGenerator]]:
+        generations_aggregator: Callable[[list[Any]], str] | None,
+    ) -> Generator | AsyncGenerator | None:
         return super()._streams_handler(output, capture_output, generations_aggregator)

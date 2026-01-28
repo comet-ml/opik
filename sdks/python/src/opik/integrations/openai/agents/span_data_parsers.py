@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any, Dict, Optional
+from typing import Any
 import logging
 
 from agents import tracing
@@ -42,12 +42,12 @@ def _span_name(openai_span_data: tracing.SpanData) -> str:
 class ParsedSpanData:
     name: str
     type: SpanType
-    input: Optional[Dict[str, Any]] = None
-    output: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    usage: Optional[llm_usage.OpikUsage] = None
-    model: Optional[str] = None
-    provider: Optional[LLMProvider] = None
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+    usage: llm_usage.OpikUsage | None = None
+    model: str | None = None
+    provider: LLMProvider | None = None
 
 
 def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:

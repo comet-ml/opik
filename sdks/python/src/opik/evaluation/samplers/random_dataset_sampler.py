@@ -1,5 +1,4 @@
 import random
-from typing import List, Optional
 
 from opik.api_objects.dataset import dataset_item
 
@@ -8,7 +7,7 @@ from . import base_dataset_sampler
 
 class RandomDatasetSampler(base_dataset_sampler.BaseDatasetSampler):
     def __init__(
-        self, max_samples: int, shuffle: bool = True, seed: Optional[int] = None
+        self, max_samples: int, shuffle: bool = True, seed: int | None = None
     ) -> None:
         """Samples a random subset of dataset items.
 
@@ -28,8 +27,8 @@ class RandomDatasetSampler(base_dataset_sampler.BaseDatasetSampler):
         self.seed = seed
 
     def sample(
-        self, data_items: List[dataset_item.DatasetItem]
-    ) -> List[dataset_item.DatasetItem]:
+        self, data_items: list[dataset_item.DatasetItem]
+    ) -> list[dataset_item.DatasetItem]:
         if len(data_items) == 0:
             return []
 

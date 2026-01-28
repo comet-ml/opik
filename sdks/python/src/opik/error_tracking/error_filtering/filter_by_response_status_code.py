@@ -1,10 +1,9 @@
-from typing import List, Optional
 from ..types import Event, Hint
 from . import event_filter
 
 
 class FilterByResponseStatusCode(event_filter.EventFilter):
-    def __init__(self, status_codes_to_drop: List[int]):
+    def __init__(self, status_codes_to_drop: list[int]):
         super().__init__()
 
         self._status_codes_to_drop = status_codes_to_drop
@@ -21,14 +20,14 @@ class FilterByResponseStatusCode(event_filter.EventFilter):
         return True
 
 
-def _try_get_status_code_from_error_tracking_extra(event: Event) -> Optional[int]:
+def _try_get_status_code_from_error_tracking_extra(event: Event) -> int | None:
     try:
         return event["extra"]["error_tracking_extra"]["status_code"]
     except Exception:
         return None
 
 
-def _try_get_status_code_from_raised_exception(hint: Hint) -> Optional[int]:
+def _try_get_status_code_from_raised_exception(hint: Hint) -> int | None:
     try:
         if "exc_info" not in hint:
             return None

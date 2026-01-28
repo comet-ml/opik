@@ -1,5 +1,6 @@
 import logging
-from typing import Callable, Dict, Type, Any
+from typing import Any
+from collections.abc import Callable
 
 import pydantic
 import tenacity
@@ -34,7 +35,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self._batch_memory_limit_mb = batch_memory_limit_mb
         self._is_active = active
 
-        self._handlers: Dict[Type, MessageProcessingHandler] = {
+        self._handlers: dict[type, MessageProcessingHandler] = {
             messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
             messages.CreateTraceMessage: self._process_create_trace_message,  # type: ignore
             messages.UpdateSpanMessage: self._process_update_span_message,  # type: ignore
@@ -309,8 +310,8 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
 
 def _generate_error_tracking_extra(
     exception: Exception, message: messages.BaseMessage
-) -> Dict[str, Any]:
-    result: Dict[str, Any] = {"exception": exception}
+) -> dict[str, Any]:
+    result: dict[str, Any] = {"exception": exception}
 
     if isinstance(exception, rest_api_core.ApiError):
         fingerprint = [

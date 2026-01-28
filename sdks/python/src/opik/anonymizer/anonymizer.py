@@ -1,7 +1,7 @@
 import abc
-from typing import Dict, Any, Union, List
+from typing import Any, Union
 
-AnonymizerDataType = Union[Dict[str, Any], str, List[Any]]
+AnonymizerDataType = Union[dict[str, Any], str, list[Any]]
 
 
 class Anonymizer(abc.ABC):

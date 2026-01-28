@@ -7,7 +7,7 @@ new releases move the helper again.
 """
 
 import importlib
-from typing import Callable, List
+from collections.abc import Callable
 
 import pytest
 
@@ -87,7 +87,7 @@ def test_convert_to_langchain_messages_rejects_unknown_roles() -> None:
         convert_to_langchain_messages([{"role": "critic", "content": "text"}])
 
 
-def _resolve_messages_to_dict() -> Callable[[List[HumanMessage]], List[dict]]:
+def _resolve_messages_to_dict() -> Callable[[list[HumanMessage]], list[dict]]:
     candidates = [
         ("langchain.schema", "messages_to_dict"),
         ("langchain_core.messages.utils", "messages_to_dict"),

@@ -41,7 +41,7 @@ def index_documents_directory():
     TEXT = "Before college the two main things I worked on, outside of school, were writing and programming."
     os.makedirs(directory_name, exist_ok=True)
     try:
-        with open("./data/paul_graham/paul_graham_essay.txt", "wt") as f:
+        with open("./data/paul_graham/paul_graham_essay.txt", "w") as f:
             f.write(TEXT)
 
         yield directory_name

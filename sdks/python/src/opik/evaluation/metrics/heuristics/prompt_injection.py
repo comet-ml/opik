@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Iterable, List, Optional
+from typing import Any
+from collections.abc import Iterable
 
 from opik.evaluation import preprocessing
 from opik.evaluation.metrics.base_metric import BaseMetric
@@ -105,9 +106,9 @@ class PromptInjection(BaseMetric):
         self,
         name: str = "prompt_injection",
         track: bool = True,
-        project_name: Optional[str] = None,
-        patterns: Optional[Iterable[str]] = None,
-        keywords: Optional[Iterable[str]] = None,
+        project_name: str | None = None,
+        patterns: Iterable[str] | None = None,
+        keywords: Iterable[str] | None = None,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)
         self._patterns = [
@@ -122,7 +123,7 @@ class PromptInjection(BaseMetric):
                 value=0.0, name=self.name, reason="Empty output", metadata={}
             )
 
-        matches: List[str] = []
+        matches: list[str] = []
         for pattern in self._patterns:
             if pattern.search(processed):
                 matches.append(pattern.pattern)

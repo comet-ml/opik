@@ -3,7 +3,6 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
 
 import opik
 from rich.console import Console
@@ -18,10 +17,10 @@ def import_projects_from_directory(
     client: opik.Opik,
     source_dir: Path,
     dry_run: bool,
-    name_pattern: Optional[str],
+    name_pattern: str | None,
     debug: bool,
     recreate_experiments_flag: bool = False,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Import projects from a directory.
 
     Returns:
@@ -49,7 +48,7 @@ def import_projects_from_directory(
             try:
                 project_name = project_dir.name
                 # Maintain a per-project mapping from original -> new trace ids
-                trace_id_map: Dict[str, str] = {}
+                trace_id_map: dict[str, str] = {}
 
                 # Filter by name pattern if specified
                 if name_pattern and not matches_name_pattern(
@@ -77,7 +76,7 @@ def import_projects_from_directory(
 
                 for trace_file in trace_files:
                     try:
-                        with open(trace_file, "r", encoding="utf-8") as f:
+                        with open(trace_file, encoding="utf-8") as f:
                             trace_data = json.load(f)
 
                         # Import trace and spans
@@ -122,7 +121,7 @@ def import_projects_from_directory(
 
                         # Create spans with full data, preserving parent-child relationships
                         # Build span_id_map to translate parent_span_id references
-                        span_id_map: Dict[
+                        span_id_map: dict[
                             str, str
                         ] = {}  # Maps original span ID to new span ID
 

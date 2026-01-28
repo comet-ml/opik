@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 from unittest import mock
 import pytest
 
@@ -49,7 +49,7 @@ def test_evaluate__happyflow(
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         if dataset_item["input"]["message"] == "say hello":
             return {"output": "hello"}
 
@@ -283,7 +283,7 @@ def test_evaluate_with_scoring_key_mapping(
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         if dataset_item["input"]["message"] == "say hello":
             return {"result": "hello"}
 
@@ -522,7 +522,7 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         if dataset_item["input"]["message"] == "say hello":
             return {
                 "the-key-that-is-not-named-output": "hello",
@@ -576,7 +576,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         raise Exception("some-error-message")
 
     mock_experiment = mock.Mock()
@@ -705,7 +705,7 @@ def test_evaluate__with_random_sampler__happy_flow(
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         if dataset_item["reference"] == "hello":
             return {"output": "hello"}
 
@@ -808,7 +808,7 @@ def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
@@ -889,7 +889,7 @@ def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
@@ -975,7 +975,7 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
@@ -1298,7 +1298,7 @@ def test_evaluate__aggregated_metric__happy_flow(
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         if dataset_item["input"]["message"] == "say hello":
             return {"output": "hello"}
 
@@ -1314,7 +1314,7 @@ def test_evaluate__aggregated_metric__happy_flow(
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
 
-    def aggregator(results: List[score_result.ScoreResult]) -> score_result.ScoreResult:
+    def aggregator(results: list[score_result.ScoreResult]) -> score_result.ScoreResult:
         value = sum([result.value for result in results])
         return score_result.ScoreResult(name="aggregated_metric_result", value=value)
 
@@ -1760,7 +1760,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         if dataset_item["input"]["message"] == "say hello":
             return {"output": "hello"}
 
@@ -2069,7 +2069,7 @@ def test_evaluate__with_experiment_scores(fake_backend):
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         return {"output": "hello"}
 
     # Create a real Experiment instance with mocked dependencies
@@ -2094,7 +2094,7 @@ def test_evaluate__with_experiment_scores(fake_backend):
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
 
-    def compute_accuracy_stats(test_results: List) -> List[score_result.ScoreResult]:
+    def compute_accuracy_stats(test_results: list) -> list[score_result.ScoreResult]:
         """Compute max accuracy across all test results."""
         accuracy_scores = [
             score.value
@@ -2155,7 +2155,7 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter([])
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
@@ -2167,7 +2167,7 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
 
-    def compute_accuracy_stats(test_results: List) -> List[score_result.ScoreResult]:
+    def compute_accuracy_stats(test_results: list) -> list[score_result.ScoreResult]:
         """Compute max accuracy across all test results."""
         return [
             score_result.ScoreResult(
@@ -2407,14 +2407,14 @@ def test_evaluate_on_dict_items__with_scoring_functions(fake_backend):
         {"input": "What is 3+3?", "expected_output": "6"},
     ]
 
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+    def task(item: dict[str, Any]) -> dict[str, Any]:
         if "2+2" in item["input"]:
             return {"output": "4"}
         return {"output": "6"}
 
     def custom_scorer(
-        dataset_item: Dict[str, Any],
-        task_outputs: Dict[str, Any],
+        dataset_item: dict[str, Any],
+        task_outputs: dict[str, Any],
     ) -> score_result.ScoreResult:
         expected = dataset_item.get("expected_output", "")
         actual = task_outputs.get("output", "")
@@ -2482,7 +2482,7 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
@@ -2535,7 +2535,7 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
@@ -2594,7 +2594,7 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()
@@ -2659,7 +2659,7 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
         ]
     )
 
-    def say_task(dataset_item: Dict[str, Any]):
+    def say_task(dataset_item: dict[str, Any]):
         return {"output": "hello"}
 
     mock_experiment = mock.Mock()

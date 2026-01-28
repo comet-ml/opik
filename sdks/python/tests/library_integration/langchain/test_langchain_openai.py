@@ -165,8 +165,7 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
     chain = prompt_template | model
 
     def stream_generator(chain, inputs):
-        for chunk in chain.stream(inputs, config={"callbacks": [callback]}):
-            yield chunk
+        yield from chain.stream(inputs, config={"callbacks": [callback]})
 
     def invoke_generator(chain, inputs):
         for chunk in stream_generator(chain, inputs):
@@ -382,8 +381,7 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
     chain = prompt_template | model
 
     def stream_generator(chain, inputs):
-        for chunk in chain.stream(inputs, config={"callbacks": [callback]}):
-            yield chunk
+        yield from chain.stream(inputs, config={"callbacks": [callback]})
 
     def invoke_generator(chain, inputs):
         for chunk in stream_generator(chain, inputs):

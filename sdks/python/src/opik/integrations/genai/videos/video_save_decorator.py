@@ -5,7 +5,8 @@ Tracks video saves with attachments.
 """
 
 import functools
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import Callable
 
 import opik
 from opik.api_objects import attachment
@@ -16,9 +17,9 @@ if TYPE_CHECKING:
 
 def patch_videos_save(
     operation: "GenerateVideosOperation",
-    project_name: Optional[str],
-    tags: Optional[List[str]],
-    metadata: Optional[Dict[str, Any]],
+    project_name: str | None,
+    tags: list[str] | None,
+    metadata: dict[str, Any] | None,
     upload_video: bool,
 ) -> None:
     """Patch save method on all videos in the operation response."""
@@ -51,16 +52,16 @@ def patch_videos_save(
 
 
 def _create_video_save_decorator(
-    project_name: Optional[str],
-    tags: Optional[List[str]],
-    metadata: Optional[Dict[str, Any]],
+    project_name: str | None,
+    tags: list[str] | None,
+    metadata: dict[str, Any] | None,
     upload_video: bool,
 ) -> Callable[[Callable[[str], None]], Callable[[str], None]]:
     """Create a decorator that tracks Video.save calls."""
 
     def decorator(func: Callable[[str], None]) -> Callable[[str], None]:
         @functools.wraps(func)
-        def wrapper(file: str) -> Any:
+        def wrapper(file: str) -> None:
             with opik.start_as_current_span(
                 name="video.save",
                 input={"file": str(file)},
@@ -69,7 +70,7 @@ def _create_video_save_decorator(
                 type="general",
                 project_name=project_name,
             ) as span_data:
-                result = func(file)
+                func(file)
                 if upload_video:
                     span_data.update(
                         attachments=[
@@ -78,7 +79,7 @@ def _create_video_save_decorator(
                             )
                         ]
                     )
-                return result
+                return None
 
         return wrapper
 

@@ -1,6 +1,6 @@
 import random
 import string
-from typing import Any, Dict, Optional
+from typing import Any
 
 import pytest
 
@@ -14,9 +14,9 @@ from opik.api_objects.prompt.chat.content_renderer_registry import (
 def _render_content(
     content: Any,
     *,
-    variables: Optional[Dict[str, Any]] = None,
-    supported_modalities: Optional[Dict[str, bool]] = None,
-    registry: Optional[ChatContentRendererRegistry] = None,
+    variables: dict[str, Any] | None = None,
+    supported_modalities: dict[str, bool] | None = None,
+    registry: ChatContentRendererRegistry | None = None,
 ) -> Any:
     template = ChatPromptTemplate(
         messages=[{"role": "user", "content": content}],
@@ -190,8 +190,8 @@ class TestChatPromptTemplate:
         custom_part = {"type": "thumbnail", "image_url": {"url": "{{thumb_url}}"}}
 
         def _render_thumbnail(
-            part: Dict[str, Any], variables: Dict[str, Any], template_type: Any
-        ) -> Dict[str, Any]:
+            part: dict[str, Any], variables: dict[str, Any], template_type: Any
+        ) -> dict[str, Any]:
             rendered = chat_prompt_template.render_image_url_part(
                 part, variables, template_type
             )

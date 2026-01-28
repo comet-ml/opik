@@ -1,5 +1,4 @@
 import json
-from typing import List, Optional
 
 from . import experiment_item
 from .. import rest_stream_parser
@@ -25,8 +24,8 @@ def get_experiment_data_by_name(
 def get_experiments_data_by_name(
     rest_client: rest_api.OpikApi,
     name: str,
-    max_results: Optional[int] = None,
-) -> List[experiment_public.ExperimentPublic]:
+    max_results: int | None = None,
+) -> list[experiment_public.ExperimentPublic]:
     experiments = rest_stream_parser.read_and_parse_full_stream(
         read_source=lambda current_batch_size,
         last_retrieved_id: rest_client.experiments.stream_experiments(
@@ -49,14 +48,14 @@ def get_experiments_data_by_name(
 def find_experiment_items_for_dataset(
     rest_client: rest_api.OpikApi,
     dataset_id: str,
-    experiment_ids: List[str],
+    experiment_ids: list[str],
     max_results: int,
     truncate: bool,
-    filter_expression: Optional[str] = None,
-) -> List[experiment_item.ExperimentItemContent]:
+    filter_expression: str | None = None,
+) -> list[experiment_item.ExperimentItemContent]:
     PAGE_SIZE = 100
 
-    collected_items: List[experiment_item.ExperimentItemContent] = []
+    collected_items: list[experiment_item.ExperimentItemContent] = []
     experiment_ids_json = json.dumps(experiment_ids)
 
     page_number = 1

@@ -1,9 +1,9 @@
-from typing import Dict, Any
+from typing import Any
 
 from ...testlib import assert_dict_has_keys
 
 
-def assert_usage_validity(usage: Dict[str, Any]):
+def assert_usage_validity(usage: dict[str, Any]):
     required_usage_keys = [
         "completion_tokens",
         "prompt_tokens",

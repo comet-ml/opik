@@ -1,4 +1,4 @@
-from typing import Union, Optional, List, Any
+from typing import Any
 import pydantic
 from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result, base_metric
@@ -12,7 +12,7 @@ class FactualityResponseFormatClaim(pydantic.BaseModel):
     reason: str
 
 
-FactualityResponseFormat = List[FactualityResponseFormatClaim]
+FactualityResponseFormat = list[FactualityResponseFormatClaim]
 
 
 class Factuality(base_metric.BaseMetric):
@@ -42,11 +42,11 @@ class Factuality(base_metric.BaseMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "FactualityMetric",
-        few_shot_examples: Optional[List[template.FewShotExampleFactuality]] = None,
+        few_shot_examples: list[template.FewShotExampleFactuality] | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         super().__init__(
             name=name,
@@ -57,16 +57,14 @@ class Factuality(base_metric.BaseMetric):
         self._init_model(model)
         self.few_shot_examples = few_shot_examples or template.FEW_SHOT_EXAMPLES
 
-    def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]]
-    ) -> None:
+    def _init_model(self, model: str | base_model.OpikBaseModel | None) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
             self._model = models_factory.get(model_name=model, track=self.track)
 
     def score(
-        self, input: str, output: str, context: List[str], **ignored_kwargs: Any
+        self, input: str, output: str, context: list[str], **ignored_kwargs: Any
     ) -> score_result.ScoreResult:
         """
         Calculate the factuality score for the given input-output pair and context.
@@ -94,7 +92,7 @@ class Factuality(base_metric.BaseMetric):
         return parser.parse_model_output(content=model_output, name=self.name)
 
     async def ascore(
-        self, input: str, output: str, context: List[str], **ignored_kwargs: Any
+        self, input: str, output: str, context: list[str], **ignored_kwargs: Any
     ) -> score_result.ScoreResult:
         """
         Asynchronously calculate the factuality score for the given input-output pair and context.

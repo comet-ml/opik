@@ -1,4 +1,5 @@
-from typing import Any, Callable, Optional, Sequence, Union
+from typing import Any
+from collections.abc import Callable, Sequence
 
 from opik.exceptions import MetricComputationError
 from opik.evaluation.metrics import base_metric, score_result
@@ -46,12 +47,12 @@ class GLEU(base_metric.BaseMetric):
 
     def __init__(
         self,
-        gleu_fn: Optional[GleuFn] = None,
+        gleu_fn: GleuFn | None = None,
         min_len: int = 1,
         max_len: int = 4,
         name: str = "gleu_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         if min_len <= 0 or max_len <= 0:
             raise ValueError("min_len and max_len must be positive integers.")
@@ -86,7 +87,7 @@ class GLEU(base_metric.BaseMetric):
     def score(
         self,
         output: str,
-        reference: Union[str, Sequence[str]],
+        reference: str | Sequence[str],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         if not output.strip():

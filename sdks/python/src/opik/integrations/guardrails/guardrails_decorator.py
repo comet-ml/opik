@@ -1,15 +1,8 @@
 import logging
 from typing import (
     Any,
-    AsyncGenerator,
-    Callable,
-    Dict,
-    Generator,
-    List,
-    Optional,
-    Tuple,
-    Union,
 )
+from collections.abc import AsyncGenerator, Callable, Generator
 from typing_extensions import override
 
 from guardrails import validators
@@ -29,8 +22,8 @@ class GuardrailsValidatorValidateDecorator(base_track_decorator.BaseTrackDecorat
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
         name = track_options.name if track_options.name is not None else func.__name__
         metadata = track_options.metadata if track_options.metadata is not None else {}
@@ -87,6 +80,6 @@ class GuardrailsValidatorValidateDecorator(base_track_decorator.BaseTrackDecorat
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], str]],
-    ) -> Optional[Union[Generator, AsyncGenerator]]:
+        generations_aggregator: Callable[[list[Any]], str] | None,
+    ) -> Generator | AsyncGenerator | None:
         return super()._streams_handler(output, capture_output, generations_aggregator)

@@ -1,10 +1,7 @@
-from typing import List, Optional
-
-
 class ValidationResult:
-    def __init__(self, failed: bool, failure_reasons: Optional[List[str]] = None):
+    def __init__(self, failed: bool, failure_reasons: list[str] | None = None):
         self._failed = failed
-        self._failure_reasons: List[str] = (
+        self._failure_reasons: list[str] = (
             failure_reasons if failure_reasons is not None else []
         )
 
@@ -15,7 +12,7 @@ class ValidationResult:
         return not self._failed
 
     @property
-    def failure_reasons(self) -> List[str]:
+    def failure_reasons(self) -> list[str]:
         return self._failure_reasons
 
     def __bool__(self) -> bool:

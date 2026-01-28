@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # *******************************************************
 #   ____                     _               _
 #  / ___|___  _ __ ___   ___| |_   _ __ ___ | |
@@ -13,7 +12,7 @@
 # *******************************************************
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from ..logging_messages import (
     PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES,
@@ -39,25 +38,25 @@ class OpikApiKey:
     def __init__(
         self,
         api_key_raw: str,
-        api_key: Optional[str] = None,
-        attributes: Optional[Dict[str, Any]] = None,
+        api_key: str | None = None,
+        attributes: dict[str, Any] | None = None,
     ):
         self._api_key_raw = api_key_raw
         self._api_key = api_key
         self._attributes = attributes
 
     @property
-    def api_key(self) -> Optional[str]:
+    def api_key(self) -> str | None:
         return self._api_key_raw
 
     @property
-    def short_api_key(self) -> Optional[str]:
+    def short_api_key(self) -> str | None:
         if self._api_key is not None:
             return self._api_key
         return self._api_key_raw
 
     @property
-    def base_url(self) -> Optional[str]:
+    def base_url(self) -> str | None:
         if self["baseUrl"] is not None:
             return str(self["baseUrl"])
         else:
@@ -70,7 +69,7 @@ class OpikApiKey:
         return None
 
 
-def parse_api_key(raw_key: str) -> Optional[OpikApiKey]:
+def parse_api_key(raw_key: str) -> OpikApiKey | None:
     if raw_key is None or len(raw_key) == 0:
         LOGGER.debug(PARSE_API_KEY_EMPTY_KEY)
         return None

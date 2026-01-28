@@ -1,7 +1,7 @@
 import time
 import abc
 
-from typing import List, Callable
+from collections.abc import Callable
 from .. import messages
 
 
@@ -18,7 +18,7 @@ class BaseBatcher(abc.ABC):
     ):
         self._flush_interval_seconds: float = flush_interval_seconds
         self._flush_callback: Callable[[messages.BaseMessage], None] = flush_callback
-        self._accumulated_messages: List[messages.BaseMessage] = []
+        self._accumulated_messages: list[messages.BaseMessage] = []
         self._max_batch_size: int = max_batch_size
         self._batch_memory_limit_mb: int = batch_memory_limit_mb
 
@@ -43,7 +43,7 @@ class BaseBatcher(abc.ABC):
     @abc.abstractmethod
     def _create_batches_from_accumulated_messages(
         self,
-    ) -> List[messages.BaseMessage]: ...
+    ) -> list[messages.BaseMessage]: ...
 
     @abc.abstractmethod
     def add(self, message: messages.BaseMessage) -> None:

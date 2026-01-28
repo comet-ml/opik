@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from opik import llm_usage
 from . import (
@@ -15,7 +15,7 @@ from . import provider_usage_extractor_protocol
 
 LOGGER = logging.getLogger(__name__)
 
-_REGISTERED_PROVIDER_USAGE_EXTRACTORS: List[
+_REGISTERED_PROVIDER_USAGE_EXTRACTORS: list[
     provider_usage_extractor_protocol.ProviderUsageExtractorProtocol
 ] = [
     openai_usage_extractor.OpenAIUsageExtractor(),
@@ -29,8 +29,8 @@ _REGISTERED_PROVIDER_USAGE_EXTRACTORS: List[
 
 
 def try_extract_provider_usage_data(
-    run_dict: Dict[str, Any],
-) -> Optional[llm_usage.LLMUsageInfo]:
+    run_dict: dict[str, Any],
+) -> llm_usage.LLMUsageInfo | None:
     for extractor in _REGISTERED_PROVIDER_USAGE_EXTRACTORS:
         if not extractor.is_provider_run(run_dict):
             continue

@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 import aisuite
 import pytest
@@ -35,7 +35,7 @@ EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
 }
 
 
-def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
+def _assert_metadata_contains_required_keys(metadata: dict[str, Any]):
     REQUIRED_METADATA_KEYS = [
         "usage",
         "model",

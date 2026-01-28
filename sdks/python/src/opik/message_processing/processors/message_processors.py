@@ -1,6 +1,6 @@
 import abc
 import logging
-from typing import List, Optional, TypeVar, Type
+from typing import TypeVar
 
 from .. import messages
 
@@ -33,14 +33,14 @@ class ChainedMessageProcessor(BaseMessageProcessor):
     the chain.
     """
 
-    def __init__(self, processors: List[BaseMessageProcessor]) -> None:
+    def __init__(self, processors: list[BaseMessageProcessor]) -> None:
         self._processors = processors
 
     def is_active(self) -> bool:
         return True
 
     def process(self, message: messages.BaseMessage) -> None:
-        rate_limit_error: Optional[opik.exceptions.OpikCloudRequestsRateLimited] = None
+        rate_limit_error: opik.exceptions.OpikCloudRequestsRateLimited | None = None
 
         for processor in self._processors:
             try:
@@ -59,7 +59,7 @@ class ChainedMessageProcessor(BaseMessageProcessor):
         if rate_limit_error is not None:
             raise rate_limit_error
 
-    def get_processor_by_type(self, processor_type: Type[T]) -> Optional[T]:
+    def get_processor_by_type(self, processor_type: type[T]) -> T | None:
         """
         Retrieves a processor from the available processors that matches the specified type.
 

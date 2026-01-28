@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import opik.exceptions as exceptions
 
@@ -60,7 +60,7 @@ class GEvalConversationMetric(ConversationThreadMetric):
     def __init__(
         self,
         judge: BaseMetric,
-        name: Optional[str] = None,
+        name: str | None = None,
     ) -> None:
         super().__init__(
             name=name or f"conversation_{judge.name}",
@@ -175,9 +175,9 @@ class ConversationComplianceRiskMetric(GEvalConversationMetric):
 
     def __init__(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
@@ -223,9 +223,9 @@ class ConversationDialogueHelpfulnessMetric(GEvalConversationMetric):
 
     def __init__(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
@@ -271,9 +271,9 @@ class ConversationQARelevanceMetric(GEvalConversationMetric):
 
     def __init__(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
@@ -320,9 +320,9 @@ class ConversationSummarizationCoherenceMetric(GEvalConversationMetric):
 
     def __init__(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
@@ -367,9 +367,9 @@ class ConversationSummarizationConsistencyMetric(GEvalConversationMetric):
 
     def __init__(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(
@@ -415,9 +415,9 @@ class ConversationPromptUncertaintyMetric(GEvalConversationMetric):
 
     def __init__(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
         temperature: float = 0.0,
     ) -> None:
         super().__init__(

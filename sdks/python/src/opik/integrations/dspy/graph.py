@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 import dspy
 import string
 
@@ -11,18 +11,20 @@ classDef Tools fill:##D3D3D3
 
 
 def build_mermaid_graph_from_module(module: dspy.Module) -> str:
-    modules: Dict[str, Any] = {}
+    modules: dict[str, Any] = {}
     _get_dspy_module_heirarchy(module, modules)
     graph = ""
     queue = [modules]
-    states: Dict[str, Any] = {}
+    states: dict[str, Any] = {}
     while queue:
         current = queue.pop()
         graph += _get_mermaid_arrows(queue, current, states)
 
     if graph:
         for key in states:
-            graph += "class %s %s\n" % (states[key]["state_name"], states[key]["class"])
+            graph += "class {} {}\n".format(
+                states[key]["state_name"], states[key]["class"]
+            )
         graph += "class Tools Tools\n"
 
         return "graph TD\n" + graph + STYLES
@@ -30,26 +32,26 @@ def build_mermaid_graph_from_module(module: dspy.Module) -> str:
 
 
 def _get_mermaid_arrows(
-    queue: List[dspy.Module], current: Dict[str, Any], states: Dict[str, Any]
+    queue: list[dspy.Module], current: dict[str, Any], states: dict[str, Any]
 ) -> str:
     start = _get_mermaid_state(current, states)
     arrows = []
     for module in current["sub_data"]:
         end = _get_mermaid_state(module, states)
-        arrows.append("%s --> %s\n" % (start["text"], end["text"]))
+        arrows.append("{} --> {}\n".format(start["text"], end["text"]))
         queue.append(module)
     if "tools" in current["details"]:
-        arrows.append("%s --> Tools\n" % (start["text"],))
+        arrows.append("{} --> Tools\n".format(start["text"]))
         arrows.append("subgraph Tools[<b>Tools</b>]\n")
         for tool in current["details"]["tools"]:
-            arrows.append("    %s(<b>%s</b>)\n" % (tool, tool))
+            arrows.append(f"    {tool}(<b>{tool}</b>)\n")
         arrows.append("end\n")
     return "".join(arrows)
 
 
 def _get_mermaid_state(
-    current: Dict[str, Any], states: Dict[str, Any]
-) -> Dict[str, Any]:
+    current: dict[str, Any], states: dict[str, Any]
+) -> dict[str, Any]:
     if current["id"] not in states:
         state_name = string.ascii_uppercase[len(states)]
         state_text = "<b>%s</b>" % current["name"]
@@ -59,13 +61,13 @@ def _get_mermaid_state(
             ].replace("`", "'")
         states[current["id"]] = {
             "state_name": state_name,
-            "text": "%s(%s)" % (state_name, state_text),
+            "text": f"{state_name}({state_text})",
             "class": current["name"],
         }
     return states[current["id"]]
 
 
-def _get_dspy_module_heirarchy(module: dspy.Module, data: Dict[str, Any]) -> None:
+def _get_dspy_module_heirarchy(module: dspy.Module, data: dict[str, Any]) -> None:
     data["name"] = module.__class__.__name__
     data["id"] = id(module)
     data["details"] = {}
@@ -76,11 +78,11 @@ def _get_dspy_module_heirarchy(module: dspy.Module, data: Dict[str, Any]) -> Non
     data["sub_data"] = []
     for name, attribute in module.__dict__.items():
         if isinstance(attribute, dspy.Module):
-            sub_data: Dict[str, Any] = {}
+            sub_data: dict[str, Any] = {}
             _get_dspy_module_heirarchy(attribute, sub_data)
             data["sub_data"].append(sub_data)
         elif name == "lm":
-            lm_data: Dict[str, Any] = {}
+            lm_data: dict[str, Any] = {}
             lm_data["name"] = "LM"
             lm_data["id"] = id(attribute)
             lm_data["details"] = {}

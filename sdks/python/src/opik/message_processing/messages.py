@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 from dataclasses import field
-from typing import Optional, Any, Dict, List, Union, Literal, Set
+from typing import Any, Literal
 
 from . import arguments_utils
 from .preprocessing import constants
@@ -14,7 +14,7 @@ class BaseMessage:
     delivery_time: float = field(init=False, default=0.0)
     delivery_attempts: int = field(init=False, default=1)
 
-    def as_payload_dict(self) -> Dict[str, Any]:
+    def as_payload_dict(self) -> dict[str, Any]:
         # we are not using dataclasses.as_dict() here
         # because it will try to deepcopy all objects and will fail if there is a non-serializable object
         data = {**self.__dict__}
@@ -31,16 +31,16 @@ class BaseMessage:
 class CreateTraceMessage(BaseMessage):
     trace_id: str
     project_name: str
-    name: Optional[str]
+    name: str | None
     start_time: datetime.datetime
-    end_time: Optional[datetime.datetime]
-    input: Optional[Dict[str, Any]]
-    output: Optional[Dict[str, Any]]
-    metadata: Optional[Dict[str, Any]]
-    tags: Optional[List[str]]
-    error_info: Optional[ErrorInfoDict]
-    thread_id: Optional[str]
-    last_updated_at: Optional[datetime.datetime]
+    end_time: datetime.datetime | None
+    input: dict[str, Any] | None
+    output: dict[str, Any] | None
+    metadata: dict[str, Any] | None
+    tags: list[str] | None
+    error_info: ErrorInfoDict | None
+    thread_id: str | None
+    last_updated_at: datetime.datetime | None
 
     def __post_init__(self) -> None:
         if self.input is not None:
@@ -48,13 +48,13 @@ class CreateTraceMessage(BaseMessage):
         if self.output is not None:
             self.output = arguments_utils.recursive_shallow_copy(self.output)
 
-    def as_payload_dict(self) -> Dict[str, Any]:
+    def as_payload_dict(self) -> dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("trace_id")
         return data
 
     @staticmethod
-    def fields_to_anonymize() -> Set[str]:
+    def fields_to_anonymize() -> set[str]:
         return {"input", "output", "metadata"}
 
 
@@ -66,13 +66,13 @@ class UpdateTraceMessage(BaseMessage):
 
     trace_id: str
     project_name: str
-    end_time: Optional[datetime.datetime]
-    input: Optional[Dict[str, Any]]
-    output: Optional[Dict[str, Any]]
-    metadata: Optional[Dict[str, Any]]
-    tags: Optional[List[str]]
-    error_info: Optional[ErrorInfoDict]
-    thread_id: Optional[str]
+    end_time: datetime.datetime | None
+    input: dict[str, Any] | None
+    output: dict[str, Any] | None
+    metadata: dict[str, Any] | None
+    tags: list[str] | None
+    error_info: ErrorInfoDict | None
+    thread_id: str | None
 
     def __post_init__(self) -> None:
         if self.input is not None:
@@ -80,13 +80,13 @@ class UpdateTraceMessage(BaseMessage):
         if self.output is not None:
             self.output = arguments_utils.recursive_shallow_copy(self.output)
 
-    def as_payload_dict(self) -> Dict[str, Any]:
+    def as_payload_dict(self) -> dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("trace_id")
         return data
 
     @staticmethod
-    def fields_to_anonymize() -> Set[str]:
+    def fields_to_anonymize() -> set[str]:
         return {"input", "output", "metadata"}
 
 
@@ -95,21 +95,21 @@ class CreateSpanMessage(BaseMessage):
     span_id: str
     trace_id: str
     project_name: str
-    parent_span_id: Optional[str]
-    name: Optional[str]
+    parent_span_id: str | None
+    name: str | None
     start_time: datetime.datetime
-    end_time: Optional[datetime.datetime]
-    input: Optional[Dict[str, Any]]
-    output: Optional[Dict[str, Any]]
-    metadata: Optional[Dict[str, Any]]
-    tags: Optional[List[str]]
+    end_time: datetime.datetime | None
+    input: dict[str, Any] | None
+    output: dict[str, Any] | None
+    metadata: dict[str, Any] | None
+    tags: list[str] | None
     type: SpanType
-    usage: Optional[Dict[str, int]]
-    model: Optional[str]
-    provider: Optional[Union[LLMProvider, str]]
-    error_info: Optional[ErrorInfoDict]
-    total_cost: Optional[float]
-    last_updated_at: Optional[datetime.datetime]
+    usage: dict[str, int] | None
+    model: str | None
+    provider: LLMProvider | str | None
+    error_info: ErrorInfoDict | None
+    total_cost: float | None
+    last_updated_at: datetime.datetime | None
 
     def __post_init__(self) -> None:
         if self.input is not None:
@@ -117,14 +117,14 @@ class CreateSpanMessage(BaseMessage):
         if self.output is not None:
             self.output = arguments_utils.recursive_shallow_copy(self.output)
 
-    def as_payload_dict(self) -> Dict[str, Any]:
+    def as_payload_dict(self) -> dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("span_id")
         data["total_estimated_cost"] = data.pop("total_cost")
         return data
 
     @staticmethod
-    def fields_to_anonymize() -> Set[str]:
+    def fields_to_anonymize() -> set[str]:
         return {"input", "output", "metadata"}
 
 
@@ -133,19 +133,19 @@ class UpdateSpanMessage(BaseMessage):
     """Not recommended to use. Kept only for low level update operations in public API"""
 
     span_id: str
-    parent_span_id: Optional[str]
+    parent_span_id: str | None
     trace_id: str
     project_name: str
-    end_time: Optional[datetime.datetime]
-    input: Optional[Dict[str, Any]]
-    output: Optional[Dict[str, Any]]
-    metadata: Optional[Dict[str, Any]]
-    tags: Optional[List[str]]
-    usage: Optional[Dict[str, int]]
-    model: Optional[str]
-    provider: Optional[Union[LLMProvider, str]]
-    error_info: Optional[ErrorInfoDict]
-    total_cost: Optional[float]
+    end_time: datetime.datetime | None
+    input: dict[str, Any] | None
+    output: dict[str, Any] | None
+    metadata: dict[str, Any] | None
+    tags: list[str] | None
+    usage: dict[str, int] | None
+    model: str | None
+    provider: LLMProvider | str | None
+    error_info: ErrorInfoDict | None
+    total_cost: float | None
 
     def __post_init__(self) -> None:
         if self.input is not None:
@@ -153,14 +153,14 @@ class UpdateSpanMessage(BaseMessage):
         if self.output is not None:
             self.output = arguments_utils.recursive_shallow_copy(self.output)
 
-    def as_payload_dict(self) -> Dict[str, Any]:
+    def as_payload_dict(self) -> dict[str, Any]:
         data = super().as_payload_dict()
         data["id"] = data.pop("span_id")
         data["total_estimated_cost"] = data.pop("total_cost")
         return data
 
     @staticmethod
-    def fields_to_anonymize() -> Set[str]:
+    def fields_to_anonymize() -> set[str]:
         return {"input", "output", "metadata"}
 
 
@@ -176,13 +176,13 @@ class FeedbackScoreMessage(BaseMessage):
     name: str
     value: float
     source: str
-    reason: Optional[str] = None
-    category_name: Optional[str] = None
+    reason: str | None = None
+    category_name: str | None = None
 
 
 @dataclasses.dataclass
 class AddFeedbackScoresBatchMessage(BaseMessage):
-    batch: List[FeedbackScoreMessage]
+    batch: list[FeedbackScoreMessage]
     supports_batching: bool = True
 
 
@@ -203,7 +203,7 @@ class ThreadsFeedbackScoreMessage(FeedbackScoreMessage):
     only as an item of AddThreadsFeedbackScoresBatchMessage
     """
 
-    def as_payload_dict(self) -> Dict[str, Any]:
+    def as_payload_dict(self) -> dict[str, Any]:
         data = super().as_payload_dict()
         data["thread_id"] = data.pop("id")
         return data
@@ -211,25 +211,25 @@ class ThreadsFeedbackScoreMessage(FeedbackScoreMessage):
 
 @dataclasses.dataclass
 class AddThreadsFeedbackScoresBatchMessage(BaseMessage):
-    batch: List[ThreadsFeedbackScoreMessage]
+    batch: list[ThreadsFeedbackScoreMessage]
     supports_batching: bool = True
 
 
 @dataclasses.dataclass
 class CreateSpansBatchMessage(BaseMessage):
-    batch: List[span_write.SpanWrite]
+    batch: list[span_write.SpanWrite]
 
     @staticmethod
-    def fields_to_anonymize() -> Set[str]:
+    def fields_to_anonymize() -> set[str]:
         return {"input", "output", "metadata"}
 
 
 @dataclasses.dataclass
 class CreateTraceBatchMessage(BaseMessage):
-    batch: List[trace_write.TraceWrite]
+    batch: list[trace_write.TraceWrite]
 
     @staticmethod
-    def fields_to_anonymize() -> Set[str]:
+    def fields_to_anonymize() -> set[str]:
         return {"input", "output", "metadata"}
 
 
@@ -240,21 +240,21 @@ class GuardrailBatchItemMessage(BaseMessage):
     only as an item of BatchMessage
     """
 
-    project_name: Optional[str]
+    project_name: str | None
     entity_id: str
     secondary_id: str
     name: str
-    result: Union[Literal["passed", "failed"], Any]
-    config: Dict[str, Any]
-    details: Dict[str, Any]
+    result: Literal["passed", "failed"] | Any
+    config: dict[str, Any]
+    details: dict[str, Any]
 
 
 @dataclasses.dataclass
 class GuardrailBatchMessage(BaseMessage):
-    batch: List[GuardrailBatchItemMessage]
+    batch: list[GuardrailBatchItemMessage]
     supports_batching: bool = True
 
-    def as_payload_dict(self) -> Dict[str, Any]:
+    def as_payload_dict(self) -> dict[str, Any]:
         data = super().as_payload_dict()
         data.pop("supports_batching")
         return data
@@ -275,7 +275,7 @@ class ExperimentItemMessage(BaseMessage):
 
 @dataclasses.dataclass
 class CreateExperimentItemsBatchMessage(BaseMessage):
-    batch: List[ExperimentItemMessage]
+    batch: list[ExperimentItemMessage]
     supports_batching: bool = True
 
 
@@ -283,7 +283,7 @@ class CreateExperimentItemsBatchMessage(BaseMessage):
 class CreateAttachmentMessage(BaseMessage):
     file_path: str
     file_name: str
-    mime_type: Optional[str]
+    mime_type: str | None
     entity_type: AttachmentEntityType
     entity_id: str
     project_name: str

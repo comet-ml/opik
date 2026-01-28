@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Tuple, Dict, Any
+from typing import Any
 import google.adk.agents
 from google.adk.agents import callback_context
 
@@ -8,7 +8,7 @@ LOGGER = logging.getLogger(__name__)
 
 def try_get_session_info(
     callback_context: callback_context.CallbackContext,
-) -> Tuple[Optional[str], Dict[str, Any]]:
+) -> tuple[str | None, dict[str, Any]]:
     try:
         session = callback_context._invocation_context.session
         return session.id, {"user_id": session.user_id, "app_name": session.app_name}
@@ -21,7 +21,7 @@ def try_get_session_info(
 
 def try_get_current_agent_instance(
     callback_context: callback_context.CallbackContext,
-) -> Optional[google.adk.agents.BaseAgent]:
+) -> google.adk.agents.BaseAgent | None:
     try:
         invocation_context = callback_context._invocation_context
         return invocation_context.agent

@@ -1,5 +1,5 @@
 import logging
-from typing import Iterator, Optional, Tuple
+from collections.abc import Iterator
 
 import opentelemetry.trace
 import opik
@@ -55,7 +55,7 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
     def __init__(
         self,
         opik_client: opik_client.Opik,
-        distributed_headers: Optional[DistributedTraceHeadersDict],
+        distributed_headers: DistributedTraceHeadersDict | None,
     ) -> None:
         self.opik_client = opik_client
         self._distributed_headers = distributed_headers
@@ -63,11 +63,11 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
     def start_span(
         self,
         name: str,
-        context: Optional[opentelemetry.trace.Context] = None,
+        context: opentelemetry.trace.Context | None = None,
         kind: opentelemetry.trace.SpanKind = opentelemetry.trace.SpanKind.INTERNAL,
         attributes: opentelemetry.trace.types.Attributes = None,
         links: opentelemetry.trace._Links = None,
-        start_time: Optional[int] = None,
+        start_time: int | None = None,
         record_exception: bool = True,
         set_status_on_exception: bool = True,
     ) -> "opentelemetry.trace.Span":
@@ -77,11 +77,11 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
     def start_as_current_span(
         self,
         name: str,
-        context: Optional[opentelemetry.trace.Context] = None,
+        context: opentelemetry.trace.Context | None = None,
         kind: opentelemetry.trace.SpanKind = opentelemetry.trace.SpanKind.INTERNAL,
         attributes: opentelemetry.trace.types.Attributes = None,
         links: opentelemetry.trace._Links = None,
-        start_time: Optional[int] = None,
+        start_time: int | None = None,
         record_exception: bool = True,
         set_status_on_exception: bool = True,
         end_on_exit: bool = True,
@@ -169,10 +169,10 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
 
 def _prepare_trace_and_span_to_be_finalized(
     name: str,
-    current_trace_data: Optional[trace.TraceData],
-    current_span_data: Optional[span.SpanData],
-    distributed_headers: Optional[DistributedTraceHeadersDict],
-) -> Tuple[Optional[trace.TraceData], Optional[span.SpanData]]:
+    current_trace_data: trace.TraceData | None,
+    current_span_data: span.SpanData | None,
+    distributed_headers: DistributedTraceHeadersDict | None,
+) -> tuple[trace.TraceData | None, span.SpanData | None]:
     """
     Prepares a trace and a span to be finalized in the finally block.
     """

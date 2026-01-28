@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import haystack
 from haystack import tracing
@@ -81,7 +81,7 @@ class OpikConnector:
             tracer.actual_tracer.flush()
     """
 
-    def __init__(self, name: str, project_name: Optional[str] = None):
+    def __init__(self, name: str, project_name: str | None = None):
         """
         Initialize the OpikConnector component.
 
@@ -101,7 +101,7 @@ class OpikConnector:
         tracing.enable_tracing(self.tracer)
 
     def _create_opik_tracer(
-        self, name: str, project_name: Optional[str]
+        self, name: str, project_name: str | None
     ) -> opik_tracer.OpikTracer:
         """Create and configure the OpikTracer instance."""
         opik_client_ = opik_client.get_client_cached()
@@ -111,9 +111,7 @@ class OpikConnector:
         )
 
     @haystack.component.output_types(name=str, trace_id=Optional[str], project_url=str)
-    def run(
-        self, invocation_context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    def run(self, invocation_context: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Runs the OpikConnector component.
 
@@ -135,7 +133,7 @@ class OpikConnector:
 
         return self._build_response()
 
-    def _build_response(self) -> Dict[str, Any]:
+    def _build_response(self) -> dict[str, Any]:
         """Build the response dictionary for the OpikConnector run method."""
         if self.tracer is None:
             return {"name": self.name, "trace_id": None, "project_url": None}

@@ -7,7 +7,7 @@ modalities can be plugged in without changing the core implementation.
 """
 
 import re
-from typing import Any, Dict, List, Optional, Set, Union, cast
+from typing import Any, cast
 from typing_extensions import override
 
 import opik.exceptions as exceptions
@@ -119,12 +119,10 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
 
     def __init__(
         self,
-        messages: List[Dict[str, prompt_types.MessageContent]],
+        messages: list[dict[str, prompt_types.MessageContent]],
         template_type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         *,
-        registry: Optional[
-            content_renderer_registry.ChatContentRendererRegistry
-        ] = None,
+        registry: None | (content_renderer_registry.ChatContentRendererRegistry) = None,
         validate_placeholders: bool = False,
     ) -> None:
         self._messages = messages
@@ -135,7 +133,7 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
         self._validate_placeholders = validate_placeholders
 
     @property
-    def messages(self) -> List[Dict[str, prompt_types.MessageContent]]:
+    def messages(self) -> list[dict[str, prompt_types.MessageContent]]:
         return self._messages
 
     def required_modalities(self) -> prompt_types.ModalitySet:
@@ -148,11 +146,11 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
             required.update(self._registry.infer_modalities(content))
         return required
 
-    def _extract_placeholders(self, template_type: prompt_types.PromptType) -> Set[str]:
+    def _extract_placeholders(self, template_type: prompt_types.PromptType) -> set[str]:
         """
         Extract all placeholders from all messages.
         """
-        placeholders: Set[str] = set()
+        placeholders: set[str] = set()
         for message in self._messages:
             content = cast(prompt_types.MessageContent, message.get("content", ""))
             if isinstance(content, str):
@@ -180,11 +178,11 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
     @override
     def format(
         self,
-        variables: Dict[str, Any],
-        supported_modalities: Optional[prompt_types.SupportedModalities] = None,
+        variables: dict[str, Any],
+        supported_modalities: prompt_types.SupportedModalities | None = None,
         *,
-        template_type: Optional[Union[str, prompt_types.PromptType]] = None,
-    ) -> List[Dict[str, prompt_types.MessageContent]]:
+        template_type: str | prompt_types.PromptType | None = None,
+    ) -> list[dict[str, prompt_types.MessageContent]]:
         """
         Render the template messages with the provided variables.
 
@@ -203,14 +201,14 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
             and resolved_template_type == prompt_types.PromptType.MUSTACHE
         ):
             placeholders = self._extract_placeholders(resolved_template_type)
-            variables_keys: Set[str] = set(variables.keys())
+            variables_keys: set[str] = set(variables.keys())
 
             if variables_keys != placeholders:
                 raise exceptions.PromptPlaceholdersDontMatchFormatArguments(
                     prompt_placeholders=placeholders, format_arguments=variables_keys
                 )
 
-        rendered_messages: List[Dict[str, prompt_types.MessageContent]] = []
+        rendered_messages: list[dict[str, prompt_types.MessageContent]] = []
 
         for message in self._messages:
             role = message.get("role")
@@ -242,7 +240,7 @@ class ChatPromptTemplate(base_prompt_template.BasePromptTemplate):
 
 def _render_template_string(
     template: str,
-    variables: Dict[str, Any],
+    variables: dict[str, Any],
     template_type: prompt_types.PromptType,
 ) -> str:
     if not template:
@@ -261,9 +259,9 @@ def _render_template_string(
 
 def render_text_part(
     part: prompt_types.ContentPart,
-    variables: Dict[str, Any],
+    variables: dict[str, Any],
     template_type: prompt_types.PromptType,
-) -> Optional[prompt_types.ContentPart]:
+) -> prompt_types.ContentPart | None:
     text_template = part.get("text", "")
     rendered_text = _render_template_string(text_template, variables, template_type)
     return {"type": "text", "text": rendered_text}
@@ -271,9 +269,9 @@ def render_text_part(
 
 def render_image_url_part(
     part: prompt_types.ContentPart,
-    variables: Dict[str, Any],
+    variables: dict[str, Any],
     template_type: prompt_types.PromptType,
-) -> Optional[prompt_types.ContentPart]:
+) -> prompt_types.ContentPart | None:
     image_dict = part.get("image_url", {})
     if not isinstance(image_dict, dict):
         return None
@@ -283,7 +281,7 @@ def render_image_url_part(
     if not rendered_url:
         return None
 
-    rendered_image: Dict[str, Any] = {"url": rendered_url}
+    rendered_image: dict[str, Any] = {"url": rendered_url}
     if "detail" in image_dict:
         rendered_image["detail"] = image_dict["detail"]
 
@@ -292,9 +290,9 @@ def render_image_url_part(
 
 def render_video_url_part(
     part: prompt_types.ContentPart,
-    variables: Dict[str, Any],
+    variables: dict[str, Any],
     template_type: prompt_types.PromptType,
-) -> Optional[prompt_types.ContentPart]:
+) -> prompt_types.ContentPart | None:
     """
     Render a ``video_url`` part and preserve optional metadata.
 
@@ -314,7 +312,7 @@ def render_video_url_part(
     if not rendered_url:
         return None
 
-    rendered_video: Dict[str, Any] = {"url": rendered_url}
+    rendered_video: dict[str, Any] = {"url": rendered_url}
     for key in ("detail", "mime_type", "duration", "format"):
         if key in video_dict:
             rendered_video[key] = video_dict[key]
@@ -324,7 +322,7 @@ def render_video_url_part(
 
 def _extract_placeholders_from_string(
     text: str, template_type: prompt_types.PromptType
-) -> Set[str]:
+) -> set[str]:
     """
     Extract placeholder keys from a string template.
     Only supports Mustache templates for now.

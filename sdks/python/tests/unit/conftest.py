@@ -43,9 +43,9 @@ def capture_log_check_errors(caplog):
         if record.levelno >= logging.ERROR and record.name.startswith("opik")
     ]
 
-    assert (
-        not error_records
-    ), f"Errors were logged during test execution: {[r.message for r in error_records]}"
+    assert not error_records, (
+        f"Errors were logged during test execution: {[r.message for r in error_records]}"
+    )
 
 
 @pytest.fixture

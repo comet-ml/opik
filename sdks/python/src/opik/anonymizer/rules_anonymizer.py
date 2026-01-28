@@ -1,4 +1,4 @@
-from typing import List, Any
+from typing import Any
 
 from . import recursive_anonymizer, rules
 
@@ -10,7 +10,7 @@ class RulesAnonymizer(recursive_anonymizer.RecursiveAnonymizer):
     anonymize sensitive information in text.
     """
 
-    def __init__(self, anonymizer_rules: List[rules.Rule], max_depth: int = 10):
+    def __init__(self, anonymizer_rules: list[rules.Rule], max_depth: int = 10):
         """Initialize the RulesAnonymizer with a list of rules.
 
         Args:

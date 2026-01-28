@@ -1,7 +1,7 @@
 from opik.evaluation.metrics import base_metric, score_result
 import opik.exceptions as exceptions
 
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 import opik.opik_context as opik_context
 
 if TYPE_CHECKING:
@@ -15,7 +15,7 @@ class RagasMetricWrapper(base_metric.BaseMetric):
         self,
         ragas_metric: "ragas_metrics.SingleTurnMetric",
         track: bool = True,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ):
         from ragas import metrics as ragas_metrics
 
@@ -31,7 +31,7 @@ class RagasMetricWrapper(base_metric.BaseMetric):
         ]
 
     def _create_ragas_single_turn_sample(
-        self, input_dict: Dict[str, Any]
+        self, input_dict: dict[str, Any]
     ) -> "ragas_dataset_schema.SingleTurnSample":
         from ragas import dataset_schema as ragas_dataset_schema
 

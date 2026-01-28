@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclasses.dataclass
@@ -11,7 +11,7 @@ class CloudRateLimit:
         return self.remaining_limit_reset_time
 
 
-def parse_rate_limit(rate_limit_response: Dict[str, Any]) -> Optional[CloudRateLimit]:
+def parse_rate_limit(rate_limit_response: dict[str, Any]) -> CloudRateLimit | None:
     rate_limit_reset_time = int(rate_limit_response.get("RateLimit-Reset", 0))
     if rate_limit_reset_time == 0:
         rate_limit_reset_time = int(rate_limit_response.get("ratelimit-reset", 0))

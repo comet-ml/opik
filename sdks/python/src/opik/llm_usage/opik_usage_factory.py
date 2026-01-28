@@ -1,14 +1,15 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any
+from collections.abc import Callable
 
 from opik.types import LLMProvider
 from . import opik_usage
 
 
 # One provider can have multiple formats of usage dicts, so it can have more than 1 build function
-_PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[
-    Union[str, LLMProvider],
-    List[Callable[[Dict[str, Any]], opik_usage.OpikUsage]],
+_PROVIDER_TO_OPIK_USAGE_BUILDERS: dict[
+    str | LLMProvider,
+    list[Callable[[dict[str, Any]], opik_usage.OpikUsage]],
 ] = {
     LLMProvider.OPENAI: [
         opik_usage.OpikUsage.from_openai_completions_dict,
@@ -22,8 +23,8 @@ _PROVIDER_TO_OPIK_USAGE_BUILDERS: Dict[
 
 
 def build_opik_usage(
-    provider: Union[str, LLMProvider],
-    usage: Dict[str, Any],
+    provider: str | LLMProvider,
+    usage: dict[str, Any],
 ) -> opik_usage.OpikUsage:
     build_functions = _PROVIDER_TO_OPIK_USAGE_BUILDERS[provider]
 
@@ -42,7 +43,7 @@ def build_opik_usage(
 
 
 def build_opik_usage_from_unknown_provider(
-    usage: Dict[str, Any],
+    usage: dict[str, Any],
 ) -> opik_usage.OpikUsage:
     for build_functions in _PROVIDER_TO_OPIK_USAGE_BUILDERS.values():
         for build_function in build_functions:
@@ -56,11 +57,11 @@ def build_opik_usage_from_unknown_provider(
 
 
 def try_build_opik_usage_or_log_error(
-    provider: Union[str, LLMProvider],
-    usage: Dict[str, Any],
+    provider: str | LLMProvider,
+    usage: dict[str, Any],
     logger: logging.Logger,
     error_message: str,
-) -> Optional[opik_usage.OpikUsage]:
+) -> opik_usage.OpikUsage | None:
     try:
         return build_opik_usage(provider=provider, usage=usage)
     except Exception:

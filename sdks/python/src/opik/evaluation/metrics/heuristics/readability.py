@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from opik.evaluation.metrics.base_metric import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -39,11 +39,11 @@ class Readability(BaseMetric):
         *,
         name: str = "readability_metric",
         track: bool = True,
-        project_name: Optional[str] = None,
-        min_grade: Optional[float] = None,
-        max_grade: Optional[float] = None,
+        project_name: str | None = None,
+        min_grade: float | None = None,
+        max_grade: float | None = None,
         language: str = "en_US",
-        textstat_module: Optional[Any] = None,
+        textstat_module: Any | None = None,
         enforce_bounds: bool = False,
     ) -> None:
         super().__init__(name=name, track=track, project_name=project_name)

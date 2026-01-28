@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import opik.datetime_helpers as datetime_helpers
 import opik.llm_usage as llm_usage
@@ -30,13 +30,13 @@ class Trace:
 
     def end(
         self,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[Any]] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        thread_id: Optional[str] = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[Any] | None = None,
+        error_info: ErrorInfoDict | None = None,
+        thread_id: str | None = None,
     ) -> None:
         """
         End the trace and update its attributes.
@@ -73,13 +73,13 @@ class Trace:
 
     def update(
         self,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[Any]] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        thread_id: Optional[str] = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[Any] | None = None,
+        error_info: ErrorInfoDict | None = None,
+        thread_id: str | None = None,
     ) -> None:
         """
         Update the trace attributes.
@@ -112,22 +112,22 @@ class Trace:
 
     def span(
         self,
-        id: Optional[str] = None,
-        parent_span_id: Optional[str] = None,
-        name: Optional[str] = None,
+        id: str | None = None,
+        parent_span_id: str | None = None,
+        name: str | None = None,
         type: SpanType = "general",
-        start_time: Optional[datetime.datetime] = None,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
-        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-        model: Optional[str] = None,
-        provider: Optional[Union[LLMProvider, str]] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        total_cost: Optional[float] = None,
-        attachments: Optional[List[attachment.Attachment]] = None,
+        start_time: datetime.datetime | None = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+        model: str | None = None,
+        provider: LLMProvider | str | None = None,
+        error_info: ErrorInfoDict | None = None,
+        total_cost: float | None = None,
+        attachments: list[attachment.Attachment] | None = None,
     ) -> span.Span:
         """
         Create a new span within the trace.
@@ -185,8 +185,8 @@ class Trace:
         self,
         name: str,
         value: float,
-        category_name: Optional[str] = None,
-        reason: Optional[str] = None,
+        category_name: str | None = None,
+        reason: str | None = None,
     ) -> None:
         """
         Log a feedback score for the trace.
@@ -221,13 +221,13 @@ def update_trace(
     trace_id: str,
     project_name: str,
     message_streamer: streamer.Streamer,
-    end_time: Optional[datetime.datetime] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    input: Optional[Dict[str, Any]] = None,
-    output: Optional[Dict[str, Any]] = None,
-    tags: Optional[List[Any]] = None,
-    error_info: Optional[ErrorInfoDict] = None,
-    thread_id: Optional[str] = None,
+    end_time: datetime.datetime | None = None,
+    metadata: dict[str, Any] | None = None,
+    input: dict[str, Any] | None = None,
+    output: dict[str, Any] | None = None,
+    tags: list[Any] | None = None,
+    error_info: ErrorInfoDict | None = None,
+    thread_id: str | None = None,
 ) -> None:
     """
     Update an existing trace with new information.

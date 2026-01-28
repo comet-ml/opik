@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Union
+from typing import Any
 import pydantic
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -43,13 +43,13 @@ class ContextRecall(base_metric.BaseMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "context_recall_metric",
-        few_shot_examples: Optional[List[template.FewShotExampleContextRecall]] = None,
+        few_shot_examples: list[template.FewShotExampleContextRecall] | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
-        seed: Optional[int] = None,
-        temperature: Optional[float] = None,
+        project_name: str | None = None,
+        seed: int | None = None,
+        temperature: float | None = None,
     ):
         super().__init__(
             name=name,
@@ -62,8 +62,8 @@ class ContextRecall(base_metric.BaseMetric):
 
     def _init_model(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]],
-        temperature: Optional[float],
+        model: str | base_model.OpikBaseModel | None,
+        temperature: float | None,
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
@@ -83,7 +83,7 @@ class ContextRecall(base_metric.BaseMetric):
         input: str,
         output: str,
         expected_output: str,
-        context: List[str],
+        context: list[str],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
@@ -119,7 +119,7 @@ class ContextRecall(base_metric.BaseMetric):
         input: str,
         output: str,
         expected_output: str,
-        context: List[str],
+        context: list[str],
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """

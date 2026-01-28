@@ -1,4 +1,4 @@
-from typing import Dict, Any
+from typing import Any
 
 import opik
 from opik.api_objects.experiment import experiment_item
@@ -18,7 +18,7 @@ DATASET_ITEMS = [
 ]
 
 
-def llm_task(item: Dict[str, Any]):
+def llm_task(item: dict[str, Any]):
     if item["input"] == {"question": "What is the of capital of Ukraine?"}:
         return {"output": "Kyiv"}
 
@@ -27,7 +27,7 @@ def llm_task(item: Dict[str, Any]):
     )
 
 
-def equals_scoring_function(dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]):
+def equals_scoring_function(dataset_item: dict[str, Any], task_outputs: dict[str, Any]):
     reference = dataset_item["expected_model_output"]["output"]
     prediction = task_outputs["output"]
     if reference == prediction:
@@ -53,8 +53,8 @@ def task_span_name_scoring_function(
 
 
 def task_span_name_and_equals_scoring_function(
-    dataset_item: Dict[str, Any],
-    task_outputs: Dict[str, Any],
+    dataset_item: dict[str, Any],
+    task_outputs: dict[str, Any],
     task_span: models.SpanModel,
 ) -> score_result.ScoreResult:
     score = 1.0 if task_span.name == "llm_task" else 0.0

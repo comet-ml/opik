@@ -1,6 +1,7 @@
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Callable
 from typing_extensions import override
 
 import opik
@@ -37,12 +38,12 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         func: Callable,
         track_options: arguments_helpers.TrackOptions,
-        args: Tuple,
-        kwargs: Dict[str, Any],
+        args: tuple,
+        kwargs: dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in BedrockRuntime.Client.invoke_model(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in BedrockRuntime.Client.invoke_model(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
         body_dict = json.loads(kwargs.get("body", "{}"))
@@ -116,11 +117,8 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
         self,
         output: Any,
         capture_output: bool,
-        generations_aggregator: Optional[Callable[[List[Any]], Any]],
-    ) -> Union[
-        types.InvokeModelOutput,
-        None,
-    ]:
+        generations_aggregator: Callable[[list[Any]], Any] | None,
+    ) -> types.InvokeModelOutput | None:
         # Despite the name, StreamingBody is not a stream in traditional LLM provider sense (response chunks).
         # It's an interface to a stream of bytes representing the response body.
         streaming_body_detected = (
@@ -146,7 +144,7 @@ class BedrockInvokeModelDecorator(base_track_decorator.BaseTrackDecorator):
             return None
 
         generations_aggregator = cast(
-            Callable[[List[Any]], Any], generations_aggregator
+            Callable[[list[Any]], Any], generations_aggregator
         )
 
         event_streaming_body_detected = (

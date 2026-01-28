@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import Any
 from . import guard
 from .. import schemas
 import functools
@@ -13,8 +13,8 @@ class Topic(guard.Guard):
 
     def __init__(
         self,
-        allowed_topics: Optional[List[str]] = None,
-        restricted_topics: Optional[List[str]] = None,
+        allowed_topics: list[str] | None = None,
+        restricted_topics: list[str] | None = None,
         threshold: float = 0.5,
     ) -> None:
         """
@@ -38,8 +38,8 @@ class Topic(guard.Guard):
         self._restricted_topics = restricted_topics
         self._threshold = threshold
 
-    @functools.lru_cache()
-    def get_validation_configs(self) -> List[Dict[str, Any]]:
+    @functools.lru_cache
+    def get_validation_configs(self) -> list[dict[str, Any]]:
         """
         Get the validation configuration for topic matching.
 

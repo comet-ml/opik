@@ -1,9 +1,10 @@
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Mapping, Union, cast
+from typing import TYPE_CHECKING, Any, Union, cast
+from collections.abc import Iterable, Mapping
 
 if TYPE_CHECKING:
     import langchain_core.messages
 
-ContentType = Union[str, List[Dict[str, Any]]]
+ContentType = Union[str, list[dict[str, Any]]]
 
 
 _ROLE_TO_MESSAGE_CLASS: Mapping[str, str] = {
@@ -17,7 +18,7 @@ _ROLE_TO_MESSAGE_CLASS: Mapping[str, str] = {
 
 def convert_to_langchain_messages(
     messages: Iterable[Mapping[str, Any]],
-) -> List["langchain_core.messages.BaseMessage"]:
+) -> list["langchain_core.messages.BaseMessage"]:
     """Convert OpenAI-style chat messages to LangChain's primitives.
 
     Args:
@@ -42,7 +43,7 @@ def convert_to_langchain_messages(
         for role, class_name in _ROLE_TO_MESSAGE_CLASS.items()
     }
 
-    langchain_messages: List["langchain_core.messages.BaseMessage"] = []
+    langchain_messages: list["langchain_core.messages.BaseMessage"] = []
     for message in messages:
         payload: Mapping[str, Any] = message
 

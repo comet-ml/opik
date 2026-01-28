@@ -1,7 +1,8 @@
 import contextlib
 import logging
 import os
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any
+from collections.abc import Iterator
 
 from haystack import tracing
 
@@ -25,7 +26,7 @@ class OpikTracer(tracing.Tracer):
         self,
         opik_client: opik_client.Opik,
         name: str = "Haystack",
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> None:
         """
         Initialize OpikTracer.
@@ -42,7 +43,7 @@ class OpikTracer(tracing.Tracer):
                 "before importing Haystack."
             )
         self._opik_client = opik_client
-        self._context: List[opik_span_bridge.OpikSpanBridge] = []
+        self._context: list[opik_span_bridge.OpikSpanBridge] = []
         self._name = name
         self._project_name = project_name
         self.enforce_flush = (
@@ -54,8 +55,8 @@ class OpikTracer(tracing.Tracer):
     def trace(
         self,
         operation_name: str,
-        tags: Optional[Dict[str, Any]] = None,
-        parent_span: Optional[opik_span_bridge.OpikSpanBridge] = None,
+        tags: dict[str, Any] | None = None,
+        parent_span: opik_span_bridge.OpikSpanBridge | None = None,
     ) -> Iterator[tracing.Span]:
         tags = tags or {}
         span_name = tags.get(constants.COMPONENT_NAME_KEY, operation_name)
@@ -95,7 +96,7 @@ class OpikTracer(tracing.Tracer):
             start_span_arguments=start_span_parameters,
             distributed_trace_headers=None,
         )
-        final_span_or_trace_data: Union[opik_span.SpanData, opik_trace.TraceData] = (
+        final_span_or_trace_data: opik_span.SpanData | opik_trace.TraceData = (
             result.trace_data if result.trace_data is not None else result.span_data
         )
 
@@ -106,7 +107,7 @@ class OpikTracer(tracing.Tracer):
         parent_span: opik_span_bridge.OpikSpanBridge,
         span_name: str,
         operation_name: str,
-        tags: Dict[str, Any],
+        tags: dict[str, Any],
     ) -> opik_span_bridge.OpikSpanBridge:
         """Create a child span from a parent span."""
         parent_data = parent_span.get_opik_span_or_trace_data()
@@ -150,11 +151,11 @@ class OpikTracer(tracing.Tracer):
         """Flush the Opik client to send pending data."""
         self._opik_client.flush()
 
-    def current_span(self) -> Optional[opik_span_bridge.OpikSpanBridge]:
+    def current_span(self) -> opik_span_bridge.OpikSpanBridge | None:
         """Return the current active span."""
         return self._context[-1] if self._context else None
 
-    def get_project_url(self) -> Optional[str]:
+    def get_project_url(self) -> str | None:
         """Return the URL to the tracing data."""
         span = self.current_span()
         if not span:
@@ -170,7 +171,7 @@ class OpikTracer(tracing.Tracer):
             trace_id=trace_id, url_override=self._opik_client.config.url_override
         )
 
-    def get_trace_id(self) -> Optional[str]:
+    def get_trace_id(self) -> str | None:
         """Return the trace id of the current trace."""
         span = self.current_span()
         if not span:

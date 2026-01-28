@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from llama_index.core import Settings
 from llama_index.core.base.llms.types import ChatResponse
@@ -13,8 +13,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 def get_span_input_from_events(
-    event_type: llama_index_schema.CBEventType, payload: Optional[Dict[str, Any]]
-) -> Optional[Dict[str, Any]]:
+    event_type: llama_index_schema.CBEventType, payload: dict[str, Any] | None
+) -> dict[str, Any] | None:
     if payload is None:
         return None
 
@@ -59,8 +59,8 @@ def get_span_input_from_events(
 
 
 def get_span_output_from_event(
-    event_type: llama_index_schema.CBEventType, payload: Optional[Dict[str, Any]]
-) -> Optional[Dict[str, Any]]:
+    event_type: llama_index_schema.CBEventType, payload: dict[str, Any] | None
+) -> dict[str, Any] | None:
     if payload is None:
         return None
 
@@ -121,7 +121,7 @@ def get_span_output_from_event(
         return None
 
 
-def get_span_error_info(payload: Optional[Dict[str, Any]]) -> Optional[ErrorInfoDict]:
+def get_span_error_info(payload: dict[str, Any] | None) -> ErrorInfoDict | None:
     """Retrieves error information from LlamaIndex if the event failed"""
     if payload is None:
         return None
@@ -137,7 +137,7 @@ def get_span_error_info(payload: Optional[Dict[str, Any]]) -> Optional[ErrorInfo
 
 
 def get_usage_data(
-    payload: Optional[Dict[str, Any]],
+    payload: dict[str, Any] | None,
 ) -> llm_usage.LLMUsageInfo:
     llm_usage_info = llm_usage.LLMUsageInfo()
 
@@ -152,7 +152,7 @@ def get_usage_data(
     if "openai" not in Settings.llm.class_name().lower():
         return llm_usage_info
 
-    response: Optional[ChatResponse] = payload.get(
+    response: ChatResponse | None = payload.get(
         llama_index_schema.EventPayload.RESPONSE
     )
 

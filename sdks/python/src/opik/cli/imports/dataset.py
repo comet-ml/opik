@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-from typing import Dict, Optional
 
 import opik
 from rich.console import Console
@@ -16,9 +15,9 @@ def import_datasets_from_directory(
     client: opik.Opik,
     source_dir: Path,
     dry_run: bool,
-    name_pattern: Optional[str],
+    name_pattern: str | None,
     debug: bool,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     """Import datasets from a directory.
 
     Returns:
@@ -36,7 +35,7 @@ def import_datasets_from_directory(
         error_count = 0
         for dataset_file in dataset_files:
             try:
-                with open(dataset_file, "r", encoding="utf-8") as f:
+                with open(dataset_file, encoding="utf-8") as f:
                     dataset_data = json.load(f)
 
                 # Handle two export formats:

@@ -1,14 +1,15 @@
-from typing import Union, List, Dict, Callable, Tuple
+from typing import Union
+from collections.abc import Callable
 
 from . import anonymizer, rules_anonymizer, rules
 
 RulesType = Union[
-    List[Dict[str, str]],
-    List[Tuple[str, str]],
-    List[Callable[[str], str]],
-    List[Union[Dict[str, str], Tuple[str, str], Callable[[str], str]]],
-    Dict[str, str],
-    Tuple[str, str],
+    list[dict[str, str]],
+    list[tuple[str, str]],
+    list[Callable[[str], str]],
+    list[Union[dict[str, str], tuple[str, str], Callable[[str], str]]],
+    dict[str, str],
+    tuple[str, str],
     Callable[[str], str],
 ]
 
@@ -32,7 +33,7 @@ def create_anonymizer(
     Raises:
         ValueError: If a rule format is invalid.
     """
-    rule_objects: List[rules.Rule] = []
+    rule_objects: list[rules.Rule] = []
 
     if callable(anonymizer_rules):
         # Single function rule
@@ -68,12 +69,12 @@ def create_anonymizer(
     return rules_anonymizer.RulesAnonymizer(rule_objects, max_depth=max_depth)
 
 
-def _check_dictionary_rule(rule: Dict[str, str]) -> None:
+def _check_dictionary_rule(rule: dict[str, str]) -> None:
     if "regex" not in rule or "replace" not in rule:
         raise ValueError("Dictionary rule must have 'regex' and 'replace' keys")
 
 
-def _check_tuple_rule(rule: Tuple[str, str]) -> None:
+def _check_tuple_rule(rule: tuple[str, str]) -> None:
     if len(rule) != 2:
         raise ValueError(
             "Tuple rule must have exactly 2 elements: (regex, replacement)"

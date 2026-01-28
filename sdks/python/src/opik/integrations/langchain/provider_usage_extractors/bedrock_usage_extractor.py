@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, List
+from typing import TYPE_CHECKING, Any
 
 import opik
 from opik import llm_usage, _logging as opik_logging, logging_messages
@@ -18,12 +18,12 @@ class BedrockUsageExtractor(
 ):
     PROVIDER = opik.LLMProvider.BEDROCK
 
-    def is_provider_run(self, run_dict: Dict[str, Any]) -> bool:
+    def is_provider_run(self, run_dict: dict[str, Any]) -> bool:
         try:
             if run_dict.get("serialized") is None:
                 return False
 
-            class_id: List[str] = run_dict.get("serialized", {}).get("id", [])
+            class_id: list[str] = run_dict.get("serialized", {}).get("id", [])
             if len(class_id) == 0:
                 return False
 
@@ -39,7 +39,7 @@ class BedrockUsageExtractor(
             )
             return False
 
-    def get_llm_usage_info(self, run_dict: Dict[str, Any]) -> llm_usage.LLMUsageInfo:
+    def get_llm_usage_info(self, run_dict: dict[str, Any]) -> llm_usage.LLMUsageInfo:
         usage_dict = _try_get_token_usage(run_dict)
         model = _try_get_model_name(run_dict)
 
@@ -48,7 +48,7 @@ class BedrockUsageExtractor(
         )
 
 
-def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsage]:
+def _try_get_token_usage(run_dict: dict[str, Any]) -> llm_usage.OpikUsage | None:
     try:
         if token_usage := langchain_run_helpers.try_to_get_usage_by_search(
             run_dict, candidate_keys=None
@@ -80,7 +80,7 @@ def _try_get_token_usage(run_dict: Dict[str, Any]) -> Optional[llm_usage.OpikUsa
     return None
 
 
-def _try_get_model_name(run_dict: Dict[str, Any]) -> Optional[str]:
+def _try_get_model_name(run_dict: dict[str, Any]) -> str | None:
     MODEL_NAME_KEY = "model_id"
 
     model = run_dict.get("serialized", {}).get("kwargs", {}).get(MODEL_NAME_KEY, None)

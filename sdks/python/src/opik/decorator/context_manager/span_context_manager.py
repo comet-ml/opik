@@ -1,6 +1,7 @@
 import logging
 from contextlib import contextmanager
-from typing import Optional, Dict, Any, List, Generator
+from typing import Any
+from collections.abc import Generator
 
 from opik.api_objects import span, opik_client
 from opik.types import SpanType
@@ -14,15 +15,15 @@ LOGGER = logging.getLogger(__name__)
 def start_as_current_span(
     name: str,
     type: SpanType = "general",
-    input: Optional[Dict[str, Any]] = None,
-    output: Optional[Dict[str, Any]] = None,
-    tags: Optional[List[str]] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    project_name: Optional[str] = None,
-    model: Optional[str] = None,
-    provider: Optional[str] = None,
+    input: dict[str, Any] | None = None,
+    output: dict[str, Any] | None = None,
+    tags: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+    project_name: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
     flush: bool = False,
-    **kwargs: Dict[str, Any],
+    **kwargs: dict[str, Any],
 ) -> Generator[span.SpanData, Any, None]:
     """
     A context manager for starting and managing a span and parent trace.

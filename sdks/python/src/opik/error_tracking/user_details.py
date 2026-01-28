@@ -1,13 +1,12 @@
 import functools
 import hashlib
 
-from typing import Optional
 
 import opik.config
 import opik.environment
 
 
-def get_id() -> Optional[str]:
+def get_id() -> str | None:
     """
     The workspace name serves as a user identifier.
     If workspace is default, then we try to compute the identifier as a hash from the hostname

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 import json
 import dataclasses
 
@@ -26,7 +26,7 @@ class PromptClient:
         self,
         name: str,
         prompt: str,
-        metadata: Optional[Dict[str, Any]],
+        metadata: dict[str, Any] | None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         template_structure: str = "text",
     ) -> prompt_version_detail.PromptVersionDetail:
@@ -98,7 +98,7 @@ class PromptClient:
         name: str,
         prompt: str,
         type: prompt_version_detail.PromptVersionDetailType,
-        metadata: Optional[Dict[str, Any]],
+        metadata: dict[str, Any] | None,
         template_structure: str = "text",
     ) -> prompt_version_detail.PromptVersionDetail:
         new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
@@ -117,15 +117,15 @@ class PromptClient:
 
     def _get_latest_version(
         self, name: str
-    ) -> Optional[prompt_version_detail.PromptVersionDetail]:
+    ) -> prompt_version_detail.PromptVersionDetail | None:
         return self.get_prompt(name=name, commit=None)
 
     def get_prompt(
         self,
         name: str,
-        commit: Optional[str] = None,
-        raise_if_not_template_structure: Optional[str] = None,
-    ) -> Optional[prompt_version_detail.PromptVersionDetail]:
+        commit: str | None = None,
+        raise_if_not_template_structure: str | None = None,
+    ) -> prompt_version_detail.PromptVersionDetail | None:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
 
@@ -172,7 +172,7 @@ class PromptClient:
     # need to retrieve the prompt id
     def get_all_prompt_versions(
         self, name: str
-    ) -> List[prompt_version_detail.PromptVersionDetail]:
+    ) -> list[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve all the prompt details for a given prompt name.
 
@@ -209,10 +209,10 @@ class PromptClient:
 
     def _get_prompt_versions_by_id_paginated(
         self, prompt_id: str
-    ) -> List[prompt_version_detail.PromptVersionDetail]:
+    ) -> list[prompt_version_detail.PromptVersionDetail]:
         page = 1
         size = 100
-        prompts: List[prompt_version_detail.PromptVersionDetail] = []
+        prompts: list[prompt_version_detail.PromptVersionDetail] = []
         while True:
             prompt_versions_page = self._rest_client.prompts.get_prompt_versions(
                 id=prompt_id, page=page, size=size
@@ -246,9 +246,9 @@ class PromptClient:
     def search_prompts(
         self,
         *,
-        name: Optional[str] = None,
-        parsed_filters: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[PromptSearchResult]:
+        name: str | None = None,
+        parsed_filters: list[dict[str, Any]] | None = None,
+    ) -> list[PromptSearchResult]:
         """
         Search prompt containers by optional name substring and filters, then
         return the latest version detail for each matched prompt container.
@@ -268,7 +268,7 @@ class PromptClient:
             # Page through all prompt containers and collect name + template_structure
             page = 1
             size = 1000
-            prompt_info: List[Tuple[str, str]] = []  # (name, template_structure)
+            prompt_info: list[tuple[str, str]] = []  # (name, template_structure)
             while True:
                 prompts_page = self._rest_client.prompts.get_prompts(
                     page=page,
@@ -290,7 +290,7 @@ class PromptClient:
                 return []
 
             # Retrieve latest version for each container name
-            results: List[PromptSearchResult] = []
+            results: list[PromptSearchResult] = []
             for prompt_name, template_structure in prompt_info:
                 try:
                     latest_version = self._rest_client.prompts.retrieve_prompt_version(

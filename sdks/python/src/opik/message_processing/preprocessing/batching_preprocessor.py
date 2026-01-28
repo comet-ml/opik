@@ -1,5 +1,3 @@
-from typing import Optional
-
 from . import preprocessor
 from .. import messages
 from ..batching import batch_manager
@@ -15,12 +13,12 @@ class BatchingPreprocessor(preprocessor.MessagePreprocessor):
     messages are processed or delegated based on their batching capabilities.
     """
 
-    def __init__(self, batching_manager: Optional[batch_manager.BatchManager]) -> None:
+    def __init__(self, batching_manager: batch_manager.BatchManager | None) -> None:
         self._batch_manager = batching_manager
 
     def preprocess(
-        self, message: Optional[messages.BaseMessage]
-    ) -> Optional[messages.BaseMessage]:
+        self, message: messages.BaseMessage | None
+    ) -> messages.BaseMessage | None:
         if message is None:
             # possibly already processed
             return None

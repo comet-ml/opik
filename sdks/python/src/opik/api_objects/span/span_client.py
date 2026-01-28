@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import opik.datetime_helpers as datetime_helpers
 import opik.id_helpers as id_helpers
@@ -29,7 +29,7 @@ class Span:
         project_name: str,
         message_streamer: streamer.Streamer,
         url_override: str,
-        parent_span_id: Optional[str] = None,
+        parent_span_id: str | None = None,
     ):
         """
         A Span object. This object should not be created directly, instead use the `span` method of a Trace (:func:`opik.Opik.span`) or another Span (:meth:`opik.Span.span`).
@@ -43,16 +43,16 @@ class Span:
 
     def end(
         self,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
-        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-        model: Optional[str] = None,
-        provider: Optional[Union[LLMProvider, str]] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        total_cost: Optional[float] = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+        model: str | None = None,
+        provider: LLMProvider | str | None = None,
+        error_info: ErrorInfoDict | None = None,
+        total_cost: float | None = None,
     ) -> None:
         """
         End the span and update its attributes.
@@ -99,16 +99,16 @@ class Span:
 
     def update(
         self,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
-        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-        model: Optional[str] = None,
-        provider: Optional[Union[LLMProvider, str]] = None,
-        error_info: Optional[ErrorInfoDict] = None,
-        total_cost: Optional[float] = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+        model: str | None = None,
+        provider: LLMProvider | str | None = None,
+        error_info: ErrorInfoDict | None = None,
+        total_cost: float | None = None,
     ) -> None:
         """
         Update the span attributes.
@@ -154,21 +154,21 @@ class Span:
 
     def span(
         self,
-        id: Optional[str] = None,
-        name: Optional[str] = None,
+        id: str | None = None,
+        name: str | None = None,
         type: SpanType = "general",
-        start_time: Optional[datetime.datetime] = None,
-        end_time: Optional[datetime.datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        input: Optional[Dict[str, Any]] = None,
-        output: Optional[Dict[str, Any]] = None,
-        tags: Optional[List[str]] = None,
-        usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-        model: Optional[str] = None,
+        start_time: datetime.datetime | None = None,
+        end_time: datetime.datetime | None = None,
+        metadata: dict[str, Any] | None = None,
+        input: dict[str, Any] | None = None,
+        output: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+        model: str | None = None,
         provider: LLMProvider = LLMProvider.OPENAI,
-        error_info: Optional[ErrorInfoDict] = None,
-        total_cost: Optional[float] = None,
-        attachments: Optional[List[attachment.Attachment]] = None,
+        error_info: ErrorInfoDict | None = None,
+        total_cost: float | None = None,
+        attachments: list[attachment.Attachment] | None = None,
     ) -> "Span":
         """
         Create a new child span within the current span.
@@ -225,8 +225,8 @@ class Span:
         self,
         name: str,
         value: float,
-        category_name: Optional[str] = None,
-        reason: Optional[str] = None,
+        category_name: str | None = None,
+        reason: str | None = None,
     ) -> None:
         """
         Log a feedback score for the span.
@@ -269,22 +269,22 @@ def create_span(
     project_name: str,
     url_override: str,
     message_streamer: streamer.Streamer,
-    span_id: Optional[str] = None,
-    parent_span_id: Optional[str] = None,
-    name: Optional[str] = None,
+    span_id: str | None = None,
+    parent_span_id: str | None = None,
+    name: str | None = None,
     type: SpanType = "general",
-    start_time: Optional[datetime.datetime] = None,
-    end_time: Optional[datetime.datetime] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    input: Optional[Dict[str, Any]] = None,
-    output: Optional[Dict[str, Any]] = None,
-    tags: Optional[List[str]] = None,
-    usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-    model: Optional[str] = None,
-    provider: Optional[Union[LLMProvider, str]] = None,
-    error_info: Optional[ErrorInfoDict] = None,
-    total_cost: Optional[float] = None,
-    attachments: Optional[List[attachment.Attachment]] = None,
+    start_time: datetime.datetime | None = None,
+    end_time: datetime.datetime | None = None,
+    metadata: dict[str, Any] | None = None,
+    input: dict[str, Any] | None = None,
+    output: dict[str, Any] | None = None,
+    tags: list[str] | None = None,
+    usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+    model: str | None = None,
+    provider: LLMProvider | str | None = None,
+    error_info: ErrorInfoDict | None = None,
+    total_cost: float | None = None,
+    attachments: list[attachment.Attachment] | None = None,
 ) -> Span:
     span_id = span_id if span_id is not None else id_helpers.generate_id()
     start_time = (
@@ -346,21 +346,21 @@ def create_span(
 def update_span(
     id: str,
     trace_id: str,
-    parent_span_id: Optional[str],
+    parent_span_id: str | None,
     project_name: str,
     url_override: str,
     message_streamer: streamer.Streamer,
-    end_time: Optional[datetime.datetime] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-    input: Optional[Dict[str, Any]] = None,
-    output: Optional[Dict[str, Any]] = None,
-    tags: Optional[List[str]] = None,
-    usage: Optional[Union[Dict[str, Any], llm_usage.OpikUsage]] = None,
-    model: Optional[str] = None,
-    provider: Optional[Union[LLMProvider, str]] = None,
-    error_info: Optional[ErrorInfoDict] = None,
-    total_cost: Optional[float] = None,
-    attachments: Optional[List[attachment.Attachment]] = None,
+    end_time: datetime.datetime | None = None,
+    metadata: dict[str, Any] | None = None,
+    input: dict[str, Any] | None = None,
+    output: dict[str, Any] | None = None,
+    tags: list[str] | None = None,
+    usage: dict[str, Any] | llm_usage.OpikUsage | None = None,
+    model: str | None = None,
+    provider: LLMProvider | str | None = None,
+    error_info: ErrorInfoDict | None = None,
+    total_cost: float | None = None,
+    attachments: list[attachment.Attachment] | None = None,
 ) -> None:
     backend_compatible_usage = validation_helpers.validate_and_parse_usage(
         usage=usage,

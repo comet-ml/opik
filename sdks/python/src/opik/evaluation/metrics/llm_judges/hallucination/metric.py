@@ -1,4 +1,4 @@
-from typing import Union, Optional, List, Any
+from typing import Any
 import pydantic
 
 from opik.evaluation.models import base_model, models_factory
@@ -9,7 +9,7 @@ from . import template, parser
 
 class HallucinationResponseFormat(pydantic.BaseModel):
     score: float
-    reason: List[str]
+    reason: list[str]
 
 
 class Hallucination(base_metric.BaseMetric):
@@ -46,13 +46,13 @@ class Hallucination(base_metric.BaseMetric):
 
     def __init__(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        model: str | base_model.OpikBaseModel | None = None,
         name: str = "hallucination_metric",
-        few_shot_examples: Optional[List[template.FewShotExampleHallucination]] = None,
+        few_shot_examples: list[template.FewShotExampleHallucination] | None = None,
         track: bool = True,
-        project_name: Optional[str] = None,
-        seed: Optional[int] = None,
-        temperature: Optional[float] = None,
+        project_name: str | None = None,
+        seed: int | None = None,
+        temperature: float | None = None,
     ):
         super().__init__(name=name, track=track, project_name=project_name)
         self._seed = seed
@@ -61,8 +61,8 @@ class Hallucination(base_metric.BaseMetric):
 
     def _init_model(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]],
-        temperature: Optional[float],
+        model: str | base_model.OpikBaseModel | None,
+        temperature: float | None,
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
@@ -81,7 +81,7 @@ class Hallucination(base_metric.BaseMetric):
         self,
         input: str,
         output: str,
-        context: Optional[List[str]] = None,
+        context: list[str] | None = None,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """
@@ -113,7 +113,7 @@ class Hallucination(base_metric.BaseMetric):
         self,
         input: str,
         output: str,
-        context: Optional[List[str]] = None,
+        context: list[str] | None = None,
         **ignored_kwargs: Any,
     ) -> score_result.ScoreResult:
         """

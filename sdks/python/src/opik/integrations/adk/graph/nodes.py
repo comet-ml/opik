@@ -1,4 +1,4 @@
-from typing import List, Optional, Any
+from typing import Any
 from enum import Enum
 
 import google.adk.agents
@@ -18,9 +18,9 @@ class AgentNode:
     def __init__(self, agent: google.adk.agents.BaseAgent) -> None:
         self.agent = agent
         self.name = _to_mermaid_compatible_name(agent.name)
-        self.subagent_nodes: List[AgentNode] = []
+        self.subagent_nodes: list[AgentNode] = []
         self.type = _determine_agent_type(agent)
-        self.tools: List[ToolNode] = []
+        self.tools: list[ToolNode] = []
 
     def add_child(self, child: "AgentNode") -> None:
         self.subagent_nodes.append(child)
@@ -29,11 +29,11 @@ class AgentNode:
         self.tools.append(tool)
 
     @property
-    def first_child_name(self) -> Optional[str]:
+    def first_child_name(self) -> str | None:
         return self.subagent_nodes[0].name if self.subagent_nodes else None
 
     @property
-    def last_child_name(self) -> Optional[str]:
+    def last_child_name(self) -> str | None:
         return self.subagent_nodes[-1].name if self.subagent_nodes else None
 
 
@@ -41,7 +41,7 @@ class ToolNode:
     def __init__(self, tool: Any, name: str) -> None:
         self.tool = tool
         self.name = name
-        self.agent: Optional[AgentNode] = None
+        self.agent: AgentNode | None = None
         self.type = GraphNodeType.TOOL
 
     def associate_agent_node(self, agent: AgentNode) -> None:

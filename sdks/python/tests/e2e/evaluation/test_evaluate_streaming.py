@@ -1,5 +1,5 @@
 import threading
-from typing import Dict, Any, List
+from typing import Any
 from unittest import mock
 
 import opik
@@ -22,13 +22,13 @@ DATASET_ITEMS = [
 TEST_BATCH_SIZE = 5
 
 
-def simple_task(item: Dict[str, Any]) -> Dict[str, Any]:
+def simple_task(item: dict[str, Any]) -> dict[str, Any]:
     """Simple task that echoes the expected output."""
     return item["expected_output"]
 
 
 def simple_scoring_function(
-    dataset_item: Dict[str, Any], task_outputs: Dict[str, Any]
+    dataset_item: dict[str, Any], task_outputs: dict[str, Any]
 ) -> score_result.ScoreResult:
     """Simple scoring function that always returns 1.0."""
     return score_result.ScoreResult(
@@ -56,7 +56,7 @@ def test_streaming_starts_evaluation_before_complete_download(
     dataset.insert(DATASET_ITEMS)
 
     # Track the sequence of events: 'yield' or 'task'
-    events: List[str] = []
+    events: list[str] = []
     events_lock = threading.Lock()
 
     # Store original read_and_parse_stream function
@@ -72,7 +72,7 @@ def test_streaming_starts_evaluation_before_complete_download(
             tracked_items.append(item)
         return tracked_items
 
-    def tracked_task(item: Dict[str, Any]) -> Dict[str, Any]:
+    def tracked_task(item: dict[str, Any]) -> dict[str, Any]:
         """Wrapper that tracks when tasks start executing."""
         with events_lock:
             events.append("task")
@@ -135,9 +135,9 @@ def test_streaming_starts_evaluation_before_complete_download(
     # Verify scoring output: each item should have a score with name "simple_score" and value 1.0
     for item in experiment_items:
         # Check that feedback_scores exists and is not empty
-        assert (
-            item.feedback_scores is not None and len(item.feedback_scores) == 1
-        ), f"Experiment item {item.id} should have exactly 1 feedback score, got {len(item.feedback_scores) if item.feedback_scores else 0}"
+        assert item.feedback_scores is not None and len(item.feedback_scores) == 1, (
+            f"Experiment item {item.id} should have exactly 1 feedback score, got {len(item.feedback_scores) if item.feedback_scores else 0}"
+        )
 
         # Verify the score matches expected structure
         expected_score = FeedbackScoreDict(

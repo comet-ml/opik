@@ -1,5 +1,5 @@
 import numbers
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 
 class Parameter:
@@ -9,8 +9,8 @@ class Parameter:
         self,
         name: str,
         value: Any,
-        types: Tuple,
-        possible_values: Optional[List] = None,
+        types: tuple,
+        possible_values: list | None = None,
         allow_empty: bool = True,
     ):
         self.name = name
@@ -23,7 +23,7 @@ class Parameter:
 def create_str_parameter(
     name: str,
     value: Any,
-    possible_values: Optional[List[str]] = None,
+    possible_values: list[str] | None = None,
     allow_empty: bool = True,
 ) -> Parameter:
     return Parameter(
@@ -38,7 +38,7 @@ def create_str_parameter(
 def create_int_parameter(
     name: str,
     value: Any,
-    possible_values: Optional[List[int]] = None,
+    possible_values: list[int] | None = None,
     allow_empty: bool = True,
 ) -> Parameter:
     return Parameter(
@@ -53,7 +53,7 @@ def create_int_parameter(
 def create_float_parameter(
     name: str,
     value: Any,
-    possible_values: Optional[List[float]] = None,
+    possible_values: list[float] | None = None,
     allow_empty: bool = True,
 ) -> Parameter:
     return Parameter(
@@ -68,7 +68,7 @@ def create_float_parameter(
 def create_numeric_parameter(
     name: str,
     value: Any,
-    possible_values: Optional[List[numbers.Number]] = None,
+    possible_values: list[numbers.Number] | None = None,
     allow_empty: bool = True,
 ) -> Parameter:
     return Parameter(

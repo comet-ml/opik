@@ -1,5 +1,6 @@
 import logging
-from typing import Generator, Any, List, Optional, Callable, Dict
+from typing import Any
+from collections.abc import Generator, Callable
 from opik.types import ErrorInfoDict
 
 from opik.api_objects import trace, span
@@ -14,15 +15,15 @@ def wrap_stream(
     stream: eventstream.EventStream,
     capture_output: bool,
     span_to_end: span.SpanData,
-    trace_to_end: Optional[trace.TraceData],
-    generations_aggregator: Callable[[List[Any]], Any],
-    response_metadata: Dict[str, Any],
+    trace_to_end: trace.TraceData | None,
+    generations_aggregator: Callable[[list[Any]], Any],
+    response_metadata: dict[str, Any],
     finally_callback: generator_wrappers.FinishGeneratorCallback,
 ) -> Generator[Any, None, None]:
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
 
     try:
-        error_info: Optional[ErrorInfoDict] = None
+        error_info: ErrorInfoDict | None = None
         for item in stream:
             items.append(item)
 
