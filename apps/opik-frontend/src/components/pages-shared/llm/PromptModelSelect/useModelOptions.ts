@@ -5,6 +5,7 @@ import isNull from "lodash/isNull";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
   ProviderObject,
 } from "@/types/providers";
 import { getProviderDisplayName, getProviderIcon } from "@/lib/provider";
@@ -40,6 +41,10 @@ export function useModelOptions(
   configuredProvidersList: ProviderObject[],
   getProviderModels: () => Record<string, ModelOption[]>,
   filterValue: string,
+  modelFilter?: (
+    model: PROVIDER_MODEL_TYPE,
+    provider: PROVIDER_TYPE,
+  ) => boolean,
 ): UseModelOptionsResult {
   const modelProviderMapRef = useRef<Record<string, COMPOSED_PROVIDER_TYPE>>(
     {},
@@ -56,6 +61,15 @@ export function useModelOptions(
     if (!providerModels?.length) return null;
 
     const model = providerModels[0];
+
+    // Apply model filter if provided
+    if (
+      modelFilter &&
+      !modelFilter(model.value as PROVIDER_MODEL_TYPE, PROVIDER_TYPE.OPIK_FREE)
+    ) {
+      return null;
+    }
+
     const configModelLabel = freeProvider.configuration?.model_label?.trim();
     const modelLabel = configModelLabel || model.label;
 
@@ -67,7 +81,7 @@ export function useModelOptions(
       composedProviderType: PROVIDER_TYPE.OPIK_FREE as COMPOSED_PROVIDER_TYPE,
       icon: getProviderIcon(freeProvider),
     };
-  }, [configuredProvidersList, getProviderModels]);
+  }, [configuredProvidersList, getProviderModels, modelFilter]);
 
   const groupOptions = useMemo(() => {
     const filteredByConfiguredProviders = pick(
@@ -92,7 +106,17 @@ export function useModelOptions(
           (p) => p.ui_composed_provider === composedProviderType,
         )!;
 
-        const options = providerModels.map((providerModel) => ({
+        // Apply model filter if provided
+        const filteredModels = modelFilter
+          ? providerModels.filter((m) =>
+              modelFilter(
+                m.value as PROVIDER_MODEL_TYPE,
+                configuredProvider.provider,
+              ),
+            )
+          : providerModels;
+
+        const options = filteredModels.map((providerModel) => ({
           label: providerModel.label,
           value: providerModel.value,
         }));
@@ -107,7 +131,7 @@ export function useModelOptions(
         };
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
-  }, [configuredProvidersList, getProviderModels]);
+  }, [configuredProvidersList, getProviderModels, modelFilter]);
 
   // Combined filtering logic
   const { filteredFreeModel, filteredGroups } = useMemo(() => {
