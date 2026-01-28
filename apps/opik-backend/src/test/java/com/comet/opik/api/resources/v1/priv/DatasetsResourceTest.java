@@ -7578,6 +7578,42 @@ class DatasetsResourceTest {
             assertColumns(datasetId, apiKey, workspaceName, Set.copyOf(experimentIds), expectedOutput);
         }
 
+        @Test
+        void getExperimentItemsOutputColumns__whenNoMatchingExperimentItems__thenReturnEmptyColumns() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset without any experiment items
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create experiments but no experiment items (no traces linked)
+            List<UUID> experimentIds = IntStream.range(0, 2)
+                    .mapToObj(i -> {
+                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                                .datasetName(dataset.name())
+                                .promptVersion(null)
+                                .promptVersions(null)
+                                .datasetVersionId(null)
+                                .datasetVersionSummary(null)
+                                .build();
+                        return experimentResourceClient.create(experiment, apiKey, workspaceName);
+                    })
+                    .toList();
+
+            // Verify empty columns are returned (not null)
+            assertColumns(datasetId, apiKey, workspaceName, Set.copyOf(experimentIds), Set.of());
+        }
+
         private void assertColumns(UUID datasetId, String apiKey, String workspaceName, Set<UUID> experimentIds,
                 Set<Column> expectedOutput) {
 
