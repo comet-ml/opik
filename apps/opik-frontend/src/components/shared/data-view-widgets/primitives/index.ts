@@ -5,6 +5,7 @@
 // Each widget has a clear API/props and exported config for registry building.
 
 import type { ComponentRenderProps, ComponentRegistry } from "@/lib/data-view";
+import { useResolvedProps } from "@/lib/data-view";
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -124,7 +125,8 @@ import { LinkWidget } from "./LinkWidget";
 import { TraceLinkWidget } from "./TraceLinkWidget";
 import { ThreadLinkWidget } from "./ThreadLinkWidget";
 
-function createTextRenderer({ props }: ComponentRenderProps) {
+function TextRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   const value = props.value;
 
   // DEBUG: Log when Text widget receives non-string content
@@ -143,7 +145,8 @@ function createTextRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createNumberRenderer({ props }: ComponentRenderProps) {
+function NumberRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return NumberWidget({
     value: props.value as number | null,
     label: props.label as string | null | undefined,
@@ -152,7 +155,8 @@ function createNumberRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createLabelRenderer({ props }: ComponentRenderProps) {
+function LabelRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   const text = props.text;
 
   // DEBUG: Log empty labels
@@ -165,7 +169,8 @@ function createLabelRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createTagRenderer({ props }: ComponentRenderProps) {
+function TagRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return TagWidget({
     label: String(props.label ?? ""),
     variant: props.variant as
@@ -178,14 +183,16 @@ function createTagRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createBoolRenderer({ props }: ComponentRenderProps) {
+function BoolRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return BoolWidget({
     value: props.value as boolean | null,
     style: props.style as "check" | "text" | undefined,
   });
 }
 
-function createBoolChipRenderer({ props }: ComponentRenderProps) {
+function BoolChipRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return BoolChipWidget({
     value: props.value as boolean | null,
     trueLabel: props.trueLabel as string | null | undefined,
@@ -193,7 +200,8 @@ function createBoolChipRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createLinkButtonRenderer({ props }: ComponentRenderProps) {
+function LinkButtonRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return LinkButtonWidget({
     type: props.type as "trace" | "span",
     id: String(props.id ?? ""),
@@ -201,7 +209,8 @@ function createLinkButtonRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createLinkRenderer({ props }: ComponentRenderProps) {
+function LinkRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return LinkWidget({
     url: String(props.url ?? ""),
     text: props.text as string | null | undefined,
@@ -209,7 +218,8 @@ function createLinkRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createTraceLinkRenderer({ props }: ComponentRenderProps) {
+function TraceLinkRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return TraceLinkWidget({
     traceId: String(props.traceId ?? ""),
     text: props.text as string | null | undefined,
@@ -217,7 +227,8 @@ function createTraceLinkRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createThreadLinkRenderer({ props }: ComponentRenderProps) {
+function ThreadLinkRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return ThreadLinkWidget({
     threadId: String(props.threadId ?? ""),
     text: props.text as string | null | undefined,
@@ -226,14 +237,14 @@ function createThreadLinkRenderer({ props }: ComponentRenderProps) {
 }
 
 export const inlineWidgetRegistry: ComponentRegistry = {
-  Text: createTextRenderer,
-  Number: createNumberRenderer,
-  Label: createLabelRenderer,
-  Tag: createTagRenderer,
-  Bool: createBoolRenderer,
-  BoolChip: createBoolChipRenderer,
-  LinkButton: createLinkButtonRenderer,
-  Link: createLinkRenderer,
-  TraceLink: createTraceLinkRenderer,
-  ThreadLink: createThreadLinkRenderer,
+  Text: TextRenderer,
+  Number: NumberRenderer,
+  Label: LabelRenderer,
+  Tag: TagRenderer,
+  Bool: BoolRenderer,
+  BoolChip: BoolChipRenderer,
+  LinkButton: LinkButtonRenderer,
+  Link: LinkRenderer,
+  TraceLink: TraceLinkRenderer,
+  ThreadLink: ThreadLinkRenderer,
 };

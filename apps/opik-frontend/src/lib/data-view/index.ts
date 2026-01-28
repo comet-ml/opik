@@ -134,6 +134,8 @@ export {
   useViewTree,
 } from "./react/DataViewProvider";
 
+export { useResolvedProps } from "./react/useResolvedProps";
+
 export type {
   UseViewStreamOptions,
   UseViewStreamResult,

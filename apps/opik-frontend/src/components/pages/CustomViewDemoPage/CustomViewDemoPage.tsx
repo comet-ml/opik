@@ -37,7 +37,7 @@ import {
   deleteView,
   createEmptyTree,
 } from "@/lib/data-view";
-import { contextDataToSourceData } from "./data-view-widgets/types";
+import { contextDataToSourceData } from "@/components/shared/data-view-widgets/types";
 import { ContextData } from "@/types/custom-view";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";

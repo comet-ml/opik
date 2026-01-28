@@ -131,15 +131,16 @@ export type SourceData = Record<string, unknown>;
 
 /**
  * Props passed to component renderers.
- * Components are responsible for handling empty/missing data.
+ * Aligned with json-render pattern: element + children.
+ * Components use useResolvedProps() hook to resolve dynamic values.
  */
-export interface ComponentRenderProps<TProps = Record<string, unknown>> {
-  /** Resolved props (bindings already resolved) */
-  props: TProps;
-  /** The node being rendered */
-  node: ViewNode;
-  /** Rendered children */
+export interface ComponentRenderProps {
+  /** Full element definition (type, props, children keys, etc.) */
+  element: ViewNode;
+  /** Pre-rendered children */
   children: ReactNode;
+  /** Optional loading state */
+  loading?: boolean;
 }
 
 // ============================================================================
@@ -168,8 +169,8 @@ export interface ComponentDefinition<
 /**
  * Component renderer function type.
  */
-export type ComponentRenderer<TProps = Record<string, unknown>> = (
-  renderProps: ComponentRenderProps<TProps>,
+export type ComponentRenderer = (
+  renderProps: ComponentRenderProps,
 ) => ReactNode;
 
 /**

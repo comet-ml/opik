@@ -5,6 +5,7 @@
 // Each widget has a clear API/props and exported config for registry building.
 
 import type { ComponentRenderProps, ComponentRegistry } from "@/lib/data-view";
+import { useResolvedProps } from "@/lib/data-view";
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -120,18 +121,20 @@ import { AudioWidget } from "./AudioWidget";
 import { FileWidget } from "./FileWidget";
 import { ChatMessageWidget } from "./ChatMessageWidget";
 
-function createHeaderRenderer({ props }: ComponentRenderProps) {
+function HeaderRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return HeaderWidget({
     text: String(props.text ?? ""),
     level: props.level as 1 | 2 | 3 | undefined,
   });
 }
 
-function createDividerRenderer() {
+function DividerRenderer() {
   return DividerWidget({});
 }
 
-function createTextBlockRenderer({ props }: ComponentRenderProps) {
+function TextBlockRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   const content = props.content;
 
   // DEBUG: Log when TextBlock receives non-string content
@@ -150,7 +153,8 @@ function createTextBlockRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createCodeRenderer({ props }: ComponentRenderProps) {
+function CodeRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   const content = props.content;
   const isJson = isJsonValue(content);
 
@@ -167,7 +171,8 @@ function createCodeRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createImageRenderer({ props }: ComponentRenderProps) {
+function ImageRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return ImageWidget({
     src: String(props.src ?? ""),
     alt: props.alt as string | null | undefined,
@@ -176,7 +181,8 @@ function createImageRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createVideoRenderer({ props }: ComponentRenderProps) {
+function VideoRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return VideoWidget({
     src: String(props.src ?? ""),
     label: props.label as string | null | undefined,
@@ -185,7 +191,8 @@ function createVideoRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createAudioRenderer({ props }: ComponentRenderProps) {
+function AudioRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return AudioWidget({
     src: String(props.src ?? ""),
     label: props.label as string | null | undefined,
@@ -194,7 +201,8 @@ function createAudioRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createFileRenderer({ props }: ComponentRenderProps) {
+function FileRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return FileWidget({
     url: String(props.url ?? ""),
     filename: props.filename as string | null | undefined,
@@ -203,7 +211,8 @@ function createFileRenderer({ props }: ComponentRenderProps) {
   });
 }
 
-function createChatMessageRenderer({ props }: ComponentRenderProps) {
+function ChatMessageRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return ChatMessageWidget({
     content: String(props.content ?? ""),
     role: (props.role as "user" | "assistant") ?? "assistant",
@@ -211,13 +220,13 @@ function createChatMessageRenderer({ props }: ComponentRenderProps) {
 }
 
 export const blockWidgetRegistry: ComponentRegistry = {
-  Header: createHeaderRenderer,
-  Divider: createDividerRenderer,
-  TextBlock: createTextBlockRenderer,
-  Code: createCodeRenderer,
-  Image: createImageRenderer,
-  Video: createVideoRenderer,
-  Audio: createAudioRenderer,
-  File: createFileRenderer,
-  ChatMessage: createChatMessageRenderer,
+  Header: HeaderRenderer,
+  Divider: DividerRenderer,
+  TextBlock: TextBlockRenderer,
+  Code: CodeRenderer,
+  Image: ImageRenderer,
+  Video: VideoRenderer,
+  Audio: AudioRenderer,
+  File: FileRenderer,
+  ChatMessage: ChatMessageRenderer,
 };

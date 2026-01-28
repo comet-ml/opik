@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import useStreamingTreeCompletion from "./useStreamingTreeCompletion";
 import type { ViewTree, ViewPatch, SourceData } from "@/lib/data-view";
 import { generatePrompt } from "@/lib/data-view";
-import { customViewCatalog } from "@/components/pages/CustomViewDemoPage/data-view-widgets";
+import { customViewCatalog } from "@/components/shared/data-view-widgets";
 import { SchemaAction } from "@/types/schema-proposal";
 import { ContextType } from "@/types/custom-view";
 import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";

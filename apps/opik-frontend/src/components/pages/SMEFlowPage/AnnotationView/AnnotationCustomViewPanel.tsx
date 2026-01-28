@@ -1,7 +1,7 @@
 import React from "react";
 import { Trace } from "@/types/traces";
 import { ViewTree, DataViewProvider, Renderer } from "@/lib/data-view";
-import { customViewRegistry } from "@/components/pages/CustomViewDemoPage/data-view-widgets";
+import { customViewRegistry } from "@/components/shared/data-view-widgets";
 
 interface AnnotationCustomViewPanelProps {
   trace: Trace;

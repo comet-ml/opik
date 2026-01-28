@@ -1,9 +1,8 @@
 "use client";
 
 import type React from "react";
-import type { ViewTree, SourceData, ComponentRegistry } from "../core/types";
-import { resolveProps } from "../core/path";
-import { useDataView, useSourceData } from "./DataViewProvider";
+import type { ViewTree, ComponentRegistry } from "../core/types";
+import { useDataView } from "./DataViewProvider";
 
 // ============================================================================
 // RE-EXPORTS
@@ -30,15 +29,21 @@ interface RendererProps {
  * Renders a view tree using the provided component registry.
  *
  * @example
- * import { createCatalog, Renderer, DataViewProvider } from "@/lib/data-view";
+ * import { createCatalog, Renderer, DataViewProvider, useResolvedProps } from "@/lib/data-view";
  *
  * // Define catalog (schemas for AI)
  * const catalog = createCatalog({ components: {...} });
  *
- * // Define registry (React components)
+ * // Define registry (React components use element + useResolvedProps hook)
  * const registry = {
- *   Section: ({ props, children }) => <div>{props.title}{children}</div>,
- *   KeyValue: ({ props }) => <span>{props.label}: {props.value}</span>,
+ *   Section: ({ element, children }) => {
+ *     const props = useResolvedProps(element);
+ *     return <div>{props.title}{children}</div>;
+ *   },
+ *   KeyValue: ({ element }) => {
+ *     const props = useResolvedProps(element);
+ *     return <span>{props.label}: {props.value}</span>;
+ *   },
  * };
  *
  * // Render
@@ -50,7 +55,6 @@ export function Renderer({
   registry,
   loading,
 }: RendererProps): JSX.Element | null {
-  const source = useSourceData();
   const { tree } = useDataView();
 
   if (!tree.root || !tree.nodes[tree.root]) {
@@ -62,7 +66,6 @@ export function Renderer({
       nodeId={tree.root}
       tree={tree}
       registry={registry}
-      source={source}
       loading={loading}
     />
   );
@@ -76,18 +79,13 @@ interface NodeRendererProps {
   nodeId: string;
   tree: ViewTree;
   registry: ComponentRegistry;
-  source: SourceData;
   loading?: boolean;
 }
-
-// Debug flag - set to true to enable widget tree debugging
-const DEBUG_WIDGET_TREE = true;
 
 function NodeRenderer({
   nodeId,
   tree,
   registry,
-  source,
   loading,
 }: NodeRendererProps): JSX.Element | null {
   const node = tree.nodes[nodeId];
@@ -109,49 +107,20 @@ function NodeRenderer({
     );
   }
 
-  // Resolve dynamic values
-  const resolved = resolveProps(node.props, source);
-
-  // DEBUG: Log widget tree rendering details
-  if (DEBUG_WIDGET_TREE) {
-    // Check for potentially problematic widgets
-    const hasEmptyValues = Object.entries(resolved).some(([key, value]) => {
-      // Skip checking children-related props
-      if (key === "children") return false;
-      return value === undefined || value === null || value === "";
-    });
-
-    const hasObjectValues = Object.entries(resolved).some(([key, value]) => {
-      if (key === "children") return false;
-      return value !== null && typeof value === "object";
-    });
-
-    if (hasEmptyValues || hasObjectValues) {
-      console.debug(`[Renderer] Widget: ${node.type} (${nodeId})`, {
-        rawProps: node.props,
-        resolvedProps: resolved,
-        hasEmptyValues,
-        hasObjectValues,
-        parentKey: node.parentKey,
-      });
-    }
-  }
-
   // Render children recursively
   const childProps = {
     tree,
     registry,
-    source,
     loading,
   };
   const children = node.children?.map((childId) => (
     <NodeRenderer key={childId} nodeId={childId} {...childProps} />
   ));
 
-  // Components are responsible for handling empty/missing data
+  // Components use useResolvedProps hook internally to resolve dynamic values
   return (
     <AnimatedMount nodeId={nodeId}>
-      <Component props={resolved} node={node}>
+      <Component element={node} loading={loading}>
         {children}
       </Component>
     </AnimatedMount>

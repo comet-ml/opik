@@ -6,6 +6,7 @@
 // Containers have hasChildren: true and receive/render children.
 
 import type { ComponentRenderProps, ComponentRegistry } from "@/lib/data-view";
+import { useResolvedProps } from "@/lib/data-view";
 
 // Components
 export { ContainerWidget, containerWidgetConfig } from "./Container";
@@ -65,7 +66,8 @@ import { Level1ContainerWidget } from "./Level1Container";
 import { Level2ContainerWidget } from "./Level2Container";
 import { InlineRowWidget } from "./InlineRow";
 
-function createContainerRenderer({ props, children }: ComponentRenderProps) {
+function ContainerRenderer({ element, children }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return ContainerWidget({
     layout: props.layout as ContainerLayout | undefined,
     gap: props.gap as ContainerGap | undefined,
@@ -74,10 +76,8 @@ function createContainerRenderer({ props, children }: ComponentRenderProps) {
   });
 }
 
-function createLevel1ContainerRenderer({
-  props,
-  children,
-}: ComponentRenderProps) {
+function Level1ContainerRenderer({ element, children }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return Level1ContainerWidget({
     title: props.title as string | null | undefined,
     defaultOpen: props.defaultOpen !== false,
@@ -85,10 +85,8 @@ function createLevel1ContainerRenderer({
   });
 }
 
-function createLevel2ContainerRenderer({
-  props,
-  children,
-}: ComponentRenderProps) {
+function Level2ContainerRenderer({ element, children }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return Level2ContainerWidget({
     summary: String(props.summary ?? ""),
     defaultOpen: Boolean(props.defaultOpen),
@@ -99,15 +97,15 @@ function createLevel2ContainerRenderer({
   });
 }
 
-function createInlineRowRenderer({ children }: ComponentRenderProps) {
+function InlineRowRenderer({ children }: ComponentRenderProps) {
   return InlineRowWidget({
     children,
   });
 }
 
 export const containerWidgetRegistry: ComponentRegistry = {
-  Container: createContainerRenderer,
-  Level1Container: createLevel1ContainerRenderer,
-  Level2Container: createLevel2ContainerRenderer,
-  InlineRow: createInlineRowRenderer,
+  Container: ContainerRenderer,
+  Level1Container: Level1ContainerRenderer,
+  Level2Container: Level2ContainerRenderer,
+  InlineRow: InlineRowRenderer,
 };

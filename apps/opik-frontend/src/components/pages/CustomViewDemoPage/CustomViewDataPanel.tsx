@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { AlertCircle, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Renderer, useDataView } from "@/lib/data-view";
-import { customViewRegistry } from "./data-view-widgets";
+import { customViewRegistry } from "@/components/shared/data-view-widgets";
 
 interface CustomViewDataPanelProps {
   isDataLoading: boolean;
