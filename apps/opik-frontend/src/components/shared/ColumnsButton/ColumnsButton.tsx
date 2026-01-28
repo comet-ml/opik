@@ -15,6 +15,7 @@ import {
 import SortableMenuSection from "./SortableMenuSection";
 import { ColumnData } from "@/types/shared";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 /**
  * Computes the list of column IDs that should be selected when "Select all" is checked.
@@ -186,12 +187,13 @@ const ColumnsButton = <TColumnData,>({
 
   return (
     <DropdownMenu onOpenChange={openStateChangeHandler}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Columns3 className="mr-1.5 size-3.5" />
-          Columns
-        </Button>
-      </DropdownMenuTrigger>
+      <TooltipWrapper content="Columns">
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="icon-sm">
+            <Columns3 className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipWrapper>
       <DropdownMenuContent className="min-w-56 max-w-72 p-0 pt-12" align="end">
         <div
           className="absolute inset-x-1 top-1 h-11"

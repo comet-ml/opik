@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { createEmptyGroup, isGroupValid } from "@/lib/groups";
 import GroupRow from "@/components/shared/GroupsContent/GroupRow";
 import { MAX_GROUP_LEVELS } from "@/constants/groups";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const hasDuplication = (groups: Groups, group: Group, index: number) => {
   return (
@@ -178,26 +179,28 @@ const GroupsButton = <TColumnData,>({
 
   return (
     <Popover onOpenChange={setOpen} open={open}>
-      <PopoverTrigger asChild>
-        <Button
-          variant={variant}
-          size="sm"
-          className={cn(
-            isIconLayout && !validGroups.length && "size-8 px-0",
-            isIconLayout && validGroups.length && "px-3",
-          )}
-          disabled={disabled}
-        >
-          <GroupIcon className="size-3.5 shrink-0" />
-          {isIconLayout ? (
-            validGroups.length ? (
-              <span className="ml-1.5">{validGroups.length}</span>
-            ) : null
-          ) : (
-            <span className="ml-1.5">{`Groups (${validGroups.length})`}</span>
-          )}
-        </Button>
-      </PopoverTrigger>
+      <TooltipWrapper content={isIconLayout ? "Groups" : undefined}>
+        <PopoverTrigger asChild>
+          <Button
+            variant={variant}
+            size="sm"
+            className={cn(
+              isIconLayout && !validGroups.length && "size-8 px-0",
+              isIconLayout && validGroups.length && "px-3",
+            )}
+            disabled={disabled}
+          >
+            <GroupIcon className="size-3.5 shrink-0" />
+            {isIconLayout ? (
+              validGroups.length ? (
+                <span className="ml-1.5">{validGroups.length}</span>
+              ) : null
+            ) : (
+              <span className="ml-1.5">{`Groups (${validGroups.length})`}</span>
+            )}
+          </Button>
+        </PopoverTrigger>
+      </TooltipWrapper>
       <PopoverContent className="min-w-[340px] px-8 py-6" align={align}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between pb-1">
