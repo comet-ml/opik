@@ -8,6 +8,13 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Default configuration values for Docker executor containers
+# CPU shares: higher value = higher priority. Docker default is 1024.
+# Value of 512 gives containers moderate priority relative to other processes.
+DEFAULT_CPU_SHARES = 512
+# Memory limit for executor containers
+DEFAULT_MEM_LIMIT = "256mb"
+
 @dataclass
 class ExecutionResult:
     """Result of code execution."""

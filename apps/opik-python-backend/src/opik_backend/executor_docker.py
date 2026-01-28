@@ -15,7 +15,7 @@ from opentelemetry import metrics
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
-from opik_backend.executor import CodeExecutorBase, ExecutionResult
+from opik_backend.executor import CodeExecutorBase, ExecutionResult, DEFAULT_CPU_SHARES, DEFAULT_MEM_LIMIT
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +86,8 @@ class DockerExecutor(CodeExecutorBase):
         self.docker_tag = os.getenv("PYTHON_CODE_EXECUTOR_IMAGE_TAG", "latest")
         self.pool_check_interval = int(os.getenv("PYTHON_CODE_EXECUTOR_POOL_CHECK_INTERVAL_IN_SECONDS", "3"))
         self.network_disabled = os.getenv("PYTHON_CODE_EXECUTOR_ALLOW_NETWORK", "false").lower() != "true"
-        # CPU shares: higher value = higher priority. Default 1024 is the Docker default.
-        # Previous value of 2 was too low, causing processes to yield too frequently.
-        self.cpu_shares = int(os.getenv("PYTHON_CODE_EXECUTOR_CPU_SHARES", "512"))
-        self.mem_limit = os.getenv("PYTHON_CODE_EXECUTOR_MEM_LIMIT", "256mb")
+        self.cpu_shares = int(os.getenv("PYTHON_CODE_EXECUTOR_CPU_SHARES", str(DEFAULT_CPU_SHARES)))
+        self.mem_limit = os.getenv("PYTHON_CODE_EXECUTOR_MEM_LIMIT", DEFAULT_MEM_LIMIT)
 
         self.client = docker.from_env()
         self.instance_id = str(uuid7())
