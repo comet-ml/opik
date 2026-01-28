@@ -47,6 +47,8 @@ import SidebarMenuItem, {
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 
+const HOME_PATH = "/$workspaceName/home";
+
 const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
 const CONFIGURATION_ITEM: MenuItem = {
@@ -201,13 +203,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     (state) => state.SidebarInviteDevButton,
   );
 
-  // Use full logo (with text when expanded)
-  const logo = LogoComponent ? (
-    <LogoComponent expanded={expanded} />
-  ) : (
-    <Logo expanded={expanded} />
-  );
-
   const { data: projectData } = useProjectsList(
     {
       workspaceName,
@@ -348,6 +343,12 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     optimizations_running: hasActiveOptimizations,
   };
 
+  const logo = LogoComponent ? (
+    <LogoComponent expanded={expanded} />
+  ) : (
+    <Logo expanded={expanded} />
+  );
+
   const renderItems = (items: MenuItem[]) => {
     return items.map((item) => (
       <SidebarMenuItem
@@ -421,9 +422,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   return (
     <>
       <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
-        <div className="comet-header-height relative flex w-full min-w-0 items-center gap-2 border-b px-3">
+        <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
           <Link
-            to="/$workspaceName/home"
+            to={HOME_PATH}
             className="absolute left-[18px] z-10 block"
             params={{ workspaceName }}
           >
