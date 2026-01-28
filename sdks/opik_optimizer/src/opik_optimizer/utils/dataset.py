@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 FilterBy = Mapping[str, Any]
 
+
 def _normalize_filter_value(value: Any) -> Any:
     if isinstance(value, (set, frozenset, tuple)):
         return [str(item) for item in sorted(value, key=str)]
