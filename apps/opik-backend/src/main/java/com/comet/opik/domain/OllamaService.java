@@ -42,7 +42,7 @@ public class OllamaService {
     public OllamaConnectionTestResponse testConnection(@NonNull String baseUrl) {
         String normalizedUrl = normalizeUrl(baseUrl);
         String versionUrl = normalizedUrl + "/api/version";
-        log.debug("Testing Ollama connection at: {}", versionUrl);
+        log.debug("Testing Ollama connection at: {}", ValidationUtils.redactCredentialsFromUrl(versionUrl));
 
         try {
             Response response = httpClient.target(versionUrl)
@@ -79,7 +79,7 @@ public class OllamaService {
     public List<OllamaModel> listModels(@NonNull String baseUrl) {
         String normalizedUrl = normalizeUrl(baseUrl);
         String tagsUrl = normalizedUrl + "/api/tags";
-        log.debug("Fetching models from Ollama instance at: {}", tagsUrl);
+        log.debug("Fetching models from Ollama instance at: {}", ValidationUtils.redactCredentialsFromUrl(tagsUrl));
 
         try {
             Response response = httpClient.target(tagsUrl)
