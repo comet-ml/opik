@@ -1,5 +1,6 @@
 """Data types and context objects for Optimization Studio."""
 
+import re
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 from uuid import UUID
@@ -7,84 +8,43 @@ from uuid import UUID
 
 def _convert_template_syntax(text: str) -> str:
     """Convert double curly braces to single curly braces for template variables.
-
+    
     The frontend uses Mustache-style {{variable}} syntax, but the optimizer
     expects Python-style {variable} syntax.
-
+    
     Args:
         text: String that may contain {{variable}} patterns
-
+        
     Returns:
         String with {{variable}} or {{ name }} converted to {variable} or {name}
-
-    Raises:
-        ValueError: If the input text exceeds the maximum allowed length (1MB)
-
-    Note:
-        Each prompt message content is limited to 1MB to prevent DoS attacks.
-        This limit applies to the entire message content, not individual template variables.
     """
-    # 1MB is a reasonable limit for prompt messages while preventing abuse
-    MAX_MESSAGE_LENGTH = 1_048_576  # 1MB in characters
-    if len(text) > MAX_MESSAGE_LENGTH:
-        raise ValueError(
-            f"Prompt message content exceeds maximum length of {MAX_MESSAGE_LENGTH:,} characters "
-            f"({len(text):,} characters provided). Please reduce the message length."
-        )
-
     # Convert {{variable}} to {variable}, handling spaces, dots, and hyphens
-    # Use simple string operations instead of regex for better performance and security
-    result = []
-    i = 0
-    while i < len(text):
-        # Look for opening double braces
-        if i < len(text) - 1 and text[i] == "{" and text[i + 1] == "{":
-            # Find the matching closing double braces
-            j = i + 2
-            while j < len(text) - 1:
-                if text[j] == "}" and text[j + 1] == "}":
-                    # Extract content between braces and trim whitespace
-                    content = text[i + 2 : j].strip()
-                    # Replace with single braces
-                    result.append(f"{{{content}}}")
-                    i = j + 2
-                    break
-                j += 1
-            else:
-                # No matching closing braces found, keep original characters
-                result.append(text[i])
-                i += 1
-        else:
-            result.append(text[i])
-            i += 1
-
-    return "".join(result)
+    return re.sub(r'\{\{\s*([^}]+?)\s*\}\}', r'{\1}', text)
 
 
 @dataclass
 class OptimizationJobContext:
     """Context for an optimization job.
-
+    
     Contains the core identifiers and configuration needed to process
     an optimization job from the Java backend.
     """
-
     optimization_id: str
     workspace_id: str
     workspace_name: str
     config: Dict[str, Any]
     opik_api_key: Optional[str] = None
-
+    
     @classmethod
     def from_job_message(cls, job_message: Dict[str, Any]) -> "OptimizationJobContext":
         """Create context from job message.
-
+        
         Args:
             job_message: Raw job message from RQ
-
+            
         Returns:
             OptimizationJobContext instance
-
+            
         Raises:
             KeyError: If required fields are missing
         """
@@ -100,64 +60,58 @@ class OptimizationJobContext:
 @dataclass
 class OptimizationConfig:
     """Parsed optimization configuration.
-
+    
     Extracts and structures the nested configuration from the job message
     for easier access.
     """
-
     # Dataset
     dataset_name: str
-
+    
     # Prompt
     prompt_messages: List[Dict[str, str]]
-
+    
     # Model
     model: str
     model_params: Dict[str, Any]
-
+    
     # Metric
     metric_type: str
     metric_params: Dict[str, Any]
-
+    
     # Optimizer
     optimizer_type: str
     optimizer_params: Dict[str, Any]
-
+    
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> "OptimizationConfig":
         """Parse config dict into typed object.
-
+        
         Args:
             config: Configuration dictionary from job message
-
+            
         Returns:
             OptimizationConfig instance
-
+            
         Raises:
             KeyError: If required fields are missing
-            ValueError: If metrics list is empty, or if any prompt message content
-                        exceeds the maximum length of 1MB per message
+            ValueError: If metrics list is empty
         """
         # Extract metric config (use first metric for now)
         metric_config_list = config["evaluation"]["metrics"]
         if not metric_config_list:
             raise ValueError("At least one metric must be defined")
-
+        
         metric_config = metric_config_list[0]
-
+        
         # Convert prompt messages template syntax from {{var}} (FE-style) to {var} (optimizer-style)
         prompt_messages = []
         for msg in config["prompt"]["messages"]:
             converted_msg = {
                 "role": msg["role"],
-                "content": (
-                    _convert_template_syntax(msg["content"])
-                    if isinstance(msg["content"], str)
-                    else msg["content"]
-                ),
+                "content": _convert_template_syntax(msg["content"]) if isinstance(msg["content"], str) else msg["content"]
             }
             prompt_messages.append(converted_msg)
-
+        
         return cls(
             dataset_name=config["dataset_name"],
             prompt_messages=prompt_messages,
@@ -173,16 +127,15 @@ class OptimizationConfig:
 @dataclass
 class OptimizationResult:
     """Result of an optimization run."""
-
     optimization_id: str
     final_score: float
     initial_score: Optional[float]
     metric_name: str
     timestamp: str
-
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary for API response.
-
+        
         Returns:
             Dictionary representation of the result
         """
@@ -194,3 +147,4 @@ class OptimizationResult:
             "metric_name": self.metric_name,
             "timestamp": self.timestamp,
         }
+
