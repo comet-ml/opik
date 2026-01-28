@@ -10,9 +10,30 @@ title: Changelog
 
 Stay current on Agent Optimizer updates. Each entry below reflects a version bump in `sdks/opik_optimizer/pyproject.toml` on `main`. The compare links jump straight to the commits that landed in that release. As Opik is a monorepo, you will see other non-optimizer related changes in the commit links below.
 
+## Version 3.x
+
+Highlights: Full public, production-ready release designed to work alongside Optimization Studio. MCP/tool optimization is temporarily removed in `3.0.0`–`3.0.1` due to compatibility reasons.
+
+### Version 2 -> 3.0.0 highlights
+
+- First fully native multi-agent and multi-prompt optimization support end-to-end across optimizers.
+- Specific reasoning models seperate from training supported across all optimizers.
+- Multimodal optimization supported across all optimizers.
+- Pass@k evaluation across all optimizers via the `n` parameter and selection policies.
+- Full refactor and normalization of all optimizers for simpler code and better performance.
+
 | Date | Version | Highlights |
 | --- | --- | --- |
-| **2026-01-26** | `3.0.0` | Major rewrite: native multi-agent/multi-prompt optimization, reasoning model support, pass@k evaluation, and optimizer refactor. [Commits →](https://github.com/comet-ml/opik/compare/105f3ef0340d3e2c7c2e8d342766576c3519f748...98434bb3374280054ef6d8902b0cdc887bab25aa) |
+| **TBD** | `3.1.0` | Brings back tool optimization (MCP/tooling support). |
+| **2026-01-28** | `3.0.1` | Suppress noisy Hugging Face notebook warnings, fix HotpotQA multihop agent with new LiteLLM calls + JSON mode, map missing error enum so UI shows “Error”, HRPO rich output fixes and performance improvements, sanitize attachment spans to prevent output errors, fix HRPO async in notebooks. |
+| **2026-01-26** | `3.0.0` | Major rewrite: native multi-agent/multi-prompt optimization, reasoning model support, pass@k evaluation, and optimizer refactor. Breaking change: MCP-based optimizers removed. [Commits →](https://github.com/comet-ml/opik/compare/105f3ef0340d3e2c7c2e8d342766576c3519f748...98434bb3374280054ef6d8902b0cdc887bab25aa) |
+
+## Version 2.x
+
+Highlights: Introduced new optimizers including HRPO and GEPA, tool optimization and expanding coverage beyond early prompt-only workflows. Breaking change includes dropping MIPRO in favour of GEPA.
+
+| Date | Version | Highlights |
+| --- | --- | --- |
 | **2026-01-22** | `2.3.12` | Fixes for optimizer breaking issues. [Commits →](https://github.com/comet-ml/opik/compare/a327fa3c2fb4f7a9fac2d9bba05c02c8cc234a1e...105f3ef0340d3e2c7c2e8d342766576c3519f748) |
 | **2026-01-06** | `2.3.11` | Fixed hierarchical optimizer reason handling and numeric equals. [Commits →](https://github.com/comet-ml/opik/compare/fe02947b0843f28d8f0e67eee55e6ba377a3cc42...a327fa3c2fb4f7a9fac2d9bba05c02c8cc234a1e) |
 | **2025-12-24** | `2.3.10` | Added missing model parameter in HRPO. [Commits →](https://github.com/comet-ml/opik/compare/2735ea6fcaf06d1dd275fbe0ef8297b0d5e5f490...fe02947b0843f28d8f0e67eee55e6ba377a3cc42) |
@@ -40,6 +61,13 @@ Stay current on Agent Optimizer updates. Each entry below reflects a version bum
 | **2025-10-09** | `2.1.0` | Pinned LiteLLM, shipped optimizer API docs, added parameter-only tuning. [Commits →](https://github.com/comet-ml/opik/compare/516ba494ffeeaf7ba9d49337f336ac7cd360a4f2...47354f6d41123acd45330a0e3969892f86281ece) |
 | **2025-10-02** | `2.0.1` | Added GEPA dependency and test package init files. [Commits →](https://github.com/comet-ml/opik/compare/c2230e13a2d956635f588bc0a52df16421507b6f...516ba494ffeeaf7ba9d49337f336ac7cd360a4f2) |
 | **2025-10-01** | `2.0.0` | Updated pyproject.toml for v2.0 release. [Commits →](https://github.com/comet-ml/opik/compare/69dd9e6e61d3cd8aabe30a1ef814a5a57d74ef50...c2230e13a2d956635f588bc0a52df16421507b6f) |
+
+## Version 1.x
+
+Highlights: Initial research release for testing early internal optimizers MetaPrompter, Evolutionary and support for MIPRO.
+
+| Date | Version | Highlights |
+| --- | --- | --- |
 | **2025-10-01** | `1.1.0` | Optimizer MCP with EO, signature refactor, docs and dotfiles for optimizer release. [Commits →](https://github.com/comet-ml/opik/compare/67d147a8be9ad8ae70dea37fe2f649cda3a34ad3...69dd9e6e61d3cd8aabe30a1ef814a5a57d74ef50) |
 | **2025-09-24** | `1.0.6` | Initial optimizer packaging cleanup. [Commit →](https://github.com/comet-ml/opik/commit/67d147a8be9ad8ae70dea37fe2f649cda3a34ad3) |
 
