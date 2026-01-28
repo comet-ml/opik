@@ -13,6 +13,7 @@ import docker
 import schedule
 from opentelemetry import metrics
 from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 from opik_backend.executor import CodeExecutorBase, ExecutionResult
 
@@ -298,7 +299,7 @@ class DockerExecutor(CodeExecutorBase):
         logger.info(f"Get container latency: {get_container_latency:.3f} milliseconds")
         get_container_histogram.record(get_container_latency, attributes={"method": "get_container"})
 
-        with self.tracer.start_as_current_span("docker.run_scoring"):
+        with self.tracer.start_as_current_span("docker.run_scoring") as span:
             try:
                 cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.pyc", code, data_json, payload_type or ""]
                 
@@ -316,13 +317,10 @@ class DockerExecutor(CodeExecutorBase):
                     exit_code=result.exit_code,
                     output=result.output
                 )
-                total_latency = self._calculate_latency_ms(start_time)
                 
                 # Access ThreadPoolExecutor's internal work queue (private attribute)
                 queue_size = self.scoring_executor._work_queue.qsize()
                 scoring_executor_queue_size_gauge.set(queue_size)
-
-                scoring_executor_histogram.record(total_latency, attributes={"method": "run_scoring"})
                 
                 # Parse result and track outcome
                 parsed_result = self.parse_execution_result(exec_result)
@@ -330,22 +328,37 @@ class DockerExecutor(CodeExecutorBase):
                 # Determine outcome status based on result
                 if exec_result.exit_code == 0:
                     outcome_status = "success"
-                    logger.info(f"Scoring executor latency: {total_latency:.3f} ms (code_size: {code_size} bytes, data_size: {data_size} bytes)")
                 else:
                     outcome_status = "invalid_code"
-                    logger.warning(f"Execution failed with invalid code/data (exit_code: {exec_result.exit_code}, code_size: {code_size} bytes, data_size: {data_size} bytes)")
+                    span.set_status(Status(StatusCode.ERROR, f"Execution failed with exit_code={exec_result.exit_code}"))
+                    span.set_attribute("error.type", "invalid_code")
+                    span.set_attribute("error.exit_code", exec_result.exit_code)
                 
                 self._record_execution_outcome(outcome_status, payload_type)
                 return parsed_result
-            except concurrent.futures.TimeoutError:
+            except concurrent.futures.TimeoutError as e:
                 self._record_execution_outcome("timeout", payload_type)
-                logger.error(f"Execution timed out in container {container.id} (code_size: {code_size} bytes, data_size: {data_size} bytes)")
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, "Execution timed out"))
+                span.set_attribute("error.type", "timeout")
+                span.set_attribute("error.timeout_seconds", self.exec_timeout)
                 return {"code": 504, "error": "Server processing exceeded timeout limit."}
             except Exception as e:
                 self._record_execution_outcome("error", payload_type)
+                span.record_exception(e)
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                span.set_attribute("error.type", type(e).__name__)
                 logger.error(f"An unexpected error occurred: {e}")
                 return {"code": 500, "error": "An unexpected error occurred"}
             finally:
+                # Always record total latency regardless of outcome
+                total_latency = self._calculate_latency_ms(start_time)
+                scoring_executor_histogram.record(total_latency, attributes={"method": "run_scoring"})
+                span.set_attribute("latency_ms", total_latency)
+                span.set_attribute("code_size_bytes", code_size)
+                span.set_attribute("data_size_bytes", data_size)
+                logger.info(f"Scoring executor latency: {total_latency:.3f} ms (code_size: {code_size} bytes, data_size: {data_size} bytes)")
+                
                 # Stop and remove the container, then create a new one asynchronously
                 self.release_container(container)
             
