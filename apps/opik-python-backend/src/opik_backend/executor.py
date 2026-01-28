@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 # Value of 512 gives containers moderate priority relative to other processes.
 DEFAULT_CPU_SHARES = 512
 # Memory limit for executor containers
-DEFAULT_MEM_LIMIT = "256mb"
+# Uses Docker SDK format: number followed by single letter unit (b/k/m/g)
+DEFAULT_MEM_LIMIT = "256m"
 
 @dataclass
 class ExecutionResult:
