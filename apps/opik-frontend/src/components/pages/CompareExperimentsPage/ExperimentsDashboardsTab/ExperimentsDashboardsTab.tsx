@@ -185,7 +185,9 @@ const ExperimentsDashboardsTab: React.FunctionComponent<
           </div>
         )}
 
-        {!isPending && dashboard && <DashboardContent />}
+        {!isPending && dashboard && (
+          <DashboardContent onSave={isTemplate ? undefined : save} />
+        )}
       </div>
     </>
   );
