@@ -81,6 +81,8 @@
     --template-icon-experiments: #10b981;
 
     /* DataTable colors */
+    --table-best-row-bg: #e6f7ed;
+    --table-best-row-hover-bg: #d0f0dc;
 
     /* Trace thread colors */
     --thread-active: #ebf2f5;
@@ -302,6 +304,10 @@
     --diff-added-bg: #14532d;
     --diff-added-text: #bbf7d0;
 
+    /* DataTable colors - Dark Mode */
+    --table-best-row-bg: #29322f;
+    --table-best-row-hover-bg: #314136;
+
     /* Upload field colors - Dark Mode */
     --upload-icon-bg: 215 19.3% 34.5%;
 
@@ -462,6 +468,14 @@
   .comet-content-inset {
     --comet-content-width: calc(100vw - var(--sidebar-width));
     left: var(--sidebar-width);
+  }
+
+  .comet-table-row-best td {
+    background-color: var(--table-best-row-bg) !important;
+  }
+
+  .comet-table-row-best:hover td {
+    background-color: var(--table-best-row-hover-bg) !important;
   }
 
   .comet-table-row-active[data-row-active="true"] td {
