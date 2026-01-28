@@ -140,8 +140,8 @@ def generate_code():
 
         config_dict = request.get_json(force=True)
 
-        if not config_dict:
-            abort(400, "Request body is required")
+        if not isinstance(config_dict, dict) or not config_dict:
+            abort(400, "Request body must be a non-empty JSON object")
 
         # Convert to OptimizationConfig
         config = OptimizationConfig.from_dict(config_dict)
