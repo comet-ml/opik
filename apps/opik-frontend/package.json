@@ -24,7 +24,9 @@
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "e2e": "playwright test && playwright show-report",
     "e2e:debug": "playwright test --debug",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "deps:validate": "depcruise src --config --ignore-known .dependency-cruiser-known-violations.json",
+    "deps:baseline": "depcruise src --config --output-type baseline > .dependency-cruiser-known-violations.json"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.1",
@@ -126,6 +128,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.45.3",
+    "dependency-cruiser": "^17.3.6",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query-devtools": "^5.45.0",
     "@tanstack/router-devtools": "^1.36.3",
