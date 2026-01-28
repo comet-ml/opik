@@ -43,7 +43,7 @@ title: Optimizer Frequently Asked Questions
 <AccordionGroup>
   <Accordion title="What are the supported optimization algorithms?">
   Opik Agent Optimizer supports a wide range of optimization algorithms including:
-  - [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_reflective_optimizer)
+  - [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
   - [GEPA Optimization](/agent_optimization/algorithms/gepa_optimizer)
   - [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)
   - [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer)
@@ -54,7 +54,7 @@ title: Optimizer Frequently Asked Questions
   </Accordion>
   <Accordion title="How do I choose the right optimizer for my task?">
   Knowing which optimizer to use depends on your specific needs. As a rule of thumb, we recommend
-  starting with [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_reflective_optimizer)
+  starting with [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
   as this has been shown to be a strong baseline for most tasks.
 
   You can also try to use:
@@ -135,7 +135,7 @@ For frequent setup and usage errors, head to [Known Issues](/agent_optimization/
     Yes—compose metrics using `MultiMetricObjective` or custom heuristics so optimizers weigh multiple goals. For complex trade-offs, capture human preferences in the metric reasons, or explore Pareto-aware optimizers like GEPA that surface trade-offs between accuracy and cost.
   </Accordion>
   <Accordion title="What about multimodal or agent workflows?">
-    Opik supports optimizing prompts that handle images/videos, as well as agents built with LangGraph, Google ADK, or MCP toolchains. Use the [Optimize agents](/agent_optimization/optimization/optimize_agents/overview) and [Optimize multimodal](/agent_optimization/optimization/optimize_multimodal) guides for modality-specific advice.
+    Opik supports optimizing prompts that handle images/videos, as well as agents built with LangGraph, Google ADK, or MCP toolchains. Use the [Optimize agents](/agent_optimization/optimization/optimize_agents) and [Optimize multimodal](/agent_optimization/optimization/optimize_multimodal) guides for modality-specific advice.
   </Accordion>
   <Accordion title="How reliable are optimizer metrics?">
     LLM-based metrics can be noisy. Always include deterministic checks when possible, and ensure your `ScoreResult.reason` is informative so reflective optimizers can identify true failure modes. See [Define metrics](/agent_optimization/optimization/define_metrics) and [Custom metrics](/agent_optimization/advanced/custom_metrics) for best practices.
