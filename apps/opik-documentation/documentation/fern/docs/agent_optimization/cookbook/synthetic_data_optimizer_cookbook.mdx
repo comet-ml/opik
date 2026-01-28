@@ -11,14 +11,13 @@ title: Synthetic Data Optimizer Cookbook
 ---
 
 <Info>
-  This example shows how to generate synthetic Q&A data from Opik traces and optimize prompts using the
-  MetaPromptOptimizer. All steps, code, and explanations are provided in the interactive Colab notebook below.
+  This page is a high-level entry point for the synthetic data workflow. Use the notebook or SDK script to run the full example end-to-end.
 </Info>
 
-## Load Example Notebook
+## Launch the example
 
 <Note>
-  To follow this example, simply open the Colab notebook below. You can run, modify, and experiment with the workflow directly in your browser—no local setup required.
+  The notebook is the fastest way to explore synthetic data optimization in your browser.
 </Note>
 
 | Platform | Launch Link |
@@ -26,16 +25,24 @@ title: Synthetic Data Optimizer Cookbook
 | **Google Colab (Preferred)** | [<img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab" style="vertical-align: middle; display: inline-block;"/>](https://colab.research.google.com/github/comet-ml/opik/blob/main/sdks/opik_optimizer/notebooks/OpikSyntheticDataOptimizer.ipynb) |
 | **GitHub** | [View the notebook on GitHub](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/notebooks/OpikSyntheticDataOptimizer.ipynb) |
 
-## What you'll learn
+## What this example covers
 
-- How to extract and clean traces from Opik
-- How to generate synthetic Q&A datasets using [tinyqabenchmarkpp](https://pypi.org/project/tinyqabenchmarkpp/)
-- How to upload and manage datasets in Opik
-- How to configure and run the MetaPromptOptimizer on synthetic data
-- How to interpret and visualize optimization results
+- Generating synthetic Q&A datasets from Opik traces
+- Using TinyQA (via [tinyqabenchmarkpp](https://pypi.org/project/tinyqabenchmarkpp/)) and variants like TinyQA++
+- Optimizing prompts with MetaPrompt on synthetic data
+- Reviewing results in the Opik UI
 
-## Quick Start
+## Where the full implementation lives
 
-1. Click the Colab badge above to launch the notebook.
-2. Follow the notebook's step-by-step workflow.
-3. For more details, see the [Opik Agent Optimizer documentation](/agent_optimization/overview).
+<Callout>
+  Notebook: [`sdks/opik_optimizer/notebooks/OpikSyntheticDataOptimizer.ipynb`](https://github.com/comet-ml/opik/blob/main/sdks/opik_optimizer/notebooks/OpikSyntheticDataOptimizer.ipynb)
+</Callout>
+
+<Callout>
+  SDK codebase: browse `sdks/opik_optimizer/` for dataset utilities, metrics, and optimizer implementations.
+</Callout>
+
+## Next steps
+
+- Run the notebook and swap in your own traces or datasets.
+- Explore [Define datasets](/agent_optimization/optimization/define_datasets) and [Define metrics](/agent_optimization/optimization/define_metrics) for deeper control.
