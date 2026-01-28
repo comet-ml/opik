@@ -71,13 +71,14 @@ def _write_file_like_to_temp_file(file_like: bytes) -> str:
             temp_file.name,
         )
     except Exception as e:
-        temp_file.close()
         LOGGER.error(
             "Failed to write file-like attachment to temp file: %s",
             e,
             exc_info=True,
         )
         raise
+    finally:
+        temp_file.close()
 
     return temp_file.name
 
