@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Split, Trash } from "lucide-react";
+import { Split, Trash, Tag } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Experiment } from "@/types/datasets";
@@ -12,14 +12,16 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Separator } from "@/components/ui/separator";
+import AddTagDialog from "@/components/pages-shared/experiments/AddTagDialog/AddTagDialog";
 
 type ExperimentsActionsPanelsProps = {
   experiments: Experiment[];
+  onTagsAdded?: () => void;
 };
 
 const ExperimentsActionsPanel: React.FunctionComponent<
   ExperimentsActionsPanelsProps
-> = ({ experiments }) => {
+> = ({ experiments, onTagsAdded }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | number>(false);
   const navigate = useNavigate();
@@ -73,9 +75,16 @@ const ExperimentsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteExperimentsHandler}
         title="Delete experiments"
-        description="Deleting experiments will remove all samples in these experiments. Related traces won’t be affected. This action cannot be undone. Are you sure you want to continue?"
+        description="Deleting experiments will remove all samples in these experiments. Related traces won't be affected. This action cannot be undone. Are you sure you want to continue?"
         confirmText="Delete experiments"
         confirmButtonVariant="destructive"
+      />
+      <AddTagDialog
+        key={`tag-${resetKeyRef.current}`}
+        experiments={experiments}
+        open={open === 3}
+        setOpen={setOpen}
+        onSuccess={onTagsAdded}
       />
       <div className="inline-flex items-center gap-2">
         <TooltipWrapper content="Compare experiments">
@@ -92,6 +101,19 @@ const ExperimentsActionsPanel: React.FunctionComponent<
         />
         <Separator orientation="vertical" className="mx-2 h-4" />
       </div>
+      <TooltipWrapper content="Add tags">
+        <Button
+          variant="outline"
+          size="icon-sm"
+          onClick={() => {
+            setOpen(3);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <Tag />
+        </Button>
+      </TooltipWrapper>
       <TooltipWrapper content="Delete">
         <Button
           variant="outline"

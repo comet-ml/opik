@@ -675,6 +675,10 @@ navigation:
             icon: fa-regular fa-house
             path: docs/agent_optimization/overview.mdx
             slug: overview
+          - page: Optimization Studio
+            icon: fa-regular fa-window-maximize
+            path: docs/agent_optimization/optimization/optimization_studio.mdx
+            slug: optimization_studio
           - page: Quickstart
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/getting_started/quickstart.mdx
@@ -691,6 +695,10 @@ navigation:
             icon: fa-regular fa-calendar
             path: docs/agent_optimization/getting_started/changelog.mdx
             slug: changelog
+          - page: Known Issues
+            icon: fa-regular fa-triangle-exclamation
+            path: docs/agent_optimization/known_issues.mdx
+            slug: known_issues
       - section: Optimization
         slug: /optimization
         contents:
@@ -787,6 +795,18 @@ navigation:
             icon: fa-regular fa-sliders
             path: docs/agent_optimization/advanced/custom_metrics.mdx
             slug: custom_metrics
+          - page: Custom optimizer prompts
+            icon: fa-regular fa-pen-to-square
+            path: docs/agent_optimization/advanced/prompt_customization.mdx
+            slug: prompt_customization
+          - page: Sampling controls
+            icon: fa-regular fa-scale-balanced
+            path: docs/agent_optimization/advanced/n_samples.mdx
+            slug: n_samples
+          - page: Multiple completions (n)
+            icon: fa-regular fa-code-fork
+            path: docs/agent_optimization/advanced/multiple_completions.mdx
+            slug: multiple_completions
           - page: Chaining optimizers
             icon: fa-regular fa-objects-align-bottom
             path: docs/agent_optimization/advanced/chaining_optimizers.mdx
@@ -830,6 +850,9 @@ navigation:
           - page: Large CSV uploads
             path: docs/self-host/configure/large_csv_uploads.mdx
             slug: large_csv_uploads
+          - page: Dataset versioning migration
+            path: docs/self-host/configure/dataset_versioning_migration.mdx
+            slug: dataset_versioning_migration
   - tab: reference
     layout:
       - page: Overview

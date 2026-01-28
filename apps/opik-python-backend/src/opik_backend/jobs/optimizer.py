@@ -113,8 +113,8 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         span.set_attribute("optimization_id", str(context.optimization_id))
         span.set_attribute("workspace_id", context.workspace_id)
         span.set_attribute("workspace_name", context.workspace_name)
-
-        logger.info(
+        
+        logger.debug(
             f"Processing Optimization Studio job: {context.optimization_id} "
             f"for workspace: {context.workspace_name}"
         )
@@ -163,7 +163,7 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
                 config = OptimizationConfig.from_dict(job_message.get("config", {}))
 
                 # Generate Python code from configuration
-                logger.info(
+                logger.debug(
                     f"Generating optimization code for {context.optimization_id}"
                 )
                 generated_code = OptimizationCodeGenerator.generate(config, context)

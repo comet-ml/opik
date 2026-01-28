@@ -12,8 +12,15 @@ env:
   GOOGLE_CLOUD_PROJECT: opik-sdk-tests
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  OPIK_TEST_EXPENSIVE: ${{ inputs.run_expensive_tests }}
 on:
   workflow_call:
+    inputs:
+      run_expensive_tests:
+        description: "Run expensive tests (e.g., video generation)"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   tests:

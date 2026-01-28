@@ -104,7 +104,7 @@ distributedLock:
   # Description: This value has to be considerably higher than the lockTimeoutMS value, as it has to guarantee that the
   # last thread to join the queue to acquire the lock will have enough time to execute the action. Then, the lock will
   # be deleted from redis after the specified period of time.
-  # This is needed as redisson by default doesn't delete the lock from redis after the lease time expires, it just
+  # This is needed as Redisson by default doesn't delete the lock from redis after the lease time expires, it just
   # releases the lock. The expiration time will be reset every time the lock is acquired.
   ttlInSeconds: 1
 
@@ -397,6 +397,12 @@ workspaceSettings:
   # Set to -1 to disable the limit (allow sorting for all project sizes).
   # This value is calculated via estimated size based on spans table.
   maxProjectSizeToAllowSorting: -1
+  # Default: 1000000
+  # Description: Maximum number of experiment items in a workspace to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all experiment item counts).
+  # This count-based limit is used because experiment_items has fixed-size columns (UUIDs only)
+  # and query performance scales with row count, not data size.
+  maxExperimentItemsToAllowSorting: -1
 
 # Configuration AWS S3
 s3Config:
@@ -452,7 +458,10 @@ serviceToggles:
   exportEnabled: "true"
   # Default: false for testing (legacy mode)
   # Description: Whether or not dataset versioning feature is enabled
-  datasetVersioningEnabled: "false"
+  datasetVersioningEnabled: "true"
+  # Default: true
+  # Description: Whether or not dataset export to CSV feature is enabled
+  datasetExportEnabled: "true"
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: "false"
@@ -525,6 +534,35 @@ traceThreadConfig:
   # Default: 3
   # Description: Maximum number of retry attempts for failed messages (1-10)
   maxRetries: 3
+
+# Dataset Versioning Migration configuration
+# Includes both lazy migration (on-demand) and items_total migration (startup)
+datasetVersioningMigration:
+  # Default: false for testing
+  # Description: Whether to enable lazy migration (migrate datasets on first access)
+  lazyEnabled: false
+  # Default: false for testing
+  # Description: Whether to run the items_total migration on startup
+  # Set to true to enable the migration, false to disable after completion
+  # This migration calculates and updates the items_total field for dataset versions
+  # that were created by the Liquibase migration (where dataset_id = dataset_version_id)
+  itemsTotalEnabled: false
+  # Default: 100
+  # Description: Number of dataset versions to process in each batch for items_total migration
+  # Smaller batches reduce memory usage but increase total migration time
+  itemsTotalDatasetsBatchSize: 100
+  # Default: 3600 (1 hour)
+  # Description: Lock timeout in seconds for the items_total migration process
+  # Should be long enough to complete the migration
+  itemsTotalLockTimeoutSeconds: 3600
+  # Default: 30 seconds
+  # Description: Delay in seconds before starting the items_total migration job after application startup
+  # This allows the service to stabilize before running the migration
+  itemsTotalStartupDelaySeconds: 30
+  # Default: 3600s (1 hour)
+  # Description: Job execution timeout in seconds for the items_total migration
+  # Should be long enough to complete the entire migration process
+  itemsTotalJobTimeoutSeconds: 3600
 
 # Job timeout configuration
 jobTimeout:

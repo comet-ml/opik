@@ -1,240 +1,86 @@
 """
-Evaluation operations for the Meta-Prompt Optimizer.
-
-This module contains functions for evaluating prompts and managing dataset subsets.
+Evaluation and selection helpers for the Meta-Prompt Optimizer.
 """
 
 from typing import Any
-from collections.abc import Callable
-import logging
-import random
-
-import opik
-from opik import opik_context
+from collections.abc import Sequence
 
 from ....api_objects import chat_prompt
-from .... import task_evaluator, helpers
-from ....mcp_utils.mcp_workflow import MCPExecutionConfig
+from ....utils import display as display_utils
+from .. import reporting
+from . import result_ops
 
-logger = logging.getLogger(__name__)
+
+def select_best_candidate(
+    *,
+    prompt_scores: Sequence[tuple[dict[str, chat_prompt.ChatPrompt], float]],
+    best_score: float,
+) -> tuple[
+    list[tuple[dict[str, chat_prompt.ChatPrompt], float]],
+    dict[str, chat_prompt.ChatPrompt],
+    float,
+    float,
+]:
+    """
+    Sort prompt scores and return the top candidate with improvement.
+    """
+    sorted_scores = sorted(prompt_scores, key=lambda x: x[1], reverse=True)
+    best_candidate, best_cand_score_avg = sorted_scores[0]
+    improvement = result_ops.calculate_improvement(best_cand_score_avg, best_score)
+    return sorted_scores, best_candidate, best_cand_score_avg, improvement
 
 
-def evaluate_prompt(
+def score_candidate_prompts(
+    *,
     optimizer: Any,
-    prompt: chat_prompt.ChatPrompt,
-    dataset: opik.Dataset,
-    metric: Callable,
-    n_samples: int | None = None,
-    dataset_item_ids: list[str] | None = None,
-    experiment_config: dict | None = None,
-    use_full_dataset: bool = True,
-    optimization_id: str | None = None,
-    mcp_config: MCPExecutionConfig | None = None,
-    **kwargs: Any,
-) -> float:
+    context: Any,
+    candidate_prompts: list[dict[str, chat_prompt.ChatPrompt]],
+    best_score: float,
+) -> tuple[list[tuple[Any, float]], float]:
     """
-    Evaluate a prompt on a dataset using a metric.
-
-    Args:
-        optimizer: Reference to the optimizer instance
-        prompt: Prompt to evaluate
-        dataset: Opik Dataset to evaluate the prompt on
-        metric: Metric function
-        use_full_dataset: Whether to use the full dataset or a subset
-        experiment_config: Optional configuration for the experiment
-        n_samples: Optional number of items to test in the dataset
-        optimization_id: Optional ID of the optimization
-        mcp_config: Optional MCP configuration
-        **kwargs: Additional arguments
-
-    Returns:
-        float: The evaluation score
+    Score candidate prompt bundles and return scores plus best score in round.
     """
-    # Calculate subset size for trials
-    if not use_full_dataset:
-        total_items = len(dataset.get_items())
-        if n_samples is not None:
-            if n_samples > total_items:
-                logger.warning(
-                    f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset."
-                )
-                subset_size = None
-            else:
-                subset_size = n_samples
-                logger.debug(f"Using specified n_samples: {subset_size} items")
-        else:
-            # FIXME: This is a hack to ensure we don't evaluate on too many items
-            # This should be a configuration parameter and centralised
-            #
-            # Calculate 20% of total, but no more than 100 items and no more than total items
-            DEFAULT_EVALUATION_SUBSET_SIZE = min(
-                total_items, max(100, int(total_items * 0.2))
-            )
-            subset_size = DEFAULT_EVALUATION_SUBSET_SIZE
-            logger.debug(
-                f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)"
-            )
-    else:
-        subset_size = None  # Use all items for final checks
-        logger.debug("Using full dataset for evaluation")
-
-    configuration_updates = helpers.drop_none(
-        {
-            "n_samples": subset_size,
-            "use_full_dataset": use_full_dataset,
-        }
-    )
-    meta_metadata = helpers.drop_none(
-        {
-            "optimization_id": optimization_id,
-            "stage": "trial_evaluation" if not use_full_dataset else "final_eval",
-        }
-    )
-    experiment_config = optimizer._prepare_experiment_config(
-        prompt=prompt,
-        dataset=dataset,
-        metric=metric,
-        experiment_config=experiment_config,
-        configuration_updates=configuration_updates,
-        additional_metadata={"meta_prompt": meta_metadata} if meta_metadata else None,
+    prompt_scores: list[tuple[Any, float]] = []
+    current_round_best_score = best_score
+    optimizer._total_candidates_in_round = len(candidate_prompts)
+    dataset_name = getattr(getattr(context, "evaluation_dataset", None), "name", None)
+    is_validation = (
+        context.validation_dataset is not None
+        and context.evaluation_dataset is context.validation_dataset
     )
 
-    def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-        new_prompt = prompt.copy()
-        messages = new_prompt.get_messages(dataset_item)
-        new_prompt.set_messages(messages)
-        agent = optimizer._instantiate_agent(new_prompt)
+    for candidate_count, candidate in enumerate(candidate_prompts):
+        if optimizer._should_stop_context(context):
+            break
 
-        if mcp_config is not None:
-            coordinator = mcp_config.coordinator
-            coordinator.reset()
+        optimizer._current_candidate = candidate_count
+        selection_summary = display_utils.summarize_selection_policy(candidate)
+        with reporting.display_prompt_candidate_scoring_report(
+            verbose=optimizer.verbose,
+            dataset_name=dataset_name,
+            is_validation=is_validation,
+            selection_summary=selection_summary,
+        ) as reporter:
+            reporter.set_generated_prompts(candidate_count, candidate)
+            context.extra_params["suppress_evaluation_progress"] = True
             try:
-                logger.debug(
-                    "Calling MCP-enabled LLM with tool access; prompt length=%s",
-                    sum(len(msg["content"]) for msg in messages),
+                sampling_tag = optimizer._build_sampling_tag(
+                    scope="meta_prompt",
+                    round_index=getattr(optimizer, "_current_round", None),
+                    candidate_id=f"cand{candidate_count}",
                 )
-                raw_model_output = agent.llm_invoke(
-                    messages=messages,
-                    seed=optimizer.seed,
-                    allow_tool_use=True,
+                prompt_score = optimizer.evaluate(
+                    context,
+                    candidate,
+                    sampling_tag=sampling_tag,
                 )
-            except Exception as exc:
-                logger.error("Error during MCP first pass: %s", exc)
-                raise
+            finally:
+                context.extra_params.pop("suppress_evaluation_progress", None)
+            reporter.set_final_score(current_round_best_score, prompt_score)
 
-            second_pass_messages = coordinator.build_second_pass_messages(
-                base_messages=messages,
-                dataset_item=dataset_item,
-            )
+        if prompt_score > current_round_best_score:
+            current_round_best_score = prompt_score
 
-            if second_pass_messages is None and mcp_config.fallback_invoker:
-                fallback_args = mcp_config.fallback_arguments(dataset_item)
-                if fallback_args:
-                    logger.debug(
-                        "MCP fallback triggered for tool %s with args=%s",
-                        mcp_config.tool_name,
-                        fallback_args,
-                    )
-                    summary_override = mcp_config.fallback_invoker(fallback_args)
-                    second_pass_messages = coordinator.build_second_pass_messages(
-                        base_messages=messages,
-                        dataset_item=dataset_item,
-                        summary_override=summary_override,
-                    )
+        prompt_scores.append((candidate, prompt_score))
 
-            if second_pass_messages is not None:
-                logger.debug(
-                    "Executing MCP second pass with %d messages",
-                    len(second_pass_messages),
-                )
-                final_response = agent.llm_invoke(
-                    messages=second_pass_messages,
-                    seed=optimizer.seed,
-                    allow_tool_use=mcp_config.allow_tool_use_on_second_pass,
-                )
-            else:
-                final_response = raw_model_output
-
-            cleaned_model_output = final_response.strip()
-        else:
-            try:
-                logger.debug(
-                    f"Calling LLM with prompt length: {sum(len(msg['content']) for msg in messages)}"
-                )
-                raw_model_output = agent.invoke(messages)
-                logger.debug(f"LLM raw response length: {len(raw_model_output)}")
-                logger.debug(f"LLM raw output: {raw_model_output}")
-            except Exception as e:
-                logger.error(f"Error calling model with prompt: {e}")
-                logger.error(f"Failed prompt: {messages}")
-                logger.error(
-                    f"Prompt length: {sum(len(msg['content']) for msg in messages)}"
-                )
-                raise
-
-            cleaned_model_output = raw_model_output.strip()
-
-        # Add tags to trace for optimization tracking
-        if optimizer.current_optimization_id:
-            opik_context.update_current_trace(
-                tags=[
-                    optimizer.current_optimization_id,
-                    "Evaluation",
-                ]
-            )
-
-        result = {
-            "llm_output": cleaned_model_output,
-        }
-        return result
-
-    # Use dataset's get_items with limit for sampling
-    logger.debug(
-        f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {getattr(metric, '__name__', str(metric))}"
-    )
-    score = task_evaluator.evaluate(
-        dataset=dataset,
-        metric=metric,
-        evaluated_task=llm_task,
-        dataset_item_ids=dataset_item_ids,
-        num_threads=optimizer.n_threads,
-        project_name=optimizer.project_name,
-        n_samples=subset_size,  # Use subset_size for trials, None for full dataset
-        experiment_config=experiment_config,
-        optimization_id=optimization_id,
-        verbose=optimizer.verbose,
-    )
-    logger.debug(f"Evaluation score: {score:.4f}")
-    return score
-
-
-def get_evaluation_subset(
-    dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
-) -> list[dict[str, Any]]:
-    """
-    Get a random subset of the dataset for evaluation.
-
-    Args:
-        dataset: The dataset to sample from
-        min_size: Minimum subset size
-        max_size: Maximum subset size
-
-    Returns:
-        List of dataset items to evaluate against
-    """
-    try:
-        # Get all items from the dataset
-        all_items = dataset.get_items()
-        if not all_items:
-            return all_items
-
-        # Calculate subset size
-        total_size = len(all_items)
-        subset_size = min(max(min_size, int(total_size * 0.2)), max_size)
-
-        # Get random subset of items
-        return random.sample(all_items, subset_size)
-
-    except Exception as e:
-        logger.warning(f"Could not create evaluation subset: {e}")
-        return all_items
+    return prompt_scores, current_round_best_score

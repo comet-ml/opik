@@ -86,18 +86,6 @@ public interface DatasetItemDAO {
 @Slf4j
 class DatasetItemDAOImpl implements DatasetItemDAO {
 
-    /**
-     * Maximum decimal value bound for duration statistics in ClickHouse Decimal64(9).
-     * This ensures values stay within the precision limits while handling extreme values.
-     */
-    private static final String MAX_DECIMAL_BOUND = "999999999.999999999";
-
-    /**
-     * Minimum decimal value bound for duration statistics in ClickHouse Decimal64(9).
-     * This ensures values stay within the precision limits while handling extreme values.
-     */
-    private static final String MIN_DECIMAL_BOUND = "-999999999.999999999";
-
     private static final String INSERT_DATASET_ITEM = """
             INSERT INTO dataset_items (
                 id,
@@ -142,7 +130,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM dataset_items
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
+            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -187,12 +175,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 created_by,
                 last_updated_by,
                 null AS experiment_items_array
-            FROM dataset_items
+            FROM dataset_items FINAL
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            ORDER BY (workspace_id, dataset_id, id) DESC
             LIMIT :limit OFFSET :offset
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -708,8 +695,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
-                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
-                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                         metadata,
                         visibility_mode
                     FROM traces

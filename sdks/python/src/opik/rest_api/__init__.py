@@ -120,6 +120,8 @@ from .types import (
     BooleanFeedbackDetailCreate,
     BooleanFeedbackDetailPublic,
     BooleanFeedbackDetailUpdate,
+    BreakdownConfigPublic,
+    BreakdownConfigPublicField,
     CategoricalFeedbackDefinition,
     CategoricalFeedbackDefinitionCreate,
     CategoricalFeedbackDefinitionPublic,
@@ -160,6 +162,8 @@ from .types import (
     Dataset,
     DatasetExpansion,
     DatasetExpansionResponse,
+    DatasetExportJobPublic,
+    DatasetExportJobPublicStatus,
     DatasetItem,
     DatasetItemBatch,
     DatasetItemChangesPublic,
@@ -223,6 +227,9 @@ from .types import (
     ExperimentScoreWrite,
     ExperimentStatus,
     ExperimentType,
+    ExperimentUpdate,
+    ExperimentUpdateStatus,
+    ExperimentUpdateType,
     ExportTraceServiceRequest,
     Feedback,
     FeedbackCreate,
@@ -443,6 +450,7 @@ from .types import (
     StudioPrompt,
     StudioPromptPublic,
     StudioPromptWrite,
+    TokenUsageNames,
     Tool,
     ToolCall,
     ToolCallType,
@@ -557,7 +565,7 @@ from .attachments import (
 from .client import AsyncOpikApi, OpikApi
 from .datasets import DatasetUpdateVisibility, DatasetWriteVisibility
 from .environment import OpikApiEnvironment
-from .experiments import ExperimentUpdateStatus, ExperimentUpdateType, ExperimentWriteStatus, ExperimentWriteType
+from .experiments import ExperimentWriteStatus, ExperimentWriteType
 from .feedback_definitions import FindFeedbackDefinitionsRequestType
 from .llm_provider_key import ProviderApiKeyWriteProvider
 from .optimizations import OptimizationUpdateStatus
@@ -696,6 +704,8 @@ __all__ = [
     "BooleanFeedbackDetailCreate",
     "BooleanFeedbackDetailPublic",
     "BooleanFeedbackDetailUpdate",
+    "BreakdownConfigPublic",
+    "BreakdownConfigPublicField",
     "CategoricalFeedbackDefinition",
     "CategoricalFeedbackDefinitionCreate",
     "CategoricalFeedbackDefinitionPublic",
@@ -738,6 +748,8 @@ __all__ = [
     "Dataset",
     "DatasetExpansion",
     "DatasetExpansionResponse",
+    "DatasetExportJobPublic",
+    "DatasetExportJobPublicStatus",
     "DatasetItem",
     "DatasetItemBatch",
     "DatasetItemChangesPublic",
@@ -804,6 +816,7 @@ __all__ = [
     "ExperimentScoreWrite",
     "ExperimentStatus",
     "ExperimentType",
+    "ExperimentUpdate",
     "ExperimentUpdateStatus",
     "ExperimentUpdateType",
     "ExperimentWriteStatus",
@@ -1048,6 +1061,7 @@ __all__ = [
     "StudioPrompt",
     "StudioPromptPublic",
     "StudioPromptWrite",
+    "TokenUsageNames",
     "Tool",
     "ToolCall",
     "ToolCallType",

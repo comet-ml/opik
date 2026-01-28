@@ -6,6 +6,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentBatchUpdate;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
@@ -16,6 +17,7 @@ import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
+import com.comet.opik.api.Project;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.ExperimentCreated;
 import com.comet.opik.api.events.ExperimentsDeleted;
@@ -49,6 +51,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -57,7 +60,9 @@ import static com.comet.opik.api.AlertEventType.EXPERIMENT_FINISHED;
 import static com.comet.opik.api.Experiment.ExperimentPage;
 import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.api.grouping.GroupingFactory.DATASET_ID;
+import static com.comet.opik.api.grouping.GroupingFactory.PROJECT_ID;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__(@Inject))
@@ -68,6 +73,7 @@ public class ExperimentService {
     private final @NonNull ExperimentItemDAO experimentItemDAO;
     private final @NonNull DatasetService datasetService;
     private final @NonNull DatasetVersionService datasetVersionService;
+    private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
@@ -141,6 +147,10 @@ public class ExperimentService {
                     .map(Experiment::datasetVersionId)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toUnmodifiableSet());
+            var projectIds = experiments.stream()
+                    .map(Experiment::projectId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toUnmodifiableSet());
 
             return Mono.zip(
                     promptService.getVersionsInfoByVersionsIds(getPromptVersionIds(experiments)),
@@ -149,7 +159,10 @@ public class ExperimentService {
                             .map(this::getDatasetMap),
                     Mono.fromCallable(() -> datasetVersionService.findByIds(versionIds, workspaceId))
                             .subscribeOn(Schedulers.boundedElastic())
-                            .map(this::getDatasetVersionMap))
+                            .map(this::getDatasetVersionMap),
+                    Mono.fromCallable(() -> projectService.findByIds(workspaceId, projectIds))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .map(this::getProjectMap))
                     .map(tuple -> experiments.stream()
                             .map(experiment -> experiment.toBuilder()
                                     .datasetName(Optional
@@ -161,6 +174,11 @@ public class ExperimentService {
                                             .map(tuple.getT3()::get)
                                             .map(DatasetVersionMapper.INSTANCE::toDatasetVersionSummary)
                                             .orElse(null))
+                                    .projectName(Optional
+                                            .ofNullable(experiment.projectId())
+                                            .map(tuple.getT4()::get)
+                                            .map(Project::name)
+                                            .orElse(null))
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
                                     .promptVersions(buildPromptVersions(tuple.getT1(), experiment))
                                     .build())
@@ -170,6 +188,10 @@ public class ExperimentService {
 
     private Map<UUID, Dataset> getDatasetMap(List<Dataset> datasets) {
         return datasets.stream().collect(Collectors.toMap(Dataset::id, Function.identity()));
+    }
+
+    private Map<UUID, Project> getProjectMap(List<Project> projects) {
+        return projects.stream().collect(Collectors.toMap(Project::id, Function.identity()));
     }
 
     private Map<UUID, DatasetVersion> getDatasetVersionMap(List<DatasetVersion> versions) {
@@ -292,25 +314,52 @@ public class ExperimentService {
 
     private Mono<ExperimentGroupEnrichInfoHolder> getEnrichInfoHolder(List<List<String>> allGroupValues,
             List<GroupBy> groups, String workspaceId) {
-        int nestingIdx = groups.stream().filter(g -> DATASET_ID.equals(g.field()))
+        Set<UUID> datasetIds = extractUuidsFromGroupValues(allGroupValues, groups, DATASET_ID);
+        Set<UUID> projectIds = extractUuidsFromGroupValues(allGroupValues, groups, PROJECT_ID);
+
+        Mono<Map<UUID, Dataset>> datasetsMono = loadEntityMap(
+                () -> datasetService.findByIds(datasetIds, workspaceId),
+                this::getDatasetMap);
+
+        Mono<Map<UUID, Project>> projectsMono = loadEntityMap(
+                () -> projectService.findByIds(workspaceId, projectIds),
+                this::getProjectMap);
+
+        return Mono.zip(datasetsMono, projectsMono)
+                .map(tuple -> ExperimentGroupEnrichInfoHolder.builder()
+                        .datasetMap(tuple.getT1())
+                        .projectMap(tuple.getT2())
+                        .build());
+    }
+
+    private <T, R> Mono<Map<UUID, R>> loadEntityMap(
+            Callable<List<T>> serviceCall,
+            Function<List<T>, Map<UUID, R>> mapper) {
+        return Mono.fromCallable(serviceCall)
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(mapper);
+    }
+
+    private Set<UUID> extractUuidsFromGroupValues(List<List<String>> allGroupValues, List<GroupBy> groups,
+            String fieldName) {
+        int nestingIdx = groups.stream()
+                .filter(g -> fieldName.equals(g.field()))
                 .findFirst()
                 .map(groups::indexOf)
                 .orElse(-1);
 
-        Set<UUID> datasetIds = nestingIdx == -1
-                ? Set.of()
-                : allGroupValues.stream()
-                        .map(groupValues -> groupValues.get(nestingIdx))
-                        .filter(Objects::nonNull)
-                        .map(UUID::fromString)
-                        .collect(Collectors.toSet());
+        if (nestingIdx == -1) {
+            return Set.of();
+        }
 
-        return Mono.fromCallable(() -> datasetService.findByIds(datasetIds, workspaceId))
-                .subscribeOn(Schedulers.boundedElastic())
-                .map(this::getDatasetMap)
-                .map(datasetMap -> ExperimentGroupEnrichInfoHolder.builder()
-                        .datasetMap(datasetMap)
-                        .build());
+        return allGroupValues.stream()
+                .map(groupValues -> groupValues.get(nestingIdx))
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(StringUtils::isNotBlank)
+                .filter(s -> !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(s))
+                .map(UUID::fromString)
+                .collect(Collectors.toSet());
     }
 
     @WithSpan
@@ -345,11 +394,21 @@ public class ExperimentService {
                                     .subscribeOn(Schedulers.boundedElastic())
                             : Mono.just(Optional.empty());
 
+                    // Get project if experiment has a project ID
+                    Mono<Optional<Project>> projectMono = experiment.projectId() != null
+                            ? Mono.fromCallable(
+                                    () -> projectService.findByIds(workspaceId, Set.of(experiment.projectId()))
+                                            .stream()
+                                            .findFirst())
+                                    .subscribeOn(Schedulers.boundedElastic())
+                            : Mono.just(Optional.empty());
+
                     return Mono.zip(
                             promptService.getVersionsInfoByVersionsIds(promptVersionIds),
                             Mono.fromCallable(() -> datasetService.getById(experiment.datasetId(), workspaceId))
                                     .subscribeOn(Schedulers.boundedElastic()),
-                            versionMono)
+                            versionMono,
+                            projectMono)
                             .map(tuple -> experiment.toBuilder()
                                     .promptVersion(buildPromptVersion(tuple.getT1(), experiment))
                                     .promptVersions(buildPromptVersions(tuple.getT1(), experiment))
@@ -358,6 +417,9 @@ public class ExperimentService {
                                             .orElse(null))
                                     .datasetVersionSummary(tuple.getT3()
                                             .map(DatasetVersionMapper.INSTANCE::toDatasetVersionSummary)
+                                            .orElse(null))
+                                    .projectName(tuple.getT4()
+                                            .map(Project::name)
                                             .orElse(null))
                                     .build());
                 }));
@@ -597,6 +659,19 @@ public class ExperimentService {
                 .doOnSuccess(unused -> log.info("Successfully updated experiment with id '{}'", id))
                 .onErrorResume(throwable -> {
                     log.error("Failed to update experiment with id '{}'", id, throwable);
+                    return Mono.error(throwable);
+                });
+    }
+
+    public Mono<Void> batchUpdate(@NonNull ExperimentBatchUpdate batchUpdate) {
+        log.info("Batch updating '{}' experiments", batchUpdate.ids().size());
+
+        boolean mergeTags = batchUpdate.mergeTags();
+        return experimentDAO.update(batchUpdate.ids(), batchUpdate.update(), mergeTags)
+                .doOnSuccess(__ -> log.info("Completed batch update for '{}' experiments", batchUpdate.ids().size()))
+                .onErrorResume(throwable -> {
+                    log.error("Failed to complete batch update of the '{}' experiments", batchUpdate.ids().size(),
+                            throwable);
                     return Mono.error(throwable);
                 });
     }

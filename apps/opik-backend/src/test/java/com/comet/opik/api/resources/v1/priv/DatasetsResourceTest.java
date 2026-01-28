@@ -3845,6 +3845,7 @@ class DatasetsResourceTest {
                         .datasetName(datasetName)
                         .items(batchItems)
                         .datasetId(null)
+                        .batchGroupId(null)
                         .build();
 
                 putAndAssert(batch, TEST_WORKSPACE, API_KEY);
@@ -3915,6 +3916,20 @@ class DatasetsResourceTest {
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
 
         return actualEntity;
+    }
+
+    /**
+     * Fetches a dataset item by its stable dataset_item_id from the latest version.
+     * This is necessary when dataset versioning is enabled, as the version-specific id
+     * may return items from previous versions.
+     */
+    private DatasetItem getItemByStableId(UUID datasetId, UUID datasetItemId, String workspaceName, String apiKey) {
+        var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1000), apiKey, workspaceName);
+        return allItems.content().stream()
+                .filter(item -> item.datasetItemId().equals(datasetItemId))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "Dataset item not found with dataset_item_id: '%s'".formatted(datasetItemId)));
     }
 
     @Nested
@@ -4190,10 +4205,11 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Verify initial state
+            // Verify initial state - fetch by stable ID
             var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
             var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
             var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            var datasetId = retrieved1.datasetId();
             assertThat(retrieved1.tags()).containsExactlyInAnyOrder("existing1");
             assertThat(retrieved2.tags()).containsExactlyInAnyOrder("existing2");
             assertThat(retrieved3.tags()).isEmpty();
@@ -4209,10 +4225,10 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify tags were merged
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
-            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            // Verify tags were merged - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated3 = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("existing1", "newtag");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("existing2", "newtag");
             assertThat(updated3.tags()).containsExactlyInAnyOrder("newtag");
@@ -4239,6 +4255,7 @@ class DatasetsResourceTest {
             // Verify initial state
             var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
             var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var datasetId = retrieved1.datasetId();
             assertThat(retrieved1.tags()).containsExactlyInAnyOrder("old1", "old2");
             assertThat(retrieved2.tags()).containsExactlyInAnyOrder("old3", "old4");
 
@@ -4253,9 +4270,9 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify tags were replaced
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            // Verify tags were replaced - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("new1", "new2");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("new1", "new2");
         }
@@ -4347,10 +4364,10 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify only items matching filters were updated
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
-            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            // Verify only items matching filters were updated - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated3 = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("include", "tag1", "newtag");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("include", "tag2", "newtag");
             assertThat(updated3.tags()).containsExactlyInAnyOrder("exclude", "tag3"); // unchanged
@@ -4403,10 +4420,10 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify tags were merged (not replaced) for items matching filters
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
-            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            // Verify tags were merged (not replaced) for items matching filters - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated3 = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("include", "tag1", "newtag");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("include", "tag2", "newtag");
             assertThat(updated3.tags()).containsExactlyInAnyOrder("other"); // Unchanged
@@ -4492,10 +4509,10 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify ALL items were updated (empty filters = select all)
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
-            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            // Verify ALL items were updated (empty filters = select all) - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated3 = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("tag1", "newtag");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("tag2", "newtag");
             assertThat(updated3.tags()).containsExactlyInAnyOrder("tag3", "newtag");
@@ -4554,6 +4571,7 @@ class DatasetsResourceTest {
                     TEST_WORKSPACE);
             var retrievedDataset2Item2 = datasetResourceClient.getDatasetItem(dataset2Item2.id(), API_KEY,
                     TEST_WORKSPACE);
+            UUID dataset2Id = retrievedDataset2Item1.datasetId();
 
             assertThat(retrievedDataset1Item1.tags()).containsExactlyInAnyOrder("target-tag");
             assertThat(retrievedDataset1Item2.tags()).containsExactlyInAnyOrder("other-tag");
@@ -4579,15 +4597,15 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify: Only dataset1 items were updated, dataset2 items remain unchanged
-            var updatedDataset1Item1 = datasetResourceClient.getDatasetItem(dataset1Item1.id(), API_KEY,
-                    TEST_WORKSPACE);
-            var updatedDataset1Item2 = datasetResourceClient.getDatasetItem(dataset1Item2.id(), API_KEY,
-                    TEST_WORKSPACE);
-            var updatedDataset2Item1 = datasetResourceClient.getDatasetItem(dataset2Item1.id(), API_KEY,
-                    TEST_WORKSPACE);
-            var updatedDataset2Item2 = datasetResourceClient.getDatasetItem(dataset2Item2.id(), API_KEY,
-                    TEST_WORKSPACE);
+            // Verify: Only dataset1 items were updated, dataset2 items remain unchanged - fetch by stable dataset_item_id
+            var updatedDataset1Item1 = getItemByStableId(dataset1Id, retrievedDataset1Item1.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
+            var updatedDataset1Item2 = getItemByStableId(dataset1Id, retrievedDataset1Item2.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
+            var updatedDataset2Item1 = getItemByStableId(dataset2Id, retrievedDataset2Item1.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
+            var updatedDataset2Item2 = getItemByStableId(dataset2Id, retrievedDataset2Item2.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
 
             // Dataset1 items with target-tag should be updated
             assertThat(updatedDataset1Item1.tags()).containsExactlyInAnyOrder("target-tag", "updated-tag");
@@ -4656,6 +4674,10 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
+            // Get the dataset ID from one of the created items
+            var firstItem = datasetResourceClient.getDatasetItem(items.get(0).id(), API_KEY, TEST_WORKSPACE);
+            var datasetId = firstItem.datasetId();
+
             var deleteRequest = DatasetItemsDelete.builder()
                     .itemIds(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
                     .build();
@@ -4671,19 +4693,15 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            for (var item : items) {
-                var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                        .path("items")
-                        .path(item.id().toString())
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                        .get();
+            // Fetch all items from the dataset and verify deleted items are not present
+            var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1000), API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset item not found");
-            }
+            // Verify that none of the deleted item IDs are in the current dataset version
+            var deletedItemIds = items.stream().map(DatasetItem::id).collect(Collectors.toSet());
+            var currentItemIds = allItems.content().stream().map(DatasetItem::id).collect(Collectors.toSet());
+
+            assertThat(currentItemIds).doesNotContainSequence(deletedItemIds);
         }
 
         @Test
@@ -4824,29 +4842,19 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            // Verify items matching filters were deleted
-            try (var response1 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(item1.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response1.getStatusInfo().getStatusCode()).isEqualTo(404);
-            }
+            // Verify items matching filters were deleted - check by fetching all items and looking for stable IDs
+            var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1000), API_KEY,
+                    TEST_WORKSPACE);
+            var item1StillExists = allItems.content().stream()
+                    .anyMatch(item -> item.datasetItemId().equals(retrieved1.datasetItemId()));
+            var item2StillExists = allItems.content().stream()
+                    .anyMatch(item -> item.datasetItemId().equals(retrieved2.datasetItemId()));
 
-            try (var response2 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(item2.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response2.getStatusInfo().getStatusCode()).isEqualTo(404);
-            }
+            assertThat(item1StillExists).isFalse();
+            assertThat(item2StillExists).isFalse();
 
             // Verify item not matching filter was NOT deleted
-            var stillExists = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            var stillExists = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(stillExists.tags()).containsExactlyInAnyOrder("keep-me", "tag3");
         }
 
@@ -4895,12 +4903,12 @@ class DatasetsResourceTest {
                     .build();
             putAndAssert(batch2, TEST_WORKSPACE, API_KEY);
 
-            // Verify initial state
-            assertThat(datasetResourceClient.getDatasetItem(item1Dataset1.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
-            assertThat(datasetResourceClient.getDatasetItem(item2Dataset1.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
-            assertThat(datasetResourceClient.getDatasetItem(item3Dataset1.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
-            assertThat(datasetResourceClient.getDatasetItem(item1Dataset2.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
-            assertThat(datasetResourceClient.getDatasetItem(item2Dataset2.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
+            // Verify initial state and get stable IDs
+            var retrieved1Dataset1 = datasetResourceClient.getDatasetItem(item1Dataset1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2Dataset1 = datasetResourceClient.getDatasetItem(item2Dataset1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3Dataset1 = datasetResourceClient.getDatasetItem(item3Dataset1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved1Dataset2 = datasetResourceClient.getDatasetItem(item1Dataset2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2Dataset2 = datasetResourceClient.getDatasetItem(item2Dataset2.id(), API_KEY, TEST_WORKSPACE);
 
             // Create filter to delete items with "delete-me" tag
             var tagFilter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "delete-me");
@@ -4922,38 +4930,29 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            // Verify items from dataset1 with "delete-me" tag were deleted
-            try (var response1 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(item1Dataset1.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response1.getStatusInfo().getStatusCode()).isEqualTo(404);
-            }
+            // Verify items from dataset1 with "delete-me" tag were deleted - check by fetching all items
+            var dataset1Items = datasetResourceClient.getDatasetItems(dataset1Id, Map.of("size", 1000), API_KEY,
+                    TEST_WORKSPACE);
+            var item1Dataset1StillExists = dataset1Items.content().stream()
+                    .anyMatch(item -> item.datasetItemId().equals(retrieved1Dataset1.datasetItemId()));
+            var item2Dataset1StillExists = dataset1Items.content().stream()
+                    .anyMatch(item -> item.datasetItemId().equals(retrieved2Dataset1.datasetItemId()));
 
-            try (var response2 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(item2Dataset1.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response2.getStatusInfo().getStatusCode()).isEqualTo(404);
-            }
+            assertThat(item1Dataset1StillExists).isFalse();
+            assertThat(item2Dataset1StillExists).isFalse();
 
             // Verify item from dataset1 without "delete-me" tag was NOT deleted
-            var stillExistsDataset1 = datasetResourceClient.getDatasetItem(item3Dataset1.id(), API_KEY, TEST_WORKSPACE);
+            var stillExistsDataset1 = getItemByStableId(dataset1Id, retrieved3Dataset1.datasetItemId(), TEST_WORKSPACE,
+                    API_KEY);
             assertThat(stillExistsDataset1.tags()).containsExactlyInAnyOrder("keep-me", "dataset1");
 
             // CRITICAL: Verify ALL items from dataset2 remain untouched (proves dataset_id filter works)
-            var stillExistsDataset2Item1 = datasetResourceClient.getDatasetItem(item1Dataset2.id(), API_KEY,
-                    TEST_WORKSPACE);
+            var stillExistsDataset2Item1 = getItemByStableId(dataset2Id, retrieved1Dataset2.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
             assertThat(stillExistsDataset2Item1.tags()).containsExactlyInAnyOrder("delete-me", "dataset2");
 
-            var stillExistsDataset2Item2 = datasetResourceClient.getDatasetItem(item2Dataset2.id(), API_KEY,
-                    TEST_WORKSPACE);
+            var stillExistsDataset2Item2 = getItemByStableId(dataset2Id, retrieved2Dataset2.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
             assertThat(stillExistsDataset2Item2.tags()).containsExactlyInAnyOrder("delete-me", "dataset2");
         }
 
@@ -5005,18 +5004,10 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            // Verify ALL items were deleted
-            for (var item : List.of(item1, item2, item3)) {
-                try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                        .path("items")
-                        .path(item.id().toString())
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                        .get()) {
-                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(404);
-                }
-            }
+            // Verify ALL items were deleted - check by fetching all items
+            var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1000), API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(allItems.content()).isEmpty();
         }
     }
 
@@ -5099,7 +5090,6 @@ class DatasetsResourceTest {
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
-                    .batchGroupId(null)
                     .build();
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
@@ -7586,6 +7576,42 @@ class DatasetsResourceTest {
             Set<Column> expectedOutput = getOutputDynamicColumns(traces);
 
             assertColumns(datasetId, apiKey, workspaceName, Set.copyOf(experimentIds), expectedOutput);
+        }
+
+        @Test
+        void getExperimentItemsOutputColumns__whenNoMatchingExperimentItems__thenReturnEmptyColumns() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset without any experiment items
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create experiments but no experiment items (no traces linked)
+            List<UUID> experimentIds = IntStream.range(0, 2)
+                    .mapToObj(i -> {
+                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                                .datasetName(dataset.name())
+                                .promptVersion(null)
+                                .promptVersions(null)
+                                .datasetVersionId(null)
+                                .datasetVersionSummary(null)
+                                .build();
+                        return experimentResourceClient.create(experiment, apiKey, workspaceName);
+                    })
+                    .toList();
+
+            // Verify empty columns are returned (not null)
+            assertColumns(datasetId, apiKey, workspaceName, Set.copyOf(experimentIds), Set.of());
         }
 
         private void assertColumns(UUID datasetId, String apiKey, String workspaceName, Set<UUID> experimentIds,

@@ -225,13 +225,15 @@ component:
       # Maximum number of concurrent optimization jobs (default: 5)
       # Each job runs in a separate worker thread with isolated subprocess
       # OPTSTUDIO_MAX_CONCURRENT_JOBS: "5"
-      # Number of dataset items to sample for optimization (default: 20)
+      # Number of dataset items to sample for optimization (default: 1000)
       # Limits memory usage for large datasets
-      # OPTSTUDIO_DATASET_SAMPLES: "20"
+      # OPTSTUDIO_DATASET_SAMPLES: "1000"
       # Terminal width for Rich log output formatting (default: 80)
-      # OPTSTUDIO_LOG_TERM_WIDTH: "80"
-      # Execution timeout for optimization jobs in seconds (default: 7200 = 2 hours)
-      # OPTSTUDIO_EXECUTION_TIMEOUT: "7200"
+      # OPTSTUDIO_LOG_TERM_WIDTH: "150"
+      # Execution timeout for optimization jobs in seconds (default: 86400 = 24 hours)
+      # OPTSTUDIO_EXECUTION_TIMEOUT: "86400"
+      # Log level for the opik-optimizer SDK (default: DEBUG)
+      # OPIK_OPTIMIZER_LOG_LEVEL: "DEBUG"
       # TTL for optimization logs in Redis in seconds (default: 86400 = 24 hours)
       # OPTSTUDIO_LOG_REDIS_TTL: "86400"
       # Default max output tokens for optimizer LLM calls (default: 8192)
@@ -345,6 +347,50 @@ component:
     awsResolver: false
     # Enable HSTS header (only enable when running behind HTTPS termination)
     hstsEnabled: false
+    # Content Security Policy (CSP) configuration
+    # Customize these lists to allow additional external services (analytics, CDNs, etc.)
+    csp:
+      enabled: true
+      # Scripts allowed to execute
+      scriptSrc:
+        - "'self'"
+        - "'unsafe-inline'"
+        - "'unsafe-eval'"
+        # Add external services here, e.g.:
+        # - "https://cdn.example.com"
+      # Styles allowed to load
+      styleSrc:
+        - "'self'"
+        - "'unsafe-inline'"
+        - "https://fonts.googleapis.com"
+      # Images allowed to load
+      imgSrc:
+        - "'self'"
+        - "data:"
+        - "blob:"
+        - "https:"
+        - "http:"
+      # Media (audio/video) allowed to load
+      mediaSrc:
+        - "'self'"
+        - "https:"
+        - "http:"
+      # Fonts allowed to load
+      fontSrc:
+        - "'self'"
+        - "data:"
+        - "https://fonts.gstatic.com"
+      # XHR/Fetch/WebSocket connections allowed
+      connectSrc:
+        - "'self'"
+        - "ws:"
+        - "wss:"
+        - "https:"
+        # Add external API endpoints here, e.g.:
+        # - "https://api.example.com"
+      # Frame ancestors (who can embed this site)
+      frameAncestors:
+        - "'none'"
     upstreamConfig: {}
       # proxy_read_timeout: 60
       # proxy_connect_timeout: 60
