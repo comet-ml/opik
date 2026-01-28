@@ -784,6 +784,14 @@ navigation:
             icon: fa-regular fa-book
             path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
             slug: synthetic_data_optimizer_cookbook
+          - page: ARC-AGI tutorial
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/arc_agi_optimizer_cookbook.mdx
+            slug: arc_agi_optimizer_cookbook
+          - page: Multimodal agent tutorial
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/multimodal_agent_optimizer_cookbook.mdx
+            slug: multimodal_agent_optimizer_cookbook
       - section: Advanced Topics
         slug: /advanced
         contents:
