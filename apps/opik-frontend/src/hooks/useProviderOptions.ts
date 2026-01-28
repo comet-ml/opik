@@ -43,6 +43,7 @@ export interface ProviderEnabledMap {
   [PROVIDER_TYPE.OPEN_ROUTER]: boolean;
   [PROVIDER_TYPE.VERTEX_AI]: boolean;
   [PROVIDER_TYPE.BEDROCK]: boolean;
+  [PROVIDER_TYPE.OLLAMA]: boolean;
   [PROVIDER_TYPE.CUSTOM]: boolean;
 }
 
@@ -81,6 +82,7 @@ export function useProviderEnabledMap(): ProviderEnabledMap {
       [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
       [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
       [PROVIDER_TYPE.BEDROCK]: isBedrockEnabled,
+      [PROVIDER_TYPE.OLLAMA]: isCustomLLMEnabled,
       [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
     }),
     [
@@ -117,12 +119,13 @@ export function useProviderOptions({
   return useMemo(() => {
     const options: ProviderGridOption[] = [];
 
-    // Filter standard providers based on feature flags (excludes Custom, Bedrock, Opik Free)
+    // Filter standard providers based on feature flags (excludes Custom, Bedrock, Ollama, Opik Free)
     const standardProviders = PROVIDERS_OPTIONS.filter((option) => {
       if (
         option.value === PROVIDER_TYPE.CUSTOM ||
         option.value === PROVIDER_TYPE.OPIK_FREE ||
-        option.value === PROVIDER_TYPE.BEDROCK
+        option.value === PROVIDER_TYPE.BEDROCK ||
+        option.value === PROVIDER_TYPE.OLLAMA
       ) {
         return false;
       }
@@ -179,7 +182,25 @@ export function useProviderOptions({
       });
     }
 
-    // Add "Add new" options for Bedrock and Custom if requested
+    // Add configured Ollama provider instances if requested and enabled
+    if (providerEnabledMap[PROVIDER_TYPE.OLLAMA] && includeConfiguredStatus) {
+      const ollamaProviders =
+        configuredProvidersList?.filter(
+          (key) => key.provider === PROVIDER_TYPE.OLLAMA,
+        ) || [];
+
+      ollamaProviders.forEach((ollamaProvider) => {
+        options.push({
+          value: ollamaProvider.ui_composed_provider,
+          label: getProviderDisplayName(ollamaProvider),
+          providerType: PROVIDER_TYPE.OLLAMA,
+          configuredId: ollamaProvider.id,
+          isConfigured: true,
+        });
+      });
+    }
+
+    // Add "Add new" options for Bedrock, Ollama, and Custom if requested
     if (includeAddNewOptions) {
       if (providerEnabledMap[PROVIDER_TYPE.BEDROCK]) {
         const defaultLabel = PROVIDERS[PROVIDER_TYPE.BEDROCK].label;
@@ -189,6 +210,17 @@ export function useProviderOptions({
             ? addNewLabelGenerator(PROVIDER_TYPE.BEDROCK, defaultLabel)
             : defaultLabel,
           providerType: PROVIDER_TYPE.BEDROCK,
+        });
+      }
+
+      if (providerEnabledMap[PROVIDER_TYPE.OLLAMA]) {
+        const defaultLabel = PROVIDERS[PROVIDER_TYPE.OLLAMA].label;
+        options.push({
+          value: buildComposedProviderKey(PROVIDER_TYPE.OLLAMA),
+          label: addNewLabelGenerator
+            ? addNewLabelGenerator(PROVIDER_TYPE.OLLAMA, defaultLabel)
+            : defaultLabel,
+          providerType: PROVIDER_TYPE.OLLAMA,
         });
       }
 
