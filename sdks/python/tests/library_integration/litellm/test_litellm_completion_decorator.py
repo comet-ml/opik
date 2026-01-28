@@ -41,7 +41,9 @@ def test_litellm_completion_decorator_accepts_object_output(
     _install_litellm_stub(monkeypatch)
 
     sys.modules.pop("opik.integrations.litellm.litellm_completion_decorator", None)
-    lcd = importlib.import_module("opik.integrations.litellm.litellm_completion_decorator")
+    lcd = importlib.import_module(
+        "opik.integrations.litellm.litellm_completion_decorator"
+    )
 
     decorator = lcd.LiteLLMCompletionTrackDecorator()
     span_data = SpanData(trace_id="trace-id", project_name="proj", name="span")
