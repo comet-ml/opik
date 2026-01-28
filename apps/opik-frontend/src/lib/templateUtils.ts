@@ -14,7 +14,7 @@ import { ContextData } from "@/types/structured-completion";
  */
 export const renderTemplate = (
   template: string,
-  context: ContextData
+  context: ContextData,
 ): string => {
   if (!context || Object.keys(context).length === 0) {
     return template;
@@ -49,7 +49,7 @@ export const renderTemplate = (
  */
 export const flattenContextPaths = (
   obj: Record<string, unknown>,
-  prefix: string = ""
+  prefix: string = "",
 ): Record<string, unknown> => {
   const result: Record<string, unknown> = {};
 
@@ -60,7 +60,7 @@ export const flattenContextPaths = (
     if (value && typeof value === "object" && !Array.isArray(value)) {
       Object.assign(
         result,
-        flattenContextPaths(value as Record<string, unknown>, fullKey)
+        flattenContextPaths(value as Record<string, unknown>, fullKey),
       );
     }
   }

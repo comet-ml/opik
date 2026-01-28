@@ -1,39 +1,51 @@
 import React, { useState, useEffect } from "react";
 import { AlertCircle, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CustomViewSchema, WidgetSize, ContextData } from "@/types/custom-view";
-import { resolveTracePath } from "@/lib/tracePathResolver";
-import WidgetRenderer from "./widgets/WidgetRenderer";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { Renderer, useDataView } from "@/lib/data-view";
+import { customViewRegistry } from "./data-view-widgets";
 
 interface CustomViewDataPanelProps {
-  data: ContextData | null | undefined;
-  viewSchema: CustomViewSchema | null;
   isDataLoading: boolean;
   isDataError: boolean;
   isAIGenerating: boolean;
+  isStreaming: boolean;
+  patchCount: number;
   isAPIError: boolean;
   apiError: string | null;
 }
 
 const CustomViewDataPanel: React.FC<CustomViewDataPanelProps> = ({
-  data,
-  viewSchema,
   isDataLoading,
   isDataError,
   isAIGenerating,
+  isStreaming,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  patchCount,
   isAPIError,
   apiError,
 }) => {
-  // Determine the current state
+  // Get tree from context (single DataViewProvider in parent)
+  const { tree, source } = useDataView();
+
+  // Determine the current state based on context
   const getState = () => {
-    if (!data && !isDataLoading) return "idle";
+    const hasSource = source && Object.keys(source).length > 0;
+    const hasTree = tree?.root && Object.keys(tree.nodes || {}).length > 0;
+    const isGeneratingOrStreaming = isAIGenerating || isStreaming;
+
+    if (!hasSource && !isDataLoading) return "idle";
     if (isDataError) return "data-error";
     if (isDataLoading) return "loading";
-    if (isAPIError && !isAIGenerating) return "api-error";
-    if (isAIGenerating) return "generating";
-    if (data && !viewSchema) return "awaiting-generation";
-    if (data && viewSchema) return "ready";
+    if (isAPIError && !isGeneratingOrStreaming) return "api-error";
+
+    // Show tree content with streaming indicator when we have tree content during generation
+    if (isGeneratingOrStreaming && hasTree) return "streaming";
+
+    // Show generating overlay only when no tree content yet
+    if (isGeneratingOrStreaming && !hasTree) return "generating";
+
+    if (hasSource && !hasTree) return "awaiting-generation";
+    if (hasSource && hasTree) return "ready";
     return "idle";
   };
 
@@ -41,20 +53,14 @@ const CustomViewDataPanel: React.FC<CustomViewDataPanelProps> = ({
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header - Sticky */}
-      <div className="border-b p-4">
-        <h2 className="comet-title-m">Data Visualization</h2>
-      </div>
-
       {/* Content - Scrollable */}
       <div className="relative flex-1 overflow-y-auto p-6">
         {state === "loading" && <LoadingOverlay />}
         {state === "generating" && <GeneratingOverlay />}
+        {state === "streaming" && <StreamingState />}
         {state === "idle" && <IdleState />}
         {state === "awaiting-generation" && <AwaitingGenerationState />}
-        {state === "ready" && (
-          <ReadyState data={data!} viewSchema={viewSchema!} />
-        )}
+        {state === "ready" && <ReadyState />}
         {state === "data-error" && <DataErrorState />}
         {state === "api-error" && <APIErrorState error={apiError} />}
       </div>
@@ -145,61 +151,66 @@ const GeneratingOverlay = () => {
   );
 };
 
-const ReadyState = ({
-  data,
-  viewSchema,
-}: {
-  data: ContextData;
-  viewSchema: CustomViewSchema;
-}) => {
-  if (!viewSchema.widgets || viewSchema.widgets.length === 0) {
+const STREAMING_MESSAGES = [
+  "Crafting your view...",
+  "Organizing data...",
+  "Building layout...",
+  "Adding details...",
+  "Almost there...",
+];
+
+const StreamingState = () => {
+  const [messageIndex, setMessageIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessageIndex((prev) => (prev + 1) % STREAMING_MESSAGES.length);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="relative">
+      {/* Streaming indicator badge */}
+      <div className="absolute right-0 top-0 z-10 flex items-center gap-2 rounded-bl-lg bg-gradient-to-r from-primary/5 to-primary/10 px-4 py-2.5 backdrop-blur-sm">
+        <Sparkles className="size-4 animate-pulse text-primary" />
+        <span className="comet-body-s-accented text-primary">
+          {STREAMING_MESSAGES[messageIndex]}
+        </span>
+      </div>
+
+      {/* Tree content - renders progressively */}
+      <div className="space-y-4 pt-12">
+        <Renderer registry={customViewRegistry} />
+      </div>
+    </div>
+  );
+};
+
+const ReadyState = () => {
+  // Use context from parent DataViewProvider - no nested provider needed
+  const { tree } = useDataView();
+
+  // Check if the tree has a valid root and nodes
+  if (!tree?.root || !tree.nodes || Object.keys(tree.nodes).length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-center">
         <div>
           <div className="comet-title-m mb-2 text-muted-slate">
-            No Widgets Generated
+            No Content Generated
           </div>
           <div className="comet-body-s text-muted-slate">
-            The AI didn&apos;t generate any widgets. Try a different prompt.
+            The AI didn&apos;t generate any content. Try a different prompt.
           </div>
         </div>
       </div>
     );
   }
 
-  // Helper function to get column span classes based on widget size
-  const getColumnSpanClass = (size: WidgetSize): string => {
-    switch (size) {
-      case WidgetSize.SMALL:
-        return "col-span-6 md:col-span-3 xl:col-span-2";
-      case WidgetSize.MEDIUM:
-        return "col-span-6 md:col-span-6 xl:col-span-3";
-      case WidgetSize.LARGE:
-        return "col-span-6 xl:col-span-4";
-      case WidgetSize.FULL:
-        return "col-span-6";
-    }
-  };
-
+  // Renderer reads tree and source from context automatically
   return (
-    <div className="grid grid-cols-6 gap-6">
-      {viewSchema.widgets.map((widget, index) => {
-        const value = resolveTracePath(data, widget.path);
-        const columnSpanClass = getColumnSpanClass(widget.size);
-
-        return (
-          <TooltipWrapper key={index} content={`Path: ${widget.path}`}>
-            <div className={columnSpanClass}>
-              <WidgetRenderer
-                type={widget.uiWidget}
-                value={value}
-                label={widget.label}
-                path={widget.path}
-              />
-            </div>
-          </TooltipWrapper>
-        );
-      })}
+    <div className="space-y-4">
+      <Renderer registry={customViewRegistry} />
     </div>
   );
 };
@@ -212,8 +223,8 @@ const DataErrorState = () => (
         Error Loading Data
       </div>
       <div className="comet-body-s mb-4 text-muted-slate">
-        An error occurred while loading the data. The item may not exist
-        or you may not have permission to view it.
+        An error occurred while loading the data. The item may not exist or you
+        may not have permission to view it.
       </div>
       <Button variant="outline" onClick={() => window.location.reload()}>
         Retry

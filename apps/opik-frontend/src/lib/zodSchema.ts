@@ -12,7 +12,7 @@ export interface OpenAIJsonSchema {
 
 export const convertZodToOpenAIFormat = <T extends z.ZodSchema>(
   schema: T,
-  name: string = "response_schema"
+  name: string = "response_schema",
 ): OpenAIJsonSchema => {
   const jsonSchema = zodToJsonSchema(schema, {
     name,

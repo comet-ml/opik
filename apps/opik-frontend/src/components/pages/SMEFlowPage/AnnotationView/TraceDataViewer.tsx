@@ -10,17 +10,20 @@ import {
 import { Button } from "@/components/ui/button";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import { Trace } from "@/types/traces";
+import { ViewTree, loadView } from "@/lib/data-view";
 import { useSMEFlow } from "../SMEFlowContext";
 import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
 import useTraceById from "@/api/traces/useTraceById";
 import { useProcessedInputData } from "@/hooks/useProcessedInputData";
 import AttachmentsList from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
-import { customViewStorage } from "@/lib/customViewStorage";
+import { viewModeStorage } from "@/lib/viewModeStorage";
 import AnnotationCustomViewPanel from "./AnnotationCustomViewPanel";
-import { CustomViewSchema } from "@/types/custom-view";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
+
+// Storage key prefix for custom views (matches CustomViewDemoPage)
+const STORAGE_KEY_PREFIX = "custom-view:";
 
 const TraceDataViewer: React.FC = () => {
   const { currentItem, nextItem } = useSMEFlow();
@@ -31,9 +34,9 @@ const TraceDataViewer: React.FC = () => {
 
   // View mode state
   const [viewMode, setViewMode] = useState<"classic" | "custom">(() =>
-    customViewStorage.getViewMode(),
+    viewModeStorage.getViewMode(),
   );
-  const [savedSchema, setSavedSchema] = useState<CustomViewSchema | null>(null);
+  const [savedViewTree, setSavedViewTree] = useState<ViewTree | null>(null);
 
   // Fetch full trace data (not truncated)
   const { data: fullTrace, isFetching } = useTraceById(
@@ -63,19 +66,21 @@ const TraceDataViewer: React.FC = () => {
 
   const { media } = useProcessedInputData(displayTrace?.input);
 
-  // Load saved schema for the current trace's project
+  // Load saved view tree for the current trace's project
   useEffect(() => {
     if (!displayTrace?.project_id) return;
 
-    const schema = customViewStorage.load(displayTrace.project_id);
-    setSavedSchema(schema);
+    const viewTree = loadView(
+      `${STORAGE_KEY_PREFIX}${displayTrace.project_id}`,
+    );
+    setSavedViewTree(viewTree);
   }, [displayTrace?.project_id]);
 
   // Toggle handler
   const handleToggleViewMode = useCallback(() => {
     const newMode = viewMode === "classic" ? "custom" : "classic";
     setViewMode(newMode);
-    customViewStorage.setViewMode(newMode);
+    viewModeStorage.setViewMode(newMode);
   }, [viewMode]);
 
   // Handlers for scroll position changes
@@ -116,7 +121,7 @@ const TraceDataViewer: React.FC = () => {
           {viewMode === "classic" ? "Standard View" : "Custom View"}
         </div>
         <div className="flex items-center gap-2">
-          {viewMode === "custom" && !savedSchema && (
+          {viewMode === "custom" && !savedViewTree && (
             <span className="comet-body-xs text-muted-slate">
               No saved view for this project
             </span>
@@ -202,10 +207,10 @@ const TraceDataViewer: React.FC = () => {
             </AccordionContent>
           </AccordionItem>
         </Accordion>
-      ) : savedSchema && displayTrace ? (
+      ) : savedViewTree && displayTrace ? (
         <AnnotationCustomViewPanel
           trace={displayTrace}
-          viewSchema={savedSchema}
+          viewTree={savedViewTree}
         />
       ) : (
         <div className="flex flex-col items-center justify-center py-12 text-center">

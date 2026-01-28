@@ -40,13 +40,29 @@ export interface UseConversationalAIParams {
 }
 
 /**
+ * Extended message type that includes tool call data
+ */
+export interface ConversationalMessageWithToolCall
+  extends ConversationalMessage {
+  toolCallId?: string;
+  toolCallName?: string;
+  toolCallArguments?: Record<string, unknown>;
+  toolResultStatus?: "accepted" | "rejected";
+}
+
+/**
  * Hook return type
  */
 export interface UseConversationalAIReturn {
-  messages: ConversationalMessage[];
+  messages: ConversationalMessageWithToolCall[];
   isLoading: boolean;
   error: string | null;
-  generate: (params: GenerateConversationalParams) => Promise<ConversationalResponse | null>;
+  generate: (
+    params: GenerateConversationalParams,
+  ) => Promise<ConversationalResponse | null>;
+  setMessages: React.Dispatch<
+    React.SetStateAction<ConversationalMessageWithToolCall[]>
+  >;
   reset: () => void;
 }
 
@@ -57,7 +73,9 @@ export interface UseConversationalAIReturn {
 const useConversationalAI = ({
   workspaceName,
 }: UseConversationalAIParams): UseConversationalAIReturn => {
-  const [messages, setMessages] = useState<ConversationalMessage[]>([]);
+  const [messages, setMessages] = useState<ConversationalMessageWithToolCall[]>(
+    [],
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -143,14 +161,28 @@ const useConversationalAI = ({
         const content = assistantMessage.content || "";
         const toolCalls = assistantMessage.tool_calls as ToolCall[] | undefined;
 
-        // Only add assistant message to history if it has content
-        // (tool calls with empty content are handled by the UI separately)
-        if (content) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content },
-          ]);
+        // Always add assistant message to history (including tool call data)
+        // This ensures tool call messages are persisted in chat history
+        const newAssistantMessage: ConversationalMessageWithToolCall = {
+          role: "assistant",
+          content,
+        };
+
+        // If there's a tool call, add its data to the message
+        if (toolCalls && toolCalls.length > 0) {
+          const toolCall = toolCalls[0];
+          newAssistantMessage.toolCallId = toolCall.id;
+          newAssistantMessage.toolCallName = toolCall.function.name;
+          try {
+            newAssistantMessage.toolCallArguments = JSON.parse(
+              toolCall.function.arguments,
+            );
+          } catch {
+            newAssistantMessage.toolCallArguments = {};
+          }
         }
+
+        setMessages((prev) => [...prev, newAssistantMessage]);
 
         setIsLoading(false);
         return { content, toolCalls };
@@ -170,6 +202,7 @@ const useConversationalAI = ({
     isLoading,
     error,
     generate,
+    setMessages,
     reset,
   };
 };

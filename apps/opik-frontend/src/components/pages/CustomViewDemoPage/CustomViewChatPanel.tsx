@@ -2,11 +2,11 @@ import React, { RefObject } from "react";
 import { Send, Loader2, AlertCircle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
+import PlaygroundOutputLoader from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import { ChatDisplayMessage } from "@/types/structured-completion";
-import { ProposalState } from "@/types/schema-proposal";
-import SchemaProposalCard from "./SchemaProposalCard";
+import { ProposalState, SchemaProposal } from "@/types/schema-proposal";
+import SchemaProposalCard, { ProposalCardStatus } from "./SchemaProposalCard";
 import { cn } from "@/lib/utils";
 
 interface CustomViewChatPanelProps {
@@ -23,6 +23,8 @@ interface CustomViewChatPanelProps {
   proposalState: ProposalState;
   onAcceptProposal: () => void;
   onRejectProposal: () => void;
+  generationError: string | null;
+  onRetryGeneration: () => void;
 }
 
 const CustomViewChatPanel: React.FC<CustomViewChatPanelProps> = ({
@@ -39,6 +41,8 @@ const CustomViewChatPanel: React.FC<CustomViewChatPanelProps> = ({
   proposalState,
   onAcceptProposal,
   onRejectProposal,
+  generationError,
+  onRetryGeneration,
 }) => {
   // Block input when proposal is pending or generating
   const isInputBlocked =
@@ -83,58 +87,130 @@ const CustomViewChatPanel: React.FC<CustomViewChatPanelProps> = ({
             {messages.map((message) => {
               const isUser = message.role === "user";
               const noContent = message.content === "";
+              const hasToolCall = Boolean(message.toolCall);
+              const isResolvedToolCall =
+                hasToolCall && Boolean(message.toolResultStatus);
+
+              // Determine if this is the currently pending/generating proposal
+              const isCurrentPendingProposal =
+                hasToolCall &&
+                !isResolvedToolCall &&
+                proposalState.status !== "idle" &&
+                "proposal" in proposalState &&
+                proposalState.proposal.id === message.toolCall?.id;
 
               return (
-                <div
-                  key={message.id}
-                  className={cn(
-                    "mb-2 flex",
-                    isUser ? "justify-end" : "justify-start",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "relative min-w-[20%] max-w-[85%] rounded-lg px-4 py-3",
-                      isUser
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted",
-                      message.isError &&
-                        "border border-destructive bg-destructive/10",
-                      noContent && "w-4/5",
-                    )}
-                  >
-                    {message.isLoading && noContent ? (
-                      <div className="flex w-full flex-wrap gap-2 overflow-hidden">
-                        <Skeleton className="inline-block h-2 w-1/4" />
-                        <Skeleton className="inline-block h-2 w-2/3" />
-                        <Skeleton className="inline-block h-2 w-3/4" />
-                        <Skeleton className="inline-block h-2 w-1/4" />
-                      </div>
-                    ) : isUser ? (
-                      <div className="whitespace-pre-wrap">
-                        {message.content}
-                      </div>
-                    ) : (
-                      <MarkdownPreview
-                        className={cn(message.isError && "text-destructive")}
+                <React.Fragment key={message.id}>
+                  {/* Render regular message content if present */}
+                  {(message.content || message.isLoading) && (
+                    <div
+                      className={cn(
+                        "mb-2 flex",
+                        isUser ? "justify-end" : "justify-start",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "relative min-w-[20%] max-w-[85%] rounded-lg px-4 py-3",
+                          isUser
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted",
+                          message.isError &&
+                            "border border-destructive bg-destructive/10",
+                          noContent && message.isLoading && "w-4/5",
+                        )}
                       >
-                        {message.content}
-                      </MarkdownPreview>
-                    )}
-                  </div>
-                </div>
+                        {message.isLoading && noContent ? (
+                          <div className="flex items-center gap-2 py-1">
+                            <PlaygroundOutputLoader />
+                            <span className="text-sm text-muted-slate">
+                              Thinking...
+                            </span>
+                          </div>
+                        ) : isUser ? (
+                          <div className="whitespace-pre-wrap">
+                            {message.content}
+                          </div>
+                        ) : (
+                          <MarkdownPreview
+                            className={cn(
+                              message.isError && "text-destructive",
+                            )}
+                          >
+                            {message.content}
+                          </MarkdownPreview>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Render tool call card if this message has a tool call */}
+                  {hasToolCall &&
+                    message.toolCall &&
+                    (() => {
+                      // Build proposal object from tool call arguments
+                      const toolArgs = message.toolCall.arguments as {
+                        intent_summary?: string;
+                        action?: "generate_new" | "update_existing";
+                      };
+                      const proposal: SchemaProposal = {
+                        id: message.toolCall.id,
+                        intentSummary: toolArgs.intent_summary || "",
+                        action: toolArgs.action || "generate_new",
+                      };
+
+                      // Determine the status for the card
+                      let cardStatus: ProposalCardStatus;
+                      if (
+                        isCurrentPendingProposal &&
+                        proposalState.status === "generating"
+                      ) {
+                        // Still generating - show loading state even if toolResultStatus is set
+                        cardStatus = "generating";
+                      } else if (isResolvedToolCall) {
+                        cardStatus =
+                          message.toolResultStatus as ProposalCardStatus;
+                      } else if (isCurrentPendingProposal) {
+                        cardStatus = proposalState.status as ProposalCardStatus;
+                      } else {
+                        // Fallback for unresolved but not current (shouldn't happen normally)
+                        cardStatus = "pending";
+                      }
+
+                      return (
+                        <SchemaProposalCard
+                          proposal={proposal}
+                          status={cardStatus}
+                          onAccept={
+                            isCurrentPendingProposal &&
+                            proposalState.status === "pending"
+                              ? onAcceptProposal
+                              : undefined
+                          }
+                          onReject={
+                            isCurrentPendingProposal &&
+                            proposalState.status === "pending"
+                              ? onRejectProposal
+                              : undefined
+                          }
+                          error={
+                            isCurrentPendingProposal &&
+                            proposalState.status === "generating"
+                              ? generationError
+                              : null
+                          }
+                          onRetry={
+                            isCurrentPendingProposal &&
+                            proposalState.status === "generating"
+                              ? onRetryGeneration
+                              : undefined
+                          }
+                        />
+                      );
+                    })()}
+                </React.Fragment>
               );
             })}
-            {/* Render proposal card if there's a pending or generating proposal */}
-            {(proposalState.status === "pending" ||
-              proposalState.status === "generating") && (
-              <SchemaProposalCard
-                proposal={proposalState.proposal}
-                status={proposalState.status}
-                onAccept={onAcceptProposal}
-                onReject={onRejectProposal}
-              />
-            )}
             {error && !isLoading && (
               <div className="mb-2 flex justify-start">
                 <div className="relative min-w-[20%] max-w-[85%] rounded-lg border border-destructive bg-destructive/10 px-4 py-3">

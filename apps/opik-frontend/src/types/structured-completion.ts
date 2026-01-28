@@ -7,12 +7,30 @@ export interface StructuredCompletionMessage {
   content: string;
 }
 
+/**
+ * Tool call information stored in chat messages
+ */
+export interface ChatToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+/**
+ * Tool result status after user interaction
+ */
+export type ChatToolResultStatus = "accepted" | "rejected";
+
 export interface ChatDisplayMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   isLoading?: boolean;
   isError?: boolean;
+  /** Tool call data if this message contains a tool call */
+  toolCall?: ChatToolCall;
+  /** Tool result after user accepts/rejects a proposal */
+  toolResultStatus?: ChatToolResultStatus;
 }
 
 export interface UseStructuredCompletionParams<T extends z.ZodSchema> {

@@ -69,15 +69,22 @@ const ContextSelectionSection: React.FC<ContextSelectionSectionProps> = ({
     },
   );
 
-  const traces = tracesData?.content ?? [];
+  const traces = useMemo(
+    () => tracesData?.content ?? [],
+    [tracesData?.content],
+  );
   const totalTraces = tracesData?.total ?? 0;
   const hasMoreTraces = totalTraces > 100;
 
-  const threads = threadsData?.content ?? [];
+  const threads = useMemo(
+    () => threadsData?.content ?? [],
+    [threadsData?.content],
+  );
   const totalThreads = threadsData?.total ?? 0;
   const hasMoreThreads = totalThreads > 100;
 
-  const isPending = contextType === "trace" ? isTracesPending : isThreadsPending;
+  const isPending =
+    contextType === "trace" ? isTracesPending : isThreadsPending;
 
   // Client-side filtering for traces
   const filteredTraces = useMemo(() => {
@@ -193,7 +200,9 @@ const ContextSelectionSection: React.FC<ContextSelectionSectionProps> = ({
                 <SearchInput
                   searchText={searchText}
                   setSearchText={setSearchText}
-                  placeholder={`Search ${contextType === "trace" ? "traces" : "threads"}...`}
+                  placeholder={`Search ${
+                    contextType === "trace" ? "traces" : "threads"
+                  }...`}
                 />
               </div>
               <div className="max-h-[300px] overflow-y-auto">
@@ -206,8 +215,8 @@ const ContextSelectionSection: React.FC<ContextSelectionSectionProps> = ({
                     <>
                       {hasMoreTraces && !searchText && (
                         <div className="comet-body-xs px-4 py-2 text-muted-slate">
-                          Showing the 100 most recent traces. Use search to
-                          find specific traces.
+                          Showing the 100 most recent traces. Use search to find
+                          specific traces.
                         </div>
                       )}
                       {filteredTraces.map((trace) => (

@@ -1,25 +1,45 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Save, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { CustomViewSchema, ViewSource } from "@/types/custom-view";
+import { useDataView, loadView } from "@/lib/data-view";
+
+// Storage key prefix for custom views
+const STORAGE_KEY_PREFIX = "custom-view:";
 
 interface SaveViewButtonProps {
-  schema: CustomViewSchema | null;
   projectId: string | null | undefined;
-  viewSource: ViewSource;
   onSave: () => void;
   isSaving: boolean;
+  saveVersion: number;
 }
 
 const SaveViewButton: React.FC<SaveViewButtonProps> = ({
-  schema,
   projectId,
-  viewSource,
   onSave,
   isSaving,
+  saveVersion,
 }) => {
-  const isDisabled = !schema || !projectId || viewSource === "saved";
+  const { tree } = useDataView();
+
+  // Check if current tree matches saved tree (compare only essential properties, ignoring metadata)
+  const isSaved = useMemo(() => {
+    if (!tree?.root || !projectId) {
+      return false;
+    }
+
+    const savedTree = loadView(`${STORAGE_KEY_PREFIX}${projectId}`);
+    if (!savedTree) return false;
+    // Compare only version, root, and nodes - ignore metadata like timestamps
+    return (
+      savedTree.version === tree.version &&
+      savedTree.root === tree.root &&
+      JSON.stringify(savedTree.nodes) === JSON.stringify(tree.nodes)
+    );
+  }, [tree, projectId, saveVersion]);
+
+  const hasTree = Boolean(tree?.root);
+  const isDisabled = !hasTree || !projectId || isSaved;
 
   const getButtonContent = () => {
     if (isSaving) {
@@ -31,7 +51,7 @@ const SaveViewButton: React.FC<SaveViewButtonProps> = ({
       );
     }
 
-    if (viewSource === "saved") {
+    if (isSaved) {
       return (
         <>
           <Check className="mr-2 size-4" />
@@ -49,13 +69,13 @@ const SaveViewButton: React.FC<SaveViewButtonProps> = ({
   };
 
   const getTooltipContent = () => {
-    if (!schema) {
+    if (!hasTree) {
       return "Generate a view first";
     }
     if (!projectId) {
       return "Select a project first";
     }
-    if (viewSource === "saved") {
+    if (isSaved) {
       return "View is already saved";
     }
     return "Save this view for the current project";
@@ -64,7 +84,7 @@ const SaveViewButton: React.FC<SaveViewButtonProps> = ({
   return (
     <TooltipWrapper content={getTooltipContent()}>
       <Button
-        variant={viewSource === "saved" ? "outline" : "default"}
+        variant={isSaved ? "outline" : "default"}
         size="sm"
         onClick={onSave}
         disabled={isDisabled || isSaving}
