@@ -380,6 +380,11 @@ const InitParameterInput: React.FC<InitParameterInputProps> = ({
         value={currentValue?.toString() ?? ""}
         onChange={(e) => {
           const val = e.target.value;
+          // Handle empty input - store null to allow Python defaults
+          if (val === "") {
+            handleChange(null);
+            return;
+          }
           // Try to parse as number if the type suggests it
           if (
             lowerType === "int" ||
@@ -389,7 +394,7 @@ const InitParameterInput: React.FC<InitParameterInputProps> = ({
             const num = parseFloat(val);
             handleChange(isNaN(num) ? val : num);
           } else {
-            handleChange(val || null);
+            handleChange(val);
           }
         }}
         placeholder={param.default_value ?? `Enter ${param.name}`}
