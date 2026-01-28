@@ -218,7 +218,7 @@ const WorkspaceSelector: React.FC = () => {
   const chevronButton = (
     <button
       className={cn(
-        "flex items-center justify-center rounded-md text-foreground transition-colors hover:bg-primary-foreground",
+        "flex items-center justify-center rounded-md border border-transparent text-foreground transition-colors hover:bg-primary-foreground focus:outline-none focus-visible:outline-none focus-visible:ring-0",
         "h-8 w-6 shrink-0 px-0",
       )}
       onClick={(e) => {
