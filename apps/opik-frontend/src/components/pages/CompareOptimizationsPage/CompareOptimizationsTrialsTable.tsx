@@ -62,7 +62,7 @@ const CompareOptimizationsTrialsTable: React.FC<
   const getRowClassName = useCallback(
     (row: Row<Experiment>) => {
       if (highlightedTrialId && row.id === highlightedTrialId) {
-        return "[&_td]:bg-[#e6f7ed] [&:hover_td]:!bg-[#d0f0dc]";
+        return "comet-table-row-best";
       }
       return "";
     },
