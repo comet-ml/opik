@@ -29,6 +29,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         validate_placeholders: bool = False,
+        tags: Optional[List[str]] = None,
     ) -> None:
         """
         Initializes a new instance of the ChatPrompt class.
@@ -40,6 +41,7 @@ class ChatPrompt(base_prompt.BasePrompt):
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
             validate_placeholders: Whether to validate template placeholders.
+            tags: Optional list of tags for categorization and filtering.
 
         Raises:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
@@ -58,6 +60,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         self._metadata = metadata
         self._type = type
         self._messages = messages
+        self._tags = copy.copy(tags) if tags else []
         self._commit: Optional[str] = None
         self.__internal_api__prompt_id__: str
         self.__internal_api__version_id__: str
@@ -111,6 +114,12 @@ class ChatPrompt(base_prompt.BasePrompt):
 
     @property
     @override
+    def version_id(self) -> str:
+        """The unique identifier of the prompt version."""
+        return self.__internal_api__version_id__
+
+    @property
+    @override
     def metadata(self) -> Optional[Dict[str, Any]]:
         """The metadata dictionary associated with the prompt"""
         return copy.deepcopy(self._metadata)
@@ -120,6 +129,12 @@ class ChatPrompt(base_prompt.BasePrompt):
     def type(self) -> prompt_types.PromptType:
         """The prompt type of the prompt."""
         return self._type
+
+    @property
+    @override
+    def tags(self) -> List[str]:
+        """The tags associated with the prompt."""
+        return copy.copy(self._tags)
 
     @override
     def format(
@@ -207,4 +222,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         chat_prompt._commit = prompt_version.commit
         chat_prompt._metadata = prompt_version.metadata
         chat_prompt._type = prompt_version.type
+        chat_prompt._tags = (
+            copy.copy(prompt_version.tags) if prompt_version.tags else []
+        )
         return chat_prompt
