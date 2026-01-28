@@ -32,10 +32,10 @@ export class TracesPage {
     await this.page.waitForTimeout(1000);
 
     try {
-      await this.page.getByRole('button', { name: 'Columns' }).click({ timeout: 5000 });
+      await this.page.getByTestId('columns-button').click({ timeout: 5000 });
     } catch {
       await this.page.reload();
-      await this.page.getByRole('button', { name: 'Columns' }).click({ timeout: 5000 });
+      await this.page.getByTestId('columns-button').click({ timeout: 5000 });
     }
 
     try {

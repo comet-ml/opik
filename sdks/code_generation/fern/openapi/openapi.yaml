@@ -3531,6 +3531,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeedbackScoreNames"
+  /v1/private/projects/{id}/token-usage/names:
+    get:
+      tags:
+      - Projects
+      summary: Find Token Usage names
+      description: Find Token Usage names
+      operationId: findTokenUsageNames
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Token Usage names resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenUsageNames"
   /v1/private/projects/{id}/metrics:
     post:
       tags:
@@ -10445,6 +10466,9 @@ components:
           type: string
           format: uuid
           readOnly: true
+        project_name:
+          type: string
+          readOnly: true
         name:
           type: string
         metadata:
@@ -11293,6 +11317,9 @@ components:
         project_id:
           type: string
           format: uuid
+          readOnly: true
+        project_name:
+          type: string
           readOnly: true
         name:
           type: string
@@ -13106,6 +13133,13 @@ components:
           type: string
         type:
           type: string
+    TokenUsageNames:
+      type: object
+      properties:
+        names:
+          type: array
+          items:
+            type: string
     DataPointNumber_Public:
       required:
       - time
@@ -13157,6 +13191,24 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DataPointNumber_Public"
+    BreakdownConfig_Public:
+      type: object
+      properties:
+        field:
+          type: string
+          enum:
+          - none
+          - tags
+          - metadata
+          - name
+          - error_info
+          - model
+          - provider
+          - type
+        metadata_key:
+          type: string
+        sub_metric:
+          type: string
     ProjectMetricRequest_Public:
       type: object
       properties:
@@ -13200,6 +13252,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceThreadFilter_Public"
+        breakdown:
+          $ref: "#/components/schemas/BreakdownConfig_Public"
     ProjectStatsSummary:
       type: object
       properties:

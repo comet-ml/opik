@@ -34,3 +34,6 @@ jobs:
 
       - name: Type check
         run: npm run typecheck
+
+      - name: Dependency validation
+        run: npm run deps:validate

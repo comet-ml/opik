@@ -1,7 +1,9 @@
 import logging
+from typing import Optional
 
 from opik import semantic_version
 from opik.api_objects import opik_client
+from opik.types import DistributedTraceHeadersDict
 from . import llm_response_wrapper
 from . import litellm_wrappers
 from .adk_otel_tracer import opik_adk_otel_tracer
@@ -14,10 +16,15 @@ from google.adk.agents import base_agent
 LOGGER = logging.getLogger(__name__)
 
 
-def patch_adk(opik_client: opik_client.Opik) -> None:
+def patch_adk(
+    opik_client: opik_client.Opik,
+    distributed_headers: Optional[DistributedTraceHeadersDict] = None,
+) -> None:
     _patch_adk_lite_llm()
     if semantic_version.SemanticVersion.parse(google.adk.__version__) >= "1.3.0":  # type: ignore
-        _patch_adk_opentelemetry_tracers(opik_client)
+        _patch_adk_opentelemetry_tracers(
+            opik_client, distributed_headers=distributed_headers
+        )
 
 
 def _patch_adk_lite_llm() -> None:
@@ -53,8 +60,13 @@ def _patch_adk_lite_llm() -> None:
             LOGGER.debug("Patched _model_response_to_generate_content_response")
 
 
-def _patch_adk_opentelemetry_tracers(opik_client: opik_client.Opik) -> None:
-    no_op_opik_tracer = opik_adk_otel_tracer.OpikADKOtelTracer(opik_client)
+def _patch_adk_opentelemetry_tracers(
+    opik_client: opik_client.Opik,
+    distributed_headers: Optional[DistributedTraceHeadersDict],
+) -> None:
+    no_op_opik_tracer = opik_adk_otel_tracer.OpikADKOtelTracer(
+        opik_client, distributed_headers=distributed_headers
+    )
 
     adk_telemetry.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
     adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
