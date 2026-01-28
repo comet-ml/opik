@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import opik
 from opik import opik_context
@@ -230,9 +230,7 @@ class HotpotMultiHopAgent(OptimizableAgent):
             metadata={"_opik_graph_definition": self.create_agent_graph()}
         )
         # Precedence: explicit agent model -> shared default -> builtin.
-        model_name = self.model or getattr(
-            constants, "DEFAULT_MODEL", "openai/gpt-4.1-mini"
-        )
+        model_name = self.model or constants.DEFAULT_MODEL or "openai/gpt-4.1-mini"
         call_metadata = {
             "opik": {
                 "current_span_data": opik_context.get_current_span_data(),
@@ -243,12 +241,15 @@ class HotpotMultiHopAgent(OptimizableAgent):
 
         # Step 1: Generate first search query
         messages = prompts["create_query_1"].get_messages(dataset_item)
-        search_query_1: str = call_model(
-            messages=messages,
-            model=model_name,
-            model_parameters=self.model_parameters,
-            metadata=call_metadata,
-            return_all=False,
+        search_query_1 = cast(
+            str,
+            call_model(
+                messages=messages,
+                model=model_name,
+                model_parameters=self.model_parameters,
+                metadata=call_metadata,
+                return_all=False,
+            ),
         )
         search_query_1 = str(search_query_1 or "").strip()
 
@@ -262,13 +263,16 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "passages_1": "\n\n".join(search_query_1_result),
             }
         )
-        response: SummaryObject = call_model(
-            messages=messages,
-            model=model_name,
-            model_parameters=self.model_parameters,
-            response_model=SummaryObject,
-            metadata=call_metadata,
-            return_all=False,
+        response = cast(
+            SummaryObject,
+            call_model(
+                messages=messages,
+                model=model_name,
+                model_parameters=self.model_parameters,
+                response_model=SummaryObject,
+                metadata=call_metadata,
+                return_all=False,
+            ),
         )
         summary_1 = response.summary
         gaps_1 = response.gaps
@@ -281,12 +285,15 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "gaps_1": "\n\n".join(gaps_1),
             }
         )
-        search_query_2: str = call_model(
-            messages=messages,
-            model=model_name,
-            model_parameters=self.model_parameters,
-            metadata=call_metadata,
-            return_all=False,
+        search_query_2 = cast(
+            str,
+            call_model(
+                messages=messages,
+                model=model_name,
+                model_parameters=self.model_parameters,
+                metadata=call_metadata,
+                return_all=False,
+            ),
         )
         search_query_2 = str(search_query_2 or "").strip()
 
@@ -301,13 +308,16 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "passages_2": "\n\n".join(search_query_2_result),
             }
         )
-        summary_2_response: SummaryUpdate = call_model(
-            messages=messages,
-            model=model_name,
-            model_parameters=self.model_parameters,
-            response_model=SummaryUpdate,
-            metadata=call_metadata,
-            return_all=False,
+        summary_2_response = cast(
+            SummaryUpdate,
+            call_model(
+                messages=messages,
+                model=model_name,
+                model_parameters=self.model_parameters,
+                response_model=SummaryUpdate,
+                metadata=call_metadata,
+                return_all=False,
+            ),
         )
         summary_2 = summary_2_response.summary
 
@@ -318,11 +328,14 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "summary_2": summary_2,
             }
         )
-        final_answer_response: str = call_model(
-            messages=messages,
-            model=model_name,
-            model_parameters=self.model_parameters,
-            metadata=call_metadata,
-            return_all=False,
+        final_answer_response = cast(
+            str,
+            call_model(
+                messages=messages,
+                model=model_name,
+                model_parameters=self.model_parameters,
+                metadata=call_metadata,
+                return_all=False,
+            ),
         )
         return str(final_answer_response or "").strip()
