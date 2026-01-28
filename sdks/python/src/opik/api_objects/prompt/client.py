@@ -324,10 +324,11 @@ class PromptClient:
                 json.dumps(parsed_filters) if parsed_filters is not None else None
             )
 
-            # Page through all prompt containers and collect name + template_structure + tags
+            # Page through all prompt containers and collect:
+            # (name, template_structure, tags)
             page = 1
             size = 1000
-            prompt_info: List[Tuple[str, str, Optional[List[str]]]] = []  # (name, template_structure, tags)
+            prompt_info: List[Tuple[str, str, Optional[List[str]]]] = []
             while True:
                 prompts_page = self._rest_client.prompts.get_prompts(
                     page=page,
