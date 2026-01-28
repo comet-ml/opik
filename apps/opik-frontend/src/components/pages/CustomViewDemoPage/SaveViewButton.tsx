@@ -36,6 +36,7 @@ const SaveViewButton: React.FC<SaveViewButtonProps> = ({
       savedTree.root === tree.root &&
       JSON.stringify(savedTree.nodes) === JSON.stringify(tree.nodes)
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, projectId, saveVersion]);
 
   const hasTree = Boolean(tree?.root);

@@ -363,6 +363,7 @@ const CustomViewDemoPageContent: React.FC<CustomViewDemoPageContentProps> = ({
       savedTree.root === tree.root &&
       JSON.stringify(savedTree.nodes) === JSON.stringify(tree.nodes)
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree, projectId, saveVersion]);
 
   // Check if we have a view schema (tree with root)
