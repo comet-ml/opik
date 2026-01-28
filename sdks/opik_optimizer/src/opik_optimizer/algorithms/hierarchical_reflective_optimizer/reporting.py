@@ -28,10 +28,6 @@ __all__ = [
 ]
 
 
-def _pluralize(word: str, count: int) -> str:
-    return f"{word}" if count == 1 else f"{word}s"
-
-
 def _display_box(
     title: str,
     content_lines: list[str],
@@ -374,8 +370,8 @@ def display_hierarchical_synthesis(
         return
 
     content_lines = [
-        f"Analyzed {total_test_cases} {_pluralize('case', total_test_cases)} "
-        f"across {num_batches} {_pluralize('batch', num_batches)}",
+        f"Analyzed {total_test_cases} {'case' if total_test_cases == 1 else 'cases'} "
+        f"across {num_batches} {'batch' if num_batches == 1 else 'batches'}",
         "",
         "Synthesis Notes:",
         synthesis_notes,
@@ -398,7 +394,7 @@ def display_failure_modes(failure_modes: list[Any], verbose: int = 1) -> None:
     display_text_block("│")
     display_text_block(
         f"│   ✓ Identified Failure Modes: Found {len(failure_modes)} distinct "
-        f"{_pluralize('failure pattern', len(failure_modes))}",
+        f"{'failure pattern' if len(failure_modes) == 1 else 'failure patterns'}",
         style="bold bright_green",
     )
 
