@@ -398,6 +398,24 @@ Scores:
         Returns:
             HierarchicalRootCauseAnalysis with unified failure modes and synthesis notes
         """
-        return asyncio.run(
-            self.analyze_async(evaluation_result, project_name=project_name)
-        )
+        coro = self.analyze_async(evaluation_result, project_name=project_name)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(coro)
+
+        if loop.is_running():
+            try:
+                # Needed for notebooks; optional dependency (no type stubs).
+                import nest_asyncio  # type: ignore[import-not-found]
+            except Exception as exc:
+                raise RuntimeError(
+                    "Hierarchical root cause analysis requires running an async loop. "
+                    "Either call analyze_async(...) directly, or install and enable "
+                    "nest_asyncio to allow nested event loops in notebooks."
+                ) from exc
+
+            nest_asyncio.apply()
+            return loop.run_until_complete(coro)
+
+        return loop.run_until_complete(coro)
