@@ -203,6 +203,17 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                 }
         except Exception:
             pass
+
+        # Normalize span data after LiteLLM call to ensure input/output are dicts
+        # This prevents issues where the LiteLLM integration might set these to lists
+        try:
+            from ..utils import prompt_tracing
+
+            prompt_tracing._normalize_current_span_data()
+        except Exception:
+            # Silently fail - this is a defensive measure
+            pass
+
         return response
 
     def _apply_cost_usage_to_owner(self, response: Any) -> None:
