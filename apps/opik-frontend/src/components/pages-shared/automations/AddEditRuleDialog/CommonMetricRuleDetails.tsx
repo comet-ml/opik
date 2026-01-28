@@ -50,7 +50,6 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
   isLoading = false,
   error = null,
 }) => {
-
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;

@@ -9,6 +9,7 @@ import {
 } from "@/types/automations";
 import { UI_EVALUATORS_RULE_TYPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
+import useCommonMetricsQuery from "@/api/automations/useCommonMetricsQuery";
 
 // Mock the API hook
 vi.mock("@/api/automations/useCommonMetricsQuery", () => ({
@@ -122,10 +123,15 @@ const TestWrapper = () => {
       },
     });
 
+    const { data: metricsData, isLoading, error } = useCommonMetricsQuery();
+
     return (
       <FormProvider {...form}>
         <CommonMetricRuleDetails
           form={form as unknown as UseFormReturn<EvaluationRuleFormType>}
+          metricsData={metricsData}
+          isLoading={isLoading}
+          error={error}
         />
       </FormProvider>
     );
