@@ -33,6 +33,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
+import OrganizationSelector from "@/components/layout/SideBar/OrganizationSelector/OrganizationSelector";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
@@ -46,8 +47,6 @@ import SidebarMenuItem, {
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
-
-const HOME_PATH = "/$workspaceName/home";
 
 const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
@@ -199,9 +198,21 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const LogoComponent = usePluginsStore((state) => state.Logo);
+  const UserMenu = usePluginsStore((state) => state.UserMenu);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
   );
+
+  // For open-source: use full logo (with text when expanded)
+  // For Comet: use compact icon (without text)
+  const logo = LogoComponent ? (
+    <LogoComponent expanded={expanded} />
+  ) : (
+    <Logo expanded={expanded} />
+  );
+
+  // Compact icon for Comet mode (organization selector)
+  const compactIcon = <Logo expanded={false} />;
 
   const { data: projectData } = useProjectsList(
     {
@@ -343,12 +354,6 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     optimizations_running: hasActiveOptimizations,
   };
 
-  const logo = LogoComponent ? (
-    <LogoComponent expanded={expanded} />
-  ) : (
-    <Logo expanded={expanded} />
-  );
-
   const renderItems = (items: MenuItem[]) => {
     return items.map((item) => (
       <SidebarMenuItem
@@ -422,14 +427,35 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   return (
     <>
       <aside className="comet-sidebar-width group h-[calc(100vh-var(--banner-height))] border-r transition-all">
-        <div className="comet-header-height relative flex w-full items-center justify-between gap-6 border-b">
-          <Link
-            to={HOME_PATH}
-            className="absolute left-[18px] z-10 block"
-            params={{ workspaceName }}
-          >
-            {logo}
-          </Link>
+        <div className="comet-header-height relative flex w-full min-w-0 items-center gap-2 border-b px-3">
+          {!UserMenu ? (
+            // Open-source: Show logo as clickable link to home
+            <Link
+              to="/$workspaceName/home"
+              className="absolute left-[18px] z-10 block"
+              params={{ workspaceName }}
+            >
+              {logo}
+            </Link>
+          ) : (
+            // Comet: Show compact icon + organization selector
+            // Match menu item structure: same padding/width logic
+            <>
+              <div
+                className={cn(
+                  "flex shrink-0 items-center",
+                  expanded ? "pl-[6px]" : "w-9 justify-center",
+                )}
+              >
+                {compactIcon}
+              </div>
+              {expanded && (
+                <div className="min-w-0 flex-1">
+                  <OrganizationSelector expanded={expanded} />
+                </div>
+              )}
+            </>
+          )}
         </div>
         <div className="relative flex h-[calc(100%-var(--header-height))]">
           {renderExpandCollapseButton()}

@@ -14,7 +14,7 @@
         ],
         "envFile": "${workspaceFolder}/.env.local"
       },
-      "slack": {
+      "Slack": {
         "command": "docker",
         "args": [
           "run",
@@ -22,7 +22,8 @@
           "--rm",
           "-e",
           "SLACK_MCP_XOXP_TOKEN",
-          "-e", "LOG_LEVEL=error",
+          "-e",
+          "LOG_LEVEL=error",
           "-e",
           "SLACK_MCP_ADD_MESSAGE_TOOL=true",
           "ghcr.io/korotovsky/slack-mcp-server:latest",
@@ -33,38 +34,32 @@
         "envFile": "${workspaceFolder}/.env.local"
       },
       "Atlassian": {
-        "command": "npx -y mcp-remote https://mcp.atlassian.com/v1/sse",
-        "env": {},
-        "args": []
+        "command": "npx",
+        "args": ["-y", "mcp-remote", "https://mcp.atlassian.com/v1/sse"]
       },
-      "Jira-Headless": {
+      "JiraHeadless": {
         "command": "uvx",
         "args": ["mcp-atlassian"],
         "envFile": "${workspaceFolder}/.env.local"
       },
       "Notion": {
-        "command": "npx -y mcp-remote https://mcp.notion.com/mcp",
-        "env": {},
-        "args": []
+        "command": "npx",
+        "args": ["-y", "mcp-remote", "https://mcp.notion.com/mcp"]
       },
       "Playwright": {
-        "command": "npx @playwright/mcp@latest",
-        "env": {},
-        "args": []
+        "command": "npx",
+        "args": ["@playwright/mcp@latest"]
       },
-      "chrome-devtools": {
+      "ChromeDevTools": {
         "command": "npx",
         "args": ["chrome-devtools-mcp@latest"]
       },
-      "playwright-test": {
+      "PlaywrightTest": {
         "command": "npx",
-        "args": [
-          "playwright",
-          "run-test-mcp-server"
-        ],
+        "args": ["playwright", "run-test-mcp-server"],
         "cwd": "${workspaceFolder}/tests_end_to_end/tests_end_to_end_ts/typescript-tests"
       },
-      "context7": {
+      "Context7": {
         "command": "npx",
         "args": ["-y", "@upstash/context7-mcp@latest"]
       }
