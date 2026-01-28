@@ -1,11 +1,13 @@
+import React from "react";
 import { StringParam, useQueryParam } from "use-query-params";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
-import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
-import LogsTab from "@/components/pages/TracesPage/LogsTab/LogsTab";
+import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesSpansTab";
+import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
@@ -20,15 +22,6 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import ViewSelector, {
   VIEW_TYPE,
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
-import { LOGS_TYPE } from "@/constants/traces";
-import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
-
-enum PROJECT_TAB {
-  logs = "logs",
-  metrics = "metrics",
-  evaluators = "rules",
-  annotationQueues = "annotation-queues",
-}
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
@@ -36,6 +29,22 @@ const TracesPage = () => {
     useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
+
+  const [type = TRACE_DATA_TYPE.traces, setType] = useQueryParam(
+    "type",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
+  const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
+    "view",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
   );
 
   const { data: project } = useProjectById(
@@ -49,118 +58,63 @@ const TracesPage = () => {
 
   const projectName = project?.name || projectId;
 
-  // Fetch thread statistics to get thread count for determining default logs type
-  const { data: threadsStats } = useThreadsStatistic(
-    {
-      projectId,
-    },
-    {
-      enabled: !!projectId,
-      refetchOnMount: false,
-    },
-  );
-
-  // Extract thread count from statistics
-  const threadCountStat = threadsStats?.stats?.find(
-    (stat) =>
-      stat.name === "thread_count" &&
-      stat.type === STATISTIC_AGGREGATION_TYPE.COUNT,
-  );
-  const threadCount =
-    (threadCountStat?.type === STATISTIC_AGGREGATION_TYPE.COUNT
-      ? threadCountStat.value
-      : 0) ?? 0;
-  const defaultLogsType =
-    threadCount > 0 ? LOGS_TYPE.threads : LOGS_TYPE.traces;
-
-  // Remember the user's selected LOGS_TYPE to preserve their choice across tab switches
-  const [userSelectedLogsType, setUserSelectedLogsType] =
-    useState<LOGS_TYPE | null>(null);
-
-  const [queryType = defaultLogsType, setQueryType] = useQueryParam(
-    "type",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
-  // Determine which main tab is active based on the type value
-  // Cast once to avoid repeated casting throughout the component
-  const typeAsProjectTab = queryType as PROJECT_TAB;
-  const typeAsLogsType = queryType as LOGS_TYPE;
-  const isValidProjectTab =
-    Object.values(PROJECT_TAB).includes(typeAsProjectTab);
-  const isValidLogsType = Object.values(LOGS_TYPE).includes(typeAsLogsType);
-
-  const activeTab = isValidProjectTab ? typeAsProjectTab : PROJECT_TAB.logs;
-
-  // Handle tab change - preserve user's selected logs type when returning to Logs tab
-  const handleTabChange = (newTab: string) => {
-    if (newTab === PROJECT_TAB.logs) {
-      // Use remembered value if available, otherwise use default
-      setQueryType(userSelectedLogsType ?? defaultLogsType);
-    } else {
-      // Remember current logs type before switching away
-      if (isValidLogsType) {
-        setUserSelectedLogsType(typeAsLogsType);
-      }
-      setQueryType(newTab);
-    }
-  };
-
-  const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
-    "view",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
 
   const renderContent = () => {
     if (view === VIEW_TYPE.DETAILS) {
       return (
         <Tabs
-          defaultValue={PROJECT_TAB.logs}
-          value={activeTab}
-          onValueChange={handleTabChange}
+          defaultValue="traces"
+          value={type as string}
+          onValueChange={setType}
           className="min-w-min"
         >
           <PageBodyStickyContainer direction="horizontal" limitWidth>
             <TabsList variant="underline">
-              <TabsTrigger variant="underline" value={PROJECT_TAB.logs}>
-                Logs
+              <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.traces}>
+                Traces
               </TabsTrigger>
-              <TabsTrigger variant="underline" value={PROJECT_TAB.metrics}>
+              <TabsTrigger variant="underline" value={TRACE_DATA_TYPE.spans}>
+                Spans
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="threads">
+                Threads
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="metrics">
                 Metrics
               </TabsTrigger>
-              <TabsTrigger variant="underline" value={PROJECT_TAB.evaluators}>
+              <TabsTrigger variant="underline" value="rules">
                 Online evaluation
               </TabsTrigger>
-              <TabsTrigger
-                variant="underline"
-                value={PROJECT_TAB.annotationQueues}
-              >
+              <TabsTrigger variant="underline" value="annotation-queues">
                 Annotation queues
               </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
-          <TabsContent value={PROJECT_TAB.logs}>
-            <LogsTab
+          <TabsContent value={TRACE_DATA_TYPE.traces}>
+            <TracesSpansTab
+              type={TRACE_DATA_TYPE.traces}
               projectId={projectId}
               projectName={projectName}
-              defaultLogsType={defaultLogsType}
             />
           </TabsContent>
-          <TabsContent value={PROJECT_TAB.metrics}>
+          <TabsContent value={TRACE_DATA_TYPE.spans}>
+            <TracesSpansTab
+              type={TRACE_DATA_TYPE.spans}
+              projectId={projectId}
+              projectName={projectName}
+            />
+          </TabsContent>
+          <TabsContent value="threads">
+            <ThreadsTab projectId={projectId} projectName={projectName} />
+          </TabsContent>
+          <TabsContent value="metrics">
             <MetricsTab projectId={projectId} />
           </TabsContent>
-          <TabsContent value={PROJECT_TAB.evaluators}>
+          <TabsContent value="rules">
             <RulesTab projectId={projectId} />
           </TabsContent>
-          <TabsContent value={PROJECT_TAB.annotationQueues}>
+          <TabsContent value="annotation-queues">
             <AnnotationQueuesTab projectId={projectId} />
           </TabsContent>
         </Tabs>
