@@ -39,12 +39,14 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
   const listModelsMutation = useOllamaListModelsMutation();
 
   const url = form.watch("url");
+  const apiKey = form.watch("apiKey");
+  const headers = form.watch("headers");
 
-  // Reset connection status when URL changes
+  // Reset connection status when any credential-affecting field changes
   useEffect(() => {
     setConnectionTested(false);
     setConnectionSuccess(false);
-  }, [url]);
+  }, [url, apiKey, headers]);
 
   const handleTestConnection = async () => {
     if (!url) {
@@ -59,6 +61,7 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
     try {
       const response = await testConnectionMutation.mutateAsync({
         base_url: url,
+        api_key: apiKey || undefined,
       });
 
       setConnectionTested(true);
@@ -98,6 +101,7 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
     try {
       const models = await listModelsMutation.mutateAsync({
         base_url: url,
+        api_key: apiKey || undefined,
       });
 
       if (models.length > 0) {
