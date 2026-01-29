@@ -1521,6 +1521,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     // the list will be fully populated based on the provider config response
   ],
 
+  [PROVIDER_TYPE.OLLAMA]: [
+    // the list will be fully populated based on the provider config response
+  ],
+
   [PROVIDER_TYPE.BEDROCK]: [
     // the list will be fully populated based on the provider config response
   ],

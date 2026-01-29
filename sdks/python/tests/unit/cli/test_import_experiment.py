@@ -21,6 +21,7 @@ from opik.cli.imports.experiment import (  # noqa: E402
 )
 from opik.cli.imports.utils import (  # noqa: E402
     translate_trace_id as utils_translate_trace_id,
+    sort_spans_topologically,
 )
 
 
@@ -434,6 +435,90 @@ class TestImportTracesWithSpans:
         # and its new ID should be in span_id_map
         assert "parent_span_id" in second_call.kwargs
 
+        # Third span (grandchild) should have parent_span_id set to second span's new ID
+        third_call = span_calls[2]
+        assert "parent_span_id" in third_call.kwargs
+        assert third_call.kwargs.get("parent_span_id") is not None
+
+        # Verify trace was created
+        assert mock_client.trace.called
+        assert "original-trace-1" in trace_id_map
+
+    def test_import_traces_preserves_deep_hierarchy(
+        self, mock_client: Mock, tmp_path: Path
+    ) -> None:
+        """Test that deep hierarchies (4+ levels) are preserved correctly."""
+        projects_dir = tmp_path / "projects" / "test-project"
+        projects_dir.mkdir(parents=True)
+
+        # Create a 4-level hierarchy: root -> child -> grandchild -> great-grandchild
+        # Spans are intentionally in wrong order to test sorting
+        trace_data = {
+            "trace": {
+                "id": "original-trace-1",
+                "name": "test-trace",
+                "input": {},
+                "output": {},
+            },
+            "spans": [
+                {
+                    "id": "span-4",
+                    "name": "great-grandchild",
+                    "parent_span_id": "span-3",
+                    "input": {},
+                    "output": {},
+                },
+                {
+                    "id": "span-2",
+                    "name": "child",
+                    "parent_span_id": "span-1",
+                    "input": {},
+                    "output": {},
+                },
+                {
+                    "id": "span-1",
+                    "name": "root",
+                    "parent_span_id": None,
+                    "input": {},
+                    "output": {},
+                },
+                {
+                    "id": "span-3",
+                    "name": "grandchild",
+                    "parent_span_id": "span-2",
+                    "input": {},
+                    "output": {},
+                },
+            ],
+        }
+
+        trace_file = projects_dir / "trace_original-trace-1.json"
+        with open(trace_file, "w") as f:
+            json.dump(trace_data, f)
+
+        # Import traces
+        trace_id_map, _ = _import_traces_from_projects_directory(
+            mock_client, tmp_path, dry_run=False, debug=False
+        )
+
+        # Verify all spans were created
+        assert mock_client.span.call_count == 4
+
+        span_calls = mock_client.span.call_args_list
+
+        # Verify order: root -> child -> grandchild -> great-grandchild
+        # First span should be root (no parent)
+        assert span_calls[0].kwargs.get("parent_span_id") is None
+
+        # Second span should be child (has parent)
+        assert span_calls[1].kwargs.get("parent_span_id") is not None
+
+        # Third span should be grandchild (has parent)
+        assert span_calls[2].kwargs.get("parent_span_id") is not None
+
+        # Fourth span should be great-grandchild (has parent)
+        assert span_calls[3].kwargs.get("parent_span_id") is not None
+
         # Verify trace was created
         assert mock_client.trace.called
         assert "original-trace-1" in trace_id_map
@@ -487,6 +572,184 @@ class TestImportTracesWithSpans:
 
         # Second span should have parent_span_id
         assert span_calls[1].kwargs.get("parent_span_id") is not None
+
+
+class TestTopologicalSort:
+    """Test the topological sort function for spans."""
+
+    def test_sort_spans_simple_hierarchy(self) -> None:
+        """Test sorting with a simple 2-level hierarchy."""
+        spans = [
+            {"id": "span-2", "name": "child", "parent_span_id": "span-1"},
+            {"id": "span-1", "name": "root", "parent_span_id": None},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # Root should come first
+        assert sorted_spans[0]["id"] == "span-1"
+        assert sorted_spans[0]["parent_span_id"] is None
+        # Child should come second
+        assert sorted_spans[1]["id"] == "span-2"
+        assert sorted_spans[1]["parent_span_id"] == "span-1"
+
+    def test_sort_spans_multi_level_hierarchy(self) -> None:
+        """Test sorting with a 4-level hierarchy (root -> child -> grandchild -> great-grandchild)."""
+        spans = [
+            {"id": "span-4", "name": "great-grandchild", "parent_span_id": "span-3"},
+            {"id": "span-2", "name": "child", "parent_span_id": "span-1"},
+            {"id": "span-1", "name": "root", "parent_span_id": None},
+            {"id": "span-3", "name": "grandchild", "parent_span_id": "span-2"},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # Verify order: root -> child -> grandchild -> great-grandchild
+        assert sorted_spans[0]["id"] == "span-1"
+        assert sorted_spans[0]["parent_span_id"] is None
+
+        assert sorted_spans[1]["id"] == "span-2"
+        assert sorted_spans[1]["parent_span_id"] == "span-1"
+
+        assert sorted_spans[2]["id"] == "span-3"
+        assert sorted_spans[2]["parent_span_id"] == "span-2"
+
+        assert sorted_spans[3]["id"] == "span-4"
+        assert sorted_spans[3]["parent_span_id"] == "span-3"
+
+    def test_sort_spans_multiple_roots(self) -> None:
+        """Test sorting with multiple root spans."""
+        spans = [
+            {"id": "span-3", "name": "child-of-2", "parent_span_id": "span-2"},
+            {"id": "span-1", "name": "root-1", "parent_span_id": None},
+            {"id": "span-2", "name": "root-2", "parent_span_id": None},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # Both roots should come before the child
+        root_ids = {sorted_spans[0]["id"], sorted_spans[1]["id"]}
+        assert root_ids == {"span-1", "span-2"}
+        assert sorted_spans[0]["parent_span_id"] is None
+        assert sorted_spans[1]["parent_span_id"] is None
+
+        # Child should come last
+        assert sorted_spans[2]["id"] == "span-3"
+        assert sorted_spans[2]["parent_span_id"] == "span-2"
+
+    def test_sort_spans_multiple_children(self) -> None:
+        """Test sorting with a root that has multiple children."""
+        spans = [
+            {"id": "span-3", "name": "child-2", "parent_span_id": "span-1"},
+            {"id": "span-1", "name": "root", "parent_span_id": None},
+            {"id": "span-2", "name": "child-1", "parent_span_id": "span-1"},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # Root should come first
+        assert sorted_spans[0]["id"] == "span-1"
+        assert sorted_spans[0]["parent_span_id"] is None
+
+        # Both children should come after root (order doesn't matter for siblings)
+        child_ids = {sorted_spans[1]["id"], sorted_spans[2]["id"]}
+        assert child_ids == {"span-2", "span-3"}
+        assert sorted_spans[1]["parent_span_id"] == "span-1"
+        assert sorted_spans[2]["parent_span_id"] == "span-1"
+
+    def test_sort_spans_missing_parent(self) -> None:
+        """Test sorting when a span references a non-existent parent."""
+        spans = [
+            {"id": "span-1", "name": "root", "parent_span_id": None},
+            {"id": "span-2", "name": "orphan", "parent_span_id": "nonexistent"},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # Both should be treated as roots (orphan becomes root)
+        assert len(sorted_spans) == 2
+        # Both should have no parent or invalid parent
+        for span in sorted_spans:
+            assert (
+                span["parent_span_id"] is None
+                or span["parent_span_id"] == "nonexistent"
+            )
+
+    def test_sort_spans_empty_list(self) -> None:
+        """Test sorting with empty list."""
+        spans: list = []
+        sorted_spans = sort_spans_topologically(spans)
+        assert sorted_spans == []
+
+    def test_sort_spans_single_root(self) -> None:
+        """Test sorting with single root span."""
+        spans = [{"id": "span-1", "name": "root", "parent_span_id": None}]
+        sorted_spans = sort_spans_topologically(spans)
+        assert len(sorted_spans) == 1
+        assert sorted_spans[0]["id"] == "span-1"
+        assert sorted_spans[0]["parent_span_id"] is None
+
+    def test_sort_spans_all_have_parents(self) -> None:
+        """Test sorting when all spans have parents (no explicit root).
+
+        This tests the fix for the bug where empty root_spans would cause
+        the function to return an empty list, silently dropping all spans.
+        """
+        spans = [
+            {"id": "span-1", "name": "child-1", "parent_span_id": "span-2"},
+            {"id": "span-2", "name": "child-2", "parent_span_id": "span-1"},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # Should not return empty list - all spans should be included
+        assert len(sorted_spans) == 2
+        # Verify all spans are present
+        span_ids = {span["id"] for span in sorted_spans}
+        assert span_ids == {"span-1", "span-2"}
+
+    def test_sort_spans_cycle(self) -> None:
+        """Test sorting with a cycle in the span graph.
+
+        This tests that cycles don't cause infinite loops and all spans
+        are still included in the result.
+        """
+        spans = [
+            {"id": "span-1", "name": "span-1", "parent_span_id": "span-2"},
+            {"id": "span-2", "name": "span-2", "parent_span_id": "span-3"},
+            {"id": "span-3", "name": "span-3", "parent_span_id": "span-1"},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # Should not return empty list - all spans should be included
+        assert len(sorted_spans) == 3
+        # Verify all spans are present
+        span_ids = {span["id"] for span in sorted_spans}
+        assert span_ids == {"span-1", "span-2", "span-3"}
+
+    def test_sort_spans_disconnected_components(self) -> None:
+        """Test sorting with disconnected components (multiple separate graphs).
+
+        This tests that spans not reachable from root spans are still included.
+        """
+        spans = [
+            {"id": "span-1", "name": "root-1", "parent_span_id": None},
+            {"id": "span-2", "name": "child-1", "parent_span_id": "span-1"},
+            {"id": "span-3", "name": "disconnected-1", "parent_span_id": "span-4"},
+            {"id": "span-4", "name": "disconnected-2", "parent_span_id": "span-3"},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # All spans should be included
+        assert len(sorted_spans) == 4
+        # Verify all spans are present
+        span_ids = {span["id"] for span in sorted_spans}
+        assert span_ids == {"span-1", "span-2", "span-3", "span-4"}
+        # Root span should come first
+        assert sorted_spans[0]["id"] == "span-1"
+        assert sorted_spans[0]["parent_span_id"] is None
 
 
 class TestModuleNameUsage:
