@@ -988,7 +988,12 @@ def test_opik_client_span__attachments(opik_client, attachment_data_file):
     )
 
 
-def test_opik_client_span__attachment_file_like(opik_client, attachment_data_file):
+def test_opik_client_span__attachment_with_file_like_data(
+    opik_client, attachment_data_file
+):
+    """
+    Test that a span can be created with an attachment that has file-like data.
+    """
     trace_id = helpers.generate_id()
     file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_without_mime_type"]
