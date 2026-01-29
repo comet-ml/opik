@@ -9,22 +9,19 @@ optimizable prompts:
 from __future__ import annotations
 
 from collections.abc import Callable
-import json
 import logging
 import os
 import random
-import re
 from typing import Any
 
 from pydantic import BaseModel
 
-import litellm
 import opik
 from opik import opik_context
-from opik.integrations.litellm import track_completion
 
 from benchmarks.metrics.hotpot import hotpot_f1
 from opik_optimizer import ChatPrompt, HierarchicalReflectiveOptimizer, OptimizableAgent
+from opik_optimizer.core.llm_calls import call_model
 from opik_optimizer.datasets import hotpot
 from opik_optimizer.utils.logging import setup_logging
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
@@ -41,7 +38,6 @@ os.environ["TQDM_DISABLE"] = "1"
 # Configure logging and environment
 setup_logging()
 logger = logging.getLogger(__name__)
-tracked_completion = track_completion()(litellm.completion)
 random.seed(SEED)
 
 
@@ -129,28 +125,6 @@ class SummaryUpdate(BaseModel):
     summary: str
 
 
-def _parse_summary_response(content: str) -> SummaryObject:
-    try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", content, re.DOTALL)
-        if not match:
-            raise
-        data = json.loads(match.group(0))
-    return SummaryObject(**data)
-
-
-def _parse_summary_update(content: str) -> SummaryUpdate:
-    try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", content, re.DOTALL)
-        if not match:
-            raise
-        data = json.loads(match.group(0))
-    return SummaryUpdate(**data)
-
-
 # ---------------------------------------------------------------------------
 # Agent implementation
 # ---------------------------------------------------------------------------
@@ -229,20 +203,22 @@ class HotpotMultiHopAgent(OptimizableAgent):
         opik_context.update_current_trace(
             metadata={"_opik_graph_definition": self.create_agent_graph()}
         )
+        call_metadata = {
+            "opik": {
+                "current_span_data": opik_context.get_current_span_data(),
+                "tags": ["streaming-test"],
+                "suppress_call_log": True,
+            }
+        }
 
         messages = prompts["create_query_1"].get_messages(dataset_item)
-        search_query_1 = tracked_completion(
-            model=self.model,
+        search_query_1 = call_model(
             messages=messages,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            metadata=call_metadata,
         )
-        search_query_1 = str(search_query_1.choices[0].message.content or "").strip()
+        search_query_1 = str(search_query_1 or "").strip()
 
         search_query_1_result = self.search_fn(search_query_1, self.num_passages)
 
@@ -252,24 +228,15 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "passages_1": "\n\n".join(search_query_1_result),
             }
         )
-        response = tracked_completion(
-            model=self.model,
+        response = call_model(
             messages=messages,
-            response_format=SummaryObject,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            response_model=SummaryObject,
+            metadata=call_metadata,
         )
-        response_msg = response.choices[0].message
-        parsed = getattr(response_msg, "parsed", None)
-        if parsed is None:
-            parsed = _parse_summary_response(response_msg.content)
-        search_query_1_summary = parsed.summary
-        gaps_1 = parsed.gaps
+        search_query_1_summary = response.summary
+        gaps_1 = response.gaps
 
         messages = prompts["create_query_2"].get_messages(
             {
@@ -278,20 +245,13 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "gaps_1": "\n\n".join(gaps_1),
             }
         )
-        search_query_2 = tracked_completion(
-            model=self.model,
+        search_query_2 = call_model(
             messages=messages,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            metadata=call_metadata,
         )
-        search_query_prompt = str(
-            search_query_2.choices[0].message.content or ""
-        ).strip()
+        search_query_prompt = str(search_query_2 or "").strip()
         search_query_2_result = self.search_fn(search_query_prompt, self.num_passages)
 
         messages = prompts["summarize_2"].get_messages(
@@ -301,23 +261,14 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "passages_2": "\n\n".join(search_query_2_result),
             }
         )
-        search_query_2_summary = tracked_completion(
-            model=self.model,
+        search_query_2_summary = call_model(
             messages=messages,
-            response_format=SummaryUpdate,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            response_model=SummaryUpdate,
+            metadata=call_metadata,
         )
-        response_msg = search_query_2_summary.choices[0].message
-        parsed = getattr(response_msg, "parsed", None)
-        if parsed is None:
-            parsed = _parse_summary_update(response_msg.content)
-        search_query_2_summary_text = parsed.summary
+        search_query_2_summary_text = search_query_2_summary.summary
 
         messages = prompts["final_answer"].get_messages(
             {
@@ -325,18 +276,13 @@ class HotpotMultiHopAgent(OptimizableAgent):
                 "summary_2": search_query_2_summary_text,
             }
         )
-        final_answer = tracked_completion(
-            model=self.model,
+        final_answer = call_model(
             messages=messages,
-            metadata={
-                "opik": {
-                    "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"],
-                },
-            },
-            **self.model_parameters,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            metadata=call_metadata,
         )
-        return str(final_answer.choices[0].message.content or "").strip()
+        return str(final_answer or "").strip()
 
 
 # ---------------------------------------------------------------------------
