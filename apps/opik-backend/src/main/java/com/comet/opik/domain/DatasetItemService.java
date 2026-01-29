@@ -16,6 +16,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
+import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -150,6 +151,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull DatasetVersioningMigrationService migrationService;
+    private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull @Config OpikConfiguration config;
 
     @Override
@@ -799,6 +801,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
             Visibility visibility) {
         log.info("Getting dataset items by '{}' on workspaceId '{}'", request, workspaceId);
+
+        // Parse filters from the request
+        List<DatasetItemFilter> filters = parseFilters(request.filters());
+
         return Mono
                 .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
@@ -822,7 +828,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         return Mono.fromCallable(() -> versionService.resolveVersionId(workspaceId, dataset.id(),
                                 versionHashOrTag))
                                 .flatMapMany(versionId -> versionDao.getItems(dataset.id(), versionId,
-                                        request.steamLimit(), request.lastRetrievedId()));
+                                        request.steamLimit(), request.lastRetrievedId(), filters));
                     }
 
                     // Case 2: Feature toggle ON and no version specified - use latest version
@@ -836,7 +842,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         log.info("Streaming from latest version '{}' for dataset '{}'", versionId,
                                                 dataset.id());
                                         return versionDao.getItems(dataset.id(), versionId, request.steamLimit(),
-                                                request.lastRetrievedId());
+                                                request.lastRetrievedId(), filters);
                                     } else {
                                         // No version exists yet - return empty
                                         log.warn("No versions exist for dataset '{}', returning empty stream",
@@ -848,8 +854,23 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                     // Case 3: Feature toggle OFF - use legacy table
                     log.info("Feature toggle OFF, using legacy table for streaming dataset '{}' items", dataset.id());
-                    return dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId());
+                    return dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId(), filters);
                 });
+    }
+
+    /**
+     * Parse filters from JSON string.
+     *
+     * @param filtersJson JSON string containing filter definitions
+     * @return List of DatasetItemFilter objects, or null if input is blank
+     */
+    @SuppressWarnings("unchecked")
+    private List<DatasetItemFilter> parseFilters(String filtersJson) {
+        if (StringUtils.isBlank(filtersJson)) {
+            return null;
+        }
+        var filters = filtersFactory.newFilters(filtersJson, DatasetItemFilter.LIST_TYPE_REFERENCE);
+        return filters != null ? (List<DatasetItemFilter>) filters : null;
     }
 
     @Override

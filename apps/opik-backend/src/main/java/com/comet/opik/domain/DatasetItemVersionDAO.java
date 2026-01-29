@@ -72,6 +72,9 @@ public interface DatasetItemVersionDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId);
 
+    Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId,
+            List<DatasetItemFilter> filters);
+
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
 
     /**
@@ -1609,13 +1612,28 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
             UUID lastRetrievedId) {
-        log.info("Streaming dataset items by datasetId '{}', versionId '{}', limit '{}', lastRetrievedId '{}'",
-                datasetId, versionId, limit, lastRetrievedId);
+        return getItems(datasetId, versionId, limit, lastRetrievedId, null);
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
+            UUID lastRetrievedId, List<DatasetItemFilter> filters) {
+        log.info(
+                "Streaming dataset items by datasetId '{}', versionId '{}', limit '{}', lastRetrievedId '{}', hasFilters '{}'",
+                datasetId, versionId, limit, lastRetrievedId, CollectionUtils.isNotEmpty(filters));
 
         ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
         if (lastRetrievedId != null) {
             template.add("lastRetrievedId", true);
         }
+
+        // Add filter support
+        if (CollectionUtils.isNotEmpty(filters)) {
+            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+        }
+
         String query = template.render();
 
         return asyncTemplate.stream(connection -> {
@@ -1628,6 +1646,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 statement.bind("lastRetrievedId", lastRetrievedId.toString());
             } else {
                 statement.bind("offset", 0);
+            }
+
+            // Bind filter parameters
+            if (CollectionUtils.isNotEmpty(filters)) {
+                FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
             }
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "stream_version_items");

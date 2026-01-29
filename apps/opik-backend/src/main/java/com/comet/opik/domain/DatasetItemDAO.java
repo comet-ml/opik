@@ -60,6 +60,8 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
+    Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId, List<DatasetItemFilter> filters);
+
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
     Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
@@ -144,6 +146,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit
@@ -1142,8 +1145,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @Override
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId) {
-        log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}'",
-                datasetId, limit, lastRetrievedId);
+        return getItems(datasetId, limit, lastRetrievedId, null);
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId,
+            List<DatasetItemFilter> filters) {
+        log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}', hasFilters '{}'",
+                datasetId, limit, lastRetrievedId, CollectionUtils.isNotEmpty(filters));
 
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_STREAM, "select_dataset_items_stream", workspaceId,
@@ -1153,6 +1163,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 template.add("lastRetrievedId", lastRetrievedId);
             }
 
+            // Add filter support
+            if (CollectionUtils.isNotEmpty(filters)) {
+                FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                        .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+            }
+
             var statement = connection.createStatement(template.render())
                     .bind("datasetId", datasetId)
                     .bind("limit", limit)
@@ -1160,6 +1176,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             if (lastRetrievedId != null) {
                 statement.bind("lastRetrievedId", lastRetrievedId);
+            }
+
+            // Bind filter parameters
+            if (CollectionUtils.isNotEmpty(filters)) {
+                FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
             }
 
             Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_stream");
