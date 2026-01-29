@@ -272,61 +272,63 @@ jobs:
         id: collect-failures
         run: |
           FAILED_SUITES=""
+          WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           
-          # Check each test suite and collect failures
+          # Check each test suite and collect failures with links
+          # Link format points to the workflow run with job filter
           if [ "${{ needs.openai_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• OpenAI\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|OpenAI>\n"
           fi
           if [ "${{ needs.langchain_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• LangChain\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|LangChain>\n"
           fi
           if [ "${{ needs.langchain_legacy_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• LangChain Legacy\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|LangChain Legacy>\n"
           fi
           if [ "${{ needs.llama_index_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• LlamaIndex\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|LlamaIndex>\n"
           fi
           if [ "${{ needs.anthropic_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• Anthropic\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Anthropic>\n"
           fi
           if [ "${{ needs.aisuite_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• AISuite\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|AISuite>\n"
           fi
           if [ "${{ needs.haystack_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• Haystack\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Haystack>\n"
           fi
           if [ "${{ needs.guardrails_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• Guardrails\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Guardrails>\n"
           fi
           if [ "${{ needs.dspy_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• DSPy\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|DSPy>\n"
           fi
           if [ "${{ needs.crewai_v0_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• CrewAI v0\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|CrewAI v0>\n"
           fi
           if [ "${{ needs.crewai_v1_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• CrewAI v1\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|CrewAI v1>\n"
           fi
           if [ "${{ needs.genai_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• GenAI\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|GenAI>\n"
           fi
           if [ "${{ needs.adk_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• ADK\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|ADK>\n"
           fi
           if [ "${{ needs.adk_legacy_1_3_0_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• ADK Legacy 1.3.0\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|ADK Legacy 1.3.0>\n"
           fi
           if [ "${{ needs.evaluation_metrics_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• Evaluation Metrics\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Evaluation Metrics>\n"
           fi
           if [ "${{ needs.bedrock_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• Bedrock\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Bedrock>\n"
           fi
           if [ "${{ needs.litellm_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• LiteLLM\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|LiteLLM>\n"
           fi
           if [ "${{ needs.harbor_tests.result }}" == "failure" ]; then
-            FAILED_SUITES="${FAILED_SUITES}• Harbor\n"
+            FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Harbor>\n"
           fi
           
           # Count failures
