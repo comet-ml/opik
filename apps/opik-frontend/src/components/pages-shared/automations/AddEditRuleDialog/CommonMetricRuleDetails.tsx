@@ -94,7 +94,7 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
 
   // Get the selected metric ID from form state
   const selectedMetricId = form.watch("commonMetricDetails.metricId");
-  
+
   // Track the previous metric ID to detect metric changes
   const previousMetricIdRef = useRef<string | undefined>(undefined);
 
@@ -122,9 +122,10 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
   useEffect(() => {
     if (selectedMetric) {
       // Check if the metric has actually changed (user switched to a different metric)
-      const metricChanged = previousMetricIdRef.current !== undefined && 
-                           previousMetricIdRef.current !== selectedMetric.id;
-      
+      const metricChanged =
+        previousMetricIdRef.current !== undefined &&
+        previousMetricIdRef.current !== selectedMetric.id;
+
       // Update the ref for next comparison
       previousMetricIdRef.current = selectedMetric.id;
 
@@ -161,7 +162,9 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
       }
 
       // Set up init config
-      const currentInitConfig = form.getValues("commonMetricDetails.initConfig");
+      const currentInitConfig = form.getValues(
+        "commonMetricDetails.initConfig",
+      );
       const newInitConfig: Record<string, string | boolean | number | null> =
         {};
 

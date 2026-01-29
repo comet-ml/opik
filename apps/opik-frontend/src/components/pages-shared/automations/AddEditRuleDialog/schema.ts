@@ -355,19 +355,31 @@ const BasePythonCodeObjectSchema = z.object({
   score_config: z.record(z.string(), z.string()).optional(),
 });
 
-// Base schema with validation
-export const BasePythonCodeFormSchema = BasePythonCodeObjectSchema.superRefine(
-  (data, ctx) => {
-    // Either metric code OR common_metric_id must be present
-    // If common_metric_id is not present, metric is required
-    if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Code is required",
-        path: ["metric"],
-      });
-    }
-  },
+// Reusable validation function for metric/common_metric_id
+const validateMetricOrCommonMetricId = (
+  data: { metric?: string; common_metric_id?: string },
+  ctx: z.RefinementCtx,
+) => {
+  // Either metric code OR common_metric_id must be present
+  // If common_metric_id is not present, metric is required
+  if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Code is required",
+      path: ["metric"],
+    });
+  }
+};
+
+// Reusable arguments schema for Trace and Span
+const ArgumentsSchema = z.record(
+  z.string(),
+  z
+    .string()
+    .min(1, { message: "Key is required" })
+    .regex(/^(input|output|metadata)(\.|$)/, {
+      message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+    }),
 );
 
 export const CommonMetricDetailsSchema = z.object({
@@ -387,62 +399,18 @@ export const CommonMetricDetailsSchema = z.object({
 
 export const PythonCodeDetailsTraceFormSchema =
   BasePythonCodeObjectSchema.extend({
-    arguments: z.record(
-      z.string(),
-      z
-        .string()
-        .min(1, { message: "Key is required" })
-        .regex(/^(input|output|metadata)(\.|$)/, {
-          message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
-        }),
-    ),
+    arguments: ArgumentsSchema,
     parsingArgumentsError: z.boolean().optional(),
-  }).superRefine((data, ctx) => {
-    // Either metric code OR common_metric_id must be present
-    if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Code is required",
-        path: ["metric"],
-      });
-    }
-  });
+  }).superRefine(validateMetricOrCommonMetricId);
 
 export const PythonCodeDetailsThreadFormSchema =
-  BasePythonCodeObjectSchema.superRefine((data, ctx) => {
-    // Either metric code OR common_metric_id must be present
-    if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Code is required",
-        path: ["metric"],
-      });
-    }
-  });
+  BasePythonCodeObjectSchema.superRefine(validateMetricOrCommonMetricId);
 
-export const PythonCodeDetailsSpanFormSchema = BasePythonCodeObjectSchema.extend(
-  {
-    arguments: z.record(
-      z.string(),
-      z
-        .string()
-        .min(1, { message: "Key is required" })
-        .regex(/^(input|output|metadata)(\.|$)/, {
-          message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
-        }),
-    ),
+export const PythonCodeDetailsSpanFormSchema =
+  BasePythonCodeObjectSchema.extend({
+    arguments: ArgumentsSchema,
     parsingArgumentsError: z.boolean().optional(),
-  },
-).superRefine((data, ctx) => {
-  // Either metric code OR common_metric_id must be present
-  if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Code is required",
-      path: ["metric"],
-    });
-  }
-});
+  }).superRefine(validateMetricOrCommonMetricId);
 
 export const BaseEvaluationRuleFormSchema = z.object({
   ruleName: RuleNameSchema,
