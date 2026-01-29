@@ -1,0 +1,22 @@
+---
+description: Agent deployment rules
+alwaysApply: true
+---
+# Agent Deployment
+
+## Domain Routing
+- `apps/opik-backend/**` → Backend skill
+- `apps/opik-frontend/**` → Frontend skill
+- `sdks/python/**` → Python SDK skill
+- `sdks/opik-typescript/**` → TypeScript SDK skill
+- `tests_end_to_end/**` → Playwright E2E skill
+
+## Task Approach
+- Complex features → Plan before implementing
+- Bug fixes → Reproduce with test first
+- Multi-component → Coordinate across domains
+
+## Execution
+- Independent tasks → Run in parallel
+- Use Opus for: complex planning, security, architecture
+- Use Haiku for: simple test runs, formatting
