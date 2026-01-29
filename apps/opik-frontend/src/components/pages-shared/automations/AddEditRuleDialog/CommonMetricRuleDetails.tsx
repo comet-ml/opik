@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import get from "lodash/get";
 
@@ -94,6 +94,9 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
 
   // Get the selected metric ID from form state
   const selectedMetricId = form.watch("commonMetricDetails.metricId");
+  
+  // Track the previous metric ID to detect metric changes
+  const previousMetricIdRef = useRef<string | undefined>(undefined);
 
   // Auto-select the first metric if none is selected
   useEffect(() => {
@@ -118,6 +121,13 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
   // Update form values when metric changes
   useEffect(() => {
     if (selectedMetric) {
+      // Check if the metric has actually changed (user switched to a different metric)
+      const metricChanged = previousMetricIdRef.current !== undefined && 
+                           previousMetricIdRef.current !== selectedMetric.id;
+      
+      // Update the ref for next comparison
+      previousMetricIdRef.current = selectedMetric.id;
+
       // Set up arguments based on metric score_parameters (only for non-thread scope)
       // Only include mappable parameters (which map to trace/span fields)
       if (!isThreadScope) {
@@ -150,17 +160,33 @@ const CommonMetricRuleDetails: React.FC<CommonMetricRuleDetailsProps> = ({
         form.setValue("pythonCodeDetails.score_config", newScoreConfig);
       }
 
-      // Set up init config with default values from __init__ parameters
+      // Set up init config
+      const currentInitConfig = form.getValues("commonMetricDetails.initConfig");
       const newInitConfig: Record<string, string | boolean | number | null> =
         {};
 
-      // Add init parameters with fresh default values for the new metric
+      // Add init parameters
       selectedMetric.init_parameters?.forEach((param) => {
-        // Always use default values when metric changes to avoid stale data
-        newInitConfig[param.name] = parseDefaultValue(
-          param.default_value,
-          param.type,
-        );
+        // If metric changed, reset to defaults (don't preserve values from different metric)
+        // If same metric, preserve existing values (for editing existing rules)
+        if (metricChanged) {
+          // Metric switched - use fresh defaults
+          newInitConfig[param.name] = parseDefaultValue(
+            param.default_value,
+            param.type,
+          );
+        } else {
+          // Same metric - preserve existing values if available
+          const existingValue = currentInitConfig?.[param.name];
+          if (existingValue !== undefined) {
+            newInitConfig[param.name] = existingValue;
+          } else {
+            newInitConfig[param.name] = parseDefaultValue(
+              param.default_value,
+              param.type,
+            );
+          }
+        }
       });
 
       form.setValue("commonMetricDetails.initConfig", newInitConfig);
