@@ -510,16 +510,31 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
                 <if(dataset_item_filters)>
                 AND ei.dataset_item_id IN (
-                    SELECT div.id
-                    FROM dataset_item_versions div
-                    INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
-                    LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
-                    WHERE div.workspace_id = :workspace_id
-                    AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
+                    SELECT id
+                    FROM (
+                        SELECT
+                            div.id AS id,
+                            div.data AS data,
+                            div.source AS source,
+                            div.trace_id AS trace_id,
+                            div.span_id AS span_id,
+                            div.tags AS tags,
+                            div.created_at AS created_at,
+                            div.last_updated_at AS last_updated_at,
+                            div.created_by AS created_by,
+                            div.last_updated_by AS last_updated_by,
+                            div.dataset_version_id AS dataset_version_id,
+                            COALESCE(nullIf(e.dataset_version_id, ''), :versionId) AS resolved_version
+                        FROM dataset_item_versions div
+                        INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
+                        LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
+                        WHERE div.workspace_id = :workspace_id
+                        AND div.dataset_id = :datasetId
+                    ) AS versioned
+                    WHERE dataset_version_id = resolved_version
                     AND <dataset_item_filters>
-                    ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                    LIMIT 1 BY div.id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
                 <endif>
             	ORDER BY id DESC, last_updated_at DESC
@@ -659,16 +674,31 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
                 <if(dataset_item_filters)>
                 AND ei.dataset_item_id IN (
-                    SELECT div.id
-                    FROM dataset_item_versions div
-                    INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
-                    LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
-                    WHERE div.workspace_id = :workspace_id
-                    AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
+                    SELECT id
+                    FROM (
+                        SELECT
+                            div.id AS id,
+                            div.data AS data,
+                            div.source AS source,
+                            div.trace_id AS trace_id,
+                            div.span_id AS span_id,
+                            div.tags AS tags,
+                            div.created_at AS created_at,
+                            div.last_updated_at AS last_updated_at,
+                            div.created_by AS created_by,
+                            div.last_updated_by AS last_updated_by,
+                            div.dataset_version_id AS dataset_version_id,
+                            COALESCE(nullIf(e.dataset_version_id, ''), :versionId) AS resolved_version
+                        FROM dataset_item_versions div
+                        INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
+                        LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
+                        WHERE div.workspace_id = :workspace_id
+                        AND div.dataset_id = :datasetId
+                    ) AS versioned
+                    WHERE dataset_version_id = resolved_version
                     AND <dataset_item_filters>
-                    ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                    LIMIT 1 BY div.id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
                 <endif>
             	ORDER BY id DESC, last_updated_at DESC
@@ -1384,16 +1414,31 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
                 <if(dataset_item_filters)>
                 AND ei.dataset_item_id IN (
-                    SELECT div.id
-                    FROM dataset_item_versions div
-                    INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
-                    LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
-                    WHERE div.workspace_id = :workspace_id
-                    AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
+                    SELECT id
+                    FROM (
+                        SELECT
+                            div.id AS id,
+                            div.data AS data,
+                            div.source AS source,
+                            div.trace_id AS trace_id,
+                            div.span_id AS span_id,
+                            div.tags AS tags,
+                            div.created_at AS created_at,
+                            div.last_updated_at AS last_updated_at,
+                            div.created_by AS created_by,
+                            div.last_updated_by AS last_updated_by,
+                            div.dataset_version_id AS dataset_version_id,
+                            COALESCE(nullIf(e.dataset_version_id, ''), :versionId) AS resolved_version
+                        FROM dataset_item_versions div
+                        INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
+                        LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
+                        WHERE div.workspace_id = :workspace_id
+                        AND div.dataset_id = :datasetId
+                    ) AS versioned
+                    WHERE dataset_version_id = resolved_version
                     AND <dataset_item_filters>
-                    ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                    LIMIT 1 BY div.id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 )
                 <endif>
             ), trace_project_mapping AS (
