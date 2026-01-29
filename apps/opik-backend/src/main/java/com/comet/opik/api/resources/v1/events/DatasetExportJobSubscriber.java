@@ -64,12 +64,13 @@ public class DatasetExportJobSubscriber extends BaseRedisSubscriber<DatasetExpor
 
     @Override
     protected Mono<Void> processEvent(@NonNull DatasetExportMessage message) {
-        log.info("Processing dataset export job: jobId='{}', datasetId='{}', workspaceId='{}'",
-                message.jobId(), message.datasetId(), message.workspaceId());
+        log.info("Processing dataset export job: jobId='{}', datasetId='{}', workspaceId='{}', versionId='{}'",
+                message.jobId(), message.datasetId(), message.workspaceId(), message.versionId());
 
         // Set reactive context for the processing
+        // Use versionId as provided in the message; it was resolved at job creation time
         return jobService.updateJobToProcessing(message.jobId()) // Set status to PROCESSING first
-                .then(csvProcessor.generateAndUploadCsv(message.datasetId()))
+                .then(csvProcessor.generateAndUploadCsv(message.datasetId(), message.versionId()))
                 .flatMap(result -> {
                     log.info("CSV generated successfully for job '{}', file path: '{}', expires at: '{}'",
                             message.jobId(), result.filePath(), result.expiresAt());

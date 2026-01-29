@@ -17,6 +17,7 @@ import VersionRowActionsCell from "./VersionRowActionsCell";
 
 interface VersionHistoryTabProps {
   datasetId: string;
+  datasetName?: string;
 }
 
 const getRowId = (v: DatasetVersion) => v.id;
@@ -69,7 +70,10 @@ const COLUMNS: ColumnData<DatasetVersion>[] = [
   },
 ];
 
-const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
+const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({
+  datasetId,
+  datasetName,
+}) => {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
 
@@ -89,10 +93,10 @@ const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
       ...baseColumns,
       generateActionsColumDef<DatasetVersion>({
         cell: VersionRowActionsCell,
-        customMeta: { datasetId },
+        customMeta: { datasetId, datasetName },
       }),
     ];
-  }, [datasetId]);
+  }, [datasetId, datasetName]);
 
   const data = versionsData?.content || [];
   const total = versionsData?.total ?? 0;

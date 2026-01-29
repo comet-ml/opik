@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
@@ -11,5 +12,6 @@ import java.util.UUID;
 public record DatasetExportMessage(
         @NotNull UUID jobId,
         @NotNull UUID datasetId,
-        @NotNull String workspaceId) {
+        @NotNull String workspaceId,
+        @Nullable UUID versionId) {
 }
