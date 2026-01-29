@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from "react";
 import { DownloadIcon, Expand, ExternalLink } from "lucide-react";
 
-import { cn, isSameDomainUrl } from "@/lib/utils";
+import { cn, isSameDomainUrl, isOpikS3AttachmentUrl } from "@/lib/utils";
 import { ATTACHMENT_TYPE, AttachmentPreviewData } from "@/types/attachments";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
@@ -21,12 +21,7 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   const Icon = ATTACHMENT_ICON_MAP[type];
 
   const allowedDomain = useMemo(() => {
-    return (
-      isSameDomainUrl(url) ||
-      /^https:\/\/s3\.amazonaws\.com\/([^\s/]+)\/opik\/attachment\/(\S+)$/.test(
-        url,
-      )
-    );
+    return isSameDomainUrl(url) || isOpikS3AttachmentUrl(url);
   }, [url]);
   const showDownload = url.startsWith("data:") || allowedDomain;
 

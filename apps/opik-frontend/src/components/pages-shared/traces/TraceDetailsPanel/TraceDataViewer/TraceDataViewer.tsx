@@ -114,16 +114,24 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     // If no tab is set, use the default
     if (!tab) return defaultTab;
 
+    // Normalize legacy tab values
+    let normalizedTab = tab;
+    if (tab === "input") {
+      normalizedTab = canShowMessagesTab ? "messages" : "details";
+    } else if (tab === "metadata") {
+      normalizedTab = "details";
+    }
+
     // If messages tab is selected but not available, fall back to details
-    if (tab === "messages" && !canShowMessagesTab) return "details";
+    if (normalizedTab === "messages" && !canShowMessagesTab) return "details";
 
     // If graph tab is selected but not available, fall back to default
-    if (tab === "graph" && !hasSpanAgentGraph) return defaultTab;
+    if (normalizedTab === "graph" && !hasSpanAgentGraph) return defaultTab;
 
     // If prompts tab is selected but not available, fall back to default
-    if (tab === "prompts" && !hasPrompts) return defaultTab;
+    if (normalizedTab === "prompts" && !hasPrompts) return defaultTab;
 
-    return tab;
+    return normalizedTab;
   }, [tab, defaultTab, canShowMessagesTab, hasSpanAgentGraph, hasPrompts]);
 
   const isSpanInputOutputLoading =

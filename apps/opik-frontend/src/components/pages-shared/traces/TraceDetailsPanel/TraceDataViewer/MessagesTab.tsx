@@ -44,6 +44,17 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     [transformedOutput],
   );
 
+  // Cache the output mapper result to avoid duplicate calls
+  const outputMappedResult = useMemo(() => {
+    if (outputDetection.supported && outputDetection.provider) {
+      const provider = getProvider(outputDetection.provider);
+      if (provider) {
+        return provider.mapper(transformedOutput, { fieldType: "output" });
+      }
+    }
+    return null;
+  }, [outputDetection, transformedOutput]);
+
   // Map messages from both input and output
   const combinedMessages = useMemo(() => {
     const messages: LLMMessageDescriptor[] = [];
@@ -59,38 +70,23 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
       }
     }
 
-    // Map output messages
-    if (outputDetection.supported && outputDetection.provider) {
-      const provider = getProvider(outputDetection.provider);
-      if (provider) {
-        const outputResult = provider.mapper(transformedOutput, {
-          fieldType: "output",
-        });
-        // Adjust IDs to avoid collisions
-        const outputMessages = outputResult.messages.map((msg, idx) => ({
-          ...msg,
-          id: `output-combined-${idx}`,
-        }));
-        messages.push(...outputMessages);
-      }
+    // Map output messages using cached result
+    if (outputMappedResult) {
+      // Adjust IDs to avoid collisions
+      const outputMessages = outputMappedResult.messages.map((msg, idx) => ({
+        ...msg,
+        id: `output-combined-${idx}`,
+      }));
+      messages.push(...outputMessages);
     }
 
     return messages;
-  }, [inputDetection, outputDetection, transformedInput, transformedOutput]);
+  }, [inputDetection, transformedInput, outputMappedResult]);
 
-  // Get usage info from output
+  // Get usage info from cached output result
   const usage = useMemo(() => {
-    if (outputDetection.supported && outputDetection.provider) {
-      const provider = getProvider(outputDetection.provider);
-      if (provider) {
-        const outputResult = provider.mapper(transformedOutput, {
-          fieldType: "output",
-        });
-        return outputResult.usage;
-      }
-    }
-    return undefined;
-  }, [outputDetection, transformedOutput]);
+    return outputMappedResult?.usage;
+  }, [outputMappedResult]);
 
   // Get all message IDs for expand/collapse all functionality
   const allMessageIds = useMemo(() => {
