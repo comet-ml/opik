@@ -54,6 +54,7 @@ export interface Organization {
   academic: boolean;
   role: ORGANIZATION_ROLE_TYPE;
   onlyAdminsInviteByEmail: boolean;
+  workspaceRolesEnabled: boolean;
 }
 
 export enum ManagementPermissionsNames {

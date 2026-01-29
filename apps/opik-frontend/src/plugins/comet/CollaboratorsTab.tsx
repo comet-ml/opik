@@ -38,8 +38,7 @@ import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
 import WorkspaceMemberActionsCell from "./WorkspaceMemberActionsCell";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import { WorkspaceRolesProvider } from "./WorkspaceRolesContext";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsWorkspaceRolesEnabled } from "@/plugins/comet/hooks/useIsWorkspaceRolesEnabled";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
 
@@ -90,9 +89,7 @@ const CollaboratorsTab = () => {
   const currentOrganization = useCurrentOrganization();
   const { isWorkspaceOwner } = useUserPermission();
 
-  const isPermissionsManagementEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.PERMISSIONS_MANAGEMENT_ENABLED,
-  );
+  const isPermissionsManagementEnabled = useIsWorkspaceRolesEnabled();
 
   const { data: workspaceMembers = [], isPending } = useAllWorkspaceMembers(
     { workspaceId: workspaceId || "" },

@@ -1,6 +1,5 @@
 import { useMemo } from "react";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsWorkspaceRolesEnabled } from "@/plugins/comet/hooks/useIsWorkspaceRolesEnabled";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
 import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
 import useWorkspaceUsersRoles from "@/plugins/comet/api/useWorkspaceUsersRoles";
@@ -27,9 +26,7 @@ interface UseWorkspaceUserRolesParams {
 export const useWorkspaceUserRolesMap = ({
   workspaceId,
 }: UseWorkspaceUserRolesParams) => {
-  const isPermissionsManagementEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.PERMISSIONS_MANAGEMENT_ENABLED,
-  );
+  const isPermissionsManagementEnabled = useIsWorkspaceRolesEnabled();
 
   const { data: workspaceMembers = [] } = useAllWorkspaceMembers(
     { workspaceId },

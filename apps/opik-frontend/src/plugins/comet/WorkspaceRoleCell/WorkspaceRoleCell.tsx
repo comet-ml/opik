@@ -14,8 +14,7 @@ import { useUpdateWorkspaceUserRoleMutation } from "@/plugins/comet/api/useUpdat
 import { useLoggedInUserName } from "@/store/AppStore";
 import useManageUsersRolePopover from "./useManageUsersRolePopover";
 import { useWorkspaceRolesContext } from "@/plugins/comet/WorkspaceRolesContext";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsWorkspaceRolesEnabled } from "@/plugins/comet/hooks/useIsWorkspaceRolesEnabled";
 import WorkspaceRolesSelectContent from "./WorkspaceRolesSelectContent";
 
 const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
@@ -31,9 +30,7 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
   const { roles: workspaceRoles } = useWorkspaceRolesContext();
 
-  const isPermissionsManagementEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.PERMISSIONS_MANAGEMENT_ENABLED,
-  );
+  const isPermissionsManagementEnabled = useIsWorkspaceRolesEnabled();
 
   const [popoverData, setPopoverData] = useState<WorkspaceMember | null>(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
