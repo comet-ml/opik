@@ -25,6 +25,30 @@ export const hasAnyVisibleColumns = <TColumnData>(
 ) => columns.some(({ id }) => selectedColumns.includes(id));
 
 /**
+ * Migrates selected columns from an old localStorage key.
+ * Returns the migrated value to be persisted by the caller.
+ *
+ * @param oldStorageKey - The old localStorage key to migrate from
+ * @param defaultColumns - Default columns to use if no stored data exists
+ * @param columnsToAdd - Columns to add during migration
+ * @returns The selected columns array
+ */
+export const migrateSelectedColumns = (
+  oldStorageKey: string,
+  defaultColumns: string[],
+  columnsToAdd: string[] = [],
+): string[] => {
+  const oldData = localStorage.getItem(oldStorageKey);
+
+  if (oldData !== null) {
+    const oldColumns = JSON.parse(oldData);
+    return [...new Set([...oldColumns, ...columnsToAdd])];
+  }
+
+  return defaultColumns;
+};
+
+/**
  * Determines if a column can be sorted based on the backend's sortable_by response.
  * Handles multiple matching patterns:
  * 1. Direct match: column id exactly matches a sortable field
@@ -96,7 +120,6 @@ export const mapColumnDataFields = <TColumnData, TData>(
   columnData: ColumnData<TColumnData>,
 ): ColumnDef<TData> => {
   return {
-    id: columnData.id,
     ...(columnData.accessorFn && { accessorFn: columnData.accessorFn }),
     accessorKey: columnData.id,
     header: (columnData.header ?? TypeHeader) as never,
@@ -149,7 +172,10 @@ export const injectColumnCallback = <TData>(
   callback: (row: TData) => void,
   additionalMeta?: Record<string, unknown>,
 ): ColumnDef<TData>[] => {
-  const columnIndex = columns.findIndex((col) => col.id === columnId);
+  const columnIndex = columns.findIndex((col) => {
+    const column = col as { accessorKey?: string };
+    return column.accessorKey === columnId;
+  });
 
   if (columnIndex === -1) {
     return columns;

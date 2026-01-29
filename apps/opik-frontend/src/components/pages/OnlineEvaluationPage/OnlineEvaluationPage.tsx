@@ -23,7 +23,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { EvaluatorsRule } from "@/types/automations";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -130,7 +130,8 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "type",
 ];
 
-const SELECTED_COLUMNS_KEY = "workspace-rules-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "workspace-rules-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "workspace-rules-columns-width";
 const COLUMNS_ORDER_KEY = "workspace-rules-columns-order";
 const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
@@ -218,9 +219,13 @@ export const OnlineEvaluationPage: React.FC = () => {
   const dialogMode = editingRule ? "edit" : cloningRule ? "clone" : "create";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 

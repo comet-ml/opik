@@ -52,7 +52,7 @@ import {
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
 import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
@@ -238,7 +238,8 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   USER_FEEDBACK_COLUMN_ID,
 ];
 
-const SELECTED_COLUMNS_KEY = "traces-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "traces-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "traces-columns-width";
 const COLUMNS_ORDER_KEY = "traces-columns-order";
 const COLUMNS_SORT_KEY_SUFFIX = "-columns-sort";
@@ -458,9 +459,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   // Declare selectedColumns early so it can be used in excludeFields computation
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_TRACES_PAGE_COLUMNS,
+        [COLUMN_ID_ID],
+      ),
     },
   );
 

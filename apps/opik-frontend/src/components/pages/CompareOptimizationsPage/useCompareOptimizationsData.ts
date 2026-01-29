@@ -14,6 +14,7 @@ import {
 } from "@/types/shared";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { OPTIMIZATION_ACTIVE_REFETCH_INTERVAL } from "@/lib/optimizations";
+import { migrateSelectedColumns } from "@/lib/table";
 import useAppStore from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
@@ -22,7 +23,8 @@ import { useOptimizationScores } from "@/components/pages-shared/experiments/use
 
 const MAX_EXPERIMENTS_LOADED = 1000;
 
-const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "optimization-experiments-columns-order";
 const COLUMNS_SORT_KEY = "optimization-experiments-columns-sort-v2";
@@ -59,9 +61,13 @@ export const useCompareOptimizationsData = () => {
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID, COLUMN_ID_ID],
+      ),
     },
   );
 

@@ -32,7 +32,7 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import {
@@ -46,7 +46,8 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 
 export const getRowId = (d: Dataset) => d.id;
 
-const SELECTED_COLUMNS_KEY = "datasets-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "datasets-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "datasets-columns-width";
 const COLUMNS_ORDER_KEY = "datasets-columns-order";
 const COLUMNS_SORT_KEY = "datasets-columns-sort";
@@ -226,9 +227,13 @@ const DatasetsPage: React.FunctionComponent = () => {
   const noDataText = noData ? "There are no datasets yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 

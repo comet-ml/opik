@@ -40,7 +40,7 @@ import {
   ColumnData,
   HeaderIconType,
 } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
 import {
@@ -57,7 +57,8 @@ import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell"
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
-const SELECTED_COLUMNS_KEY = "projects-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "projects-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "projects-columns-width";
 const COLUMNS_ORDER_KEY = "projects-columns-order";
 const COLUMNS_SORT_KEY = "projects-columns-sort";
@@ -324,9 +325,13 @@ const ProjectsPage: React.FunctionComponent = () => {
   const noDataText = noData ? "There are no projects yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 

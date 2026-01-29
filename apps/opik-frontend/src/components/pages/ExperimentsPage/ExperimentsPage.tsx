@@ -463,7 +463,7 @@ const ExperimentsPage: React.FC = () => {
     [setGroupLimit],
   );
 
-  // Filter out dataset/project columns when grouping by dataset/project
+  // Filter out name and dataset/project columns when grouping by dataset/project
   const availableColumns = useMemo(() => {
     const isGroupingByDataset = groups.some(
       (g) => g.field === COLUMN_DATASET_ID,
@@ -475,6 +475,7 @@ const ExperimentsPage: React.FC = () => {
     return columnsDef.filter((col) => {
       if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
       if (isGroupingByProject && col.id === COLUMN_PROJECT_ID) return false;
+      if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
       return true;
     });
   }, [groups, columnsDef]);
@@ -732,6 +733,7 @@ const ExperimentsPage: React.FC = () => {
         </div>
       </PageBodyStickyContainer>
       <DataTable
+        key={hasGroups ? "grouped" : "ungrouped"}
         columns={columns}
         aggregationMap={aggregationMap}
         data={experiments}

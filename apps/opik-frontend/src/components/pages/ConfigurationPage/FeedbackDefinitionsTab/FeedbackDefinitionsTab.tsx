@@ -24,7 +24,7 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
@@ -39,7 +39,8 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 export const getRowId = (f: FeedbackDefinition) => f.id;
 
-const SELECTED_COLUMNS_KEY = "feedback-definitions-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "feedback-definitions-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "feedback-definitions-columns-width";
 const COLUMNS_ORDER_KEY = "feedback-definitions-columns-order";
 const PAGINATION_SIZE_KEY = "feedback-definitions-pagination-size";
@@ -138,9 +139,13 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
     : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 
