@@ -6,7 +6,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,6 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
@@ -58,13 +57,8 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
+    cell: TextCell as never,
     sortable: true,
-    customMeta: {
-      nameKey: "name",
-      idKey: "id",
-      resource: RESOURCE_TYPE.prompt,
-    },
   },
   {
     id: "id",

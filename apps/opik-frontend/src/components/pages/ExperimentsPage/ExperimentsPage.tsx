@@ -54,7 +54,6 @@ import { Card } from "@/components/ui/card";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
-import { Experiment } from "@/types/datasets";
 import { useExperimentsTableConfig } from "@/components/pages-shared/experiments/useExperimentsTableConfig";
 import {
   FILTER_AND_GROUP_COLUMNS,
@@ -160,16 +159,8 @@ const ExperimentsPage: React.FC = () => {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: TextCell as never,
         sortable: true,
-        customMeta: {
-          nameKey: "name",
-          idKey: "dataset_id",
-          resource: RESOURCE_TYPE.experiment,
-          getSearch: (data: Experiment) => ({
-            experiments: [data.id],
-          }),
-        },
         size: 200,
       },
       {

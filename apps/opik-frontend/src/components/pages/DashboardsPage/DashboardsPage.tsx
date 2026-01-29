@@ -14,7 +14,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { Dashboard } from "@/types/dashboard";
@@ -43,7 +43,6 @@ import {
   generateSelectColumDef,
   getRowId,
 } from "@/components/shared/DataTable/utils";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const SELECTED_COLUMNS_KEY = "dashboards-selected-columns";
 const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
@@ -74,13 +73,8 @@ const DashboardsPage: React.FunctionComponent = () => {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: TextCell as never,
         sortable: true,
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.dashboard,
-        },
       },
       {
         id: "id",

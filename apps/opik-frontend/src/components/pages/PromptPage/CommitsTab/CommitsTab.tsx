@@ -1,12 +1,13 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnSort, RowSelectionState } from "@tanstack/react-table";
+import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, useQueryParam } from "use-query-params";
-import get from "lodash/get";
 import isObject from "lodash/isObject";
 
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
+import useAppStore from "@/store/AppStore";
 import Loader from "@/components/shared/Loader/Loader";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 
@@ -18,7 +19,7 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { formatDate } from "@/lib/date";
 import {
@@ -27,7 +28,6 @@ import {
   mapColumnDataFields,
 } from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CommitsActionsPanel from "@/components/pages/PromptPage/CommitsTab/CommitsActionsPanel";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
@@ -36,6 +36,10 @@ import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Separator } from "@/components/ui/separator";
 import PromptVersionsMetadataAutocomplete from "@/components/pages/PromptPage/CommitsTab/PromptVersionsMetadataAutocomplete";
+import {
+  RESOURCE_TYPE,
+  RESOURCE_MAP,
+} from "@/components/shared/ResourceLink/ResourceLink";
 
 export const getRowId = (p: PromptVersion) => p.id;
 
@@ -186,6 +190,8 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     updateType: "replaceIn",
   });
 
+  const navigate = useNavigate();
+
   const { data, isPending } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
@@ -205,6 +211,24 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const versions = useMemo(() => data?.content ?? [], [data?.content]);
   const noDataText = "There are no commits yet";
 
+  const handleRowClick = useCallback(
+    (row: PromptVersion) => {
+      const promptResource = RESOURCE_MAP[RESOURCE_TYPE.prompt];
+      const workspaceName = useAppStore.getState().activeWorkspaceName;
+      navigate({
+        to: promptResource.url,
+        params: {
+          [promptResource.param]: row.prompt_id,
+          workspaceName,
+        },
+        search: {
+          activeVersionId: row.id,
+        },
+      });
+    },
+    [navigate],
+  );
+
   const columns = useMemo(() => {
     // Get sortable columns dynamically from backend API response
     const sortableColumns = data?.sortable_by || [];
@@ -215,15 +239,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
         id: "commit",
         label: "Prompt commit",
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        customMeta: {
-          nameKey: "commit",
-          idKey: "prompt_id",
-          resource: RESOURCE_TYPE.prompt,
-          getSearch: (data: PromptVersion) => ({
-            activeVersionId: get(data, "id", null),
-          }),
-        },
+        cell: TextCell as never,
         explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
         sortable: isColumnSortable("commit", sortableColumns),
       }),
@@ -328,6 +344,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
       <DataTable
         columns={columns}
         data={versions}
+        onRowClick={handleRowClick}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
