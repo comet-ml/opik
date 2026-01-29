@@ -259,6 +259,36 @@ describe("OpenAI Parsers", () => {
         const result = parseUsage({});
         expect(result).toBeUndefined();
       });
+
+      it("should filter out non-numeric values from OpenRouter extended usage fields", () => {
+        const openRouterResponse = {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+            is_byok: false,
+            cost_details: {
+              upstream_inference_cost: null,
+            },
+          },
+        };
+
+        const result = parseUsage(openRouterResponse);
+
+        expect(result).toBeDefined();
+        expect(result?.prompt_tokens).toBe(10);
+        expect(result?.completion_tokens).toBe(20);
+        expect(result?.total_tokens).toBe(30);
+        // Non-numeric values should be filtered out
+        expect(result?.["original_usage.is_byok"]).toBeUndefined();
+        expect(
+          result?.["original_usage.cost_details.upstream_inference_cost"]
+        ).toBeUndefined();
+        // Numeric values should be included
+        expect(result?.["original_usage.prompt_tokens"]).toBe(10);
+        expect(result?.["original_usage.completion_tokens"]).toBe(20);
+        expect(result?.["original_usage.total_tokens"]).toBe(30);
+      });
     });
   });
 });

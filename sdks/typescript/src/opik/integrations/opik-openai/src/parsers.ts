@@ -299,30 +299,57 @@ export const parseUsage = (
   res: unknown
 ): Record<string, number> | undefined => {
   if (hasCompletionUsage(res)) {
-    return {
+    const flattenedUsage = flattenObject(res.usage, "original_usage");
+    const result: Record<string, number> = {
       completion_tokens: res.usage.completion_tokens,
       prompt_tokens: res.usage.prompt_tokens,
       total_tokens: res.usage.total_tokens,
-      ...flattenObject(res.usage, "original_usage"),
     };
+
+    // Filter to ensure only numeric values are included (API requirement)
+    for (const [key, value] of Object.entries(flattenedUsage)) {
+      if (typeof value === "number") {
+        result[key] = value;
+      }
+    }
+
+    return result;
   }
 
   if (hasResponseUsage(res)) {
-    return {
+    const flattenedUsage = flattenObject(res.usage, "original_usage");
+    const result: Record<string, number> = {
       completion_tokens: res.usage.input_tokens,
       prompt_tokens: res.usage.output_tokens,
       total_tokens: res.usage.total_tokens,
-      ...flattenObject(res.usage, "original_usage"),
     };
+
+    // Filter to ensure only numeric values are included (API requirement)
+    for (const [key, value] of Object.entries(flattenedUsage)) {
+      if (typeof value === "number") {
+        result[key] = value;
+      }
+    }
+
+    return result;
   }
 
   if (hasEmbeddingUsage(res)) {
-    return {
+    const flattenedUsage = flattenObject(res.usage, "original_usage");
+    const result: Record<string, number> = {
       completion_tokens: 0,
       prompt_tokens: res.usage.prompt_tokens,
       total_tokens: res.usage.total_tokens,
-      ...flattenObject(res.usage, "original_usage"),
     };
+
+    // Filter to ensure only numeric values are included (API requirement)
+    for (const [key, value] of Object.entries(flattenedUsage)) {
+      if (typeof value === "number") {
+        result[key] = value;
+      }
+    }
+
+    return result;
   }
 
   return undefined;
