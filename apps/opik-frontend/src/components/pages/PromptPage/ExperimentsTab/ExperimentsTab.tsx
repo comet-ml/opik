@@ -35,6 +35,7 @@ import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
+import { Experiment } from "@/types/datasets";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
@@ -43,6 +44,7 @@ import {
   COLUMN_ID_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
+  COLUMN_NAME_ID,
 } from "@/types/shared";
 import { formatDate } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
@@ -75,6 +77,7 @@ const COLUMNS_SORT_KEY = "prompt-experiments-columns-sort";
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "prompt",
   COLUMN_DATASET_ID,
   "created_at",
@@ -131,6 +134,22 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const columnsDef: ColumnData<GroupedExperiment>[] = useMemo(() => {
     return [
+      {
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        cell: ResourceCell as never,
+        sortable: true,
+        customMeta: {
+          nameKey: "name",
+          idKey: "dataset_id",
+          resource: RESOURCE_TYPE.experiment,
+          getSearch: (data: Experiment) => ({
+            experiments: [data.id],
+          }),
+        },
+        size: 200,
+      },
       {
         id: "prompt",
         label: "Prompt commit",

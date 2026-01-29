@@ -24,7 +24,7 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
@@ -39,12 +39,19 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 export const getRowId = (f: FeedbackDefinition) => f.id;
 
-const SELECTED_COLUMNS_KEY = "feedback-definitions-selected-columns";
+const SELECTED_COLUMNS_KEY = "feedback-definitions-selected-columns-v2";
 const COLUMNS_WIDTH_KEY = "feedback-definitions-columns-width";
 const COLUMNS_ORDER_KEY = "feedback-definitions-columns-order";
 const PAGINATION_SIZE_KEY = "feedback-definitions-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Feedback score",
+    type: COLUMN_TYPE.numberDictionary,
+    cell: FeedbackScoreNameCell as never,
+    sortable: true,
+  },
   {
     id: "id",
     label: "ID",
@@ -83,11 +90,15 @@ export const DEFAULT_COLUMNS: ColumnData<FeedbackDefinition>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["type", "values"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
+  "type",
+  "values",
+];
 
 const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -153,12 +164,6 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<FeedbackDefinition>(),
-      mapColumnDataFields<FeedbackDefinition, FeedbackDefinition>({
-        id: "name",
-        label: "Feedback score",
-        type: COLUMN_TYPE.numberDictionary,
-        cell: FeedbackScoreNameCell as never,
-      }),
       ...convertColumnDataToColumn<FeedbackDefinition, FeedbackDefinition>(
         DEFAULT_COLUMNS,
         {

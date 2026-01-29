@@ -31,11 +31,7 @@ import {
 } from "@/types/shared";
 import { Trace } from "@/types/traces";
 import { AnnotationQueue } from "@/types/annotation-queues";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, injectColumnCallback } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import {
   generateActionsColumDef,
@@ -80,6 +76,16 @@ import SelectBox, {
 import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const TRACE_COLUMNS: ColumnData<Trace>[] = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: LinkCell as never,
+    customMeta: {
+      asId: true,
+    },
+    sortable: true,
+  },
   {
     id: "name",
     label: "Name",
@@ -225,17 +231,18 @@ const TRACE_FILTER_COLUMNS: ColumnData<Trace>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_ID_ID,
   "name",
   "input",
   "output",
   "comments",
 ];
 
-const SELECTED_COLUMNS_KEY = "queue-trace-selected-columns";
+const SELECTED_COLUMNS_KEY = "queue-trace-selected-columns-v2";
 const COLUMNS_WIDTH_KEY = "queue-trace-columns-width";
 const COLUMNS_ORDER_KEY = "queue-trace-columns-order";
 const COLUMNS_SORT_KEY = "queue-trace-columns-sort";
@@ -452,24 +459,18 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   );
 
   const columns = useMemo(() => {
-    return [
-      generateSelectColumDef<Trace>(),
-      mapColumnDataFields<Trace, Trace>({
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
-        sortable: isColumnSortable(COLUMN_ID_ID, sortableBy),
-      }),
-      ...convertColumnDataToColumn<Trace, Trace>(TRACE_COLUMNS, {
+    const convertedColumns = convertColumnDataToColumn<Trace, Trace>(
+      TRACE_COLUMNS,
+      {
         columnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
-      }),
+      },
+    );
+
+    return [
+      generateSelectColumDef<Trace>(),
+      ...injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick),
       ...convertColumnDataToColumn<Trace, Trace>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
         selectedColumns,
@@ -483,13 +484,13 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       }),
     ];
   }, [
-    handleRowClick,
     sortableBy,
     columnsOrder,
     selectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
     annotationQueue.id,
+    handleRowClick,
   ]);
 
   const sortConfig = useMemo(

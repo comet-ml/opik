@@ -96,6 +96,7 @@ export const mapColumnDataFields = <TColumnData, TData>(
   columnData: ColumnData<TColumnData>,
 ): ColumnDef<TData> => {
   return {
+    id: columnData.id,
     ...(columnData.accessorFn && { accessorFn: columnData.accessorFn }),
     accessorKey: columnData.id,
     header: (columnData.header ?? TypeHeader) as never,
@@ -130,4 +131,46 @@ export const mapColumnDataFields = <TColumnData, TData>(
     }),
     enableSorting: columnData.sortable || false,
   };
+};
+
+/**
+ * Injects a callback into a column's custom metadata.
+ * Useful for adding dynamic row click handlers to columns that need to be editable via the columns menu.
+ *
+ * @param columns - Array of column definitions
+ * @param columnId - ID of the column to inject the callback into
+ * @param callback - The callback function to inject
+ * @param additionalMeta - Optional additional metadata to merge
+ * @returns The modified columns array
+ */
+export const injectColumnCallback = <TData>(
+  columns: ColumnDef<TData>[],
+  columnId: string,
+  callback: (row: TData) => void,
+  additionalMeta?: Record<string, unknown>,
+): ColumnDef<TData>[] => {
+  const columnIndex = columns.findIndex((col) => col.id === columnId);
+
+  if (columnIndex === -1) {
+    return columns;
+  }
+
+  const targetColumn = columns[columnIndex];
+  const updatedColumn: ColumnDef<TData> = {
+    ...targetColumn,
+    meta: {
+      ...targetColumn.meta,
+      custom: {
+        ...targetColumn.meta?.custom,
+        callback,
+        ...additionalMeta,
+      },
+    },
+  };
+
+  return [
+    ...columns.slice(0, columnIndex),
+    updatedColumn,
+    ...columns.slice(columnIndex + 1),
+  ];
 };
