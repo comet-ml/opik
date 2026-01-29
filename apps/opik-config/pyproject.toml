@@ -1,0 +1,29 @@
+[project]
+name = "opik-config"
+version = "0.1.0"
+description = "Dynamic configuration management for AI agents with backend sync and experimentation"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0.0",
+    "requests>=2.31.0",
+    "opik>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+]
+demo = [
+    "langgraph>=0.2.0",
+    "langchain-openai>=0.1.0",
+    "jupyter>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/opik_config"]
