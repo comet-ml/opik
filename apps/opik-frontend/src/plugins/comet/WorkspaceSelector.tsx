@@ -193,7 +193,6 @@ const WorkspaceSelector: React.FC = () => {
   // Simple computed values - no memoization needed
   const hasMultipleOrganizations = organizations && organizations.length > 1;
   const shouldShowDropdown = currentOrgWorkspaces.length > 0;
-  const currentWorkspaceDisplayName = calculateWorkspaceName(workspaceName);
   const isOrgAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
   // Loading state
@@ -222,10 +221,7 @@ const WorkspaceSelector: React.FC = () => {
 
   // Multiple workspaces - show name as link and chevron as dropdown trigger
   return (
-    <WorkspaceLink
-      className="gap-0.5"
-      workspaceName={currentWorkspaceDisplayName}
-    >
+    <WorkspaceLink className="gap-0.5" workspaceName={workspaceName}>
       <DropdownMenu open={isDropdownOpen} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
           <Button
