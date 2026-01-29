@@ -42,12 +42,12 @@ examples, or tool interactions.
     (e.g., [`MetaPromptOptimizer`](/agent_optimization/algorithms/metaprompt_optimizer),
     [`FewShotBayesianOptimizer`](/agent_optimization/algorithms/fewshot_bayesian_optimizer),
     [`EvolutionaryOptimizer`](/agent_optimization/algorithms/evolutionary_optimizer),
-    [`HRPO`](/agent_optimization/algorithms/hierarchical_adaptive_optimizer))
+    [`HRPO`](/agent_optimization/algorithms/hierarchical_reflective_optimizer))
     employs unique strategies and configurable parameters to address specific optimization goals.
   </Accordion>
   <Accordion title="ChatPrompt">
     The object to optimize which contains your chat messages with placeholders for variables that change on each example.
-    See the [API Reference](/agent_optimization/api-reference#chatprompt).
+    See the [API Reference](/agent_optimization/advanced/api_reference#chatprompt).
   </Accordion>
   <Accordion title="Metric">
     An object defining how to measure the performance of a prompt. The metric functions should accept two parameters:
@@ -80,17 +80,17 @@ examples, or tool interactions.
     The model that is used to optimize the prompt. This is the model that the optimizer uses to improve your prompt,
     you will get the best performance by using the most powerful model for the optimization. Configure it via the optimizer's `model` parameter.
     
-    See [Configure LLM Providers](/agent_optimization/optimization/configure_models) for setup instructions.
+    See [Configure LLM Providers](/agent_optimization/opik_optimizer/configure_models) for setup instructions.
   </Accordion>
 </AccordionGroup>
 
 ## Next Steps
 
-- Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+- Explore specific [Optimizers](/agent_optimization/algorithms/overview) for algorithm details.
 - Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
-- Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.
+- Refer to the [API Reference](/agent_optimization/advanced/api_reference) for detailed configuration options.
 
 <Info>
-  📓 Want to see these concepts in action? Check out our [Example Projects & Cookbooks](/agent_optimization/optimizer-cookbooks/optimizer_introduction_cookbook)
+  📓 Want to see these concepts in action? Check out our [Example Projects & Cookbooks](/agent_optimization/quickstart_notebook)
   for step-by-step, runnable Colab notebooks.
 </Info>

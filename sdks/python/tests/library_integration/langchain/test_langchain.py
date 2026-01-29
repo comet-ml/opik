@@ -3,6 +3,7 @@ from langchain_core.language_models import fake
 from langchain_core.language_models.fake import FakeStreamingListLLM
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool
 
 import opik
 from opik import context_storage
@@ -665,3 +666,91 @@ def test_langchain_callback__skip_error_callback__error_output_skipped(
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
+
+
+def test_langchain__tool_with_description__description_attached_to_span_metadata(
+    fake_backend,
+):
+    """Test that tool description/docstring is attached to the tool span metadata."""
+
+    @tool
+    def get_weather(location: str) -> str:
+        """Fetches the current weather for a given location."""
+        return f"The weather in {location} is sunny and 25°C."
+
+    llm = fake.FakeListLLM(responses=["The weather is nice today!"])
+    prompt_template = PromptTemplate(
+        input_variables=["input"],
+        template="Summarize this weather: {input}",
+    )
+
+    # Create a chain: tool -> prompt -> llm
+    chain = get_weather | prompt_template | llm
+
+    callback = OpikTracer()
+    _ = chain.invoke("Paris", config={"callbacks": [callback]})
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="RunnableSequence",
+        input={"input": "Paris"},
+        output={"output": "The weather is nice today!"},
+        metadata={"created_from": "langchain"},
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        project_name=OPIK_PROJECT_DEFAULT_NAME,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="tool",
+                name="get_weather",
+                input={"input": "Paris"},
+                output={"output": "The weather in Paris is sunny and 25°C."},
+                metadata=ANY_DICT.containing(
+                    {
+                        "created_from": "langchain",
+                        "tool_description": "Fetches the current weather for a given location.",
+                    }
+                ),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="tool",
+                name="PromptTemplate",
+                input={"input": "The weather in Paris is sunny and 25°C."},
+                output=ANY_DICT,
+                metadata={"created_from": "langchain"},
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="FakeListLLM",
+                input={
+                    "prompts": [
+                        "Summarize this weather: The weather in Paris is sunny and 25°C."
+                    ]
+                },
+                output=ANY_DICT,
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=OPIK_PROJECT_DEFAULT_NAME,
+                spans=[],
+            ),
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert len(callback.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

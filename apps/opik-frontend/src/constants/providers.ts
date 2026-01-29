@@ -6,8 +6,7 @@ import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
 import BedrockIcon from "@/icons/integrations/bedrock.svg?react";
 import CustomIcon from "@/icons/integrations/custom.svg?react";
 import OpikIcon from "@/icons/integrations/opik.svg?react";
-// TODO: Add dedicated Ollama icon
-import OllamaIcon from "@/icons/integrations/custom.svg?react";
+import OllamaIcon from "@/icons/integrations/ollama.svg?react";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -125,7 +124,7 @@ export const PROVIDER_FEATURE_TOGGLE_MAP: Record<
   [PROVIDER_TYPE.OPEN_ROUTER]: FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
   [PROVIDER_TYPE.VERTEX_AI]: FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
   [PROVIDER_TYPE.BEDROCK]: FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED,
-  [PROVIDER_TYPE.OLLAMA]: FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED, // Reuse custom LLM toggle for now
+  [PROVIDER_TYPE.OLLAMA]: FeatureToggleKeys.OLLAMA_PROVIDER_ENABLED,
   [PROVIDER_TYPE.CUSTOM]: FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
 };
 

@@ -27,9 +27,9 @@ class OllamaServiceProvider implements LlmServiceProvider {
     private final LlmProviderClientConfig config;
 
     OllamaServiceProvider(
-            CustomLlmClientGenerator clientGenerator,
-            LlmProviderFactory factory,
-            LlmProviderClientConfig config) {
+            @NonNull CustomLlmClientGenerator clientGenerator,
+            @NonNull LlmProviderFactory factory,
+            @NonNull LlmProviderClientConfig config) {
         this.clientGenerator = clientGenerator;
         this.config = config;
         factory.register(LlmProvider.OLLAMA, this);
@@ -44,8 +44,8 @@ class OllamaServiceProvider implements LlmServiceProvider {
 
     @Override
     public ChatModel getLanguageModel(
-            LlmProviderClientApiConfig apiConfig,
-            LlmAsJudgeModelParameters modelParameters) {
+            @NonNull LlmProviderClientApiConfig apiConfig,
+            @NonNull LlmAsJudgeModelParameters modelParameters) {
         return clientGenerator.generateChat(apiConfig, modelParameters);
     }
 }

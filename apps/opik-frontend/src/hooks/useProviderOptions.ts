@@ -73,6 +73,9 @@ export function useProviderEnabledMap(): ProviderEnabledMap {
   const isCustomLLMEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
   );
+  const isOllamaEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OLLAMA_PROVIDER_ENABLED,
+  );
 
   return useMemo(
     () => ({
@@ -82,7 +85,7 @@ export function useProviderEnabledMap(): ProviderEnabledMap {
       [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
       [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
       [PROVIDER_TYPE.BEDROCK]: isBedrockEnabled,
-      [PROVIDER_TYPE.OLLAMA]: isCustomLLMEnabled,
+      [PROVIDER_TYPE.OLLAMA]: isOllamaEnabled,
       [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
     }),
     [
@@ -92,6 +95,7 @@ export function useProviderEnabledMap(): ProviderEnabledMap {
       isOpenRouterEnabled,
       isVertexAIEnabled,
       isBedrockEnabled,
+      isOllamaEnabled,
       isCustomLLMEnabled,
     ],
   );

@@ -1,25 +1,23 @@
 import { useMutation } from "@tanstack/react-query";
-import api, { PROVIDER_KEYS_REST_ENDPOINT } from "@/api/api";
+import api, { OLLAMA_REST_ENDPOINT } from "@/api/api";
 import { AxiosError } from "axios";
 
 export type OllamaModel = {
   name: string;
-  size: number;
-  digest: string;
-  modified_at: string;
+  size?: number | null;
+  digest?: string | null;
+  modified_at?: string | null;
 };
 
 export type OllamaListModelsRequest = {
   base_url: string;
+  api_key?: string;
 };
 
 const useOllamaListModelsMutation = () => {
   return useMutation<OllamaModel[], AxiosError, OllamaListModelsRequest>({
     mutationFn: async (request: OllamaListModelsRequest) => {
-      const { data } = await api.post(
-        `${PROVIDER_KEYS_REST_ENDPOINT}../ollama/models`,
-        request,
-      );
+      const { data } = await api.post(`${OLLAMA_REST_ENDPOINT}models`, request);
       return data;
     },
   });

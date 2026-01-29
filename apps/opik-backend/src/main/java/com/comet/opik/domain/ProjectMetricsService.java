@@ -6,6 +6,7 @@ import com.comet.opik.api.metrics.BreakdownQueryBuilder;
 import com.comet.opik.api.metrics.MetricType;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
 import com.comet.opik.api.metrics.ProjectMetricResponse;
+import com.comet.opik.infrastructure.cache.Cacheable;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -13,6 +14,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +27,8 @@ public interface ProjectMetricsService {
     String ERR_START_BEFORE_END = "'start_time' must be before 'end_time'";
 
     Mono<ProjectMetricResponse<Number>> getProjectMetrics(UUID projectId, ProjectMetricRequest request);
+
+    Mono<List<String>> getProjectTokenUsageNames(String workspaceId, UUID projectId);
 }
 
 @Slf4j
@@ -33,6 +37,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private final @NonNull Map<MetricType, BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>>> projectMetricHandler;
     private final @NonNull ProjectService projectService;
     private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
+    private final @NonNull ProjectMetricsDAO projectMetricsDAO;
 
     @Inject
     public ProjectMetricsServiceImpl(@NonNull ProjectMetricsDAO projectMetricsDAO,
@@ -54,6 +59,7 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 Map.entry(MetricType.SPAN_TOKEN_USAGE, projectMetricsDAO::getSpanTokenUsage));
         this.projectService = projectService;
         this.instantToUUIDMapper = instantToUUIDMapper;
+        this.projectMetricsDAO = projectMetricsDAO;
     }
 
     @Override
@@ -62,7 +68,9 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
                 .then(Mono.defer(() -> Mono.just(request.toBuilder()
                         // Enrich request with UUID bounds derived from time parameters for efficient ID-based filtering
                         .uuidFromTime(instantToUUIDMapper.toLowerBound(request.intervalStart()))
-                        .uuidToTime(instantToUUIDMapper.toUpperBound(request.intervalEnd()))
+                        // Use current time as default end time when intervalEnd is null to enable WITH FILL clause
+                        .uuidToTime(instantToUUIDMapper.toUpperBound(
+                                request.intervalEnd() != null ? request.intervalEnd() : Instant.now()))
                         .build())))
                 .flatMap(enrichedRequest -> getMetricHandler(enrichedRequest.metricType())
                         .apply(projectId, enrichedRequest)
@@ -180,5 +188,12 @@ class ProjectMetricsServiceImpl implements ProjectMetricsService {
     private BiFunction<UUID, ProjectMetricRequest, Mono<List<ProjectMetricsDAO.Entry>>> getMetricHandler(
             MetricType metricType) {
         return projectMetricHandler.get(metricType);
+    }
+
+    @Override
+    @Cacheable(name = "project_token_usage_names_per_workspace", key = "$workspaceId +'-'+ $projectId", returnType = String.class, wrapperType = List.class)
+    public Mono<List<String>> getProjectTokenUsageNames(@NonNull String workspaceId, @NonNull UUID projectId) {
+        return validateProject(projectId)
+                .then(projectMetricsDAO.getProjectTokenUsageNames(workspaceId, projectId));
     }
 }

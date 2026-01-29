@@ -14,13 +14,13 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import { v4 as uuidv4 } from "uuid";
+import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { PROVIDERS } from "@/constants/providers";
 import { PROVIDER_TYPE } from "@/types/providers";
 import useOllamaTestConnectionMutation from "@/api/provider-keys/useOllamaTestConnectionMutation";
 import useOllamaListModelsMutation from "@/api/provider-keys/useOllamaListModelsMutation";
 import { useToast } from "@/components/ui/use-toast";
+import CustomHeadersField from "./CustomHeadersField";
 
 type OllamaProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
@@ -39,12 +39,14 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
   const listModelsMutation = useOllamaListModelsMutation();
 
   const url = form.watch("url");
+  const apiKey = form.watch("apiKey");
+  const headers = form.watch("headers");
 
-  // Reset connection status when URL changes
+  // Reset connection status when any credential-affecting field changes
   useEffect(() => {
     setConnectionTested(false);
     setConnectionSuccess(false);
-  }, [url]);
+  }, [url, apiKey, headers]);
 
   const handleTestConnection = async () => {
     if (!url) {
@@ -59,6 +61,7 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
     try {
       const response = await testConnectionMutation.mutateAsync({
         base_url: url,
+        api_key: apiKey || undefined,
       });
 
       setConnectionTested(true);
@@ -98,6 +101,7 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
     try {
       const models = await listModelsMutation.mutateAsync({
         base_url: url,
+        api_key: apiKey || undefined,
       });
 
       if (models.length > 0) {
@@ -125,9 +129,7 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
   };
 
   const getDefaultUrl = () => {
-    return (
-      PROVIDERS[PROVIDER_TYPE.OLLAMA].defaultUrl || "http://localhost:11434/v1"
-    );
+    return PROVIDERS[PROVIDER_TYPE.OLLAMA].defaultUrl;
   };
 
   return (
@@ -323,116 +325,9 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
         }}
       />
 
-      <FormField
-        control={form.control}
-        name="headers"
-        render={({ field, formState }) => {
-          const headers = field.value || [];
-
-          const addHeader = () => {
-            field.onChange([...headers, { key: "", value: "", id: uuidv4() }]);
-          };
-
-          const removeHeader = (id: string) => {
-            const newHeaders = headers.filter((h) => h.id !== id);
-            field.onChange(newHeaders);
-          };
-
-          const updateHeader = (id: string, key: string, value: string) => {
-            const newHeaders = headers.map((h) =>
-              h.id === id ? { ...h, key, value } : h,
-            );
-            field.onChange(newHeaders);
-          };
-
-          const getHeaderError = (index: number, field: "key" | "value") => {
-            return get(formState.errors, ["headers", index, field]);
-          };
-
-          return (
-            <FormItem>
-              <Label>Custom headers (optional)</Label>
-              <div className="flex flex-col gap-2">
-                {headers.map((header, index) => {
-                  const keyError = getHeaderError(index, "key");
-                  const valueError = getHeaderError(index, "value");
-
-                  return (
-                    <div key={header.id} className="flex flex-col gap-1">
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <Input
-                            placeholder="Header name"
-                            value={header.key}
-                            onChange={(e) =>
-                              updateHeader(
-                                header.id,
-                                e.target.value,
-                                header.value,
-                              )
-                            }
-                            className={cn("w-full", {
-                              "border-destructive": Boolean(keyError),
-                            })}
-                          />
-                          {keyError && (
-                            <p className="mt-1 text-xs text-destructive">
-                              {keyError.message as string}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <Input
-                            placeholder="Header value"
-                            value={header.value}
-                            onChange={(e) =>
-                              updateHeader(
-                                header.id,
-                                header.key,
-                                e.target.value,
-                              )
-                            }
-                            className={cn("w-full", {
-                              "border-destructive": Boolean(valueError),
-                            })}
-                          />
-                          {valueError && (
-                            <p className="mt-1 text-xs text-destructive">
-                              {valueError.message as string}
-                            </p>
-                          )}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeHeader(header.id)}
-                          className="shrink-0"
-                        >
-                          <Trash2 className="comet-body-s" />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addHeader}
-                  className="w-fit"
-                >
-                  <Plus className="mr-1.5 size-3.5" />
-                  Add header
-                </Button>
-              </div>
-              <Description>
-                Optional custom headers for authentication or configuration.
-              </Description>
-              <FormMessage />
-            </FormItem>
-          );
-        }}
+      <CustomHeadersField
+        form={form}
+        description="Optional custom headers for authentication or configuration."
       />
     </div>
   );

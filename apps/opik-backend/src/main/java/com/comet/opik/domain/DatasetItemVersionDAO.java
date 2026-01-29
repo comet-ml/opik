@@ -543,13 +543,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             LEFT JOIN (
                 SELECT
                     t.id,
-                    <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
-                    <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>
+                    <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
+                    <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>
                 FROM (
                     SELECT
                         id,
                         input,
-                        output
+                        input_slim,
+                        truncated_input,
+                        output,
+                        output_slim,
+                        truncated_output
                     FROM traces
                     WHERE workspace_id = :workspace_id
                     AND id IN (SELECT trace_id FROM experiment_items_final)
@@ -591,35 +595,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 LIMIT 1 BY id
             )
             SELECT
-                arrayFold(
-                    (acc, x) -> mapFromArrays(
-                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                        arrayMap(
-                            key -> arrayDistinct(arrayConcat(acc[key], x[key])),
-                            arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))
-                        )
-                    ),
-                    arrayDistinct(
-                        arrayFlatten(
-                            groupArray(
-                                arrayMap(
-                                    key_type -> map(tupleElement(key_type, 1), [tupleElement(key_type, 2)]),
-                                    output_keys
-                                )
-                            )
-                        )
-                    ),
-                    CAST(map(), 'Map(String, Array(String))')
+                mapFromArrays(
+                    groupArray(key),
+                    groupArray(types)
                 ) AS columns
-            FROM experiment_items_scope AS ei
-            INNER JOIN (
+            FROM (
                 SELECT
-                    id,
-                    output_keys
-                FROM traces FINAL
-                WHERE workspace_id = :workspace_id
-                AND id IN (SELECT trace_id FROM experiment_items_scope)
-            ) AS t ON t.id = ei.trace_id
+                    tupleElement(key_type, 1) AS key,
+                    arrayDistinct(groupArray(tupleElement(key_type, 2))) AS types
+                FROM (
+                    SELECT
+                        output_keys
+                    FROM traces FINAL
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_scope)
+                ) AS traces_with_keys
+                ARRAY JOIN output_keys AS key_type
+                GROUP BY key
+            )
             """;
 
     // Query to fetch versioned dataset items with their associated experiment items
@@ -919,8 +912,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
-                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
-                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                         metadata,
                         visibility_mode
                     FROM traces

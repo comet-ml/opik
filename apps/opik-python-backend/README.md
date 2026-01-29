@@ -14,6 +14,8 @@ Opik Python Backend is a service that runs Python code in a sandboxed environmen
     - `PYTHON_CODE_EXECUTOR_PARALLEL_NUM`: number of containers or subprocesses to use (default: 5)
     - `PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS`: timeout for execution in seconds (default: 3)
     - `PYTHON_CODE_EXECUTOR_ALLOW_NETWORK`: set to `true` to allow network access in executor containers (default: false)
+    - `PYTHON_CODE_EXECUTOR_CPU_SHARES`: Docker CPU shares for containers, higher = higher priority (default: 512, Docker default is 1024)
+    - `PYTHON_CODE_EXECUTOR_MEM_LIMIT`: Memory limit for executor containers, uses Docker format with single letter unit b/k/m/g (default: 256m)
 
 ## Running the Flask service
 

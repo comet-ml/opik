@@ -3,7 +3,7 @@ from typing import Optional
 import pytest
 from opik import exceptions
 from opik.integrations import langchain
-from opik.integrations.langchain.opik_tracer import _parse_graph_interrupt_value
+from opik.integrations.langchain.run_parse_helpers import parse_graph_interrupt_value
 
 
 def test_opik_tracer__init_validation():
@@ -278,8 +278,8 @@ def test_opik_tracer__init_validation():
     ],
 )
 def test_parse_graph_interrupt_value(error_traceback: str, expected: Optional[str]):
-    """Test _parse_graph_interrupt_value with various input formats."""
-    result = _parse_graph_interrupt_value(error_traceback)
+    """Test parse_graph_interrupt_value with various input formats."""
+    result = parse_graph_interrupt_value(error_traceback)
     assert (
         result == expected
     ), f"Expected {expected!r}, got {result!r} for input: {error_traceback[:100]}"

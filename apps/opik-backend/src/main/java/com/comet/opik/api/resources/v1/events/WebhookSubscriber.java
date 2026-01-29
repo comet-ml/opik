@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.AlertPayloadAdapter;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.ValidationUtils;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.metrics.LongCounter;
 import jakarta.inject.Inject;
@@ -110,7 +111,7 @@ public class WebhookSubscriber extends BaseRedisSubscriber<WebhookEvent<?>> {
 
     private Mono<Void> validateEvent(@NonNull WebhookEvent<?> event) {
         return Mono.fromRunnable(() -> {
-            com.comet.opik.utils.ValidationUtils.validateHttpUrl(event.getUrl(), "Webhook URL");
+            ValidationUtils.validateHttpUrl(event.getUrl(), "Webhook URL");
 
             if (event.getId() == null || event.getId().trim().isEmpty()) {
                 throw new IllegalArgumentException("Webhook event ID cannot be null or empty");

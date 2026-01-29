@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Any, Literal, List, NamedTuple
+from typing import Dict, Any, Literal, List, NamedTuple, Union
 
 from . import attachment, attachment_context, decoder_base64
 
@@ -44,29 +44,77 @@ class AttachmentsExtractor:
 
     def extract_and_replace(
         self,
-        data: Dict[str, Any],
+        data: Union[Dict[str, Any], List[Any]],
         entity_type: Literal["span", "trace"],
         entity_id: str,
         project_name: str,
         context: Literal["input", "output", "metadata"],
     ) -> List[attachment_context.AttachmentWithContext]:
-        # iterate over all items and extract attachments
+        """
+        Extract attachments from data and replace with placeholders.
+
+        Handles both dict and list at the top level, recursively processing
+        nested structures to find and extract base64-encoded attachments.
+
+        Args:
+            data: The data structure to process (dict or list)
+            entity_type: Type of entity (span or trace)
+            entity_id: ID of the entity
+            project_name: Name of the project
+            context: Context where data is located (input, output, or metadata)
+
+        Returns:
+            List of extracted attachments with context
+        """
         attachments: List[attachment_context.AttachmentWithContext] = []
-        for key, value in data.items():
-            extraction_result = self._try_extract_attachments(value, context)
-            if extraction_result.attachments:
-                # replace the original value with the sanitized one and collect attachments
-                data[key] = extraction_result.sanitized_data
-                for extracted_attachment in extraction_result.attachments:
-                    attachments.append(
-                        attachment_context.AttachmentWithContext(
-                            attachment_data=extracted_attachment,
-                            entity_type=entity_type,
-                            entity_id=entity_id,
-                            project_name=project_name,
-                            context=context,
+
+        if isinstance(data, dict):
+            # For dicts, iterate over items and extract attachments from values
+            for key, value in data.items():
+                extraction_result = self._try_extract_attachments(value, context)
+                if extraction_result.attachments:
+                    # replace the original value with the sanitized one and collect attachments
+                    data[key] = extraction_result.sanitized_data
+                    for extracted_attachment in extraction_result.attachments:
+                        attachments.append(
+                            attachment_context.AttachmentWithContext(
+                                attachment_data=extracted_attachment,
+                                entity_type=entity_type,
+                                entity_id=entity_id,
+                                project_name=project_name,
+                                context=context,
+                            )
                         )
+        elif isinstance(data, list):
+            # For lists, extract attachments from each item and replace in place
+            extraction_result = self._try_extract_attachments(data, context)
+            # Replace list contents with sanitized version
+            data.clear()
+            data.extend(extraction_result.sanitized_data)
+            # Convert extracted attachments to AttachmentWithContext
+            for extracted_attachment in extraction_result.attachments:
+                attachments.append(
+                    attachment_context.AttachmentWithContext(
+                        attachment_data=extracted_attachment,
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        project_name=project_name,
+                        context=context,
                     )
+                )
+        else:
+            # For other types (str, int, bool, None, etc.), try to extract but don't mutate
+            extraction_result = self._try_extract_attachments(data, context)
+            for extracted_attachment in extraction_result.attachments:
+                attachments.append(
+                    attachment_context.AttachmentWithContext(
+                        attachment_data=extracted_attachment,
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        project_name=project_name,
+                        context=context,
+                    )
+                )
 
         return attachments
 

@@ -6,6 +6,7 @@ import com.comet.opik.api.OllamaInstanceBaseUrlRequest;
 import com.comet.opik.api.OllamaModel;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.OllamaService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -40,6 +41,12 @@ public class OllamaResource {
 
     private final @NonNull OllamaService ollamaService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull OpikConfiguration config;
+
+    private boolean isOllamaEnabled() {
+        return config.getServiceToggles() != null
+                && config.getServiceToggles().isOllamaProviderEnabled();
+    }
 
     @POST
     @Path("/test-connection")
@@ -49,14 +56,29 @@ public class OllamaResource {
             + "For inference, use the URL with /v1 suffix.", responses = {
                     @ApiResponse(responseCode = "200", description = "Connection test successful", content = @Content(schema = @Schema(implementation = OllamaConnectionTestResponse.class))),
                     @ApiResponse(responseCode = "422", description = "Unprocessable Content - Invalid URL format", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-                    @ApiResponse(responseCode = "500", description = "Connection test failed")
+                    @ApiResponse(responseCode = "502", description = "Connection test failed - Ollama instance unreachable", content = @Content(schema = @Schema(implementation = OllamaConnectionTestResponse.class))),
+                    @ApiResponse(responseCode = "503", description = "Ollama provider is disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
             })
     public Response testConnection(
             @NotNull @Valid OllamaInstanceBaseUrlRequest request) {
+        if (!isOllamaEnabled()) {
+            log.warn("Ollama provider is disabled, returning 503");
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(new io.dropwizard.jersey.errors.ErrorMessage(
+                            Response.Status.SERVICE_UNAVAILABLE.getStatusCode(),
+                            "Ollama provider is disabled"))
+                    .build();
+        }
+
         log.info("Testing Ollama connection for workspace '{}'",
                 requestContext.get().getWorkspaceName());
 
-        OllamaConnectionTestResponse response = ollamaService.testConnection(request.baseUrl());
+        OllamaConnectionTestResponse response = ollamaService.testConnection(request.baseUrl(), request.apiKey())
+                .block();
+
+        if (response != null && !response.connected()) {
+            return Response.status(Response.Status.BAD_GATEWAY).entity(response).build();
+        }
         return Response.ok(response).build();
     }
 
@@ -68,14 +90,25 @@ public class OllamaResource {
             + "For actual LLM inference, use the URL with /v1 suffix for OpenAI-compatible endpoints.", responses = {
                     @ApiResponse(responseCode = "200", description = "Models retrieved successfully", content = @Content(array = @ArraySchema(schema = @Schema(implementation = OllamaModel.class)))),
                     @ApiResponse(responseCode = "422", description = "Unprocessable Content - Invalid URL format", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-                    @ApiResponse(responseCode = "500", description = "Failed to fetch models")
+                    @ApiResponse(responseCode = "500", description = "Failed to fetch models"),
+                    @ApiResponse(responseCode = "503", description = "Ollama provider is disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
             })
     public Response listModels(
             @NotNull @Valid OllamaInstanceBaseUrlRequest request) {
+        if (!isOllamaEnabled()) {
+            log.warn("Ollama provider is disabled, returning 503");
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE)
+                    .entity(new io.dropwizard.jersey.errors.ErrorMessage(
+                            Response.Status.SERVICE_UNAVAILABLE.getStatusCode(),
+                            "Ollama provider is disabled"))
+                    .build();
+        }
+
         log.info("Fetching Ollama models for workspace '{}'",
                 requestContext.get().getWorkspaceName());
 
-        List<OllamaModel> models = ollamaService.listModels(request.baseUrl());
+        List<OllamaModel> models = ollamaService.listModels(request.baseUrl(), request.apiKey())
+                .block();
         return Response.ok(models).build();
     }
 }
