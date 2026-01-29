@@ -59,8 +59,8 @@ Opik supports integration with various AI providers, including:
 - VertexAI
 - Azure OpenAI
 - Amazon Bedrock
-- LM Studio (coming soon)
-- vLLM / Ollama / any other OpenAI API-compliant provider
+- Ollama (local or self-hosted, OpenAI-compatible)
+- vLLM / any other OpenAI API-compliant provider
 
 <Tip>
   If you would like us to support additional LLM providers, please let us know by opening an issue on
@@ -281,9 +281,35 @@ Bedrock endpoints follow this pattern: `https://bedrock-runtime.<region>.amazona
 
 You can configure multiple Bedrock providers for different AWS regions or accounts. Each instance appears separately in the provider dropdown, making it easy to switch between configurations in the Playground and Online Evaluation.
 
+#### Ollama
+
+Opik connects to [Ollama](https://ollama.com/) using the OpenAI-compatible API, so you can use Ollama models for all LLM operations.
+
+<Note>
+**URL must end with `/v1`.** The base URL you enter in Opik must end with `/v1` (e.g., `http://localhost:11434/v1`). Opik uses this to call the OpenAI-compatible chat completions endpoint on your Ollama instance.
+</Note>
+
+<Tip>
+**Self-hosted deployments:** The Ollama provider is enabled by default. To disable it, set the environment variable `TOGGLE_OLLAMA_PROVIDER_ENABLED=false` on the Opik backend service.
+</Tip>
+
+##### Configuring Ollama in Opik
+
+1. In Opik, go to **Configuration → AI Providers**
+2. Click **"Add configuration"**
+3. Select **"Ollama"** from the provider dropdown
+4. Fill in:
+   - **Provider name**: A name for this instance (e.g., "Ollama local")
+   - **URL**: Base URL of your Ollama instance, ending with `/v1` (e.g., `http://localhost:11434/v1`)
+   - **API Key** (optional): Leave blank unless your Ollama instance requires authentication
+   - Use **"Test connection"** to verify Opik can reach the instance, then **"Discover models"** to load the model list
+5. Click **Save** to store the configuration
+
+You can configure multiple Ollama instances with different provider names and URLs.
+
 #### vLLM / Custom Provider
 
-Use this option to add any OpenAI API-compliant provider such as vLLM, Ollama, etc. **You can configure multiple custom providers**, each with their own unique name, URL, and models.
+Use this option to add any other OpenAI API-compliant provider such as vLLM, etc. **You can configure multiple custom providers**, each with their own unique name, URL, and models.
 
 <Frame>
   <img src="/img/configuration/vllm_configuration.png" alt="New Custom AI Provider Modal" />
