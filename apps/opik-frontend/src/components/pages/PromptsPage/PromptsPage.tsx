@@ -21,7 +21,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import useLocalStorageState from "use-local-storage-state";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import usePromptsList from "@/api/prompts/usePromptsList";
@@ -46,7 +46,8 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 
 export const getRowId = (p: Prompt) => p.id;
 
-const SELECTED_COLUMNS_KEY = "prompts-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "prompts-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "prompts-columns-width";
 const COLUMNS_ORDER_KEY = "prompts-columns-order";
 const COLUMNS_SORT_KEY = "prompts-columns-sort";
@@ -238,9 +239,13 @@ const PromptsPage: React.FunctionComponent = () => {
   const noDataText = noData ? "There are no prompts yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 

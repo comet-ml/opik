@@ -406,15 +406,17 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     [setGroupLimit],
   );
 
-  // Filter out dataset column when grouping by dataset
+  // Filter out dataset column when grouping by dataset and name column when grouping is enabled
   const availableColumns = useMemo(() => {
     const isGroupingByDataset = groups.some(
       (g) => g.field === COLUMN_DATASET_ID,
     );
-    if (isGroupingByDataset) {
-      return columnsDef.filter((col) => col.id !== COLUMN_DATASET_ID);
-    }
-    return columnsDef;
+
+    return columnsDef.filter((col) => {
+      if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
+      if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
+      return true;
+    });
   }, [groups, columnsDef]);
 
   if (isPending || isFeedbackScoresPending) {
@@ -465,6 +467,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         </div>
       </PageBodyStickyContainer>
       <DataTable
+        key={hasGroups ? "grouped" : "ungrouped"}
         columns={columns}
         aggregationMap={aggregationMap}
         data={experiments}

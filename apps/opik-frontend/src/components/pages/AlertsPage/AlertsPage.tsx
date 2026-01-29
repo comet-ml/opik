@@ -27,7 +27,7 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import {
@@ -46,7 +46,8 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 
 export const getRowId = (a: Alert) => a.id!;
 
-const SELECTED_COLUMNS_KEY = "alerts-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "alerts-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "alerts-columns-width";
 const COLUMNS_ORDER_KEY = "alerts-columns-order";
 const COLUMNS_SORT_KEY = "alerts-columns-sort";
@@ -235,9 +236,13 @@ const AlertsPage: React.FunctionComponent = () => {
   const noDataText = noData ? "There are no alerts yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 

@@ -29,7 +29,11 @@ import {
 import { Thread } from "@/types/traces";
 import { ThreadStatus } from "@/types/thread";
 import { AnnotationQueue } from "@/types/annotation-queues";
-import { convertColumnDataToColumn, injectColumnCallback } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  injectColumnCallback,
+  migrateSelectedColumns,
+} from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import {
   generateActionsColumDef,
@@ -212,7 +216,8 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "comments",
 ];
 
-const SELECTED_COLUMNS_KEY = "queue-thread-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "queue-thread-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "queue-thread-columns-width";
 const COLUMNS_ORDER_KEY = "queue-thread-columns-order";
 const COLUMNS_SORT_KEY = "queue-thread-columns-sort";
@@ -374,9 +379,13 @@ const ThreadQueueItemsTab: React.FunctionComponent<
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_ID_ID],
+      ),
     },
   );
 

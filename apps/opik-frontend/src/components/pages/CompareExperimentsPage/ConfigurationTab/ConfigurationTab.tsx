@@ -32,7 +32,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [],
+  left: ["name"],
   right: [],
 };
 

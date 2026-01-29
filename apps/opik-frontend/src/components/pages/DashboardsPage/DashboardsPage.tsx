@@ -37,7 +37,7 @@ import {
 } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -45,7 +45,8 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
-const SELECTED_COLUMNS_KEY = "dashboards-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "dashboards-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "dashboards-columns-width";
 const COLUMNS_ORDER_KEY = "dashboards-columns-order";
 const COLUMNS_SORT_KEY = "dashboards-columns-sort";
@@ -177,9 +178,13 @@ const DashboardsPage: React.FunctionComponent = () => {
   }, [dashboards, rowSelection]);
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 

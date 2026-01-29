@@ -17,7 +17,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { EvaluatorsRule } from "@/types/automations";
-import { convertColumnDataToColumn } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -117,7 +117,8 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "enabled",
 ];
 
-const SELECTED_COLUMNS_KEY = "project-rules-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "project-rules-columns-width";
 const COLUMNS_ORDER_KEY = "project-rules-columns-order";
 const PAGINATION_SIZE_KEY = "project-rules-pagination-size";
@@ -190,9 +191,13 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const dialogMode = editingRule ? "edit" : cloningRule ? "clone" : "create";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 

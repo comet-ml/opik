@@ -42,7 +42,11 @@ import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList"
 import useAppStore from "@/store/AppStore";
 import { Experiment, ExperimentsCompare } from "@/types/datasets";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
-import { convertColumnDataToColumn, hasAnyVisibleColumns } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  hasAnyVisibleColumns,
+  migrateSelectedColumns,
+} from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -67,7 +71,8 @@ const columnHelper = createColumnHelper<ExperimentsCompare>();
 const REFETCH_INTERVAL = 30000;
 const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
 
-const SELECTED_COLUMNS_KEY = "compare-trials-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "compare-trials-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "compare-trials-columns-width";
 const COLUMNS_ORDER_KEY = "compare-trials-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-trials-dynamic-columns";
@@ -179,9 +184,13 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   });
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_ID_ID],
+      ),
     },
   );
 

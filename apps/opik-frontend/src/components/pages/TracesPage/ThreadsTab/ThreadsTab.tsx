@@ -34,7 +34,11 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { Thread } from "@/types/traces";
-import { convertColumnDataToColumn, injectColumnCallback } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  injectColumnCallback,
+  migrateSelectedColumns,
+} from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
@@ -257,7 +261,8 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   USER_FEEDBACK_COLUMN_ID,
 ];
 
-const SELECTED_COLUMNS_KEY = "threads-selected-columns-v2";
+const SELECTED_COLUMNS_KEY = "threads-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "threads-columns-width";
 const COLUMNS_ORDER_KEY = "threads-columns-order";
 const COLUMNS_SORT_KEY = "threads-columns-sort";
@@ -496,9 +501,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_ID_ID],
+      ),
     },
   );
 
