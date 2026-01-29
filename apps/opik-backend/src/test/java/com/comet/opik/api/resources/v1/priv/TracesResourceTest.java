@@ -1458,7 +1458,7 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("When scoring batch of threads with threads that dont exist, then threads are created and scores are persisted")
+        @DisplayName("When scoring batch of threads with threads that don't exist, then threads are created and scores are persisted")
         void scoreBatchOfThreads_withThreadsDontExist_thenThreadsCreatedAndScoresPersisted() {
             // Given
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);

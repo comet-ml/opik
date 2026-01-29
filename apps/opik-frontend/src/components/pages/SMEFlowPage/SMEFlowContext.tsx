@@ -181,9 +181,6 @@ const validateCurrentItem = (
 
   if (!item) return errors;
 
-  // Thread status validation removed - feedback scores can now be added to threads
-  // regardless of their active/inactive status
-
   return errors;
 };
 
