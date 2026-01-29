@@ -6,8 +6,7 @@ import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
 import BedrockIcon from "@/icons/integrations/bedrock.svg?react";
 import CustomIcon from "@/icons/integrations/custom.svg?react";
 import OpikIcon from "@/icons/integrations/opik.svg?react";
-// TODO: Add dedicated Ollama icon
-import OllamaIcon from "@/icons/integrations/custom.svg?react";
+import OllamaIcon from "@/icons/integrations/ollama.svg?react";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
