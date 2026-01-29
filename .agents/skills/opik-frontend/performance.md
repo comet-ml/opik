@@ -2,20 +2,6 @@
 
 ## Bundle Optimization
 
-### Avoid Barrel Imports
-Import directly from source files instead of barrel files (index.js re-exports).
-
-```tsx
-// BAD - loads 1,583 modules, 200-800ms per cold start
-import { Check, X } from 'lucide-react';
-
-// GOOD - loads only what you need
-import Check from 'lucide-react/dist/esm/icons/check';
-import X from 'lucide-react/dist/esm/icons/x';
-```
-
-Affected libraries: `lucide-react`, `@radix-ui/*`, `lodash`, `date-fns`, `rxjs`.
-
 ### Lazy Load Heavy Components
 Use `React.lazy` for components not needed on initial render.
 
@@ -38,18 +24,6 @@ function CodePanel({ code }: { code: string }) {
 ```
 
 ## Rendering Performance
-
-### CSS content-visibility for Long Lists
-Apply `content-visibility: auto` to defer off-screen rendering.
-
-```css
-.list-item {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 80px; /* estimated height */
-}
-```
-
-For 1000 items, browser skips layout/paint for ~990 off-screen items (10x faster initial render).
 
 ### Animate SVG Wrappers
 Browsers don't hardware-accelerate CSS animations on SVG elements.
@@ -114,34 +88,3 @@ function Profile({ user, loading }: Props) {
 ```
 
 Note: If React Compiler is enabled, manual memoization isn't necessary.
-
-## Data Fetching
-
-### Parallel Fetching
-Fetch independent data in parallel with Promise.all.
-
-```tsx
-// BAD - sequential, 2x latency
-const users = await fetchUsers();
-const projects = await fetchProjects();
-
-// GOOD - parallel
-const [users, projects] = await Promise.all([
-  fetchUsers(),
-  fetchProjects()
-]);
-```
-
-### Preload on Hover
-Start loading on hover for perceived instant navigation.
-
-```tsx
-const prefetch = useRouter().prefetch;
-
-<Link
-  to="/details/$id"
-  onMouseEnter={() => prefetch('/details/$id')}
->
-  View Details
-</Link>
-```

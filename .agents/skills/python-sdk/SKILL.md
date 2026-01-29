@@ -105,3 +105,4 @@ client.batch_create_items(...)
 ## Reference Files
 - [testing.md](testing.md) - fake_backend, verifiers, test naming
 - [error-handling.md](error-handling.md) - Exception hierarchy, MetricComputationError
+- [good-code.md](good-code.md) - Access control, imports, factories, DI

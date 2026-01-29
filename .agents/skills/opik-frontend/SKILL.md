@@ -100,6 +100,7 @@ const mutation = useMutation({
 ## Reference Files
 - [forms.md](forms.md) - React Hook Form + Zod patterns
 - [ui-components.md](ui-components.md) - Button variants, typography, dark theme
+- [responsive-design.md](responsive-design.md) - Tailwind breakpoints vs useIsPhone
 - [testing.md](testing.md) - When to test, Vitest patterns
 - [code-quality.md](code-quality.md) - Lodash imports, naming, deps:validate
 - [performance.md](performance.md) - Bundle optimization, rendering, memoization

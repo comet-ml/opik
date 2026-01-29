@@ -105,6 +105,44 @@ Add new colors to `main.css` with dark alternatives:
 }
 ```
 
+## Color System
+
+```css
+/* Primary */
+bg-primary text-primary-foreground hover:bg-primary-hover
+
+/* Secondary */
+bg-secondary text-secondary-foreground
+
+/* Muted */
+bg-muted text-muted-foreground text-muted-gray
+
+/* Destructive */
+bg-destructive text-destructive-foreground border-destructive
+```
+
+## State Classes
+
+```tsx
+// Loading
+<Skeleton className="h-4 w-full" />
+
+// Error
+className={cn("border", { "border-destructive": hasError })}
+
+// Active
+"comet-table-row-active"
+
+// Disabled
+"disabled:opacity-50 disabled:pointer-events-none"
+```
+
+## Spacing
+
+- Gaps: `gap-2`, `gap-4`, `gap-6`, `gap-8`
+- Padding: `p-2`, `p-4`, `p-6`
+- Border radius: `rounded-md` (default), `rounded-lg`
+
 ## Component Placement
 
 - **Reusable**: `components/shared/`
