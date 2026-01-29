@@ -1,6 +1,7 @@
 package com.comet.opik.api.evaluators;
 
 import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.validation.TraceThreadUserDefinedMetricCodeValidation;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -15,6 +16,7 @@ import lombok.experimental.SuperBuilder;
 import java.beans.ConstructorProperties;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.UUID;
@@ -33,11 +35,21 @@ public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @TraceThreadUserDefinedMetricCodeValidation
     public record TraceThreadUserDefinedMetricPythonCode(
             @JsonView( {
-                    View.Public.class, View.Write.class}) @NotNull String metric){
+                    View.Public.class, View.Write.class}) String metric,
+            @JsonView({View.Public.class, View.Write.class}) String commonMetricId,
+            @JsonView({View.Public.class, View.Write.class}) Map<String, Object> initConfig){
 
         public static final String CONTEXT_ARG_NAME = "context";
+
+        /**
+         * Returns true if this is a common metric (from the SDK) rather than custom Python code.
+         */
+        public boolean isCommonMetric() {
+            return commonMetricId != null && !commonMetricId.isBlank();
+        }
     }
 
     @ConstructorProperties({"id", "projectId", "projectName", "projects", "projectIds", "name", "samplingRate",

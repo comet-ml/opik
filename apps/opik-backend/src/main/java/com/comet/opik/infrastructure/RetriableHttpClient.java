@@ -84,6 +84,93 @@ public class RetriableHttpClient {
         return RetryableHttpPost.of(requestFunction);
     }
 
+    /**
+     * Fluent interface for building and executing retryable HTTP GET requests.
+     */
+    public interface RetryableHttpGet {
+
+        @NonNull Function<Client, WebTarget> callEndpoint();
+
+        static RetryableHttpGet of(@NonNull Function<Client, WebTarget> requestFunction) {
+            return () -> requestFunction;
+        }
+
+        default RetryableHttpGetCallContext withRetryPolicy(@NonNull Retry retryPolicy) {
+            return () -> Tuples.of(this, retryPolicy);
+        }
+    }
+
+    public interface RetryableHttpGetCallContext {
+        Tuple2<RetryableHttpGet, Retry> getRequestWithContext();
+
+        default <T> RetryableHttpGetExecutableContext<T> withResponse(@NonNull Function<Response, T> responseFunction) {
+            return () -> Tuples.of(this, responseFunction);
+        }
+    }
+
+    public interface RetryableHttpGetExecutableContext<T> {
+
+        Tuple2<RetryableHttpGetCallContext, Function<Response, T>> getFullContext();
+
+        default T execute(@NonNull RetriableHttpClient httpClient) {
+            Function<Client, WebTarget> requestFunction = getFullContext().getT1().getRequestWithContext().getT1()
+                    .callEndpoint();
+            Retry retrySpec = getFullContext().getT1().getRequestWithContext().getT2();
+            Function<Response, T> responseFunction = getFullContext().getT2();
+
+            return httpClient.executeGetWithRetry(retrySpec, requestFunction, responseFunction);
+        }
+    }
+
+    /**
+     * Initiates a new retryable HTTP GET request to the specified endpoint.
+     *
+     * @param requestFunction Function that takes a JAX-RS Client and returns a WebTarget for the desired endpoint.
+     * @return A RetryableHttpGet instance to further configure the request.
+     */
+    public static RetryableHttpGet newGet(@NonNull Function<Client, WebTarget> requestFunction) {
+        return RetryableHttpGet.of(requestFunction);
+    }
+
+    private <T> T executeGetWithRetry(Retry retrySpec, Function<Client, WebTarget> requestFunction,
+            Function<Response, T> responseFunction) {
+        return Mono.defer(() -> performHttpGet(requestFunction)
+                .flatMap(response -> {
+                    int statusCode = response.getStatus();
+
+                    if (isRetryableStatusCode(statusCode)) {
+                        response.bufferEntity();
+                        String body = response.readEntity(String.class);
+                        return Mono.error(new RetryUtils.RetryableHttpException(
+                                "Service temporarily unavailable (HTTP %s): %s".formatted(statusCode, body),
+                                statusCode));
+                    }
+
+                    return Mono.just(response);
+                })
+                .flatMap(value -> Mono.fromCallable(() -> responseFunction.apply(value))))
+                .subscribeOn(Schedulers.boundedElastic())
+                .retryWhen(retrySpec)
+                .block();
+    }
+
+    private Mono<Response> performHttpGet(Function<Client, WebTarget> requestFunction) {
+        return Mono.create(sink -> requestFunction.apply(client)
+                .request()
+                .async()
+                .get(new InvocationCallback<Response>() {
+                    @Override
+                    public void completed(Response response) {
+                        sink.success(response);
+                    }
+
+                    @Override
+                    public void failed(Throwable throwable) {
+                        sink.error(throwable);
+                    }
+                }));
+    }
+
     private <T> T executePostWithRetry(Entity<?> request, Retry retrySpec, Function<Client, WebTarget> requestFunction,
             Function<Response, T> responseFunction) {
         return Mono.defer(() -> performHttpPost(request, requestFunction)

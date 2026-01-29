@@ -49,10 +49,12 @@ import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
 import useAppStore from "@/store/AppStore";
 import useRuleCreateMutation from "@/api/automations/useRuleCreateMutation";
 import useRuleUpdateMutation from "@/api/automations/useRuleUpdateMutation";
+import useCommonMetricsQuery from "@/api/automations/useCommonMetricsQuery";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import PythonCodeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
+import CommonMetricRuleDetails from "@/components/pages-shared/automations/AddEditRuleDialog/CommonMetricRuleDetails";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import RuleFilteringSection, {
   TRACE_FILTER_COLUMNS,
@@ -177,8 +179,18 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     useConfirmAction();
   const { toast } = useToast();
 
+  // Load common metrics when dialog opens
+  const {
+    data: commonMetricsData,
+    isLoading: isCommonMetricsLoading,
+    error: commonMetricsError,
+  } = useCommonMetricsQuery({
+    enabled: open, // Only fetch when dialog is open
+  });
+
+  // Pass the code to getUIRuleType to properly detect common metrics
   const formUIRuleType = defaultRule?.type
-    ? getUIRuleType(defaultRule.type)
+    ? getUIRuleType(defaultRule.type, defaultRule.code)
     : UI_EVALUATORS_RULE_TYPE.llm_judge;
   const formScope = defaultRule?.type
     ? getUIRuleScope(defaultRule.type)
@@ -190,6 +202,25 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     }
     return defaultRule?.name || "";
   };
+
+  // Extract common metric details from the rule if it's a common metric
+  const getInitialCommonMetricDetails = useCallback(() => {
+    if (
+      defaultRule &&
+      isPythonCodeRule(defaultRule) &&
+      formUIRuleType === UI_EVALUATORS_RULE_TYPE.common_metric
+    ) {
+      const code = defaultRule.code as PythonCodeObject;
+      if ("common_metric_id" in code && code.common_metric_id) {
+        return {
+          metricId: code.common_metric_id,
+          // Clone initConfig to prevent mutations to the original rule data
+          initConfig: code.init_config ? cloneDeep(code.init_config) : {},
+        };
+      }
+    }
+    return undefined;
+  }, [defaultRule, formUIRuleType]);
 
   const form: UseFormReturn<EvaluationRuleFormType> = useForm<
     z.infer<typeof EvaluationRuleFormSchema>
@@ -223,12 +254,15 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
               defaultRule.code as LLMJudgeObject,
             )
           : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[formScope]),
+      commonMetricDetails: getInitialCommonMetricDetails(),
     },
   });
 
-  const isLLMJudge =
-    form.getValues("uiType") === UI_EVALUATORS_RULE_TYPE.llm_judge;
-  const scope = form.getValues("scope");
+  // Use form.watch for reactive values that affect rendering
+  const uiType = form.watch("uiType");
+  const isLLMJudge = uiType === UI_EVALUATORS_RULE_TYPE.llm_judge;
+  const isCommonMetric = uiType === UI_EVALUATORS_RULE_TYPE.common_metric;
+  const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
@@ -288,6 +322,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 defaultRule.code as LLMJudgeObject,
               )
             : cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[formScope]),
+        commonMetricDetails: getInitialCommonMetricDetails(),
       };
       form.reset(cloneFormData as EvaluationRuleFormType);
     }
@@ -300,6 +335,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     formScope,
     formUIRuleType,
     form,
+    getInitialCommonMetricDetails,
   ]);
 
   const handleScopeChange = useCallback(
@@ -441,9 +477,25 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       } as EvaluatorsRule;
     }
 
+    // For Python code rules, check if it's a common metric
+    const pythonCodeDetails = { ...formData.pythonCodeDetails };
+
+    // If this is a common metric, add the metric ID, init config, and score config
+    if (
+      formData.uiType === UI_EVALUATORS_RULE_TYPE.common_metric &&
+      formData.commonMetricDetails?.metricId
+    ) {
+      pythonCodeDetails.common_metric_id =
+        formData.commonMetricDetails.metricId;
+      pythonCodeDetails.init_config = formData.commonMetricDetails.initConfig;
+      // score_config is already in pythonCodeDetails from the form
+      // Clear the metric code field since we're using the SDK metric
+      pythonCodeDetails.metric = "";
+    }
+
     return {
       ...ruleData,
-      code: formData.pythonCodeDetails,
+      code: pythonCodeDetails,
     } as EvaluatorsRule;
   }, [form]);
 
@@ -581,11 +633,13 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 <SelectItem value={EVALUATORS_RULE_SCOPE.trace}>
                                   Trace
                                 </SelectItem>
-                                <SelectItem
-                                  value={EVALUATORS_RULE_SCOPE.thread}
-                                >
-                                  Thread
-                                </SelectItem>
+                                {!isCommonMetric && (
+                                  <SelectItem
+                                    value={EVALUATORS_RULE_SCOPE.thread}
+                                  >
+                                    Thread
+                                  </SelectItem>
+                                )}
                                 {(isSpanLlmAsJudgeEnabled ||
                                   isSpanPythonCodeEnabled) && (
                                   <SelectItem
@@ -647,7 +701,20 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               ) => {
                                 if (!value) return;
 
-                                const { scope } = form.getValues();
+                                let { scope } = form.getValues();
+
+                                // If switching to common metric and scope is thread, change to trace
+                                if (
+                                  value ===
+                                    UI_EVALUATORS_RULE_TYPE.common_metric &&
+                                  scope === EVALUATORS_RULE_SCOPE.thread
+                                ) {
+                                  scope = EVALUATORS_RULE_SCOPE.trace;
+                                  form.setValue("scope", scope);
+                                  // Reset filters when scope changes as columns are different
+                                  form.setValue("filters", []);
+                                }
+
                                 const type = getBackendRuleType(scope, value);
 
                                 field.onChange(value);
@@ -660,6 +727,18 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                   form.setValue(
                                     "llmJudgeDetails",
                                     cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[scope]),
+                                  );
+                                } else if (
+                                  value ===
+                                  UI_EVALUATORS_RULE_TYPE.common_metric
+                                ) {
+                                  // Reset common metric selection and python code details
+                                  form.setValue("commonMetricDetails", {
+                                    metricId: "",
+                                  });
+                                  form.setValue(
+                                    "pythonCodeDetails",
+                                    cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
                                   );
                                 } else {
                                   form.setValue(
@@ -678,12 +757,24 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               {isCodeMetricEnabled &&
                                 (!isSpanScope ||
                                   (isSpanScope && isSpanPythonCodeEnabled)) && (
-                                  <ToggleGroupItem
-                                    value={UI_EVALUATORS_RULE_TYPE.python_code}
-                                    aria-label="Code metric"
-                                  >
-                                    Code metric
-                                  </ToggleGroupItem>
+                                  <>
+                                    <ToggleGroupItem
+                                      value={
+                                        UI_EVALUATORS_RULE_TYPE.common_metric
+                                      }
+                                      aria-label="Common metrics"
+                                    >
+                                      Common metrics
+                                    </ToggleGroupItem>
+                                    <ToggleGroupItem
+                                      value={
+                                        UI_EVALUATORS_RULE_TYPE.python_code
+                                      }
+                                      aria-label="Code metric"
+                                    >
+                                      Code metric
+                                    </ToggleGroupItem>
+                                  </>
                                 )}
                             </ToggleGroup>
                           </div>
@@ -692,8 +783,10 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                           {isLLMJudge
                             ? EXPLAINERS_MAP[EXPLAINER_ID.whats_llm_as_a_judge]
                                 .description
-                            : EXPLAINERS_MAP[EXPLAINER_ID.whats_a_code_metric]
-                                .description}
+                            : isCommonMetric
+                              ? "Use pre-defined metrics from the Python SDK like Equals, Contains, LevenshteinRatio, and more."
+                              : EXPLAINERS_MAP[EXPLAINER_ID.whats_a_code_metric]
+                                  .description}
                         </Description>
                       </FormItem>
                     )}
@@ -705,6 +798,15 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     form={form}
                     projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
+                  />
+                ) : isCommonMetric ? (
+                  <CommonMetricRuleDetails
+                    form={form}
+                    projectName={projectName}
+                    datasetColumnNames={datasetColumnNames}
+                    metricsData={commonMetricsData}
+                    isLoading={isCommonMetricsLoading}
+                    error={commonMetricsError}
                   />
                 ) : (
                   <PythonCodeRuleDetails

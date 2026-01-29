@@ -8,3 +8,4 @@ from enum import Enum
 class PayloadType(Enum):
     """Payload type constants for evaluator handling"""
     TRACE_THREAD = "trace_thread"
+    COMMON_METRIC = "common_metric"

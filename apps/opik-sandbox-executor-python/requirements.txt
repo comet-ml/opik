@@ -63,3 +63,9 @@ urllib3==2.5.0
 uuid6==2025.0.1
 yarl==1.20.1
 zipp==3.23.0
+
+# Heuristic metrics dependencies (required for common_metrics support)
+nltk==3.9.2
+textstat==0.7.12
+scipy==1.16.2
+rouge-score==0.1.2
