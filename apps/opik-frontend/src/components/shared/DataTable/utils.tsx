@@ -3,7 +3,6 @@ import {
   CellContext,
   Column,
   ColumnDef,
-  ColumnDefTemplate,
   flexRender,
   Row,
   Table,
@@ -27,7 +26,6 @@ import {
 } from "@/constants/shared";
 import {
   CELL_VERTICAL_ALIGNMENT,
-  COLUMN_ACTIONS_ID,
   COLUMN_SELECT_ID,
   ColumnData,
   OnChangeFn,
@@ -235,27 +233,6 @@ export const generateSelectColumDef = <TData,>(meta?: {
     enableResizing: false,
     enableSorting: false,
     enableHiding: false,
-  } as ColumnDef<TData>;
-};
-
-export const generateActionsColumDef = <TData,>({
-  cell,
-  customMeta,
-}: {
-  cell: ColumnDefTemplate<CellContext<TData, unknown>>;
-  customMeta?: unknown;
-}) => {
-  return {
-    accessorKey: COLUMN_ACTIONS_ID,
-    meta: {
-      custom: customMeta,
-    },
-    header: "",
-    cell,
-    size: 56,
-    enableHiding: false,
-    enableResizing: false,
-    enableSorting: false,
   } as ColumnDef<TData>;
 };
 

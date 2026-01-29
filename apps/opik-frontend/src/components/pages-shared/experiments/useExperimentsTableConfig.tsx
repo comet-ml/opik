@@ -3,8 +3,6 @@ import {
   ColumnSort,
   RowSelectionState,
   ColumnPinningState,
-  ColumnDefTemplate,
-  CellContext,
   OnChangeFn,
 } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
@@ -36,7 +34,6 @@ import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import {
-  generateActionsColumDef,
   generateGroupedRowCellDef,
   generateDataRowCellDef,
   getSharedShiftCheckboxClickHandler,
@@ -55,7 +52,6 @@ export type UseExperimentsTableConfigProps<T> = {
   experiments: T[];
   rowSelection: RowSelectionState;
   feedbackScoresData?: Array<{ name: string }>;
-  actionsCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
 };
@@ -73,7 +69,6 @@ export const useExperimentsTableConfig = <
   dynamicScoresColumns,
   experiments,
   rowSelection,
-  actionsCell,
   sortedColumns,
   setSortedColumns,
 }: UseExperimentsTableConfigProps<T>) => {
@@ -280,7 +275,7 @@ export const useExperimentsTableConfig = <
       );
     });
 
-    const baseColumns = [
+    return [
       generateDataRowCellDef<T>(
         {
           id: COLUMN_NAME_ID,
@@ -313,16 +308,6 @@ export const useExperimentsTableConfig = <
         sortableColumns: sortableBy,
       }),
     ];
-
-    if (actionsCell) {
-      baseColumns.push(
-        generateActionsColumDef({
-          cell: actionsCell,
-        }),
-      );
-    }
-
-    return baseColumns;
   }, [
     groups,
     sortableBy,
@@ -332,7 +317,6 @@ export const useExperimentsTableConfig = <
     selectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
-    actionsCell,
   ]);
 
   const sortConfig = useMemo(

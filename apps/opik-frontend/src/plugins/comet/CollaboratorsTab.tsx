@@ -33,8 +33,7 @@ import {
   WorkspaceMember,
 } from "./types";
 import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
-import WorkspaceMemberActionsCell from "./WorkspaceMemberActionsCell";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
+import WorkspaceMemberRowActions from "./WorkspaceMemberRowActions";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
 
@@ -113,15 +112,10 @@ const CollaboratorsTab = () => {
     );
 
   const columns = useMemo(() => {
-    return [
-      ...convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
-        DEFAULT_COLUMNS,
-        {},
-      ),
-      generateActionsColumDef({
-        cell: WorkspaceMemberActionsCell,
-      }),
-    ];
+    return convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
+      DEFAULT_COLUMNS,
+      {},
+    );
   }, []);
 
   const resizeConfig = useMemo(
@@ -196,6 +190,9 @@ const CollaboratorsTab = () => {
         columns={columns}
         data={tableData}
         resizeConfig={resizeConfig}
+        actionsConfig={{
+          render: (row) => <WorkspaceMemberRowActions member={row.original} />,
+        }}
       />
     );
   };
