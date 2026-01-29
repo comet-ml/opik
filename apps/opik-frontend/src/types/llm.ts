@@ -29,6 +29,24 @@ export type MessageContent =
   | string
   | Array<TextPart | ImagePart | VideoPart | AudioPart>;
 
+/**
+ * Source annotation for messages loaded from traces
+ * Helps users understand where each message originated
+ */
+export type MessageSourceType =
+  | "system_config" // Original system message from config
+  | "user_input" // Direct user input
+  | "tool_output" // Output from a tool span
+  | "llm_response" // Response from an LLM
+  | "merged" // Combined from multiple sources (e.g., RAG context + user query)
+  | "trace_input"; // Generic input from trace
+
+export interface MessageSourceAnnotation {
+  type: MessageSourceType;
+  description?: string; // e.g., "From retriever span output"
+  sourceSpanName?: string; // Name of the span this came from
+}
+
 export interface LLMMessage {
   id: string;
   content: MessageContent;
@@ -36,6 +54,8 @@ export interface LLMMessage {
   promptId?: string;
   promptVersionId?: string;
   autoImprove?: boolean;
+  // Source annotation for trace-aware playground mode
+  sourceAnnotation?: MessageSourceAnnotation;
 }
 
 export type ProviderMessageType = Omit<LLMMessage, "id"> & {
