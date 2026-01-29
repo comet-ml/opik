@@ -446,7 +446,9 @@ describe("isOpikS3AttachmentUrl", () => {
 
   it("should reject URLs without opik/attachment path", () => {
     expect(
-      isOpikS3AttachmentUrl("https://s3.amazonaws.com/my-bucket/other/file.pdf"),
+      isOpikS3AttachmentUrl(
+        "https://s3.amazonaws.com/my-bucket/other/file.pdf",
+      ),
     ).toBe(false);
     expect(
       isOpikS3AttachmentUrl(
@@ -456,9 +458,9 @@ describe("isOpikS3AttachmentUrl", () => {
   });
 
   it("should reject non-S3 URLs", () => {
-    expect(isOpikS3AttachmentUrl("https://example.com/opik/attachment/file.pdf")).toBe(
-      false,
-    );
+    expect(
+      isOpikS3AttachmentUrl("https://example.com/opik/attachment/file.pdf"),
+    ).toBe(false);
     expect(isOpikS3AttachmentUrl("https://google.com/file.pdf")).toBe(false);
   });
 
@@ -477,7 +479,9 @@ describe("isOpikS3AttachmentUrl", () => {
 
   it("should reject URLs with empty attachment path", () => {
     expect(
-      isOpikS3AttachmentUrl("https://s3.amazonaws.com/my-bucket/opik/attachment/"),
+      isOpikS3AttachmentUrl(
+        "https://s3.amazonaws.com/my-bucket/opik/attachment/",
+      ),
     ).toBe(false);
     expect(
       isOpikS3AttachmentUrl(
