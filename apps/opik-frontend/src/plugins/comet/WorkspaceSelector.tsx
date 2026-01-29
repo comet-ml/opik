@@ -1,12 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronUp,
-  Settings,
-  Settings2,
-} from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronUp, Settings2 } from "lucide-react";
 import sortBy from "lodash/sortBy";
 import toLower from "lodash/toLower";
 
@@ -22,6 +16,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Separator } from "@/components/ui/separator";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { calculateWorkspaceName, cn } from "@/lib/utils";
@@ -192,7 +187,10 @@ const WorkspaceSelector: React.FC = () => {
 
   // Simple computed values - no memoization needed
   const hasMultipleOrganizations = organizations && organizations.length > 1;
-  const shouldShowDropdown = currentOrgWorkspaces.length > 0;
+  const hasSelectableWorkspaces = currentOrgWorkspaces.length > 0;
+  // Show dropdown if there are workspaces to select OR if user can switch orgs
+  const shouldShowDropdown =
+    hasSelectableWorkspaces || hasMultipleOrganizations;
   const isOrgAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
   // Loading state
@@ -257,17 +255,18 @@ const WorkspaceSelector: React.FC = () => {
                 </TooltipWrapper>
               )}
 
+              {/* Separator between icon buttons */}
+              {isOrgAdmin && hasMultipleOrganizations && (
+                <Separator orientation="vertical" className="h-3.5" />
+              )}
+
               {/* Switch org submenu - only if multiple orgs */}
               {hasMultipleOrganizations && (
                 <DropdownMenuSub
                   open={isOrgSubmenuOpen}
                   onOpenChange={setIsOrgSubmenuOpen}
                 >
-                  <DropdownMenuSubTrigger className="h-6 gap-0.5 px-1 py-0">
-                    <span className="comet-body-xs text-light-slate">
-                      Switch org
-                    </span>
-                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger className="size-6 justify-center p-0 text-light-slate [&>svg]:ml-0" />
                   <DropdownMenuPortal>
                     <DropdownMenuSubContent className="w-[244px] p-1">
                       <div className="flex items-center gap-1 p-2">
@@ -375,10 +374,9 @@ const WorkspaceSelector: React.FC = () => {
           <div className="flex items-center justify-center py-1">
             <a
               href={buildUrl("account-settings/workspaces", workspaceName)}
-              className="comet-body-xs flex h-6 cursor-pointer items-center gap-0.5 text-primary hover:underline"
+              className="comet-body-xs flex h-6 cursor-pointer items-center text-primary hover:underline"
             >
-              <Settings className="size-3 shrink-0" />
-              <span>Manage workspaces</span>
+              Manage workspaces
             </a>
           </div>
         </DropdownMenuContent>
