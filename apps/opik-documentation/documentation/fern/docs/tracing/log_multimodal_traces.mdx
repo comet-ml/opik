@@ -22,12 +22,17 @@ want to log to Opik.
 
 Each attachment is made up of the following fields:
 
-- `data`: The path to the file or the base64 encoded string of the file
+- `data`: The path to the file, raw bytes, or a base64 encoded string of the file
+- `file_name`: Optional name for the attachment (required when using raw bytes without a file path)
 - `content_type`: The content type of the file formatted as a MIME type
 
 These attachements can then be logged to your traces and spans using The
 `opik_context.update_current_span` and `opik_context.update_current_trace`
 methods:
+
+### Using file paths
+
+The most common way to log attachments is by providing a file path:
 
 ```python wordWrap
 from opik import opik_context, track, Attachment
@@ -37,7 +42,7 @@ def my_llm_agent(input):
     # LLM chain code
     # ...
 
-    # Update the trace
+    # Update the trace with a file path
     opik_context.update_current_trace(
         attachments=[
             Attachment(
@@ -50,6 +55,152 @@ def my_llm_agent(input):
     return "World!"
 
 print(my_llm_agent("Hello!"))
+```
+
+### Using raw bytes (file-like data)
+
+You can also pass raw bytes directly to an attachment. This is useful when you have
+file content in memory (e.g., from an API response, generated content, or streaming data)
+and don't want to write it to disk first:
+
+```python wordWrap
+from opik import opik_context, track, Attachment
+
+@track
+def process_image(image_bytes: bytes):
+    # Process the image
+    # ...
+
+    # Log the raw bytes as an attachment
+    opik_context.update_current_trace(
+        attachments=[
+            Attachment(
+                data=image_bytes,  # Raw bytes
+                file_name="processed_image.png",  # Required for bytes
+                content_type="image/png",
+            )
+        ]
+    )
+
+    return "Image processed!"
+
+# Example: Reading a file into memory and logging it
+with open("image.png", "rb") as f:
+    image_data = f.read()
+
+print(process_image(image_data))
+```
+
+<Note>
+When using raw bytes, Opik automatically creates a temporary file for upload
+and cleans it up after the attachment is uploaded. If you don't specify a
+`content_type`, Opik will try to infer it from the `file_name` or default
+to `application/octet-stream`.
+</Note>
+
+### Logging images from HTTP responses
+
+A common use case is logging images fetched from external APIs or URLs:
+
+```python wordWrap
+import httpx
+from opik import opik_context, track, Attachment
+
+@track
+def analyze_remote_image(image_url: str):
+    # Fetch image from URL
+    response = httpx.get(image_url)
+    image_bytes = response.content
+    content_type = response.headers.get("content-type", "image/jpeg")
+
+    # Log the fetched image as an attachment
+    opik_context.update_current_trace(
+        attachments=[
+            Attachment(
+                data=image_bytes,
+                file_name="remote_image.jpg",
+                content_type=content_type,
+            )
+        ]
+    )
+
+    # Process the image...
+    return "Image analyzed!"
+
+# Analyze an image from a URL
+result = analyze_remote_image("https://example.com/image.jpg")
+```
+
+### Logging generated content
+
+You can also log dynamically generated content like charts or reports:
+
+```python wordWrap
+from opik import opik_context, track, Attachment
+import json
+
+@track
+def generate_report(data: dict):
+    # Generate a JSON report
+    report_bytes = json.dumps(data, indent=2).encode("utf-8")
+
+    opik_context.update_current_trace(
+        attachments=[
+            Attachment(
+                data=report_bytes,
+                file_name="report.json",
+                content_type="application/json",
+            )
+        ]
+    )
+
+    return "Report generated!"
+```
+
+### Using the Opik client directly
+
+You can also log attachments using the Opik client directly with both file paths and raw bytes:
+
+```python wordWrap
+import opik
+from opik import Attachment
+
+client = opik.Opik()
+
+# Create a trace
+trace = client.trace(
+    name="my-trace",
+    input={"query": "Process this data"},
+    project_name="my-project",
+)
+
+# Log attachment with file path
+span_with_file = client.span(
+    trace_id=trace.id,
+    name="file-attachment-span",
+    attachments=[
+        Attachment(
+            data="/path/to/document.pdf",
+            content_type="application/pdf",
+        )
+    ],
+)
+
+# Log attachment with raw bytes
+binary_data = b"Hello, this is binary content!"
+span_with_bytes = client.span(
+    trace_id=trace.id,
+    name="bytes-attachment-span",
+    attachments=[
+        Attachment(
+            data=binary_data,
+            file_name="data.bin",
+            content_type="application/octet-stream",
+        )
+    ],
+)
+
+client.flush()
 ```
 
 The attachements will be uploaded to the Opik platform and can be both previewed
