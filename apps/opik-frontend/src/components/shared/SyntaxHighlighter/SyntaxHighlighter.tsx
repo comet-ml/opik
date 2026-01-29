@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 
@@ -12,10 +12,6 @@ import {
 import { useScrollRestoration } from "@/components/shared/SyntaxHighlighter/hooks/useScrollRestoration";
 import CodeMirrorHighlighter from "@/components/shared/SyntaxHighlighter/CodeMirrorHighlighter";
 import MarkdownHighlighter from "@/components/shared/SyntaxHighlighter/MarkdownHighlighter";
-import {
-  LLMMessagesHighlighter,
-  detectLLMMessages,
-} from "@/components/shared/SyntaxHighlighter/llmMessages";
 import { OnChangeFn } from "@/types/shared";
 
 export type SyntaxHighlighterProps = {
@@ -27,7 +23,6 @@ export type SyntaxHighlighterProps = {
   scrollPosition?: number;
   onScrollPositionChange?: OnChangeFn<number>;
   maxHeight?: string;
-  provider?: string;
 };
 
 const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
@@ -39,23 +34,17 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   scrollPosition,
   onScrollPositionChange,
   maxHeight,
-  provider,
 }) => {
   const { mode, setMode } = useSyntaxHighlighterMode(
     prettifyConfig,
     preserveKey,
   );
-  const code = useSyntaxHighlighterCode(data, mode, prettifyConfig, provider);
+  const code = useSyntaxHighlighterCode(data, mode, prettifyConfig);
   const options = useSyntaxHighlighterOptions(
     prettifyConfig,
     code.canBePrettified,
   );
   const [localSearchValue, setLocalSearchValue] = useState<string>("");
-
-  // Detect if LLM messages format is supported for custom pretty mode
-  const llmMessagesDetection = useMemo(() => {
-    return detectLLMMessages(data, prettifyConfig, provider);
-  }, [data, prettifyConfig, provider]);
 
   // Scroll management hook
   const { scrollRef, handleScroll } = useScrollRestoration({
@@ -87,25 +76,6 @@ const SyntaxHighlighter: React.FC<SyntaxHighlighterProps> = ({
   );
 
   if (code.mode === MODE_TYPE.pretty) {
-    // Use LLMMessagesHighlighter for supported LLM format data
-    if (llmMessagesDetection.supported && llmMessagesDetection.provider) {
-      return (
-        <LLMMessagesHighlighter
-          codeOutput={code}
-          data={data}
-          prettifyConfig={prettifyConfig}
-          provider={llmMessagesDetection.provider}
-          modeSelector={modeSelector}
-          copyButton={copyButton}
-          scrollRef={scrollRef}
-          onScroll={handleScroll}
-          maxHeight={maxHeight}
-          preserveKey={preserveKey}
-        />
-      );
-    }
-
-    // Fall back to MarkdownHighlighter for unsupported formats
     return (
       <MarkdownHighlighter
         codeOutput={code}

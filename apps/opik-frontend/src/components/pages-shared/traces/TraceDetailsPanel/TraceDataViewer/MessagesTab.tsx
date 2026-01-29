@@ -1,7 +1,6 @@
 import React, { useMemo } from "react";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
-import { Span, Trace } from "@/types/traces";
-import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
+import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
 import {
   MediaProvider,
   detectLLMMessages,
@@ -21,18 +20,19 @@ import { useLLMMessagesExpandAll } from "@/components/shared/SyntaxHighlighter/h
 import Loader from "@/components/shared/Loader/Loader";
 
 type MessagesTabProps = {
-  data: Trace | Span;
+  transformedInput: object;
+  transformedOutput: object;
+  media: UnifiedMediaItem[];
   isLoading: boolean;
   search?: string;
 };
 
 const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
-  data,
+  transformedInput,
+  transformedOutput,
+  media,
   isLoading,
 }) => {
-  // Use unified media hook to fetch all media and get transformed data
-  const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
-
   // Detect LLM format and get providers for input and output
   const inputDetection = useMemo(
     () => detectLLMMessages(transformedInput, { fieldType: "input" }),

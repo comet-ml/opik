@@ -132,6 +132,185 @@ const getImageName = (url: string, index: number): string => {
 };
 
 /**
+ * Processes multimodal content array (images, audio, text).
+ * Groups consecutive images and audios together, flushing them when text is encountered.
+ */
+const processMultimodalContent = (
+  content: OpenAIContentItem[],
+  role: MessageRole,
+  blocks: LLMBlockDescriptor[],
+): void => {
+  const images: Array<{ url: string; name: string }> = [];
+  const audios: Array<{ url: string; name: string }> = [];
+
+  content.forEach((item, index) => {
+    if (item.type === "text") {
+      // If we have pending images, add them first
+      if (images.length > 0) {
+        blocks.push({
+          blockType: "image",
+          component: PrettyLLMMessage.ImageBlock,
+          props: {
+            images: [...images],
+          },
+        });
+        images.length = 0;
+      }
+      // If we have pending audios, add them first
+      if (audios.length > 0) {
+        blocks.push({
+          blockType: "audio",
+          component: PrettyLLMMessage.AudioPlayerBlock,
+          props: {
+            audios: [...audios],
+          },
+        });
+        audios.length = 0;
+      }
+      blocks.push({
+        blockType: "text",
+        component: PrettyLLMMessage.TextBlock,
+        props: {
+          children: item.text,
+          role,
+          showMoreButton: true,
+        },
+      });
+    } else if (item.type === "image_url") {
+      // Guard against missing or invalid image_url
+      if (
+        item.image_url &&
+        typeof item.image_url === "object" &&
+        typeof item.image_url.url === "string" &&
+        item.image_url.url.length > 0
+      ) {
+        const url = item.image_url.url;
+        images.push({
+          url: url,
+          name: isPlaceholder(url) ? url : getImageName(url, index),
+        });
+      }
+      // Skip invalid image entries silently
+    } else if (item.type === "input_audio") {
+      // Handle input audio content
+      if (
+        item.input_audio &&
+        typeof item.input_audio === "object" &&
+        typeof item.input_audio.data === "string" &&
+        item.input_audio.data.length > 0
+      ) {
+        const audioData = item.input_audio.data;
+        const audioName = isPlaceholder(audioData)
+          ? audioData
+          : `Audio ${index + 1}`;
+        audios.push({
+          url: audioData,
+          name: audioName,
+        });
+      }
+      // Skip invalid audio entries silently
+    }
+  });
+
+  // Add any remaining images
+  if (images.length > 0) {
+    blocks.push({
+      blockType: "image",
+      component: PrettyLLMMessage.ImageBlock,
+      props: {
+        images,
+      },
+    });
+  }
+
+  // Add any remaining audios
+  if (audios.length > 0) {
+    blocks.push({
+      blockType: "audio",
+      component: PrettyLLMMessage.AudioPlayerBlock,
+      props: {
+        audios,
+      },
+    });
+  }
+};
+
+/**
+ * Maps tool calls to code block descriptors with formatted JSON arguments.
+ */
+const mapToolCalls = (
+  toolCalls: OpenAIToolCall[],
+  blocks: LLMBlockDescriptor[],
+): void => {
+  toolCalls.forEach((toolCall) => {
+    // Guard: skip if function is missing or invalid
+    if (
+      !toolCall.function ||
+      typeof toolCall.function !== "object" ||
+      !toolCall.function.name ||
+      typeof toolCall.function.arguments !== "string"
+    ) {
+      // Use safe fallback
+      blocks.push({
+        blockType: "code",
+        component: PrettyLLMMessage.CodeBlock,
+        props: {
+          code: "",
+          label: toolCall.function?.name ?? `unknown tool`,
+        },
+      });
+      return;
+    }
+
+    let formattedArgs = toolCall.function.arguments;
+    try {
+      const parsed = JSON.parse(toolCall.function.arguments);
+      formattedArgs = JSON.stringify(parsed, null, 2);
+    } catch {
+      // Keep original if not parseable
+    }
+
+    blocks.push({
+      blockType: "code",
+      component: PrettyLLMMessage.CodeBlock,
+      props: {
+        code: formattedArgs,
+        label: toolCall.function.name,
+      },
+    });
+  });
+};
+
+/**
+ * Formats content as a pretty-printed JSON code block for tool results.
+ */
+const formatAsToolResult = (
+  content: string | unknown,
+  name?: string,
+): LLMBlockDescriptor => {
+  const contentStr =
+    typeof content === "string" ? content : JSON.stringify(content, null, 2);
+
+  let formattedContent = contentStr;
+  try {
+    const jsonLike = contentStr.replace(/'/g, '"');
+    const parsed = JSON.parse(jsonLike);
+    formattedContent = JSON.stringify(parsed, null, 2);
+  } catch {
+    // Keep original if not parseable
+  }
+
+  return {
+    blockType: "code",
+    component: PrettyLLMMessage.CodeBlock,
+    props: {
+      code: formattedContent,
+      label: name || "Tool result",
+    },
+  };
+};
+
+/**
  * Converts custom input message content to block descriptors.
  * Handles messages with 'text' field instead of 'content'.
  */
@@ -155,167 +334,17 @@ const mapCustomInputMessageContent = (
   }
   // Handle array content (multimodal)
   else if (Array.isArray(message.text)) {
-    // Group images and audios together
-    const images: Array<{ url: string; name: string }> = [];
-    const audios: Array<{ url: string; name: string }> = [];
-
-    message.text.forEach((item, index) => {
-      if (item.type === "text") {
-        // If we have pending images, add them first
-        if (images.length > 0) {
-          blocks.push({
-            blockType: "image",
-            component: PrettyLLMMessage.ImageBlock,
-            props: {
-              images: [...images],
-            },
-          });
-          images.length = 0;
-        }
-        // If we have pending audios, add them first
-        if (audios.length > 0) {
-          blocks.push({
-            blockType: "audio",
-            component: PrettyLLMMessage.AudioPlayerBlock,
-            props: {
-              audios: [...audios],
-            },
-          });
-          audios.length = 0;
-        }
-        blocks.push({
-          blockType: "text",
-          component: PrettyLLMMessage.TextBlock,
-          props: {
-            children: item.text,
-            role,
-            showMoreButton: true,
-          },
-        });
-      } else if (item.type === "image_url") {
-        // Guard against missing or invalid image_url
-        if (
-          item.image_url &&
-          typeof item.image_url === "object" &&
-          typeof item.image_url.url === "string" &&
-          item.image_url.url.length > 0
-        ) {
-          const url = item.image_url.url;
-          images.push({
-            url: url,
-            name: isPlaceholder(url) ? url : getImageName(url, index),
-          });
-        }
-        // Skip invalid image entries silently
-      } else if (item.type === "input_audio") {
-        // Handle input audio content
-        if (
-          item.input_audio &&
-          typeof item.input_audio === "object" &&
-          typeof item.input_audio.data === "string" &&
-          item.input_audio.data.length > 0
-        ) {
-          const audioData = item.input_audio.data;
-          const audioName = isPlaceholder(audioData)
-            ? audioData
-            : `Audio ${index + 1}`;
-          audios.push({
-            url: audioData,
-            name: audioName,
-          });
-        }
-        // Skip invalid audio entries silently
-      }
-    });
-
-    // Add any remaining images
-    if (images.length > 0) {
-      blocks.push({
-        blockType: "image",
-        component: PrettyLLMMessage.ImageBlock,
-        props: {
-          images,
-        },
-      });
-    }
-
-    // Add any remaining audios
-    if (audios.length > 0) {
-      blocks.push({
-        blockType: "audio",
-        component: PrettyLLMMessage.AudioPlayerBlock,
-        props: {
-          audios,
-        },
-      });
-    }
+    processMultimodalContent(message.text, role, blocks);
   }
 
   // Handle tool calls (assistant requesting tools)
   if (message.tool_calls && message.tool_calls.length > 0) {
-    message.tool_calls.forEach((toolCall) => {
-      // Guard: skip if function is missing or invalid
-      if (
-        !toolCall.function ||
-        typeof toolCall.function !== "object" ||
-        !toolCall.function.name ||
-        typeof toolCall.function.arguments !== "string"
-      ) {
-        // Use safe fallback
-        blocks.push({
-          blockType: "code",
-          component: PrettyLLMMessage.CodeBlock,
-          props: {
-            code: "",
-            label: toolCall.function?.name ?? `unknown tool`,
-          },
-        });
-        return;
-      }
-
-      let formattedArgs = toolCall.function.arguments;
-      try {
-        const parsed = JSON.parse(toolCall.function.arguments);
-        formattedArgs = JSON.stringify(parsed, null, 2);
-      } catch {
-        // Keep original if not parseable
-      }
-
-      blocks.push({
-        blockType: "code",
-        component: PrettyLLMMessage.CodeBlock,
-        props: {
-          code: formattedArgs,
-          label: toolCall.function.name,
-        },
-      });
-    });
+    mapToolCalls(message.tool_calls, blocks);
   }
 
   // Handle tool result messages
   if (message.role === "tool" && message.text) {
-    const content =
-      typeof message.text === "string"
-        ? message.text
-        : JSON.stringify(message.text, null, 2);
-
-    let formattedContent = content;
-    try {
-      const jsonLike = content.replace(/'/g, '"');
-      const parsed = JSON.parse(jsonLike);
-      formattedContent = JSON.stringify(parsed, null, 2);
-    } catch {
-      // Keep original if not parseable
-    }
-
-    blocks.push({
-      blockType: "code",
-      component: PrettyLLMMessage.CodeBlock,
-      props: {
-        code: formattedContent,
-        label: message.name || "Tool result",
-      },
-    });
+    blocks.push(formatAsToolResult(message.text, message.name));
 
     return blocks.filter(
       (block) =>
@@ -341,23 +370,7 @@ const mapMessageContent = (
   if (typeof message.content === "string") {
     // For tool role (including normalized legacy "function" role), format as code
     if (role === "tool") {
-      let formattedContent = message.content;
-      try {
-        const jsonLike = message.content.replace(/'/g, '"');
-        const parsed = JSON.parse(jsonLike);
-        formattedContent = JSON.stringify(parsed, null, 2);
-      } catch {
-        // Keep original if not parseable
-      }
-
-      blocks.push({
-        blockType: "code",
-        component: PrettyLLMMessage.CodeBlock,
-        props: {
-          code: formattedContent,
-          label: message.name || "Tool result",
-        },
-      });
+      blocks.push(formatAsToolResult(message.content, message.name));
     } else {
       blocks.push({
         blockType: "text",
@@ -372,104 +385,10 @@ const mapMessageContent = (
   }
   // Handle array content (multimodal)
   else if (Array.isArray(message.content)) {
-    // Group images and audios together
-    const images: Array<{ url: string; name: string }> = [];
-    const audios: Array<{ url: string; name: string }> = [];
-
-    message.content.forEach((item, index) => {
-      if (item.type === "text") {
-        // If we have pending images, add them first
-        if (images.length > 0) {
-          blocks.push({
-            blockType: "image",
-            component: PrettyLLMMessage.ImageBlock,
-            props: {
-              images: [...images],
-            },
-          });
-          images.length = 0;
-        }
-        // If we have pending audios, add them first
-        if (audios.length > 0) {
-          blocks.push({
-            blockType: "audio",
-            component: PrettyLLMMessage.AudioPlayerBlock,
-            props: {
-              audios: [...audios],
-            },
-          });
-          audios.length = 0;
-        }
-        blocks.push({
-          blockType: "text",
-          component: PrettyLLMMessage.TextBlock,
-          props: {
-            children: item.text,
-            role,
-            showMoreButton: true,
-          },
-        });
-      } else if (item.type === "image_url") {
-        // Guard against missing or invalid image_url
-        if (
-          item.image_url &&
-          typeof item.image_url === "object" &&
-          typeof item.image_url.url === "string" &&
-          item.image_url.url.length > 0
-        ) {
-          const url = item.image_url.url;
-          // Keep placeholders as-is - they will be resolved by ImageBlock using MediaContext
-          images.push({
-            url: url, // May be placeholder like "[image_0]", actual URL, or base64
-            name: isPlaceholder(url) ? url : getImageName(url, index),
-          });
-        }
-        // Skip invalid image entries silently
-      } else if (item.type === "input_audio") {
-        // Handle input audio content
-        if (
-          item.input_audio &&
-          typeof item.input_audio === "object" &&
-          typeof item.input_audio.data === "string" &&
-          item.input_audio.data.length > 0
-        ) {
-          const audioData = item.input_audio.data;
-          const audioName = isPlaceholder(audioData)
-            ? audioData
-            : `Audio ${index + 1}`;
-          audios.push({
-            url: audioData,
-            name: audioName,
-          });
-        }
-        // Skip invalid audio entries silently
-      }
-    });
-
-    // Add any remaining images
-    if (images.length > 0) {
-      blocks.push({
-        blockType: "image",
-        component: PrettyLLMMessage.ImageBlock,
-        props: {
-          images,
-        },
-      });
-    }
-
-    // Add any remaining audios
-    if (audios.length > 0) {
-      blocks.push({
-        blockType: "audio",
-        component: PrettyLLMMessage.AudioPlayerBlock,
-        props: {
-          audios,
-        },
-      });
-    }
+    processMultimodalContent(message.content, role, blocks);
   }
 
-  // Handle audio messages
+  // Handle audio messages (message-level audio, not content-level)
   if (message.audio) {
     // Add audio player block if data is present
     if (message.audio.data) {
@@ -503,44 +422,7 @@ const mapMessageContent = (
 
   // Handle tool calls (assistant requesting tools)
   if (message.tool_calls && message.tool_calls.length > 0) {
-    message.tool_calls.forEach((toolCall) => {
-      // Guard: skip if function is missing or invalid
-      if (
-        !toolCall.function ||
-        typeof toolCall.function !== "object" ||
-        !toolCall.function.name ||
-        typeof toolCall.function.arguments !== "string"
-      ) {
-        // Use safe fallback
-        blocks.push({
-          blockType: "code",
-          component: PrettyLLMMessage.CodeBlock,
-          props: {
-            code: "",
-            label: toolCall.function?.name ?? `unknown tool`,
-          },
-        });
-        return;
-      }
-
-      // Try to parse and pretty-print the arguments JSON
-      let formattedArgs = toolCall.function.arguments;
-      try {
-        const parsed = JSON.parse(toolCall.function.arguments);
-        formattedArgs = JSON.stringify(parsed, null, 2);
-      } catch {
-        // Keep original if not parseable
-      }
-
-      blocks.push({
-        blockType: "code",
-        component: PrettyLLMMessage.CodeBlock,
-        props: {
-          code: formattedArgs,
-          label: toolCall.function.name,
-        },
-      });
-    });
+    mapToolCalls(message.tool_calls, blocks);
   }
 
   // Handle tool result messages (only for non-string content)
@@ -549,31 +431,7 @@ const mapMessageContent = (
     message.content &&
     typeof message.content !== "string"
   ) {
-    // Tool content is typically a string (JSON-like or plain text)
-    const content =
-      typeof message.content === "string"
-        ? message.content
-        : JSON.stringify(message.content, null, 2);
-
-    // Try to parse and pretty-print if it's JSON-like
-    let formattedContent = content;
-    try {
-      // Handle Python dict-like strings
-      const jsonLike = content.replace(/'/g, '"');
-      const parsed = JSON.parse(jsonLike);
-      formattedContent = JSON.stringify(parsed, null, 2);
-    } catch {
-      // Keep original if not parseable
-    }
-
-    blocks.push({
-      blockType: "code",
-      component: PrettyLLMMessage.CodeBlock,
-      props: {
-        code: formattedContent,
-        label: message.name || "Tool result",
-      },
-    });
+    blocks.push(formatAsToolResult(message.content, message.name));
 
     // Remove any text blocks that duplicate the tool content
     return blocks.filter(

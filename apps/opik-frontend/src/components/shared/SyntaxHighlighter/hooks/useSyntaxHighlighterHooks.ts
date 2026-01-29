@@ -42,11 +42,10 @@ export const useSyntaxHighlighterCode = (
   data: object,
   mode: MODE_TYPE,
   prettifyConfig?: PrettifyConfig,
-  provider?: string,
 ): CodeOutput => {
   return useMemo(() => {
-    return generateSyntaxHighlighterCode(data, mode, prettifyConfig, provider);
-  }, [mode, data, prettifyConfig, provider]);
+    return generateSyntaxHighlighterCode(data, mode, prettifyConfig);
+  }, [mode, data, prettifyConfig]);
 };
 
 export const useSyntaxHighlighterOptions = (

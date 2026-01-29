@@ -42,6 +42,7 @@ import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFee
 import { detectLLMMessages } from "@/components/shared/SyntaxHighlighter/llmMessages";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -86,16 +87,20 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     return Array.isArray(prompts) && prompts.length > 0;
   }, [data.metadata, showOptimizerPrompts]);
 
+  // Get transformed data from useUnifiedMedia - single source of truth for LLM messages detection
+  const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
+
   // Detect if Messages tab should be shown (both input AND output support LLM pretty mode)
+  // Using transformedInput/transformedOutput ensures consistency with MessagesTab rendering
   const canShowMessagesTab = useMemo(() => {
-    const inputDetection = detectLLMMessages(data.input, {
+    const inputDetection = detectLLMMessages(transformedInput, {
       fieldType: "input",
     });
-    const outputDetection = detectLLMMessages(data.output, {
+    const outputDetection = detectLLMMessages(transformedOutput, {
       fieldType: "output",
     });
     return inputDetection.supported && outputDetection.supported;
-  }, [data.input, data.output]);
+  }, [transformedInput, transformedOutput]);
 
   // Default tab: Messages if available, otherwise Details
   const defaultTab = canShowMessagesTab ? "messages" : "details";
@@ -347,7 +352,9 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           {canShowMessagesTab && (
             <TabsContent value="messages">
               <MessagesTab
-                data={data}
+                transformedInput={transformedInput}
+                transformedOutput={transformedOutput}
+                media={media}
                 isLoading={isSpanInputOutputLoading}
                 search={search}
               />

@@ -8,13 +8,11 @@ import {
   PrettifyConfig,
   CodeOutput,
 } from "@/components/shared/SyntaxHighlighter/types";
-import { detectLLMMessages } from "@/components/shared/SyntaxHighlighter/llmMessages/detectLLMMessages";
 
 export const generateSyntaxHighlighterCode = (
   data: object,
   mode: MODE_TYPE,
   prettifyConfig?: PrettifyConfig,
-  provider?: string,
 ): CodeOutput => {
   const response = prettifyConfig
     ? prettifyMessage(data, {
@@ -25,13 +23,7 @@ export const generateSyntaxHighlighterCode = (
         prettified: false,
       };
 
-  // Check if new LLM detection system supports this format
-  const llmDetection = prettifyConfig
-    ? detectLLMMessages(data, prettifyConfig, provider)
-    : { supported: false };
-
-  // Combine both systems - either can enable Pretty mode
-  const canBePrettified = response.prettified || llmDetection.supported;
+  const canBePrettified = response.prettified;
 
   switch (mode) {
     case MODE_TYPE.yaml:
