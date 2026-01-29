@@ -1,5 +1,6 @@
 """Common utilities for import functionality."""
 
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 import opik
@@ -212,16 +213,40 @@ def sort_spans_topologically(spans_info: List[Dict[str, Any]]) -> List[Dict[str,
 
     # Perform level-order traversal (breadth-first)
     result: List[Dict[str, Any]] = []
-    queue: List[Dict[str, Any]] = root_spans.copy()
+    visited: set[str] = set()
+
+    # If no root spans exist (e.g., cycles), seed queue with all spans
+    # This ensures we process all spans even in cyclic or disconnected graphs
+    queue: deque[Dict[str, Any]]
+    if not root_spans:
+        queue = deque(spans_info)
+    else:
+        queue = deque(root_spans)
 
     while queue:
-        current = queue.pop(0)
-        result.append(current)
-
-        # Add all children of current span to queue
+        current = queue.popleft()
         current_id = current.get("id")
+
+        # Skip if already visited (prevents infinite loops in cycles)
+        if current_id and current_id in visited:
+            continue
+
+        result.append(current)
+        if current_id:
+            visited.add(current_id)
+
+        # Add all children of current span to queue (only if not visited)
         if current_id and current_id in children_map:
-            queue.extend(children_map[current_id])
+            for child in children_map[current_id]:
+                child_id = child.get("id")
+                if child_id and child_id not in visited:
+                    queue.append(child)
+
+    # Append any spans not yet visited (handles disconnected components)
+    for span in spans_info:
+        span_id = span.get("id")
+        if span_id and span_id not in visited:
+            result.append(span)
 
     return result
 

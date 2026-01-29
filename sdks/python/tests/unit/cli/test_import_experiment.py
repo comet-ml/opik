@@ -689,6 +689,68 @@ class TestTopologicalSort:
         assert sorted_spans[0]["id"] == "span-1"
         assert sorted_spans[0]["parent_span_id"] is None
 
+    def test_sort_spans_all_have_parents(self) -> None:
+        """Test sorting when all spans have parents (no explicit root).
+
+        This tests the fix for the bug where empty root_spans would cause
+        the function to return an empty list, silently dropping all spans.
+        """
+        spans = [
+            {"id": "span-1", "name": "child-1", "parent_span_id": "span-2"},
+            {"id": "span-2", "name": "child-2", "parent_span_id": "span-1"},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # Should not return empty list - all spans should be included
+        assert len(sorted_spans) == 2
+        # Verify all spans are present
+        span_ids = {span["id"] for span in sorted_spans}
+        assert span_ids == {"span-1", "span-2"}
+
+    def test_sort_spans_cycle(self) -> None:
+        """Test sorting with a cycle in the span graph.
+
+        This tests that cycles don't cause infinite loops and all spans
+        are still included in the result.
+        """
+        spans = [
+            {"id": "span-1", "name": "span-1", "parent_span_id": "span-2"},
+            {"id": "span-2", "name": "span-2", "parent_span_id": "span-3"},
+            {"id": "span-3", "name": "span-3", "parent_span_id": "span-1"},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # Should not return empty list - all spans should be included
+        assert len(sorted_spans) == 3
+        # Verify all spans are present
+        span_ids = {span["id"] for span in sorted_spans}
+        assert span_ids == {"span-1", "span-2", "span-3"}
+
+    def test_sort_spans_disconnected_components(self) -> None:
+        """Test sorting with disconnected components (multiple separate graphs).
+
+        This tests that spans not reachable from root spans are still included.
+        """
+        spans = [
+            {"id": "span-1", "name": "root-1", "parent_span_id": None},
+            {"id": "span-2", "name": "child-1", "parent_span_id": "span-1"},
+            {"id": "span-3", "name": "disconnected-1", "parent_span_id": "span-4"},
+            {"id": "span-4", "name": "disconnected-2", "parent_span_id": "span-3"},
+        ]
+
+        sorted_spans = sort_spans_topologically(spans)
+
+        # All spans should be included
+        assert len(sorted_spans) == 4
+        # Verify all spans are present
+        span_ids = {span["id"] for span in sorted_spans}
+        assert span_ids == {"span-1", "span-2", "span-3", "span-4"}
+        # Root span should come first
+        assert sorted_spans[0]["id"] == "span-1"
+        assert sorted_spans[0]["parent_span_id"] is None
+
 
 class TestModuleNameUsage:
     """Test that module names are used correctly (not checked for None)."""
