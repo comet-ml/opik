@@ -26,7 +26,7 @@ repos:
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.6
+    rev: v0.14.14
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes]
@@ -35,7 +35,7 @@ repos:
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+    rev: v1.19.1
     hooks:
       - id: mypy
         files: ^sdks/opik_optimizer
@@ -44,13 +44,13 @@ repos:
         additional_dependencies: [types-requests, pytest, pyrate_limiter, modal]
 
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.8.2
+    rev: 0.9.0
     hooks:
       - id: nbstripout
         files: ^sdks/opik_optimizer/.*\.ipynb$
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.38.0
+    rev: v0.47.0
     hooks:
       - id: markdownlint
         files: ^sdks/opik_optimizer/.*\.md$
