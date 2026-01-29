@@ -99,8 +99,8 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   useEffect(() => {
     setValue(feedbackScoreData.value);
 
-    if (!feedbackScoreData.value) {
-      setReasonValue(undefined);
+    if (feedbackScoreData.value === "") {
+      setReasonValue("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedbackScoreData.value]);
@@ -146,7 +146,7 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
   const deleteFeedbackScore = useCallback(() => {
     onDeleteFeedbackScore(name);
-    setReasonValue(undefined);
+    setReasonValue("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, setReasonValue]);
 
@@ -364,13 +364,14 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           placeholder="Add a reason..."
           value={reasonValue}
           onChange={onReasonChange}
+          disabled={value === ""}
           className="min-h-6 resize-none overflow-hidden py-1 pt-[4px]"
           ref={(e) => {
             textAreaRef.current = e;
             updateTextAreaHeight(e, 32);
           }}
         />
-        {feedbackScoreData?.reason && (
+        {feedbackScoreData?.reason && value !== "" && (
           <div className="absolute right-2 top-1 hidden gap-1 group-hover/reason-field:flex">
             <TooltipWrapper content="Copy">
               <Button
