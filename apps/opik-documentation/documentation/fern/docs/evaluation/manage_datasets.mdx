@@ -17,6 +17,8 @@ example. These datasets can be created from:
 - Traces table: You can add existing logged traces (from a production application for example) to a dataset.
 - The Opik UI: You can manually create a dataset and add items to it.
 
+Datasets are versioned; every change creates a new snapshot (see [Understanding dataset versioning](#understanding-dataset-versioning) below). Opik uses **version tags** (e.g. `latest`, `baseline`) to label dataset snapshots, and **item tags** to label individual rows for filtering; both are optional.
+
 Once a dataset has been created, you can run Experiments on it. Each Experiment will evaluate an LLM application based
 on the test cases in the dataset using an evaluation metric and report the results back to the dataset.
 
@@ -52,71 +54,6 @@ For datasets requiring rich metadata, complex schemas, or programmatic control, 
 <Note>
   When you create a dataset with a CSV file, this creates the first version (v1)
   of your dataset. All subsequent modifications will create new versions automatically.
-</Note>
-
-## Understanding dataset versioning
-
-Dataset versioning in Opik creates **immutable snapshots** of your data. Every time you modify a dataset—whether adding, editing, or deleting items—a new version is automatically created. This ensures complete reproducibility, provides an audit trail of all changes, and allows easy rollback to any previous state.
-
-Each dataset version contains:
-
-- **Version name**: Auto-generated sequential name (v1, v2, v3, etc.)
-- **Change description**: Optional note describing what changed
-- **Tags**: Labels for categorizing versions (e.g., `production`, `baseline`)
-- **Item statistics**: Count of items added, modified, and deleted
-- **Timestamp and author**: When the version was created and by whom
-
-Once a version is created, its data cannot be changed—any modification creates a new version instead. Restoring a previous version also creates a *new* version with the same data, preserving your complete version timeline.
-
-<Note>
-  The special `latest` tag always points to the most recent version.
-  When running experiments without specifying a version, `latest` is used by default.
-</Note>
-
-## Working with draft mode (UI)
-
-When making changes to a dataset in the Opik UI, all modifications go into a **draft state** first. This gives you a staging area to review changes before committing them as a new version. The draft is visible only to you, and AI-generated samples from "Expand with AI" also go to draft for review.
-
-When a dataset has unsaved draft changes, an orange **"Draft"** tag appears next to the dataset name, and **Save changes** / **Discard changes** buttons appear in the toolbar. Items show colored borders: green for newly added items, amber for modified items.
-
-<Frame>
-  <img src="/img/evaluation/dataset_draft_mode.png" />
-</Frame>
-
-### Saving or discarding changes
-
-To commit your draft as a new version:
-1. Click **Save changes** in the toolbar
-2. Enter a **version note** describing what changed
-3. Optionally add **tags** to categorize this version
-4. Click **Save**
-
-<Frame>
-  <img src="/img/evaluation/save_version_dialog.png" />
-</Frame>
-
-To abandon your draft, click **Discard changes** and confirm. If you try to navigate away with unsaved changes, Opik displays a warning to prevent accidental loss of work.
-
-<Tip>
-  Use draft mode to batch related changes into a single, well-documented version.
-</Tip>
-
-## Version history
-
-To view the complete timeline of dataset changes, navigate to your dataset and click the **Version history** tab. The table shows each version's name, change summary (items added/modified/deleted), version note, tags, item count, and creation timestamp.
-
-<Frame>
-  <img src="/img/evaluation/version_history_tab.png" />
-</Frame>
-
-From this view you can:
-- **View items**: Click a version row and select **View items** to see the exact data at that point in time
-- **Restore**: Click the **⋮** menu and select **Restore this version** to create a new version with that data
-- **Edit metadata**: Click the **⋮** menu and select **Edit** to update the version note or tags (the data itself remains immutable)
-
-<Note>
-  Restoring a version creates a **new** version with the same data.
-  No history is lost or overwritten.
 </Note>
 
 ## Adding traces to a dataset
@@ -235,7 +172,7 @@ dataset.insert([
 
 <Note>
   When using the SDK to insert items, a new dataset version is automatically created.
-  If you insert items in multiple batches within a single `insert()` call, they are grouped into one version.
+  Each `insert()` creates a new version; batches within one call are grouped into one version.
 </Note>
 
 Once the items have been inserted, you can view them in the Opik UI:
@@ -316,41 +253,133 @@ You can delete items in a dataset by using the `delete` method:
   in previous versions through the version history, ensuring you never permanently lose data.
 </Note>
 
-## Downloading a dataset from Opik
+## Understanding dataset versioning
 
-You can download a dataset from Opik using the `get_dataset` method:
+Dataset versioning in Opik creates **immutable snapshots** of your data. Every time you modify a dataset—whether adding, editing, or deleting items—a new version is automatically created. This ensures complete reproducibility, provides an audit trail of all changes, and allows easy rollback to any previous state.
+
+Each dataset version contains:
+
+- **Version name**: Auto-generated sequential name (v1, v2, v3, etc.)
+- **Change description**: Optional note describing what changed
+- **Tags**: Labels for categorizing versions (e.g., `production`, `baseline`)
+- **Item statistics**: Count of items added, modified, and deleted
+- **Timestamp and author**: When the version was created and by whom
+
+Once a version is created, its data cannot be changed—any modification creates a new version instead. Restoring a previous version also creates a *new* version with the same data, preserving your complete version timeline.
+
+<Note>
+  The special `latest` tag always points to the most recent version.
+  When running experiments without specifying a version, `latest` is used by default.
+</Note>
+
+### Working with draft mode (UI)
+
+When making changes to a dataset in the Opik UI, all modifications go into a **draft state** first. This gives you a staging area to review changes before committing them as a new version. The draft is visible only to you, and AI-generated samples from "Expand with AI" also go to draft for review.
+
+When a dataset has unsaved draft changes, an orange **"Draft"** tag appears next to the dataset name, and **Save changes** / **Discard changes** buttons appear in the toolbar. Items show colored borders: green for newly added items, amber for modified items.
+
+<Frame>
+  <img src="/img/evaluation/dataset_draft_mode.png" />
+</Frame>
+
+#### Saving or discarding changes
+
+To commit your draft as a new version:
+1. Click **Save changes** in the toolbar
+2. Enter a **version note** describing what changed
+3. Optionally add **tags** to categorize this version
+4. Click **Save**
+
+<Frame>
+  <img src="/img/evaluation/save_version_dialog.png" />
+</Frame>
+
+To abandon your draft, click **Discard changes** and confirm. If you try to navigate away with unsaved changes, Opik displays a warning to prevent accidental loss of work.
+
+<Tip>
+  Use draft mode to batch related changes into a single, well-documented version.
+</Tip>
+
+### Version history (UI)
+
+To view the complete timeline of dataset changes, navigate to your dataset and click the **Version history** tab. The table shows each version's name, change summary (items added/modified/deleted), version note, tags, item count, and creation timestamp.
+
+<Frame>
+  <img src="/img/evaluation/version_history_tab.png" />
+</Frame>
+
+From this view you can:
+- **View items**: Click a version row and select **View items** to see the exact data at that point in time
+- **Restore**: Click the **⋮** menu and select **Restore this version** to create a new version with that data
+- **Edit metadata**: Click the **⋮** menu and select **Edit** to update the version note or tags (the data itself remains immutable)
+
+<Note>
+  Restoring a version creates a **new** version with the same data.
+  No history is lost or overwritten.
+</Note>
+
+### How versions are created (SDK)
+
+| Action | Effect |
+|--------|--------|
+| **First `insert()`** on a new dataset | Creates the first version with those items. |
+| **Later `insert()`** | Creates a new version that adds the new items to the previous version. |
+| **`delete()` or `clear()`** | Creates a new version with the specified items removed (or all items removed). |
+| **Multiple batches in one call** | A single `insert()` may send several batches internally; they are grouped into **one** version. |
+
+You do not need to call a separate "save version" from the SDK — each mutating operation produces a new version automatically.
+
+### Reading data: latest vs specific version (SDK)
+
+When you get a dataset and read its items, you always work with the **latest** version by default. This is what "downloading" a dataset means in the SDK:
 
 <CodeBlocks>
-  ```typescript title="TypeScript" language="typescript"
-  import { Opik } from "opik";
+```typescript title="TypeScript" language="typescript"
+const client = new Opik();
+const dataset = await client.getDataset("My dataset");
 
-  const client = new Opik();
-  const dataset = await client.getDataset("My dataset");
+// Items from the latest version
+const items = await dataset.getItems();
+```
 
-  const items = await dataset.getItems();
-  console.log(items);
-  ```
+```python title="Python" language="python"
+client = Opik()
+dataset = client.get_dataset(name="My dataset")
 
-  ```python title="Python" language="python"
-  from opik import Opik
-
-  client = Opik()
-  dataset = client.get_dataset(name="My dataset")
-
-  # Get items as list of DatasetItem objects
-  items = dataset.get_items()
-
-  # Convert to a Pandas DataFrame
-  dataset.to_pandas()
-
-  # Convert to a JSON array
-  dataset.to_json()
-  ```
+# Items from the latest version
+items = dataset.get_items()
+dataset.to_pandas()  # also uses latest version
+dataset.to_json()    # also uses latest version
+```
 </CodeBlocks>
+
+So `get_dataset()` (or `getOrCreateDataset()`) plus `get_items()`, `to_pandas()`, or `to_json()` always reflects the current latest snapshot.
+
+To read items from a **specific** version (e.g. a past snapshot or a tagged version like `"baseline"`), use the Datasets REST API with the `version` parameter:
+
+- **Paginated items:** `GET /v1/private/datasets/{id}/items?version={version_ref}`
+- **Streaming items:** `POST /v1/private/datasets/items/stream` with `dataset_version` in the body.
+
+`version_ref` can be a **version hash** (e.g. from the version history in the UI or from `list_dataset_versions`) or a **tag** (e.g. `"latest"` or a custom tag you added in the UI).
+
+The Python and TypeScript SDKs’ high-level `Dataset#get_items()` (and helpers like `to_pandas()` / `to_json()`) do not currently accept a version argument; they always use the latest. For version-pinned reads, use the REST client’s `get_dataset_items(id, version=version_ref)` or the stream endpoint with `dataset_version` set.
+
+### Listing versions and restoring (API)
+
+Via the REST API you can:
+
+- **List versions:** `GET /v1/private/datasets/{id}/versions` — returns a paginated list of versions (newest first), each with metadata such as version hash, item counts, and tags.
+- **Restore a version:** `POST /v1/private/datasets/{id}/versions/restore` with `version_ref` (hash or tag). This creates a **new** version that copies the data from the specified version; it does not overwrite history.
+
+These operations are available on the generated REST client (e.g. `client.datasets.list_dataset_versions(id)` and `client.datasets.restore_dataset_version(id, version_ref=...)` in Python).
+
+## Reading and exporting data
+
+To read or export dataset items via the SDK, use `get_dataset()` then `get_items()`, `to_pandas()`, or `to_json()`; you get the **latest** version by default. For a specific version, see [Reading data: latest vs specific version (SDK)](#reading-data-latest-vs-specific-version-sdk) above. To export from the UI, use bulk select and **Export** (CSV/JSON); see [Bulk operations](#bulk-operations) below.
 
 ## Running experiments with dataset versions
 
-When you run an experiment, Opik automatically links it to the specific dataset version that was used. This ensures complete reproducibility—you can always know exactly which data was used for any experiment.
+When you run an experiment, it is tied to a specific dataset version so results are reproducible. Opik automatically links each experiment to the dataset version that was used—you can always know exactly which data was used for any experiment.
 
 ### Automatic version association
 
@@ -485,7 +514,7 @@ To expand a dataset with AI:
 
 ## Managing dataset item tags
 
-Tags are a powerful way to organize, categorize, and filter your dataset items. You can use tags to:
+Item tags apply to **rows** in a dataset (for filtering); they are separate from **version tags** (e.g. `latest`) described in [Understanding dataset versioning](#understanding-dataset-versioning). Tags are a powerful way to organize, categorize, and filter your dataset items. You can use tags to:
 
 - **Categorize test cases** by type, difficulty, or domain (e.g., `edge-case`, `production`, `multilingual`)
 - **Track data sources** where items originated from (e.g., `user-feedback`, `synthetic`, `real-world`)
