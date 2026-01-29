@@ -9,6 +9,9 @@ COPY scoring_runner.py .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download NLTK data required for heuristic metrics
+RUN python3 -c "import nltk; nltk.download('wordnet', quiet=True); nltk.download('omw-1.4', quiet=True); nltk.download('punkt', quiet=True); nltk.download('punkt_tab', quiet=True)"
+
 # Completely remove pip and all package management tools
 RUN pip uninstall -y pip setuptools wheel ensurepip
 
@@ -47,6 +50,9 @@ RUN rm -rf /usr/local/lib/python3.12/site-packages/*
 
 # Copy artifacts from builder
 COPY --from=builder /runtime-python /usr/local/lib/python3.12/site-packages/
+
+# Copy NLTK data from builder
+COPY --from=builder /root/nltk_data /root/nltk_data
 
 # Copy optimized .pyc file for fastest execution (legacy layout with -b flag)
 COPY --from=builder /build/scoring_runner.pyc ./scoring_runner.pyc

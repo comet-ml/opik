@@ -8,6 +8,9 @@ import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.validation.InRange;
@@ -23,8 +26,11 @@ import com.comet.opik.podam.manufacturer.ProjectConfigurationTypeManufacturer;
 import com.comet.opik.podam.manufacturer.PromptVersionManufacturer;
 import com.comet.opik.podam.manufacturer.ProviderApiKeyManufacturer;
 import com.comet.opik.podam.manufacturer.ProviderApiKeyUpdateManufacturer;
+import com.comet.opik.podam.manufacturer.SpanUserDefinedMetricPythonCodeManufacturer;
 import com.comet.opik.podam.manufacturer.StartMultipartUploadRequestManufacturer;
+import com.comet.opik.podam.manufacturer.TraceThreadUserDefinedMetricPythonCodeManufacturer;
 import com.comet.opik.podam.manufacturer.UUIDTypeManufacturer;
+import com.comet.opik.podam.manufacturer.UserDefinedMetricPythonCodeManufacturer;
 import com.comet.opik.podam.manufacturer.anthropic.AnthropicContentManufacturer;
 import com.comet.opik.podam.manufacturer.anthropic.AnthropicCreateMessageResponseManufacturer;
 import com.comet.opik.podam.manufacturer.anthropic.AnthropicUsageManufacturer;
@@ -91,6 +97,12 @@ public class PodamFactoryUtils {
         strategy.addOrReplaceTypeManufacturer(LlmAsJudgeMessageContent.class,
                 LlmAsJudgeMessageContentManufacturer.INSTANCE);
         strategy.addOrReplaceTypeManufacturer(LlmAsJudgeMessage.class, LlmAsJudgeMessageManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(UserDefinedMetricPythonCode.class,
+                UserDefinedMetricPythonCodeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(TraceThreadUserDefinedMetricPythonCode.class,
+                TraceThreadUserDefinedMetricPythonCodeManufacturer.INSTANCE);
+        strategy.addOrReplaceTypeManufacturer(SpanUserDefinedMetricPythonCode.class,
+                SpanUserDefinedMetricPythonCodeManufacturer.INSTANCE);
 
         return podamFactory;
     }

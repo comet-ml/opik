@@ -30,3 +30,9 @@ rq==2.6.0
 opik-optimizer==3.0.1
 gepa==0.0.17
 pyrate-limiter>=3.0.0,<4.0.0
+
+# Heuristic metrics dependencies
+nltk==3.9.2
+textstat==0.7.12
+scipy==1.16.2
+rouge-score==0.1.2

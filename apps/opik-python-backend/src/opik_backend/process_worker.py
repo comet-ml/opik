@@ -5,11 +5,12 @@ import inspect
 import uuid
 import logging
 from types import ModuleType
-from typing import Type, Union, List, Optional
+from typing import Type, Union, List, Optional, Dict, Any
 
 from opik.evaluation.metrics import BaseMetric
 from opik.evaluation.metrics.score_result import ScoreResult
 from .payload_types import PayloadType
+from .common_metrics import instantiate_metric, UnknownMetricError
 
 # Set up logging for the worker
 logger = logging.getLogger("process_worker")
@@ -27,6 +28,7 @@ def get_metric_class(module: ModuleType) -> Type[BaseMetric]:
         if issubclass(cls, BaseMetric) and cls is not BaseMetric:
             return cls
 
+
 def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[ScoreResult]:
     scores = []
     if isinstance(score_result, ScoreResult):
@@ -36,6 +38,42 @@ def to_scores(score_result: Union[ScoreResult, List[ScoreResult]]) -> List[Score
             if isinstance(item, ScoreResult):
                 scores.append(item)
     return scores
+
+
+def run_common_metric(
+    metric_id: str,
+    init_config: Optional[Dict[str, Any]],
+    scoring_kwargs: Dict[str, Any],
+) -> dict:
+    """
+    Run a common heuristic metric from the opik SDK.
+
+    Args:
+        metric_id: The snake_case ID of the metric (e.g., 'contains', 'equals')
+        init_config: Configuration for metric __init__ (e.g., {'case_sensitive': True})
+        scoring_kwargs: Arguments to pass to metric.score() method
+
+    Returns:
+        Dictionary with 'scores' list on success, or 'code'/'error' on failure
+    """
+    try:
+
+        metric = instantiate_metric(metric_id, init_config)
+
+        # Call the score method
+        result = metric.score(**scoring_kwargs)
+
+        # Convert to list of scores
+        scores = to_scores(result)
+
+        return {"scores": [score.__dict__ for score in scores]}
+
+    except UnknownMetricError as e:
+        # Handle unknown metric errors
+        return {"code": 404, "error": str(e)}
+    except Exception as e:
+        stacktrace = "\n".join(traceback.format_exc().splitlines()[3:])
+        return {"code": 400, "error": f"Failed to execute metric: {stacktrace}"}
 
 
 def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> dict:
@@ -90,13 +128,21 @@ def worker_process_main(connection):
                 if command_data is None or command_data.get("command") == "EXIT":
                     break
                     
-                # Parse the command (code, data, and payload_type)
-                code = command_data.get('code', '')
-                input_data = command_data.get('data', {})
+                # Parse the command
                 payload_type = command_data.get('payload_type')
+                input_data = command_data.get('data', {})
                 
-                # Execute the code
-                result = run_user_code(code, input_data, payload_type)
+                # Handle common metric execution
+                if payload_type == PayloadType.COMMON_METRIC.value:
+                    # For common metrics, data contains metric_id, init_config, scoring_kwargs
+                    metric_id = input_data.get('metric_id')
+                    init_config = input_data.get('init_config', {})
+                    scoring_kwargs = input_data.get('scoring_kwargs', {})
+                    result = run_common_metric(metric_id, init_config, scoring_kwargs)
+                else:
+                    # Handle user code execution (original behavior)
+                    code = command_data.get('code', '')
+                    result = run_user_code(code, input_data, payload_type)
                 
                 # Return the result via the pipe
                 connection.send(result)

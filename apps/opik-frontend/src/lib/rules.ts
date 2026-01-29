@@ -6,12 +6,26 @@ import {
 } from "@/types/automations";
 import { LLMJudgeSchema } from "@/types/llm";
 
-export const isPythonCodeRule = (rule: EvaluatorsRule): boolean => {
+/**
+ * Checks if a rule type is a Python code type.
+ * Useful when you only have the rule type enum, not the full rule object.
+ */
+export const isPythonCodeRuleType = (
+  ruleType: EVALUATORS_RULE_TYPE,
+): boolean => {
   return (
-    rule.type === EVALUATORS_RULE_TYPE.python_code ||
-    rule.type === EVALUATORS_RULE_TYPE.thread_python_code ||
-    rule.type === EVALUATORS_RULE_TYPE.span_python_code
+    ruleType === EVALUATORS_RULE_TYPE.python_code ||
+    ruleType === EVALUATORS_RULE_TYPE.thread_python_code ||
+    ruleType === EVALUATORS_RULE_TYPE.span_python_code
   );
+};
+
+/**
+ * Checks if a rule is a Python code rule.
+ * Use this when you have the full rule object.
+ */
+export const isPythonCodeRule = (rule: EvaluatorsRule): boolean => {
+  return isPythonCodeRuleType(rule.type);
 };
 
 /**

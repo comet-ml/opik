@@ -341,43 +341,76 @@ export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   });
 });
 
-export const BasePythonCodeFormSchema = z.object({
-  metric: z
-    .string({
-      required_error: "Code is required",
-    })
-    .min(1, { message: "Code is required" }),
+// Base schema without validation - used as a base for extension
+const BasePythonCodeObjectSchema = z.object({
+  metric: z.string().optional(),
+  // Common metric fields (optional - only present for common metrics)
+  common_metric_id: z.string().optional(),
+  init_config: z
+    .record(
+      z.string(),
+      z.union([z.string(), z.boolean(), z.number(), z.null()]),
+    )
+    .optional(),
+  score_config: z.record(z.string(), z.string()).optional(),
 });
 
-export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
-  {
-    arguments: z.record(
-      z.string(),
-      z
-        .string()
-        .min(1, { message: "Key is required" })
-        .regex(/^(input|output|metadata)(\.|$)/, {
-          message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
-        }),
-    ),
-    parsingArgumentsError: z.boolean().optional(),
-  },
+// Reusable validation function for metric/common_metric_id
+const validateMetricOrCommonMetricId = (
+  data: { metric?: string; common_metric_id?: string },
+  ctx: z.RefinementCtx,
+) => {
+  // Either metric code OR common_metric_id must be present
+  // If common_metric_id is not present, metric is required
+  if (!data.common_metric_id && (!data.metric || data.metric.trim() === "")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Code is required",
+      path: ["metric"],
+    });
+  }
+};
+
+// Reusable arguments schema for Trace and Span
+const ArgumentsSchema = z.record(
+  z.string(),
+  z
+    .string()
+    .min(1, { message: "Key is required" })
+    .regex(/^(input|output|metadata)(\.|$)/, {
+      message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+    }),
 );
 
-export const PythonCodeDetailsThreadFormSchema = BasePythonCodeFormSchema;
-
-export const PythonCodeDetailsSpanFormSchema = BasePythonCodeFormSchema.extend({
-  arguments: z.record(
-    z.string(),
-    z
-      .string()
-      .min(1, { message: "Key is required" })
-      .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
-      }),
-  ),
-  parsingArgumentsError: z.boolean().optional(),
+export const CommonMetricDetailsSchema = z.object({
+  metricId: z
+    .string({
+      required_error: "Metric is required",
+    })
+    .min(1, { message: "Please select a metric" }),
+  // Configuration parameters from __init__ (e.g., case_sensitive, reference)
+  initConfig: z
+    .record(
+      z.string(),
+      z.union([z.string(), z.boolean(), z.number(), z.null()]),
+    )
+    .optional(),
 });
+
+export const PythonCodeDetailsTraceFormSchema =
+  BasePythonCodeObjectSchema.extend({
+    arguments: ArgumentsSchema,
+    parsingArgumentsError: z.boolean().optional(),
+  }).superRefine(validateMetricOrCommonMetricId);
+
+export const PythonCodeDetailsThreadFormSchema =
+  BasePythonCodeObjectSchema.superRefine(validateMetricOrCommonMetricId);
+
+export const PythonCodeDetailsSpanFormSchema =
+  BasePythonCodeObjectSchema.extend({
+    arguments: ArgumentsSchema,
+    parsingArgumentsError: z.boolean().optional(),
+  }).superRefine(validateMetricOrCommonMetricId);
 
 export const BaseEvaluationRuleFormSchema = z.object({
   ruleName: RuleNameSchema,
@@ -387,6 +420,7 @@ export const BaseEvaluationRuleFormSchema = z.object({
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),
   enabled: z.boolean().default(true),
   filters: FiltersSchema.default([]),
+  commonMetricDetails: CommonMetricDetailsSchema.optional(),
 });
 
 export const LLMJudgeTraceEvaluationRuleFormSchema =

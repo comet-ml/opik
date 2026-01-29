@@ -20,6 +20,7 @@ export enum EVALUATORS_RULE_SCOPE {
 export enum UI_EVALUATORS_RULE_TYPE {
   llm_judge = "llm_judge",
   python_code = "python_code",
+  common_metric = "common_metric",
 }
 
 export interface LLMJudgeModel {
@@ -48,16 +49,27 @@ export interface PythonCodeDetailsTraceForm {
   metric: string;
   arguments: Record<string, string>;
   parsingArgumentsError?: boolean;
+  // Common metric fields (optional - only present for common metrics)
+  common_metric_id?: string;
+  init_config?: Record<string, string | boolean | number | null>;
+  score_config?: Record<string, string>; // Static values for non-mappable score parameters
 }
 
 export interface PythonCodeDetailsThreadForm {
   metric: string;
+  // Common metric fields (optional - only present for common metrics)
+  common_metric_id?: string;
+  init_config?: Record<string, string | boolean | number | null>;
 }
 
 export interface PythonCodeDetailsSpanForm {
   metric: string;
   arguments: Record<string, string>;
   parsingArgumentsError?: boolean;
+  // Common metric fields (optional - only present for common metrics)
+  common_metric_id?: string;
+  init_config?: Record<string, string | boolean | number | null>;
+  score_config?: Record<string, string>; // Static values for non-mappable score parameters
 }
 
 export type PythonCodeObject =
@@ -111,4 +123,33 @@ export interface EvaluatorRuleLogItem {
 
 export interface EvaluatorRuleLogItemWithId extends EvaluatorRuleLogItem {
   id: string;
+}
+
+// Common Metrics types
+export interface ScoreParameter {
+  name: string;
+  type: string;
+  description: string;
+  required: boolean;
+  mappable: boolean;
+}
+
+export interface InitParameter {
+  name: string;
+  type: string;
+  description: string;
+  default_value: string | null;
+  required: boolean;
+}
+
+export interface CommonMetric {
+  id: string;
+  name: string;
+  description: string;
+  score_parameters: ScoreParameter[];
+  init_parameters: InitParameter[];
+}
+
+export interface CommonMetricList {
+  content: CommonMetric[];
 }

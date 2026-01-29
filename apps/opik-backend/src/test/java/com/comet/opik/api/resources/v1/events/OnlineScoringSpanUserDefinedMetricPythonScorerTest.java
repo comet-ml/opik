@@ -176,7 +176,10 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
             SpanUserDefinedMetricPythonCode code = new SpanUserDefinedMetricPythonCode(
                     "def score(input, output): return [ScoreResult(name='test_score', value=0.95, reason='test')]",
-                    Map.of("input", "input.input", "output", "output.output"));
+                    Map.of("input", "input.input", "output", "output.output"),
+                    null,
+                    null,
+                    null);
 
             SpanToScoreUserDefinedMetricPython message = SpanToScoreUserDefinedMetricPython.builder()
                     .span(span)
@@ -234,7 +237,10 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
             SpanUserDefinedMetricPythonCode code = new SpanUserDefinedMetricPythonCode(
                     "def score(input, output): return [...]",
-                    Map.of());
+                    Map.of(),
+                    null,
+                    null,
+                    null);
 
             SpanToScoreUserDefinedMetricPython message = SpanToScoreUserDefinedMetricPython.builder()
                     .span(span)
@@ -299,7 +305,10 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
             SpanUserDefinedMetricPythonCode code = new SpanUserDefinedMetricPythonCode(
                     "def score(input, output): return [...]",
-                    Map.of("input", "input.key", "output", "output.result"));
+                    Map.of("input", "input.key", "output", "output.result"),
+                    null,
+                    null,
+                    null);
 
             SpanToScoreUserDefinedMetricPython message = SpanToScoreUserDefinedMetricPython.builder()
                     .span(span)
