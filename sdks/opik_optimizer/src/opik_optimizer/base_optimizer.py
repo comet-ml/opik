@@ -555,6 +555,11 @@ class BaseOptimizer(ABC):
                     additional_metadata=None,
                     validation_dataset=context.validation_dataset,
                     build_optimizer_version=_OPTIMIZER_VERSION,
+                    training_dataset=(
+                        context.dataset
+                        if context.validation_dataset is not None
+                        else None
+                    ),
                 ),
             )
             coerced_score = self._coerce_score(baseline_score)

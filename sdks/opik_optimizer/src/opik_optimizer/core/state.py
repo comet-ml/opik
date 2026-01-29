@@ -178,6 +178,7 @@ def prepare_experiment_config(
     additional_metadata: dict[str, Any] | None,
     is_single_prompt_optimization: bool,
     build_optimizer_version: str,
+    training_dataset: Dataset | None = None,
 ) -> dict[str, Any]:
     project_name = optimizer.project_name
 
@@ -214,12 +215,18 @@ def prepare_experiment_config(
         tools = serialize_tools(prompt)
         prompt_project_name = {prompt_name_attr: getattr(prompt, "project_name", None)}
 
+    # When using train/validation split, training_dataset identifies the training
+    # dataset so we always set dataset_training/dataset_validation keys correctly
+    # (OPIK-3820: avoid showing validation data under "dataset_training" keys).
+    dataset_for_training_keys = (
+        training_dataset if training_dataset is not None else dataset
+    )
     base_config: dict[str, Any] = {
         "project_name": project_name,
         "agent_config": agent_config,
         "metric": metric.__name__,
-        "dataset_training": dataset.name,
-        "dataset_training_id": dataset.id,
+        "dataset_training": dataset_for_training_keys.name,
+        "dataset_training_id": dataset_for_training_keys.id,
         "optimizer": optimizer.__class__.__name__,
         "optimizer_metadata": build_optimizer_metadata(
             optimizer, build_optimizer_version
