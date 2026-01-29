@@ -290,6 +290,10 @@ Opik connects to [Ollama](https://ollama.com/) using the OpenAI-compatible API, 
 **URL must end with `/v1`.** The base URL you enter in Opik must end with `/v1` (e.g., `http://localhost:11434/v1`). Opik uses this to call the OpenAI-compatible chat completions endpoint on your Ollama instance.
 </Note>
 
+<Tip>
+**Self-hosted deployments:** The Ollama provider is enabled by default. To disable it, set the environment variable `TOGGLE_OLLAMA_PROVIDER_ENABLED=false` on the Opik backend service.
+</Tip>
+
 ##### Configuring Ollama in Opik
 
 1. In Opik, go to **Configuration → AI Providers**
