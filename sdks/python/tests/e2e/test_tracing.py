@@ -988,6 +988,67 @@ def test_opik_client_span__attachments(opik_client, attachment_data_file):
     )
 
 
+def test_opik_client_span__attachment_file_like(opik_client, attachment_data_file):
+    trace_id = helpers.generate_id()
+    file_name = os.path.basename(attachment_data_file.name)
+    names = [file_name + "_first", file_name + "_without_mime_type"]
+    # read file bytes into memory
+    attachment_data_file.seek(0)
+    attachment_data = attachment_data_file.read()
+
+    attachments = {
+        names[0]: Attachment(
+            data=attachment_data,
+            file_name=names[0],
+            content_type="application/octet-stream",
+        ),
+        names[1]: Attachment(
+            data=attachment_data,
+            file_name=names[1],
+        ),
+    }
+    data_sizes = {
+        names[0]: ATTACHMENT_FILE_SIZE,
+        names[1]: ATTACHMENT_FILE_SIZE,
+    }
+
+    # Send a trace that matches the input filter
+    opik_client.trace(
+        id=trace_id,
+        name="trace-name",
+        input={"input": "Some random input"},
+        output={"output": "trace-output"},
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+    span = opik_client.span(
+        trace_id=trace_id,
+        name="span-name",
+        input={"input": "Some random input 2"},
+        output={"output": "span-output"},
+        attachments=attachments.values(),
+    )
+
+    opik_client.flush()
+
+    expected_attachments = {
+        names[0]: attachments[names[0]],
+        names[1]: Attachment(
+            data=attachment_data,
+            file_name=names[1],
+            content_type="application/octet-stream",  # should be inferred from data
+        ),
+    }
+
+    # check that the attachment was uploaded
+    verifiers.verify_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=span.id,
+        attachments=expected_attachments,
+        data_sizes=data_sizes,
+    )
+
+
 def test_span_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(attachment_data_file.name)
