@@ -12,6 +12,7 @@ import {
   Sparkles,
   Trash,
   Download,
+  Wrench,
 } from "lucide-react";
 import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
@@ -115,6 +116,9 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const isAIInspectorEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
   );
+  const isAgentOptimizerEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED, // Using same toggle for now
+  );
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const { toast } = useToast();
 
@@ -130,11 +134,12 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       { name: "FILTER", size: 60, visible: true },
       { name: "SEPARATOR", size: 25, visible: true },
       { name: "INSPECT_TRACE", size: 166, visible: isAIInspectorEnabled },
+      { name: "AGENT_OPTIMIZER", size: 166, visible: isAgentOptimizerEnabled },
       { name: "AGENT_GRAPH", size: 166, visible: hasAgentGraph },
       {
         name: "SEPARATOR",
         size: 25,
-        visible: isAIInspectorEnabled || hasAgentGraph,
+        visible: isAIInspectorEnabled || isAgentOptimizerEnabled || hasAgentGraph,
       },
       { name: "MORE", size: 32, visible: true },
     ];
@@ -466,6 +471,20 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             >
               <Sparkles className="size-3.5 shrink-0" />
               {isSmall ? null : <span className="ml-1.5">Debug with AI</span>}
+            </Button>
+          </TooltipWrapper>
+        )}
+        {isAgentOptimizerEnabled && (
+          <TooltipWrapper content="Optimize your agent prompts to fix issues">
+            <Button
+              variant="default"
+              size={isSmall ? "icon-sm" : "sm"}
+              onClick={() =>
+                setActiveSection(DetailsActionSection.AgentOptimizer)
+              }
+            >
+              <Wrench className="size-3.5 shrink-0" />
+              {isSmall ? null : <span className="ml-1.5">Solve a problem</span>}
             </Button>
           </TooltipWrapper>
         )}
