@@ -49,6 +49,76 @@ For datasets requiring rich metadata, complex schemas, or programmatic control, 
 
 </Tip>
 
+<Note>
+  When you create a dataset with a CSV file, this creates the first version (v1)
+  of your dataset. All subsequent modifications will create new versions automatically.
+</Note>
+
+## Understanding dataset versioning
+
+Dataset versioning in Opik creates **immutable snapshots** of your data. Every time you modify a dataset—whether adding, editing, or deleting items—a new version is automatically created. This ensures complete reproducibility, provides an audit trail of all changes, and allows easy rollback to any previous state.
+
+Each dataset version contains:
+
+- **Version name**: Auto-generated sequential name (v1, v2, v3, etc.)
+- **Change description**: Optional note describing what changed
+- **Tags**: Labels for categorizing versions (e.g., `production`, `baseline`)
+- **Item statistics**: Count of items added, modified, and deleted
+- **Timestamp and author**: When the version was created and by whom
+
+Once a version is created, its data cannot be changed—any modification creates a new version instead. Restoring a previous version also creates a *new* version with the same data, preserving your complete version timeline.
+
+<Note>
+  The special `latest` tag always points to the most recent version.
+  When running experiments without specifying a version, `latest` is used by default.
+</Note>
+
+## Working with draft mode (UI)
+
+When making changes to a dataset in the Opik UI, all modifications go into a **draft state** first. This gives you a staging area to review changes before committing them as a new version. The draft is visible only to you, and AI-generated samples from "Expand with AI" also go to draft for review.
+
+When a dataset has unsaved draft changes, an orange **"Draft"** tag appears next to the dataset name, and **Save changes** / **Discard changes** buttons appear in the toolbar. Items show colored borders: green for newly added items, amber for modified items.
+
+<Frame>
+  <img src="/img/evaluation/dataset_draft_mode.png" />
+</Frame>
+
+### Saving or discarding changes
+
+To commit your draft as a new version:
+1. Click **Save changes** in the toolbar
+2. Enter a **version note** describing what changed
+3. Optionally add **tags** to categorize this version
+4. Click **Save**
+
+<Frame>
+  <img src="/img/evaluation/save_version_dialog.png" />
+</Frame>
+
+To abandon your draft, click **Discard changes** and confirm. If you try to navigate away with unsaved changes, Opik displays a warning to prevent accidental loss of work.
+
+<Tip>
+  Use draft mode to batch related changes into a single, well-documented version.
+</Tip>
+
+## Version history
+
+To view the complete timeline of dataset changes, navigate to your dataset and click the **Version history** tab. The table shows each version's name, change summary (items added/modified/deleted), version note, tags, item count, and creation timestamp.
+
+<Frame>
+  <img src="/img/evaluation/version_history_tab.png" />
+</Frame>
+
+From this view you can:
+- **View items**: Click a version row and select **View items** to see the exact data at that point in time
+- **Restore**: Click the **⋮** menu and select **Restore this version** to create a new version with that data
+- **Edit metadata**: Click the **⋮** menu and select **Edit** to update the version note or tags (the data itself remains immutable)
+
+<Note>
+  Restoring a version creates a **new** version with the same data.
+  No history is lost or overwritten.
+</Note>
+
 ## Adding traces to a dataset
 
 One of the most powerful ways to build evaluation datasets is by converting production traces into dataset items. This allows you to leverage real-world interactions from your LLM application to create test cases for evaluation.
@@ -163,6 +233,11 @@ dataset.insert([
   dataset` methods means that you can use the SDK to manage your datasets in a "fire and forget" manner.
 </Tip>
 
+<Note>
+  When using the SDK to insert items, a new dataset version is automatically created.
+  If you insert items in multiple batches within a single `insert()` call, they are grouped into one version.
+</Note>
+
 Once the items have been inserted, you can view them in the Opik UI:
 
 <Frame>
@@ -236,6 +311,11 @@ You can delete items in a dataset by using the `delete` method:
   ```
 </CodeBlocks>
 
+<Note>
+  Deleting items creates a new version of the dataset. The deleted items remain accessible
+  in previous versions through the version history, ensuring you never permanently lose data.
+</Note>
+
 ## Downloading a dataset from Opik
 
 You can download a dataset from Opik using the `get_dataset` method:
@@ -268,6 +348,85 @@ You can download a dataset from Opik using the `get_dataset` method:
   ```
 </CodeBlocks>
 
+## Running experiments with dataset versions
+
+When you run an experiment, Opik automatically links it to the specific dataset version that was used. This ensures complete reproducibility—you can always know exactly which data was used for any experiment.
+
+### Automatic version association
+
+Every experiment records which dataset version it used:
+
+- When running from the UI or SDK without specifying a version, the `latest` version is used
+- The experiment results page shows the associated dataset version
+- You can click the version to see the exact data that was evaluated
+
+This association is permanent. Even if you later modify the dataset, your experiment results remain linked to the original version used.
+
+### Selecting a specific version in Playground
+
+When running experiments from the Playground:
+
+1. Open the Playground and configure your prompt
+2. In the dataset selector, choose your dataset
+3. A nested dropdown appears showing available versions
+4. Select the specific version you want to use, or choose `latest` for the most recent
+
+<Frame>
+  <img src="/img/evaluation/dataset_version_select.png" />
+</Frame>
+
+<Tip>
+  When comparing experiments or running A/B tests, use the same dataset version
+  to isolate the effect of your changes. This ensures differences in results
+  are due to your prompt or model changes, not data variations.
+</Tip>
+
+### Selecting a specific version in the SDK
+
+When running experiments programmatically, you can specify which dataset version to use:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import Opik
+from opik.evaluation import evaluate
+
+client = Opik()
+dataset = client.get_dataset(name="My dataset")
+
+# Run experiment on the latest version (default)
+result = evaluate(
+    experiment_name="baseline-experiment",
+    dataset=dataset,
+    task=my_task_function,
+    scoring_metrics=[my_metric],
+)
+
+# Run experiment on a specific version by tag
+result = evaluate(
+    experiment_name="production-test",
+    dataset=dataset,
+    dataset_version="production",  # Use version tagged as "production"
+    task=my_task_function,
+    scoring_metrics=[my_metric],
+)
+```
+
+```typescript title="TypeScript" language="typescript"
+import { Opik } from "opik";
+
+const client = new Opik();
+const dataset = await client.getDataset("My dataset");
+
+// Run experiment on the latest version (default)
+const result = await evaluate({
+  experimentName: "baseline-experiment",
+  dataset: dataset,
+  task: myTaskFunction,
+  scoringMetrics: [myMetric],
+});
+```
+</CodeBlocks>
+
 ## Expanding a dataset with AI
 
 Dataset expansion allows you to use AI to generate additional synthetic samples based on your existing dataset. This is particularly useful when you have a small dataset and want to create more diverse test cases to improve your evaluation coverage.
@@ -292,7 +451,7 @@ To expand a dataset with AI:
    - **Variation Instructions**: Provide specific guidance on how to vary the data (e.g., "Create variations that test edge cases" or "Generate examples with different complexity levels")
    - **Custom Prompt**: Optionally provide a custom prompt template instead of the auto-generated one
 4. **Start the expansion** - The AI will analyze your data and generate new samples
-5. **Review the results** - New samples will be added to your dataset and can be reviewed, edited, or removed as needed
+5. **Review the results** - Generated samples are added to your **draft**. You can review, edit, or remove them before saving to create a new version
 
 <Frame>
   <img src="/img/evaluation/dataset_expansion_modal.png" />
@@ -385,3 +544,42 @@ The dataset items table will update to show only items matching your filter crit
 - **Combine with other filters** to create complex queries
 
 The filter is saved in the URL, so you can bookmark or share specific filtered views of your dataset.
+
+## Bulk operations
+
+Opik supports bulk operations for efficiently managing large datasets. These operations help you work with many items at once without tedious individual selections.
+
+### Select all functionality
+
+When working with datasets that span multiple pages:
+
+1. **Select items on the current page** using the checkbox in the table header
+2. A banner appears offering to **"Select all items"** across all pages
+3. Click to select all items matching your current filter criteria
+
+<Frame>
+  <img src="/img/evaluation/dataset_bulk_select.png" />
+</Frame>
+
+This works with filtered views too—if you have a filter applied, "Select all" only selects items matching that filter.
+
+### Available bulk operations
+
+Once you have items selected, the toolbar shows available operations:
+
+- **Add tags**: Apply one or more tags to all selected items
+- **Delete**: Remove selected items (creates a new version with items removed)
+- **Export**: Download selected items as CSV or JSON
+
+### Processing indicators
+
+For large bulk operations:
+
+- A loading indicator shows "Your dataset is still processing..."
+- The operation runs in the background—you can continue browsing
+- A success message appears when processing completes
+
+<Tip>
+  For very large datasets, bulk operations are processed in batches. The UI remains
+  responsive during processing, and you'll see progress indicators for long-running operations.
+</Tip>
