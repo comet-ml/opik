@@ -9,6 +9,7 @@ import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
+from opik.integrations import model_defaults
 
 from . import stream_patchers
 
@@ -45,6 +46,13 @@ class AnthropicMessagesCreateDecorator(base_track_decorator.BaseTrackDecorator):
             kwargs, KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
         metadata.update(metadata_from_kwargs)
+
+        # Add default parameters for Anthropic models
+        model = kwargs.get("model")
+        default_params = model_defaults.get_anthropic_default_params(model, kwargs)
+        if default_params:
+            metadata.update(default_params)
+
         metadata["created_from"] = "anthropic"
         tags = ["anthropic"]
 
