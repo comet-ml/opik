@@ -9,7 +9,7 @@ const WorkspaceRolesSelectContent = ({
   roles,
 }: WorkspaceRolesSelectContentProps) => {
   return (
-    <SelectContent align="start" position="item-aligned" className="w-[280px]">
+    <SelectContent align="start" position="popper" className="w-[280px]">
       {roles.map((role) => (
         <SelectItem
           key={role.roleId}

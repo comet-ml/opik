@@ -110,7 +110,7 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
   const trigger = (
     <SelectTrigger
-      className="-ml-1 h-auto border-none bg-transparent px-1 py-0.5 disabled:bg-transparent"
+      className="-ml-1 h-auto border-none bg-transparent px-1 py-0.5 disabled:bg-transparent [&>span]:block [&>span]:truncate"
       onClick={(e) => {
         e.stopPropagation();
         if (isInvitedByEmail) {
