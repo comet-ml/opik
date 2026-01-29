@@ -511,15 +511,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(dataset_item_filters)>
                 AND ei.dataset_item_id IN (
                     SELECT div.id
-                    FROM dataset_item_versions div
+                    FROM (
+                        SELECT id, dataset_version_id, last_updated_at
+                        FROM dataset_item_versions
+                        WHERE workspace_id = :workspace_id
+                        AND dataset_id = :datasetId
+                        AND <dataset_item_filters>
+                        ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS div
                     INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
                     LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
-                    WHERE div.workspace_id = :workspace_id
-                    AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
-                    AND <dataset_item_filters>
-                    ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                    LIMIT 1 BY div.id
+                    WHERE div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
                 )
                 <endif>
             	ORDER BY id DESC, last_updated_at DESC
@@ -660,15 +663,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(dataset_item_filters)>
                 AND ei.dataset_item_id IN (
                     SELECT div.id
-                    FROM dataset_item_versions div
+                    FROM (
+                        SELECT id, dataset_version_id, last_updated_at
+                        FROM dataset_item_versions
+                        WHERE workspace_id = :workspace_id
+                        AND dataset_id = :datasetId
+                        AND <dataset_item_filters>
+                        ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS div
                     INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
                     LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
-                    WHERE div.workspace_id = :workspace_id
-                    AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
-                    AND <dataset_item_filters>
-                    ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                    LIMIT 1 BY div.id
+                    WHERE div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
                 )
                 <endif>
             	ORDER BY id DESC, last_updated_at DESC
@@ -1385,15 +1391,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(dataset_item_filters)>
                 AND ei.dataset_item_id IN (
                     SELECT div.id
-                    FROM dataset_item_versions div
+                    FROM (
+                        SELECT id, dataset_version_id, last_updated_at
+                        FROM dataset_item_versions
+                        WHERE workspace_id = :workspace_id
+                        AND dataset_id = :datasetId
+                        AND <dataset_item_filters>
+                        ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    ) AS div
                     INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div.id
                     LEFT JOIN experiments e ON e.id = ei_inner.experiment_id AND e.workspace_id = :workspace_id
-                    WHERE div.workspace_id = :workspace_id
-                    AND div.dataset_id = :datasetId
-                    AND div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
-                    AND <dataset_item_filters>
-                    ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                    LIMIT 1 BY div.id
+                    WHERE div.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
                 )
                 <endif>
             ), trace_project_mapping AS (
