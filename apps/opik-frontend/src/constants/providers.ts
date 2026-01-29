@@ -6,6 +6,8 @@ import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
 import BedrockIcon from "@/icons/integrations/bedrock.svg?react";
 import CustomIcon from "@/icons/integrations/custom.svg?react";
 import OpikIcon from "@/icons/integrations/opik.svg?react";
+// TODO: Add dedicated Ollama icon
+import OllamaIcon from "@/icons/integrations/custom.svg?react";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -20,6 +22,7 @@ export type PROVIDER_OPTION_TYPE = {
   defaultModel: PROVIDER_MODEL_TYPE | "";
   description?: string;
   apiKeyURL?: string;
+  defaultUrl?: string;
   /** If true, this provider is system-managed and users cannot configure it */
   readOnly?: boolean;
 };
@@ -84,6 +87,17 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     apiKeyName: "BEDROCK_API_KEY",
     defaultModel: "",
   },
+  [PROVIDER_TYPE.OLLAMA]: {
+    label: "Ollama",
+    value: PROVIDER_TYPE.OLLAMA,
+    icon: OllamaIcon,
+    apiKeyName: "OLLAMA_API_KEY",
+    defaultModel: "",
+    description:
+      "Run open-source LLMs locally with Ollama. Connect to your local or cloud Ollama instance.",
+    apiKeyURL: "https://github.com/ollama/ollama",
+    defaultUrl: "http://localhost:11434/v1",
+  },
   [PROVIDER_TYPE.CUSTOM]: {
     label: "vLLM / Custom provider",
     value: PROVIDER_TYPE.CUSTOM,
@@ -111,6 +125,7 @@ export const PROVIDER_FEATURE_TOGGLE_MAP: Record<
   [PROVIDER_TYPE.OPEN_ROUTER]: FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
   [PROVIDER_TYPE.VERTEX_AI]: FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
   [PROVIDER_TYPE.BEDROCK]: FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.OLLAMA]: FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED, // Reuse custom LLM toggle for now
   [PROVIDER_TYPE.CUSTOM]: FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
 };
 

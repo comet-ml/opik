@@ -16,6 +16,7 @@ public enum LlmProvider {
     OPEN_ROUTER("openrouter"),
     VERTEX_AI("vertex-ai"),
     BEDROCK("bedrock"),
+    OLLAMA("ollama"),
     CUSTOM_LLM("custom-llm"),
     OPIK_FREE("opik-free"),
     ;
@@ -35,9 +36,9 @@ public enum LlmProvider {
      * Checks if this provider supports custom naming (multiple instances with different names).
      * Providers that support naming can have multiple configurations distinguished by provider_name.
      *
-     * @return true if this provider supports custom naming (CUSTOM_LLM, BEDROCK), false otherwise
+     * @return true if this provider supports custom naming (CUSTOM_LLM, BEDROCK, OLLAMA), false otherwise
      */
     public boolean supportsProviderName() {
-        return this == CUSTOM_LLM || this == BEDROCK;
+        return this == CUSTOM_LLM || this == BEDROCK || this == OLLAMA;
     }
 }

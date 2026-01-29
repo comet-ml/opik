@@ -6,6 +6,7 @@ import { PROVIDERS } from "@/constants/providers";
 import { Form } from "@/components/ui/form";
 import CloudAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CloudAIProviderDetails";
 import CustomProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/CustomProviderDetails";
+import OllamaProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/OllamaProviderDetails";
 import VertexAIProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/VertexAIProviderDetails";
 import BedrockProviderDetails from "@/components/pages-shared/llm/ManageAIProviderDialog/BedrockProviderDetails";
 import { AIProviderFormType } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
@@ -56,7 +57,9 @@ const ProviderConfigurationStep: React.FC<ProviderConfigurationStepProps> = ({
           onSubmit={form.handleSubmit(onSubmit)}
           className="flex flex-col gap-4"
         >
-          {selectedProviderType === PROVIDER_TYPE.CUSTOM ? (
+          {selectedProviderType === PROVIDER_TYPE.OLLAMA ? (
+            <OllamaProviderDetails form={form} isEdit={isEdit} />
+          ) : selectedProviderType === PROVIDER_TYPE.CUSTOM ? (
             <CustomProviderDetails form={form} isEdit={isEdit} />
           ) : selectedProviderType === PROVIDER_TYPE.BEDROCK ? (
             <BedrockProviderDetails form={form} isEdit={isEdit} />

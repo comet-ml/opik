@@ -9,7 +9,8 @@ export const CloudAIProviderDetailsFormSchema = z.object({
       (v) =>
         v !== PROVIDER_TYPE.VERTEX_AI &&
         v !== PROVIDER_TYPE.CUSTOM &&
-        v !== PROVIDER_TYPE.BEDROCK,
+        v !== PROVIDER_TYPE.BEDROCK &&
+        v !== PROVIDER_TYPE.OLLAMA,
     ) as [string, ...string[]],
     {
       message: "Provider is required",
@@ -41,9 +42,12 @@ export const createCustomProviderDetailsFormSchema = (
 ) =>
   z
     .object({
-      provider: z.enum([PROVIDER_TYPE.CUSTOM, PROVIDER_TYPE.BEDROCK], {
-        message: "Provider is required",
-      }),
+      provider: z.enum(
+        [PROVIDER_TYPE.CUSTOM, PROVIDER_TYPE.BEDROCK, PROVIDER_TYPE.OLLAMA],
+        {
+          message: "Provider is required",
+        },
+      ),
       composedProviderType: z.string(),
       id: z.string().optional(),
       providerName: z.string().optional(),
