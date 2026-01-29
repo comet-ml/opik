@@ -14,6 +14,8 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type RawPromptData = {
   id: string;
@@ -22,6 +24,7 @@ type RawPromptData = {
     commit: string;
     id: string;
     template: string;
+    metadata?: object;
   };
 };
 
@@ -38,7 +41,7 @@ const convertRawPromptToPromptWithLatestVersion = (
   const promptVersion: PromptVersion = {
     id: rawPrompt.version.id,
     template: rawPrompt.version.template,
-    metadata: {},
+    metadata: rawPrompt.version.metadata ?? {},
     commit: rawPrompt.version.commit,
     prompt_id: rawPrompt.id,
     created_at: date, // We don't have this in raw data, using current time
@@ -85,15 +88,25 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   data,
   search,
 }) => {
-  const rawPrompts = get(data.metadata, "opik_prompts", null);
+  const rawPrompts = get(
+    data.metadata as Record<string, unknown>,
+    "opik_prompts",
+    null,
+  ) as RawPromptData[] | null;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const showOptimizerPrompts = useIsFeatureEnabled(
+    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+  );
 
   const prompts = useMemo(() => {
-    if (!rawPrompts || !Array.isArray(rawPrompts)) return [];
-    return (rawPrompts as RawPromptData[]).map(
-      convertRawPromptToPromptWithLatestVersion,
-    );
-  }, [rawPrompts]);
+    if (!showOptimizerPrompts) return [];
+    if (Array.isArray(rawPrompts) && rawPrompts.length > 0) {
+      return (rawPrompts as RawPromptData[]).map(
+        convertRawPromptToPromptWithLatestVersion,
+      );
+    }
+    return [];
+  }, [rawPrompts, showOptimizerPrompts]);
 
   const renderPrompts = () => {
     if (!prompts || prompts.length === 0) return null;

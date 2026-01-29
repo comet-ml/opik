@@ -104,7 +104,7 @@ distributedLock:
   # Description: This value has to be considerably higher than the lockTimeoutMS value, as it has to guarantee that the
   # last thread to join the queue to acquire the lock will have enough time to execute the action. Then, the lock will
   # be deleted from redis after the specified period of time.
-  # This is needed as redisson by default doesn't delete the lock from redis after the lease time expires, it just
+  # This is needed as Redisson by default doesn't delete the lock from redis after the lease time expires, it just
   # releases the lock. The expiration time will be reset every time the lock is acquired.
   ttlInSeconds: 1
 
@@ -397,6 +397,12 @@ workspaceSettings:
   # Set to -1 to disable the limit (allow sorting for all project sizes).
   # This value is calculated via estimated size based on spans table.
   maxProjectSizeToAllowSorting: -1
+  # Default: 1000000
+  # Description: Maximum number of experiment items in a workspace to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all experiment item counts).
+  # This count-based limit is used because experiment_items has fixed-size columns (UUIDs only)
+  # and query performance scales with row count, not data size.
+  maxExperimentItemsToAllowSorting: -1
 
 # Configuration AWS S3
 s3Config:
@@ -480,6 +486,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Ollama provider is enabled
+  ollamaProviderEnabled: "true"
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"

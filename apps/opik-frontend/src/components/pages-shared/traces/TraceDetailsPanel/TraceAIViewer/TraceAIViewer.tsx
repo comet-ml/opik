@@ -11,9 +11,11 @@ import { useToast } from "@/components/ui/use-toast";
 import {
   DetailsActionSectionLayout,
   DetailsActionSectionValue,
+  DetailsActionSection,
 } from "@/components/pages-shared/traces/DetailsActionSection";
 import TraceChatInput from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/TraceChatInput";
 import TraceChatMessage from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/TraceChatMessage";
+import TraceSessionFeedback from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/TraceSessionFeedback";
 import { useChatScroll } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAIViewer/useChatScroll";
 import useTraceAnalyzerHistory from "@/api/ai-assistant/useTraceAnalyzerHistory";
 import useTraceAnalyzerRunStreaming from "@/api/ai-assistant/useTraceAnalyzerRunStreaming";
@@ -28,7 +30,11 @@ import {
 import { Tag } from "@/components/ui/tag";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import Loader from "@/components/shared/Loader/Loader";
-import { TraceAnalyzerLLMMessage, MESSAGE_TYPE } from "@/types/ai-assistant";
+import {
+  TraceAnalyzerLLMMessage,
+  MESSAGE_TYPE,
+  SESSION_FEEDBACK_VALUE,
+} from "@/types/ai-assistant";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { Span } from "@/types/traces";
@@ -53,6 +59,11 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
     value: "",
     messages: [],
   });
+  const [feedback, setFeedback] = useState<SESSION_FEEDBACK_VALUE | null>(null);
+  // Keep track of feedback choices per trace (persists across trace switches)
+  const feedbackCacheRef = useRef<Map<string, SESSION_FEEDBACK_VALUE | null>>(
+    new Map(),
+  );
   const [isRunning, setIsRunning] = useState(false);
   const [isStreamingText, setIsStreamingText] = useState(false);
   const [pendingToolCallCount, setPendingToolCallCount] = useState(0);
@@ -105,11 +116,16 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
   useEffect(() => {
     setChat({ value: "", messages: [] });
     stopStreaming();
+
+    // Load feedback from cache for this trace, or null if not cached
+    const cachedFeedback = feedbackCacheRef.current.get(traceId) ?? null;
+    setFeedback(cachedFeedback);
   }, [traceId, stopStreaming]);
 
   useEffect(() => {
     const historyMessages = historyData?.content || [];
 
+    // Update messages only on initial load
     if (
       chat.messages.length === 0 &&
       historyMessages.length > 0 &&
@@ -119,6 +135,18 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
       setChat((prev) => ({ ...prev, messages: historyMessages }));
     }
   }, [historyData?.content, chat.messages.length, isRunning, isHistoryPending]);
+
+  // Update cache whenever feedback changes (from user interaction or backend)
+  useEffect(() => {
+    feedbackCacheRef.current.set(traceId, feedback);
+  }, [feedback, traceId]);
+
+  // Clear cache when panel is closed
+  useEffect(() => {
+    if (activeSection !== DetailsActionSection.AIAssistants) {
+      feedbackCacheRef.current.clear();
+    }
+  }, [activeSection]);
 
   useEffect(() => {
     return () => {
@@ -159,6 +187,13 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
     [],
   );
 
+  const handleOptimisticFeedbackUpdate = useCallback(
+    (value: SESSION_FEEDBACK_VALUE | null) => {
+      setFeedback(value);
+    },
+    [],
+  );
+
   const handleDeleteSession = useCallback(() => {
     stopStreaming();
     deleteMutate(
@@ -166,6 +201,9 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
       {
         onSuccess: () => {
           setChat({ value: "", messages: [] });
+          // Clear feedback when conversation is cleared - user is starting fresh
+          setFeedback(null);
+          feedbackCacheRef.current.delete(traceId);
         },
       },
     );
@@ -513,6 +551,19 @@ const TraceAIViewer: React.FC<TraceAIViewerProps> = ({
                         <span className="comet-body-xs">Thinking</span>
                       </div>
                     </div>
+                  </div>
+                )}
+                {/* Show feedback below final AI message when not streaming */}
+                {!isRunning && chat.messages.length > 0 && (
+                  <div className="mb-2 flex items-center justify-start gap-2">
+                    <TraceSessionFeedback
+                      state={feedback ?? undefined}
+                      traceId={traceId}
+                      onOptimisticUpdate={handleOptimisticFeedbackUpdate}
+                    />
+                    <span className="comet-body-xs text-muted-slate">
+                      Rate this conversation
+                    </span>
                   </div>
                 )}
               </div>

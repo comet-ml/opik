@@ -1,10 +1,6 @@
 from typing import Any
 
-from opik_optimizer import (
-    ChatPrompt,
-    ParameterOptimizer,
-    ParameterSearchSpace,
-)
+from opik_optimizer import ChatPrompt, ParameterOptimizer, ParameterSearchSpace
 from opik_optimizer.datasets import hotpot
 
 from opik.evaluation.metrics import LevenshteinRatio
@@ -55,7 +51,7 @@ parameter_space = ParameterSearchSpace.model_validate(
 
 optimization_result = optimizer.optimize_parameter(
     prompt=prompt,
-    agent_class=ADKAgent,
+    agent=ADKAgent(),
     dataset=dataset,
     metric=levenshtein_ratio,
     parameter_space=parameter_space,

@@ -1,0 +1,154 @@
+---
+description: Known runtime issues when running Opik Optimizer with current dependencies.
+headline: Known Issues
+title: Known Issues
+---
+
+## Known Issues
+
+<AccordionGroup>
+  <Accordion title="Rate limiter errors (pyrate-limiter 4.x)">
+    If `pyrate-limiter` 4.x is installed you may see `TypeError: Limiter.__init__() got an unexpected keyword argument 'raise_when_fail'`. That version dropped the legacy flag our optimizer still passes.
+
+    **Workaround**: pin `pyrate-limiter` to a 3.x release:
+    ```bash
+    pip install "pyrate-limiter>=3.0.0,<4.0.0"
+    ```
+
+    **Fixed in**: `3.0.0` (2026-01-26). Upgrade the SDK to remove the legacy flag entirely.
+  </Accordion>
+
+  <Accordion title="tqdm / rich progress error (tqdm >= 4.71)">
+    `convert_tqdm_to_rich.<locals>._tqdm_to_track() missing 1 required positional argument: 'iterable'` comes from `tqdm` >= 4.71 changing the wrapper signature we rely on.
+
+    **Workaround**: pin `tqdm` to 4.70.0:
+    ```bash
+    pip install tqdm==4.70.0
+    ```
+
+    **Fixed in**: `3.0.0` (2026-01-26).
+  </Accordion>
+
+  <Accordion title="Pydantic serialization warnings">
+    `PydanticSerializationUnexpectedValue` is emitted when LiteLLM serializes `Message` objects with fewer fields than the schema (an upstream change in LiteLLM/Pydantic v2). We suppress the warning because the payload is still valid.
+
+    **Workaround**: avoid the affected LiteLLM builds:
+    ```bash
+    pip install --upgrade "litellm<1.81.1"
+    ```
+
+    **Fixed in**: `3.0.0` (2026-01-26).
+  </Accordion>
+
+  <Accordion title="litellm → OpenAI connection errors (1.81.x)">
+    `litellm.InternalServerError: OpenAIException - Connection error.` has been reproducible against LiteLLM `1.81.*`. These releases can break the OpenAI evaluation flow inside Opik Optimizer.
+ 
+    **Workaround**:
+    ```bash
+    pip install --upgrade "litellm<1.81.0"
+    ```
+
+    **Fixed in**: `3.0.0` (2026-01-26).
+  </Accordion>
+</AccordionGroup>
+
+## Common Errors
+
+<AccordionGroup>
+  <Accordion title="ValueError: Prompt must be a ChatPrompt object">
+    This error occurs when you pass an incorrect type to the optimizer's `optimize_prompt()` method.
+
+    **Solution**: Ensure you're using the `ChatPrompt` class to define your prompt:
+    ```python
+    from opik_optimizer import ChatPrompt
+
+    prompt = ChatPrompt(
+        messages=[
+            {"role": "system", "content": "Your system prompt here"},
+            {"role": "user", "content": "Your user prompt with {variable}"},
+        ],
+        model="gpt-4",
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="ValueError: Dataset must be a Dataset object">
+    This error occurs when the dataset passed to the optimizer is not a proper `Dataset` object.
+
+    **Solution**: Use the `Dataset` class to create your dataset:
+    ```python
+    import opik
+
+    client = opik.Opik()
+    dataset = client.get_or_create_dataset(name="your-dataset-name")
+    dataset.insert(
+        [
+            {"input": "example 1", "output": "expected 1"},
+            {"input": "example 2", "output": "expected 2"},
+        ]
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="ValueError: Metric must be a function">
+    This error occurs when the metric parameter is not callable or doesn't have the correct signature.
+
+    **Solution**: Ensure your metric is a function that takes `dataset_item` and `llm_output` as arguments and returns a `ScoreResult`:
+    ```python
+    from opik.evaluation.metrics import ScoreResult
+
+    def my_metric(dataset_item, llm_output):
+        # Your scoring logic here
+        score = calculate_score(dataset_item, llm_output)
+        return ScoreResult(
+            name="my-metric",
+            value=score,
+            reason="Explanation for the score",
+        )
+    ```
+  </Accordion>
+
+  <Accordion title="ValueError: Missing required key in prompt">
+    This error occurs when your prompt template contains placeholders (e.g., `{variable}`) that don't match your dataset fields.
+
+    **Solution**: Ensure all placeholders in your prompt match the keys in your dataset:
+    ```python
+    # Prompt with {question} placeholder
+    prompt = ChatPrompt(
+        user="Answer: {question}",
+        model="gpt-4",
+    )
+
+    # Dataset must have 'question' field
+    dataset = Dataset.from_list(
+        [
+            {"question": "What is AI?", "output": "..."},
+        ]
+    )
+    ```
+  </Accordion>
+
+  <Accordion title="ImportError: gepa package is required for GepaOptimizer">
+    This error occurs when trying to use the `GepaOptimizer` without the required `gepa` package installed.
+
+    **Solution**: Install the gepa package:
+    ```bash
+    pip install gepa
+    ```
+  </Accordion>
+
+  <Accordion title="Exception: Make sure you have provider API key set">
+    This error typically occurs when the LLM provider API key is not configured in your environment.
+
+    **Solution**: Set the appropriate environment variable for your LLM provider:
+    ```bash
+    # For OpenAI
+    export OPENAI_API_KEY="your-api-key"
+
+    # For Anthropic
+    export ANTHROPIC_API_KEY="your-api-key"
+
+    # For other providers, check the LiteLLM documentation
+    ```
+  </Accordion>
+</AccordionGroup>

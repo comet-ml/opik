@@ -675,13 +675,17 @@ navigation:
             icon: fa-regular fa-house
             path: docs/agent_optimization/overview.mdx
             slug: overview
+          - page: Optimization Studio
+            icon: fa-regular fa-window-maximize
+            path: docs/agent_optimization/optimization/optimization_studio.mdx
+            slug: optimization_studio
           - page: Quickstart
             icon: fa-regular fa-bolt
             path: docs/agent_optimization/getting_started/quickstart.mdx
             slug: quickstart
           - page: Quickstart notebook
             icon: fa-regular fa-play
-            path: docs/agent_optimization/getting_started/quickstart_notebook.mdx
+            path: docs/agent_optimization/cookbook/optimizer_introduction_cookbook.mdx
             slug: quickstart_notebook
           - page: FAQ
             icon: fa-regular fa-question
@@ -691,6 +695,10 @@ navigation:
             icon: fa-regular fa-calendar
             path: docs/agent_optimization/getting_started/changelog.mdx
             slug: changelog
+          - page: Known Issues
+            icon: fa-regular fa-triangle-exclamation
+            path: docs/agent_optimization/known_issues.mdx
+            slug: known_issues
       - section: Optimization
         slug: /optimization
         contents:
@@ -776,6 +784,14 @@ navigation:
             icon: fa-regular fa-book
             path: docs/agent_optimization/cookbook/synthetic_data_optimizer_cookbook.mdx
             slug: synthetic_data_optimizer_cookbook
+          - page: ARC-AGI tutorial
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/arc_agi_optimizer_cookbook.mdx
+            slug: arc_agi_optimizer_cookbook
+          - page: Multimodal agent tutorial
+            icon: fa-regular fa-book
+            path: docs/agent_optimization/cookbook/multimodal_agent_optimizer_cookbook.mdx
+            slug: multimodal_agent_optimizer_cookbook
       - section: Advanced Topics
         slug: /advanced
         contents:
@@ -787,6 +803,18 @@ navigation:
             icon: fa-regular fa-sliders
             path: docs/agent_optimization/advanced/custom_metrics.mdx
             slug: custom_metrics
+          - page: Custom optimizer prompts
+            icon: fa-regular fa-pen-to-square
+            path: docs/agent_optimization/advanced/prompt_customization.mdx
+            slug: prompt_customization
+          - page: Sampling controls
+            icon: fa-regular fa-scale-balanced
+            path: docs/agent_optimization/advanced/n_samples.mdx
+            slug: n_samples
+          - page: Multiple completions (n)
+            icon: fa-regular fa-code-fork
+            path: docs/agent_optimization/advanced/multiple_completions.mdx
+            slug: multiple_completions
           - page: Chaining optimizers
             icon: fa-regular fa-objects-align-bottom
             path: docs/agent_optimization/advanced/chaining_optimizers.mdx
@@ -1325,6 +1353,15 @@ redirects:
     permanent: true
   - source: "/docs/opik/agent_optimization/reference"
     destination: "/docs/opik/agent_optimization/api-reference"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/quickstart_notebook"
+    destination: "/docs/opik/agent_optimization/cookbooks/optimizer_introduction_cookbook"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/getting_started/quickstart_notebook"
+    destination: "/docs/opik/agent_optimization/cookbooks/optimizer_introduction_cookbook"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimization/optimization_studio"
+    destination: "/docs/opik/agent_optimization/optimization_studio"
     permanent: true
   # Common redirects
   - source: "/docs/opik/typescript-sdk/opik-query-language"

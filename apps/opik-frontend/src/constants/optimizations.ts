@@ -23,14 +23,15 @@ export const OPTIMIZATION_STUDIO_SUPPORTED_MODELS: Record<
     PROVIDER_MODEL_TYPE.GPT_4_1_NANO,
   ],
   [PROVIDER_TYPE.ANTHROPIC]: [
+    PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
+    PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5,
     PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
-    PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
     PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7,
-    PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_3_5,
   ],
   [PROVIDER_TYPE.OPEN_ROUTER]: [],
   [PROVIDER_TYPE.GEMINI]: [],
   [PROVIDER_TYPE.VERTEX_AI]: [],
+  [PROVIDER_TYPE.OLLAMA]: [],
   [PROVIDER_TYPE.CUSTOM]: [],
   [PROVIDER_TYPE.BEDROCK]: [],
   [PROVIDER_TYPE.OPIK_FREE]: [],
@@ -86,6 +87,24 @@ export const DEFAULT_LEVENSHTEIN_METRIC_CONFIGS = {
   REFERENCE_KEY: "",
 };
 
+export const DEFAULT_CODE_METRIC_CONFIGS = {
+  CODE: `from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MyMetric(BaseMetric):
+    def __init__(self, name: str = "my_metric"):
+        super().__init__(name=name)
+    
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        # output: the LLM response
+        # kwargs: contains dataset_item fields (e.g., kwargs.get("expected_value"))
+        return ScoreResult(
+            name=self.name,
+            value=1.0,  # Score between 0.0 and 1.0
+            reason="Evaluation reason"
+        )`,
+};
+
 export const OPTIMIZATION_MESSAGE_TYPE_OPTIONS = [
   {
     label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.system],
@@ -135,6 +154,11 @@ export const OPTIMIZATION_METRIC_OPTIONS = [
     label: "Levenshtein",
     description: "Measures edit distance between output and expected text.",
   },
+  {
+    value: METRIC_TYPE.CODE,
+    label: "Code",
+    description: "Runs custom Python code to evaluate outputs.",
+  },
 ];
 
 // Type for demo dataset items - keys should match template variables
@@ -181,7 +205,7 @@ const CHATBOT_DATASET_ITEMS: DemoDatasetItem[] = [
     message:
       "No rush, but I've been waiting 3 weeks for a response to my support ticket. Just following up when you get a chance.",
     expected_intent: "complaint",
-    expected_urgency: "high",
+    expected_urgency: "medium",
   },
   {
     message:
@@ -214,8 +238,8 @@ const CHATBOT_DATASET_ITEMS: DemoDatasetItem[] = [
   {
     message:
       "Just checking - what's the process for exporting all my data? Asking for future reference.",
-    expected_intent: "request",
-    expected_urgency: "medium",
+    expected_intent: "question",
+    expected_urgency: "low",
   },
 ];
 
@@ -372,12 +396,62 @@ Output valid JSON only.`,
       evaluation: {
         metrics: [
           {
-            type: METRIC_TYPE.G_EVAL,
+            type: METRIC_TYPE.CODE,
             parameters: {
-              task_introduction:
-                "You are evaluating a customer support message classifier. The system analyzes incoming customer messages and outputs a JSON object with 'intent' (containing 'primary' category and 'confidence' score) and 'urgency' level. The dataset provides 'expected_intent' and 'expected_urgency' as ground truth labels for each message.",
-              evaluation_criteria:
-                "Score based on: 1) Intent accuracy - the 'intent.primary' field should match 'expected_intent' from the dataset (question, complaint, request, feedback, or other). Pay attention to sarcasm and indirect phrasing. 2) Urgency accuracy - the 'urgency' field should match 'expected_urgency' (critical for time-sensitive blockers, high for significant issues, medium for moderate concerns, low for minor feedback). 3) Confidence calibration - confidence scores should be lower for ambiguous messages. 4) Valid JSON output format.",
+              code: `import json
+from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class IntentAccuracyMetric(BaseMetric):
+    def __init__(self, name: str = "intent_accuracy"):
+        super().__init__(name=name)
+    
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        try:
+            # Parse the LLM output
+            llm_output = output.strip()
+            if llm_output.startswith("${"```"}"):
+                llm_output = llm_output.split("${"```"}")[1]
+                if llm_output.startswith("json"):
+                    llm_output = llm_output[4:]
+            result = json.loads(llm_output)
+
+            # Extract predictions
+            predicted_intent = result.get("intent", {}).get("primary", "").lower()
+            predicted_urgency = result.get("urgency", "").lower()
+
+            # Get expected values from kwargs (dataset_item fields)
+            expected_intent = kwargs.get("expected_intent", "").lower()
+            expected_urgency = kwargs.get("expected_urgency", "").lower()
+
+            # Score: 0.6 for intent, 0.4 for urgency
+            score = 0.0
+            reasons = []
+
+            if predicted_intent == expected_intent:
+                score += 0.6
+                reasons.append(f"Intent correct: {predicted_intent}")
+            else:
+                reasons.append(f"Intent wrong: expected '{expected_intent}', got '{predicted_intent}'")
+
+            if predicted_urgency == expected_urgency:
+                score += 0.4
+                reasons.append(f"Urgency correct: {predicted_urgency}")
+            else:
+                reasons.append(f"Urgency wrong: expected '{expected_urgency}', got '{predicted_urgency}'")
+
+            return ScoreResult(
+                name=self.name,
+                value=score,
+                reason="; ".join(reasons)
+            )
+
+        except Exception as e:
+            return ScoreResult(
+                name=self.name,
+                value=0.0,
+                reason=f"Failed to parse output: {str(e)}"
+            )`,
             },
           },
         ],

@@ -104,15 +104,14 @@ const ExperimentsActionsPanel: React.FunctionComponent<
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"
-          size="sm"
+          size="icon-sm"
           onClick={() => {
             setOpen(3);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
         >
-          <Tag className="mr-2 size-4" />
-          Add tags
+          <Tag />
         </Button>
       </TooltipWrapper>
       <TooltipWrapper content="Delete">
