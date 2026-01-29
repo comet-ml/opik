@@ -21,6 +21,7 @@ type PluginStore = {
   SidebarInviteDevButton: React.ComponentType<SidebarInviteDevButtonProps> | null;
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
+  WorkspaceSelector: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -38,6 +39,7 @@ const PLUGIN_NAMES = [
   "SidebarInviteDevButton",
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
+  "WorkspaceSelector",
   "init",
 ];
 
@@ -53,6 +55,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   SidebarInviteDevButton: null,
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
+  WorkspaceSelector: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
