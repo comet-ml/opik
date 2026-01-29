@@ -53,7 +53,7 @@ const WorkspacePreferencesTab: React.FC = () => {
   const data = useMemo(
     () => [
       {
-        name: "Online scoring cooling period",
+        name: "Thread online scoring rule cooldown period",
         value: formatIso8601Duration(threadTimeoutValue) ?? "Not set",
         type: WORKSPACE_PREFERENCE_TYPE.THREAD_TIMEOUT,
       },

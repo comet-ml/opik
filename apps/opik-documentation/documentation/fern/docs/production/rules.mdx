@@ -171,10 +171,10 @@ Similarly, for the Python metrics, you have the `Conversation` object available 
 ]
 ```
 
-For online scoring rules on threads, Opik waits for a "cooling period" after the last activity in a thread
+For online scoring rules on threads, Opik waits for a "cooldown period" after the last activity in a thread
 before running the evaluation. This ensures the scoring is done on the full context of the conversation.
 
 <Note>
-  The default cooling period is 15 minutes but can be configured at the workspace level under "Online scoring cooling period".
+  The default cooldown period is 15 minutes but can be configured at the workspace level under "Thread online scoring rule cooldown period".
   For self-hosted installations, set the `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable.
 </Note>

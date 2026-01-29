@@ -360,16 +360,26 @@ You can also tag a thread and add comments to it. This is useful to add addition
   <img src="/img/tracing/chat_conversation_tags_comments.png" />
 </Frame>
 
-### Online Scoring Cooling Period
+### Thread Online Scoring Rule Cooldown Period
 
-For online evaluation rules (automatic scoring), Opik waits for a "cooling period" after the last activity
+For thread-level online evaluation rules (automatic scoring), Opik waits for a "cooldown period" after the last activity
 in a thread before running the rules. This gives conversations time to settle before automatic evaluation.
 
 <Note>
-  By default, the cooling period is 15 minutes. You can change this value by setting the
+  By default, the cooldown period is 15 minutes. You can change this value by setting the
   `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable (if you are using the Opik self-hosted version).
-  On cloud, you can change this setting at workspace level under "Online scoring cooling period".
+  On cloud, you can change this setting at workspace level under "Thread online scoring rule cooldown period".
 </Note>
+
+#### Behavior When Adding Traces to Existing Threads
+
+When a new trace is added to an existing thread, the following happens:
+
+- **All previous feedback scores are deleted**: This includes both manual feedback scores and online evaluation scores. This ensures that the thread is re-evaluated with the complete, updated conversation context.
+- **The cooldown timer restarts**: The timer resets from the moment the new trace is added, ensuring online evaluation waits for the full cooldown period before scoring the updated thread.
+- **Online evaluation re-runs**: Once the cooldown period expires, thread-level online scoring rules will automatically evaluate the complete conversation again.
+
+This behavior ensures that online evaluation scores always reflect the final, complete state of the conversation rather than intermediate states.
 
 ## Advanced Thread Features
 
@@ -434,8 +444,6 @@ You can also manage threads programmatically using the Opik SDK:
     ```
 
 </CodeBlocks>
-
-You can mark a thread as inactive by calling [`TracesClient.close_trace_thread`](https://www.comet.com/docs/opik/python-sdk-reference/rest_api/clients/traces.html#opik.rest_api.traces.client.TracesClient.close_trace_thread)
 
 ## Next steps
 

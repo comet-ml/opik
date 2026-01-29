@@ -46,8 +46,8 @@ const EditThreadTimeoutDialog: React.FC<EditThreadTimeoutDialogProps> = ({
     );
 
     toast({
-      title: "Cooling period updated",
-      description: `Online scoring rules will wait ${formattedDuration} after the last activity before evaluating threads.`,
+      title: "Thread cooldown period updated",
+      description: `Thread online scoring rules will wait ${formattedDuration} after the last activity before evaluating threads.`,
       actions: [
         <ToastAction
           variant="link"
@@ -74,11 +74,13 @@ const EditThreadTimeoutDialog: React.FC<EditThreadTimeoutDialogProps> = ({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Edit online scoring cooling period</DialogTitle>
+          <DialogTitle>
+            Edit thread online scoring rule cooldown period
+          </DialogTitle>
           <DialogDescription>
             Set how long to wait after the last activity in a thread before
-            running online scoring rules. This gives conversations time to
-            settle before automatic evaluation.
+            running thread-level online scoring rules. This gives conversations
+            time to settle before automatic evaluation.
           </DialogDescription>
         </DialogHeader>
 
@@ -97,7 +99,7 @@ const EditThreadTimeoutDialog: React.FC<EditThreadTimeoutDialogProps> = ({
             variant="default"
             form={EDIT_THREAD_TIMEOUT_FORM_ID}
           >
-            Update cooling period
+            Update cooldown period
           </Button>
         </DialogFooter>
       </DialogContent>
