@@ -9,7 +9,12 @@ import opik
 from rich.console import Console
 
 from .experiment import recreate_experiments
-from .utils import matches_name_pattern, clean_feedback_scores, clean_usage_for_import
+from .utils import (
+    matches_name_pattern,
+    clean_feedback_scores,
+    clean_usage_for_import,
+    sort_spans_topologically,
+)
 
 console = Console()
 
@@ -126,12 +131,9 @@ def import_projects_from_directory(
                             str, str
                         ] = {}  # Maps original span ID to new span ID
 
-                        # Sort spans to process root spans (no parent) first, then children
-                        root_spans = [
-                            s for s in spans_info if not s.get("parent_span_id")
-                        ]
-                        child_spans = [s for s in spans_info if s.get("parent_span_id")]
-                        sorted_spans = root_spans + child_spans
+                        # Sort spans topologically to ensure parents are processed before children
+                        # This handles multi-level hierarchies correctly
+                        sorted_spans = sort_spans_topologically(spans_info)
 
                         for span_info in sorted_spans:
                             # Clean feedback scores to remove read-only fields
