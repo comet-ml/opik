@@ -245,10 +245,9 @@ const WorkspaceSelector: React.FC = () => {
               {isOrgAdmin && (
                 <TooltipWrapper content="Organization settings">
                   <Button
-                    variant="ghost"
+                    variant="minimal"
                     size="icon-xs"
                     onClick={handleOrgSettingsClick}
-                    className="text-light-slate"
                   >
                     <Settings2 className="size-3.5" />
                   </Button>
