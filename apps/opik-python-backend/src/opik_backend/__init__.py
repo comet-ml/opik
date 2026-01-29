@@ -11,6 +11,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.view import View, ExplicitBucketHistogramAggregation
 from opentelemetry.sdk.resources import Resource
 
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
@@ -142,7 +143,40 @@ def create_app(test_config=None, should_init_executor=True):
 def setup_otel_metrics(app, resource):
     """Configure OpenTelemetry metrics export."""
     otlp_reader = PeriodicExportingMetricReader(OTLPMetricExporter())
-    provider = MeterProvider(resource=resource, metric_readers=[otlp_reader])
+    
+    # Custom bucket boundaries for payload size histograms (in bytes)
+    # Covers range from 100 bytes to 100MB
+    payload_size_buckets = [
+        100,        # 100 B
+        500,        # 500 B
+        1_000,      # 1 KB
+        5_000,      # 5 KB
+        10_000,     # 10 KB
+        50_000,     # 50 KB
+        100_000,    # 100 KB
+        500_000,    # 500 KB
+        1_000_000,  # 1 MB
+        5_000_000,  # 5 MB
+        10_000_000, # 10 MB
+        50_000_000, # 50 MB
+        100_000_000,# 100 MB
+    ]
+    
+    # Create views for payload size histograms with custom buckets
+    payload_code_size_view = View(
+        instrument_name="payload_code_size",
+        aggregation=ExplicitBucketHistogramAggregation(boundaries=payload_size_buckets),
+    )
+    payload_data_size_view = View(
+        instrument_name="payload_data_size",
+        aggregation=ExplicitBucketHistogramAggregation(boundaries=payload_size_buckets),
+    )
+    
+    provider = MeterProvider(
+        resource=resource,
+        metric_readers=[otlp_reader],
+        views=[payload_code_size_view, payload_data_size_view],
+    )
     metrics.set_meter_provider(provider)
     app.logger.debug("OpenTelemetry metrics configured")
 
