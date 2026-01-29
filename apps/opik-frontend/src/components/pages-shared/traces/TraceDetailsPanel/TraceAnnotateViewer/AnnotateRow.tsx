@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import isNumber from "lodash/isNumber";
 import sortBy from "lodash/sortBy";
-import { Copy, MessageSquareMore, Trash, X } from "lucide-react";
+import { Copy, Trash, X } from "lucide-react";
 import DebounceInput from "@/components/shared/DebounceInput/DebounceInput";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
@@ -21,7 +21,7 @@ import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { SelectItem } from "@/components/ui/select";
 import { DropdownOption } from "@/types/shared";
-import { cn, updateTextAreaHeight } from "@/lib/utils";
+import { updateTextAreaHeight } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
@@ -90,20 +90,17 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
   const [categoryName, setCategoryName] = useState<string | undefined>(
     feedbackScoreData.category_name,
   );
-  const [editReason, setEditReason] = useState(false);
 
   useEffect(() => {
     setCategoryName(feedbackScoreData.category_name);
-    setEditReason(false);
   }, [feedbackScoreData.category_name]);
 
   const [value, setValue] = useState<number | "">(feedbackScoreData.value);
   useEffect(() => {
     setValue(feedbackScoreData.value);
 
-    if (!feedbackScoreData.value) {
-      setEditReason(false);
-      setReasonValue(undefined);
+    if (feedbackScoreData.value === "") {
+      setReasonValue("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedbackScoreData.value]);
@@ -149,15 +146,9 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
 
   const deleteFeedbackScore = useCallback(() => {
     onDeleteFeedbackScore(name);
-    setEditReason(false);
-    setReasonValue(undefined);
+    setReasonValue("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, setReasonValue]);
-
-  const toggleEditReasonHandler = useCallback(() => {
-    setEditReason(!editReason);
-    setReasonValue(feedbackScoreData?.reason);
-  }, [editReason, feedbackScoreData?.reason, setReasonValue]);
 
   const handleCopyReasonClick = async (v: string) => {
     await copy(v);
@@ -356,31 +347,6 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
           <div>{feedbackScoreData?.value}</div>
         )}
       </div>
-      <div className="flex items-center justify-center overflow-hidden border-t border-border">
-        {feedbackScoreData?.value !== "" && (
-          <Button
-            variant="outline"
-            size="icon-xs"
-            className={cn(
-              "relative group/reason-btn",
-              editReason &&
-                "bg-toggle-outline-active active:bg-toggle-outline-active hover:bg-toggle-outline-active",
-            )}
-            onClick={toggleEditReasonHandler}
-          >
-            {!!feedbackScoreData?.reason && (
-              <div
-                className={cn(
-                  "absolute right-1 top-1 size-[8px] rounded-full border-2 border-white bg-primary group-hover/reason-btn:border-primary-foreground",
-                  editReason &&
-                    "border-toggle-outline-active group-hover/reason-btn:border-toggle-outline-active",
-                )}
-              />
-            )}
-            <MessageSquareMore />
-          </Button>
-        )}
-      </div>
       <div className="flex items-center overflow-hidden border-t border-border px-0.5">
         {feedbackScoreData?.value !== "" && (
           <Button
@@ -393,48 +359,39 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
         )}
       </div>
 
-      {editReason && (
-        <>
-          <div className="group/reason-field relative col-span-3 px-1 pb-1 ">
-            <Textarea
-              placeholder="Add a reason..."
-              value={reasonValue}
-              onChange={onReasonChange}
-              className="min-h-6 resize-none overflow-hidden py-1 pt-[4px]"
-              ref={(e) => {
-                textAreaRef.current = e;
-                updateTextAreaHeight(e, 32);
-              }}
-            />
-            {feedbackScoreData?.reason && (
-              <div className="absolute right-2 top-1 hidden gap-1 group-hover/reason-field:flex">
-                <TooltipWrapper content="Copy">
-                  <Button
-                    size="icon-2xs"
-                    variant="outline"
-                    onClick={() =>
-                      handleCopyReasonClick(feedbackScoreData.reason!)
-                    }
-                  >
-                    <Copy />
-                  </Button>
-                </TooltipWrapper>
+      <div className="group/reason-field relative col-span-2 px-1 pb-1">
+        <Textarea
+          placeholder="Add a reason..."
+          value={reasonValue}
+          onChange={onReasonChange}
+          disabled={value === ""}
+          className="min-h-6 resize-none overflow-hidden py-1 pt-[4px]"
+          ref={(e) => {
+            textAreaRef.current = e;
+            updateTextAreaHeight(e, 32);
+          }}
+        />
+        {feedbackScoreData?.reason && value !== "" && (
+          <div className="absolute right-2 top-1 hidden gap-1 group-hover/reason-field:flex">
+            <TooltipWrapper content="Copy">
+              <Button
+                size="icon-2xs"
+                variant="outline"
+                onClick={() => handleCopyReasonClick(feedbackScoreData.reason!)}
+              >
+                <Copy />
+              </Button>
+            </TooltipWrapper>
 
-                <TooltipWrapper content="Clear">
-                  <Button
-                    variant="outline"
-                    size="icon-2xs"
-                    onClick={onReasonReset}
-                  >
-                    <Trash />
-                  </Button>
-                </TooltipWrapper>
-              </div>
-            )}
+            <TooltipWrapper content="Clear">
+              <Button variant="outline" size="icon-2xs" onClick={onReasonReset}>
+                <Trash />
+              </Button>
+            </TooltipWrapper>
           </div>
-          <div></div>
-        </>
-      )}
+        )}
+      </div>
+      <div></div>
     </>
   );
 };

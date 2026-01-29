@@ -164,7 +164,7 @@ const FeedbackScoresEditor = ({
   return (
     <div className={cn("flex flex-col px-6", className)}>
       {header}
-      <div className="grid max-w-full grid-cols-[minmax(0,5fr)_minmax(0,5fr)__36px_30px] border-b border-border empty:border-transparent">
+      <div className="grid max-w-full grid-cols-[minmax(0,5fr)_minmax(0,5fr)_30px] border-b border-border empty:border-transparent">
         {rows.map((row) => (
           <AnnotateRow
             key={row.name}
