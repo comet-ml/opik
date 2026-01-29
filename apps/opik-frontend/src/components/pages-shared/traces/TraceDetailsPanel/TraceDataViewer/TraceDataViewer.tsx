@@ -6,6 +6,7 @@ import {
   Brain,
   Clock,
   Coins,
+  FlaskConical,
   Hash,
   MessageSquareMore,
   PenLine,
@@ -25,6 +26,7 @@ import InputOutputTab from "./InputOutputTab";
 import MetadataTab from "./MatadataTab";
 import AgentGraphTab from "./AgentGraphTab";
 import PromptsTab from "./PromptsTab";
+import ConfigurationTab from "./ConfigurationTab";
 import { formatDuration, formatDate } from "@/lib/date";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
@@ -85,13 +87,24 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     return Array.isArray(prompts) && prompts.length > 0;
   }, [data.metadata, showOptimizerPrompts]);
 
+  const configData = useMemo(() => {
+    const metadata = data.metadata as Record<string, unknown> | undefined;
+    return metadata?.opik_config as
+      | { experiment_id?: string; values?: Record<string, unknown> }
+      | undefined;
+  }, [data.metadata]);
+
+  const hasConfig = Boolean(configData);
+  const hasExperiment = Boolean(configData?.experiment_id);
+
   const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
   });
 
   const selectedTab =
     (tab === "graph" && !hasSpanAgentGraph) ||
-    (tab === "prompts" && !hasPrompts)
+    (tab === "prompts" && !hasPrompts) ||
+    (tab === "configuration" && !hasConfig)
       ? "input"
       : tab;
 
@@ -275,6 +288,19 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 </div>
               </TooltipWrapper>
             )}
+            {hasExperiment && (
+              <TooltipWrapper
+                content={`Experiment: ${configData?.experiment_id}`}
+              >
+                <div
+                  className="comet-body-xs-accented flex items-center gap-1 text-purple-500"
+                  data-testid="data-viewer-experiment"
+                >
+                  <FlaskConical className="size-3 shrink-0" />
+                  <span>Experiment</span>
+                </div>
+              </TooltipWrapper>
+            )}
           </div>
           <TagList
             data={data}
@@ -300,6 +326,14 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             <TabsTrigger variant="underline" value="metadata">
               Metadata
             </TabsTrigger>
+            {hasConfig && (
+              <TabsTrigger variant="underline" value="configuration">
+                {hasExperiment && (
+                  <FlaskConical className="mr-1 size-3.5 text-purple-500" />
+                )}
+                Configuration
+              </TabsTrigger>
+            )}
             {hasPrompts && (
               <TabsTrigger variant="underline" value="prompts">
                 Prompts
@@ -351,6 +385,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           <TabsContent value="metadata">
             <MetadataTab data={data} search={search} />
           </TabsContent>
+          {hasConfig && (
+            <TabsContent value="configuration">
+              <ConfigurationTab data={data} search={search} />
+            </TabsContent>
+          )}
           {hasPrompts && (
             <TabsContent value="prompts">
               <PromptsTab data={data} search={search} />

@@ -95,6 +95,7 @@ import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import GuardrailsCell from "@/components/shared/DataTableCells/GuardrailsCell";
+import ExperimentCell from "@/components/shared/DataTableCells/ExperimentCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import {
@@ -815,6 +816,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const columnData = useMemo(() => {
     return [
       ...SHARED_COLUMNS,
+      {
+        id: "experiment",
+        label: "Experiment",
+        type: COLUMN_TYPE.string,
+        accessorFn: (row: BaseTraceData) => row.metadata,
+        cell: ExperimentCell as never,
+        size: 80,
+      },
       ...(type === TRACE_DATA_TYPE.traces
         ? [
             {
