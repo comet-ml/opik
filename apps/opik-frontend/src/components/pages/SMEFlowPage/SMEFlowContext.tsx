@@ -37,7 +37,6 @@ import useThreadFeedbackScoreSetMutation from "@/api/traces/useThreadFeedbackSco
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import { UpdateFeedbackScoreData } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/types";
-import { ThreadStatus } from "@/types/thread";
 import {
   getAnnotationQueueItemId,
   getFeedbackScoresByUser,
@@ -177,20 +176,13 @@ const getChangedScores = (state: AnnotationState) => {
 
 const validateCurrentItem = (
   item: Trace | Thread | undefined,
-  isThread: boolean,
 ): ValidationError[] => {
   const errors: ValidationError[] = [];
 
   if (!item) return errors;
 
-  if (isThread && (item as Thread).status === ThreadStatus.ACTIVE) {
-    errors.push({
-      type: "active_thread",
-      message:
-        "Active threads cannot be scored. Please set the thread status to inactive before submitting feedback scores.",
-      icon: "MessageCircleWarning",
-    });
-  }
+  // Thread status validation removed - feedback scores can now be added to threads
+  // regardless of their active/inactive status
 
   return errors;
 };
@@ -755,13 +747,13 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   ]);
 
   const validationState = useMemo((): ValidationState => {
-    const errors = validateCurrentItem(currentItem, isThread);
+    const errors = validateCurrentItem(currentItem);
     const hasChanges = hasUnsavedChanges(currentAnnotationState);
     return {
       canSubmit: errors.length === 0 && hasChanges,
       errors,
     };
-  }, [currentItem, isThread, currentAnnotationState]);
+  }, [currentItem, currentAnnotationState]);
 
   useEffect(() => {
     if (!currentView && !isItemsLoading && queueItems.length > 0) {
