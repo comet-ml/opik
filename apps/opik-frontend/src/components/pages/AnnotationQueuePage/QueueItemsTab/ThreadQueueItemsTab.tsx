@@ -29,11 +29,7 @@ import {
 import { Thread } from "@/types/traces";
 import { ThreadStatus } from "@/types/thread";
 import { AnnotationQueue } from "@/types/annotation-queues";
-import {
-  convertColumnDataToColumn,
-  injectColumnCallback,
-  migrateSelectedColumns,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import {
   generateActionsColumDef,
@@ -50,7 +46,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
@@ -154,10 +150,7 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     id: COLUMN_ID_ID,
     label: "ID",
     type: COLUMN_TYPE.string,
-    cell: LinkCell as never,
-    customMeta: {
-      asId: true,
-    },
+    cell: IdCell as never,
     sortable: true,
   },
   ...SHARED_COLUMNS,
@@ -434,7 +427,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
 
     return [
       generateSelectColumDef<Thread>(),
-      ...injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick),
+      ...convertedColumns,
       ...convertColumnDataToColumn<Thread, Thread>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
         selectedColumns,
@@ -448,7 +441,6 @@ const ThreadQueueItemsTab: React.FunctionComponent<
       }),
     ];
   }, [
-    handleRowClick,
     sortableBy,
     columnsOrder,
     selectedColumns,

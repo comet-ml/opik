@@ -68,6 +68,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
@@ -227,6 +228,7 @@ const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
 const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   COLUMN_ID_ID,
   "name",
+  "start_time",
   "input",
   "output",
   "duration",
@@ -568,7 +570,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       defaultValue: migrateSelectedColumns(
         SELECTED_COLUMNS_KEY,
         DEFAULT_TRACES_PAGE_COLUMNS,
-        [COLUMN_ID_ID],
+        [COLUMN_ID_ID, "start_time"],
       ),
     },
   );
@@ -820,11 +822,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         id: COLUMN_ID_ID,
         label: "ID",
         type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
+        cell: IdCell as never,
         sortable: true,
       },
       ...SHARED_COLUMNS,
@@ -901,7 +899,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         : []),
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
-  }, [type, handleRowClick, handleThreadIdClick, isGuardrailsEnabled]);
+  }, [type, handleThreadIdClick, isGuardrailsEnabled]);
 
   const filtersColumnData = useMemo(() => {
     return [
