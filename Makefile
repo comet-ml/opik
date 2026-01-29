@@ -10,8 +10,8 @@ help:
 	@echo "AI Editor Configuration Sync"
 	@echo ""
 	@echo "  make cursor        - Ensure .cursor symlink points to .agents/"
-	@echo "  make claude        - Sync .agents/ to .claude/ + generate .mcp.json for Claude CLI"
-	@echo "  make clean-agents  - Remove generated files (keeps .agents/)"
+	@echo "  make claude        - Sync .agents/ to .claude/ + generate .mcp.json (preserves local files)"
+	@echo "  make clean-agents  - Remove synced files from .claude/ (preserves local customizations)"
 	@echo ""
 	@echo "Git Hooks"
 	@echo ""
@@ -41,13 +41,14 @@ cursor:
 # Sync to Claude (preserve nested structure, convert frontmatter)
 # Converts: .mdc -> .md, Cursor frontmatter -> Claude frontmatter
 # Cursor: globs/alwaysApply -> Claude: paths
+# Preserves local customizations (files in .claude/ not in .agents/)
 claude:
 	@if [ ! -d "$(AI_DIR)/rules" ]; then \
 		echo "Error: $(AI_DIR)/rules/ does not exist."; \
 		exit 1; \
 	fi
-	@echo "Syncing $(AI_DIR)/rules/ to $(CLAUDE_DIR)/rules/ (nested, with frontmatter conversion)..."
-	@rm -rf $(CLAUDE_DIR)/rules
+	@echo "Syncing $(AI_DIR)/rules/ to $(CLAUDE_DIR)/rules/ (preserving local files)..."
+	@mkdir -p $(CLAUDE_DIR)/rules
 	@find $(AI_DIR)/rules -name "*.mdc" | while read src; do \
 		rel=$${src#$(AI_DIR)/rules/}; \
 		dest="$(CLAUDE_DIR)/rules/$${rel%.mdc}.md"; \
@@ -55,10 +56,10 @@ claude:
 		./scripts/convert-frontmatter.sh cursor-to-claude "$$src" "$$dest"; \
 		echo "  $$rel -> $${rel%.mdc}.md"; \
 	done
-	@# Sync commands (preserve nested structure)
+	@# Sync commands (preserve local files)
 	@if [ -d "$(AI_DIR)/commands" ]; then \
-		echo "Syncing $(AI_DIR)/commands/ to $(CLAUDE_DIR)/commands/..."; \
-		rm -rf $(CLAUDE_DIR)/commands; \
+		echo "Syncing $(AI_DIR)/commands/ to $(CLAUDE_DIR)/commands/ (preserving local files)..."; \
+		mkdir -p $(CLAUDE_DIR)/commands; \
 		find $(AI_DIR)/commands -name "*.md" | while read src; do \
 			rel=$${src#$(AI_DIR)/commands/}; \
 			dest="$(CLAUDE_DIR)/commands/$$rel"; \
@@ -67,6 +68,20 @@ claude:
 			echo "  $$rel"; \
 		done; \
 	fi
+	@# Sync skills (preserve local files)
+	@if [ -d "$(AI_DIR)/skills" ]; then \
+		echo "Syncing $(AI_DIR)/skills/ to $(CLAUDE_DIR)/skills/ (preserving local files)..."; \
+		mkdir -p $(CLAUDE_DIR)/skills; \
+		cp -r $(AI_DIR)/skills/* $(CLAUDE_DIR)/skills/; \
+		echo "  skills synced"; \
+	fi
+	@# Sync agents (preserve local files)
+	@if [ -d "$(AI_DIR)/agents" ]; then \
+		echo "Syncing $(AI_DIR)/agents/ to $(CLAUDE_DIR)/agents/ (preserving local files)..."; \
+		mkdir -p $(CLAUDE_DIR)/agents; \
+		cp -r $(AI_DIR)/agents/* $(CLAUDE_DIR)/agents/; \
+		echo "  agents synced"; \
+	fi
 	@# Convert MCP config to Claude CLI format (.mcp.json at repo root)
 	@if [ -f "$(AI_DIR)/mcp.json" ]; then \
 		echo "Converting MCP config to Claude CLI format..."; \
@@ -74,13 +89,47 @@ claude:
 	fi
 	@echo "Claude ready! Files in $(CLAUDE_DIR)/ and .mcp.json"
 
-# Clean generated files (preserves .agents/)
+# Clean generated files (preserves .agents/ and local customizations in .claude/)
+# Only deletes files that have a corresponding source in .agents/
 clean-agents:
-	@echo "Removing generated files..."
+	@echo "Removing generated files (preserving local customizations)..."
 	@[ -L "$(CURSOR_DIR)" ] && rm -f $(CURSOR_DIR) && echo "Removed $(CURSOR_DIR) symlink" || true
-	@rm -rf $(CLAUDE_DIR)/rules $(CLAUDE_DIR)/commands && echo "Removed $(CLAUDE_DIR)/rules/ and commands/" || true
+	@# Clean rules: only delete .claude/rules/*.md that have .agents/rules/*.mdc source
+	@if [ -d "$(AI_DIR)/rules" ]; then \
+		find $(AI_DIR)/rules -name "*.mdc" 2>/dev/null | while read src; do \
+			rel=$${src#$(AI_DIR)/rules/}; \
+			dest="$(CLAUDE_DIR)/rules/$${rel%.mdc}.md"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
+		done; \
+	fi
+	@# Clean commands: only delete files that exist in .agents/commands/
+	@if [ -d "$(AI_DIR)/commands" ]; then \
+		find $(AI_DIR)/commands -name "*.md" 2>/dev/null | while read src; do \
+			rel=$${src#$(AI_DIR)/commands/}; \
+			dest="$(CLAUDE_DIR)/commands/$$rel"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
+		done; \
+	fi
+	@# Clean skills: only delete directories/files that exist in .agents/skills/
+	@if [ -d "$(AI_DIR)/skills" ]; then \
+		find $(AI_DIR)/skills -type f 2>/dev/null | while read src; do \
+			rel=$${src#$(AI_DIR)/skills/}; \
+			dest="$(CLAUDE_DIR)/skills/$$rel"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
+		done; \
+	fi
+	@# Clean agents: only delete files that exist in .agents/agents/
+	@if [ -d "$(AI_DIR)/agents" ]; then \
+		find $(AI_DIR)/agents -name "*.md" 2>/dev/null | while read src; do \
+			rel=$${src#$(AI_DIR)/agents/}; \
+			dest="$(CLAUDE_DIR)/agents/$$rel"; \
+			[ -f "$$dest" ] && rm -f "$$dest" && echo "  Removed $$dest"; \
+		done; \
+	fi
+	@# Clean up empty directories
+	@find $(CLAUDE_DIR) -type d -empty -delete 2>/dev/null || true
 	@[ -f ".mcp.json" ] && rm -f .mcp.json && echo "Removed .mcp.json" || true
-	@echo "Done! $(AI_DIR)/ preserved."
+	@echo "Done! Local customizations preserved."
 
 # Install Git hooks from .hooks/ to .git/hooks/
 hooks:
