@@ -25,8 +25,7 @@ description: Local development environment setup and commands. Use when helping 
 
 - **Frontend**: localhost:5174 (standard) / localhost:5173 (BE-only)
 - **Backend API**: localhost:8080
-- **Health**: localhost:8080/health
-- **Swagger**: localhost:8080/swagger
+- **Health**: http://localhost:8080/health-check?name=all
 
 ## Build Commands
 
