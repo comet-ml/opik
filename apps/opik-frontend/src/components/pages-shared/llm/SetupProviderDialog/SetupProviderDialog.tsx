@@ -101,6 +101,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
     (data: AIProviderFormType) => {
       const isCustom = data.provider === PROVIDER_TYPE.CUSTOM;
       const isBedrock = data.provider === PROVIDER_TYPE.BEDROCK;
+      const isOllama = data.provider === PROVIDER_TYPE.OLLAMA;
       const isVertex = data.provider === PROVIDER_TYPE.VERTEX_AI;
 
       const providerKeyData: Partial<{
@@ -116,7 +117,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
       };
 
       if (
-        (isCustom || isBedrock) &&
+        (isCustom || isBedrock || isOllama) &&
         "url" in data &&
         "models" in data &&
         "providerName" in data

@@ -21,5 +21,6 @@ export enum FeatureToggleKeys {
   VERTEXAI_PROVIDER_ENABLED = "vertexai_provider_enabled",
   BEDROCK_PROVIDER_ENABLED = "bedrock_provider_enabled",
   CUSTOMLLM_PROVIDER_ENABLED = "customllm_provider_enabled",
+  OLLAMA_PROVIDER_ENABLED = "ollama_provider_enabled",
   COLLABORATORS_TAB_ENABLED = "collaborators_tab_enabled",
 }

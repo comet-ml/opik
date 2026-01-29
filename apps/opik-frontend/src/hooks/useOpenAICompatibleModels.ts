@@ -27,7 +27,8 @@ const useOpenAICompatibleModels = () => {
         .filter(
           (providerKey) =>
             providerKey.provider === PROVIDER_TYPE.CUSTOM ||
-            providerKey.provider === PROVIDER_TYPE.BEDROCK,
+            providerKey.provider === PROVIDER_TYPE.BEDROCK ||
+            providerKey.provider === PROVIDER_TYPE.OLLAMA,
         )
         .forEach((providerObject) => {
           if (providerObject.configuration?.models) {

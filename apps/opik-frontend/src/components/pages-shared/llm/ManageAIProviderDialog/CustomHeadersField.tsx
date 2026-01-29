@@ -1,0 +1,132 @@
+import React from "react";
+import { UseFormReturn } from "react-hook-form";
+import { Label } from "@/components/ui/label";
+import { AIProviderFormType } from "@/components/pages-shared/llm/ManageAIProviderDialog/schema";
+import get from "lodash/get";
+import { FormField, FormItem, FormMessage } from "@/components/ui/form";
+import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Description } from "@/components/ui/description";
+import { Button } from "@/components/ui/button";
+import { Plus, Trash2 } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
+
+type CustomHeadersFieldProps = {
+  form: UseFormReturn<AIProviderFormType>;
+  description?: string;
+};
+
+const CustomHeadersField: React.FC<CustomHeadersFieldProps> = ({
+  form,
+  description = "Custom providers may require additional headers beyond the API key. Add them here as key-value pairs.",
+}) => {
+  return (
+    <FormField
+      control={form.control}
+      name="headers"
+      render={({ field, formState }) => {
+        const headers = field.value || [];
+
+        const addHeader = () => {
+          field.onChange([...headers, { key: "", value: "", id: uuidv4() }]);
+        };
+
+        const removeHeader = (id: string) => {
+          const newHeaders = headers.filter((h) => h.id !== id);
+          field.onChange(newHeaders);
+        };
+
+        const updateHeader = (id: string, key: string, value: string) => {
+          const newHeaders = headers.map((h) =>
+            h.id === id ? { ...h, key, value } : h,
+          );
+          field.onChange(newHeaders);
+        };
+
+        const getHeaderError = (index: number, fieldName: "key" | "value") => {
+          return get(formState.errors, ["headers", index, fieldName]);
+        };
+
+        return (
+          <FormItem>
+            <Label>Custom headers (optional)</Label>
+            <div className="flex flex-col gap-2">
+              {headers.map((header, index) => {
+                const keyError = getHeaderError(index, "key");
+                const valueError = getHeaderError(index, "value");
+
+                return (
+                  <div key={header.id} className="flex flex-col gap-1">
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Header name"
+                          value={header.key}
+                          onChange={(e) =>
+                            updateHeader(
+                              header.id,
+                              e.target.value,
+                              header.value,
+                            )
+                          }
+                          className={cn("w-full", {
+                            "border-destructive": Boolean(keyError),
+                          })}
+                        />
+                        {keyError && (
+                          <p className="mt-1 text-xs text-destructive">
+                            {keyError.message as string}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Header value"
+                          value={header.value}
+                          onChange={(e) =>
+                            updateHeader(header.id, header.key, e.target.value)
+                          }
+                          className={cn("w-full", {
+                            "border-destructive": Boolean(valueError),
+                          })}
+                        />
+                        {valueError && (
+                          <p className="mt-1 text-xs text-destructive">
+                            {valueError.message as string}
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeHeader(header.id)}
+                        className="shrink-0"
+                      >
+                        <Trash2 className="comet-body-s" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addHeader}
+                className="w-fit"
+              >
+                <Plus className="mr-1.5 size-3.5" />
+                Add header
+              </Button>
+            </div>
+            <Description>{description}</Description>
+            <FormMessage />
+          </FormItem>
+        );
+      }}
+    />
+  );
+};
+
+export default CustomHeadersField;
