@@ -62,6 +62,20 @@ def attachment_to_message(
 
 
 def _write_file_like_to_temp_file(file_like: bytes) -> str:
+    """
+    Writes a bytes-like file object to a temporary file on the filesystem.
+
+    This function accepts a file-like object in the form of bytes and writes its
+    contents to a temporary file. The temporary file is not deleted automatically
+    on program termination. The path to the created temporary file is returned.
+
+    Args:
+        file_like: The bytes-like object containing the file content
+            to be written to a temporary file.
+
+    Returns:
+        The full path to the created temporary file.
+    """
     temp_file = tempfile.NamedTemporaryFile(mode="wb", delete=False)
     try:
         temp_file.write(file_like)
