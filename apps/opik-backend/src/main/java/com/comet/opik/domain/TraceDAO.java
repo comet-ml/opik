@@ -1842,18 +1842,28 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_TRACES_STATS = """
-             WITH spans_agg AS (
+             WITH spans_data AS (
+                SELECT
+                    id,
+                    trace_id,
+                    usage,
+                    total_estimated_cost,
+                    type,
+                    workspace_id,
+                    project_id
+                FROM spans FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+             ), spans_agg AS (
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(id) as span_count,
                     toInt64(countIf(type = 'llm')) as llm_span_count
-                FROM spans FINAL
-                WHERE workspace_id = :workspace_id
-                AND project_id IN :project_ids
-                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                FROM spans_data
                 GROUP BY workspace_id, project_id, trace_id
             ), feedback_scores_combined_raw AS (
                 SELECT
@@ -2004,13 +2014,6 @@ class TraceDAOImpl implements TraceDAO {
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
-            ), target_spans AS (
-                SELECT id, trace_id
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND project_id IN :project_ids
-                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
             ),
             span_feedback_scores_combined_raw AS (
                 SELECT workspace_id,
@@ -2030,7 +2033,6 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -2049,7 +2051,6 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  AND entity_id IN (SELECT id FROM target_spans)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -2100,7 +2101,7 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_at,
                        author
                 FROM span_feedback_scores_combined sfs
-                INNER JOIN target_spans s ON sfs.entity_id = s.id
+                INNER JOIN spans_data s ON sfs.entity_id = s.id
             ), span_feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
@@ -2173,30 +2174,6 @@ class TraceDAOImpl implements TraceDAO {
                  GROUP BY trace_id
                  HAVING <span_feedback_scores_empty_filters>
             )
-            <endif>
-            <if(project_stats)>
-            ,    error_count_current AS (
-                    SELECT
-                        project_id,
-                        count(error_info) AS recent_error_count
-                    FROM traces final
-                    WHERE workspace_id = :workspace_id
-                    AND project_id IN :project_ids
-                    AND error_info != ''
-                    AND toDateTime(UUIDv7ToDateTime(toUUID(id))) BETWEEN toStartOfDay(subtractDays(now(), 7)) AND now64(9)
-                    GROUP BY workspace_id, project_id
-                ),
-                error_count_past_period AS (
-                    SELECT
-                        project_id,
-                        count(error_info) AS past_period_error_count
-                    FROM traces final
-                    WHERE workspace_id = :workspace_id
-                    AND project_id IN :project_ids
-                    AND error_info != ''
-                    AND toDateTime(UUIDv7ToDateTime(toUUID(id))) \\< toStartOfDay(subtractDays(now(), 7))
-                    GROUP BY workspace_id, project_id
-                )
             <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -2327,8 +2304,8 @@ class TraceDAOImpl implements TraceDAO {
                 toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
                 sum(g.failed_count) AS guardrails_failed_count,
                 <if(project_stats)>
-                any(ec.recent_error_count) AS recent_error_count,
-                any(ecl.past_period_error_count) AS past_period_error_count
+                countIf(t.error_info != '' AND toDateTime(UUIDv7ToDateTime(toUUID(t.id))) BETWEEN toStartOfDay(subtractDays(now(), 7)) AND now64(9)) AS recent_error_count,
+                countIf(t.error_info != '' AND toDateTime(UUIDv7ToDateTime(toUUID(t.id))) \\< toStartOfDay(subtractDays(now(), 7))) AS past_period_error_count
                 <else>
                 countIf(t.error_info, t.error_info != '') AS error_count
                 <endif>
@@ -2337,10 +2314,6 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN feedback_scores_agg as f ON t.id = f.entity_id
             LEFT JOIN span_feedback_scores_agg as sfs ON t.id = sfs.trace_id
             LEFT JOIN guardrails_agg as g ON t.id = g.entity_id
-            <if(project_stats)>
-            LEFT JOIN error_count_current ec ON t.project_id = ec.project_id
-            LEFT JOIN error_count_past_period ecl ON t.project_id = ecl.project_id
-            <endif>
             GROUP BY t.workspace_id, t.project_id
             SETTINGS log_comment = '<log_comment>'
             ;
