@@ -7,15 +7,15 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import { getKeyForChangingRole } from "@/plugins/comet/lib/permissions";
 import { UserPermission, WorkspaceMember } from "@/plugins/comet/types";
-import useWorkspace from "@/plugins/comet/useWorkspace";
 import WorkspaceRolePopover from "@/plugins/comet/WorkspaceRolePopover";
+import WorkspaceRolesSelectContent from "./WorkspaceRolesSelectContent";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import { useUpdateWorkspaceUsersPermissionsMutation } from "@/plugins/comet/api/useUpdateWorkspaceUsersPermissionsMutation";
 import { useUpdateWorkspaceUserRoleMutation } from "@/plugins/comet/api/useUpdateWorkspaceUserRoleMutation";
 import { useLoggedInUserName } from "@/store/AppStore";
 import useManageUsersRolePopover from "./useManageUsersRolePopover";
 import { useWorkspaceRolesContext } from "@/plugins/comet/WorkspaceRolesContext";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
-import WorkspaceRolesSelectContent from "./WorkspaceRolesSelectContent";
 
 const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   const value = context.getValue();
