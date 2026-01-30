@@ -9,7 +9,6 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
 
-import pytest
 
 from opik.cli import code_agent_trace
 
@@ -120,8 +119,18 @@ class TestGroupByGeneration:
     def test_group__single_generation__groups_correctly(self):
         """Test grouping records with single generation_id."""
         records: List[Dict[str, Any]] = [
-            {"id": "1", "generation_id": "gen-1", "event": "tool_execution", "timestamp": "2024-01-30T08:00:00Z"},
-            {"id": "2", "generation_id": "gen-1", "event": "tool_execution", "timestamp": "2024-01-30T08:00:05Z"},
+            {
+                "id": "1",
+                "generation_id": "gen-1",
+                "event": "tool_execution",
+                "timestamp": "2024-01-30T08:00:00Z",
+            },
+            {
+                "id": "2",
+                "generation_id": "gen-1",
+                "event": "tool_execution",
+                "timestamp": "2024-01-30T08:00:05Z",
+            },
         ]
 
         result = code_agent_trace._group_by_generation(records)
@@ -133,9 +142,24 @@ class TestGroupByGeneration:
     def test_group__multiple_generations__groups_correctly(self):
         """Test grouping records with multiple generation_ids."""
         records: List[Dict[str, Any]] = [
-            {"id": "1", "generation_id": "gen-1", "event": "tool_execution", "timestamp": "2024-01-30T08:00:00Z"},
-            {"id": "2", "generation_id": "gen-2", "event": "tool_execution", "timestamp": "2024-01-30T08:00:05Z"},
-            {"id": "3", "generation_id": "gen-1", "event": "tool_execution", "timestamp": "2024-01-30T08:00:10Z"},
+            {
+                "id": "1",
+                "generation_id": "gen-1",
+                "event": "tool_execution",
+                "timestamp": "2024-01-30T08:00:00Z",
+            },
+            {
+                "id": "2",
+                "generation_id": "gen-2",
+                "event": "tool_execution",
+                "timestamp": "2024-01-30T08:00:05Z",
+            },
+            {
+                "id": "3",
+                "generation_id": "gen-1",
+                "event": "tool_execution",
+                "timestamp": "2024-01-30T08:00:10Z",
+            },
         ]
 
         result = code_agent_trace._group_by_generation(records)
@@ -144,7 +168,9 @@ class TestGroupByGeneration:
         assert len(result["gen-1"]) == 2
         assert len(result["gen-2"]) == 1
 
-    def test_group__user_message_different_generation__includes_in_other_generation(self):
+    def test_group__user_message_different_generation__includes_in_other_generation(
+        self,
+    ):
         """Test that user_message is included in generation without one."""
         records: List[Dict[str, Any]] = [
             {
@@ -169,7 +195,9 @@ class TestGroupByGeneration:
 
         # gen-agent should have the user_message included
         gen_agent_records = result["gen-agent"]
-        has_user_message = any(r.get("event") == "user_message" for r in gen_agent_records)
+        has_user_message = any(
+            r.get("event") == "user_message" for r in gen_agent_records
+        )
         assert has_user_message
 
     def test_group__no_generation_id__creates_standalone(self):
