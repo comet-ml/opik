@@ -179,13 +179,25 @@ jobs:
           # Configure Allure results directory
           export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/typescript-tests/${{ env.ALLURE_RESULTS }}"
           
+          # Create .allure directory to prevent testplan.json error
+          mkdir -p .allure
+          
           # Run tests with allurectl for TestOps integration
-          # Note: We use || true to prevent step from failing immediately
-          # The actual result is captured via the step outcome
+          # Capture output to extract the direct report URL
           set +e
-          allurectl watch -- npx playwright test
-          TEST_EXIT_CODE=$?
+          allurectl watch -- npx playwright test 2>&1 | tee allure_output.log
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
           set -e
+          
+          # Extract the direct job run URL from allurectl output
+          if grep -q "Report link:" allure_output.log; then
+            REPORT_URL=$(grep "Report link:" allure_output.log | head -1 | sed 's/.*Report link:[[:space:]]*//' | awk '{print $1}')
+            echo "allure_report_url=${REPORT_URL}" >> $GITHUB_OUTPUT
+            echo "📊 Captured Allure TestOps report URL: ${REPORT_URL}"
+          else
+            echo "allure_report_url=" >> $GITHUB_OUTPUT
+            echo "⚠️ Could not capture direct report URL from allurectl output"
+          fi
           
           echo ""
           echo "========================================"
@@ -235,7 +247,17 @@ jobs:
         id: set-outputs
         if: always()
         run: |
-          TESTOPS_URL="${{ env.ALLURE_ENDPOINT }}project/${{ env.ALLURE_PROJECT_ID }}/launches"
+          # Use direct report URL if captured, otherwise fall back to launches page
+          DIRECT_URL="${{ steps.run-tests.outputs.allure_report_url }}"
+          
+          if [ -n "$DIRECT_URL" ]; then
+            TESTOPS_URL="$DIRECT_URL"
+            echo "📊 Using direct TestOps report URL"
+          else
+            TESTOPS_URL="${{ env.ALLURE_ENDPOINT }}project/${{ env.ALLURE_PROJECT_ID }}/launches"
+            echo "📊 Using fallback launches page URL"
+          fi
+          
           echo "testops_url=$TESTOPS_URL" >> $GITHUB_OUTPUT
 
       # ========================================
@@ -245,7 +267,7 @@ jobs:
         if: always()
         run: |
           SUITE="${{ github.event.inputs.suite || 'happypaths' }}"
-          TESTOPS_URL="${{ env.ALLURE_ENDPOINT }}project/${{ env.ALLURE_PROJECT_ID }}/launches"
+          TESTOPS_URL="${{ steps.set-outputs.outputs.testops_url }}"
           
           TOTAL="${{ steps.parse-results.outputs.total }}"
           PASSED="${{ steps.parse-results.outputs.passed }}"
@@ -372,6 +394,58 @@ jobs:
             echo "configured=true" >> $GITHUB_OUTPUT
           fi
 
+      - name: "🔍 Resolve Slack mentions"
+        id: resolve-slack-mentions
+        if: steps.check-slack.outputs.configured == 'true'
+        env:
+          SLACK_USER_MAPPING: ${{ secrets.SLACK_USER_MAPPING }}
+          SLACK_QA_LEAD_ID: ${{ secrets.SLACK_QA_LEAD_ID }}
+        run: |
+          AUTHOR="${{ needs.e2e-tests.outputs.pr_author }}"
+          IS_FAILURE="${{ needs.e2e-tests.result == 'failure' }}"
+          
+          # Only resolve mentions for failures
+          if [ "$IS_FAILURE" == "true" ]; then
+            # Build QA lead mention
+            if [ -n "$SLACK_QA_LEAD_ID" ]; then
+              QA_MENTION="<@$SLACK_QA_LEAD_ID>"
+            else
+              QA_MENTION=""
+            fi
+            
+            # Look up author's Slack ID from the mapping
+            AUTHOR_MENTION=""
+            if [ -n "$SLACK_USER_MAPPING" ]; then
+              AUTHOR_SLACK_ID=$(echo "$SLACK_USER_MAPPING" | jq -r --arg user "$AUTHOR" '.[$user] // empty' 2>/dev/null || echo "")
+              if [ -n "$AUTHOR_SLACK_ID" ]; then
+                # Don't duplicate mention if author IS the QA lead
+                if [ "$AUTHOR_SLACK_ID" != "$SLACK_QA_LEAD_ID" ]; then
+                  AUTHOR_MENTION="<@$AUTHOR_SLACK_ID>"
+                fi
+              fi
+            fi
+            
+            # Build combined mention string
+            if [ -n "$QA_MENTION" ] && [ -n "$AUTHOR_MENTION" ]; then
+              MENTIONS="$QA_MENTION $AUTHOR_MENTION"
+            elif [ -n "$QA_MENTION" ]; then
+              MENTIONS="$QA_MENTION"
+            elif [ -n "$AUTHOR_MENTION" ]; then
+              MENTIONS="$AUTHOR_MENTION"
+            else
+              MENTIONS=""
+            fi
+            
+            echo "mentions=$MENTIONS" >> $GITHUB_OUTPUT
+            echo "has_mentions=true" >> $GITHUB_OUTPUT
+          else
+            echo "mentions=" >> $GITHUB_OUTPUT
+            echo "has_mentions=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Always output author for display
+          echo "author_display=$AUTHOR" >> $GITHUB_OUTPUT
+
       - name: "📢 Send Slack notification"
         if: steps.check-slack.outputs.configured == 'true'
         env:
@@ -384,7 +458,8 @@ jobs:
           SHORT_SHA="${COMMIT_SHA:0:7}"
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           TESTOPS_URL="${{ needs.e2e-tests.outputs.testops_url }}"
-          AUTHOR="${{ needs.e2e-tests.outputs.pr_author }}"
+          AUTHOR="${{ steps.resolve-slack-mentions.outputs.author_display }}"
+          MENTIONS="${{ steps.resolve-slack-mentions.outputs.mentions }}"
           
           PASSED="${{ needs.e2e-tests.outputs.passed_tests }}"
           FAILED="${{ needs.e2e-tests.outputs.failed_tests }}"
@@ -400,9 +475,21 @@ jobs:
             COLOR="danger"
           fi
           
+          # Build the mention block (only for failures with mentions)
+          if [ "${{ needs.e2e-tests.result }}" == "failure" ] && [ -n "$MENTIONS" ]; then
+            MENTION_BLOCK=',
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "🚨 '"$MENTIONS"' - Tests need attention!"
+                    }
+                  }'
+          else
+            MENTION_BLOCK=""
+          fi
+          
           # Build payload
-          # Note: To mention specific users, you'd need to map GitHub usernames to Slack user IDs
-          # For now, we include the GitHub username in the message
           cat << EOF > payload.json
           {
             "attachments": [
@@ -416,7 +503,7 @@ jobs:
                       "text": "$STATUS_EMOJI E2E Tests $STATUS_TEXT - Post Merge",
                       "emoji": true
                     }
-                  },
+                  }$MENTION_BLOCK,
                   {
                     "type": "section",
                     "fields": [
@@ -497,12 +584,23 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Slack notifications are not configured. To enable them:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "1. Create a Slack Incoming Webhook:" >> $GITHUB_STEP_SUMMARY
-          echo "   - Go to your Slack workspace's App Directory" >> $GITHUB_STEP_SUMMARY
-          echo "   - Search for 'Incoming Webhooks'" >> $GITHUB_STEP_SUMMARY
-          echo "   - Create a new webhook for your desired channel" >> $GITHUB_STEP_SUMMARY
+          echo "### Required: Create a Slack Incoming Webhook" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "2. Add the webhook URL as a repository secret:" >> $GITHUB_STEP_SUMMARY
-          echo "   - Go to Settings → Secrets and variables → Actions" >> $GITHUB_STEP_SUMMARY
-          echo "   - Create a new secret named \`SLACK_WEBHOOK_URL\`" >> $GITHUB_STEP_SUMMARY
-          echo "   - Paste your webhook URL as the value" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to your Slack workspace's App Directory" >> $GITHUB_STEP_SUMMARY
+          echo "2. Search for 'Incoming Webhooks' and create a new app" >> $GITHUB_STEP_SUMMARY
+          echo "3. Create a new webhook for your desired channel" >> $GITHUB_STEP_SUMMARY
+          echo "4. Add the webhook URL as a repository secret named \`SLACK_WEBHOOK_URL\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Optional: Enable @mentions on failures" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To ping users when tests fail, add these additional secrets:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`SLACK_QA_LEAD_ID\`: Your Slack user ID (always notified on failures)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`SLACK_USER_MAPPING\`: JSON mapping of GitHub usernames to Slack IDs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Example SLACK_USER_MAPPING format:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          echo '{"github-user": "USLACKID1", "another-user": "USLACKID2"}' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See: scripts/slack-user-mapping/README.md for detailed setup instructions." >> $GITHUB_STEP_SUMMARY
