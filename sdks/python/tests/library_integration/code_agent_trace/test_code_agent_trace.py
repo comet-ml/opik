@@ -11,11 +11,7 @@ import opik
 from opik.integrations.code_agent_trace import log_code_agent_turn
 
 from ...testlib import (
-    ANY,
     ANY_BUT_NONE,
-    ANY_DICT,
-    ANY_LIST,
-    ANY_STRING,
     FeedbackScoreModel,
     SpanModel,
     TraceModel,
@@ -42,10 +38,11 @@ def test_log_code_agent_turn__full_flow__creates_trace_and_spans(fake_backend):
 
     This test uses a real traces.jsonl file and verifies:
     - Trace is created with correct metadata
-    - Input is in OpenAI messages format
+    - Input is in OpenAI messages format (user, assistant with tool_calls, tool results)
     - Output is in OpenAI chat completion format
     - Spans are created for tool executions
     - Feedback scores are included
+    - thread_id is set from conversation_id
     """
     records = _load_test_records()
 
@@ -60,6 +57,7 @@ def test_log_code_agent_turn__full_flow__creates_trace_and_spans(fake_backend):
     trace_tree = fake_backend.trace_trees[0]
 
     # Define expected trace structure using tree-based assertion
+    # We control test_traces.jsonl, so we specify exact expected values
     EXPECTED_TRACE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
@@ -68,7 +66,7 @@ def test_log_code_agent_turn__full_flow__creates_trace_and_spans(fake_backend):
         name="Agent Turn: 1 edit, 1 command",
         input={
             "messages": [
-                # User message
+                # User message - exact content from test_traces.jsonl
                 {
                     "role": "user",
                     "content": [
@@ -85,35 +83,53 @@ def test_log_code_agent_turn__full_flow__creates_trace_and_spans(fake_backend):
                     "refusal": None,
                     "audio": None,
                     "function_call": None,
-                    "tool_calls": ANY_LIST,
+                    "tool_calls": [
+                        {
+                            "id": "call_record-2",
+                            "type": "function",
+                            "function": {
+                                "name": "file_edit",
+                                "arguments": '{"file_path": "/project/main.py", "edit_count": 1}',
+                            },
+                        },
+                        {
+                            "id": "call_record-3",
+                            "type": "function",
+                            "function": {
+                                "name": "shell",
+                                "arguments": '{"command": "python main.py", "cwd": "/project"}',
+                            },
+                        },
+                    ],
                 },
                 # Tool result for file_edit
                 {
                     "role": "tool",
                     "tool_call_id": "call_record-2",
                     "name": "file_edit",
-                    "content": ANY_STRING,
+                    "content": '{"file_path": "/project/main.py", "status": "success", "lines_modified": [{"start": 1, "end": 3}]}',
                 },
                 # Tool result for shell
                 {
                     "role": "tool",
                     "tool_call_id": "call_record-3",
                     "name": "shell",
-                    "content": ANY_STRING,
+                    "content": '{"command": "python main.py", "output": "Hello, World!", "duration_ms": 150.5, "cwd": "/project"}',
                 },
             ]
         },
         output={
             "id": "chatcmpl-gen-test-456",
             "object": "chat.completion",
-            "created": ANY_BUT_NONE,
+            "created": ANY_BUT_NONE,  # Unix timestamp, varies
             "model": "claude-4-opus",
             "choices": [
                 {
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": ANY_STRING.containing("I've added a hello world function"),
+                        # Content includes final response + code changes summary
+                        "content": ANY_BUT_NONE,
                         "refusal": None,
                     },
                     "finish_reason": "stop",
@@ -134,17 +150,17 @@ def test_log_code_agent_turn__full_flow__creates_trace_and_spans(fake_backend):
             FeedbackScoreModel(
                 id=ANY_BUT_NONE,
                 name="duration_seconds",
-                value=ANY_BUT_NONE,
+                value=3.0,  # 3 seconds from 08:00:00 to 08:00:03
             ),
             FeedbackScoreModel(
                 id=ANY_BUT_NONE,
                 name="lines_added",
-                value=2,  # 2 non-empty lines added
+                value=2,  # 2 non-empty lines: "def hello():" and "print(...)"
             ),
             FeedbackScoreModel(
                 id=ANY_BUT_NONE,
                 name="lines_deleted",
-                value=0,
+                value=0,  # old_string was empty
             ),
         ],
         spans=[
@@ -189,112 +205,8 @@ def test_log_code_agent_turn__full_flow__creates_trace_and_spans(fake_backend):
 
     assert_equal(EXPECTED_TRACE, trace_tree)
 
-
-def test_log_code_agent_turn__thread_id__set_from_conversation_id(fake_backend):
-    """Test that thread_id is set from conversation_id."""
-    records = _load_test_records()
-
-    log_code_agent_turn(records, project_name="test-thread-id")
-    opik.flush_tracker()
-
-    assert len(fake_backend.trace_trees) == 1
-    trace_tree = fake_backend.trace_trees[0]
-
-    # Use tree-based assertion for thread_id
-    EXPECTED_TRACE = TraceModel(
-        id=ANY_BUT_NONE,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        thread_id="conv-test-123",
-        name=ANY_STRING,
-        input=ANY_DICT,
-        output=ANY_DICT,
-        metadata=ANY_DICT.containing({"conversation_id": "conv-test-123"}),
-        tags=ANY_LIST,
-        feedback_scores=ANY_LIST,
-        spans=ANY_LIST,
-    )
-
-    assert_equal(EXPECTED_TRACE, trace_tree)
-
-
-def test_log_code_agent_turn__output_format__is_chat_completion(fake_backend):
-    """Test that output is in OpenAI chat completion format."""
-    records = _load_test_records()
-
-    log_code_agent_turn(records, project_name="test-output-format")
-    opik.flush_tracker()
-
-    assert len(fake_backend.trace_trees) == 1
-    trace_tree = fake_backend.trace_trees[0]
-
-    # Use tree-based assertion for output format
-    EXPECTED_TRACE = TraceModel(
-        id=ANY_BUT_NONE,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        name=ANY_STRING,
-        input=ANY_DICT,
-        output={
-            "id": ANY_STRING.starting_with("chatcmpl-"),
-            "object": "chat.completion",
-            "created": ANY_BUT_NONE,
-            "model": "claude-4-opus",
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": ANY_STRING,
-                        "refusal": None,
-                    },
-                    "finish_reason": "stop",
-                }
-            ],
-        },
-        metadata=ANY_DICT,
-        tags=ANY_LIST,
-        thread_id=ANY_BUT_NONE,
-        feedback_scores=ANY_LIST,
-        spans=ANY_LIST,
-    )
-
-    assert_equal(EXPECTED_TRACE, trace_tree)
-
-
-def test_log_code_agent_turn__input_format__is_messages_array(fake_backend):
-    """Test that input is in OpenAI messages array format."""
-    records = _load_test_records()
-
-    log_code_agent_turn(records, project_name="test-input-format")
-    opik.flush_tracker()
-
-    assert len(fake_backend.trace_trees) == 1
-    trace_tree = fake_backend.trace_trees[0]
-
-    # Use tree-based assertion for input format
-    EXPECTED_TRACE = TraceModel(
-        id=ANY_BUT_NONE,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        name=ANY_STRING,
-        output=ANY_DICT,
-        input={
-            "messages": [
-                {"role": "user", "content": ANY_LIST},
-                {"role": "assistant", "content": ANY, "tool_calls": ANY_LIST, "refusal": ANY, "audio": ANY, "function_call": ANY},
-                {"role": "tool", "tool_call_id": ANY_STRING, "name": "file_edit", "content": ANY_STRING},
-                {"role": "tool", "tool_call_id": ANY_STRING, "name": "shell", "content": ANY_STRING},
-            ]
-        },
-        metadata=ANY_DICT,
-        tags=ANY_LIST,
-        thread_id=ANY_BUT_NONE,
-        feedback_scores=ANY_LIST,
-        spans=ANY_LIST,
-    )
-
-    assert_equal(EXPECTED_TRACE, trace_tree)
+    # Additional assertions for output content (contains both response and code changes)
+    output_content = trace_tree.output["choices"][0]["message"]["content"]
+    assert "I've added a hello world function" in output_content
+    assert "## Code Changes Summary" in output_content
+    assert "`main.py`" in output_content
