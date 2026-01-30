@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import debounce from "lodash/debounce";
 import {
   Select,
   SelectContent,
@@ -75,9 +76,26 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  // Parse value to extract datasetId for internal use
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const debouncedCloseVersions = useCallback(
+    debounce(() => setOpenDatasetId(null), 150),
+    [],
+  );
+
+  const handleOpenVersions = (datasetId: string) => {
+    debouncedCloseVersions.cancel();
+    setOpenDatasetId(datasetId);
+  };
+
+  useEffect(() => {
+    return () => {
+      debouncedCloseVersions.cancel();
+    };
+  }, [debouncedCloseVersions]);
+
   const parsed = parseDatasetVersionKey(value);
-  const datasetId = parsed?.datasetId || null;
+  const datasetId = parsed?.datasetId ?? null;
+  const selectedVersionId = parsed?.versionId ?? null;
 
   const {
     datasets,
@@ -99,14 +117,11 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
     [datasets, datasetId],
   );
 
-  const displayValue = useMemo(() => {
-    if (!selectedDataset) return null;
-
-    return `${selectedDataset.name} / ${versionName || ""}`;
-  }, [selectedDataset, versionName]);
+  const displayValue = selectedDataset
+    ? `${selectedDataset.name} / ${versionName ?? ""}`
+    : null;
 
   const handleDatasetCreated = async (newDataset: Dataset) => {
-    // TODO remove ! after BE migration
     const latestVersion = newDataset.latest_version!;
 
     const formattedValue = formatDatasetVersionKey(
@@ -117,9 +132,23 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
     setIsDialogOpen(false);
   };
 
+  const handleSelectLatestVersion = (dataset: Dataset) => {
+    if (dataset.latest_version) {
+      const formattedValue = formatDatasetVersionKey(
+        dataset.id,
+        dataset.latest_version.id,
+      );
+      onChange(formattedValue);
+      setIsSelectOpen(false);
+      setOpenDatasetId(null);
+    }
+  };
+
   const renderNestedList = () => {
     return filteredDatasets.map((dataset) => {
-      const isOpen = dataset.id === openDatasetId;
+      const hasMultipleVersions =
+        dataset.version_count === undefined || dataset.version_count > 1;
+      const isOpen = dataset.id === openDatasetId && hasMultipleVersions;
       const isSelected = dataset.id === datasetId;
 
       return (
@@ -127,40 +156,46 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
           <PopoverTrigger asChild>
             <DatasetOption
               dataset={dataset}
-              workspaceName={workspaceName}
               isSelected={isSelected}
               isOpen={isOpen}
-              onMouseEnter={() => setOpenDatasetId(dataset.id)}
-              onMouseLeave={() => setOpenDatasetId(null)}
+              showChevron={hasMultipleVersions}
+              onMainAreaClick={() => handleSelectLatestVersion(dataset)}
+              onChevronMouseEnter={() =>
+                hasMultipleVersions && handleOpenVersions(dataset.id)
+              }
+              onChevronMouseLeave={debouncedCloseVersions}
             />
           </PopoverTrigger>
 
-          <PopoverContent
-            side="right"
-            align="start"
-            className="max-h-[400px] overflow-y-auto p-1"
-            onMouseEnter={() => setOpenDatasetId(dataset.id)}
-            hideWhenDetached
-          >
-            {isLoadingVersions ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner />
-              </div>
-            ) : versions.length === 0 ? (
-              <div className="comet-body-s flex min-w-40 items-center justify-center py-2 text-muted-slate">
-                No versions
-              </div>
-            ) : (
-              versions.map((version) => (
-                <VersionOption
-                  key={version.id}
-                  version={version}
-                  datasetId={dataset.id}
-                  isSelected={parsed?.versionId === version.id}
-                />
-              ))
-            )}
-          </PopoverContent>
+          {hasMultipleVersions && (
+            <PopoverContent
+              side="right"
+              align="start"
+              className="max-h-[400px] overflow-y-auto p-0.5"
+              onMouseEnter={() => handleOpenVersions(dataset.id)}
+              onMouseLeave={debouncedCloseVersions}
+              hideWhenDetached
+            >
+              {isLoadingVersions ? (
+                <div className="flex items-center justify-center py-4">
+                  <Spinner />
+                </div>
+              ) : versions.length === 0 ? (
+                <div className="comet-body-s flex min-w-40 items-center justify-center py-2 text-muted-slate">
+                  No versions
+                </div>
+              ) : (
+                versions.map((version) => (
+                  <VersionOption
+                    key={version.id}
+                    version={version}
+                    datasetId={dataset.id}
+                    isSelected={selectedVersionId === version.id}
+                  />
+                ))
+              )}
+            </PopoverContent>
+          )}
         </Popover>
       );
     });
@@ -187,7 +222,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
     }
 
     return (
-      <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden">
+      <div className="max-h-[40vh] space-y-[3px] overflow-y-auto overflow-x-hidden">
         {renderNestedList()}
         {hasMore && (
           <>
@@ -234,7 +269,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
           open={isSelectOpen}
           disabled={disabled}
         >
-          <TooltipWrapper content={displayValue || "Select a dataset"}>
+          <TooltipWrapper content={displayValue ?? "Select a dataset"}>
             <SelectTrigger
               className={cn(
                 "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0",
@@ -258,9 +293,11 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
                   <Database className="size-4 shrink-0" />
 
                   <div className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
-                    <span className="truncate">{selectedDataset?.name}</span>
+                    <span className="min-w-0 truncate">
+                      {selectedDataset?.name}
+                    </span>
                     <GitCommitVertical className="size-3.5 shrink-0 text-muted-slate" />
-                    <span className="truncate">{versionName || ""}</span>
+                    <span className="shrink-0">{versionName ?? ""}</span>
                   </div>
                 </div>
               </SelectValue>

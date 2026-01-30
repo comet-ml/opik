@@ -17,6 +17,7 @@ import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
@@ -205,6 +206,16 @@ public interface DatasetVersionDAO {
 
     @SqlQuery("SELECT COUNT(*) FROM dataset_versions WHERE dataset_id = :dataset_id AND workspace_id = :workspace_id")
     long countByDatasetId(@Bind("dataset_id") UUID datasetId, @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT dataset_id, COUNT(*) as version_count
+            FROM dataset_versions
+            WHERE dataset_id IN (<dataset_ids>) AND workspace_id = :workspace_id
+            GROUP BY dataset_id
+            """)
+    @RegisterConstructorMapper(DatasetVersionCount.class)
+    List<DatasetVersionCount> findVersionCountsByDatasetIds(@BindList("dataset_ids") Set<UUID> datasetIds,
+            @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("""
             INSERT INTO dataset_version_tags (dataset_id, tag, version_id, created_by, last_updated_by, workspace_id)
