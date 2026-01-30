@@ -9,14 +9,6 @@ repos:
         files: ^sdks/python
         exclude: "(sdks/python/src/opik/rest_api/)"
 
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
-    hooks:
-      - id: pyupgrade
-        args: [--py310-plus]
-        files: ^sdks/python
-        exclude: "(sdks/python/src/opik/rest_api/)"
-
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.14
     hooks:
