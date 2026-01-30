@@ -90,11 +90,18 @@ class DatasetView(Dataset):
         """The OQL filter string applied to this view."""
         return self._filter_string
 
+    @property
+    def dataset_items_count(self) -> Optional[int]:
+        """
+        Always None for DatasetView as the count in not known before the items are fetched.
+        """
+        #  Do not fetch the unfiltered dataset count from the backend.
+        return self._dataset_items_count
+
     def __repr__(self) -> str:
         return (
             f"DatasetView(name='{self._name}', "
-            f"filter_string='{self._filter_string}', "
-            f"items_count={self._dataset_items_count})"
+            f"filter_string='{self._filter_string}')"
         )
 
     # Override mutation methods to raise errors

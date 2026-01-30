@@ -110,45 +110,26 @@ class TestDatasetViewImmutability:
 class TestDatasetViewProperties:
     """Tests for DatasetView properties and metadata."""
 
-    def test_filter_string_property__returns_filter(self):
-        """Verify filter_string property returns the filter used to create the view."""
+    def test_properties__happyflow(self):
+        """Verify DatasetView properties return expected values."""
         mock_rest_client = Mock()
         filter_str = "tags contains 'failed'"
         view = DatasetView(
-            name="test_dataset",
+            name="my_dataset",
             description="Test description",
             rest_client=mock_rest_client,
             filter_string=filter_str,
         )
 
         assert view.filter_string == filter_str
-
-    def test_repr__includes_filter_string(self):
-        """Verify __repr__ includes the filter string."""
-        mock_rest_client = Mock()
-        view = DatasetView(
-            name="test_dataset",
-            description="Test description",
-            rest_client=mock_rest_client,
-            filter_string="tags contains 'test'",
-        )
+        assert view.name == "my_dataset"
+        assert view.dataset_items_count is None
+        mock_rest_client.datasets.get_dataset_by_identifier.assert_not_called()
 
         repr_str = repr(view)
-        assert "test_dataset" in repr_str
-        assert "tags contains 'test'" in repr_str
+        assert "my_dataset" in repr_str
+        assert filter_str in repr_str
         assert "DatasetView" in repr_str
-
-    def test_name_property__returns_dataset_name(self):
-        """Verify name property returns the source dataset name."""
-        mock_rest_client = Mock()
-        view = DatasetView(
-            name="my_dataset",
-            description="Test description",
-            rest_client=mock_rest_client,
-            filter_string="tags contains 'test'",
-        )
-
-        assert view.name == "my_dataset"
 
 
 class TestDatasetViewFiltering:
