@@ -4,7 +4,7 @@
 
 ## Overview
 
-Generate a formatted, copiable Slack command for the #opik-code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python). Automatically extracts information from the GitHub PR for the current branch and outputs a command that can be copied, edited (to add @ mentions, media links, etc.), and pasted into Slack.
+Generate a formatted, copiable Slack command for the #code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python). Automatically extracts information from the GitHub PR for the current branch and outputs a command that can be copied, edited (to add @ mentions, media links, etc.), and pasted into Slack.
 
 - **Execution model**: Automatically extracts information from GitHub PR, prompts only for missing information, formats the message according to the template, and outputs a copiable Slack command (does NOT send automatically).
 
@@ -174,11 +174,11 @@ This workflow will:
 - **Format as Slack command**: Generate a copiable command that can be pasted directly into Slack
 - **Command format**: The output should be formatted as a code block that can be easily copied
 - **Display instructions**: Show clear instructions on how to use the generated command:
-  > "📋 **Copiable Slack Command Generated**\n\nCopy the command below and paste it into the #opik-code-review channel in Slack.\n\nYou can edit it before sending to:\n- Add @ mentions for specific reviewers\n- Add media links or video links\n- Make final proof edits\n- Add any additional context\n\n```\n[FORMATTED_MESSAGE]\n```\n\n**To send in Slack:**\n1. Open Slack and navigate to #opik-code-review channel\n2. Paste the command above\n3. Edit as needed (add @ mentions, media links, etc.)\n4. Send the message"
+  > "📋 **Copiable Slack Command Generated**\n\nCopy the command below and paste it into the #code-review channel in Slack.\n\nYou can edit it before sending to:\n- Add @ mentions for specific reviewers\n- Add media links or video links\n- Make final proof edits\n- Add any additional context\n\n```\n[FORMATTED_MESSAGE]\n```\n\n**To send in Slack:**\n1. Open Slack and navigate to #code-review channel\n2. Paste the command above\n3. Edit as needed (add @ mentions, media links, etc.)\n4. Send the message"
 
 - **Alternative format (if using Slack CLI)**: If the user prefers, also provide a Slack CLI command format:
   ```
-  slack chat send --channel "#opik-code-review" --text "[FORMATTED_MESSAGE]"
+  slack chat send --channel "#code-review" --text "[FORMATTED_MESSAGE]"
   ```
 
 ---
@@ -236,7 +236,7 @@ The command is successful when:
 - **Automatic extraction**: Extracts information from PR title and description to minimize manual input
 - **Fallback to prompts**: Only prompts for information that cannot be extracted from PR
 - **Optional fields**: Only included in message if extracted from PR or provided by user
-- **Channel**: Message is intended for `#opik-code-review` channel
+- **Channel**: Message is intended for `#code-review` channel
 - **PR detection**: Automatically finds PR for current branch, falls back to manual input if needed
 - **Smart extraction**: Uses heuristics to find test environment links and component summaries in PR description
 - **Editing before sending**: The generated command can be edited to add @ mentions, media links, video links, or make final proof edits before sending in Slack
@@ -275,7 +275,7 @@ cursor generate-code-review-slack-command
 # Output:
 # 📋 **Copiable Slack Command Generated**
 # 
-# Copy the command below and paste it into the #opik-code-review channel in Slack.
+# Copy the command below and paste it into the #code-review channel in Slack.
 # 
 # You can edit it before sending to:
 # - Add @ mentions for specific reviewers
@@ -296,7 +296,7 @@ cursor generate-code-review-slack-command
 # ```
 # 
 # **To send in Slack:**
-# 1. Open Slack and navigate to #opik-code-review channel
+# 1. Open Slack and navigate to #code-review channel
 # 2. Paste the command above
 # 3. Edit as needed (add @ mentions, media links, etc.)
 # 4. Send the message

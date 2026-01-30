@@ -25,13 +25,22 @@ def attachment_to_message(
 
     mimetype = guess_attachment_type(attachment_data)
     base_url_path = base64.b64encode(url_override.encode("utf-8")).decode("utf-8")
-    file_path = attachment_data.data
+
+    if isinstance(attachment_data.data, bytes):
+        file_path = _write_file_like_to_temp_file(attachment_data.data)
+        # make sure the temporary file is deleted after upload
+        attachment_data.create_temp_copy = False
+        delete_after_upload = True
+    else:
+        file_path = attachment_data.data
+
     file_name = attachment_data.file_name
+    should_delete_after_upload = delete_after_upload
+
     if file_name is None:
         file_name = os.path.basename(file_path)
 
     # Try to create a temporary copy if requested
-    should_delete_after_upload = delete_after_upload
     if attachment_data.create_temp_copy:
         tmp_file_path = _try_create_temp_copy(file_path)
         if tmp_file_path is not None:
@@ -50,6 +59,42 @@ def attachment_to_message(
         encoded_url_override=base_url_path,
         delete_after_upload=should_delete_after_upload,
     )
+
+
+def _write_file_like_to_temp_file(file_like: bytes) -> str:
+    """
+    Writes a bytes-like file object to a temporary file on the filesystem.
+
+    This function accepts a file-like object in the form of bytes and writes its
+    contents to a temporary file. The temporary file is not deleted automatically
+    on program termination. The path to the created temporary file is returned.
+
+    Args:
+        file_like: The bytes-like object containing the file content
+            to be written to a temporary file.
+
+    Returns:
+        The full path to the created temporary file.
+    """
+    temp_file = tempfile.NamedTemporaryFile(mode="wb", delete=False)
+    try:
+        temp_file.write(file_like)
+        temp_file.flush()
+        LOGGER.debug(
+            "Created temporary copy of file-like attachment to file: %s",
+            temp_file.name,
+        )
+    except Exception as e:
+        LOGGER.error(
+            "Failed to write file-like attachment to temp file: %s",
+            e,
+            exc_info=True,
+        )
+        raise
+    finally:
+        temp_file.close()
+
+    return temp_file.name
 
 
 def _try_create_temp_copy(file_path: str) -> Optional[str]:
@@ -97,7 +142,12 @@ def guess_attachment_type(attachment_data: attachment.Attachment) -> Optional[st
     if attachment_data.file_name is not None:
         mimetype = mime_type.guess_mime_type(file=attachment_data.file_name)
 
-    if mimetype is None and isinstance(attachment_data.data, str):
+    if mimetype is not None:
+        return mimetype
+
+    if isinstance(attachment_data.data, str):
         mimetype = mime_type.guess_mime_type(file=attachment_data.data)
+    elif isinstance(attachment_data.data, bytes):
+        mimetype = mime_type.BINARY_MIME_TYPE
 
     return mimetype
