@@ -53,6 +53,7 @@ type TraceDataViewerProps = {
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
   search?: string;
+  treeData: Array<Trace | Span>;
 };
 
 const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
@@ -65,6 +66,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   setActiveSection,
   isSpansLazyLoading,
   search,
+  treeData,
 }) => {
   const type = get(data, "type", TRACE_TYPE_FOR_TREE);
   const tokens = data.usage?.total_tokens;
@@ -188,6 +190,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 activeSection={activeSection}
                 setActiveSection={setActiveSection}
                 layoutSize={layoutSize}
+                treeData={treeData}
               />
             )}
           />

@@ -113,6 +113,7 @@ import {
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import TraceRowActionsCell from "@/components/pages/TracesPage/TracesSpansTab/TraceRowActionsCell";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -1020,6 +1021,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           sortableColumns: sortableBy,
         },
       ),
+      // Row actions column (always last)
+      mapColumnDataFields<BaseTraceData, Span | Trace>({
+        id: "actions",
+        label: "",
+        type: COLUMN_TYPE.string,
+        size: 48,
+        cell: TraceRowActionsCell as never,
+        customMeta: {
+          projectId,
+        },
+      }),
     ];
   }, [
     handleRowClick,
@@ -1033,6 +1045,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     metadataMainColumnOrder,
     metadataColumnsData,
     metadataColumnsOrder,
+    projectId,
   ]);
 
   const columnsToExport = useMemo(() => {
