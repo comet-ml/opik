@@ -3769,21 +3769,10 @@ class DatasetsResourceTest {
                     .datasetName(batch.datasetName())
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                assertPage(items.reversed(), actualItems);
-            }
+            assertPage(items.reversed(), actualItems);
         }
 
         @Test
@@ -3806,21 +3795,10 @@ class DatasetsResourceTest {
                     .lastRetrievedId(items.reversed().get(1).id())
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                assertPage(items.reversed().subList(2, 5), actualItems);
-            }
+            assertPage(items.reversed().subList(2, 5), actualItems);
         }
 
         @Test
@@ -3850,24 +3828,13 @@ class DatasetsResourceTest {
                     .filters(filtersString)
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                // Should return only item2 and item1 (reversed order by created_at)
-                assertThat(actualItems).hasSize(2);
-                assertThat(actualItems).extracting(DatasetItem::tags)
-                        .allMatch(tags -> tags.contains(includeTag));
-            }
+            // Should return only item2 and item1 (reversed order by created_at)
+            assertThat(actualItems).hasSize(2);
+            assertThat(actualItems).extracting(DatasetItem::tags)
+                    .allMatch(tags -> tags.contains(includeTag));
         }
 
         @Test
@@ -3890,24 +3857,13 @@ class DatasetsResourceTest {
                     .filters(JsonUtils.writeValueAsString(List.of(filter)))
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                // Should return only matching items (reversed order by created_at)
-                assertThat(actualItems).hasSize(2);
-                assertThat(actualItems).extracting(DatasetItem::id)
-                        .containsExactly(matchingItem2.id(), matchingItem1.id());
-            }
+            // Should return only matching items (reversed order by created_at)
+            assertThat(actualItems).hasSize(2);
+            assertThat(actualItems).extracting(DatasetItem::id)
+                    .containsExactly(matchingItem2.id(), matchingItem1.id());
         }
 
         @Test
@@ -3933,22 +3889,11 @@ class DatasetsResourceTest {
                     .filters(JsonUtils.writeValueAsString(List.of(filter)))
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                assertThat(actualItems).hasSize(1);
-                assertThat(actualItems.getFirst().id()).isEqualTo(matchingItem.id());
-            }
+            assertThat(actualItems).hasSize(1);
+            assertThat(actualItems.getFirst().id()).isEqualTo(matchingItem.id());
         }
 
         @Test
@@ -3979,27 +3924,16 @@ class DatasetsResourceTest {
                     .lastRetrievedId(items.reversed().get(1).id())
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                // Should return only filtered items after the cursor (3 items)
-                assertThat(actualItems).hasSize(3);
-                assertThat(actualItems).extracting(DatasetItem::id)
-                        .containsExactly(
-                                items.reversed().get(2).id(),
-                                items.reversed().get(3).id(),
-                                items.reversed().get(4).id());
-            }
+            // Should return only filtered items after the cursor (3 items)
+            assertThat(actualItems).hasSize(3);
+            assertThat(actualItems).extracting(DatasetItem::id)
+                    .containsExactly(
+                            items.reversed().get(2).id(),
+                            items.reversed().get(3).id(),
+                            items.reversed().get(4).id());
         }
 
         @Test
@@ -4022,21 +3956,10 @@ class DatasetsResourceTest {
                     .filters(JsonUtils.writeValueAsString(List.of(filter)))
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                assertThat(actualItems).isEmpty();
-            }
+            assertThat(actualItems).isEmpty();
         }
 
         @Test
@@ -4076,29 +3999,18 @@ class DatasetsResourceTest {
                     .filters(JsonUtils.writeValueAsString(List.of(filter1, filter2)))
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                // Should return only 2 items that have BOTH tag1 AND tag2
-                assertThat(actualItems).hasSize(2);
-                assertThat(actualItems).extracting(DatasetItem::id)
-                        .containsExactlyInAnyOrder(item1.id(), item2.id());
-                // Verify all returned items have both tags
-                assertThat(actualItems).allSatisfy(item -> {
-                    assertThat(item.tags()).contains(tag1);
-                    assertThat(item.tags()).contains(tag2);
-                });
-            }
+            // Should return only 2 items that have BOTH tag1 AND tag2
+            assertThat(actualItems).hasSize(2);
+            assertThat(actualItems).extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(item1.id(), item2.id());
+            // Verify all returned items have both tags
+            assertThat(actualItems).allSatisfy(item -> {
+                assertThat(item.tags()).contains(tag1);
+                assertThat(item.tags()).contains(tag2);
+            });
         }
 
         @Test
@@ -4127,24 +4039,13 @@ class DatasetsResourceTest {
                     .steamLimit(5)
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                // Should return only 5 items (respecting steamLimit)
-                assertThat(actualItems).hasSize(5);
-                // All returned items should have includeTag
-                assertThat(actualItems).allMatch(item -> item.tags().contains(includeTag));
-            }
+            // Should return only 5 items (respecting steamLimit)
+            assertThat(actualItems).hasSize(5);
+            // All returned items should have includeTag
+            assertThat(actualItems).allMatch(item -> item.tags().contains(includeTag));
         }
 
         @Test
@@ -4180,42 +4081,19 @@ class DatasetsResourceTest {
             var streamRequest = DatasetItemStreamRequest.builder()
                     .datasetName(datasetName).build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                assertPage(expectedFirstPage, actualItems);
-            }
+            assertPage(expectedFirstPage, actualItems);
 
             streamRequest = DatasetItemStreamRequest.builder()
                     .datasetName(datasetName)
                     .lastRetrievedId(expectedFirstPage.get(1999).id())
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY, TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                assertPage(allItems.reversed().subList(2000, 3000), actualItems);
-            }
+            assertPage(allItems.reversed().subList(2000, 3000), actualItems);
         }
 
         @Test
