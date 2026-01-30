@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useIsWorkspaceRolesEnabled } from "@/plugins/comet/hooks/useIsWorkspaceRolesEnabled";
+import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
 import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
 import useWorkspaceUsersRoles from "@/plugins/comet/api/useWorkspaceUsersRoles";
@@ -26,7 +26,9 @@ interface UseWorkspaceUserRolesParams {
 export const useWorkspaceUserRolesMap = ({
   workspaceId,
 }: UseWorkspaceUserRolesParams) => {
-  const isPermissionsManagementEnabled = useIsWorkspaceRolesEnabled();
+  const currentOrganization = useCurrentOrganization();
+  const isPermissionsManagementEnabled =
+    currentOrganization?.workspaceRolesEnabled ?? false;
 
   const { data: workspaceMembers = [] } = useAllWorkspaceMembers(
     { workspaceId },
