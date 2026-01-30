@@ -9,8 +9,9 @@ This module handles the mapping between Cursor hook events and Opik data model:
 """
 
 import datetime
+import json
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from opik import datetime_helpers, id_helpers
 
@@ -151,8 +152,6 @@ def _build_assistant_message(
         ]
     }
     """
-    import json
-    
     message: Dict[str, Any] = {
         "role": "assistant",
         "content": None,
@@ -241,6 +240,82 @@ def _build_assistant_message(
     return message
 
 
+def _build_code_changes_summary(file_edit_records: List[Dict[str, Any]]) -> Optional[str]:
+    """
+    Build a markdown-formatted summary of all code changes.
+    
+    Returns None if no file edits were made.
+    """
+    if not file_edit_records:
+        return None
+    
+    # Group edits by file
+    files_changed: Dict[str, List[Dict[str, Any]]] = {}
+    for record in file_edit_records:
+        data = record.get("data", {})
+        if data.get("tool_type") != "file_edit":
+            continue
+        file_path = data.get("file_path", "unknown")
+        if file_path not in files_changed:
+            files_changed[file_path] = []
+        files_changed[file_path].append(data)
+    
+    if not files_changed:
+        return None
+    
+    # Build markdown summary
+    lines = ["## Code Changes Summary", ""]
+    
+    for file_path, edits_list in files_changed.items():
+        # Get short filename for display
+        short_name = file_path.split("/")[-1] if "/" in file_path else file_path
+        
+        # Collect all line ranges
+        all_ranges = []
+        for edit_data in edits_list:
+            ranges = edit_data.get("line_ranges", [])
+            for r in ranges:
+                start = r.get("start_line")
+                end = r.get("end_line")
+                if start and end:
+                    if start == end:
+                        all_ranges.append(f"L{start}")
+                    else:
+                        all_ranges.append(f"L{start}-{end}")
+        
+        # Format file entry
+        lines.append(f"### `{short_name}`")
+        lines.append(f"**Path:** `{file_path}`")
+        if all_ranges:
+            lines.append(f"**Lines modified:** {', '.join(all_ranges)}")
+        
+        # Show edit details (diffs)
+        for edit_data in edits_list:
+            edits = edit_data.get("edits", [])
+            for edit in edits:
+                old_str = edit.get("old_string", "")
+                new_str = edit.get("new_string", "")
+                
+                if old_str or new_str:
+                    lines.append("")
+                    lines.append("```diff")
+                    if old_str:
+                        for line in old_str.split("\n")[:10]:  # Limit to 10 lines
+                            lines.append(f"- {line}")
+                        if old_str.count("\n") > 10:
+                            lines.append("- ... (truncated)")
+                    if new_str:
+                        for line in new_str.split("\n")[:10]:  # Limit to 10 lines
+                            lines.append(f"+ {line}")
+                        if new_str.count("\n") > 10:
+                            lines.append("+ ... (truncated)")
+                    lines.append("```")
+        
+        lines.append("")
+    
+    return "\n".join(lines)
+
+
 def _build_tool_message(record: Dict[str, Any]) -> Dict[str, Any]:
     """
     Build OpenAI-format tool result message.
@@ -253,8 +328,6 @@ def _build_tool_message(record: Dict[str, Any]) -> Dict[str, Any]:
         "content": "{\"result\": \"...\"}"  # JSON string or plain text
     }
     """
-    import json
-    
     record_id = record.get("id", "unknown")
     data = record.get("data", {})
     tool_type = data.get("tool_type", "unknown")
@@ -444,7 +517,6 @@ def convert_generation_to_trace_and_spans(
     user_messages: List[Dict[str, Any]] = []
     assistant_responses: List[Dict[str, Any]] = []
     assistant_thoughts: List[Dict[str, Any]] = []
-    assistant_texts: List[Dict[str, Any]] = []  # Text before tool calls (from preToolUse)
     tool_executions: List[Dict[str, Any]] = []
     
     for record in sorted_records:
@@ -455,8 +527,6 @@ def convert_generation_to_trace_and_spans(
             assistant_responses.append(record)
         elif event == "assistant_thought":
             assistant_thoughts.append(record)
-        elif event == "assistant_text":
-            assistant_texts.append(record)
         elif event == "tool_execution":
             tool_executions.append(record)
 
@@ -480,39 +550,19 @@ def convert_generation_to_trace_and_spans(
     # Build trace output (OpenAI messages format)
     output_messages: List[Dict[str, Any]] = []
     
-    # Collect assistant text from preToolUse agent_message (text before tool calls)
-    assistant_text_contents = []
-    for text_record in assistant_texts:
-        content = text_record.get("data", {}).get("content", "")
-        if content:
-            assistant_text_contents.append(content)
-    
     # If we have tool executions, build the assistant message with tool_calls
     if tool_executions:
-        # Combine all assistant text with tool calls in one message
-        combined_content = "\n\n".join(assistant_text_contents) if assistant_text_contents else None
-        
-        # Build assistant message with content (text before tools) and tool_calls
+        # Build assistant message with tool_calls
         assistant_msg = _build_assistant_message(
             response_records=[],  # Final response comes later
             thought_records=assistant_thoughts,
             tool_records=tool_executions,
         )
-        # Add the combined text content
-        if combined_content:
-            assistant_msg["content"] = combined_content
-        
         output_messages.append(assistant_msg)
         
         # Add tool result messages for each tool execution
         for tool_record in tool_executions:
             output_messages.append(_build_tool_message(tool_record))
-    elif assistant_text_contents:
-        # No tools but we have assistant text - add it as a message
-        output_messages.append({
-            "role": "assistant",
-            "content": "\n\n".join(assistant_text_contents),
-        })
     
     # Add final assistant response (if we have one from afterAgentResponse)
     if assistant_responses:
@@ -523,8 +573,8 @@ def convert_generation_to_trace_and_spans(
                 "role": "assistant",
                 "content": content,
             })
-    elif not tool_executions and not assistant_text_contents and assistant_thoughts:
-        # If no tools, no text, no response but we have thoughts, include them
+    elif not tool_executions and assistant_thoughts:
+        # If no tools, no response but we have thoughts, include them
         thoughts = [r.get("data", {}).get("content", "") for r in assistant_thoughts]
         reasoning = "\n\n".join(filter(None, thoughts))
         if reasoning:
@@ -532,6 +582,14 @@ def convert_generation_to_trace_and_spans(
                 "role": "assistant",
                 "content": f"[Thinking]\n{reasoning}",
             })
+    
+    # Add code changes summary at the end (if there were file edits)
+    code_changes_summary = _build_code_changes_summary(tool_executions)
+    if code_changes_summary:
+        output_messages.append({
+            "role": "assistant",
+            "content": code_changes_summary,
+        })
 
     trace_output = {"messages": output_messages} if output_messages else None
 

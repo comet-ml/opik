@@ -104,3 +104,6 @@ response.txt
 # Playwright
 .playwright-mcp/
 *~
+
+# Agent Trace
+.agent-trace/

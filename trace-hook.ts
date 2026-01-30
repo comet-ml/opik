@@ -112,15 +112,6 @@ const handlers: Record<string, (input: HookInput) => void> = {
   },
 
   /**
-   * preToolUse hook - fires before a tool is executed.
-   * Note: Cursor does NOT provide agent_message in this hook (as of v2.4.23),
-   * so we can't capture the assistant's text before tool calls.
-   */
-  preToolUse: (_input) => {
-    // No useful data available - agent_message is not provided by Cursor
-  },
-
-  /**
    * Captures the agent's final text response.
    * This becomes the "assistant" role message in OpenAI format.
    */
@@ -129,14 +120,6 @@ const handlers: Record<string, (input: HookInput) => void> = {
       content: input.text,
     });
     appendTrace(record);
-  },
-
-  /**
-   * Captures the agent's thinking/reasoning.
-   * Currently disabled - thoughts are excluded from logging.
-   */
-  afterAgentThought: (_input) => {
-    // Disabled: thoughts are excluded from logging
   },
 
   /**
@@ -170,77 +153,12 @@ const handlers: Record<string, (input: HookInput) => void> = {
   },
 
   /**
-   * Captures Tab file edits (inline completions).
-   */
-  afterTabFileEdit: (input) => {
-    const rangePositions = computeRangePositions(input.edits ?? []);
-    const record = createRecord("tab_file_edit", input, {
-      tool_type: "tab_edit",
-      file_path: input.file_path,
-      edits: input.edits,
-      line_ranges: rangePositions,
-    });
-    appendTrace(record);
-  },
-
-  /**
-   * Captures session start.
-   */
-  sessionStart: (input) => {
-    const record = createRecord("session_start", input, {
-      session_id: input.session_id,
-      is_background_agent: input.is_background_agent,
-      composer_mode: input.composer_mode,
-    });
-    appendTrace(record);
-  },
-
-  /**
-   * Captures session end.
-   */
-  sessionEnd: (input) => {
-    const record = createRecord("session_end", input, {
-      session_id: input.session_id,
-      reason: input.reason,
-      duration_ms: input.duration_ms,
-      final_status: input.final_status,
-      error_message: input.error_message,
-    });
-    appendTrace(record);
-  },
-
-  /**
    * Captures the agent loop completion.
    */
   stop: (input) => {
     const record = createRecord("agent_stop", input, {
       status: (input as any).status,
       loop_count: (input as any).loop_count,
-    });
-    appendTrace(record);
-  },
-
-  // Legacy handlers for backward compatibility
-  SessionStart: (input) => handlers.sessionStart(input),
-  SessionEnd: (input) => handlers.sessionEnd(input),
-  
-  PostToolUse: (input) => {
-    const toolName = input.tool_name ?? "";
-    const isFileEdit = toolName === "Write" || toolName === "Edit";
-    const isBash = toolName === "Bash";
-
-    if (!isFileEdit && !isBash) return;
-
-    const record = createRecord("tool_execution", input, {
-      tool_type: isBash ? "shell" : "file_edit",
-      tool_name: toolName,
-      tool_use_id: input.tool_use_id,
-      file_path: isFileEdit ? input.tool_input?.file_path : undefined,
-      command: isBash ? input.tool_input?.command : undefined,
-      edits: isFileEdit ? [{
-        old_string: input.tool_input?.old_string ?? "",
-        new_string: input.tool_input?.new_string ?? "",
-      }] : undefined,
     });
     appendTrace(record);
   },
@@ -260,10 +178,8 @@ async function main() {
     const handler = handlers[input.hook_event_name];
     if (handler) {
       handler(input);
-    } else {
-      // Log unknown events for debugging
-      console.error(`Unknown hook event: ${input.hook_event_name}`);
     }
+    // Silently ignore unknown events
   } catch (e) {
     console.error("Hook error:", e);
     process.exit(1);
