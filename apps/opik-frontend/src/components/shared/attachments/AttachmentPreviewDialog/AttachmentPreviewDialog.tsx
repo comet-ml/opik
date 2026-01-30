@@ -8,8 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import PDFPreview from "@/components/pages-shared/attachments/PDFPreview/PDFPreview";
-import TextPreview from "@/components/pages-shared/attachments/TextPreview/TextPreview";
 import ZoomPanContainer from "@/components/shared/ZoomPanContainer/ZoomPanContainer";
 
 export type AttachmentPreviewProps = {
@@ -20,6 +18,11 @@ export type AttachmentPreviewProps = {
   url: string;
 };
 
+/**
+ * Simplified attachment preview dialog for shared components.
+ * Handles only image, video, and audio types.
+ * For PDF and text preview, use the pages-shared version.
+ */
 const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
   open,
   setOpen,
@@ -33,10 +36,7 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
       case ATTACHMENT_TYPE.AUDIO:
         return "w-[800px]";
       case ATTACHMENT_TYPE.IMAGE:
-      case ATTACHMENT_TYPE.PDF:
-      case ATTACHMENT_TYPE.TEXT:
         return "w-[90vw]";
-      case ATTACHMENT_TYPE.OTHER:
       default:
         return "";
     }
@@ -52,11 +52,6 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
         return renderVideoContent();
       case ATTACHMENT_TYPE.AUDIO:
         return renderAudioContent();
-      case ATTACHMENT_TYPE.PDF:
-        return renderPdfContent();
-      case ATTACHMENT_TYPE.TEXT:
-        return renderTextContent();
-      case ATTACHMENT_TYPE.OTHER:
       default:
         return null;
     }
@@ -106,22 +101,6 @@ const AttachmentPreviewDialog: React.FC<AttachmentPreviewProps> = ({
     return (
       <div className="flex items-center justify-center">
         <ReactPlayer playing url={url} controls height="100px" />
-      </div>
-    );
-  };
-
-  const renderPdfContent = () => {
-    return (
-      <div className="h-[80vh] w-full">
-        <PDFPreview url={url}></PDFPreview>
-      </div>
-    );
-  };
-
-  const renderTextContent = () => {
-    return (
-      <div className="h-[80vh] w-full">
-        <TextPreview url={url}></TextPreview>
       </div>
     );
   };

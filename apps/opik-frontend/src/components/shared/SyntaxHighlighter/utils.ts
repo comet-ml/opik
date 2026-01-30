@@ -23,29 +23,31 @@ export const generateSyntaxHighlighterCode = (
         prettified: false,
       };
 
+  const canBePrettified = response.prettified;
+
   switch (mode) {
     case MODE_TYPE.yaml:
       return {
         message: yml.dump(data, { lineWidth: -1 }).trim(),
         mode: MODE_TYPE.yaml,
         prettified: false,
-        canBePrettified: response.prettified,
+        canBePrettified,
       };
     case MODE_TYPE.json:
       return {
         message: JSON.stringify(data, null, 2),
         mode: MODE_TYPE.json,
         prettified: false,
-        canBePrettified: response.prettified,
+        canBePrettified,
       };
     case MODE_TYPE.pretty:
       return {
         message: response.prettified
           ? (response.message as string)
           : yml.dump(data, { lineWidth: -1 }).trim(),
-        mode: response.prettified ? MODE_TYPE.pretty : MODE_TYPE.yaml,
+        mode: canBePrettified ? MODE_TYPE.pretty : MODE_TYPE.yaml,
         prettified: response.prettified,
-        canBePrettified: response.prettified,
+        canBePrettified,
       };
     default:
       return {

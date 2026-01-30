@@ -4,8 +4,8 @@ import {
   AttachmentPreviewData,
   ParsedMediaData,
 } from "@/types/attachments";
-import AttachmentThumbnail from "@/components/pages-shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
-import AttachmentPreviewDialog from "@/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
+import AttachmentThumbnail from "@/components/shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
+import AttachmentPreviewDialog from "@/components/shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
 
 type ImagesListWrapperProps = {
   media: ParsedMediaData[];
