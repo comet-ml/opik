@@ -123,6 +123,7 @@ interface GenerateDefaultPromptParams {
   lastPickedModel?: PROVIDER_MODEL_TYPE | "";
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
+  initialMessageContent?: string;
 }
 
 export const generateDefaultPrompt = ({
@@ -131,13 +132,18 @@ export const generateDefaultPrompt = ({
   lastPickedModel,
   providerResolver,
   modelResolver,
+  initialMessageContent,
 }: GenerateDefaultPromptParams): PlaygroundPromptType => {
   const modelByDefault = modelResolver(lastPickedModel || "", setupProviders);
   const provider = providerResolver(modelByDefault);
 
   return {
     name: "Prompt",
-    messages: [generateDefaultLLMPromptMessage()],
+    messages: [
+      generateDefaultLLMPromptMessage({
+        content: initialMessageContent ?? "",
+      }),
+    ],
     model: modelByDefault,
     provider,
     configs: getDefaultConfigByProvider(provider, modelByDefault),
