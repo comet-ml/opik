@@ -1625,11 +1625,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             template.add("lastRetrievedId", true);
         }
 
-        // Add filter support
-        if (CollectionUtils.isNotEmpty(filters)) {
-            FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
-                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
-        }
+        addDatasetItemFiltersToTemplate(template, filters);
 
         String query = template.render();
 
@@ -1645,10 +1641,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 statement.bind("offset", 0);
             }
 
-            // Bind filter parameters
-            if (CollectionUtils.isNotEmpty(filters)) {
-                FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
-            }
+            bindDatasetItemFilters(statement, filters);
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "stream_version_items");
 
