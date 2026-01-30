@@ -73,7 +73,7 @@ public interface DatasetItemVersionDAO {
     Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId);
 
     Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId,
-            List<DatasetItemFilter> filters);
+            @NonNull List<DatasetItemFilter> filters);
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
 
@@ -1612,13 +1612,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
             UUID lastRetrievedId) {
-        return getItems(datasetId, versionId, limit, lastRetrievedId, null);
+        return getItems(datasetId, versionId, limit, lastRetrievedId, List.of());
     }
 
     @Override
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
-            UUID lastRetrievedId, List<DatasetItemFilter> filters) {
+            UUID lastRetrievedId, @NonNull List<DatasetItemFilter> filters) {
 
         ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
         if (lastRetrievedId != null) {

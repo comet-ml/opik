@@ -798,9 +798,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
-            List<DatasetItemFilter> filters, Visibility visibility) {
+            @NonNull List<DatasetItemFilter> filters, Visibility visibility) {
         log.info("Getting dataset items for dataset '{}' (hasFilters={}), version='{}', workspaceId='{}'",
-                request.datasetName(), filters != null && !filters.isEmpty(),
+                request.datasetName(), !filters.isEmpty(),
                 request.datasetVersion(), workspaceId);
 
         return Mono

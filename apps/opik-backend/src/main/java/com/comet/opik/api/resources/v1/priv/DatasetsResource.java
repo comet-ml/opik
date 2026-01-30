@@ -420,8 +420,8 @@ public class DatasetsResource {
 
         // Suppress unchecked cast warning since we already pass DatasetItemFilter reference to newFilters
         @SuppressWarnings("unchecked")
-        List<DatasetItemFilter> queryFilters = (List<DatasetItemFilter>) filtersFactory.newFilters(
-                request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE);
+        List<DatasetItemFilter> queryFilters = Optional.ofNullable((List<DatasetItemFilter>) filtersFactory.newFilters(
+                request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE)).orElse(List.of());
 
         log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
         var items = itemService.getItems(workspaceId, request, queryFilters, visibility)

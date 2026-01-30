@@ -60,7 +60,8 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
-    Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId, List<DatasetItemFilter> filters);
+    Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId,
+            @NonNull List<DatasetItemFilter> filters);
 
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
@@ -1151,7 +1152,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @Override
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId,
-            List<DatasetItemFilter> filters) {
+            @NonNull List<DatasetItemFilter> filters) {
 
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_STREAM, "select_dataset_items_stream", workspaceId,
