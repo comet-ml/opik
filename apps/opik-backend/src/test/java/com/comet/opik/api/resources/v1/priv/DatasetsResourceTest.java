@@ -1672,6 +1672,18 @@ class DatasetsResourceTest {
         experimentResourceClient.create(experiment, apiKey, workspaceName);
     }
 
+    /**
+     * Creates an Experiment record with the correct datasetName linkage.
+     * Note: ExperimentService.create() resolves the dataset from datasetName via getOrCreateDataset(),
+     * so we must use datasetName (not datasetId) to properly link experiments to datasets.
+     */
+    private UUID createExperimentForDataset(Dataset dataset, String apiKey, String workspaceName) {
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .build();
+        return experimentResourceClient.create(experiment, apiKey, workspaceName);
+    }
+
     @Nested
     @DisplayName("Get:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -5870,10 +5882,12 @@ class DatasetsResourceTest {
             var expectedDatasetItems = datasetItemBatch.items().subList(0, 4).reversed();
 
             // Create actual Experiment records for versioning support and collect their IDs
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experimentIds = IntStream.range(0, 5)
                     .mapToObj(__ -> {
                         var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                                .datasetId(datasetId)
+                                .datasetName(dataset.name())
                                 .datasetVersionId(null)
                                 .datasetVersionSummary(null)
                                 .promptVersion(null)
@@ -6281,10 +6295,12 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatchWithImage, workspaceName, apiKey);
 
             // Create actual Experiment records for versioning support and collect their IDs
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experimentIds = IntStream.range(0, 5)
                     .mapToObj(__ -> {
                         var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                                .datasetId(datasetId)
+                                .datasetName(dataset.name())
                                 .datasetVersionId(null)
                                 .datasetVersionSummary(null)
                                 .promptVersion(null)
@@ -6498,15 +6514,7 @@ class DatasetsResourceTest {
             List<Trace> traces = new ArrayList<>();
             createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
 
-            // Create actual Experiment record for versioning support
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetId(datasetId)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .build();
-            UUID experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+            UUID experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
@@ -6601,8 +6609,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            // Creating experiment and experiment item
-            var experimentId = GENERATOR.generate();
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
             var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentId)
                     .datasetItemId(datasetItem.id())
@@ -6813,7 +6821,7 @@ class DatasetsResourceTest {
             List<Trace> traces = new ArrayList<>();
             createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
 
-            UUID experimentId = GENERATOR.generate();
+            UUID experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces.subList(0, traces.size() - 1), projectName, scores);
@@ -8086,13 +8094,15 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment1 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment1, apiKey, workspaceName);
 
             var experiment2 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment2, apiKey, workspaceName);
 
@@ -8266,8 +8276,10 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment1 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment1, apiKey, workspaceName);
 
@@ -8414,18 +8426,20 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment1 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment1, apiKey, workspaceName);
 
             var experiment2 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment2, apiKey, workspaceName);
 
             var experiment3 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment3, apiKey, workspaceName);
 
@@ -8594,8 +8608,10 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
 
@@ -8734,8 +8750,10 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
 
@@ -8943,7 +8961,8 @@ class DatasetsResourceTest {
             createAndAssert(trace2, workspaceName, apiKey);
 
             // Create experiment items for both traces
-            var experimentId = GENERATOR.generate();
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
             var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentId)
                     .datasetItemId(datasetItem.id())
@@ -9069,8 +9088,7 @@ class DatasetsResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            // Create experiment
-            var experimentId = GENERATOR.generate();
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
 
             // Create experiment items linked to traces
             var experimentItems = IntStream.range(0, 3)
@@ -9171,8 +9189,7 @@ class DatasetsResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            // Create experiment
-            var experimentId = GENERATOR.generate();
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
 
             // Create experiment items linked to traces
             var experimentItems = IntStream.range(0, 3)
@@ -9253,8 +9270,7 @@ class DatasetsResourceTest {
                     .map(trace -> createTrace(trace, apiKey, workspaceName))
                     .toList();
 
-            // Create experiment
-            var experimentId = GENERATOR.generate();
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
 
             // Create experiment items linked to traces
             var experimentItems = IntStream.range(0, 3)
