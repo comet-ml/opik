@@ -75,6 +75,9 @@ type TraceDetailsActionsPanelProps = {
   threadId?: string;
   setThreadId?: OnChangeFn<string | null | undefined>;
   onClose: () => void;
+  hasPreviousRow?: boolean;
+  hasNextRow?: boolean;
+  onRowChange?: (shift: number) => void;
   isSpansLazyLoading: boolean;
   search?: string;
   setSearch: OnChangeFn<string | undefined>;
@@ -96,6 +99,9 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   threadId,
   setThreadId,
   onClose,
+  hasPreviousRow,
+  hasNextRow,
+  onRowChange,
   isSpansLazyLoading,
   search,
   setSearch,
@@ -147,12 +153,27 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   });
 
   const handleTraceDelete = useCallback(() => {
-    onClose();
+    // Navigate to previous/next trace before deleting, or close if it's the only trace
+    if (hasPreviousRow && onRowChange) {
+      onRowChange(-1);
+    } else if (hasNextRow && onRowChange) {
+      onRowChange(1);
+    } else {
+      onClose();
+    }
     mutate({
       traceId,
       projectId,
     });
-  }, [onClose, mutate, traceId, projectId]);
+  }, [
+    hasPreviousRow,
+    hasNextRow,
+    onRowChange,
+    onClose,
+    mutate,
+    traceId,
+    projectId,
+  ]);
 
   const getDataToExport = useCallback(
     (treeData: Array<Trace | Span>) => {
