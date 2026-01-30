@@ -18,6 +18,7 @@ import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
+from opik.integrations import model_defaults
 from opik.types import LLMProvider
 
 from . import stream_wrappers
@@ -66,6 +67,25 @@ class GenerateContentTrackDecorator(base_track_decorator.BaseTrackDecorator):
             kwargs, keys=KWARGS_KEYS_TO_LOG_AS_INPUTS
         )
         metadata = dict_utils.deepmerge(metadata, new_metadata)
+
+        # Add default parameters based on provider
+        # Merge config dict into kwargs to detect user-provided parameters in both places
+        config = kwargs.get("config") or {}
+        effective_kwargs = {**kwargs, **config} if isinstance(config, dict) else kwargs
+
+        if self.provider == "google_vertexai":
+            default_params = model_defaults.get_vertex_ai_default_params(
+                model, effective_kwargs
+            )
+        else:  # google_ai (Gemini)
+            default_params = model_defaults.get_gemini_default_params(
+                model, effective_kwargs
+            )
+
+        if default_params:
+            # Merge defaults first so user metadata takes precedence
+            metadata = dict_utils.deepmerge(default_params, metadata)
+
         metadata.update({"created_from": "genai"})
 
         tags = ["genai"]
