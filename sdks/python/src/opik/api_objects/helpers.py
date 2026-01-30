@@ -125,7 +125,7 @@ def parse_filter_expressions(
     if filter_string is None:
         return None
 
-    filter_expressions = opik_query_language.OpikQueryLanguage(
+    filter_expressions = opik_query_language.OpikQueryLanguage.for_traces(
         filter_string
     ).get_filter_expressions()
 
