@@ -170,7 +170,7 @@ class TestDatasetViewFiltering:
         )
 
         # Trigger streaming to invoke the REST client
-        list(view.__internal_api__stream_items_as_dataclasses__())
+        view.get_items()
 
         # Verify the REST client was called with properly formatted filters
         mock_rest_client.datasets.stream_dataset_items.assert_called()
