@@ -52,6 +52,4 @@ public class ServiceTogglesConfig {
     @NotNull boolean ollamaProviderEnabled;
     @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;
-    @JsonProperty
-    @NotNull boolean permissionsManagementEnabled;
 }
