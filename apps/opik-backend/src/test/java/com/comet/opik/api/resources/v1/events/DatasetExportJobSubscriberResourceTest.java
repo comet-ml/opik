@@ -160,7 +160,8 @@ class DatasetExportJobSubscriberResourceTest {
             Dataset dataset = createDatasetWithItemsAndColumns(expectedColumns, expectedRowCount);
 
             // When - Use CsvDatasetExportService to create job and publish to Redis stream
-            DatasetExportJob job = csvExportService.startExport(dataset.id())
+            // Pass null for versionId to use legacy table (versioning disabled in tests)
+            DatasetExportJob job = csvExportService.startExport(dataset.id(), null)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -194,7 +195,8 @@ class DatasetExportJobSubscriberResourceTest {
             datasetResourceClient.createDataset(dataset, API_KEY, WORKSPACE_NAME);
 
             // When - Use CsvDatasetExportService to create job and publish to Redis stream
-            DatasetExportJob job = csvExportService.startExport(dataset.id())
+            // Pass null for versionId to use legacy table (versioning disabled in tests)
+            DatasetExportJob job = csvExportService.startExport(dataset.id(), null)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -232,19 +234,20 @@ class DatasetExportJobSubscriberResourceTest {
             Dataset dataset3 = createDatasetWithItemsAndColumns(columns3, rowCount3);
 
             // When - Use CsvDatasetExportService to create jobs and publish to Redis stream
-            DatasetExportJob job1 = csvExportService.startExport(dataset1.id())
+            // Pass null for versionId to use legacy table (versioning disabled in tests)
+            DatasetExportJob job1 = csvExportService.startExport(dataset1.id(), null)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
-            DatasetExportJob job2 = csvExportService.startExport(dataset2.id())
+            DatasetExportJob job2 = csvExportService.startExport(dataset2.id(), null)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
                     .block();
 
-            DatasetExportJob job3 = csvExportService.startExport(dataset3.id())
+            DatasetExportJob job3 = csvExportService.startExport(dataset3.id(), null)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -285,7 +288,8 @@ class DatasetExportJobSubscriberResourceTest {
             Dataset dataset = createDatasetWithItemsAndColumns(expectedColumns, expectedRowCount);
 
             // When - Use CsvDatasetExportService to create job and publish to Redis stream
-            DatasetExportJob job = csvExportService.startExport(dataset.id())
+            // Pass null for versionId to use legacy table (versioning disabled in tests)
+            DatasetExportJob job = csvExportService.startExport(dataset.id(), null)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
@@ -321,7 +325,8 @@ class DatasetExportJobSubscriberResourceTest {
 
             // When - Use CsvDatasetExportService to start export for non-existent dataset
             // The export should complete successfully with an empty file (no columns, no items)
-            DatasetExportJob job = csvExportService.startExport(nonExistentDatasetId)
+            // Pass null for versionId to use legacy table (versioning disabled in tests)
+            DatasetExportJob job = csvExportService.startExport(nonExistentDatasetId, null)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID)
                             .put(RequestContext.USER_NAME, USER))
