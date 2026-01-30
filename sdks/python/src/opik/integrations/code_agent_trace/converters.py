@@ -12,6 +12,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from opik import id_helpers
+from opik.types import FeedbackScoreDict, SpanType
 
 from .helpers import (
     calculate_end_time,
@@ -256,10 +257,10 @@ def convert_generation_to_trace_and_spans(
         [dict(r) for r in tool_executions]  # Convert TraceRecord to dict
     )
 
-    feedback_scores: List[Dict[str, Any]] = [
+    feedback_scores: List[FeedbackScoreDict] = [
         {"name": "duration_seconds", "value": round(duration_seconds, 2)},
-        {"name": "lines_added", "value": lines_changed["lines_added"]},
-        {"name": "lines_deleted", "value": lines_changed["lines_deleted"]},
+        {"name": "lines_added", "value": float(lines_changed["lines_added"])},
+        {"name": "lines_deleted", "value": float(lines_changed["lines_deleted"])},
     ]
 
     # Generate trace ID
@@ -313,6 +314,7 @@ def _build_span_for_tool(
 
     span_input: Dict[str, Any]
     span_output: Dict[str, Any]
+    span_type: SpanType
 
     if tool_type == "shell":
         command = data.get("command", "")

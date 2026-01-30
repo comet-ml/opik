@@ -7,6 +7,8 @@ AI coding tools like Cursor, Claude Code, and other AI coding agents.
 
 from typing import Any, Dict, List, Optional, TypedDict
 
+from opik.types import FeedbackScoreDict, SpanType
+
 
 # =============================================================================
 # OpenAI Message Format Types
@@ -169,23 +171,6 @@ class TraceRecord(TypedDict, total=False):
 # =============================================================================
 
 
-class FeedbackScore(TypedDict):
-    """Feedback score for a trace."""
-
-    name: str
-    value: float
-
-
-class TraceMetadata(TypedDict, total=False):
-    """Metadata for an Opik trace."""
-
-    source: str
-    model: str
-    generation_id: str
-    conversation_id: str
-    user: str
-
-
 class SpanData(TypedDict, total=False):
     """Data for creating an Opik span."""
 
@@ -193,7 +178,7 @@ class SpanData(TypedDict, total=False):
     trace_id: str
     project_name: str
     name: str
-    type: str
+    type: SpanType
     start_time: Any  # datetime.datetime
     end_time: Any  # datetime.datetime
     input: Optional[Dict[str, Any]]
@@ -216,7 +201,7 @@ class TraceData(TypedDict, total=False):
     tags: List[str]
     thread_id: Optional[str]
     error_info: Optional[Any]
-    feedback_scores: List[Dict[str, Any]]
+    feedback_scores: List[FeedbackScoreDict]
 
 
 class ConversionResult(TypedDict):

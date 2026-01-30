@@ -48,11 +48,9 @@ from .converters import (
 from .types import (
     ChatCompletionResponse,
     ConversionResult,
-    FeedbackScore,
     LinesChanged,
     SpanData,
     TraceData,
-    TraceMetadata,
     TraceRecord,
 )
 
@@ -67,8 +65,6 @@ __all__ = [
     "TraceRecord",
     "TraceData",
     "SpanData",
-    "TraceMetadata",
-    "FeedbackScore",
     "LinesChanged",
     "ConversionResult",
     "ChatCompletionResponse",

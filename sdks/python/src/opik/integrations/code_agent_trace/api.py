@@ -5,11 +5,10 @@ This module provides functions for uploading trace records
 from tools like Cursor, Claude Code, and other AI coding agents.
 """
 
-from typing import Any, Dict, List, Optional, cast
+from typing import List, Optional
 
 import opik
 from opik.api_objects import opik_client, trace
-from opik.types import SpanType
 
 from .converters import convert_generation_to_trace_and_spans
 from .types import TraceRecord
@@ -130,7 +129,7 @@ def log_code_agent_turn(
             output=span_data["output"],
             metadata=span_data["metadata"],
             tags=span_data["tags"],
-            type=cast(SpanType, span_data["type"]),
+            type=span_data["type"],
             project_name=effective_project_name,
         )
 
