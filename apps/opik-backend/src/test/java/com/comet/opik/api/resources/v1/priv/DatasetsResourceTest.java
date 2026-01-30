@@ -146,6 +146,7 @@ import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -3801,57 +3802,69 @@ class DatasetsResourceTest {
             assertPage(items.reversed().subList(2, 5), actualItems);
         }
 
-        @Test
-        @DisplayName("when streaming dataset items with tag filter, then return only matching items")
-        void streamDataItems__whenStreamingWithTagFilter__thenReturnMatchingItems() {
-            // Create items with different tags
-            var tag1 = RandomStringUtils.insecure().nextAlphanumeric(5);
-            var tag2 = RandomStringUtils.insecure().nextAlphanumeric(5);
-            var tag3 = RandomStringUtils.insecure().nextAlphanumeric(5);
-            var includeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
-            var excludeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
-
-            var item1 = createItemWithTags(Set.of(tag1, includeTag));
-            var item2 = createItemWithTags(Set.of(tag2, includeTag));
-            var item3 = createItemWithTags(Set.of(tag3, excludeTag));
-
-            var batch = createFilterTestBatch(
-                    List.of(item1, item2),
-                    List.of(item3));
-
-            // Filter by includeTag - filters as JSON string (NOT URL-encoded for request body)
-            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, includeTag);
-            var filtersString = JsonUtils.writeValueAsString(List.of(filter));
-
-            var streamRequest = DatasetItemStreamRequest.builder()
-                    .datasetName(batch.datasetName())
-                    .filters(filtersString)
-                    .build();
-
-            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
-                    TEST_WORKSPACE);
-
-            // Should return only item2 and item1 (reversed order by created_at)
-            assertThat(actualItems).hasSize(2);
-            assertThat(actualItems).extracting(DatasetItem::tags)
-                    .allMatch(tags -> tags.contains(includeTag));
+        private Stream<Arguments> singleFilterTestCases() {
+            return Stream.of(
+                    // Tag filter
+                    Arguments.of(
+                            "tag filter",
+                            DatasetItemField.TAGS,
+                            (BiFunction<String, String, List<DatasetItem>>) (searchKey, extraTag) -> List.of(
+                                    createItemWithTags(Set.of(extraTag, searchKey)),
+                                    createItemWithTags(Set.of(RandomStringUtils.insecure().nextAlphanumeric(5),
+                                            searchKey))),
+                            (Function<String, List<DatasetItem>>) searchKey -> List.of(
+                                    createItemWithTags(
+                                            Set.of(RandomStringUtils.insecure().nextAlphanumeric(5),
+                                                    RandomStringUtils.insecure().nextAlphanumeric(5)))),
+                            (Function<String, DatasetItemFilter>) searchKey -> new DatasetItemFilter(
+                                    DatasetItemField.TAGS, Operator.CONTAINS, null, searchKey)),
+                    // Data field filter
+                    Arguments.of(
+                            "data field filter",
+                            DatasetItemField.DATA,
+                            (BiFunction<String, String, List<DatasetItem>>) (searchKey, extraTag) -> List.of(
+                                    createItemWithData(Map.of("query", new TextNode("search for " + searchKey))),
+                                    createItemWithData(
+                                            Map.of("query", new TextNode("another " + searchKey + " query")))),
+                            (Function<String, List<DatasetItem>>) searchKey -> List.of(
+                                    createItemWithData(Map.of("query", new TextNode("completely different")))),
+                            (Function<String, DatasetItemFilter>) searchKey -> new DatasetItemFilter(
+                                    DatasetItemField.DATA, Operator.CONTAINS, "query", searchKey)),
+                    // Full data filter
+                    Arguments.of(
+                            "full data filter",
+                            DatasetItemField.FULL_DATA,
+                            (BiFunction<String, String, List<DatasetItem>>) (searchKey, extraTag) -> List.of(
+                                    createItemWithData(Map.of(
+                                            "query", new TextNode("search for " + searchKey),
+                                            "type", new TextNode("question")))),
+                            (Function<String, List<DatasetItem>>) searchKey -> List.of(
+                                    createItemWithData(Map.of(
+                                            "query", new TextNode("completely different"),
+                                            "type", new TextNode("answer")))),
+                            (Function<String, DatasetItemFilter>) searchKey -> new DatasetItemFilter(
+                                    DatasetItemField.FULL_DATA, Operator.CONTAINS, null, searchKey)));
         }
 
-        @Test
-        @DisplayName("when streaming dataset items with data field filter, then return only matching items")
-        void streamDataItems__whenStreamingWithDataFieldFilter__thenReturnMatchingItems() {
+        @ParameterizedTest(name = "when streaming dataset items with {0}, then return only matching items")
+        @MethodSource("singleFilterTestCases")
+        @DisplayName("Stream with single filter returns only matching items")
+        void streamDataItemsWithSingleFilter(
+                String filterDescription,
+                DatasetItemField field,
+                BiFunction<String, String, List<DatasetItem>> matchingItemsCreator,
+                Function<String, List<DatasetItem>> nonMatchingItemsCreator,
+                Function<String, DatasetItemFilter> filterCreator) {
+
             var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
+            var extraTag = RandomStringUtils.insecure().nextAlphanumeric(5);
 
-            var matchingItem1 = createItemWithData(Map.of("query", new TextNode("search for " + searchKey)));
-            var matchingItem2 = createItemWithData(Map.of("query", new TextNode("another " + searchKey + " query")));
-            var nonMatchingItem = createItemWithData(Map.of("query", new TextNode("completely different")));
+            var matchingItems = matchingItemsCreator.apply(searchKey, extraTag);
+            var nonMatchingItems = nonMatchingItemsCreator.apply(searchKey);
 
-            var batch = createFilterTestBatch(
-                    List.of(matchingItem1, matchingItem2),
-                    List.of(nonMatchingItem));
+            var batch = createFilterTestBatch(matchingItems, nonMatchingItems);
 
-            // Filter by data field containing searchKey
-            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "query", searchKey);
+            var filter = filterCreator.apply(searchKey);
             var streamRequest = DatasetItemStreamRequest.builder()
                     .datasetName(batch.datasetName())
                     .filters(JsonUtils.writeValueAsString(List.of(filter)))
@@ -3860,40 +3873,10 @@ class DatasetsResourceTest {
             List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
                     TEST_WORKSPACE);
 
-            // Should return only matching items (reversed order by created_at)
-            assertThat(actualItems).hasSize(2);
+            assertThat(actualItems).hasSize(matchingItems.size());
             assertThat(actualItems).extracting(DatasetItem::id)
-                    .containsExactly(matchingItem2.id(), matchingItem1.id());
-        }
-
-        @Test
-        @DisplayName("when streaming dataset items with full data filter, then return only matching items")
-        void streamDataItems__whenStreamingWithFullDataFilter__thenReturnMatchingItems() {
-            var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
-
-            var matchingItem = createItemWithData(Map.of(
-                    "query", new TextNode("search for " + searchKey),
-                    "type", new TextNode("question")));
-            var nonMatchingItem = createItemWithData(Map.of(
-                    "query", new TextNode("completely different"),
-                    "type", new TextNode("answer")));
-
-            var batch = createFilterTestBatch(
-                    List.of(matchingItem),
-                    List.of(nonMatchingItem));
-
-            // Filter by full data containing searchKey
-            var filter = new DatasetItemFilter(DatasetItemField.FULL_DATA, Operator.CONTAINS, null, searchKey);
-            var streamRequest = DatasetItemStreamRequest.builder()
-                    .datasetName(batch.datasetName())
-                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
-                    .build();
-
-            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
-                    TEST_WORKSPACE);
-
-            assertThat(actualItems).hasSize(1);
-            assertThat(actualItems.getFirst().id()).isEqualTo(matchingItem.id());
+                    .containsExactlyInAnyOrderElementsOf(
+                            matchingItems.stream().map(DatasetItem::id).toList());
         }
 
         @Test
