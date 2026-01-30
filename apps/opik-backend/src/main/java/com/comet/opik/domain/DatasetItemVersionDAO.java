@@ -47,6 +47,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static java.util.Collections.emptyList;
 
 @ImplementedBy(DatasetItemVersionDAOImpl.class)
 public interface DatasetItemVersionDAO {
@@ -1612,7 +1613,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
             UUID lastRetrievedId) {
-        return getItems(datasetId, versionId, limit, lastRetrievedId, List.of());
+        return getItems(datasetId, versionId, limit, lastRetrievedId, emptyList());
     }
 
     @Override
