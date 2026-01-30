@@ -25,6 +25,8 @@ export type MenuItem = {
   showIndicator?: string;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
+  children?: MenuItem[];
+  search?: Record<string, string>;
 };
 
 export type MenuItemGroup = {
@@ -57,7 +59,12 @@ const getItemElementByType = ({
   if (item.type === MENU_ITEM_TYPE.router) {
     return (
       <li key={item.id} className="flex">
-        <Link to={item.path} params={{ workspaceName }} className={linkClasses}>
+        <Link
+          to={item.path}
+          params={{ workspaceName }}
+          search={item.search}
+          className={linkClasses}
+        >
           {content}
         </Link>
       </li>

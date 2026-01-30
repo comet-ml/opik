@@ -9,6 +9,7 @@ import {
   FileTerminal,
   LucideHome,
   Blocks,
+  Layers,
   Bolt,
   Brain,
   ChevronLeft,
@@ -133,7 +134,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         path: "/$workspaceName/prompts",
         type: MENU_ITEM_TYPE.router,
         icon: FileTerminal,
-        label: "Prompt library",
+        label: "Blueprints",
         count: "prompts",
       },
       {

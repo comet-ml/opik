@@ -321,7 +321,7 @@ const PromptsPage: React.FunctionComponent = () => {
   return (
     <div className="pt-6">
       <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Prompt library</h1>
+        <h1 className="comet-title-l truncate break-words">Blueprints</h1>
       </div>
       <ExplainerDescription
         className="mb-4"
@@ -336,6 +336,9 @@ const PromptsPage: React.FunctionComponent = () => {
             className="w-[320px]"
             dimension="sm"
           ></SearchInput>
+          <div className="flex h-7 items-center rounded-md bg-primary-100 px-2 text-xs font-medium text-primary">
+            Prompts only
+          </div>
           <FiltersButton
             columns={FILTER_COLUMNS}
             filters={filters}
