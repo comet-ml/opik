@@ -4,6 +4,7 @@ import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
 import {
   Brain,
+  Calendar,
   Clock,
   Coins,
   Hash,
@@ -145,6 +146,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const end_time = data.end_time
     ? formatDate(data.end_time, { includeSeconds: true })
     : "";
+  const created_at = data.created_at ? formatDate(data.created_at) : "";
   const estimatedCost = data.total_estimated_cost;
   const model = get(data, "model", null);
   const provider = get(data, "provider", null);
@@ -189,7 +191,17 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               />
             )}
           />
-          <div className="comet-body-s-accented flex w-full items-center gap-3 overflow-x-hidden text-muted-slate">
+          <div className="comet-body-s-accented flex w-full flex-wrap items-center gap-3 pl-1 text-muted-slate">
+            {created_at && (
+              <TooltipWrapper content={`Created at: ${created_at}`}>
+                <div
+                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  data-testid="data-viewer-created-at"
+                >
+                  <Calendar className="size-3 shrink-0" /> {created_at}
+                </div>
+              </TooltipWrapper>
+            )}
             <TooltipWrapper content={durationTooltip}>
               <div
                 className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
@@ -282,6 +294,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             projectId={projectId}
             traceId={traceId}
             spanId={spanId}
+            className="pl-1"
           />
         </div>
 
