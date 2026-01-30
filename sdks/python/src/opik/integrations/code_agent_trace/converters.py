@@ -99,6 +99,7 @@ def convert_generation_to_trace_and_spans(
     assistant_responses: List[TraceRecord] = []
     assistant_thoughts: List[TraceRecord] = []
     tool_executions: List[TraceRecord] = []
+    tab_completions: List[TraceRecord] = []
 
     for record in sorted_records:
         event = record.get("event", "")
@@ -110,6 +111,8 @@ def convert_generation_to_trace_and_spans(
             assistant_thoughts.append(record)
         elif event == "tool_execution":
             tool_executions.append(record)
+        elif event == "tab_completion":
+            tab_completions.append(record)
 
     # Calculate time bounds
     first_record = sorted_records[0]
@@ -227,12 +230,15 @@ def convert_generation_to_trace_and_spans(
     shell_count = sum(
         1 for r in tool_executions if r.get("data", {}).get("tool_type") == "shell"
     )
+    tab_count = len(tab_completions)
 
     parts = []
     if edit_count > 0:
         parts.append(f"{edit_count} edit{'s' if edit_count > 1 else ''}")
     if shell_count > 0:
         parts.append(f"{shell_count} command{'s' if shell_count > 1 else ''}")
+    if tab_count > 0:
+        parts.append(f"{tab_count} tab completion{'s' if tab_count > 1 else ''}")
     trace_name = f"Agent Turn: {', '.join(parts)}" if parts else "Agent Turn"
 
     # Build trace metadata
@@ -253,15 +259,17 @@ def convert_generation_to_trace_and_spans(
 
     # Calculate feedback scores
     duration_seconds = (trace_end_time - trace_start_time).total_seconds()
-    lines_changed = count_lines_changed(
-        [dict(r) for r in tool_executions]  # Convert TraceRecord to dict
-    )
+    # Include both tool executions and tab completions for lines changed
+    all_edits = [dict(r) for r in tool_executions] + [dict(r) for r in tab_completions]
+    lines_changed = count_lines_changed(all_edits)
 
     feedback_scores: List[FeedbackScoreDict] = [
         {"name": "duration_seconds", "value": round(duration_seconds, 2)},
         {"name": "lines_added", "value": float(lines_changed["lines_added"])},
         {"name": "lines_deleted", "value": float(lines_changed["lines_deleted"])},
     ]
+    if tab_count > 0:
+        feedback_scores.append({"name": "tab_completions", "value": float(tab_count)})
 
     # Generate trace ID
     trace_id = id_helpers.generate_id(timestamp=trace_start_time)
@@ -282,11 +290,18 @@ def convert_generation_to_trace_and_spans(
         "feedback_scores": feedback_scores,
     }
 
-    # Build spans for tool executions
+    # Build spans for tool executions and tab completions
     spans_data: List[SpanData] = [
         _build_span_for_tool(record, trace_id, project_name)
         for record in tool_executions
     ]
+
+    # Add spans for tab completions
+    for record in tab_completions:
+        spans_data.append(_build_span_for_tool(record, trace_id, project_name))
+
+    # Sort spans by start time
+    spans_data.sort(key=lambda s: s["start_time"])
 
     # Adjust end times for spans without duration
     for i, span in enumerate(spans_data):
@@ -331,6 +346,16 @@ def _build_span_for_tool(
     elif tool_type == "file_edit":
         file_path = data.get("file_path", "unknown")
         span_name = f"Edit: {shorten_path(file_path)}"
+        span_type = "general"
+        span_input = {"file_path": file_path}
+        if data.get("edits"):
+            span_input["edits"] = data["edits"]
+        span_output = {}
+        if data.get("line_ranges"):
+            span_output["line_ranges"] = data["line_ranges"]
+    elif tool_type == "tab_edit":
+        file_path = data.get("file_path", "unknown")
+        span_name = f"Tab: {shorten_path(file_path)}"
         span_type = "general"
         span_input = {"file_path": file_path}
         if data.get("edits"):
