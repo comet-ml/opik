@@ -4,7 +4,7 @@
 
 ## Overview
 
-Send a formatted Slack message to the #opik-code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python). Automatically extracts information from the GitHub PR for the current branch.
+Send a formatted Slack message to the #code-review channel with PR information, Jira ticket, test environment link, and optional component summaries (FE, BE, Python). Automatically extracts information from the GitHub PR for the current branch.
 
 - **Execution model**: Automatically extracts information from GitHub PR, prompts only for missing information, formats the message according to the template, and sends it via Slack MCP.
 
@@ -17,7 +17,7 @@ This workflow will:
 - Prompt only for missing information
 - Allow user to customize the message slightly
 - Format the message according to the code review template
-- Send the message to #opik-code-review channel via Slack MCP (`ghcr.io/korotovsky/slack-mcp-server`)
+- Send the message to #code-review channel via Slack MCP (`ghcr.io/korotovsky/slack-mcp-server`)
 - Verify successful delivery
 
 ---
@@ -191,7 +191,7 @@ This workflow will:
   - `mcp-server --transport stdio` in the Docker args (required for MCP protocol)
   - `SLACK_MCP_ADD_MESSAGE_TOOL=true` environment variable (required to enable the tool - disabled by default for safety)
 - Call the tool with the following parameters:
-  - `channel_id`: `#opik-code-review` (channel name starting with # or channel ID)
+  - `channel_id`: `#code-review` (channel name starting with # or channel ID)
   - `payload`: The formatted message text (the complete message with all fields)
   - `content_type`: `text/markdown` (optional, defaults to text/markdown)
 - **Important**: Messages will be posted as your authenticated user account (not as a bot)
@@ -201,7 +201,7 @@ This workflow will:
   - Common errors:
     - **Tool disabled error**: The `conversations_add_message` tool is disabled by default. Add `SLACK_MCP_ADD_MESSAGE_TOOL=true` to Docker args and restart Cursor (see `.agents/SLACK_MCP_SETUP.md`)
     - Authentication errors: Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-`) - see `.agents/SLACK_MCP_SETUP.md`
-    - Channel not found: Verify channel name `#opik-code-review` exists and you have access
+    - Channel not found: Verify channel name `#code-review` exists and you have access
     - Permission errors: Verify `chat:write` scope is configured in User Token Scopes (see `.agents/SLACK_MCP_SETUP.md`)
     - Docker errors: Ensure Docker is running and can pull the image `ghcr.io/korotovsky/slack-mcp-server:latest`
     - MCP not configured: Verify Slack MCP is properly configured according to `.agents/SLACK_MCP_SETUP.md` and Cursor IDE has been restarted
@@ -211,7 +211,7 @@ This workflow will:
 ### 7. Verification & Summary
 
 - **Display confirmation**: 
-  > "✅ Slack message sent successfully to #opik-code-review channel"
+  > "✅ Slack message sent successfully to #code-review channel"
   
 - **Show message preview**: Display the formatted message that was sent
 - **Provide next steps**: Remind user to check Slack channel for delivery
@@ -244,7 +244,7 @@ This workflow will:
   - Check if Docker can pull the image: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
   - Verify Docker has network access to reach Slack API
 - **Channel access errors**: 
-  - Verify channel name `#opik-code-review` exists
+  - Verify channel name `#code-review` exists
   - Ensure you have `chat:write` scope in User Token Scopes (see `.agents/SLACK_MCP_SETUP.md`)
   - Check that you are a member of the channel (join it if needed)
   - Try using channel ID instead of name if issues persist
@@ -302,7 +302,7 @@ The command is successful when:
 - **Automatic extraction**: Extracts information from PR title and description to minimize manual input
 - **Fallback to prompts**: Only prompts for information that cannot be extracted from PR
 - **Optional fields**: Only included in message if extracted from PR or provided by user
-- **Channel**: Message is always sent to `#opik-code-review` channel
+- **Channel**: Message is always sent to `#code-review` channel
 - **PR detection**: Automatically finds PR for current branch, falls back to manual input if needed
 - **Smart extraction**: Uses heuristics to find test environment links and component summaries in PR description
 - **MCP Configuration**: Slack MCP must be configured before using this command (see `.agents/SLACK_MCP_SETUP.md` for detailed setup)
@@ -341,7 +341,7 @@ cursor send-code-review-slack
 # 7. Send formatted message to Slack via conversations_add_message MCP tool (posts as user account)
 
 # Output:
-# ✅ Slack message sent successfully to #opik-code-review channel
+# ✅ Slack message sent successfully to #code-review channel
 # 
 # Message sent:
 # :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
