@@ -103,7 +103,7 @@ def log_code_agent_turn(
     trace_data = result["trace"]
     spans_data = result["spans"]
 
-    # Create the trace
+    # Create the trace with feedback scores
     created_trace = client.trace(
         id=trace_data["id"],
         name=trace_data["name"],
@@ -115,6 +115,7 @@ def log_code_agent_turn(
         tags=trace_data["tags"],
         thread_id=trace_data["thread_id"],
         error_info=trace_data["error_info"],
+        feedback_scores=trace_data.get("feedback_scores"),
         project_name=effective_project_name,
     )
 

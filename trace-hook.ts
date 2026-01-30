@@ -78,6 +78,7 @@ interface TraceRecord {
   conversation_id?: string;
   generation_id?: string;
   model?: string;
+  user_email?: string | null;
   data: Record<string, unknown>;
 }
 
@@ -94,6 +95,7 @@ function createRecord(event: string, input: HookInput, data: Record<string, unkn
     conversation_id: input.conversation_id,
     generation_id: input.generation_id,
     model: input.model,
+    user_email: input.user_email,
     data,
   };
 }

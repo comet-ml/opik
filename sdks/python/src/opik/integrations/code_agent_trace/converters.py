@@ -240,6 +240,35 @@ def _build_assistant_message(
     return message
 
 
+def _count_lines_changed(tool_executions: List[Dict[str, Any]]) -> Dict[str, int]:
+    """
+    Count lines added and deleted from file edit records.
+    
+    Returns dict with 'lines_added' and 'lines_deleted' counts.
+    """
+    lines_added = 0
+    lines_deleted = 0
+    
+    for record in tool_executions:
+        data = record.get("data", {})
+        if data.get("tool_type") != "file_edit":
+            continue
+        
+        edits = data.get("edits", [])
+        for edit in edits:
+            old_str = edit.get("old_string", "")
+            new_str = edit.get("new_string", "")
+            
+            # Count non-empty lines
+            old_lines = len([line for line in old_str.split("\n") if line.strip()]) if old_str else 0
+            new_lines = len([line for line in new_str.split("\n") if line.strip()]) if new_str else 0
+            
+            lines_deleted += old_lines
+            lines_added += new_lines
+    
+    return {"lines_added": lines_added, "lines_deleted": lines_deleted}
+
+
 def _build_code_changes_summary(file_edit_records: List[Dict[str, Any]]) -> Optional[str]:
     """
     Build a markdown-formatted summary of all code changes.
@@ -604,9 +633,10 @@ def convert_generation_to_trace_and_spans(
         parts.append(f"{shell_count} command{'s' if shell_count > 1 else ''}")
     trace_name = f"Agent Turn: {', '.join(parts)}" if parts else "Agent Turn"
 
-    # Build trace metadata (include generation_id and conversation_id here)
+    # Build trace metadata (include generation_id, conversation_id, and git user)
     model = first_record.get("model")
     conversation_id = first_record.get("conversation_id")
+    user_email = first_record.get("user_email")
     
     trace_metadata: Dict[str, Any] = {
         "source": "cursor-agent-trace",
@@ -617,6 +647,18 @@ def convert_generation_to_trace_and_spans(
         trace_metadata["generation_id"] = generation_id
     if conversation_id:
         trace_metadata["conversation_id"] = conversation_id
+    if user_email:
+        trace_metadata["user"] = user_email
+
+    # Calculate feedback scores
+    duration_seconds = (trace_end_time - trace_start_time).total_seconds()
+    lines_changed = _count_lines_changed(tool_executions)
+    
+    feedback_scores: List[Dict[str, Any]] = [
+        {"name": "duration_seconds", "value": round(duration_seconds, 2)},
+        {"name": "lines_added", "value": lines_changed["lines_added"]},
+        {"name": "lines_deleted", "value": lines_changed["lines_deleted"]},
+    ]
 
     # Generate trace ID
     trace_id = id_helpers.generate_id(timestamp=trace_start_time)
@@ -634,6 +676,7 @@ def convert_generation_to_trace_and_spans(
         "tags": ["agent-trace"],
         "thread_id": conversation_id,
         "error_info": None,
+        "feedback_scores": feedback_scores,
     }
 
     # Build spans for tool executions

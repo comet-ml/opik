@@ -84,6 +84,89 @@ class TestShortenCommand:
         assert result.endswith("...")
 
 
+class TestCountLinesChanged:
+    """Tests for _count_lines_changed function."""
+
+    def test_count__no_file_edits__returns_zeros(self):
+        """Test counting with no file edits."""
+        records = [
+            {"data": {"tool_type": "shell", "command": "ls"}},
+        ]
+        result = converters._count_lines_changed(records)
+        assert result == {"lines_added": 0, "lines_deleted": 0}
+
+    def test_count__single_edit__counts_correctly(self):
+        """Test counting lines for a single edit."""
+        records = [
+            {
+                "data": {
+                    "tool_type": "file_edit",
+                    "edits": [
+                        {
+                            "old_string": "line1\nline2\n",
+                            "new_string": "new_line1\nnew_line2\nnew_line3\n",
+                        }
+                    ],
+                }
+            },
+        ]
+        result = converters._count_lines_changed(records)
+        assert result == {"lines_added": 3, "lines_deleted": 2}
+
+    def test_count__multiple_edits__sums_correctly(self):
+        """Test counting lines across multiple edits."""
+        records = [
+            {
+                "data": {
+                    "tool_type": "file_edit",
+                    "edits": [
+                        {"old_string": "old1\n", "new_string": "new1\nnew2\n"},
+                    ],
+                }
+            },
+            {
+                "data": {
+                    "tool_type": "file_edit",
+                    "edits": [
+                        {"old_string": "old2\nold3\n", "new_string": "new3\n"},
+                    ],
+                }
+            },
+        ]
+        result = converters._count_lines_changed(records)
+        assert result == {"lines_added": 3, "lines_deleted": 3}
+
+    def test_count__empty_strings__counts_as_zero(self):
+        """Test that empty strings count as zero lines."""
+        records = [
+            {
+                "data": {
+                    "tool_type": "file_edit",
+                    "edits": [
+                        {"old_string": "", "new_string": "new_line\n"},
+                    ],
+                }
+            },
+        ]
+        result = converters._count_lines_changed(records)
+        assert result == {"lines_added": 1, "lines_deleted": 0}
+
+    def test_count__whitespace_only_lines__not_counted(self):
+        """Test that whitespace-only lines are not counted."""
+        records = [
+            {
+                "data": {
+                    "tool_type": "file_edit",
+                    "edits": [
+                        {"old_string": "  \n\n\t\n", "new_string": "actual_content\n"},
+                    ],
+                }
+            },
+        ]
+        result = converters._count_lines_changed(records)
+        assert result == {"lines_added": 1, "lines_deleted": 0}
+
+
 class TestGroupRecordsByGeneration:
     """Tests for group_records_by_generation function."""
 
