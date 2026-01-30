@@ -333,12 +333,24 @@ class OpikQueryLanguage:
 
     @classmethod
     def for_traces(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
-        """Factory method for trace/span filtering."""
+        """
+        Creates a parser for filtering traces and spans using OQL syntax. Use this when searching
+        or filtering trace/span data in projects, experiments, or prompt searches. Returns an
+        OpikQueryLanguage instance preconfigured with TraceSpanOQLConfig that validates fields like
+        name, status, metadata, feedback_scores, tags, and usage tokens. Empty or None query_string
+        yields no filters; malformed queries raise ValueError during parsing.
+        """
         return cls(query_string, TraceSpanOQLConfig())
 
     @classmethod
     def for_dataset_items(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
-        """Factory method for dataset item filtering."""
+        """
+        Creates a parser for filtering dataset items using OQL syntax. Use this when working with
+        dataset views or filtering items within a dataset. Returns an OpikQueryLanguage instance
+        preconfigured with DatasetItemOQLConfig that validates dataset-specific fields like input,
+        expected_output, and item metadata. Empty or None query_string yields no filters; malformed
+        queries raise ValueError during parsing.
+        """
         return cls(query_string, DatasetItemOQLConfig())
 
     def get_filter_expressions(self) -> Optional[List[Dict[str, Any]]]:
