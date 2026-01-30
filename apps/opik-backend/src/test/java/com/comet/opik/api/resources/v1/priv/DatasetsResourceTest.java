@@ -3787,8 +3787,8 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when streaming dataset items with filters, then return items sorted by created date")
-        void streamDataItems__whenStreamingDatasetItemsWithFilters__thenReturnItemsSortedByCreatedDate() {
+        @DisplayName("when streaming dataset items with lastRetrievedId, then return items sorted by created date")
+        void streamDataItems__whenStreamingDatasetItemsWithLastRetrievedId__thenReturnItemsSortedByCreatedDate() {
 
             var items = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
@@ -3820,6 +3820,404 @@ class DatasetsResourceTest {
                 List<DatasetItem> actualItems = getStreamedItems(response);
 
                 assertPage(items.reversed().subList(2, 5), actualItems);
+            }
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with tag filter, then return only matching items")
+        void streamDataItems__whenStreamingWithTagFilter__thenReturnMatchingItems() {
+            // Create items with different tags
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1", "include"))
+                    .build();
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag2", "include"))
+                    .build();
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag3", "exclude"))
+                    .build();
+
+            var items = List.of(item1, item2, item3);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Filter by "include" tag - filters as JSON string (NOT URL-encoded for request body)
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
+            var filtersString = JsonUtils.writeValueAsString(List.of(filter));
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(filtersString)
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                // Should return only item2 and item1 (reversed order by created_at)
+                assertThat(actualItems).hasSize(2);
+                assertThat(actualItems).extracting(DatasetItem::tags)
+                        .allMatch(tags -> tags.contains("include"));
+            }
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with data field filter, then return only matching items")
+        void streamDataItems__whenStreamingWithDataFieldFilter__thenReturnMatchingItems() {
+            var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
+
+            var matchingItem1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("query", new TextNode("search for " + searchKey)))
+                    .build();
+            var matchingItem2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("query", new TextNode("another " + searchKey + " query")))
+                    .build();
+            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of("query", new TextNode("completely different")))
+                    .build();
+
+            var items = List.of(matchingItem1, matchingItem2, nonMatchingItem);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Filter by data field containing searchKey
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "query", searchKey);
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                // Should return only matching items (reversed order by created_at)
+                assertThat(actualItems).hasSize(2);
+                assertThat(actualItems).extracting(DatasetItem::id)
+                        .containsExactly(matchingItem2.id(), matchingItem1.id());
+            }
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with full data filter, then return only matching items")
+        void streamDataItems__whenStreamingWithFullDataFilter__thenReturnMatchingItems() {
+            var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
+
+            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of(
+                            "query", new TextNode("search for " + searchKey),
+                            "type", new TextNode("question")))
+                    .build();
+            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(Map.of(
+                            "query", new TextNode("completely different"),
+                            "type", new TextNode("answer")))
+                    .build();
+
+            var items = List.of(matchingItem, nonMatchingItem);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Filter by full data containing searchKey
+            var filter = new DatasetItemFilter(DatasetItemField.FULL_DATA, Operator.CONTAINS, null, searchKey);
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                assertThat(actualItems).hasSize(1);
+                assertThat(actualItems.getFirst().id()).isEqualTo(matchingItem.id());
+            }
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with filter and lastRetrievedId, then return filtered items after cursor")
+        void streamDataItems__whenStreamingWithFilterAndLastRetrievedId__thenReturnFilteredItemsAfterCursor() {
+            // Create 5 items with "include" tag
+            var items = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .tags(Set.of("include", "tag" + i))
+                            .build())
+                    .toList();
+
+            // Create 3 items without "include" tag
+            var excludedItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .tags(Set.of("exclude", "tag" + i))
+                            .build())
+                    .toList();
+
+            var allItems = new ArrayList<DatasetItem>();
+            allItems.addAll(items);
+            allItems.addAll(excludedItems);
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(allItems)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Filter by "include" tag and use lastRetrievedId from second item (reversed order)
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .lastRetrievedId(items.reversed().get(1).id())
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                // Should return only filtered items after the cursor (3 items)
+                assertThat(actualItems).hasSize(3);
+                assertThat(actualItems).extracting(DatasetItem::id)
+                        .containsExactly(
+                                items.reversed().get(2).id(),
+                                items.reversed().get(3).id(),
+                                items.reversed().get(4).id());
+            }
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with filter matching no items, then return empty list")
+        void streamDataItems__whenStreamingWithFilterMatchingNoItems__thenReturnEmptyList() {
+            var items = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .tags(Set.of("tag1", "tag2"))
+                            .build())
+                    .toList();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Filter by non-existent tag
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "nonexistent");
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                assertThat(actualItems).isEmpty();
+            }
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with multiple filters (AND logic), then return only items matching all filters")
+        void streamDataItems__whenStreamingWithMultipleFilters__thenReturnItemsMatchingAllFilters() {
+            // Create items with different tag combinations
+            // Item 1: has both "tag1" and "tag2" - should be returned
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1", "tag2"))
+                    .experimentItems(null)
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
+                    .build();
+
+            // Item 2: has both "tag1" and "tag2" - should be returned
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1", "tag2", "tag3"))
+                    .experimentItems(null)
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
+                    .build();
+
+            // Item 3: has only "tag1" - should NOT be returned (missing tag2)
+            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag1"))
+                    .experimentItems(null)
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
+                    .build();
+
+            // Item 4: has only "tag2" - should NOT be returned (missing tag1)
+            var item4 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("tag2"))
+                    .experimentItems(null)
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
+                    .build();
+
+            // Item 5: has neither tag - should NOT be returned
+            var item5 = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .tags(Set.of("other"))
+                    .experimentItems(null)
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
+                    .build();
+
+            var items = List.of(item1, item2, item3, item4, item5);
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Create two filters - both must match (AND logic)
+            var filter1 = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag1");
+            var filter2 = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag2");
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter1, filter2)))
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                // Should return only 2 items that have BOTH tag1 AND tag2
+                assertThat(actualItems).hasSize(2);
+                assertThat(actualItems).extracting(DatasetItem::id)
+                        .containsExactlyInAnyOrder(item1.id(), item2.id());
+                // Verify all returned items have both tags
+                assertThat(actualItems).allSatisfy(item -> {
+                    assertThat(item.tags()).contains("tag1");
+                    assertThat(item.tags()).contains("tag2");
+                });
+            }
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with filter and steamLimit, then respect limit on filtered results")
+        void streamDataItems__whenStreamingWithFilterAndSteamLimit__thenRespectLimitOnFilteredResults() {
+            // Create 10 items with "include" tag
+            var includedItems = IntStream.range(0, 10)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .tags(Set.of("include"))
+                            .experimentItems(null)
+                            .createdAt(null)
+                            .lastUpdatedAt(null)
+                            .build())
+                    .toList();
+
+            // Create 5 items without "include" tag
+            var excludedItems = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
+                            .tags(Set.of("exclude"))
+                            .experimentItems(null)
+                            .createdAt(null)
+                            .lastUpdatedAt(null)
+                            .build())
+                    .toList();
+
+            var allItems = new ArrayList<DatasetItem>();
+            allItems.addAll(includedItems);
+            allItems.addAll(excludedItems);
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(allItems)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Filter by "include" tag with limit of 5
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .steamLimit(5)
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                // Should return only 5 items (respecting steamLimit)
+                assertThat(actualItems).hasSize(5);
+                // All returned items should have "include" tag
+                assertThat(actualItems).allMatch(item -> item.tags().contains("include"));
             }
         }
 
