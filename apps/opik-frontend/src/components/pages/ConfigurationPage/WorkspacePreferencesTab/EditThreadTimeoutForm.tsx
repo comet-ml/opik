@@ -62,7 +62,7 @@ const EditThreadTimeoutForm: React.FC<EditThreadTimeoutFormProps> = ({
           name="timeout_to_mark_thread_as_inactive"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Thread Timeout</FormLabel>
+              <FormLabel>Cooldown period</FormLabel>
               <FormControl>
                 <SelectBox
                   value={field.value}
