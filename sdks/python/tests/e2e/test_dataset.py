@@ -1,9 +1,5 @@
-import pytest
-
 import opik
-from opik import exceptions
 from opik.api_objects.dataset import dataset_item
-from opik.api_objects.dataset.dataset_view import DatasetView
 from opik.api_objects import helpers
 from . import verifiers
 
@@ -175,42 +171,16 @@ def test_get_dataset_with_filter__returns_filtered_items_and_is_immutable(
         ]
     )
 
-    # Get filtered view - only items with data.category="geography"
-    filtered_view = opik_client.get_dataset(
-        name=dataset_name,
+    verifiers.verify_dataset_view(
+        opik_client=opik_client,
+        dataset_name=dataset_name,
         filter_string='data.category = "geography"',
+        expected_count=2,
+        expected_inputs={
+            "What is the capital of France?",
+            "What is the capital of Poland?",
+        },
     )
-
-    # Verify it returns a DatasetView
-    assert isinstance(filtered_view, DatasetView)
-    assert filtered_view.filter_string == 'data.category = "geography"'
-
-    # Verify correct items are returned
-    filtered_items = filtered_view.get_items()
-    assert len(filtered_items) == 2
-
-    # Verify items content - should be geography questions only
-    inputs = {item.input["question"] for item in filtered_items}
-    assert inputs == {
-        "What is the capital of France?",
-        "What is the capital of Poland?",
-    }
-
-    # Verify DatasetView is immutable - insert should raise error
-    with pytest.raises(exceptions.DatasetViewImmutableError):
-        filtered_view.insert([{"input": "test"}])
-
-    # Verify DatasetView is immutable - update should raise error
-    with pytest.raises(exceptions.DatasetViewImmutableError):
-        filtered_view.update([{"id": "test-id", "input": "test"}])
-
-    # Verify DatasetView is immutable - delete should raise error
-    with pytest.raises(exceptions.DatasetViewImmutableError):
-        filtered_view.delete(["test-id"])
-
-    # Verify DatasetView is immutable - clear should raise error
-    with pytest.raises(exceptions.DatasetViewImmutableError):
-        filtered_view.clear()
 
 
 def test_get_dataset_with_filter__filter_excludes_all_items__returns_empty_view(
@@ -234,15 +204,10 @@ def test_get_dataset_with_filter__filter_excludes_all_items__returns_empty_view(
         ]
     )
 
-    # Get filtered view with filter that matches no items
-    filtered_view = opik_client.get_dataset(
-        name=dataset_name,
+    verifiers.verify_dataset_view(
+        opik_client=opik_client,
+        dataset_name=dataset_name,
         filter_string='data.category = "nonexistent"',
+        expected_count=0,
+        expected_inputs=set(),
     )
-
-    # Verify it returns a DatasetView
-    assert isinstance(filtered_view, DatasetView)
-
-    # Verify no items are returned
-    filtered_items = filtered_view.get_items()
-    assert len(filtered_items) == 0
