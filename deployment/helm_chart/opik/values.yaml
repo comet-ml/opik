@@ -85,7 +85,8 @@ component:
       enabled: false
     image:
       repository: opik-backend
-      pullPolicy: IfNotPresent
+      pullPolicy: IfNotPresent/
+      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -190,7 +191,8 @@ component:
       enabled: false
     image:
       repository: opik-python-backend
-      pullPolicy: IfNotPresent
+      pullPolicy: IfNotPresent/
+      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -309,6 +311,7 @@ component:
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent
+      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
