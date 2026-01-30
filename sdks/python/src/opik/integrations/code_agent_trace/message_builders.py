@@ -293,26 +293,44 @@ def build_code_changes_summary(file_edit_records: List[TraceRecord]) -> Optional
         if all_ranges:
             lines.append(f"**Lines modified:** {', '.join(all_ranges)}")
 
-        # Show edit details (diffs)
+        # Show edit details (diffs) with line numbers
         for edit_data in edits_list:
             edits = edit_data.get("edits", [])
-            for edit in edits:
+            line_ranges = edit_data.get("line_ranges", [])
+
+            for idx, edit in enumerate(edits):
                 old_str = edit.get("old_string", "")
                 new_str = edit.get("new_string", "")
+
+                # Get start line for this edit if available
+                start_line = 1
+                if idx < len(line_ranges):
+                    start_line = line_ranges[idx].get("start_line", 1) or 1
 
                 if old_str or new_str:
                     lines.append("")
                     lines.append("```diff")
+
+                    # Show removed lines with line numbers
                     if old_str:
-                        for line in old_str.split("\n")[:10]:
-                            lines.append(f"- {line}")
-                        if old_str.count("\n") > 10:
-                            lines.append("- ... (truncated)")
+                        old_lines = old_str.split("\n")
+                        for i, line in enumerate(old_lines[:10]):
+                            line_num = start_line + i
+                            # Preserve original indentation
+                            lines.append(f"-{line_num:4d} | {line}")
+                        if len(old_lines) > 10:
+                            lines.append("-     | ... (truncated)")
+
+                    # Show added lines with line numbers
                     if new_str:
-                        for line in new_str.split("\n")[:10]:
-                            lines.append(f"+ {line}")
-                        if new_str.count("\n") > 10:
-                            lines.append("+ ... (truncated)")
+                        new_lines = new_str.split("\n")
+                        for i, line in enumerate(new_lines[:10]):
+                            line_num = start_line + i
+                            # Preserve original indentation
+                            lines.append(f"+{line_num:4d} | {line}")
+                        if len(new_lines) > 10:
+                            lines.append("+     | ... (truncated)")
+
                     lines.append("```")
 
         lines.append("")
