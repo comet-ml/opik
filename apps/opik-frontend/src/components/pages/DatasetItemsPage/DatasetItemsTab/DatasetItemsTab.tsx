@@ -47,11 +47,11 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Check, Loader2 } from "lucide-react";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { convertColumnDataToColumn, injectColumnCallback } from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { formatDate } from "@/lib/date";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
@@ -92,11 +92,15 @@ const transformDataColumnFilters = (filters: Filters): Filters => {
 const getRowId = (d: DatasetItem) => d.id;
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "created_at", "tags"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_ID_ID,
+  "created_at",
+  "tags",
+];
 
 const SELECTED_COLUMNS_KEY = "dataset-items-selected-columns";
 const COLUMNS_WIDTH_KEY = "dataset-items-columns-width";
@@ -349,16 +353,24 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   });
 
   const columnsData = useMemo(() => {
-    const retVal: ColumnData<DatasetItem>[] = dynamicDatasetColumns.map(
-      ({ label, id, columnType }) =>
-        ({
-          id,
-          label,
-          type: columnType,
-          accessorFn: (row) => get(row, ["data", label], ""),
-          cell: AutodetectCell as never,
-        }) as ColumnData<DatasetItem>,
-    );
+    const retVal: ColumnData<DatasetItem>[] = [
+      {
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+      },
+      ...dynamicDatasetColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            accessorFn: (row) => get(row, ["data", label], ""),
+            cell: AutodetectCell as never,
+          }) as ColumnData<DatasetItem>,
+      ),
+    ];
 
     retVal.push({
       id: "tags",
@@ -443,6 +455,14 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   );
 
   const columns = useMemo(() => {
+    const convertedColumns = convertColumnDataToColumn<
+      DatasetItem,
+      DatasetItem
+    >(columnsData, {
+      columnsOrder,
+      selectedColumns,
+    });
+
     return [
       generateSelectColumDef<DatasetItem>({
         cellClassName: (context) => {
@@ -450,20 +470,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
           return getDraftStatusBorderClass(item);
         },
       }),
-      mapColumnDataFields<DatasetItem, DatasetItem>({
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
-      }),
-      ...convertColumnDataToColumn<DatasetItem, DatasetItem>(columnsData, {
-        columnsOrder,
-        selectedColumns,
-      }),
+      ...injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick),
       generateActionsColumDef({
         cell: DatasetItemRowActionsCell,
       }),
@@ -471,9 +478,9 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   }, [
     columnsData,
     columnsOrder,
-    handleRowClick,
     selectedColumns,
     getDraftStatusBorderClass,
+    handleRowClick,
   ]);
 
   const columnsToExport = useMemo(() => {

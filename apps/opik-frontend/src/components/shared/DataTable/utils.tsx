@@ -189,6 +189,7 @@ export const generateSelectColumDef = <TData,>(meta?: {
         metadata={context.column.columnDef.meta}
         tableMetadata={context.table.options.meta}
         supportStatistic={false}
+        className="justify-center"
       >
         <Checkbox
           onClick={(event) => event.stopPropagation()}
@@ -213,7 +214,7 @@ export const generateSelectColumDef = <TData,>(meta?: {
         <CellWrapper
           metadata={context.column.columnDef.meta}
           tableMetadata={context.table.options.meta}
-          className={cn("py-3.5", additionalClassName)}
+          className={cn("justify-center py-3.5", additionalClassName)}
           stopClickPropagation
         >
           <Checkbox
