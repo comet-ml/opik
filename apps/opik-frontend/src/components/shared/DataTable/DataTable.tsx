@@ -1,4 +1,5 @@
 import React, { ReactNode, useMemo, useState } from "react";
+import debounce from "lodash/debounce";
 import {
   Cell,
   ColumnDef,
@@ -58,6 +59,8 @@ import {
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import useCustomRowClick from "@/components/shared/DataTable/useCustomRowClick";
 
+const ACTIONS_COLUMN_WIDTH = 0;
+
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface TableMeta<TData extends RowData> {
@@ -116,6 +119,10 @@ interface ExpandingConfig {
   setExpanded: OnChangeFn<ExpandedState>;
 }
 
+interface ActionsConfig<TData> {
+  render: (row: Row<TData>) => ReactNode;
+}
+
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   columnsStatistic?: ColumnsStatistic;
@@ -147,6 +154,7 @@ interface DataTableProps<TData, TValue> {
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
   >;
   showLoadingOverlay?: boolean;
+  actionsConfig?: ActionsConfig<TData>;
 }
 
 const DataTable = <TData, TValue>({
@@ -177,9 +185,24 @@ const DataTable = <TData, TValue>({
   meta,
   getSubRows,
   showLoadingOverlay = false,
+  actionsConfig,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
   const isRowClickable = isFunction(onRowClick);
+  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
+
+  const updateHoveredRowPosition = useMemo(() => {
+    const debouncedHide = debounce(() => setHoveredRowId(null), 50);
+
+    return (rowId: string | null) => {
+      if (rowId === null) {
+        debouncedHide();
+      } else {
+        debouncedHide.cancel();
+        setHoveredRowId(rowId);
+      }
+    };
+  }, []);
 
   const table = useReactTable({
     data,
@@ -294,6 +317,8 @@ const DataTable = <TData, TValue>({
           },
           getRowClassName?.(row),
         )}
+        onMouseEnter={() => updateHoveredRowPosition(row.id)}
+        onMouseLeave={() => updateHoveredRowPosition(null)}
         {...(isRowClickable || isGrouped
           ? {
               onClick: (e) =>
@@ -311,6 +336,36 @@ const DataTable = <TData, TValue>({
           : {})}
       >
         {cells.map((cell) => renderCell(row, cell))}
+        {actionsConfig && (
+          <TableCell
+            style={{
+              position: "sticky",
+              right: 0,
+              width: ACTIONS_COLUMN_WIDTH,
+              minWidth: ACTIONS_COLUMN_WIDTH,
+              padding: 0,
+              border: "none",
+            }}
+            onMouseEnter={() => updateHoveredRowPosition(row.id)}
+          >
+            <div
+              style={{
+                position: "absolute",
+                right: 8,
+                top: 0,
+                bottom: 0,
+                display: "flex",
+                alignItems: "center",
+                pointerEvents: "auto",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {hoveredRowId === row.id &&
+                !row.getIsGrouped() &&
+                actionsConfig.render(row)}
+            </div>
+          </TableCell>
+        )}
       </TableRow>
     );
   };
@@ -413,6 +468,12 @@ const DataTable = <TData, TValue>({
             {cols.map((i) => (
               <col key={i.id} style={{ width: `${i.size}px` }} />
             ))}
+            {actionsConfig && (
+              <col
+                key="actions"
+                style={{ width: `${ACTIONS_COLUMN_WIDTH}px` }}
+              />
+            )}
           </colgroup>
           <TableHeader
             className={cn(stickyHeader && "sticky z-10")}
@@ -462,6 +523,18 @@ const DataTable = <TData, TValue>({
                       </TableHead>
                     );
                   })}
+                  {actionsConfig && (
+                    <TableHead
+                      style={{
+                        position: "sticky",
+                        right: 0,
+                        width: ACTIONS_COLUMN_WIDTH,
+                        minWidth: ACTIONS_COLUMN_WIDTH,
+                        padding: 0,
+                        border: "none",
+                      }}
+                    />
+                  )}
                 </TableRow>
               );
             })}

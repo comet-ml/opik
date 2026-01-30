@@ -20,7 +20,7 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 import { Dashboard } from "@/types/dashboard";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditCloneDashboardDialog from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
-import { DashboardRowActionsCell } from "@/components/pages/DashboardsPage/DashboardRowActionsCell";
+import { DashboardRowActions } from "@/components/pages/DashboardsPage/DashboardRowActions";
 import DashboardsActionsPanel from "@/components/pages/DashboardsPage/DashboardsActionsPanel";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -43,7 +43,6 @@ import {
   mapColumnDataFields,
 } from "@/lib/table";
 import {
-  generateActionsColumDef,
   generateSelectColumDef,
   getRowId,
 } from "@/components/shared/DataTable/utils";
@@ -207,9 +206,6 @@ const DashboardsPage: React.FunctionComponent = () => {
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef({
-        cell: DashboardRowActionsCell,
-      }),
     ];
   }, [selectedColumns, columnsOrder, columnsDef, sortableBy]);
 
@@ -292,6 +288,9 @@ const DashboardsPage: React.FunctionComponent = () => {
         columns={columns}
         data={dashboards}
         onRowClick={handleRowClick}
+        actionsConfig={{
+          render: (row) => <DashboardRowActions dashboard={row.original} />,
+        }}
         sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{

@@ -11,8 +11,7 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import { formatDate } from "@/lib/date";
 import { PROVIDERS, LEGACY_CUSTOM_PROVIDER_NAME } from "@/constants/providers";
 import AIProviderCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProviderCell";
-import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
-import AIProvidersRowActionsCell from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersRowActionsCell";
+import AIProvidersRowActions from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersRowActions";
 import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -94,15 +93,10 @@ const AIProvidersTab = () => {
   }, [providerKeys, search]);
 
   const columns = useMemo(() => {
-    return [
-      ...convertColumnDataToColumn<ProviderObject, ProviderObject>(
-        DEFAULT_COLUMNS,
-        {},
-      ),
-      generateActionsColumDef({
-        cell: AIProvidersRowActionsCell,
-      }),
-    ];
+    return convertColumnDataToColumn<ProviderObject, ProviderObject>(
+      DEFAULT_COLUMNS,
+      {},
+    );
   }, []);
 
   const handleAddConfigurationClick = () => {
@@ -142,6 +136,9 @@ const AIProvidersTab = () => {
         columns={columns}
         data={filteredProviderKeys}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        actionsConfig={{
+          render: (row) => <AIProvidersRowActions providerKey={row.original} />,
+        }}
         noData={
           <DataTableNoData title={noDataLabel}>
             {search === "" && (
