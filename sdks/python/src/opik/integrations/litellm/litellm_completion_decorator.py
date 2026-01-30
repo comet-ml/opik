@@ -221,9 +221,9 @@ class LiteLLMCompletionTrackDecorator(base_track_decorator.BaseTrackDecorator):
             ]
         ],
     ) -> Optional[litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper]:
-        assert (
-            generations_aggregator is not None
-        ), "LiteLLM decorator will always get aggregator function as input"
+        assert generations_aggregator is not None, (
+            "LiteLLM decorator will always get aggregator function as input"
+        )
 
         is_litellm_stream = isinstance(
             output, litellm.litellm_core_utils.streaming_handler.CustomStreamWrapper

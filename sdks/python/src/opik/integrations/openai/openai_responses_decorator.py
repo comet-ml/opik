@@ -53,9 +53,9 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in responses.create(**kwargs) or responses.parse(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in responses.create(**kwargs) or responses.parse(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
 
@@ -130,9 +130,9 @@ class OpenaiResponsesTrackDecorator(base_track_decorator.BaseTrackDecorator):
         capture_output: bool,
         generations_aggregator: Optional[Callable[[List[Any]], Any]],
     ) -> Optional[Any]:
-        assert (
-            generations_aggregator is not None
-        ), "OpenAI decorator will always get aggregator function as input"
+        assert generations_aggregator is not None, (
+            "OpenAI decorator will always get aggregator function as input"
+        )
 
         if isinstance(output, openai.Stream):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()

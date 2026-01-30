@@ -280,6 +280,6 @@ def test_opik_tracer__init_validation():
 def test_parse_graph_interrupt_value(error_traceback: str, expected: Optional[str]):
     """Test parse_graph_interrupt_value with various input formats."""
     result = parse_graph_interrupt_value(error_traceback)
-    assert (
-        result == expected
-    ), f"Expected {expected!r}, got {result!r} for input: {error_traceback[:100]}"
+    assert result == expected, (
+        f"Expected {expected!r}, got {result!r} for input: {error_traceback[:100]}"
+    )

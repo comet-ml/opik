@@ -215,12 +215,12 @@ def test_threads_client__search_threads__filter_by_feedback_score(
         filter_string=f"feedback_scores.{unique_metric} is_not_empty",
     )
     thread_ids_not_empty = {thread.id for thread in threads_not_empty}
-    assert (
-        thread_with_score in thread_ids_not_empty
-    ), "Thread with score should be found with is_not_empty filter"
-    assert (
-        thread_without_score not in thread_ids_not_empty
-    ), "Thread without score should not be found with is_not_empty filter"
+    assert thread_with_score in thread_ids_not_empty, (
+        "Thread with score should be found with is_not_empty filter"
+    )
+    assert thread_without_score not in thread_ids_not_empty, (
+        "Thread without score should not be found with is_not_empty filter"
+    )
 
     # Test filtering with = operator
     threads_with_value = threads_client.search_threads(
@@ -228,14 +228,14 @@ def test_threads_client__search_threads__filter_by_feedback_score(
         filter_string=f"feedback_scores.{unique_metric} = 0.85",
     )
     thread_ids_with_value = {thread.id for thread in threads_with_value}
-    assert (
-        thread_with_score in thread_ids_with_value
-    ), "Thread with score value 0.85 should be found"
-    assert (
-        thread_without_score not in thread_ids_with_value
-    ), "Thread without score should not be found"
+    assert thread_with_score in thread_ids_with_value, (
+        "Thread with score value 0.85 should be found"
+    )
+    assert thread_without_score not in thread_ids_with_value, (
+        "Thread without score should not be found"
+    )
 
     # Verify is_not_empty and = return the same thread
-    assert (
-        thread_ids_not_empty == thread_ids_with_value
-    ), "is_not_empty and = filters should return the same threads for this test case"
+    assert thread_ids_not_empty == thread_ids_with_value, (
+        "is_not_empty and = filters should return the same threads for this test case"
+    )

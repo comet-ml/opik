@@ -91,7 +91,7 @@ def create_dataset_item(dataset: opik.Dataset, item_data: Dict[str, Any]) -> str
     dataset_name = getattr(dataset, "name", None)
     dataset_info = f", Dataset: {dataset_name!r}" if dataset_name else ""
     raise Exception(
-        f"Failed to create dataset item. " f"Content: {new_item!r}{dataset_info}"
+        f"Failed to create dataset item. Content: {new_item!r}{dataset_info}"
     )
 
 

@@ -269,12 +269,12 @@ class TestRecreateExperiment:
             elif hasattr(call_args, "args") and call_args.args:
                 experiment_items_arg = call_args.args[0]
 
-            assert (
-                experiment_items_arg is not None
-            ), f"Could not find experiment_items in call_args: {call_args}"
-            assert (
-                len(experiment_items_arg) == 2
-            ), f"Expected 2 items in batch, got {len(experiment_items_arg)}"
+            assert experiment_items_arg is not None, (
+                f"Could not find experiment_items in call_args: {call_args}"
+            )
+            assert len(experiment_items_arg) == 2, (
+                f"Expected 2 items in batch, got {len(experiment_items_arg)}"
+            )
 
     def test_recreate_experiment_uses_module_names_correctly(
         self, mock_client: Mock, experiment_data: ExperimentData
@@ -361,7 +361,7 @@ class TestImportTracesWithSpans:
         mock_spans = []
         for i in range(3):
             mock_span = Mock()
-            mock_span.id = f"new-span-{i+1}"
+            mock_span.id = f"new-span-{i + 1}"
             mock_spans.append(mock_span)
 
         client.span = Mock(side_effect=mock_spans)

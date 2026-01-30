@@ -618,9 +618,9 @@ def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
     they are no longer in the context stack.
     """
     span_data_to_end = context_storage.pop_span_data()
-    assert (
-        span_data_to_end is not None
-    ), "When pop_end_candidates is called, top span data must not be None. Otherwise something is wrong."
+    assert span_data_to_end is not None, (
+        "When pop_end_candidates is called, top span data must not be None. Otherwise something is wrong."
+    )
 
     trace_data_to_end = pop_end_candidate_trace_data()
     return span_data_to_end, trace_data_to_end
