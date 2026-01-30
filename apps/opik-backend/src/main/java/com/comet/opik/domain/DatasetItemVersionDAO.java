@@ -400,15 +400,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * This keeps the count query closer to the legacy pattern while supporting all required filters.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
-            WITH experiment_items_scope AS (
-            	SELECT *
-            	FROM experiment_items
-            	WHERE workspace_id = :workspace_id
-            	<if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
-            	ORDER BY id DESC, last_updated_at DESC
-            	LIMIT 1 BY id
-            ),
-            experiments_resolved AS (
+            WITH experiments_resolved AS (
                 SELECT *
                 FROM experiments
                 WHERE workspace_id = :workspace_id
@@ -416,6 +408,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(experiment_ids)>AND id IN :experiment_ids<endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+            ),
+            experiment_items_scope AS (
+            	SELECT ei.*
+            	FROM experiment_items ei
+            	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
+            	WHERE ei.workspace_id = :workspace_id
+            	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+            	LIMIT 1 BY ei.id
             ),
             feedback_scores_combined_raw AS (
                 SELECT workspace_id,
@@ -629,15 +629,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     // Query to fetch versioned dataset items with their associated experiment items
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
-            WITH experiment_items_scope AS (
-            	SELECT *
-            	FROM experiment_items
-            	WHERE workspace_id = :workspace_id
-            	<if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
-            	ORDER BY id DESC, last_updated_at DESC
-            	LIMIT 1 BY id
-            ),
-            experiments_resolved AS (
+            WITH experiments_resolved AS (
                 SELECT *
                 FROM experiments
                 WHERE workspace_id = :workspace_id
@@ -645,6 +637,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(experiment_ids)>AND id IN :experiment_ids<endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+            ),
+            experiment_items_scope AS (
+            	SELECT ei.*
+            	FROM experiment_items ei
+            	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
+            	WHERE ei.workspace_id = :workspace_id
+            	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+            	LIMIT 1 BY ei.id
             ),
             dataset_items_resolved AS (
                 SELECT
@@ -1272,14 +1272,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS = """
-            WITH experiment_items_scope AS (
-                SELECT *
-                FROM experiment_items
-                WHERE workspace_id = :workspace_id
-                <if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ), experiments_resolved AS (
+            WITH experiments_resolved AS (
                 SELECT *
                 FROM experiments
                 WHERE workspace_id = :workspace_id
@@ -1287,6 +1280,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(experiment_ids)>AND id IN :experiment_ids<endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+            ), experiment_items_scope AS (
+                SELECT ei.*
+                FROM experiment_items ei
+                INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
+                WHERE ei.workspace_id = :workspace_id
+                ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
+                LIMIT 1 BY ei.id
             ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
