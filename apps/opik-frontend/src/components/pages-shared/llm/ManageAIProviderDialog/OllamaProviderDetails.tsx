@@ -217,53 +217,39 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
         }}
       />
 
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleTestConnection}
-          disabled={!url || testConnectionMutation.isPending}
-          className="flex-1"
-        >
-          {testConnectionMutation.isPending ? (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleTestConnection}
+        disabled={!url || testConnectionMutation.isPending}
+        className="w-full"
+      >
+        {testConnectionMutation.isPending ? (
+          <>
+            <Loader2 className="mr-2 size-4 animate-spin" />
+            Testing connection...
+          </>
+        ) : listModelsMutation.isPending ? (
+          <>
+            <Loader2 className="mr-2 size-4 animate-spin" />
+            Discovering models...
+          </>
+        ) : connectionTested ? (
+          connectionSuccess ? (
             <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
-              Testing...
-            </>
-          ) : connectionTested ? (
-            connectionSuccess ? (
-              <>
-                <CheckCircle2 className="mr-2 size-4 text-green-600" />
-                Connected
-              </>
-            ) : (
-              <>
-                <XCircle className="mr-2 size-4 text-destructive" />
-                Failed
-              </>
-            )
-          ) : (
-            "Test Connection"
-          )}
-        </Button>
-
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleFetchModels}
-          disabled={!url || listModelsMutation.isPending}
-          className="flex-1"
-        >
-          {listModelsMutation.isPending ? (
-            <>
-              <Loader2 className="mr-2 size-4 animate-spin" />
-              Fetching...
+              <CheckCircle2 className="mr-2 size-4 text-green-600" />
+              Connected
             </>
           ) : (
-            "Discover Models"
-          )}
-        </Button>
-      </div>
+            <>
+              <XCircle className="mr-2 size-4 text-destructive" />
+              Connection failed
+            </>
+          )
+        ) : (
+          "Connect"
+        )}
+      </Button>
 
       <FormField
         control={form.control}
