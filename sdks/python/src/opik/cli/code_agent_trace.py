@@ -10,7 +10,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from opik.integrations import code_agent_trace
+from opik.integrations.code_agent_trace import log_code_agent_turn, flush
 
 console = Console()
 
@@ -289,7 +289,7 @@ def code_agent_trace(
 
         for gen_id, turn_records in grouped.items():
             try:
-                code_agent_trace.log_code_agent_turn(turn_records, project_name=project)
+                log_code_agent_turn(turn_records, project_name=project)
                 uploaded_count += 1
                 total_operations += len(turn_records)
             except Exception as e:
@@ -298,7 +298,7 @@ def code_agent_trace(
                 )
 
         # Flush to ensure all data is sent
-        code_agent_trace.flush()
+        flush()
 
         console.print(
             f"\n[green]Successfully uploaded {uploaded_count} turns "
