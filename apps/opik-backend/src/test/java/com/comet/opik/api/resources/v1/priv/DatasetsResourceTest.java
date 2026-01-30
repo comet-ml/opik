@@ -3833,23 +3833,13 @@ class DatasetsResourceTest {
             var includeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
             var excludeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
 
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of(tag1, includeTag))
-                    .build();
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of(tag2, includeTag))
-                    .build();
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of(tag3, excludeTag))
-                    .build();
+            var item1 = createItemWithTags(Set.of(tag1, includeTag));
+            var item2 = createItemWithTags(Set.of(tag2, includeTag));
+            var item3 = createItemWithTags(Set.of(tag3, excludeTag));
 
-            var items = List.of(item1, item2, item3);
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(items)
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var batch = createFilterTestBatch(
+                    List.of(item1, item2),
+                    List.of(item3));
 
             // Filter by includeTag - filters as JSON string (NOT URL-encoded for request body)
             var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, includeTag);
@@ -3885,23 +3875,13 @@ class DatasetsResourceTest {
         void streamDataItems__whenStreamingWithDataFieldFilter__thenReturnMatchingItems() {
             var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
 
-            var matchingItem1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(Map.of("query", new TextNode("search for " + searchKey)))
-                    .build();
-            var matchingItem2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(Map.of("query", new TextNode("another " + searchKey + " query")))
-                    .build();
-            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(Map.of("query", new TextNode("completely different")))
-                    .build();
+            var matchingItem1 = createItemWithData(Map.of("query", new TextNode("search for " + searchKey)));
+            var matchingItem2 = createItemWithData(Map.of("query", new TextNode("another " + searchKey + " query")));
+            var nonMatchingItem = createItemWithData(Map.of("query", new TextNode("completely different")));
 
-            var items = List.of(matchingItem1, matchingItem2, nonMatchingItem);
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(items)
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var batch = createFilterTestBatch(
+                    List.of(matchingItem1, matchingItem2),
+                    List.of(nonMatchingItem));
 
             // Filter by data field containing searchKey
             var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "query", searchKey);
@@ -3935,24 +3915,16 @@ class DatasetsResourceTest {
         void streamDataItems__whenStreamingWithFullDataFilter__thenReturnMatchingItems() {
             var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
 
-            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(Map.of(
-                            "query", new TextNode("search for " + searchKey),
-                            "type", new TextNode("question")))
-                    .build();
-            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(Map.of(
-                            "query", new TextNode("completely different"),
-                            "type", new TextNode("answer")))
-                    .build();
+            var matchingItem = createItemWithData(Map.of(
+                    "query", new TextNode("search for " + searchKey),
+                    "type", new TextNode("question")));
+            var nonMatchingItem = createItemWithData(Map.of(
+                    "query", new TextNode("completely different"),
+                    "type", new TextNode("answer")));
 
-            var items = List.of(matchingItem, nonMatchingItem);
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(items)
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var batch = createFilterTestBatch(
+                    List.of(matchingItem),
+                    List.of(nonMatchingItem));
 
             // Filter by full data containing searchKey
             var filter = new DatasetItemFilter(DatasetItemField.FULL_DATA, Operator.CONTAINS, null, searchKey);
@@ -3987,28 +3959,17 @@ class DatasetsResourceTest {
             var excludeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
 
             var items = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of(includeTag, RandomStringUtils.insecure().nextAlphanumeric(5)))
-                            .build())
+                    .mapToObj(i -> createItemWithTags(
+                            Set.of(includeTag, RandomStringUtils.insecure().nextAlphanumeric(5))))
                     .toList();
 
             // Create 3 items without includeTag
             var excludedItems = IntStream.range(0, 3)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of(excludeTag, RandomStringUtils.insecure().nextAlphanumeric(5)))
-                            .build())
+                    .mapToObj(i -> createItemWithTags(
+                            Set.of(excludeTag, RandomStringUtils.insecure().nextAlphanumeric(5))))
                     .toList();
 
-            var allItems = new ArrayList<DatasetItem>();
-            allItems.addAll(items);
-            allItems.addAll(excludedItems);
-
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(allItems)
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var batch = createFilterTestBatch(items, excludedItems);
 
             // Filter by includeTag and use lastRetrievedId from second item (reversed order)
             var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, includeTag);
@@ -4048,17 +4009,10 @@ class DatasetsResourceTest {
             var tag2 = RandomStringUtils.insecure().nextAlphanumeric(5);
 
             var items = IntStream.range(0, 3)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of(tag1, tag2))
-                            .build())
+                    .mapToObj(i -> createItemWithTags(Set.of(tag1, tag2)))
                     .toList();
 
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(items)
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var batch = createFilterTestBatch(List.of(), items);
 
             // Filter by non-existent tag
             var nonexistentTag = RandomStringUtils.insecure().nextAlphanumeric(5);
@@ -4095,53 +4049,23 @@ class DatasetsResourceTest {
             var otherTag = RandomStringUtils.insecure().nextAlphanumeric(5);
 
             // Item 1: has both tag1 and tag2 - should be returned
-            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of(tag1, tag2))
-                    .experimentItems(null)
-                    .createdAt(null)
-                    .lastUpdatedAt(null)
-                    .build();
+            var item1 = createItemWithTagsAndNulls(Set.of(tag1, tag2));
 
             // Item 2: has both tag1 and tag2 - should be returned
-            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of(tag1, tag2, tag3))
-                    .experimentItems(null)
-                    .createdAt(null)
-                    .lastUpdatedAt(null)
-                    .build();
+            var item2 = createItemWithTagsAndNulls(Set.of(tag1, tag2, tag3));
 
             // Item 3: has only tag1 - should NOT be returned (missing tag2)
-            var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of(tag1))
-                    .experimentItems(null)
-                    .createdAt(null)
-                    .lastUpdatedAt(null)
-                    .build();
+            var item3 = createItemWithTagsAndNulls(Set.of(tag1));
 
             // Item 4: has only tag2 - should NOT be returned (missing tag1)
-            var item4 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of(tag2))
-                    .experimentItems(null)
-                    .createdAt(null)
-                    .lastUpdatedAt(null)
-                    .build();
+            var item4 = createItemWithTagsAndNulls(Set.of(tag2));
 
             // Item 5: has neither tag - should NOT be returned
-            var item5 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of(otherTag))
-                    .experimentItems(null)
-                    .createdAt(null)
-                    .lastUpdatedAt(null)
-                    .build();
+            var item5 = createItemWithTagsAndNulls(Set.of(otherTag));
 
-            var items = List.of(item1, item2, item3, item4, item5);
-
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(items)
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var batch = createFilterTestBatch(
+                    List.of(item1, item2),
+                    List.of(item3, item4, item5));
 
             // Create two filters - both must match (AND logic)
             var filter1 = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, tag1);
@@ -4185,34 +4109,15 @@ class DatasetsResourceTest {
             var excludeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
 
             var includedItems = IntStream.range(0, 10)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of(includeTag))
-                            .experimentItems(null)
-                            .createdAt(null)
-                            .lastUpdatedAt(null)
-                            .build())
+                    .mapToObj(i -> createItemWithTagsAndNulls(Set.of(includeTag)))
                     .toList();
 
             // Create 5 items without includeTag
             var excludedItems = IntStream.range(0, 5)
-                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of(excludeTag))
-                            .experimentItems(null)
-                            .createdAt(null)
-                            .lastUpdatedAt(null)
-                            .build())
+                    .mapToObj(i -> createItemWithTagsAndNulls(Set.of(excludeTag)))
                     .toList();
 
-            var allItems = new ArrayList<DatasetItem>();
-            allItems.addAll(includedItems);
-            allItems.addAll(excludedItems);
-
-            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(allItems)
-                    .datasetId(null)
-                    .build();
-
-            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            var batch = createFilterTestBatch(includedItems, excludedItems);
 
             // Filter by includeTag with limit of 5
             var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, includeTag);
@@ -8197,6 +8102,69 @@ class DatasetsResourceTest {
         }
 
         return items;
+    }
+
+    /**
+     * Creates a dataset batch with matching and non-matching items for filter tests.
+     *
+     * @param matchingItems List of items that should match the filter
+     * @param nonMatchingItems List of items that should not match the filter
+     * @return The created DatasetItemBatch
+     */
+    private DatasetItemBatch createFilterTestBatch(List<DatasetItem> matchingItems,
+            List<DatasetItem> nonMatchingItems) {
+        var allItems = new ArrayList<DatasetItem>();
+        allItems.addAll(matchingItems);
+        allItems.addAll(nonMatchingItems);
+
+        var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                .items(allItems)
+                .datasetId(null)
+                .build();
+
+        putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+        return batch;
+    }
+
+    /**
+     * Creates a DatasetItem with specified tags, using PODAM for other fields.
+     *
+     * @param tags Set of tags to assign to the item
+     * @return DatasetItem with specified tags
+     */
+    private DatasetItem createItemWithTags(Set<String> tags) {
+        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .tags(tags)
+                .build();
+    }
+
+    /**
+     * Creates a DatasetItem with specified data, using PODAM for other fields.
+     *
+     * @param data Map of data fields to assign to the item
+     * @return DatasetItem with specified data
+     */
+    private DatasetItem createItemWithData(Map<String, JsonNode> data) {
+        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .data(data)
+                .build();
+    }
+
+    /**
+     * Creates a DatasetItem with specified tags and nullified fields.
+     * Useful for tests that need specific null values.
+     *
+     * @param tags Set of tags to assign to the item
+     * @return DatasetItem with specified tags and null experimentItems, createdAt, lastUpdatedAt
+     */
+    private DatasetItem createItemWithTagsAndNulls(Set<String> tags) {
+        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .tags(tags)
+                .experimentItems(null)
+                .createdAt(null)
+                .lastUpdatedAt(null)
+                .build();
     }
 
     private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {
