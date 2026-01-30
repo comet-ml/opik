@@ -16,7 +16,6 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
-import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -80,7 +79,8 @@ public interface DatasetItemService {
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
-    Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
+    Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request,
+            List<DatasetItemFilter> filters, Visibility visibility);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
@@ -151,7 +151,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull DatasetVersioningMigrationService migrationService;
-    private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull @Config OpikConfiguration config;
 
     @Override
@@ -799,13 +798,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
-            Visibility visibility) {
+            List<DatasetItemFilter> filters, Visibility visibility) {
         log.info("Getting dataset items for dataset '{}' (hasFilters={}), version='{}', workspaceId='{}'",
-                request.datasetName(), request.filters() != null && !request.filters().isEmpty(),
+                request.datasetName(), filters != null && !filters.isEmpty(),
                 request.datasetVersion(), workspaceId);
-
-        // Parse filters from the request
-        List<DatasetItemFilter> filters = parseFilters(request.filters());
 
         return Mono
                 .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
@@ -858,21 +854,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     log.info("Feature toggle OFF, using legacy table for streaming dataset '{}' items", dataset.id());
                     return dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId(), filters);
                 });
-    }
-
-    /**
-     * Parse filters from JSON string.
-     *
-     * @param filtersJson JSON string containing filter definitions
-     * @return List of DatasetItemFilter objects, or null if input is blank
-     */
-    @SuppressWarnings("unchecked")
-    private List<DatasetItemFilter> parseFilters(String filtersJson) {
-        if (StringUtils.isBlank(filtersJson)) {
-            return null;
-        }
-        var filters = filtersFactory.newFilters(filtersJson, DatasetItemFilter.LIST_TYPE_REFERENCE);
-        return filters != null ? (List<DatasetItemFilter>) filters : null;
     }
 
     @Override

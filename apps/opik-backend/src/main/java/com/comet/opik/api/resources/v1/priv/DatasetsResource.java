@@ -418,8 +418,13 @@ public class DatasetsResource {
         var userName = requestContext.get().getUserName();
         var visibility = requestContext.get().getVisibility();
 
+        // Suppress unchecked cast warning since we already pass DatasetItemFilter reference to newFilters
+        @SuppressWarnings("unchecked")
+        List<DatasetItemFilter> queryFilters = (List<DatasetItemFilter>) filtersFactory.newFilters(
+                request.filters(), DatasetItemFilter.LIST_TYPE_REFERENCE);
+
         log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        var items = itemService.getItems(workspaceId, request, visibility)
+        var items = itemService.getItems(workspaceId, request, queryFilters, visibility)
                 .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId));
         var outputStream = streamer.getOutputStream(items);
