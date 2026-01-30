@@ -184,7 +184,7 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
             to="/$workspaceName/optimizations/$datasetId/$optimizationId/compare"
             params={{
               workspaceName,
-              datasetId: experiment.dataset_id,
+              datasetId: experiment.dataset_id!,
               optimizationId: optimization.id,
             }}
             search={{ trials: [experiment.id] }}

@@ -13,8 +13,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)"
 BACKEND_DIR="$PROJECT_ROOT/apps/opik-backend"
 FRONTEND_DIR="$PROJECT_ROOT/apps/opik-frontend"
+CONFIG_DIR="$PROJECT_ROOT/apps/opik-config"
 BACKEND_PID_FILE="/tmp/opik-backend.pid"
 FRONTEND_PID_FILE="/tmp/opik-frontend.pid"
+CONFIG_PID_FILE="/tmp/opik-config.pid"
 
 # Colors for output
 RED='\033[0;31m'
@@ -543,6 +545,91 @@ stop_frontend() {
     fi
 }
 
+# Function to start config service (KV store for agent configuration)
+start_config() {
+    log_info "Starting config service..."
+
+    # Check if config directory exists
+    if [ ! -d "$CONFIG_DIR" ]; then
+        log_warning "Config service directory not found at $CONFIG_DIR - skipping"
+        return 0
+    fi
+
+    cd "$CONFIG_DIR" || { log_error "Config directory not found"; exit 1; }
+
+    # Check if config service is already running
+    if [ -f "$CONFIG_PID_FILE" ]; then
+        CONFIG_PID=$(cat "$CONFIG_PID_FILE")
+        if kill -0 "$CONFIG_PID" 2>/dev/null; then
+            log_warning "Config service is already running (PID: $CONFIG_PID)"
+            return 0
+        else
+            log_warning "Removing stale config PID file"
+            rm -f "$CONFIG_PID_FILE"
+        fi
+    fi
+
+    # Check for uv command
+    if ! command -v uv &>/dev/null; then
+        log_warning "uv not installed - skipping config service. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh"
+        return 0
+    fi
+
+    # Create venv if needed
+    if [ ! -d ".venv" ]; then
+        log_info "Creating config service virtual environment..."
+        uv venv
+    fi
+
+    # Start config service with SQLite persistence
+    export OPIK_CONFIG_DB="/tmp/opik-config.db"
+    nohup uv run python -m opik_config > /tmp/opik-config.log 2>&1 &
+    CONFIG_PID=$!
+    echo "$CONFIG_PID" > "$CONFIG_PID_FILE"
+
+    # Wait for service to be ready
+    for i in {1..30}; do
+        if curl -s http://localhost:5050/health > /dev/null 2>&1; then
+            log_success "Config service ready (PID: $CONFIG_PID, port 5050)"
+            log_info "Config logs: tail -f /tmp/opik-config.log"
+            return 0
+        fi
+        sleep 0.5
+    done
+
+    log_warning "Config service may still be starting - check logs at /tmp/opik-config.log"
+}
+
+# Function to stop config service
+stop_config() {
+    if [ -f "$CONFIG_PID_FILE" ]; then
+        CONFIG_PID=$(cat "$CONFIG_PID_FILE")
+        if kill -0 "$CONFIG_PID" 2>/dev/null; then
+            log_info "Stopping config service (PID: $CONFIG_PID)..."
+            kill "$CONFIG_PID"
+
+            for _ in {1..10}; do
+                if ! kill -0 "$CONFIG_PID" 2>/dev/null; then
+                    break
+                fi
+                sleep 1
+            done
+
+            if kill -0 "$CONFIG_PID" 2>/dev/null; then
+                log_warning "Force killing config service..."
+                kill -9 "$CONFIG_PID"
+            fi
+
+            log_success "Config service stopped"
+        else
+            log_warning "Config PID file exists but process is not running"
+        fi
+        rm -f "$CONFIG_PID_FILE"
+    else
+        log_debug "Config service is not running"
+    fi
+}
+
 # Helper function to display backend process status
 # Returns: 0 if running, 1 if stopped
 display_backend_process_status() {
@@ -551,6 +638,17 @@ display_backend_process_status() {
         return 0
     else
         echo -e "Backend: ${RED}STOPPED${NC}"
+        return 1
+    fi
+}
+
+# Helper function to display config service process status
+display_config_process_status() {
+    if [ -f "$CONFIG_PID_FILE" ] && kill -0 "$(cat "$CONFIG_PID_FILE")" 2>/dev/null; then
+        echo -e "Config Service: ${GREEN}RUNNING${NC} (PID: $(cat "$CONFIG_PID_FILE"), port 5050)"
+        return 0
+    else
+        echo -e "Config Service: ${YELLOW}NOT RUNNING${NC}"
         return 1
     fi
 }
@@ -650,7 +748,10 @@ verify_services() {
     if display_backend_process_status; then
         backend_running=true
     fi
-    
+
+    # Config service status
+    display_config_process_status
+
     # Frontend process status
     local frontend_running=false
     if [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null; then
@@ -668,6 +769,7 @@ verify_services() {
     echo ""
     echo "Logs:"
     echo "  Backend Process:  tail -f /tmp/opik-backend.log"
+    echo "  Config Service:   tail -f /tmp/opik-config.log"
     echo "  Frontend Process: tail -f /tmp/opik-frontend.log"
 }
 
@@ -704,15 +806,17 @@ verify_be_only_services() {
 start_services() {
     log_info "=== Starting Opik Development Environment ==="
     log_warning "=== Not rebuilding: the latest local changes may not be reflected ==="
-    log_info "Step 1/5: Starting Docker services..."
+    log_info "Step 1/6: Starting Docker services..."
     start_local_be_fe
-    log_info "Step 2/5: Running DB migrations..."
+    log_info "Step 2/6: Running DB migrations..."
     run_db_migrations
-    log_info "Step 3/5: Starting backend process..."
+    log_info "Step 3/6: Starting backend process..."
     start_backend
-    log_info "Step 4/5: Starting frontend process..."
+    log_info "Step 4/6: Starting config service..."
+    start_config
+    log_info "Step 5/6: Starting frontend process..."
     start_frontend
-    log_info "Step 5/5: Creating demo data..."
+    log_info "Step 6/6: Creating demo data..."
     create_demo_data "--local-be-fe"
     log_success "=== Start Complete ==="
     verify_services
@@ -721,11 +825,13 @@ start_services() {
 # Function to stop services
 stop_services() {
     log_info "=== Stopping Opik Development Environment ==="
-    log_info "Step 1/3: Stopping frontend..."
+    log_info "Step 1/4: Stopping frontend..."
     stop_frontend
-    log_info "Step 2/3: Stopping backend..."
+    log_info "Step 2/4: Stopping config service..."
+    stop_config
+    log_info "Step 3/4: Stopping backend..."
     stop_backend
-    log_info "Step 3/3: Stopping Docker services..."
+    log_info "Step 4/4: Stopping Docker services..."
     stop_local_be_fe
     log_success "=== Stop Complete ==="
 }
@@ -745,25 +851,29 @@ migrate_services() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment ==="
-    log_info "Step 1/10: Stopping frontend process..."
+    log_info "Step 1/12: Stopping frontend process..."
     stop_frontend
-    log_info "Step 2/10: Stopping backend process..."
+    log_info "Step 2/12: Stopping config service..."
+    stop_config
+    log_info "Step 3/12: Stopping backend process..."
     stop_backend
-    log_info "Step 3/10: Stopping Docker services..."
+    log_info "Step 4/12: Stopping Docker services..."
     stop_local_be_fe
-    log_info "Step 4/10: Starting Docker services..."
+    log_info "Step 5/12: Starting Docker services..."
     start_local_be_fe
-    log_info "Step 5/10: Building backend..."
+    log_info "Step 6/12: Building backend..."
     build_backend
-    log_info "Step 6/10: Building frontend..."
+    log_info "Step 7/12: Building frontend..."
     build_frontend
-    log_info "Step 7/10: Running DB migrations..."
+    log_info "Step 8/12: Running DB migrations..."
     run_db_migrations
-    log_info "Step 8/10: Starting backend process..."
+    log_info "Step 9/12: Starting backend process..."
     start_backend
-    log_info "Step 9/10: Starting frontend process..."
+    log_info "Step 10/12: Starting config service..."
+    start_config
+    log_info "Step 11/12: Starting frontend process..."
     start_frontend
-    log_info "Step 10/10: Creating demo data..."
+    log_info "Step 12/12: Creating demo data..."
     create_demo_data "--local-be-fe"
     log_success "=== Restart Complete ==="
     verify_services
@@ -784,17 +894,21 @@ quick_restart_services() {
         run_db_migrations
     fi
     
-    log_info "Step 2/7: Stopping frontend..."
+    log_info "Step 2/8: Stopping frontend..."
     stop_frontend
-    log_info "Step 3/7: Stopping backend..."
+    log_info "Step 3/8: Stopping config service..."
+    stop_config
+    log_info "Step 4/8: Stopping backend..."
     stop_backend
-    log_info "Step 4/7: Building backend..."
+    log_info "Step 5/8: Building backend..."
     build_backend
-    log_info "Step 5/7: Starting backend..."
+    log_info "Step 6/8: Starting backend..."
     start_backend
-    
+    log_info "Step 7/8: Starting config service..."
+    start_config
+
     # Check if package.json has changed since last npm install
-    log_info "Step 6/7: Checking frontend dependencies..."
+    log_info "Checking frontend dependencies..."
     local package_json="$FRONTEND_DIR/package.json"
     local package_lock="$FRONTEND_DIR/package-lock.json"
     local node_modules="$FRONTEND_DIR/node_modules"
@@ -818,7 +932,7 @@ quick_restart_services() {
         build_frontend
     fi
     
-    log_info "Step 7/7: Starting frontend..."
+    log_info "Step 8/8: Starting frontend..."
     start_frontend
     log_success "=== Quick Restart Complete ==="
     verify_services

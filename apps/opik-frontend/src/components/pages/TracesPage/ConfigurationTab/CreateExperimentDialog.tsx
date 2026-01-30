@@ -20,6 +20,7 @@ type CreateExperimentDialogProps = {
   onClose: () => void;
   selectedVariables: ConfigVariable[];
   onSuccess: (experimentId: string) => void;
+  projectId?: string;
 };
 
 type VariableValue = {
@@ -33,12 +34,15 @@ const CreateExperimentDialog: React.FC<CreateExperimentDialogProps> = ({
   onClose,
   selectedVariables,
   onSuccess,
+  projectId = "default",
 }) => {
+  const [name, setName] = useState("");
   const [values, setValues] = useState<VariableValue[]>([]);
-  const createMutation = useCreateExperiment();
+  const createMutation = useCreateExperiment({ projectId });
 
   useEffect(() => {
     if (open) {
+      setName("");
       setValues(
         selectedVariables.map((v) => ({
           key: v.key,
@@ -67,7 +71,7 @@ const CreateExperimentDialog: React.FC<CreateExperimentDialogProps> = ({
     });
 
     createMutation.mutate(
-      { variables },
+      { variables, name: name.trim() || undefined },
       {
         onSuccess: (result) => {
           onSuccess(result.experimentId);
@@ -132,9 +136,20 @@ const CreateExperimentDialog: React.FC<CreateExperimentDialogProps> = ({
             experiment ID.
           </p>
 
+          <div>
+            <Label htmlFor="experiment-name">Name (optional)</Label>
+            <Input
+              id="experiment-name"
+              className="mt-1.5"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., happy-falcon-4821 (auto-generated if empty)"
+            />
+          </div>
+
           <Separator />
 
-          <div className="max-h-[400px] space-y-4 overflow-y-auto">
+          <div className="max-h-[350px] space-y-4 overflow-y-auto">
             {values.map((variable) => {
               const original = selectedVariables.find(
                 (v) => v.key === variable.key,

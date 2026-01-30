@@ -39,7 +39,7 @@ const ExperimentsActionsPanel: React.FunctionComponent<
       navigate({
         to: "/$workspaceName/experiments/$datasetId/compare",
         params: {
-          datasetId: experiments[0].dataset_id,
+          datasetId: experiments[0].dataset_id!,
           workspaceName,
         },
         search: {

@@ -224,11 +224,13 @@ const CompareExperimentsDetails: React.FunctionComponent<
             resource={RESOURCE_TYPE.experiment}
           />
         )}
-        <NavigationTag
-          id={experiment?.dataset_id}
-          name={experiment?.dataset_name}
-          resource={RESOURCE_TYPE.dataset}
-        />
+        {experiment?.dataset_id && experiment?.dataset_name && (
+          <NavigationTag
+            id={experiment.dataset_id}
+            name={experiment.dataset_name}
+            resource={RESOURCE_TYPE.dataset}
+          />
+        )}
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
             <NavigationTag

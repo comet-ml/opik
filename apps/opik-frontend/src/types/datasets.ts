@@ -105,12 +105,14 @@ export enum EXPERIMENT_TYPE {
   REGULAR = "regular",
   TRIAL = "trial",
   MINI_BATCH = "mini-batch",
+  LIVE = "live",
+  AB = "ab",
 }
 
 export interface Experiment {
   id: string;
-  dataset_id: string;
-  dataset_name: string;
+  dataset_id?: string;
+  dataset_name?: string;
   dataset_version_summary?: Pick<
     DatasetVersion,
     "id" | "version_hash" | "version_name" | "tags" | "change_description"

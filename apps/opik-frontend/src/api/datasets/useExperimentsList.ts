@@ -7,7 +7,11 @@ import { processSorting } from "@/lib/sorting";
 import { Filters } from "@/types/filters";
 import { generatePromptFilters, processFilters } from "@/lib/filters";
 
-const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
+const DEFAULT_EXPERIMENTS_TYPES = [
+  EXPERIMENT_TYPE.REGULAR,
+  EXPERIMENT_TYPE.LIVE,
+  EXPERIMENT_TYPE.AB,
+];
 
 export type UseExperimentsListParams = {
   workspaceName?: string;

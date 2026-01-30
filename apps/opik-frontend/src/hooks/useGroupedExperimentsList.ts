@@ -4,6 +4,7 @@ import {
   QueryFunctionContext,
   RefetchOptions,
   useQueries,
+  useQuery,
   UseQueryResult,
 } from "@tanstack/react-query";
 import isUndefined from "lodash/isUndefined";
@@ -15,6 +16,7 @@ import {
   ExperimentsGroupNode,
   ExperimentsAggregations,
   ExperimentsGroupNodeWithAggregations,
+  EXPERIMENT_TYPE,
 } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import useExperimentsList, {
@@ -43,6 +45,75 @@ import useExperimentsGroupsAggregations from "@/api/datasets/useExperimentsGroup
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useProjectsList from "@/api/projects/useProjectsList";
 import { COLUMN_DATASET_ID, COLUMN_PROJECT_ID } from "@/types/shared";
+
+const CONFIG_BACKEND_URL = "http://localhost:5050";
+
+type ConfigMask = {
+  mask_id: string;
+  name: string;
+  is_ab: boolean;
+  distribution: Record<string, number> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type ConfigMaskOverride = {
+  variant: string;
+  key: string;
+  value: unknown;
+};
+
+const fetchConfigExperiments = async (): Promise<Experiment[]> => {
+  try {
+    const masksRes = await fetch(
+      `${CONFIG_BACKEND_URL}/v1/config/masks?project_id=default&env=prod`
+    );
+    if (!masksRes.ok) return [];
+
+    const { masks }: { masks: ConfigMask[] } = await masksRes.json();
+
+    const overridesPromises = masks.map(async (mask) => {
+      try {
+        const res = await fetch(
+          `${CONFIG_BACKEND_URL}/v1/config/masks/${mask.mask_id}/overrides?project_id=default&env=prod`
+        );
+        if (!res.ok) return { mask_id: mask.mask_id, overrides: [] };
+        const { overrides }: { overrides: ConfigMaskOverride[] } =
+          await res.json();
+        return { mask_id: mask.mask_id, overrides };
+      } catch {
+        return { mask_id: mask.mask_id, overrides: [] };
+      }
+    });
+    const maskOverrides = await Promise.all(overridesPromises);
+    const overridesMap = new Map(
+      maskOverrides.map((m) => [m.mask_id, m.overrides])
+    );
+
+    return masks.map((mask) => {
+      const overrides = overridesMap.get(mask.mask_id) || [];
+      const metadata: Record<string, unknown> = {
+        config_overrides: overrides.map((o) => ({ key: o.key, value: o.value })),
+      };
+      if (mask.is_ab && mask.distribution) {
+        metadata.ab_distribution = mask.distribution;
+      }
+
+      return {
+        id: mask.mask_id,
+        name: mask.name,
+        type: mask.is_ab ? EXPERIMENT_TYPE.AB : EXPERIMENT_TYPE.LIVE,
+        status: "active",
+        trace_count: 0,
+        created_at: mask.created_at,
+        last_updated_at: mask.updated_at,
+        metadata,
+      };
+    });
+  } catch {
+    return [];
+  }
+};
 
 export type GroupedExperiment = Record<string, string> & Experiment;
 
@@ -457,6 +528,16 @@ export default function useGroupedExperimentsList(
     },
   );
 
+  const {
+    data: configExperiments,
+    refetch: refetchConfigExperiments,
+  } = useQuery({
+    queryKey: ["config-experiments"],
+    queryFn: fetchConfigExperiments,
+    refetchInterval,
+    enabled: !hasGroups,
+  });
+
   const groupsMap = useMemo(() => groupsData?.content ?? {}, [groupsData]);
 
   const datasetOrderMap = useMemo(
@@ -673,27 +754,43 @@ export default function useGroupedExperimentsList(
     ],
   );
 
+  const mergedContent = useMemo(() => {
+    if (hasGroups) return groupedData.content;
+
+    const datasetExperiments = (data?.content as GroupedExperiment[]) ?? [];
+    const configExps = (configExperiments ?? []) as GroupedExperiment[];
+
+    // Apply search filter to config experiments
+    const filteredConfigExps = params.search
+      ? configExps.filter((exp) =>
+          exp.name.toLowerCase().includes(params.search!.toLowerCase())
+        )
+      : configExps;
+
+    // Merge and sort by created_at (newest first)
+    return [...datasetExperiments, ...filteredConfigExps].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [hasGroups, groupedData.content, data?.content, configExperiments, params.search]);
+
   const transformedData = useMemo(
     () => ({
-      content: hasGroups
-        ? groupedData.content
-        : (data?.content as GroupedExperiment[]) ?? [],
+      content: mergedContent,
       flattenGroups: hasGroups ? groupedData.flattenGroups : [],
       aggregationMap: hasGroups ? aggregationMap : {},
       sortable_by: hasGroups
         ? groupedData.sortable_by
         : data?.sortable_by ?? [],
-      total: hasGroups ? groupedData.total : data?.total ?? 0,
+      total: hasGroups ? groupedData.total : mergedContent.length,
     }),
     [
       hasGroups,
-      groupedData.content,
+      mergedContent,
       groupedData.flattenGroups,
       groupedData.sortable_by,
       groupedData.total,
-      data?.content,
       data?.sortable_by,
-      data?.total,
       aggregationMap,
     ],
   );
@@ -706,10 +803,17 @@ export default function useGroupedExperimentsList(
     (isGroupingByDataset && isDatasetsPending) ||
     (isGroupingByProject && isProjectsPending);
 
+  const flatRefetch = useCallback(
+    (options?: RefetchOptions) => {
+      return Promise.all([refetch(options), refetchConfigExperiments(options)]);
+    },
+    [refetch, refetchConfigExperiments]
+  );
+
   return {
     data: transformedData,
     isPending: hasGroups ? groupedIsPending : isPending,
     isPlaceholderData: hasGroups ? isGroupsPlaceholderData : isPlaceholderData,
-    refetch: hasGroups ? groupedRefetch : refetch,
+    refetch: hasGroups ? groupedRefetch : flatRefetch,
   };
 }

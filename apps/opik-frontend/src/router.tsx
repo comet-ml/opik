@@ -40,6 +40,7 @@ import OptimizationsNewPage from "@/components/pages/OptimizationsPage/Optimizat
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
+import LiveExperimentPage from "@/components/pages/LiveExperimentPage/LiveExperimentPage";
 import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
 import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
@@ -233,6 +234,15 @@ const compareExperimentsRoute = createRoute({
   staticData: {
     param: "compare",
     paramValue: "compare",
+  },
+});
+
+const liveExperimentRoute = createRoute({
+  path: "/live/$experimentId",
+  getParentRoute: () => experimentsRoute,
+  component: LiveExperimentPage,
+  staticData: {
+    param: "experimentId",
   },
 });
 
@@ -494,6 +504,7 @@ const routeTree = rootRoute.addChildren([
       experimentsRoute.addChildren([
         experimentsListRoute,
         compareExperimentsRoute,
+        liveExperimentRoute,
       ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,

@@ -48,6 +48,10 @@ public class DatasetEventListener {
     @Subscribe
     public void onExperimentCreated(ExperimentCreated event) {
         log.info("Recording experiment for dataset '{}', experiment type '{}'", event.datasetId(), event.type());
+        if (event.datasetId() == null) {
+            log.info("Skipping experiment with null datasetId for event '{}'", event);
+            return;
+        }
         if (event.type() != ExperimentType.REGULAR) {
             log.info("Skipping experiment type is not regular for event '{}'", event);
             return;

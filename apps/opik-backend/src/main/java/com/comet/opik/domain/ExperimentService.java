@@ -142,7 +142,10 @@ public class ExperimentService {
     private Mono<List<Experiment>> enrichExperiments(List<Experiment> experiments) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            var datasetIds = experiments.stream().map(Experiment::datasetId).collect(Collectors.toUnmodifiableSet());
+            var datasetIds = experiments.stream()
+                    .map(Experiment::datasetId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toUnmodifiableSet());
             var versionIds = experiments.stream()
                     .map(Experiment::datasetVersionId)
                     .filter(Objects::nonNull)
@@ -166,7 +169,8 @@ public class ExperimentService {
                     .map(tuple -> experiments.stream()
                             .map(experiment -> experiment.toBuilder()
                                     .datasetName(Optional
-                                            .ofNullable(tuple.getT2().get(experiment.datasetId()))
+                                            .ofNullable(experiment.datasetId())
+                                            .map(tuple.getT2()::get)
                                             .map(Dataset::name)
                                             .orElse(null))
                                     .datasetVersionSummary(Optional
@@ -384,6 +388,12 @@ public class ExperimentService {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     Set<UUID> promptVersionIds = getPromptVersionIds(experiment);
 
+                    // Get dataset if experiment has a dataset ID (LIVE/AB experiments may not have one)
+                    Mono<Optional<Dataset>> datasetMono = experiment.datasetId() != null
+                            ? Mono.fromCallable(() -> datasetService.getById(experiment.datasetId(), workspaceId))
+                                    .subscribeOn(Schedulers.boundedElastic())
+                            : Mono.just(Optional.empty());
+
                     // Get dataset version if experiment has a version ID
                     Mono<Optional<DatasetVersion>> versionMono = experiment.datasetVersionId() != null
                             ? Mono.fromCallable(() -> Optional.ofNullable(
@@ -405,8 +415,7 @@ public class ExperimentService {
 
                     return Mono.zip(
                             promptService.getVersionsInfoByVersionsIds(promptVersionIds),
-                            Mono.fromCallable(() -> datasetService.getById(experiment.datasetId(), workspaceId))
-                                    .subscribeOn(Schedulers.boundedElastic()),
+                            datasetMono,
                             versionMono,
                             projectMono)
                             .map(tuple -> experiment.toBuilder()
@@ -450,6 +459,16 @@ public class ExperimentService {
         var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
         IdGenerator.validateVersion(id, "Experiment");
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
+        var type = Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR);
+
+        // LIVE and AB experiments don't require a dataset
+        if (!type.requiresDataset()) {
+            log.info("Creating {} experiment without dataset, id '{}'", type, id);
+            return processExperimentCreation(experiment, id, name, null)
+                    .onErrorResume(throwable -> handleCreateError(throwable, id));
+        }
+
+        // Dataset-based experiments (REGULAR, TRIAL, MINI_BATCH)
         return datasetService.getOrCreateDataset(experiment.datasetName())
                 .flatMap(datasetId -> {
                     // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)

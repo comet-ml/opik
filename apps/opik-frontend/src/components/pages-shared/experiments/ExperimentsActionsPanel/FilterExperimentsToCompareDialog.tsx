@@ -38,7 +38,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
     navigate({
       to: "/$workspaceName/experiments/$datasetId/compare",
       params: {
-        datasetId: selectedExperiments[0].dataset_id,
+        datasetId: selectedExperiments[0].dataset_id!,
         workspaceName,
       },
       search: {

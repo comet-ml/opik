@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Config Store Viewer</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        h2 { color: #555; margin: 30px 0 15px 0; font-size: 1.1em; }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .table-section {
+            margin-bottom: 30px;
+        }
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .count {
+            background: #6c757d;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.85em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            font-size: 0.9em;
+        }
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        th { background: #f8f9fa; font-weight: 600; }
+        tr:hover { background: #f8f9fa; }
+        .key { font-family: monospace; color: #e83e8c; }
+        .value { font-family: monospace; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .id { color: #6c757d; }
+        .env {
+            background: #17a2b8;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+        .variant {
+            background: #6f42c1;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+        .ab-badge {
+            background: #28a745;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+        .meta { color: #6c757d; font-size: 0.85em; }
+        .empty { text-align: center; padding: 20px; color: #6c757d; font-style: italic; }
+    </style>
+</head>
+<body>
+    <h1>Config Store Viewer</h1>
+
+    <div class="controls">
+        <button onclick="refresh()">Refresh</button>
+    </div>
+
+    <div id="status" class="status">Connecting...</div>
+
+    <div id="tables"></div>
+
+    <script>
+        const API = 'http://localhost:5050';
+
+        async function refresh() {
+            const status = document.getElementById('status');
+            const tables = document.getElementById('tables');
+
+            try {
+                const res = await fetch(`${API}/kv_viewer`);
+                const data = await res.json();
+
+                status.className = 'status connected';
+                status.textContent = `Connected • Last updated: ${new Date().toLocaleTimeString()}`;
+
+                let html = '';
+
+                // config_keys
+                html += renderTable('config_keys', 'Registered Keys', data.config_keys, [
+                    { key: 'id', label: 'ID', class: 'id' },
+                    { key: 'project_id', label: 'Project' },
+                    { key: 'key', label: 'Key', class: 'key' },
+                    { key: 'type', label: 'Type' },
+                ]);
+
+                // config_values
+                html += renderTable('config_values', 'Values (Append-Only History)', data.config_values, [
+                    { key: 'id', label: 'ID', class: 'id' },
+                    { key: 'key_name', label: 'Key', class: 'key' },
+                    { key: 'value', label: 'Value', class: 'value', format: v => JSON.stringify(v) },
+                    { key: 'created_at', label: 'Created', class: 'meta', format: v => new Date(v).toLocaleString() },
+                ]);
+
+                // config_published
+                html += renderTable('config_published', 'Published Pointers', data.config_published, [
+                    { key: 'env', label: 'Env', format: v => `<span class="env">${v}</span>` },
+                    { key: 'key_name', label: 'Key', class: 'key' },
+                    { key: 'value', label: 'Value', class: 'value', format: v => JSON.stringify(v) },
+                    { key: 'value_id', label: 'Value ID', class: 'id' },
+                ]);
+
+                // masks
+                html += renderTable('masks', 'Masks / Experiments', data.masks, [
+                    { key: 'id', label: 'ID', class: 'id' },
+                    { key: 'env', label: 'Env', format: v => `<span class="env">${v}</span>` },
+                    { key: 'mask_id', label: 'Mask ID', class: 'key' },
+                    { key: 'is_ab', label: 'A/B', format: v => v ? '<span class="ab-badge">A/B</span>' : '-' },
+                    { key: 'distribution', label: 'Distribution', format: v => v ? JSON.stringify(v) : '-' },
+                    { key: 'salt', label: 'Salt', class: 'meta' },
+                ]);
+
+                // mask_overrides
+                html += renderTable('mask_overrides', 'Mask Overrides', data.mask_overrides, [
+                    { key: 'env', label: 'Env', format: v => `<span class="env">${v}</span>` },
+                    { key: 'mask_id', label: 'Mask', class: 'key' },
+                    { key: 'variant', label: 'Variant', format: v => `<span class="variant">${v}</span>` },
+                    { key: 'key_name', label: 'Key', class: 'key' },
+                    { key: 'value', label: 'Value', class: 'value', format: v => JSON.stringify(v) },
+                    { key: 'value_id', label: 'Value ID', class: 'id' },
+                ]);
+
+                tables.innerHTML = html;
+            } catch (e) {
+                status.className = 'status error';
+                status.textContent = `Error: ${e.message}. Is the backend running?`;
+                tables.innerHTML = '<div class="empty">Cannot connect to backend</div>';
+            }
+        }
+
+        function renderTable(id, title, rows, columns) {
+            const count = rows ? rows.length : 0;
+            let html = `
+                <div class="table-section">
+                    <div class="table-header">
+                        <h2>${title}</h2>
+                        <span class="count">${count}</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                ${columns.map(c => `<th>${c.label}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            if (!rows || rows.length === 0) {
+                html += `<tr><td colspan="${columns.length}" class="empty">No data</td></tr>`;
+            } else {
+                for (const row of rows) {
+                    html += '<tr>';
+                    for (const col of columns) {
+                        let val = row[col.key];
+                        if (col.format) {
+                            val = col.format(val);
+                        } else {
+                            val = escapeHtml(String(val ?? ''));
+                        }
+                        html += `<td class="${col.class || ''}">${val}</td>`;
+                    }
+                    html += '</tr>';
+                }
+            }
+
+            html += '</tbody></table></div>';
+            return html;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        refresh();
+        setInterval(refresh, 2000);
+    </script>
+</body>
+</html>

@@ -1,180 +1,260 @@
+"""Agent config decorator with resolve-once-per-run caching."""
+
 from __future__ import annotations
 
 import warnings
 from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import fields, is_dataclass
-from typing import Any, Callable, Generator, TypeVar, overload
+from typing import Any, Callable, Generator, TypeVar, get_type_hints, overload
 
 from opik import opik_context
 
+from .cache import (
+    ConfigContext,
+    ResolvedConfig,
+    get_config_context,
+    get_run_cache,
+    set_config_context,
+    clear_config_context,
+)
 from .client import ConfigClient, BackendUnavailableError
+from .models import ConfigBehavior
 from .prompt import Prompt
+from .registration import KeyMetadata, queue_registration, set_registration_client
+from .resolver import _decode_value, resolve_with_dedupe
 
 T = TypeVar("T")
 
 DEFAULT_BACKEND_URL = "http://localhost:5050"
 
-_experiment_id: ContextVar[str | None] = ContextVar("experiment_id", default=None)
-
-
-EXPERIMENT_HEADER = "X-Opik-Experiment-Id"
-
-
-def _record_config_access(key: str, value: Any) -> None:
-    """Record a config value access on the current span and trace."""
-    # Convert Prompt to dict format for storage
-    if isinstance(value, Prompt):
-        store_value = {"prompt_name": value.name, "prompt": str(value)}
-    else:
-        store_value = value
-
-    experiment_id = get_experiment_id()
-
-    # Update the span
-    span_data = opik_context.get_current_span_data()
-    if span_data is not None:
-        existing_metadata = span_data.metadata or {}
-        opik_config = existing_metadata.get("opik_config", {
-            "experiment_id": experiment_id,
-            "values": {}
-        })
-        opik_config["values"][key] = store_value
-        opik_context.update_current_span(metadata={"opik_config": opik_config})
-
-    # Also update the trace
-    trace_data = opik_context.get_current_trace_data()
-    if trace_data is not None:
-        existing_metadata = trace_data.metadata or {}
-        opik_config = existing_metadata.get("opik_config", {
-            "experiment_id": experiment_id,
-            "values": {}
-        })
-        opik_config["values"][key] = store_value
-        opik_context.update_current_trace(metadata={"opik_config": opik_config})
-
 
 @contextmanager
-def experiment_context(id_or_request: str | Any) -> Generator[None, None, None]:
+def config_context(
+    mask_id: str | None = None,
+    unit_id: str | None = None,
+    project_id: str = "default",
+    env: str = "prod",
+) -> Generator[None, None, None]:
     """
-    Set the experiment ID for config lookups within this context.
+    Set the config context for resolution within this scope.
 
-    Accepts either an experiment_id string directly, or a request object
-    with headers (Flask, FastAPI, etc.) to extract X-Opik-Experiment-Id.
+    Args:
+        mask_id: Experiment/variant identifier for config overrides
+        unit_id: Bucketing identifier (auto-derived from trace_id if not set)
+        project_id: Project identifier
+        env: Environment (e.g., "prod", "staging")
     """
-    if hasattr(id_or_request, "headers"):
-        experiment_id = id_or_request.headers.get(EXPERIMENT_HEADER)
-    else:
-        experiment_id = id_or_request
+    # Auto-derive unit_id from trace_id if not provided
+    if unit_id is None:
+        trace_data = opik_context.get_current_trace_data()
+        if trace_data is not None:
+            unit_id = trace_data.id
 
-    token = _experiment_id.set(experiment_id)
+    ctx = ConfigContext(
+        project_id=project_id,
+        env=env,
+        mask_id=mask_id,
+        unit_id=unit_id,
+    )
+    set_config_context(ctx)
     try:
         yield
     finally:
-        _experiment_id.reset(token)
+        clear_config_context()
 
 
-def get_experiment_id() -> str | None:
-    return _experiment_id.get()
+@contextmanager
+def experiment_context(experiment_id: str | None) -> Generator[None, None, None]:
+    """
+    Alias for config_context with experiment_id as mask_id.
+    Provided for compatibility with existing code.
+    """
+    with config_context(mask_id=experiment_id):
+        yield
 
 
-def _get_configured_value(
-    default: T,
-    name: str,
-    backend_url: str = DEFAULT_BACKEND_URL,
-    strict: bool = True,
-) -> T:
+def _get_default_for_prompt(value: Any) -> Any:
+    """Convert a Prompt to a dict for storage."""
+    if isinstance(value, Prompt):
+        return {"prompt_name": value.name, "prompt": str(value)}
+    return value
+
+
+def _resolve_all_fields(
+    cls: type,
+    client: ConfigClient,
+    field_defaults: dict[str, Any],
+    type_hints: dict[str, type],
+    behavior: ConfigBehavior,
+) -> ResolvedConfig:
+    """Resolve all fields for a config class in a single backend call."""
+    ctx = get_config_context()
+    cache = get_run_cache()
+    qualname = cls.__qualname__
+
+    # Check cache first
+    cached = cache.get(ctx.project_id, ctx.mask_id, qualname)
+    if cached is not None:
+        return cached
+
+    # Build cache key for deduplication
+    cache_key = (ctx.project_id, ctx.env, ctx.mask_id, qualname)
+
+    def do_resolve() -> ResolvedConfig:
+        # Build the list of keys to resolve
+        keys = [f"{qualname}.{name}" for name in field_defaults.keys()]
+
+        try:
+            response = client.resolve(
+                project_id=ctx.project_id,
+                env=ctx.env,
+                keys=keys,
+                mask_id=ctx.mask_id,
+                unit_id=ctx.unit_id,
+            )
+
+            # Decode values with type hints
+            resolved_values: dict[str, Any] = {}
+            for field_name, default in field_defaults.items():
+                key = f"{qualname}.{field_name}"
+                type_hint = type_hints.get(field_name, type(default))
+
+                # Check if key was resolved or is missing
+                if key in response.get("resolved_values", {}):
+                    raw_value = response["resolved_values"][key]
+                    resolved_values[field_name] = _decode_value(raw_value, type_hint, default)
+                else:
+                    # Key is missing from backend, use default
+                    resolved_values[field_name] = default
+
+            result = ResolvedConfig(
+                values=resolved_values,
+                value_ids=response.get("resolved_value_ids", {}),
+                assigned_variant=response.get("assigned_variant"),
+                revision=0,  # SQLite backend doesn't use revision
+            )
+
+        except BackendUnavailableError:
+            if behavior.on_backend_unavailable == "error":
+                raise
+            # Use fallback defaults
+            result = ResolvedConfig(
+                values=dict(field_defaults),
+                value_ids={},
+                assigned_variant=None,
+                revision=0,
+            )
+
+        # Store in cache
+        cache.set(ctx.project_id, ctx.mask_id, qualname, result)
+
+        # Log config to trace for UI visibility
+        _log_config_to_trace(ctx.mask_id, result.assigned_variant, result.values)
+
+        return result
+
+    return resolve_with_dedupe(cache_key, do_resolve)
+
+
+def _log_config_to_trace(
+    mask_id: str | None,
+    assigned_variant: str | None,
+    resolved_values: dict[str, Any],
+) -> None:
+    """Log config data to the current trace for UI visibility."""
     trace_data = opik_context.get_current_trace_data()
-    if trace_data is None and strict:
-        raise ValueError(f"Reading '{name}' outside Opik trace context.")
-    elif trace_data is None and not strict:
-        warnings.warn(f"Reading '{name}' outside Opik trace context.", stacklevel=2)
-
-    experiment_id = get_experiment_id()
-    if experiment_id is None:
-        return default
-
-    client = ConfigClient(backend_url)
-    try:
-        values = client.get_values([name], experiment_id=experiment_id)
-        if name in values:
-            return values[name]
-    except BackendUnavailableError:
-        pass
-
-    return default
+    if trace_data is not None:
+        existing_metadata = trace_data.metadata or {}
+        opik_context.update_current_trace(
+            metadata={
+                **existing_metadata,
+                "opik_config": {
+                    "experiment_id": mask_id,
+                    "assigned_variant": assigned_variant,
+                    "values": resolved_values,
+                },
+            }
+        )
 
 
 @overload
 def agent_config(
-    cls_or_value: type[T],
+    cls: type[T],
     *,
-    name: None = None,
     backend_url: str = DEFAULT_BACKEND_URL,
-    strict: bool = True,
+    behavior: ConfigBehavior | None = None,
 ) -> type[T]: ...
 
 
 @overload
 def agent_config(
-    cls_or_value: None = None,
+    cls: None = None,
     *,
-    name: None = None,
     backend_url: str = DEFAULT_BACKEND_URL,
-    strict: bool = True,
+    behavior: ConfigBehavior | None = None,
 ) -> Callable[[type[T]], type[T]]: ...
 
 
-@overload
 def agent_config(
-    cls_or_value: T,
+    cls: type[T] | None = None,
     *,
-    name: str,
     backend_url: str = DEFAULT_BACKEND_URL,
-    strict: bool = True,
-) -> T: ...
-
-
-def agent_config(
-    cls_or_value: type[T] | T | None = None,
-    *,
-    name: str | None = None,
-    backend_url: str = DEFAULT_BACKEND_URL,
-    strict: bool = True,
-) -> type[T] | Callable[[type[T]], type[T]] | T:
+    behavior: ConfigBehavior | None = None,
+) -> type[T] | Callable[[type[T]], type[T]]:
     """
-    Make a dataclass or value configuration-aware.
+    Make a dataclass configuration-aware with resolve-once-per-run caching.
 
     Usage:
         @agent_config
         @dataclass
         class Config:
             model: str = "gpt-4"
+            temperature: float = 0.7
 
-        model = agent_config("gpt-4", name="model")
+        # In your agent:
+        with config_context(mask_id="experiment-123"):
+            config = Config()
+            print(config.model)  # Resolved from backend, cached for this run
     """
-    if name is not None:
-        return _get_configured_value(cls_or_value, name=name, backend_url=backend_url, strict=strict)
+    if behavior is None:
+        behavior = ConfigBehavior()
 
     def decorator(cls: type[T]) -> type[T]:
         if not is_dataclass(cls):
             raise TypeError(f"@agent_config requires a dataclass, got '{cls.__name__}'")
 
-        field_names = {f.name for f in fields(cls)}
+        field_info = {f.name: f for f in fields(cls)}
+        field_names = set(field_info.keys())
         original_getattribute = cls.__getattribute__
         original_init = cls.__init__
+
+        # Get type hints for decoding
+        try:
+            type_hints = get_type_hints(cls)
+        except Exception:
+            type_hints = {}
+
         client = ConfigClient(backend_url)
+        set_registration_client(client, "default")
 
         def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
             original_init(self, *args, **kwargs)
-            # Register defaults with backend only if they don't exist
+
+            # Queue key registrations (non-blocking)
             for field_name in field_names:
                 value = original_getattribute(self, field_name)
-                if isinstance(value, Prompt):
-                    prompt_data = {"prompt_name": value.name, "prompt": str(value)}
-                    client.set_value(field_name, prompt_data, if_not_exists=True, is_default=True)
-                else:
-                    client.set_value(field_name, value, if_not_exists=True, is_default=True)
+                key = f"{cls.__qualname__}.{field_name}"
+                type_hint = type_hints.get(field_name, type(value))
+
+                queue_registration(
+                    KeyMetadata(
+                        key=key,
+                        type_hint=str(type_hint),
+                        default_value=_get_default_for_prompt(value),
+                        class_name=cls.__qualname__,
+                        field_name=field_name,
+                    )
+                )
 
         cls.__init__ = __init__  # type: ignore[method-assign]
 
@@ -182,40 +262,26 @@ def agent_config(
             if attr.startswith("_") or attr not in field_names:
                 return original_getattribute(self, attr)
 
+            # Check for trace context
             trace_data = opik_context.get_current_trace_data()
-            if trace_data is None and strict:
+            if trace_data is None and behavior.strict_context:
                 raise ValueError(f"Reading '{attr}' outside Opik trace context.")
-            elif trace_data is None and not strict:
+            elif trace_data is None and not behavior.strict_context:
                 warnings.warn(f"Reading '{attr}' outside Opik trace context.", stacklevel=2)
 
-            original = original_getattribute(self, attr)
-            lookup_key = attr
-            experiment_id = get_experiment_id()
+            # Get field defaults
+            field_defaults = {}
+            for name in field_names:
+                field_defaults[name] = original_getattribute(self, name)
 
-            # Always check backend for latest value (experiment_id adds override layer)
-            result = original
-            try:
-                values = client.get_values([lookup_key], experiment_id=experiment_id)
-                if lookup_key in values:
-                    override = values[lookup_key]
-                    if isinstance(original, Prompt):
-                        if isinstance(override, dict) and "prompt" in override:
-                            result = Prompt(name=override.get("prompt_name", original.name), prompt=override["prompt"])
-                        elif isinstance(override, str):
-                            result = Prompt(name=original.name, prompt=override)
-                    else:
-                        result = override
-            except BackendUnavailableError:
-                pass
+            # Resolve all fields (cached)
+            resolved = _resolve_all_fields(cls, client, field_defaults, type_hints, behavior)
 
-            # Record this config access on the current span
-            _record_config_access(attr, result)
-
-            return result
+            return resolved.values.get(attr, original_getattribute(self, attr))
 
         cls.__getattribute__ = __getattribute__  # type: ignore[method-assign]
         return cls
 
-    if cls_or_value is None:
+    if cls is None:
         return decorator
-    return decorator(cls_or_value)
+    return decorator(cls)

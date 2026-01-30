@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   CellContext,
   ColumnDef,
@@ -6,6 +7,7 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import { FlaskConical, Pencil, FileText, Sparkles, Split } from "lucide-react";
+import useAppStore from "@/store/AppStore";
 
 import { COLUMN_SELECT_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
@@ -242,6 +244,11 @@ type ConfigurationTabProps = {
 };
 
 const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
+  // Use "default" for config backend - the Python SDK registers with project_id="default"
+  const configProjectId = "default";
+  const navigate = useNavigate();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const [selectedVariable, setSelectedVariable] =
     useState<ConfigVariable | null>(null);
   const [panelMode, setPanelMode] = useState<"update" | "experiment" | null>(
@@ -252,8 +259,8 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
   const [showOptimizeDialog, setShowOptimizeDialog] = useState(false);
   const [showABTestDialog, setShowABTestDialog] = useState(false);
 
-  const { data: configData, isPending, isError } = useConfigVariables();
-  const updateMutation = useUpdateConfigVariable();
+  const { data: configData, isPending, isError } = useConfigVariables({ projectId: configProjectId });
+  const updateMutation = useUpdateConfigVariable({ projectId: configProjectId });
 
   const configVariables = configData?.variables;
 
@@ -319,10 +326,17 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
     setShowCreateDialog(true);
   }, []);
 
-  const handleExperimentCreated = useCallback(() => {
-    setRowSelection({});
-    setShowCreateDialog(false);
-  }, []);
+  const handleExperimentCreated = useCallback(
+    (experimentId: string) => {
+      setRowSelection({});
+      setShowCreateDialog(false);
+      navigate({
+        to: "/$workspaceName/experiments/live/$experimentId",
+        params: { workspaceName, experimentId },
+      });
+    },
+    [navigate, workspaceName]
+  );
 
   const columns: ColumnDef<ConfigVariable>[] = useMemo(() => {
     return [
@@ -442,7 +456,7 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
         mode={panelMode}
         open={!!selectedVariable && !!panelMode}
         onClose={handleClosePanel}
-        projectId={projectId}
+        projectId={configProjectId}
         onSave={handleSaveValue}
         isSaving={updateMutation.isPending}
       />
@@ -450,7 +464,8 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
         open={showCreateDialog}
         onClose={() => setShowCreateDialog(false)}
         selectedVariables={selectedVariables}
-        onSuccess={() => handleExperimentCreated()}
+        projectId={configProjectId}
+        onSuccess={handleExperimentCreated}
       />
       <OptimizeChatDialog
         open={showOptimizeDialog}
@@ -461,9 +476,14 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
         open={showABTestDialog}
         onClose={() => setShowABTestDialog(false)}
         selectedVariables={selectedVariables}
-        onSuccess={() => {
+        projectId={configProjectId}
+        onSuccess={(testId) => {
           setRowSelection({});
           setShowABTestDialog(false);
+          navigate({
+            to: "/$workspaceName/experiments/live/$experimentId",
+            params: { workspaceName, experimentId: testId },
+          });
         }}
       />
     </>

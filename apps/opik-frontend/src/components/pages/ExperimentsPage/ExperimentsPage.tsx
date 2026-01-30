@@ -82,10 +82,46 @@ import TextCell from "@/components/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import ResourceLink from "@/components/shared/ResourceLink/ResourceLink";
+import { CellContext } from "@tanstack/react-table";
+import { Tag } from "@/components/ui/tag";
+import { EXPERIMENT_TYPE } from "@/types/datasets";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
+
+const DatasetCell = (context: CellContext<GroupedExperiment, unknown>) => {
+  const row = context.row.original;
+  const datasetId = row.dataset_id;
+  const datasetName = row.dataset_name;
+  const experimentType = row.type;
+
+  return (
+    <CellWrapper
+      metadata={context.column.columnDef.meta}
+      tableMetadata={context.table.options.meta}
+      className="py-1.5"
+    >
+      {datasetId ? (
+        <ResourceLink
+          id={datasetId}
+          name={datasetName}
+          resource={RESOURCE_TYPE.dataset}
+        />
+      ) : experimentType === EXPERIMENT_TYPE.AB ? (
+        <Tag variant="blue" size="sm">
+          A/B Test
+        </Tag>
+      ) : (
+        <Tag variant="red" size="sm">
+          Live
+        </Tag>
+      )}
+    </CellWrapper>
+  );
+};
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_DATASET_ID,
@@ -163,12 +199,7 @@ const ExperimentsPage: React.FC = () => {
         id: COLUMN_DATASET_ID,
         label: "Dataset",
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        customMeta: {
-          nameKey: "dataset_name",
-          idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
-        },
+        cell: DatasetCell as never,
       },
       ...(isDatasetVersioningEnabled
         ? [
@@ -416,16 +447,32 @@ const ExperimentsPage: React.FC = () => {
 
   const handleRowClick = useCallback(
     (row: GroupedExperiment) => {
-      navigate({
-        to: "/$workspaceName/experiments/$datasetId/compare",
-        params: {
-          datasetId: row.dataset_id,
-          workspaceName,
-        },
-        search: {
-          experiments: [row.id],
-        },
-      });
+      const isLiveExperiment =
+        row.type === EXPERIMENT_TYPE.LIVE || row.type === EXPERIMENT_TYPE.AB;
+
+      if (isLiveExperiment) {
+        navigate({
+          to: "/$workspaceName/experiments/live/$experimentId",
+          params: {
+            experimentId: row.id,
+            workspaceName,
+          },
+          search: {
+            name: row.name,
+          },
+        });
+      } else if (row.dataset_id) {
+        navigate({
+          to: "/$workspaceName/experiments/$datasetId/compare",
+          params: {
+            datasetId: row.dataset_id,
+            workspaceName,
+          },
+          search: {
+            experiments: [row.id],
+          },
+        });
+      }
     },
     [navigate, workspaceName],
   );

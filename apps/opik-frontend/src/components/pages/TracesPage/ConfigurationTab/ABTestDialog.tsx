@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Split } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
 
 import {
   Dialog,
@@ -16,11 +17,14 @@ import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { ConfigVariable } from "@/api/config/useConfigVariables";
 
+const CONFIG_BACKEND_URL = "http://localhost:5050";
+
 type ABTestDialogProps = {
   open: boolean;
   onClose: () => void;
   selectedVariables: ConfigVariable[];
   onSuccess: (testId: string) => void;
+  projectId?: string;
 };
 
 type VariableValue = {
@@ -34,13 +38,16 @@ const ABTestDialog: React.FC<ABTestDialogProps> = ({
   onClose,
   selectedVariables,
   onSuccess,
+  projectId = "default",
 }) => {
+  const [name, setName] = useState("");
   const [values, setValues] = useState<VariableValue[]>([]);
   const [samplingPercent, setSamplingPercent] = useState(50);
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
     if (open) {
+      setName("");
       setValues(
         selectedVariables.map((v) => ({
           key: v.key,
@@ -58,16 +65,95 @@ const ABTestDialog: React.FC<ABTestDialogProps> = ({
     );
   };
 
-  const handleSubmit = () => {
+  const parseValue = (variable: VariableValue): string | number | boolean => {
+    if (variable.type === "boolean") {
+      return variable.value === "true";
+    }
+    if (variable.type === "number") {
+      return parseFloat(variable.value);
+    }
+    return variable.value;
+  };
+
+  const handleSubmit = async () => {
     setIsCreating(true);
 
-    // Mock creating an A/B test
-    setTimeout(() => {
-      const testId = `ab-${Date.now().toString(36)}`;
-      setIsCreating(false);
+    try {
+      const testId = `ab-${uuidv4().slice(0, 8)}`;
+      const experimentName = name.trim() || undefined;
+      const distribution = {
+        A: samplingPercent,
+        B: 100 - samplingPercent,
+      };
+
+      // Create the A/B test mask
+      const maskRes = await fetch(`${CONFIG_BACKEND_URL}/v1/config/masks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: projectId,
+          env: "prod",
+          mask_id: testId,
+          name: experimentName,
+          is_ab: true,
+          distribution,
+        }),
+      });
+
+      if (!maskRes.ok) {
+        throw new Error("Failed to create A/B test");
+      }
+
+      // Set variant A overrides (new values)
+      for (const variable of values) {
+        const res = await fetch(`${CONFIG_BACKEND_URL}/v1/config/masks/override`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project_id: projectId,
+            env: "prod",
+            mask_id: testId,
+            variant: "A",
+            key: variable.key,
+            value: parseValue(variable),
+          }),
+        });
+
+        if (!res.ok) {
+          throw new Error(`Failed to set variant A override for ${variable.key}`);
+        }
+      }
+
+      // Set variant B overrides (control - current production values)
+      for (const variable of values) {
+        const original = selectedVariables.find((v) => v.key === variable.key);
+        if (original) {
+          const res = await fetch(`${CONFIG_BACKEND_URL}/v1/config/masks/override`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project_id: projectId,
+              env: "prod",
+              mask_id: testId,
+              variant: "B",
+              key: variable.key,
+              value: original.currentValue,
+            }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`Failed to set variant B override for ${variable.key}`);
+          }
+        }
+      }
+
       onSuccess(testId);
       onClose();
-    }, 1000);
+    } catch (error) {
+      console.error("Failed to create A/B test:", error);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const renderValueEditor = (variable: VariableValue) => {
@@ -129,6 +215,17 @@ const ABTestDialog: React.FC<ABTestDialogProps> = ({
             Traffic will be automatically split based on your sampling percentage.
           </p>
 
+          <div>
+            <Label htmlFor="ab-test-name">Name (optional)</Label>
+            <Input
+              id="ab-test-name"
+              className="mt-1.5"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., happy-falcon-4821 (auto-generated if empty)"
+            />
+          </div>
+
           <Separator />
 
           <div className="rounded-lg border bg-muted/30 p-4">
@@ -155,13 +252,13 @@ const ABTestDialog: React.FC<ABTestDialogProps> = ({
                 <div className="text-lg font-semibold text-blue-500">
                   {samplingPercent}%
                 </div>
-                <div className="text-xs text-muted-slate">Variant (new values)</div>
+                <div className="text-xs text-muted-slate">Variant A (new values)</div>
               </div>
               <div className="flex-1 rounded border bg-background p-2 text-center">
                 <div className="text-lg font-semibold text-slate-500">
                   {100 - samplingPercent}%
                 </div>
-                <div className="text-xs text-muted-slate">Control (production)</div>
+                <div className="text-xs text-muted-slate">Variant B (control)</div>
               </div>
             </div>
           </div>
@@ -169,7 +266,7 @@ const ABTestDialog: React.FC<ABTestDialogProps> = ({
           <Separator />
 
           <div>
-            <Label className="mb-3 block">Variant Values</Label>
+            <Label className="mb-3 block">Variant A Values</Label>
             <div className="max-h-[250px] space-y-4 overflow-y-auto">
               {values.map((variable) => {
                 const original = selectedVariables.find(
@@ -185,7 +282,7 @@ const ABTestDialog: React.FC<ABTestDialogProps> = ({
                     </div>
                     {renderValueEditor(variable)}
                     <p className="text-xs text-muted-slate">
-                      Control value:{" "}
+                      Variant B (control):{" "}
                       <span className="font-mono">
                         {String(original?.currentValue)}
                       </span>

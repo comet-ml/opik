@@ -14,11 +14,11 @@ import java.util.UUID;
 public class ExperimentCreated extends BaseEvent {
 
     private final @NonNull UUID experimentId;
-    private final @NonNull UUID datasetId;
+    private final UUID datasetId;
     private final @NonNull Instant createdAt;
     private final @NonNull ExperimentType type;
 
-    public ExperimentCreated(@NonNull UUID experimentId, @NonNull UUID datasetId, @NonNull Instant createdAt,
+    public ExperimentCreated(@NonNull UUID experimentId, UUID datasetId, @NonNull Instant createdAt,
             @NonNull String workspaceId,
             @NonNull String userName,
             @NonNull ExperimentType type) {

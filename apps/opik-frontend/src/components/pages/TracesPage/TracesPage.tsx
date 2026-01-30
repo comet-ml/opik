@@ -14,6 +14,7 @@ import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesT
 import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/DashboardsTab";
 import ConfigurationTab from "@/components/pages/TracesPage/ConfigurationTab/ConfigurationTab";
 import ExperimentsTab from "@/components/pages/TracesPage/ExperimentsTab/ExperimentsTab";
+import EndpointsTab from "@/components/pages/TracesPage/EndpointsTab/EndpointsTab";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Construction } from "lucide-react";
@@ -94,8 +95,8 @@ const TracesPage = () => {
               <TabsTrigger variant="underline" value="configuration">
                 Configuration
               </TabsTrigger>
-              <TabsTrigger variant="underline" value="experiments">
-                Experiments
+              <TabsTrigger variant="underline" value="endpoints">
+                Endpoints
               </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
@@ -128,8 +129,8 @@ const TracesPage = () => {
           <TabsContent value="configuration">
             <ConfigurationTab projectId={projectId} />
           </TabsContent>
-          <TabsContent value="experiments">
-            <ExperimentsTab projectId={projectId} />
+          <TabsContent value="endpoints">
+            <EndpointsTab projectId={projectId} />
           </TabsContent>
         </Tabs>
       );

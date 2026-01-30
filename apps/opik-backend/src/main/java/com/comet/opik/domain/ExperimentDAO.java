@@ -62,6 +62,7 @@ import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
 import static com.comet.opik.utils.JsonUtils.getStringOrDefault;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
@@ -1083,7 +1084,9 @@ class ExperimentDAO {
     private Publisher<? extends Result> insert(Experiment experiment, Connection connection) {
         var statement = connection.createStatement(INSERT)
                 .bind("id", experiment.id())
-                .bind("dataset_id", experiment.datasetId())
+                .bind("dataset_id", Optional.ofNullable(experiment.datasetId())
+                        .map(UUID::toString)
+                        .orElse(CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE))
                 .bind("name", experiment.name())
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
@@ -1206,7 +1209,7 @@ class ExperimentDAO {
             List<PromptVersionLink> promptVersions = getPromptVersions(row);
             return Experiment.builder()
                     .id(row.get("id", UUID.class))
-                    .datasetId(row.get("dataset_id", UUID.class))
+                    .datasetId(getDatasetId(row))
                     .projectId(RowUtils.getOptionalValue(row, "project_id", UUID.class))
                     .name(row.get("name", String.class))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
@@ -1245,6 +1248,14 @@ class ExperimentDAO {
     private static BigDecimal getCostValue(Row row, String fieldName) {
         return Optional.ofNullable(row.get(fieldName, BigDecimal.class))
                 .filter(value -> value.compareTo(BigDecimal.ZERO) > 0)
+                .orElse(null);
+    }
+
+    private static UUID getDatasetId(Row row) {
+        return Optional.ofNullable(row.get("dataset_id", String.class))
+                .filter(StringUtils::isNotBlank)
+                .filter(s -> !CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(s))
+                .map(UUID::fromString)
                 .orElse(null);
     }
 

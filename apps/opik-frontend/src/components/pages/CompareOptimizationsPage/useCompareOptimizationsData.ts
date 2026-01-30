@@ -165,7 +165,7 @@ export const useCompareOptimizationsData = () => {
       navigate({
         to: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
         params: {
-          datasetId: row.dataset_id,
+          datasetId: row.dataset_id!,
           optimizationId,
           workspaceName,
         },

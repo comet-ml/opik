@@ -9,7 +9,11 @@ import { Groups } from "@/types/groups";
 import { generatePromptFilters, processFilters } from "@/lib/filters";
 import { processGroups } from "@/lib/groups";
 
-const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
+const DEFAULT_EXPERIMENTS_TYPES = [
+  EXPERIMENT_TYPE.REGULAR,
+  EXPERIMENT_TYPE.LIVE,
+  EXPERIMENT_TYPE.AB,
+];
 
 export type UseExperimentsGroupsParams = {
   workspaceName?: string;

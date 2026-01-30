@@ -34,6 +34,7 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
+import ExperimentNameCell from "@/components/shared/DataTableCells/ExperimentNameCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import {
   generateActionsColumDef,
@@ -43,7 +44,11 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
-import { Experiment, ExperimentsAggregations } from "@/types/datasets";
+import {
+  Experiment,
+  ExperimentsAggregations,
+  EXPERIMENT_TYPE,
+} from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -286,15 +291,7 @@ export const useExperimentsTableConfig = <
           id: COLUMN_NAME_ID,
           label: "Name",
           type: COLUMN_TYPE.string,
-          cell: ResourceCell as never,
-          customMeta: {
-            nameKey: "name",
-            idKey: "dataset_id",
-            resource: RESOURCE_TYPE.experiment,
-            getSearch: (data: Experiment) => ({
-              experiments: [data.id],
-            }),
-          },
+          cell: ExperimentNameCell as never,
           headerCheckbox: true,
           sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
           size: 200,

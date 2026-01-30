@@ -120,7 +120,7 @@ const EvaluationSection: React.FunctionComponent = () => {
       navigate({
         to: "/$workspaceName/experiments/$datasetId/compare",
         params: {
-          datasetId: row.dataset_id,
+          datasetId: row.dataset_id!,
           workspaceName,
         },
         search: {

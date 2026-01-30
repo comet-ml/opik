@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { ChevronDown, ChevronRight, Copy, FlaskConical } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, FlaskConical, Split } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
@@ -18,13 +18,16 @@ type ExperimentsTabProps = {
 };
 
 const ExperimentsTab: React.FC<ExperimentsTabProps> = () => {
+  // Use "default" for config backend - the Python SDK registers with project_id="default"
+  const configProjectId = "default";
+
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [selectedExperimentId, setSelectedExperimentId] = useState<
     string | null
   >(null);
   const { toast } = useToast();
 
-  const { data: configData, isPending, isError } = useConfigVariables();
+  const { data: configData, isPending, isError } = useConfigVariables({ projectId: configProjectId });
   const experiments = configData?.experiments ?? [];
 
   const toggleExpanded = useCallback((id: string) => {
@@ -161,7 +164,16 @@ const ExperimentCard: React.FC<ExperimentCardProps> = ({
           ) : (
             <ChevronRight className="size-4 text-muted-slate" />
           )}
-          <code className="font-mono text-sm">{experiment.id}</code>
+          <div className="flex flex-col">
+            <span className="font-medium">{experiment.name}</span>
+            <code className="font-mono text-xs text-muted-slate">{experiment.id}</code>
+          </div>
+          {experiment.isAb && (
+            <Tag variant="blue" size="sm" className="flex items-center gap-1">
+              <Split className="size-3" />
+              A/B Test
+            </Tag>
+          )}
           <Tag variant="gray" size="sm">
             {experiment.overrides.length} override
             {experiment.overrides.length > 1 ? "s" : ""}
@@ -182,6 +194,24 @@ const ExperimentCard: React.FC<ExperimentCardProps> = ({
       </button>
       {isExpanded && (
         <div className="border-t px-4 py-4">
+          {experiment.isAb && experiment.distribution && (
+            <div className="mb-4 rounded-lg border bg-muted/30 p-3">
+              <div className="mb-2 text-sm font-medium">Traffic Split</div>
+              <div className="flex gap-2">
+                {Object.entries(experiment.distribution).map(([variant, weight]) => (
+                  <div
+                    key={variant}
+                    className="flex-1 rounded border bg-background p-2 text-center"
+                  >
+                    <div className={`text-lg font-semibold ${variant === "A" ? "text-blue-500" : "text-slate-500"}`}>
+                      {weight}%
+                    </div>
+                    <div className="text-xs text-muted-slate">Variant {variant}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="mb-4 space-y-2">
             {experiment.overrides.map((override) => (
               <div
