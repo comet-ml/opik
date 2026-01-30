@@ -280,11 +280,16 @@ Call opik api on http://localhost:5173/api
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
-| component.frontend.cacheControl."~(images/.*|assets/.*)\.(jpg|jpeg|png|gif|svg|webp|ico)$" | string | `"public, max-age=2592000"` |  |
-| component.frontend.cacheControl."~assets/.*\.(js|css)$" | string | `"public, max-age=604800, immutable"` |  |
-| component.frontend.cacheControl."~assets/.*\.(woff|woff2|ttf|eot)$" | string | `"public, max-age=2592000"` |  |
-| component.frontend.cacheControl."~assets/.*\.json$" | string | `"public, max-age=86400"` |  |
-| component.frontend.cacheControl.default | string | `"no-cache, must-revalidate"` |  |
+| component.frontend.cacheControl[0].pattern | string | `"~assets/.*\\.(js|css)$"` |  |
+| component.frontend.cacheControl[0].value | string | `"public, max-age=604800, immutable"` |  |
+| component.frontend.cacheControl[1].pattern | string | `"~(images/.*|assets/.*)\\.(jpg|jpeg|png|gif|svg|webp|ico)$"` |  |
+| component.frontend.cacheControl[1].value | string | `"public, max-age=2592000"` |  |
+| component.frontend.cacheControl[2].pattern | string | `"~assets/.*\\.(woff|woff2|ttf|eot)$"` |  |
+| component.frontend.cacheControl[2].value | string | `"public, max-age=2592000"` |  |
+| component.frontend.cacheControl[3].pattern | string | `"~assets/.*\\.json$"` |  |
+| component.frontend.cacheControl[3].value | string | `"public, max-age=86400"` |  |
+| component.frontend.cacheControl[4].pattern | string | `"default"` |  |
+| component.frontend.cacheControl[4].value | string | `"no-cache, must-revalidate"` |  |
 | component.frontend.contentSecurityPolicy.base-uri[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.child-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.connect-src[0] | string | `"'self'"` |  |
