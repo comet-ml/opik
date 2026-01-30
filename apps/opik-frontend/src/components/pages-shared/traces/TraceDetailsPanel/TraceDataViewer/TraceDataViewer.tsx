@@ -191,7 +191,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               />
             )}
           />
-          <div className="comet-body-s-accented flex w-full flex-wrap items-center gap-3 text-muted-slate">
+          <div className="comet-body-s-accented flex w-full flex-wrap items-center gap-3 pl-1 text-muted-slate">
             {created_at && (
               <TooltipWrapper content={`Created at: ${created_at}`}>
                 <div
@@ -288,13 +288,15 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               </TooltipWrapper>
             )}
           </div>
-          <TagList
-            data={data}
-            tags={data.tags}
-            projectId={projectId}
-            traceId={traceId}
-            spanId={spanId}
-          />
+          <div className="pl-1">
+            <TagList
+              data={data}
+              tags={data.tags}
+              projectId={projectId}
+              traceId={traceId}
+              spanId={spanId}
+            />
+          </div>
         </div>
 
         <Tabs defaultValue="input" value={selectedTab!} onValueChange={setTab}>
