@@ -800,7 +800,9 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
             Visibility visibility) {
-        log.info("Getting dataset items by '{}' on workspaceId '{}'", request, workspaceId);
+        log.info("Getting dataset items for dataset '{}' (hasFilters={}), version='{}', workspaceId='{}'",
+                request.datasetName(), request.filters() != null && !request.filters().isEmpty(),
+                request.datasetVersion(), workspaceId);
 
         // Parse filters from the request
         List<DatasetItemFilter> filters = parseFilters(request.filters());
