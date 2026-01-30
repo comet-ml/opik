@@ -99,7 +99,7 @@ def count_lines_changed(tool_executions: List[Dict[str, Any]]) -> LinesChanged:
     Count lines added and deleted from file edit records.
 
     Args:
-        tool_executions: List of tool execution records.
+        tool_executions: List of tool execution records with file_edit tool type.
 
     Returns:
         Dictionary with 'lines_added' and 'lines_deleted' counts.
@@ -109,7 +109,8 @@ def count_lines_changed(tool_executions: List[Dict[str, Any]]) -> LinesChanged:
 
     for record in tool_executions:
         data = record.get("data", {})
-        if data.get("tool_type") != "file_edit":
+        tool_type = data.get("tool_type")
+        if tool_type != "file_edit":
             continue
 
         edits = data.get("edits", [])
@@ -133,3 +134,31 @@ def count_lines_changed(tool_executions: List[Dict[str, Any]]) -> LinesChanged:
             lines_added += new_lines
 
     return {"lines_added": lines_added, "lines_deleted": lines_deleted}
+
+
+def format_duration(duration_ms: float) -> str:
+    """
+    Format duration in milliseconds to a human-readable string.
+
+    Args:
+        duration_ms: Duration in milliseconds.
+
+    Returns:
+        Formatted duration string like "1.23s" or "123ms".
+    """
+    if duration_ms < 1000:
+        return f"{duration_ms:.2f}ms"
+    return f"{duration_ms / 1000:.2f}s"
+
+
+def format_duration_iso8601(duration_ms: float) -> str:
+    """
+    Format duration in milliseconds to an ISO 8601 duration string.
+
+    Args:
+        duration_ms: Duration in milliseconds.
+
+    Returns:
+        Formatted duration string like "PT1.23S" or "PT123MS".
+    """
+    return f"PT{duration_ms / 1000:.2f}S"

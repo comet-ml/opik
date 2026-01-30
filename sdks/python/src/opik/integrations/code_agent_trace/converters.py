@@ -99,7 +99,6 @@ def convert_generation_to_trace_and_spans(
     assistant_responses: List[TraceRecord] = []
     assistant_thoughts: List[TraceRecord] = []
     tool_executions: List[TraceRecord] = []
-    tab_completions: List[TraceRecord] = []
 
     for record in sorted_records:
         event = record.get("event", "")
@@ -111,8 +110,6 @@ def convert_generation_to_trace_and_spans(
             assistant_thoughts.append(record)
         elif event == "tool_execution":
             tool_executions.append(record)
-        elif event == "tab_completion":
-            tab_completions.append(record)
 
     # Calculate time bounds
     first_record = sorted_records[0]
@@ -210,17 +207,40 @@ def convert_generation_to_trace_and_spans(
                     }
                 )
 
-    # Build trace INPUT: all messages ready to be sent to LLM
-    trace_input = {"messages": conversation_messages} if conversation_messages else None
+    # Build trace INPUT: all messages captured so far (valid OpenAI format)
+    # Input contains everything that was captured before the turn ended/was interrupted
+    trace_input: Dict[str, Any] = {"messages": conversation_messages}
+
+    # Determine if turn was interrupted
+    # A turn is considered interrupted if we have a user message but no final assistant response
+    # Tool-only turns (no user message) are NOT considered interrupted - they're autonomous actions
+    has_user_input = bool(user_messages)
+    has_final_response = bool(assistant_responses)
+    is_interrupted = has_user_input and not has_final_response
 
     # Build trace OUTPUT: OpenAI chat completion response format
     model = first_record.get("model") or "unknown"
+
+    # For interrupted turns, prepend interrupted message to any content
+    output_content = final_assistant_content
+    output_tool_calls = final_tool_calls
+    finish_reason_override = None
+
+    if is_interrupted:
+        interrupted_msg = "[Agent turn was interrupted]"
+        if output_content:
+            output_content = f"{interrupted_msg}\n\n{output_content}"
+        elif not output_tool_calls:
+            output_content = interrupted_msg
+        finish_reason_override = "stop"
+
     trace_output = build_chat_completion_response(
         generation_id=generation_id,
         model=model,
         created_timestamp=int(trace_start_time.timestamp()),
-        content=final_assistant_content,
-        tool_calls=final_tool_calls,
+        content=output_content,
+        tool_calls=output_tool_calls,
+        finish_reason=finish_reason_override,
     )
 
     # Build trace name
@@ -230,15 +250,14 @@ def convert_generation_to_trace_and_spans(
     shell_count = sum(
         1 for r in tool_executions if r.get("data", {}).get("tool_type") == "shell"
     )
-    tab_count = len(tab_completions)
 
     parts = []
+    if is_interrupted:
+        parts.append("interrupted")
     if edit_count > 0:
         parts.append(f"{edit_count} edit{'s' if edit_count > 1 else ''}")
     if shell_count > 0:
         parts.append(f"{shell_count} command{'s' if shell_count > 1 else ''}")
-    if tab_count > 0:
-        parts.append(f"{tab_count} tab completion{'s' if tab_count > 1 else ''}")
     trace_name = f"Agent Turn: {', '.join(parts)}" if parts else "Agent Turn"
 
     # Build trace metadata
@@ -259,17 +278,13 @@ def convert_generation_to_trace_and_spans(
 
     # Calculate feedback scores
     duration_seconds = (trace_end_time - trace_start_time).total_seconds()
-    # Include both tool executions and tab completions for lines changed
-    all_edits = [dict(r) for r in tool_executions] + [dict(r) for r in tab_completions]
-    lines_changed = count_lines_changed(all_edits)
+    lines_changed = count_lines_changed([dict(r) for r in tool_executions])
 
     feedback_scores: List[FeedbackScoreDict] = [
         {"name": "duration_seconds", "value": round(duration_seconds, 2)},
         {"name": "lines_added", "value": float(lines_changed["lines_added"])},
         {"name": "lines_deleted", "value": float(lines_changed["lines_deleted"])},
     ]
-    if tab_count > 0:
-        feedback_scores.append({"name": "tab_completions", "value": float(tab_count)})
 
     # Generate trace ID
     trace_id = id_helpers.generate_id(timestamp=trace_start_time)
@@ -290,15 +305,11 @@ def convert_generation_to_trace_and_spans(
         "feedback_scores": feedback_scores,
     }
 
-    # Build spans for tool executions and tab completions
+    # Build spans for tool executions
     spans_data: List[SpanData] = [
         _build_span_for_tool(record, trace_id, project_name)
         for record in tool_executions
     ]
-
-    # Add spans for tab completions
-    for record in tab_completions:
-        spans_data.append(_build_span_for_tool(record, trace_id, project_name))
 
     # Sort spans by start time
     spans_data.sort(key=lambda s: s["start_time"])
@@ -346,16 +357,6 @@ def _build_span_for_tool(
     elif tool_type == "file_edit":
         file_path = data.get("file_path", "unknown")
         span_name = f"Edit: {shorten_path(file_path)}"
-        span_type = "general"
-        span_input = {"file_path": file_path}
-        if data.get("edits"):
-            span_input["edits"] = data["edits"]
-        span_output = {}
-        if data.get("line_ranges"):
-            span_output["line_ranges"] = data["line_ranges"]
-    elif tool_type == "tab_edit":
-        file_path = data.get("file_path", "unknown")
-        span_name = f"Tab: {shorten_path(file_path)}"
         span_type = "general"
         span_input = {"file_path": file_path}
         if data.get("edits"):

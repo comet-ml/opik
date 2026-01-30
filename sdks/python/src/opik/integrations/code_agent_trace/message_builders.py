@@ -180,22 +180,6 @@ def build_assistant_message(
                         },
                     }
                 )
-            elif tool_type == "tab_edit":
-                file_path = data.get("file_path", "")
-                short_path = shorten_path(file_path, max_length=80)
-                arguments = {"file_path": short_path}
-
-                tool_calls.append(
-                    {
-                        "id": f"call_{record_id}",
-                        "type": "function",
-                        "function": {
-                            "name": "tab_edit",
-                            "arguments": json.dumps(arguments),
-                        },
-                    }
-                )
-
         if tool_calls:
             message["tool_calls"] = tool_calls
 
@@ -241,15 +225,6 @@ def build_tool_message(record: TraceRecord) -> Dict[str, Any]:
                 {"start": r.get("start_line"), "end": r.get("end_line")}
                 for r in line_ranges
             ]
-        content = json.dumps(result)
-
-    elif tool_type == "tab_edit":
-        tool_name = "tab_edit"
-        file_path = data.get("file_path", "unknown")
-        result = {
-            "file_path": file_path,
-            "status": "success",
-        }
         content = json.dumps(result)
 
     else:
@@ -348,20 +323,14 @@ def build_code_changes_summary(file_edit_records: List[TraceRecord]) -> Optional
                 )
 
                 # Show removed lines - use non-breaking spaces to preserve indentation
-                for line in old_lines[:15]:
-                    # Replace leading spaces with non-breaking spaces for rendering
+                for line in old_lines:
                     preserved_line = _preserve_leading_whitespace(line)
                     lines.append(f"-{preserved_line}")
-                if len(old_lines) > 15:
-                    lines.append("-... (truncated)")
 
                 # Show added lines - use non-breaking spaces to preserve indentation
-                for line in new_lines[:15]:
-                    # Replace leading spaces with non-breaking spaces for rendering
+                for line in new_lines:
                     preserved_line = _preserve_leading_whitespace(line)
                     lines.append(f"+{preserved_line}")
-                if len(new_lines) > 15:
-                    lines.append("+... (truncated)")
 
                 lines.append("```")
 
@@ -376,6 +345,7 @@ def build_chat_completion_response(
     created_timestamp: int,
     content: Optional[str],
     tool_calls: Optional[List[Dict[str, Any]]],
+    finish_reason: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Build OpenAI chat completion response format.
@@ -386,6 +356,7 @@ def build_chat_completion_response(
         created_timestamp: Unix timestamp when created.
         content: Assistant message content, or None.
         tool_calls: List of tool calls, or None.
+        finish_reason: Optional finish reason override.
 
     Returns:
         Chat completion response in OpenAI format.
@@ -398,10 +369,18 @@ def build_chat_completion_response(
     if tool_calls:
         final_message["tool_calls"] = tool_calls
 
+    # Determine finish_reason: explicit override > content-based > tool_calls
+    if finish_reason is not None:
+        resolved_finish_reason = finish_reason
+    elif content:
+        resolved_finish_reason = "stop"
+    else:
+        resolved_finish_reason = "tool_calls"
+
     choice: Dict[str, Any] = {
         "index": 0,
         "message": final_message,
-        "finish_reason": "stop" if content else "tool_calls",
+        "finish_reason": resolved_finish_reason,
     }
 
     return {

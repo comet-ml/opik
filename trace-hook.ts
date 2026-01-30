@@ -155,22 +155,6 @@ const handlers: Record<string, (input: HookInput) => void> = {
   },
 
   /**
-   * Captures Tab (inline completion) file edits.
-   * These are AI-assisted completions accepted by the user during coding.
-   */
-  afterTabFileEdit: (input) => {
-    const edits = input.edits ?? [];
-    const rangePositions = computeRangePositions(edits, tryReadFile(input.file_path!));
-    const record = createRecord("tab_completion", input, {
-      tool_type: "tab_edit",
-      file_path: input.file_path,
-      edits: edits,
-      line_ranges: rangePositions,
-    });
-    appendTrace(record);
-  },
-
-  /**
    * Captures the agent loop completion.
    */
   stop: (input) => {

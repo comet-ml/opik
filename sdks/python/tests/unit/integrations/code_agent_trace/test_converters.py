@@ -368,3 +368,159 @@ class TestConvertGenerationToTraceAndSpans:
 
         metadata = result["trace"]["metadata"]
         assert metadata["user"] == "developer@example.com"
+
+    def test_convert__interrupted_with_user_message__preserves_user_message_in_input(
+        self,
+    ):
+        """Test that interrupted turns preserve the user message in input."""
+        records: List[TraceRecord] = [
+            {
+                "id": "record-1",
+                "timestamp": "2024-01-30T08:00:00Z",
+                "event": "user_message",
+                "generation_id": "gen-1",
+                "data": {"content": "Please fix the bug"},
+            },
+            {
+                "id": "record-2",
+                "timestamp": "2024-01-30T08:00:05Z",
+                "event": "agent_stop",
+                "generation_id": "gen-1",
+                "data": {"status": "aborted"},
+            },
+        ]
+
+        result = convert_generation_to_trace_and_spans(
+            generation_id="gen-1",
+            records=records,
+            project_name="test-project",
+        )
+
+        # Input should have the actual user message
+        messages = result["trace"]["input"]["messages"]
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+        assert messages[0]["content"][0]["text"] == "Please fix the bug"
+
+        # Output should indicate interruption
+        output = result["trace"]["output"]
+        assert "interrupted" in output["choices"][0]["message"]["content"].lower()
+
+    def test_convert__interrupted_with_tools__preserves_all_messages_in_input(self):
+        """Test that interrupted turns with tool calls preserve all messages."""
+        records: List[TraceRecord] = [
+            {
+                "id": "record-1",
+                "timestamp": "2024-01-30T08:00:00Z",
+                "event": "user_message",
+                "generation_id": "gen-1",
+                "data": {"content": "Please fix the bug"},
+            },
+            {
+                "id": "record-2",
+                "timestamp": "2024-01-30T08:00:05Z",
+                "event": "tool_execution",
+                "generation_id": "gen-1",
+                "data": {"tool_type": "file_edit", "file_path": "test.py"},
+            },
+            {
+                "id": "record-3",
+                "timestamp": "2024-01-30T08:00:10Z",
+                "event": "agent_stop",
+                "generation_id": "gen-1",
+                "data": {"status": "aborted"},
+            },
+        ]
+
+        result = convert_generation_to_trace_and_spans(
+            generation_id="gen-1",
+            records=records,
+            project_name="test-project",
+        )
+
+        # Input should have user message, assistant with tool_calls, and tool result
+        messages = result["trace"]["input"]["messages"]
+        assert len(messages) == 3
+        assert messages[0]["role"] == "user"
+        assert messages[1]["role"] == "assistant"
+        assert "tool_calls" in messages[1]
+        assert messages[2]["role"] == "tool"
+
+        # Output should indicate interruption (no final response)
+        output = result["trace"]["output"]
+        assert "interrupted" in output["choices"][0]["message"]["content"].lower()
+
+    def test_convert__interrupted_turn__trace_name_indicates_interrupted(self):
+        """Test that interrupted turns have 'interrupted' in trace name."""
+        records: List[TraceRecord] = [
+            {
+                "id": "record-1",
+                "timestamp": "2024-01-30T08:00:00Z",
+                "event": "user_message",
+                "generation_id": "gen-1",
+                "data": {"content": "Hello"},
+            },
+            {
+                "id": "record-2",
+                "timestamp": "2024-01-30T08:00:05Z",
+                "event": "agent_stop",
+                "generation_id": "gen-1",
+                "data": {"status": "aborted"},
+            },
+        ]
+
+        result = convert_generation_to_trace_and_spans(
+            generation_id="gen-1",
+            records=records,
+            project_name="test-project",
+        )
+
+        assert "interrupted" in result["trace"]["name"].lower()
+
+    def test_convert__only_assistant_response__not_interrupted(self):
+        """Test that turns with assistant response are not marked as interrupted."""
+        records: List[TraceRecord] = [
+            {
+                "id": "record-1",
+                "timestamp": "2024-01-30T08:00:00Z",
+                "event": "assistant_message",
+                "generation_id": "gen-1",
+                "data": {"content": "I can help with that."},
+            },
+        ]
+
+        result = convert_generation_to_trace_and_spans(
+            generation_id="gen-1",
+            records=records,
+            project_name="test-project",
+        )
+
+        # Output should have the assistant response (not interrupted message)
+        output = result["trace"]["output"]
+        assert output["choices"][0]["message"]["content"] == "I can help with that."
+        # Trace name should NOT have "interrupted"
+        assert "interrupted" not in result["trace"]["name"].lower()
+
+    def test_convert__no_activity_records__empty_input_messages(self):
+        """Test that turns with only stop event have empty messages."""
+        records: List[TraceRecord] = [
+            {
+                "id": "record-1",
+                "timestamp": "2024-01-30T08:00:00Z",
+                "event": "agent_stop",
+                "generation_id": "gen-1",
+                "data": {"status": "completed"},
+            },
+        ]
+
+        result = convert_generation_to_trace_and_spans(
+            generation_id="gen-1",
+            records=records,
+            project_name="test-project",
+        )
+
+        # Input should have empty messages (no activity to capture)
+        messages = result["trace"]["input"]["messages"]
+        assert len(messages) == 0
+        # Not interrupted since there was no activity
+        assert "interrupted" not in result["trace"]["name"].lower()
