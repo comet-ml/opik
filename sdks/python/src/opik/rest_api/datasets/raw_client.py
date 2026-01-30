@@ -1531,6 +1531,7 @@ class RawDatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1545,6 +1546,8 @@ class RawDatasetsClient:
         steam_limit : typing.Optional[int]
 
         dataset_version : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1562,6 +1565,7 @@ class RawDatasetsClient:
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
                 "dataset_version": dataset_version,
+                "filters": filters,
             },
             headers={
                 "content-type": "application/json",
@@ -3452,6 +3456,7 @@ class AsyncRawDatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -3466,6 +3471,8 @@ class AsyncRawDatasetsClient:
         steam_limit : typing.Optional[int]
 
         dataset_version : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -3483,6 +3490,7 @@ class AsyncRawDatasetsClient:
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
                 "dataset_version": dataset_version,
+                "filters": filters,
             },
             headers={
                 "content-type": "application/json",
