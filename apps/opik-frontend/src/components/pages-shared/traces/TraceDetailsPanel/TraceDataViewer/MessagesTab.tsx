@@ -24,7 +24,6 @@ type MessagesTabProps = {
   transformedOutput: object;
   media: UnifiedMediaItem[];
   isLoading: boolean;
-  search?: string;
 };
 
 const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({

@@ -364,7 +364,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 transformedOutput={transformedOutput}
                 media={media}
                 isLoading={isSpanInputOutputLoading}
-                search={search}
               />
             </TabsContent>
           )}
