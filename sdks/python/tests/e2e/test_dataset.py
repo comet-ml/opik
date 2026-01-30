@@ -186,7 +186,7 @@ def test_get_dataset_with_filter__returns_filtered_items_and_is_immutable(
     assert filtered_view.filter_string == 'data.category = "geography"'
 
     # Verify correct items are returned
-    filtered_items = list(filtered_view.__internal_api__stream_items_as_dataclasses__())
+    filtered_items = filtered_view.get_items()
     assert len(filtered_items) == 2
 
     # Verify items content - should be geography questions only
@@ -244,5 +244,5 @@ def test_get_dataset_with_filter__filter_excludes_all_items__returns_empty_view(
     assert isinstance(filtered_view, DatasetView)
 
     # Verify no items are returned
-    filtered_items = list(filtered_view.__internal_api__stream_items_as_dataclasses__())
+    filtered_items = filtered_view.get_items()
     assert len(filtered_items) == 0
