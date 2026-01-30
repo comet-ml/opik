@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.9.101](https://img.shields.io/badge/Version-1.9.101-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.101](https://img.shields.io/badge/AppVersion-1.9.101-informational?style=flat-square)
+![Version: 1.9.103](https://img.shields.io/badge/Version-1.9.103-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.103](https://img.shields.io/badge/AppVersion-1.9.103-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -232,7 +232,6 @@ Call opik api on http://localhost:5173/api
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
-| component.backend.image.tag | string | `"latest"` |  |
 | component.backend.ingress.annotations | object | `{}` |  |
 | component.backend.ingress.enabled | bool | `false` |  |
 | component.backend.ingress.hosts | list | `[]` |  |
@@ -307,7 +306,6 @@ Call opik api on http://localhost:5173/api
 | component.frontend.hstsEnabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
-| component.frontend.image.tag | string | `"latest"` |  |
 | component.frontend.ingress.annotations | object | `{}` |  |
 | component.frontend.ingress.enabled | bool | `false` |  |
 | component.frontend.ingress.hosts | list | `[]` |  |
@@ -352,7 +350,6 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.envFrom[0].configMapRef.name | string | `"opik-python-backend"` |  |
 | component.python-backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.python-backend.image.repository | string | `"opik-python-backend"` |  |
-| component.python-backend.image.tag | string | `"latest"` |  |
 | component.python-backend.ingress.annotations | object | `{}` |  |
 | component.python-backend.ingress.enabled | bool | `false` |  |
 | component.python-backend.ingress.hosts | list | `[]` |  |
