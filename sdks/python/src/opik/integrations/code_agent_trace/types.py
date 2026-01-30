@@ -212,11 +212,11 @@ class TraceData(TypedDict, total=False):
     end_time: Any  # datetime.datetime
     input: Optional[Dict[str, Any]]
     output: Optional[Dict[str, Any]]
-    metadata: TraceMetadata
+    metadata: Dict[str, Any]
     tags: List[str]
     thread_id: Optional[str]
     error_info: Optional[Any]
-    feedback_scores: List[FeedbackScore]
+    feedback_scores: List[Dict[str, Any]]
 
 
 class ConversionResult(TypedDict):

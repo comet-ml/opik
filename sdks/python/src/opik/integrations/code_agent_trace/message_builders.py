@@ -8,18 +8,10 @@ import json
 from typing import Any, Dict, List, Optional
 
 from .helpers import shorten_path
-from .types import (
-    AssistantMessage,
-    ChatCompletionChoice,
-    ChatCompletionResponse,
-    ToolCall,
-    ToolMessage,
-    TraceRecord,
-    UserMessage,
-)
+from .types import TraceRecord
 
 
-def build_user_message(record: TraceRecord) -> UserMessage:
+def build_user_message(record: TraceRecord) -> Dict[str, Any]:
     """
     Build OpenAI-format user message from a trace record.
 
@@ -83,7 +75,7 @@ def build_assistant_message(
     response_records: List[TraceRecord],
     thought_records: List[TraceRecord],
     tool_records: List[TraceRecord],
-) -> AssistantMessage:
+) -> Dict[str, Any]:
     """
     Build OpenAI-format assistant message with tool calls.
 
@@ -95,7 +87,7 @@ def build_assistant_message(
     Returns:
         Assistant message in OpenAI format.
     """
-    message: AssistantMessage = {
+    message: Dict[str, Any] = {
         "role": "assistant",
         "content": None,
         "refusal": None,
@@ -121,7 +113,7 @@ def build_assistant_message(
 
     # Add tool calls if present
     if tool_records:
-        tool_calls: List[ToolCall] = []
+        tool_calls: List[Dict[str, Any]] = []
         for record in tool_records:
             record_id = record.get("id", "")
             data = record.get("data", {})
@@ -186,7 +178,7 @@ def build_assistant_message(
     return message
 
 
-def build_tool_message(record: TraceRecord) -> ToolMessage:
+def build_tool_message(record: TraceRecord) -> Dict[str, Any]:
     """
     Build OpenAI-format tool result message.
 
@@ -333,8 +325,8 @@ def build_chat_completion_response(
     model: str,
     created_timestamp: int,
     content: Optional[str],
-    tool_calls: Optional[List[ToolCall]],
-) -> ChatCompletionResponse:
+    tool_calls: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
     """
     Build OpenAI chat completion response format.
 
@@ -348,7 +340,7 @@ def build_chat_completion_response(
     Returns:
         Chat completion response in OpenAI format.
     """
-    final_message: AssistantMessage = {
+    final_message: Dict[str, Any] = {
         "role": "assistant",
         "content": content,
         "refusal": None,
@@ -356,7 +348,7 @@ def build_chat_completion_response(
     if tool_calls:
         final_message["tool_calls"] = tool_calls
 
-    choice: ChatCompletionChoice = {
+    choice: Dict[str, Any] = {
         "index": 0,
         "message": final_message,
         "finish_reason": "stop" if content else "tool_calls",

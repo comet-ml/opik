@@ -29,11 +29,8 @@ from .message_builders import (
 )
 from .types import (
     ConversionResult,
-    FeedbackScore,
     SpanData,
-    ToolCall,
     TraceData,
-    TraceMetadata,
     TraceRecord,
 )
 
@@ -94,9 +91,7 @@ def convert_generation_to_trace_and_spans(
         raise ValueError("Cannot convert empty record list")
 
     # Sort by timestamp
-    sorted_records = sorted(
-        records, key=lambda r: parse_timestamp(r.get("timestamp"))
-    )
+    sorted_records = sorted(records, key=lambda r: parse_timestamp(r.get("timestamp")))
 
     # Categorize records by event type
     user_messages: List[TraceRecord] = []
@@ -147,7 +142,7 @@ def convert_generation_to_trace_and_spans(
 
     # Build the final assistant message for OUTPUT
     final_assistant_content: Optional[str] = None
-    final_tool_calls: Optional[List[ToolCall]] = None
+    final_tool_calls: Optional[List[Dict[str, Any]]] = None
 
     # Add final assistant response
     if assistant_responses:
@@ -166,7 +161,9 @@ def convert_generation_to_trace_and_spans(
     code_changes_summary = build_code_changes_summary(tool_executions)
     if code_changes_summary:
         if final_assistant_content:
-            final_assistant_content = f"{final_assistant_content}\n\n{code_changes_summary}"
+            final_assistant_content = (
+                f"{final_assistant_content}\n\n{code_changes_summary}"
+            )
         else:
             final_assistant_content = code_changes_summary
 
@@ -241,7 +238,7 @@ def convert_generation_to_trace_and_spans(
     conversation_id = first_record.get("conversation_id")
     user_email = first_record.get("user_email")
 
-    trace_metadata: TraceMetadata = {
+    trace_metadata: Dict[str, Any] = {
         "source": "cursor-agent-trace",
     }
     if model and model != "unknown":
@@ -255,9 +252,11 @@ def convert_generation_to_trace_and_spans(
 
     # Calculate feedback scores
     duration_seconds = (trace_end_time - trace_start_time).total_seconds()
-    lines_changed = count_lines_changed(tool_executions)
+    lines_changed = count_lines_changed(
+        [dict(r) for r in tool_executions]  # Convert TraceRecord to dict
+    )
 
-    feedback_scores: List[FeedbackScore] = [
+    feedback_scores: List[Dict[str, Any]] = [
         {"name": "duration_seconds", "value": round(duration_seconds, 2)},
         {"name": "lines_added", "value": lines_changed["lines_added"]},
         {"name": "lines_deleted", "value": lines_changed["lines_deleted"]},

@@ -4,13 +4,14 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, cast
 
 import click
 from rich.console import Console
 from rich.table import Table
 
 from opik.integrations.code_agent_trace import log_code_agent_turn, flush
+from opik.integrations.code_agent_trace.types import TraceRecord
 
 console = Console()
 
@@ -58,7 +59,7 @@ def _group_by_generation(
     records: List[Dict[str, Any]],
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Group records by generation_id, including user_message from same conversation.
-    
+
     Cursor assigns different generation_ids to user messages and assistant responses.
     This function finds the most recent user_message in the same conversation_id
     and includes it with each generation's records.
@@ -70,23 +71,21 @@ def _group_by_generation(
             conv_id = _get_conversation_id(record)
             if conv_id:
                 user_messages_by_conv[conv_id].append(record)
-    
+
     # Sort user messages by timestamp within each conversation
     for conv_id in user_messages_by_conv:
-        user_messages_by_conv[conv_id].sort(
-            key=lambda r: r.get("timestamp", "")
-        )
-    
+        user_messages_by_conv[conv_id].sort(key=lambda r: r.get("timestamp", ""))
+
     # Group non-user-message records by generation_id
     grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for record in records:
         gen_id = _get_generation_id(record)
-        
+
         if not gen_id:
             gen_id = f"_standalone_{record.get('id', 'unknown')}"
-        
+
         grouped[gen_id].append(record)
-    
+
     # For each generation, find and include the most recent user_message
     # from the same conversation that occurred before the first record
     for gen_id, gen_records in grouped.items():
@@ -94,7 +93,7 @@ def _group_by_generation(
         has_user_message = any(r.get("event") == "user_message" for r in gen_records)
         if has_user_message:
             continue
-        
+
         # Get conversation_id and earliest timestamp from this generation
         conv_id = None
         earliest_timestamp = None
@@ -104,10 +103,10 @@ def _group_by_generation(
             ts = record.get("timestamp", "")
             if earliest_timestamp is None or ts < earliest_timestamp:
                 earliest_timestamp = ts
-        
+
         if not conv_id:
             continue
-        
+
         # Find the most recent user_message before this generation
         user_messages = user_messages_by_conv.get(conv_id, [])
         best_user_message = None
@@ -117,11 +116,11 @@ def _group_by_generation(
                 best_user_message = um
             elif not earliest_timestamp:
                 best_user_message = um
-        
+
         if best_user_message:
             # Add a copy of the user_message to this generation's records
             gen_records.insert(0, best_user_message.copy())
-    
+
     return grouped
 
 
@@ -163,16 +162,18 @@ def _print_summary_table(
         display_gen_id = gen_id[:20] + "..." if len(gen_id) > 23 else gen_id
 
         table.add_row(
-            str(i), 
-            str(len(records)), 
+            str(i),
+            str(len(records)),
             "Yes" if has_user_message else "No",
-            display_gen_id
+            display_gen_id,
         )
 
     console.print(table)
 
 
-@click.command(name="code-agent-trace", context_settings=CODE_AGENT_TRACE_CONTEXT_SETTINGS)
+@click.command(
+    name="code-agent-trace", context_settings=CODE_AGENT_TRACE_CONTEXT_SETTINGS
+)
 @click.option(
     "--file",
     "-f",
@@ -279,6 +280,7 @@ def code_agent_trace(
 
         if effective_api_key:
             import os
+
             os.environ["OPIK_API_KEY"] = effective_api_key
 
         # Upload each turn
@@ -289,13 +291,13 @@ def code_agent_trace(
 
         for gen_id, turn_records in grouped.items():
             try:
-                log_code_agent_turn(turn_records, project_name=project)
+                log_code_agent_turn(
+                    cast(List[TraceRecord], turn_records), project_name=project
+                )
                 uploaded_count += 1
                 total_operations += len(turn_records)
             except Exception as e:
-                console.print(
-                    f"[red]Error uploading turn {gen_id[:20]}...: {e}[/red]"
-                )
+                console.print(f"[red]Error uploading turn {gen_id[:20]}...: {e}[/red]")
 
         # Flush to ensure all data is sent
         flush()

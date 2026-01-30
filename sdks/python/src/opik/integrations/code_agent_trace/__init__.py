@@ -41,7 +41,10 @@ CLI Usage:
 """
 
 from .api import flush, log_code_agent_turn
-from .converters import convert_generation_to_trace_and_spans, group_records_by_generation
+from .converters import (
+    convert_generation_to_trace_and_spans,
+    group_records_by_generation,
+)
 from .types import (
     ChatCompletionResponse,
     ConversionResult,
