@@ -51,11 +51,7 @@ import {
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
 import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
@@ -72,6 +68,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
@@ -224,12 +221,14 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
 ];
 
 const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
+  COLUMN_ID_ID,
   "name",
+  "start_time",
   "input",
   "output",
   "duration",
@@ -238,6 +237,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "traces-columns-width";
 const COLUMNS_ORDER_KEY = "traces-columns-order";
 const COLUMNS_SORT_KEY_SUFFIX = "-columns-sort";
@@ -565,9 +565,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_TRACES_PAGE_COLUMNS,
+        [COLUMN_ID_ID, "start_time"],
+      ),
     },
   );
 
@@ -814,6 +818,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const columnData = useMemo(() => {
     return [
+      {
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+        sortable: true,
+      },
       ...SHARED_COLUMNS,
       ...(type === TRACE_DATA_TYPE.traces
         ? [
@@ -980,17 +991,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Trace | Span>(),
-      mapColumnDataFields<BaseTraceData, Span | Trace>({
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
-        sortable: isColumnSortable(COLUMN_ID_ID, sortableBy),
-      }),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(columnData, {
         columnsOrder,
         selectedColumns,
@@ -1022,7 +1022,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ),
     ];
   }, [
-    handleRowClick,
     sortableBy,
     columnData,
     columnsOrder,

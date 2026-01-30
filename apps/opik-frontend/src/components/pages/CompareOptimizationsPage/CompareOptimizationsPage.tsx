@@ -49,7 +49,6 @@ const CompareOptimizationsPage: React.FC = () => {
 
   const { columnsDef, columns } = useCompareOptimizationsColumns({
     optimization,
-    optimizationId,
     scoreMap,
     columnsOrder,
     selectedColumns,
