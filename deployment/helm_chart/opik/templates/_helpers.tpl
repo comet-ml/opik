@@ -113,8 +113,6 @@ Note: Directives are sorted alphabetically to ensure deterministic output
 {{-     $sources := index $ $directive -}}
 {{-     $cspParts = append $cspParts (printf "%s %s" $directive (join " " $sources)) -}}
 {{-   end -}}
-{{-   if $cspParts -}}
-{{-     join "; " $cspParts -}}
-{{-   end -}}
+{{-   join "; " $cspParts -}}
 {{- end -}}
 {{- end -}}
