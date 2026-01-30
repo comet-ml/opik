@@ -24,6 +24,7 @@ import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { DropdownOption } from "@/types/shared";
 import { ImprovePromptConfig } from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
 import PromptVariablesList from "@/components/pages-shared/llm/PromptVariablesList/PromptVariablesList";
+import { JsonObject } from "@/components/shared/JsonTreePopover";
 
 interface MessageValidationError {
   content?: {
@@ -43,6 +44,7 @@ interface LLMPromptMessagesProps {
   improvePromptConfig?: ImprovePromptConfig;
   hideAddButton?: boolean;
   disabled?: boolean;
+  jsonTreeData?: JsonObject | null;
 }
 
 const LLMPromptMessages = ({
@@ -57,6 +59,7 @@ const LLMPromptMessages = ({
   improvePromptConfig,
   hideAddButton = false,
   disabled = false,
+  jsonTreeData,
 }: LLMPromptMessagesProps) => {
   const lastFocusedMessageIdRef = useRef<string | null>(null);
   const messageRefsMap = useRef<Map<string, LLMPromptMessageHandle>>(new Map());
@@ -227,6 +230,7 @@ const LLMPromptMessages = ({
                 promptVariables={promptVariables}
                 improvePromptConfig={improvePromptConfig}
                 disabled={disabled}
+                jsonTreeData={jsonTreeData}
               />
             ))}
           </div>
