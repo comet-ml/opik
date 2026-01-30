@@ -377,6 +377,9 @@ from .numerical_feedback_detail import NumericalFeedbackDetail
 from .numerical_feedback_detail_create import NumericalFeedbackDetailCreate
 from .numerical_feedback_detail_public import NumericalFeedbackDetailPublic
 from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
+from .ollama_connection_test_response import OllamaConnectionTestResponse
+from .ollama_instance_base_url_request import OllamaInstanceBaseUrlRequest
+from .ollama_model import OllamaModel
 from .optimization import Optimization
 from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
@@ -897,6 +900,9 @@ __all__ = [
     "NumericalFeedbackDetailCreate",
     "NumericalFeedbackDetailPublic",
     "NumericalFeedbackDetailUpdate",
+    "OllamaConnectionTestResponse",
+    "OllamaInstanceBaseUrlRequest",
+    "OllamaModel",
     "Optimization",
     "OptimizationPagePublic",
     "OptimizationPublic",

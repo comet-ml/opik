@@ -1,19 +1,10 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { Mail } from "lucide-react";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useUsernameAutocomplete from "@/plugins/comet/api/useUsernameAutocomplete";
 import { useInviteUsersMutation } from "@/plugins/comet/api/useInviteMembersMutation";
-import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
-import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
-import {
-  getPermissionByType,
-  isUserPermissionValid,
-} from "@/plugins/comet/lib/permissions";
-import {
-  ManagementPermissionsNames,
-  WORKSPACE_ROLE_TYPE,
-} from "@/plugins/comet/types";
+import { useWorkspaceUserRolesMap } from "@/plugins/comet/hooks/useWorkspaceUserRolesMap";
 import {
   DropdownMenuContent,
   DropdownMenuSubContent,
@@ -58,59 +49,11 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
     },
   );
 
-  const { data: workspaceMembers = [] } = useAllWorkspaceMembers(
-    { workspaceId: workspaceId || "" },
-    {
-      enabled: Boolean(workspaceId),
-    },
-  );
-
-  const { data: permissionsData = [] } = useWorkspaceUsersPermissions(
-    { workspaceId: workspaceId || "" },
-    {
-      enabled: Boolean(workspaceId),
-    },
-  );
+  const { getUserRole } = useWorkspaceUserRolesMap({
+    workspaceId: workspaceId || "",
+  });
 
   const inviteUsersMutation = useInviteUsersMutation();
-
-  const userRoleMap = useMemo(() => {
-    const permissionsMap = new Map(
-      permissionsData.map((permission) => [
-        permission.userName,
-        permission.permissions,
-      ]),
-    );
-
-    const map = new Map<string, WORKSPACE_ROLE_TYPE>();
-    workspaceMembers.forEach((member) => {
-      const userPermissions =
-        member.userName && permissionsMap.get(member.userName)
-          ? permissionsMap.get(member.userName) || []
-          : [];
-
-      const permissionByType = getPermissionByType(
-        userPermissions,
-        ManagementPermissionsNames.MANAGEMENT,
-      );
-
-      const role = isUserPermissionValid(permissionByType?.permissionValue)
-        ? WORKSPACE_ROLE_TYPE.owner
-        : WORKSPACE_ROLE_TYPE.member;
-
-      if (member.userName) {
-        map.set(member.userName, role);
-      }
-      if (member.email) {
-        map.set(member.email.toLowerCase(), role);
-      }
-    });
-    return map;
-  }, [workspaceMembers, permissionsData]);
-
-  const getUserRole = (identifier: string): WORKSPACE_ROLE_TYPE | null => {
-    return userRoleMap.get(identifier.toLowerCase()) || null;
-  };
 
   const hasEmailQuery = EMAIL_REGEX.test(searchQuery);
 

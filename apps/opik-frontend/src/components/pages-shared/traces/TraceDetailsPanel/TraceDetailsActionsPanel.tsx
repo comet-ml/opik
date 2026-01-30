@@ -74,7 +74,7 @@ type TraceDetailsActionsPanelProps = {
   spanId: string;
   threadId?: string;
   setThreadId?: OnChangeFn<string | null | undefined>;
-  onClose: () => void;
+  onDelete: () => void;
   isSpansLazyLoading: boolean;
   search?: string;
   setSearch: OnChangeFn<string | undefined>;
@@ -95,7 +95,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   spanId,
   threadId,
   setThreadId,
-  onClose,
+  onDelete,
   isSpansLazyLoading,
   search,
   setSearch,
@@ -147,12 +147,12 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   });
 
   const handleTraceDelete = useCallback(() => {
-    onClose();
+    onDelete();
     mutate({
       traceId,
       projectId,
     });
-  }, [onClose, mutate, traceId, projectId]);
+  }, [onDelete, mutate, traceId, projectId]);
 
   const getDataToExport = useCallback(
     (treeData: Array<Trace | Span>) => {

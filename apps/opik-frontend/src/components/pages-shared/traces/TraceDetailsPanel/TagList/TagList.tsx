@@ -10,6 +10,7 @@ type TagListProps = {
   projectId: string;
   traceId: string;
   spanId?: string;
+  className?: string;
 };
 
 const TagList: React.FunctionComponent<TagListProps> = ({
@@ -18,6 +19,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
   projectId,
   traceId,
   spanId,
+  className,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const traceUpdateMutation = useTraceUpdateMutation();
@@ -65,6 +67,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
       size="sm"
+      className={className}
     />
   );
 };
