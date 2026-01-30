@@ -1619,9 +1619,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
             UUID lastRetrievedId, List<DatasetItemFilter> filters) {
-        log.info(
-                "Streaming dataset items by datasetId '{}', versionId '{}', limit '{}', lastRetrievedId '{}', hasFilters '{}'",
-                datasetId, versionId, limit, lastRetrievedId, CollectionUtils.isNotEmpty(filters));
 
         ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
         if (lastRetrievedId != null) {

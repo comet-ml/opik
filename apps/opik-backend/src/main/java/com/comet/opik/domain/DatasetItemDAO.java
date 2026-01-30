@@ -1152,8 +1152,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId,
             List<DatasetItemFilter> filters) {
-        log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}', hasFilters '{}'",
-                datasetId, limit, lastRetrievedId, CollectionUtils.isNotEmpty(filters));
 
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_STREAM, "select_dataset_items_stream", workspaceId,
