@@ -57,18 +57,18 @@ data:
     {{- end }}
     {{- with .Values.component.frontend.cacheControl }}
     map $uri $cache_control_header {
-      {{- range $pattern, $value := . }}
-      {{ $pattern }} {{ $value | squote }};
+      {{- range . }}
+      {{ .pattern }} {{ .value | squote }};
       {{- end }}
     }
     {{- else }}
     {{- /* Fallback to hardcoded defaults if cacheControl is not defined (backward compatibility) */ -}}
     map $uri $cache_control_header {
-      default                              "no-cache, must-revalidate";
       "~assets/.*\.(js|css)$"              "public, max-age=604800, immutable";
       "~(images/.*|assets/.*)\.(jpg|jpeg|png|gif|svg|webp|ico)$" "public, max-age=2592000";
       "~assets/.*\.(woff|woff2|ttf|eot)$"  "public, max-age=2592000";
       "~assets/.*\.json$"                  "public, max-age=86400";
+      default                              "no-cache, must-revalidate";
     }
     {{- end }}
 
@@ -93,9 +93,16 @@ data:
         add_header X-Trace-ID $otel_trace_id always;
         # Cache control header (from map variable)
         add_header Cache-Control $cache_control_header always;
-        {{- with .Values.component.frontend.contentSecurityPolicy }}
+        {{- /* CSP header - honor legacy csp.enabled flag for backward compatibility */ -}}
+        {{- $cspEnabled := true -}}
+        {{- if hasKey .Values.component.frontend "csp" -}}
+          {{- if hasKey .Values.component.frontend.csp "enabled" -}}
+            {{- $cspEnabled = .Values.component.frontend.csp.enabled -}}
+          {{- end -}}
+        {{- end -}}
+        {{- if and $cspEnabled .Values.component.frontend.contentSecurityPolicy }}
         # Content Security Policy (CSP)
-        add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" . }};" always;
+        add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" .Values.component.frontend.contentSecurityPolicy }};" always;
         {{- end }}
         {{- /* Backward compatibility: support deprecated hstsEnabled flag */ -}}
         {{- if .Values.component.frontend.hstsEnabled }}
