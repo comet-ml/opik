@@ -61,9 +61,9 @@ def split_into_batches(
     max_payload_size_MB: Optional[float] = None,
     max_length: Optional[int] = None,
 ) -> List[List[T]]:
-    assert (max_payload_size_MB is not None) or (
-        max_length is not None
-    ), "At least one limitation must be set for splitting"
+    assert (max_payload_size_MB is not None) or (max_length is not None), (
+        "At least one limitation must be set for splitting"
+    )
 
     if max_length is None:
         max_length = len(items)

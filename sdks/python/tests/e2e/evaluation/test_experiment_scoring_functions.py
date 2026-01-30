@@ -98,7 +98,9 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
     assert (
         "Standard deviation of 3 metric scores"
         in evaluation_result.experiment_scores[0].reason
-    ), f"Expected reason to contain 'Standard deviation of 3 metric scores', but got: '{evaluation_result.experiment_scores[0].reason}'"
+    ), (
+        f"Expected reason to contain 'Standard deviation of 3 metric scores', but got: '{evaluation_result.experiment_scores[0].reason}'"
+    )
 
     # Verify experiment was created
     verifiers.verify_experiment(

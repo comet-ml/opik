@@ -143,9 +143,9 @@ class FileUploadManager(base_upload_manager.BaseFileUploadManager):
             raise ValueError(f"Message {message} is not supported for file upload.")
 
     def upload_attachment(self, attachment: messages.CreateAttachmentMessage) -> None:
-        assert isinstance(
-            attachment, messages.CreateAttachmentMessage
-        ), "Wrong attachment message type"
+        assert isinstance(attachment, messages.CreateAttachmentMessage), (
+            "Wrong attachment message type"
+        )
 
         options = upload_options.file_upload_options_from_attachment(attachment)
         self._submit_upload(

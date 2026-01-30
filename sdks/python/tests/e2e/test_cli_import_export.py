@@ -228,9 +228,9 @@ class TestCLIImportExport:
         print(f"Directory contents: {list(project_dir.iterdir())}")
 
         trace_files = list(project_dir.glob("trace_*.json"))
-        assert (
-            len(trace_files) >= 1
-        ), f"Expected trace files, found: {list(project_dir.glob('*'))}"
+        assert len(trace_files) >= 1, (
+            f"Expected trace files, found: {list(project_dir.glob('*'))}"
+        )
 
         # Verify trace file content
         with open(trace_files[0], "r") as f:
@@ -253,9 +253,9 @@ class TestCLIImportExport:
         )
 
         # Verify import succeeded
-        assert (
-            stats.get("projects", 0) >= 1
-        ), "Expected at least 1 project to be imported"
+        assert stats.get("projects", 0) >= 1, (
+            "Expected at least 1 project to be imported"
+        )
 
     def test_export_import_datasets_happy_flow(
         self,
@@ -289,9 +289,9 @@ class TestCLIImportExport:
         assert datasets_dir.exists(), f"Export directory not found: {datasets_dir}"
 
         dataset_files = list(datasets_dir.glob("dataset_*.json"))
-        assert (
-            len(dataset_files) >= 1
-        ), f"Expected dataset files, found: {list(datasets_dir.glob('*'))}"
+        assert len(dataset_files) >= 1, (
+            f"Expected dataset files, found: {list(datasets_dir.glob('*'))}"
+        )
 
         # Verify dataset file content
         with open(dataset_files[0], "r") as f:
@@ -312,9 +312,9 @@ class TestCLIImportExport:
         )
 
         # Verify import succeeded
-        assert (
-            stats.get("datasets", 0) >= 1
-        ), "Expected at least 1 dataset to be imported"
+        assert stats.get("datasets", 0) >= 1, (
+            "Expected at least 1 dataset to be imported"
+        )
 
     def test_export_import_prompts_happy_flow(
         self,
@@ -329,9 +329,9 @@ class TestCLIImportExport:
         # Verify prompt was created
         prompts = opik_client.search_prompts()
         prompt_names = [p.name for p in prompts]
-        assert (
-            prompt_name in prompt_names
-        ), f"Expected prompt {prompt_name} to be created"
+        assert prompt_name in prompt_names, (
+            f"Expected prompt {prompt_name} to be created"
+        )
 
         # Step 2: Export prompts using direct function call
         export_prompt_by_name(
@@ -351,9 +351,9 @@ class TestCLIImportExport:
         assert prompts_dir.exists(), f"Export directory not found: {prompts_dir}"
 
         prompt_files = list(prompts_dir.glob("prompt_*.json"))
-        assert (
-            len(prompt_files) >= 1
-        ), f"Expected prompt files, found: {list(prompts_dir.glob('*'))}"
+        assert len(prompt_files) >= 1, (
+            f"Expected prompt files, found: {list(prompts_dir.glob('*'))}"
+        )
 
         # Verify prompt file content
         with open(prompt_files[0], "r") as f:
@@ -380,9 +380,9 @@ class TestCLIImportExport:
         # Verify prompt was correctly imported to backend
         imported_prompts = opik_client.search_prompts()
         imported_prompt_names = [p.name for p in imported_prompts]
-        assert (
-            prompt_name in imported_prompt_names
-        ), f"Expected prompt {prompt_name} to be imported"
+        assert prompt_name in imported_prompt_names, (
+            f"Expected prompt {prompt_name} to be imported"
+        )
 
         # Get the imported prompt and verify its content
         imported_prompt = next(p for p in imported_prompts if p.name == prompt_name)
@@ -469,9 +469,9 @@ class TestCLIImportExport:
             debug=False,
             recreate_experiments_flag=False,
         )
-        assert (
-            projects_stats.get("projects", 0) >= 1
-        ), "Expected projects to be imported"
+        assert projects_stats.get("projects", 0) >= 1, (
+            "Expected projects to be imported"
+        )
 
         # Import datasets
         datasets_stats = import_datasets_from_directory(
@@ -481,9 +481,9 @@ class TestCLIImportExport:
             name_pattern=None,
             debug=False,
         )
-        assert (
-            datasets_stats.get("datasets", 0) >= 1
-        ), "Expected datasets to be imported"
+        assert datasets_stats.get("datasets", 0) >= 1, (
+            "Expected datasets to be imported"
+        )
 
         # Import prompts
         prompts_stats = import_prompts_from_directory(
@@ -569,9 +569,9 @@ class TestCLIImportExport:
         count_after = len(traces_after)
 
         # Dry run should not create any new traces
-        assert (
-            count_after == count_before
-        ), f"Dry run should not modify data: had {count_before} traces, now have {count_after}"
+        assert count_after == count_before, (
+            f"Dry run should not modify data: had {count_before} traces, now have {count_after}"
+        )
 
     def test_cli_subprocess_validation(
         self, opik_client: opik.Opik, source_project_name: str, test_data_dir: Path
@@ -637,9 +637,9 @@ class TestCLIImportExport:
             project_dir = (
                 test_data_dir / "default" / "projects" / "non-existent-project"
             )
-            assert (
-                not project_dir.exists()
-            ), "Should not create directory for non-existent project"
+            assert not project_dir.exists(), (
+                "Should not create directory for non-existent project"
+            )
         except SystemExit:
             # Expected - function calls sys.exit(1) on error
             pass
@@ -762,28 +762,28 @@ class TestCLIImportExport:
 
         # Step 4: Verify only experiment1 was exported
         experiments_dir = test_data_dir / "default" / "experiments"
-        assert (
-            experiments_dir.exists()
-        ), f"Export directory not found: {experiments_dir}"
+        assert experiments_dir.exists(), (
+            f"Export directory not found: {experiments_dir}"
+        )
 
         experiment_files = list(experiments_dir.glob(f"experiment_{exp1_name}_*.json"))
-        assert (
-            len(experiment_files) == 1
-        ), f"Expected exactly 1 experiment file for {exp1_name}, found: {len(experiment_files)}"
+        assert len(experiment_files) == 1, (
+            f"Expected exactly 1 experiment file for {exp1_name}, found: {len(experiment_files)}"
+        )
 
         # Verify exp2 was NOT exported
         exp2_files = list(experiments_dir.glob(f"experiment_{exp2_name}_*.json"))
-        assert (
-            len(exp2_files) == 0
-        ), f"Expected 0 experiment files for {exp2_name}, found: {len(exp2_files)}"
+        assert len(exp2_files) == 0, (
+            f"Expected 0 experiment files for {exp2_name}, found: {len(exp2_files)}"
+        )
 
         # Step 5: Verify the exported experiment has the correct dataset
         with open(experiment_files[0], "r") as f:
             exp_data = json.load(f)
 
-        assert (
-            exp_data["experiment"]["dataset_name"] == dataset1_name
-        ), f"Expected dataset_name to be {dataset1_name}, got {exp_data['experiment']['dataset_name']}"
+        assert exp_data["experiment"]["dataset_name"] == dataset1_name, (
+            f"Expected dataset_name to be {dataset1_name}, got {exp_data['experiment']['dataset_name']}"
+        )
 
     def test_export_import_chat_prompts_happy_flow(
         self,
@@ -798,9 +798,9 @@ class TestCLIImportExport:
         # Verify chat prompt was created
         prompts = opik_client.search_prompts()
         prompt_names = [p.name for p in prompts]
-        assert (
-            prompt_name in prompt_names
-        ), f"Expected chat prompt {prompt_name} to be created"
+        assert prompt_name in prompt_names, (
+            f"Expected chat prompt {prompt_name} to be created"
+        )
 
         # Step 2: Export chat prompt using direct function call
         export_prompt_by_name(
@@ -832,9 +832,9 @@ class TestCLIImportExport:
 
         # Verify it's a chat prompt (messages should be a list)
         assert "prompt" in current_version
-        assert isinstance(
-            current_version["prompt"], list
-        ), "Chat prompt should have messages as a list"
+        assert isinstance(current_version["prompt"], list), (
+            "Chat prompt should have messages as a list"
+        )
         assert "template_structure" in current_version
         assert current_version["template_structure"] == "chat"
 
@@ -854,9 +854,9 @@ class TestCLIImportExport:
         # Verify chat prompt was correctly imported to backend
         imported_prompts = opik_client.search_prompts()
         imported_prompt_names = [p.name for p in imported_prompts]
-        assert (
-            prompt_name in imported_prompt_names
-        ), f"Expected chat prompt {prompt_name} to be imported"
+        assert prompt_name in imported_prompt_names, (
+            f"Expected chat prompt {prompt_name} to be imported"
+        )
 
         # Get the imported chat prompt and verify its content
         imported_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
@@ -906,9 +906,9 @@ class TestCLIImportExport:
         )
 
         # Verify import succeeded
-        assert (
-            stats.get("projects", 0) >= 1
-        ), "Expected at least 1 project to be imported"
+        assert stats.get("projects", 0) >= 1, (
+            "Expected at least 1 project to be imported"
+        )
 
     def test_export_import_llm_span_preserves_type_and_usage(
         self,
@@ -979,12 +979,12 @@ class TestCLIImportExport:
 
         original_span_data = opik_client.get_span_content(id=original_span_id)
         assert original_span_data is not None, "Failed to get original span data"
-        assert (
-            original_span_data.type == "llm"
-        ), f"Original span type should be 'llm', got {original_span_data.type}"
-        assert (
-            original_span_data.usage is not None
-        ), "Original span should have usage data"
+        assert original_span_data.type == "llm", (
+            f"Original span type should be 'llm', got {original_span_data.type}"
+        )
+        assert original_span_data.usage is not None, (
+            "Original span should have usage data"
+        )
 
         # Store original values for comparison
         original_type = original_span_data.type
@@ -1017,28 +1017,28 @@ class TestCLIImportExport:
         assert project_dir.exists(), f"Export directory not found: {project_dir}"
 
         trace_files = list(project_dir.glob("trace_*.json"))
-        assert (
-            len(trace_files) == 1
-        ), f"Expected 1 trace file, found: {len(trace_files)}"
+        assert len(trace_files) == 1, (
+            f"Expected 1 trace file, found: {len(trace_files)}"
+        )
 
         # Verify exported JSON contains correct span data
         with open(trace_files[0], "r") as f:
             exported_data = json.load(f)
 
         exported_spans = exported_data.get("spans", [])
-        assert (
-            len(exported_spans) == 1
-        ), f"Expected 1 span in export, found: {len(exported_spans)}"
+        assert len(exported_spans) == 1, (
+            f"Expected 1 span in export, found: {len(exported_spans)}"
+        )
 
         exported_span = exported_spans[0]
-        assert (
-            exported_span.get("type") == "llm"
-        ), f"Exported span type should be 'llm', got {exported_span.get('type')}"
+        assert exported_span.get("type") == "llm", (
+            f"Exported span type should be 'llm', got {exported_span.get('type')}"
+        )
         assert exported_span.get("model") == "gpt-4o-mini", "Exported model mismatch"
         assert exported_span.get("provider") == "openai", "Exported provider mismatch"
-        assert (
-            exported_span.get("usage") is not None
-        ), "Exported span should have usage data"
+        assert exported_span.get("usage") is not None, (
+            "Exported span should have usage data"
+        )
 
         # Import the project to a new project (by modifying the project directory name)
         imported_project_name = f"{project_name}-imported"
@@ -1066,9 +1066,9 @@ class TestCLIImportExport:
             recreate_experiments_flag=False,
         )
 
-        assert (
-            stats.get("projects", 0) >= 1
-        ), "Expected at least 1 project to be imported"
+        assert stats.get("projects", 0) >= 1, (
+            "Expected at least 1 project to be imported"
+        )
         assert stats.get("traces", 0) >= 1, "Expected at least 1 trace to be imported"
 
         opik_client.flush()
@@ -1076,18 +1076,18 @@ class TestCLIImportExport:
 
         # Find the imported trace and span
         imported_traces = opik_client.search_traces(project_name=imported_project_name)
-        assert (
-            len(imported_traces) >= 1
-        ), f"Expected at least 1 imported trace, found: {len(imported_traces)}"
+        assert len(imported_traces) >= 1, (
+            f"Expected at least 1 imported trace, found: {len(imported_traces)}"
+        )
 
         imported_trace = imported_traces[0]
         imported_spans = opik_client.search_spans(
             project_name=imported_project_name,
             trace_id=imported_trace.id,
         )
-        assert (
-            len(imported_spans) >= 1
-        ), f"Expected at least 1 imported span, found: {len(imported_spans)}"
+        assert len(imported_spans) >= 1, (
+            f"Expected at least 1 imported span, found: {len(imported_spans)}"
+        )
 
         imported_span = imported_spans[0]
         imported_span_data = opik_client.get_span_content(id=imported_span.id)
@@ -1099,22 +1099,22 @@ class TestCLIImportExport:
         print(f"Imported cost: {imported_span_data.total_estimated_cost}")
 
         # Verify span type is preserved
-        assert (
-            imported_span_data.type == "llm"
-        ), f"Imported span type should be 'llm', got '{imported_span_data.type}'"
+        assert imported_span_data.type == "llm", (
+            f"Imported span type should be 'llm', got '{imported_span_data.type}'"
+        )
 
         # Verify model and provider are preserved
-        assert (
-            imported_span_data.model == original_model
-        ), f"Model mismatch: expected '{original_model}', got '{imported_span_data.model}'"
-        assert (
-            imported_span_data.provider == original_provider
-        ), f"Provider mismatch: expected '{original_provider}', got '{imported_span_data.provider}'"
+        assert imported_span_data.model == original_model, (
+            f"Model mismatch: expected '{original_model}', got '{imported_span_data.model}'"
+        )
+        assert imported_span_data.provider == original_provider, (
+            f"Provider mismatch: expected '{original_provider}', got '{imported_span_data.provider}'"
+        )
 
         # Verify usage data is preserved (key token counts should match)
-        assert (
-            imported_span_data.usage is not None
-        ), "Imported span should have usage data"
+        assert imported_span_data.usage is not None, (
+            "Imported span should have usage data"
+        )
 
         # Check standard token counts
         assert imported_span_data.usage.get("prompt_tokens") == original_usage.get(
@@ -1160,10 +1160,10 @@ class TestCLIImportExport:
         # Verify cost is calculated (should be non-None if backend supports cost calculation for this model)
         # Note: Cost calculation depends on backend having pricing info for the model
         if original_cost is not None:
-            assert (
-                imported_span_data.total_estimated_cost is not None
-            ), "Expected imported span to have cost calculated by backend"
+            assert imported_span_data.total_estimated_cost is not None, (
+                "Expected imported span to have cost calculated by backend"
+            )
             # Cost should be the same since usage is the same
-            assert (
-                imported_span_data.total_estimated_cost == original_cost
-            ), f"Cost mismatch: expected {original_cost}, got {imported_span_data.total_estimated_cost}"
+            assert imported_span_data.total_estimated_cost == original_cost, (
+                f"Cost mismatch: expected {original_cost}, got {imported_span_data.total_estimated_cost}"
+            )

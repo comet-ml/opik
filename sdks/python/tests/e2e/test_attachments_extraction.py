@@ -102,9 +102,9 @@ def test_extraction__trace_without_end_time__does_not_extract_attachments(
         entity_type="trace",
     )
 
-    assert (
-        len(attachment_list) == 0
-    ), f"Expected no attachments, but found {len(attachment_list)}"
+    assert len(attachment_list) == 0, (
+        f"Expected no attachments, but found {len(attachment_list)}"
+    )
 
 
 def test_extraction__trace_with_end_time__extracts_attachments_from_output(
@@ -290,9 +290,9 @@ def test_extraction__span_without_end_time__does_not_extract_attachments(
         entity_type="span",
     )
 
-    assert (
-        len(attachment_list) == 0
-    ), f"Expected no attachments, but found {len(attachment_list)}"
+    assert len(attachment_list) == 0, (
+        f"Expected no attachments, but found {len(attachment_list)}"
+    )
 
 
 def test_extraction__trace_update__extracts_attachments(

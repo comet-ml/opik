@@ -205,9 +205,9 @@ def test_evaluate__with_experiment_name_prefix_only__generates_unique_name(
     experiment_name = _extract_experiment_name_from_call_args(call_args)
 
     assert experiment_name is not None, "Experiment name should not be None"
-    assert experiment_name.startswith(
-        "test-prefix-"
-    ), f"Experiment name '{experiment_name}' should start with 'test-prefix-'"
+    assert experiment_name.startswith("test-prefix-"), (
+        f"Experiment name '{experiment_name}' should start with 'test-prefix-'"
+    )
     assert experiment_name == f"test-prefix-{mock_generated_id}", (
         f"Expected experiment name to be 'test-prefix-{mock_generated_id}', "
         f"but got '{experiment_name}'"
@@ -342,9 +342,9 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
                 )
 
     # Verify that create_experiment was called twice with different names
-    assert (
-        mock_create_experiment.call_count == 2
-    ), "create_experiment should be called twice"
+    assert mock_create_experiment.call_count == 2, (
+        "create_experiment should be called twice"
+    )
 
     # Extract name from first call
     first_call_args = mock_create_experiment.call_args_list[0]
@@ -362,9 +362,9 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
         f"Second experiment name should be 'shared-prefix-{mock_generated_ids[1]}', "
         f"but got '{second_call_name}'"
     )
-    assert (
-        first_call_name != second_call_name
-    ), "Multiple calls with the same prefix should generate different unique names"
+    assert first_call_name != second_call_name, (
+        "Multiple calls with the same prefix should generate different unique names"
+    )
 
 
 def test_evaluate_prompt__with_experiment_name_prefix__generates_name_with_prefix(
@@ -571,9 +571,9 @@ def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_nam
     experiment_name = _extract_experiment_name_from_call_args(call_args)
 
     assert experiment_name is not None, "Experiment name should not be None"
-    assert experiment_name.startswith(
-        "test-prompt-prefix-"
-    ), f"Experiment name '{experiment_name}' should start with 'test-prompt-prefix-'"
+    assert experiment_name.startswith("test-prompt-prefix-"), (
+        f"Experiment name '{experiment_name}' should start with 'test-prompt-prefix-'"
+    )
     assert experiment_name == f"test-prompt-prefix-{mock_generated_id}", (
         f"Expected experiment name to be 'test-prompt-prefix-{mock_generated_id}', "
         f"but got '{experiment_name}'"
@@ -726,9 +726,9 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
                     )
 
     # Verify that create_experiment was called twice with different names
-    assert (
-        mock_create_experiment.call_count == 2
-    ), "create_experiment should be called twice"
+    assert mock_create_experiment.call_count == 2, (
+        "create_experiment should be called twice"
+    )
 
     # Extract name from first call
     first_call_args = mock_create_experiment.call_args_list[0]
@@ -746,6 +746,6 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
         f"Second experiment name should be 'shared-prompt-prefix-{mock_generated_ids[1]}', "
         f"but got '{second_call_name}'"
     )
-    assert (
-        first_call_name != second_call_name
-    ), "Multiple calls with the same prefix should generate different unique names"
+    assert first_call_name != second_call_name, (
+        "Multiple calls with the same prefix should generate different unique names"
+    )

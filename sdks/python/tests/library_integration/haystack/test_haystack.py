@@ -17,9 +17,9 @@ from ...testlib import (
 
 @pytest.fixture(autouse=True, scope="module")
 def enable_haystack_content_tracing():
-    assert (
-        "haystack" not in sys.modules
-    ), "haystack must be imported only after content tracing env var is set"
+    assert "haystack" not in sys.modules, (
+        "haystack must be imported only after content tracing env var is set"
+    )
     with patch_environ({"HAYSTACK_CONTENT_TRACING_ENABLED": "true"}):
         yield
 
@@ -286,6 +286,6 @@ def test_final_name_selection(operation_name, span_name, expected_final_name):
     # Instead of checking the span, directly compute final_name like _create_span_or_trace
     final_name = tracer._name if "pipeline.run" in operation_name else span_name
 
-    assert (
-        final_name == expected_final_name
-    ), f"Operation: {operation_name}, expected: {expected_final_name}, got: {final_name}"
+    assert final_name == expected_final_name, (
+        f"Operation: {operation_name}, expected: {expected_final_name}, got: {final_name}"
+    )

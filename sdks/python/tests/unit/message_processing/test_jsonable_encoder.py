@@ -47,12 +47,12 @@ def test_jsonable_encoder__cyclic_reference():
     cycle_marker = encoded["child"]["child"]
     print("=" * 150)
     print(cycle_marker)
-    assert isinstance(
-        cycle_marker, str
-    ), "Expected a string marker for cyclic reference"
-    assert (
-        "<Cyclic reference to " in cycle_marker
-    ), "Should contain 'Cyclic reference' text"
+    assert isinstance(cycle_marker, str), (
+        "Expected a string marker for cyclic reference"
+    )
+    assert "<Cyclic reference to " in cycle_marker, (
+        "Should contain 'Cyclic reference' text"
+    )
 
 
 def test_jsonable_encoder__repeated_objects_in_list():

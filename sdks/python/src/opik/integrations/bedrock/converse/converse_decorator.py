@@ -34,9 +34,9 @@ class BedrockConverseDecorator(base_track_decorator.BaseTrackDecorator):
         args: Tuple,
         kwargs: Dict[str, Any],
     ) -> arguments_helpers.StartSpanParameters:
-        assert (
-            kwargs is not None
-        ), "Expected kwargs to be not None in BedrockRuntime.Client.converse(**kwargs)"
+        assert kwargs is not None, (
+            "Expected kwargs to be not None in BedrockRuntime.Client.converse(**kwargs)"
+        )
 
         name = track_options.name if track_options.name is not None else func.__name__
         input, metadata = dict_utils.split_dict_by_keys(

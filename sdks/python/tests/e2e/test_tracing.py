@@ -518,13 +518,13 @@ def test_search_traces__wait_for_at_least__happyflow(opik_client):
     )
 
     # Verify that the matching trace is returned
-    assert (
-        len(traces) == matching_count
-    ), f"Expected to find {matching_count} matching traces"
+    assert len(traces) == matching_count, (
+        f"Expected to find {matching_count} matching traces"
+    )
     for trace in traces:
-        assert (
-            trace.id in trace_ids
-        ), f"Expected to find the matching trace id {trace.id}"
+        assert trace.id in trace_ids, (
+            f"Expected to find the matching trace id {trace.id}"
+        )
 
 
 def test_search_traces__wait_for_at_least__timeout__exception_raised(opik_client):
@@ -657,13 +657,13 @@ def test_search_spans__wait_for_at_least__happy_flow(opik_client: opik.Opik):
     )
 
     # Verify that the matching trace is returned
-    assert (
-        len(spans) == matching_count
-    ), f"Expected to find {matching_count} matching spans"
+    assert len(spans) == matching_count, (
+        f"Expected to find {matching_count} matching spans"
+    )
     for span in spans:
-        assert (
-            span.id in matching_span_ids
-        ), f"Expected to find the matching span id {span.id}"
+        assert span.id in matching_span_ids, (
+            f"Expected to find the matching span id {span.id}"
+        )
 
 
 def test_search_spans__wait_for_at_least__timeout__exception_raised(
@@ -1379,12 +1379,12 @@ def test_search_traces__filter_by_feedback_score__is_empty_and_equals(
         filter_string=f"feedback_scores.{unique_metric} is_empty",
     )
     trace_ids_empty = {trace.id for trace in traces_empty}
-    assert (
-        trace_without_score.id in trace_ids_empty
-    ), "Trace without score should be found with is_empty filter"
-    assert (
-        trace_with_score.id not in trace_ids_empty
-    ), "Trace with score should not be found with is_empty filter"
+    assert trace_without_score.id in trace_ids_empty, (
+        "Trace without score should be found with is_empty filter"
+    )
+    assert trace_with_score.id not in trace_ids_empty, (
+        "Trace with score should not be found with is_empty filter"
+    )
 
     # Test filtering with is_not_empty - should find trace with the score
     traces_not_empty = opik_client.search_traces(
@@ -1392,12 +1392,12 @@ def test_search_traces__filter_by_feedback_score__is_empty_and_equals(
         filter_string=f"feedback_scores.{unique_metric} is_not_empty",
     )
     trace_ids_not_empty = {trace.id for trace in traces_not_empty}
-    assert (
-        trace_with_score.id in trace_ids_not_empty
-    ), "Trace with score should be found with is_not_empty filter"
-    assert (
-        trace_without_score.id not in trace_ids_not_empty
-    ), "Trace without score should not be found with is_not_empty filter"
+    assert trace_with_score.id in trace_ids_not_empty, (
+        "Trace with score should be found with is_not_empty filter"
+    )
+    assert trace_without_score.id not in trace_ids_not_empty, (
+        "Trace without score should not be found with is_not_empty filter"
+    )
 
     # Test filtering with = operator - should find trace with the specific score value
     traces_with_value = opik_client.search_traces(
@@ -1405,17 +1405,17 @@ def test_search_traces__filter_by_feedback_score__is_empty_and_equals(
         filter_string=f"feedback_scores.{unique_metric} = 0.75",
     )
     trace_ids_with_value = {trace.id for trace in traces_with_value}
-    assert (
-        trace_with_score.id in trace_ids_with_value
-    ), "Trace with score value 0.75 should be found"
-    assert (
-        trace_without_score.id not in trace_ids_with_value
-    ), "Trace without score should not be found"
+    assert trace_with_score.id in trace_ids_with_value, (
+        "Trace with score value 0.75 should be found"
+    )
+    assert trace_without_score.id not in trace_ids_with_value, (
+        "Trace without score should not be found"
+    )
 
     # Verify is_not_empty and = return the same trace
-    assert (
-        trace_ids_not_empty == trace_ids_with_value
-    ), "is_not_empty and = filters should return the same traces for this test case"
+    assert trace_ids_not_empty == trace_ids_with_value, (
+        "is_not_empty and = filters should return the same traces for this test case"
+    )
 
 
 def test_search_spans__filter_by_feedback_score__is_empty_and_equals(
@@ -1460,12 +1460,12 @@ def test_search_spans__filter_by_feedback_score__is_empty_and_equals(
         filter_string=f"feedback_scores.{unique_metric} is_empty",
     )
     span_ids_empty = {span.id for span in spans_empty}
-    assert (
-        span_without_score.id in span_ids_empty
-    ), "Span without score should be found with is_empty filter"
-    assert (
-        span_with_score.id not in span_ids_empty
-    ), "Span with score should not be found with is_empty filter"
+    assert span_without_score.id in span_ids_empty, (
+        "Span without score should be found with is_empty filter"
+    )
+    assert span_with_score.id not in span_ids_empty, (
+        "Span with score should not be found with is_empty filter"
+    )
 
     # Test filtering with is_not_empty - should find span with the score
     spans_not_empty = opik_client.search_spans(
@@ -1474,12 +1474,12 @@ def test_search_spans__filter_by_feedback_score__is_empty_and_equals(
         filter_string=f"feedback_scores.{unique_metric} is_not_empty",
     )
     span_ids_not_empty = {span.id for span in spans_not_empty}
-    assert (
-        span_with_score.id in span_ids_not_empty
-    ), "Span with score should be found with is_not_empty filter"
-    assert (
-        span_without_score.id not in span_ids_not_empty
-    ), "Span without score should not be found with is_not_empty filter"
+    assert span_with_score.id in span_ids_not_empty, (
+        "Span with score should be found with is_not_empty filter"
+    )
+    assert span_without_score.id not in span_ids_not_empty, (
+        "Span without score should not be found with is_not_empty filter"
+    )
 
     # Test filtering with = operator - should find span with the specific score value
     spans_with_value = opik_client.search_spans(
@@ -1488,14 +1488,14 @@ def test_search_spans__filter_by_feedback_score__is_empty_and_equals(
         filter_string=f"feedback_scores.{unique_metric} = 0.85",
     )
     span_ids_with_value = {span.id for span in spans_with_value}
-    assert (
-        span_with_score.id in span_ids_with_value
-    ), "Span with score value 0.85 should be found"
-    assert (
-        span_without_score.id not in span_ids_with_value
-    ), "Span without score should not be found"
+    assert span_with_score.id in span_ids_with_value, (
+        "Span with score value 0.85 should be found"
+    )
+    assert span_without_score.id not in span_ids_with_value, (
+        "Span without score should not be found"
+    )
 
     # Verify is_not_empty and = return the same span
-    assert (
-        span_ids_not_empty == span_ids_with_value
-    ), "is_not_empty and = filters should return the same spans for this test case"
+    assert span_ids_not_empty == span_ids_with_value, (
+        "is_not_empty and = filters should return the same spans for this test case"
+    )
