@@ -4217,6 +4217,32 @@ class DatasetsResourceTest {
                 assertPage(allItems.reversed().subList(2000, 3000), actualItems);
             }
         }
+
+        @Test
+        @DisplayName("when streaming dataset items without filters, then return all items")
+        void streamDataItems__whenStreamingWithoutFilters__thenReturnAllItems() {
+            var items = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .toList();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Request without filters (filters is null)
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualItems).hasSize(items.size());
+            assertPage(items.reversed(), actualItems);
+        }
     }
 
     private DatasetItem getItemAndAssert(DatasetItem expectedDatasetItem, String workspaceName, String apiKey) {

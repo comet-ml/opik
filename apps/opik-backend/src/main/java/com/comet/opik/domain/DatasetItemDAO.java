@@ -1146,7 +1146,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @Override
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId) {
-        return getItems(datasetId, limit, lastRetrievedId, null);
+        return getItems(datasetId, limit, lastRetrievedId, List.of());
     }
 
     @Override
