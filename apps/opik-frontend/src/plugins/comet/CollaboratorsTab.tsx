@@ -223,7 +223,8 @@ const CollaboratorsTab = () => {
       isPending ||
       isPermissionsPending ||
       isInvitedMembersPending ||
-      (isPermissionsManagementEnabled && isUsersRolesPending);
+      (isPermissionsManagementEnabled &&
+        (isUsersRolesPending || isWorkspaceRolesPending));
 
     if (isLoading) {
       return <Loader />;

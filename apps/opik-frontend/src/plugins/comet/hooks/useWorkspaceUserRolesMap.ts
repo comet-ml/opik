@@ -62,7 +62,7 @@ export const useWorkspaceUserRolesMap = ({
     );
 
     userNameToRoleMap.forEach((roleName, userName) => {
-      roleMap.set(userName, roleName);
+      roleMap.set(userName.toLowerCase(), roleName);
     });
 
     workspaceMembers.forEach((member) => {
