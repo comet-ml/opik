@@ -56,7 +56,7 @@ def log_code_agent_turn(
             for line in f:
                 if line.strip():
                     record = json.loads(line)
-                    gen_id = record.get("metadata", {}).get("generation_id", "unknown")
+                    gen_id = record.get("generation_id", "unknown")
                     turns[gen_id].append(record)
 
         # Log each turn

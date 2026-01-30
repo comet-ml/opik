@@ -4,7 +4,7 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import click
 from rich.console import Console
@@ -225,16 +225,16 @@ def code_agent_trace(
     Examples:
     \b
         # Upload all traces from default location
-        opik agent-trace --project "my-agent-traces"
+        opik code-agent-trace --project "my-agent-traces"
     \b
         # Upload from a specific file
-        opik agent-trace -f ./my-traces.jsonl -p "my-project"
+        opik code-agent-trace -f ./my-traces.jsonl -p "my-project"
     \b
         # Filter by conversation
-        opik agent-trace -p "my-project" -c "conv-123" -c "conv-456"
+        opik code-agent-trace -p "my-project" -c "conv-123" -c "conv-456"
     \b
         # Preview what would be uploaded
-        opik agent-trace -p "my-project" --dry-run
+        opik code-agent-trace -p "my-project" --dry-run
     """
     try:
         path = Path(file)
