@@ -102,7 +102,7 @@ export const useWorkspaceUserRolesMap = ({
         : WORKSPACE_ROLE_TYPE.member;
 
       if (member.userName) {
-        roleMap.set(member.userName, role);
+        roleMap.set(member.userName.toLowerCase(), role);
       }
       if (member.email) {
         roleMap.set(member.email.toLowerCase(), role);
