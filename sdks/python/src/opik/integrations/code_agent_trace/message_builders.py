@@ -5,10 +5,34 @@ This module builds messages in OpenAI chat format from trace records.
 """
 
 import json
+import re
 from typing import Any, Dict, List, Optional
 
 from .helpers import shorten_path
 from .types import TraceRecord
+
+# Non-breaking space character for preserving indentation in markdown
+NBSP = "\u00a0"
+
+
+def _preserve_leading_whitespace(line: str) -> str:
+    """
+    Replace leading spaces/tabs with non-breaking spaces to preserve indentation.
+
+    Markdown renderers often collapse regular spaces, but non-breaking spaces
+    are preserved, ensuring code indentation is visible.
+    """
+    # Find leading whitespace
+    match = re.match(r"^(\s*)", line)
+    if not match:
+        return line
+
+    leading = match.group(1)
+    rest = line[len(leading) :]
+
+    # Replace spaces with non-breaking spaces, tabs with 4 non-breaking spaces
+    preserved = leading.replace("\t", NBSP * 4).replace(" ", NBSP)
+    return preserved + rest
 
 
 def build_user_message(record: TraceRecord) -> Dict[str, Any]:
@@ -323,15 +347,19 @@ def build_code_changes_summary(file_edit_records: List[TraceRecord]) -> Optional
                     f"@@ -{start_line},{old_count} +{start_line},{new_count} @@"
                 )
 
-                # Show removed lines (preserve tabs and spaces exactly)
-                for i, line in enumerate(old_lines[:15]):
-                    lines.append(f"-{line}")
+                # Show removed lines - use non-breaking spaces to preserve indentation
+                for line in old_lines[:15]:
+                    # Replace leading spaces with non-breaking spaces for rendering
+                    preserved_line = _preserve_leading_whitespace(line)
+                    lines.append(f"-{preserved_line}")
                 if len(old_lines) > 15:
                     lines.append("-... (truncated)")
 
-                # Show added lines (preserve tabs and spaces exactly)
-                for i, line in enumerate(new_lines[:15]):
-                    lines.append(f"+{line}")
+                # Show added lines - use non-breaking spaces to preserve indentation
+                for line in new_lines[:15]:
+                    # Replace leading spaces with non-breaking spaces for rendering
+                    preserved_line = _preserve_leading_whitespace(line)
+                    lines.append(f"+{preserved_line}")
                 if len(new_lines) > 15:
                     lines.append("+... (truncated)")
 
