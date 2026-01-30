@@ -3827,14 +3827,20 @@ class DatasetsResourceTest {
         @DisplayName("when streaming dataset items with tag filter, then return only matching items")
         void streamDataItems__whenStreamingWithTagFilter__thenReturnMatchingItems() {
             // Create items with different tags
+            var tag1 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var tag2 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var tag3 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var includeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var excludeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+
             var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("tag1", "include"))
+                    .tags(Set.of(tag1, includeTag))
                     .build();
             var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("tag2", "include"))
+                    .tags(Set.of(tag2, includeTag))
                     .build();
             var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("tag3", "exclude"))
+                    .tags(Set.of(tag3, excludeTag))
                     .build();
 
             var items = List.of(item1, item2, item3);
@@ -3845,8 +3851,8 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Filter by "include" tag - filters as JSON string (NOT URL-encoded for request body)
-            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
+            // Filter by includeTag - filters as JSON string (NOT URL-encoded for request body)
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, includeTag);
             var filtersString = JsonUtils.writeValueAsString(List.of(filter));
 
             var streamRequest = DatasetItemStreamRequest.builder()
@@ -3870,7 +3876,7 @@ class DatasetsResourceTest {
                 // Should return only item2 and item1 (reversed order by created_at)
                 assertThat(actualItems).hasSize(2);
                 assertThat(actualItems).extracting(DatasetItem::tags)
-                        .allMatch(tags -> tags.contains("include"));
+                        .allMatch(tags -> tags.contains(includeTag));
             }
         }
 
@@ -3976,17 +3982,20 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when streaming dataset items with filter and lastRetrievedId, then return filtered items after cursor")
         void streamDataItems__whenStreamingWithFilterAndLastRetrievedId__thenReturnFilteredItemsAfterCursor() {
-            // Create 5 items with "include" tag
+            // Create 5 items with includeTag
+            var includeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var excludeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+
             var items = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of("include", "tag" + i))
+                            .tags(Set.of(includeTag, RandomStringUtils.insecure().nextAlphanumeric(5)))
                             .build())
                     .toList();
 
-            // Create 3 items without "include" tag
+            // Create 3 items without includeTag
             var excludedItems = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of("exclude", "tag" + i))
+                            .tags(Set.of(excludeTag, RandomStringUtils.insecure().nextAlphanumeric(5)))
                             .build())
                     .toList();
 
@@ -4001,8 +4010,8 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Filter by "include" tag and use lastRetrievedId from second item (reversed order)
-            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
+            // Filter by includeTag and use lastRetrievedId from second item (reversed order)
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, includeTag);
             var streamRequest = DatasetItemStreamRequest.builder()
                     .datasetName(batch.datasetName())
                     .filters(JsonUtils.writeValueAsString(List.of(filter)))
@@ -4035,9 +4044,12 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when streaming dataset items with filter matching no items, then return empty list")
         void streamDataItems__whenStreamingWithFilterMatchingNoItems__thenReturnEmptyList() {
+            var tag1 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var tag2 = RandomStringUtils.insecure().nextAlphanumeric(5);
+
             var items = IntStream.range(0, 3)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of("tag1", "tag2"))
+                            .tags(Set.of(tag1, tag2))
                             .build())
                     .toList();
 
@@ -4049,7 +4061,8 @@ class DatasetsResourceTest {
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
             // Filter by non-existent tag
-            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "nonexistent");
+            var nonexistentTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, nonexistentTag);
             var streamRequest = DatasetItemStreamRequest.builder()
                     .datasetName(batch.datasetName())
                     .filters(JsonUtils.writeValueAsString(List.of(filter)))
@@ -4076,33 +4089,38 @@ class DatasetsResourceTest {
         @DisplayName("when streaming dataset items with multiple filters (AND logic), then return only items matching all filters")
         void streamDataItems__whenStreamingWithMultipleFilters__thenReturnItemsMatchingAllFilters() {
             // Create items with different tag combinations
-            // Item 1: has both "tag1" and "tag2" - should be returned
+            var tag1 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var tag2 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var tag3 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var otherTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+
+            // Item 1: has both tag1 and tag2 - should be returned
             var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("tag1", "tag2"))
+                    .tags(Set.of(tag1, tag2))
                     .experimentItems(null)
                     .createdAt(null)
                     .lastUpdatedAt(null)
                     .build();
 
-            // Item 2: has both "tag1" and "tag2" - should be returned
+            // Item 2: has both tag1 and tag2 - should be returned
             var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("tag1", "tag2", "tag3"))
+                    .tags(Set.of(tag1, tag2, tag3))
                     .experimentItems(null)
                     .createdAt(null)
                     .lastUpdatedAt(null)
                     .build();
 
-            // Item 3: has only "tag1" - should NOT be returned (missing tag2)
+            // Item 3: has only tag1 - should NOT be returned (missing tag2)
             var item3 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("tag1"))
+                    .tags(Set.of(tag1))
                     .experimentItems(null)
                     .createdAt(null)
                     .lastUpdatedAt(null)
                     .build();
 
-            // Item 4: has only "tag2" - should NOT be returned (missing tag1)
+            // Item 4: has only tag2 - should NOT be returned (missing tag1)
             var item4 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("tag2"))
+                    .tags(Set.of(tag2))
                     .experimentItems(null)
                     .createdAt(null)
                     .lastUpdatedAt(null)
@@ -4110,7 +4128,7 @@ class DatasetsResourceTest {
 
             // Item 5: has neither tag - should NOT be returned
             var item5 = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .tags(Set.of("other"))
+                    .tags(Set.of(otherTag))
                     .experimentItems(null)
                     .createdAt(null)
                     .lastUpdatedAt(null)
@@ -4126,8 +4144,8 @@ class DatasetsResourceTest {
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
             // Create two filters - both must match (AND logic)
-            var filter1 = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag1");
-            var filter2 = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag2");
+            var filter1 = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, tag1);
+            var filter2 = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, tag2);
 
             var streamRequest = DatasetItemStreamRequest.builder()
                     .datasetName(batch.datasetName())
@@ -4153,8 +4171,8 @@ class DatasetsResourceTest {
                         .containsExactlyInAnyOrder(item1.id(), item2.id());
                 // Verify all returned items have both tags
                 assertThat(actualItems).allSatisfy(item -> {
-                    assertThat(item.tags()).contains("tag1");
-                    assertThat(item.tags()).contains("tag2");
+                    assertThat(item.tags()).contains(tag1);
+                    assertThat(item.tags()).contains(tag2);
                 });
             }
         }
@@ -4162,20 +4180,23 @@ class DatasetsResourceTest {
         @Test
         @DisplayName("when streaming dataset items with filter and steamLimit, then respect limit on filtered results")
         void streamDataItems__whenStreamingWithFilterAndSteamLimit__thenRespectLimitOnFilteredResults() {
-            // Create 10 items with "include" tag
+            // Create 10 items with includeTag
+            var includeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var excludeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+
             var includedItems = IntStream.range(0, 10)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of("include"))
+                            .tags(Set.of(includeTag))
                             .experimentItems(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
                             .build())
                     .toList();
 
-            // Create 5 items without "include" tag
+            // Create 5 items without includeTag
             var excludedItems = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                            .tags(Set.of("exclude"))
+                            .tags(Set.of(excludeTag))
                             .experimentItems(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
@@ -4193,8 +4214,8 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Filter by "include" tag with limit of 5
-            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "include");
+            // Filter by includeTag with limit of 5
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, includeTag);
             var streamRequest = DatasetItemStreamRequest.builder()
                     .datasetName(batch.datasetName())
                     .filters(JsonUtils.writeValueAsString(List.of(filter)))
@@ -4216,8 +4237,8 @@ class DatasetsResourceTest {
 
                 // Should return only 5 items (respecting steamLimit)
                 assertThat(actualItems).hasSize(5);
-                // All returned items should have "include" tag
-                assertThat(actualItems).allMatch(item -> item.tags().contains("include"));
+                // All returned items should have includeTag
+                assertThat(actualItems).allMatch(item -> item.tags().contains(includeTag));
             }
         }
 
