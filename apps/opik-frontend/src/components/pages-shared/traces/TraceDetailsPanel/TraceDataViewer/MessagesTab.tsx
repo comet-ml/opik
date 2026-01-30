@@ -71,12 +71,7 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
 
     // Map output messages using cached result
     if (outputMappedResult) {
-      // Adjust IDs to avoid collisions
-      const outputMessages = outputMappedResult.messages.map((msg, idx) => ({
-        ...msg,
-        id: `output-combined-${idx}`,
-      }));
-      messages.push(...outputMessages);
+      messages.push(...outputMappedResult.messages);
     }
 
     return messages;
