@@ -1,0 +1,371 @@
+"""
+OpenAI message format builders for Code Agent Trace integration.
+
+This module builds messages in OpenAI chat format from trace records.
+"""
+
+import json
+from typing import Any, Dict, List, Optional
+
+from .helpers import shorten_path
+from .types import (
+    AssistantMessage,
+    ChatCompletionChoice,
+    ChatCompletionResponse,
+    ToolCall,
+    ToolMessage,
+    TraceRecord,
+    UserMessage,
+)
+
+
+def build_user_message(record: TraceRecord) -> UserMessage:
+    """
+    Build OpenAI-format user message from a trace record.
+
+    Args:
+        record: Trace record with event="user_message".
+
+    Returns:
+        User message in OpenAI format with content as array of parts.
+    """
+    data = record.get("data", {})
+    content_parts: List[Dict[str, Any]] = []
+
+    # Add text content
+    text_content = data.get("content", "")
+    if text_content:
+        content_parts.append(
+            {
+                "type": "text",
+                "text": text_content,
+            }
+        )
+
+    # Add attachments as images/files
+    attachments = data.get("attachments", [])
+    for attachment in attachments:
+        file_path = attachment.get("filePath", "")
+        if file_path:
+            # Check if it's an image
+            if any(
+                file_path.lower().endswith(ext)
+                for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]
+            ):
+                content_parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": file_path,
+                            "detail": "high",
+                        },
+                    }
+                )
+            else:
+                # Non-image file attachment
+                content_parts.append(
+                    {
+                        "type": "file",
+                        "file": {
+                            "path": file_path,
+                            "type": attachment.get("type", "file"),
+                        },
+                    }
+                )
+
+    return {
+        "role": "user",
+        "content": content_parts if content_parts else [{"type": "text", "text": ""}],
+    }
+
+
+def build_assistant_message(
+    response_records: List[TraceRecord],
+    thought_records: List[TraceRecord],
+    tool_records: List[TraceRecord],
+) -> AssistantMessage:
+    """
+    Build OpenAI-format assistant message with tool calls.
+
+    Args:
+        response_records: Records with event="assistant_message".
+        thought_records: Records with event="assistant_thought".
+        tool_records: Records with event="tool_execution".
+
+    Returns:
+        Assistant message in OpenAI format.
+    """
+    message: AssistantMessage = {
+        "role": "assistant",
+        "content": None,
+        "refusal": None,
+        "audio": None,
+        "function_call": None,
+    }
+
+    # Add content from response
+    if response_records:
+        content = response_records[-1].get("data", {}).get("content", "")
+        if content:
+            message["content"] = content
+
+    # Add reasoning/thinking if present
+    if thought_records:
+        thoughts = [r.get("data", {}).get("content", "") for r in thought_records]
+        reasoning = "\n\n".join(filter(None, thoughts))
+        if reasoning:
+            if message["content"] is None:
+                message["content"] = f"[Thinking]\n{reasoning}"
+            else:
+                message["reasoning_content"] = reasoning
+
+    # Add tool calls if present
+    if tool_records:
+        tool_calls: List[ToolCall] = []
+        for record in tool_records:
+            record_id = record.get("id", "")
+            data = record.get("data", {})
+            tool_type = data.get("tool_type", "unknown")
+
+            if tool_type == "shell":
+                arguments: Dict[str, Any] = {
+                    "command": data.get("command", ""),
+                }
+                if data.get("cwd"):
+                    arguments["cwd"] = data["cwd"]
+
+                tool_calls.append(
+                    {
+                        "id": f"call_{record_id}",
+                        "type": "function",
+                        "function": {
+                            "name": "shell",
+                            "arguments": json.dumps(arguments),
+                        },
+                    }
+                )
+            elif tool_type == "file_edit":
+                file_path = data.get("file_path", "")
+                short_path = shorten_path(file_path, max_length=80)
+                arguments = {
+                    "file_path": short_path,
+                }
+                edits = data.get("edits", [])
+                if edits:
+                    arguments["edit_count"] = len(edits)
+
+                tool_calls.append(
+                    {
+                        "id": f"call_{record_id}",
+                        "type": "function",
+                        "function": {
+                            "name": "file_edit",
+                            "arguments": json.dumps(arguments),
+                        },
+                    }
+                )
+            elif tool_type == "tab_edit":
+                file_path = data.get("file_path", "")
+                short_path = shorten_path(file_path, max_length=80)
+                arguments = {"file_path": short_path}
+
+                tool_calls.append(
+                    {
+                        "id": f"call_{record_id}",
+                        "type": "function",
+                        "function": {
+                            "name": "tab_edit",
+                            "arguments": json.dumps(arguments),
+                        },
+                    }
+                )
+
+        if tool_calls:
+            message["tool_calls"] = tool_calls
+
+    return message
+
+
+def build_tool_message(record: TraceRecord) -> ToolMessage:
+    """
+    Build OpenAI-format tool result message.
+
+    Args:
+        record: Trace record with event="tool_execution".
+
+    Returns:
+        Tool message in OpenAI format.
+    """
+    record_id = record.get("id", "unknown")
+    data = record.get("data", {})
+    tool_type = data.get("tool_type", "unknown")
+
+    if tool_type == "shell":
+        tool_name = "shell"
+        result: Dict[str, Any] = {
+            "command": data.get("command", ""),
+            "output": data.get("output", ""),
+        }
+        if data.get("duration_ms") is not None:
+            result["duration_ms"] = round(data["duration_ms"], 2)
+        if data.get("cwd"):
+            result["cwd"] = data["cwd"]
+        content = json.dumps(result)
+
+    elif tool_type == "file_edit":
+        tool_name = "file_edit"
+        file_path = data.get("file_path", "unknown")
+        line_ranges = data.get("line_ranges", [])
+        result = {
+            "file_path": file_path,
+            "status": "success",
+        }
+        if line_ranges:
+            result["lines_modified"] = [
+                {"start": r.get("start_line"), "end": r.get("end_line")}
+                for r in line_ranges
+            ]
+        content = json.dumps(result)
+
+    elif tool_type == "tab_edit":
+        tool_name = "tab_edit"
+        file_path = data.get("file_path", "unknown")
+        result = {
+            "file_path": file_path,
+            "status": "success",
+        }
+        content = json.dumps(result)
+
+    else:
+        tool_name = tool_type
+        content = json.dumps(data)
+
+    return {
+        "role": "tool",
+        "tool_call_id": f"call_{record_id}",
+        "name": tool_name,
+        "content": content,
+    }
+
+
+def build_code_changes_summary(file_edit_records: List[TraceRecord]) -> Optional[str]:
+    """
+    Build a markdown-formatted summary of all code changes.
+
+    Args:
+        file_edit_records: List of tool execution records.
+
+    Returns:
+        Markdown summary string, or None if no file edits were made.
+    """
+    if not file_edit_records:
+        return None
+
+    # Group edits by file
+    files_changed: Dict[str, List[Dict[str, Any]]] = {}
+    for record in file_edit_records:
+        data = record.get("data", {})
+        if data.get("tool_type") != "file_edit":
+            continue
+        file_path = data.get("file_path", "unknown")
+        if file_path not in files_changed:
+            files_changed[file_path] = []
+        files_changed[file_path].append(data)
+
+    if not files_changed:
+        return None
+
+    # Build markdown summary
+    lines = ["## Code Changes Summary", ""]
+
+    for file_path, edits_list in files_changed.items():
+        # Get short filename for display
+        short_name = file_path.split("/")[-1] if "/" in file_path else file_path
+
+        # Collect all line ranges
+        all_ranges = []
+        for edit_data in edits_list:
+            ranges = edit_data.get("line_ranges", [])
+            for r in ranges:
+                start = r.get("start_line")
+                end = r.get("end_line")
+                if start and end:
+                    if start == end:
+                        all_ranges.append(f"L{start}")
+                    else:
+                        all_ranges.append(f"L{start}-{end}")
+
+        # Format file entry
+        lines.append(f"### `{short_name}`")
+        lines.append(f"**Path:** `{file_path}`")
+        if all_ranges:
+            lines.append(f"**Lines modified:** {', '.join(all_ranges)}")
+
+        # Show edit details (diffs)
+        for edit_data in edits_list:
+            edits = edit_data.get("edits", [])
+            for edit in edits:
+                old_str = edit.get("old_string", "")
+                new_str = edit.get("new_string", "")
+
+                if old_str or new_str:
+                    lines.append("")
+                    lines.append("```diff")
+                    if old_str:
+                        for line in old_str.split("\n")[:10]:
+                            lines.append(f"- {line}")
+                        if old_str.count("\n") > 10:
+                            lines.append("- ... (truncated)")
+                    if new_str:
+                        for line in new_str.split("\n")[:10]:
+                            lines.append(f"+ {line}")
+                        if new_str.count("\n") > 10:
+                            lines.append("+ ... (truncated)")
+                    lines.append("```")
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def build_chat_completion_response(
+    generation_id: str,
+    model: str,
+    created_timestamp: int,
+    content: Optional[str],
+    tool_calls: Optional[List[ToolCall]],
+) -> ChatCompletionResponse:
+    """
+    Build OpenAI chat completion response format.
+
+    Args:
+        generation_id: Generation ID for the completion ID.
+        model: Model name.
+        created_timestamp: Unix timestamp when created.
+        content: Assistant message content, or None.
+        tool_calls: List of tool calls, or None.
+
+    Returns:
+        Chat completion response in OpenAI format.
+    """
+    final_message: AssistantMessage = {
+        "role": "assistant",
+        "content": content,
+        "refusal": None,
+    }
+    if tool_calls:
+        final_message["tool_calls"] = tool_calls
+
+    choice: ChatCompletionChoice = {
+        "index": 0,
+        "message": final_message,
+        "finish_reason": "stop" if content else "tool_calls",
+    }
+
+    return {
+        "id": f"chatcmpl-{generation_id[:20]}" if generation_id else "chatcmpl-unknown",
+        "object": "chat.completion",
+        "created": created_timestamp,
+        "model": model or "unknown",
+        "choices": [choice],
+    }

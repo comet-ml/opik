@@ -1,5 +1,5 @@
 """
-Converters for transforming Agent Trace records to Opik traces with OpenAI-format messages.
+Converters for transforming Agent Trace records to Opik traces.
 
 This module handles the mapping between Cursor hook events and Opik data model:
 - generation_id → Opik Trace (one trace per agent "turn")
@@ -8,415 +8,39 @@ This module handles the mapping between Cursor hook events and Opik data model:
 - Individual tool executions → spans within the trace
 """
 
-import datetime
 import json
-import logging
 from typing import Any, Dict, List, Optional
 
-from opik import datetime_helpers, id_helpers
+from opik import id_helpers
 
-LOGGER = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Timestamp Helpers
-# =============================================================================
-
-
-def _parse_timestamp(timestamp_str: Optional[str]) -> datetime.datetime:
-    """Parse ISO 8601 timestamp to datetime."""
-    if not timestamp_str:
-        return datetime_helpers.local_timestamp()
-    try:
-        if timestamp_str.endswith("Z"):
-            timestamp_str = timestamp_str[:-1] + "+00:00"
-        return datetime.datetime.fromisoformat(timestamp_str)
-    except (ValueError, TypeError):
-        LOGGER.warning("Failed to parse timestamp '%s', using current time", timestamp_str)
-        return datetime_helpers.local_timestamp()
-
-
-def _calculate_end_time(
-    start_time: datetime.datetime, duration_ms: Optional[float]
-) -> datetime.datetime:
-    """Calculate end time from start time and duration."""
-    if duration_ms is None:
-        return start_time
-    return start_time + datetime.timedelta(milliseconds=duration_ms)
-
-
-# =============================================================================
-# Display Helpers
-# =============================================================================
-
-
-def _shorten_path(path: str, max_length: int = 40) -> str:
-    """Shorten file path for display."""
-    if len(path) <= max_length:
-        return path
-    parts = path.split("/")
-    if len(parts) <= 2:
-        return path
-    return f"{parts[0]}/.../{parts[-1]}"
-
-
-def _shorten_command(command: str, max_length: int = 60) -> str:
-    """Shorten command for display (removes cd prefix)."""
-    if " && " in command:
-        command = command.split(" && ")[-1]
-    if len(command) <= max_length:
-        return command
-    return command[: max_length - 3] + "..."
-
-
-# =============================================================================
-# OpenAI Message Format Builders
-# =============================================================================
-
-
-def _build_user_message(record: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Build OpenAI-format user message.
-    
-    Format:
-    {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "..."},
-            {"type": "image_url", "image_url": {"url": "...", "detail": "high"}}
-        ]
-    }
-    """
-    data = record.get("data", {})
-    content_parts: List[Dict[str, Any]] = []
-    
-    # Add text content
-    text_content = data.get("content", "")
-    if text_content:
-        content_parts.append({
-            "type": "text",
-            "text": text_content,
-        })
-    
-    # Add attachments as images/files
-    attachments = data.get("attachments", [])
-    for attachment in attachments:
-        file_path = attachment.get("filePath", "")
-        if file_path:
-            # Check if it's an image
-            if any(file_path.lower().endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp"]):
-                content_parts.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": file_path,
-                        "detail": "high",
-                    },
-                })
-            else:
-                # Non-image file attachment
-                content_parts.append({
-                    "type": "file",
-                    "file": {
-                        "path": file_path,
-                        "type": attachment.get("type", "file"),
-                    },
-                })
-    
-    return {
-        "role": "user",
-        "content": content_parts if content_parts else [{"type": "text", "text": ""}],
-    }
-
-
-def _build_assistant_message(
-    response_records: List[Dict[str, Any]],
-    thought_records: List[Dict[str, Any]],
-    tool_records: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """
-    Build OpenAI-format assistant message with tool calls.
-    
-    Format:
-    {
-        "role": "assistant",
-        "content": "...",  # or null if only tool calls
-        "tool_calls": [
-            {
-                "id": "call_xxx",
-                "type": "function",
-                "function": {
-                    "name": "tool_name",
-                    "arguments": "{\"key\": \"value\"}"  # JSON string
-                }
-            }
-        ]
-    }
-    """
-    message: Dict[str, Any] = {
-        "role": "assistant",
-        "content": None,
-        "refusal": None,
-        "audio": None,
-        "function_call": None,
-    }
-    
-    # Add content from response
-    if response_records:
-        content = response_records[-1].get("data", {}).get("content", "")
-        if content:
-            message["content"] = content
-    
-    # Add reasoning/thinking if present (as part of content or separate field)
-    if thought_records:
-        thoughts = [r.get("data", {}).get("content", "") for r in thought_records]
-        reasoning = "\n\n".join(filter(None, thoughts))
-        if reasoning:
-            # Include reasoning in content if no other content
-            if message["content"] is None:
-                message["content"] = f"[Thinking]\n{reasoning}"
-            else:
-                message["reasoning_content"] = reasoning
-    
-    # Add tool calls if present
-    if tool_records:
-        tool_calls = []
-        for record in tool_records:
-            record_id = record.get("id", "")
-            data = record.get("data", {})
-            tool_type = data.get("tool_type", "unknown")
-            
-            if tool_type == "shell":
-                arguments = {
-                    "command": data.get("command", ""),
-                }
-                if data.get("cwd"):
-                    arguments["cwd"] = data["cwd"]
-                    
-                tool_calls.append({
-                    "id": f"call_{record_id}",
-                    "type": "function",
-                    "function": {
-                        "name": "shell",
-                        "arguments": json.dumps(arguments),
-                    },
-                })
-            elif tool_type == "file_edit":
-                file_path = data.get("file_path", "")
-                # Shorten path for arguments display
-                short_path = _shorten_path(file_path, max_length=80)
-                arguments = {
-                    "file_path": short_path,
-                }
-                edits = data.get("edits", [])
-                if edits:
-                    # Summarize edits for display
-                    arguments["edit_count"] = len(edits)
-                    
-                tool_calls.append({
-                    "id": f"call_{record_id}",
-                    "type": "function",
-                    "function": {
-                        "name": "file_edit",
-                        "arguments": json.dumps(arguments),
-                    },
-                })
-            elif tool_type == "tab_edit":
-                file_path = data.get("file_path", "")
-                short_path = _shorten_path(file_path, max_length=80)
-                arguments = {"file_path": short_path}
-                
-                tool_calls.append({
-                    "id": f"call_{record_id}",
-                    "type": "function",
-                    "function": {
-                        "name": "tab_edit",
-                        "arguments": json.dumps(arguments),
-                    },
-                })
-        
-        if tool_calls:
-            message["tool_calls"] = tool_calls
-    
-    return message
-
-
-def _count_lines_changed(tool_executions: List[Dict[str, Any]]) -> Dict[str, int]:
-    """
-    Count lines added and deleted from file edit records.
-    
-    Returns dict with 'lines_added' and 'lines_deleted' counts.
-    """
-    lines_added = 0
-    lines_deleted = 0
-    
-    for record in tool_executions:
-        data = record.get("data", {})
-        if data.get("tool_type") != "file_edit":
-            continue
-        
-        edits = data.get("edits", [])
-        for edit in edits:
-            old_str = edit.get("old_string", "")
-            new_str = edit.get("new_string", "")
-            
-            # Count non-empty lines
-            old_lines = len([line for line in old_str.split("\n") if line.strip()]) if old_str else 0
-            new_lines = len([line for line in new_str.split("\n") if line.strip()]) if new_str else 0
-            
-            lines_deleted += old_lines
-            lines_added += new_lines
-    
-    return {"lines_added": lines_added, "lines_deleted": lines_deleted}
-
-
-def _build_code_changes_summary(file_edit_records: List[Dict[str, Any]]) -> Optional[str]:
-    """
-    Build a markdown-formatted summary of all code changes.
-    
-    Returns None if no file edits were made.
-    """
-    if not file_edit_records:
-        return None
-    
-    # Group edits by file
-    files_changed: Dict[str, List[Dict[str, Any]]] = {}
-    for record in file_edit_records:
-        data = record.get("data", {})
-        if data.get("tool_type") != "file_edit":
-            continue
-        file_path = data.get("file_path", "unknown")
-        if file_path not in files_changed:
-            files_changed[file_path] = []
-        files_changed[file_path].append(data)
-    
-    if not files_changed:
-        return None
-    
-    # Build markdown summary
-    lines = ["## Code Changes Summary", ""]
-    
-    for file_path, edits_list in files_changed.items():
-        # Get short filename for display
-        short_name = file_path.split("/")[-1] if "/" in file_path else file_path
-        
-        # Collect all line ranges
-        all_ranges = []
-        for edit_data in edits_list:
-            ranges = edit_data.get("line_ranges", [])
-            for r in ranges:
-                start = r.get("start_line")
-                end = r.get("end_line")
-                if start and end:
-                    if start == end:
-                        all_ranges.append(f"L{start}")
-                    else:
-                        all_ranges.append(f"L{start}-{end}")
-        
-        # Format file entry
-        lines.append(f"### `{short_name}`")
-        lines.append(f"**Path:** `{file_path}`")
-        if all_ranges:
-            lines.append(f"**Lines modified:** {', '.join(all_ranges)}")
-        
-        # Show edit details (diffs)
-        for edit_data in edits_list:
-            edits = edit_data.get("edits", [])
-            for edit in edits:
-                old_str = edit.get("old_string", "")
-                new_str = edit.get("new_string", "")
-                
-                if old_str or new_str:
-                    lines.append("")
-                    lines.append("```diff")
-                    if old_str:
-                        for line in old_str.split("\n")[:10]:  # Limit to 10 lines
-                            lines.append(f"- {line}")
-                        if old_str.count("\n") > 10:
-                            lines.append("- ... (truncated)")
-                    if new_str:
-                        for line in new_str.split("\n")[:10]:  # Limit to 10 lines
-                            lines.append(f"+ {line}")
-                        if new_str.count("\n") > 10:
-                            lines.append("+ ... (truncated)")
-                    lines.append("```")
-        
-        lines.append("")
-    
-    return "\n".join(lines)
-
-
-def _build_tool_message(record: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Build OpenAI-format tool result message.
-    
-    Format:
-    {
-        "role": "tool",
-        "tool_call_id": "call_xxx",
-        "name": "tool_name",
-        "content": "{\"result\": \"...\"}"  # JSON string or plain text
-    }
-    """
-    record_id = record.get("id", "unknown")
-    data = record.get("data", {})
-    tool_type = data.get("tool_type", "unknown")
-    
-    if tool_type == "shell":
-        tool_name = "shell"
-        result = {
-            "command": data.get("command", ""),
-            "output": data.get("output", ""),
-        }
-        if data.get("duration_ms") is not None:
-            result["duration_ms"] = round(data["duration_ms"], 2)
-        if data.get("cwd"):
-            result["cwd"] = data["cwd"]
-        content = json.dumps(result)
-        
-    elif tool_type == "file_edit":
-        tool_name = "file_edit"
-        file_path = data.get("file_path", "unknown")
-        line_ranges = data.get("line_ranges", [])
-        result = {
-            "file_path": file_path,
-            "status": "success",
-        }
-        if line_ranges:
-            result["lines_modified"] = [
-                {"start": r.get("start_line"), "end": r.get("end_line")} 
-                for r in line_ranges
-            ]
-        content = json.dumps(result)
-        
-    elif tool_type == "tab_edit":
-        tool_name = "tab_edit"
-        file_path = data.get("file_path", "unknown")
-        result = {
-            "file_path": file_path,
-            "status": "success",
-        }
-        content = json.dumps(result)
-        
-    else:
-        tool_name = tool_type
-        content = json.dumps(data)
-    
-    return {
-        "role": "tool",
-        "tool_call_id": f"call_{record_id}",
-        "name": tool_name,
-        "content": content,
-    }
-
-
-# =============================================================================
-# Record Grouping
-# =============================================================================
+from .helpers import (
+    calculate_end_time,
+    count_lines_changed,
+    parse_timestamp,
+    shorten_command,
+    shorten_path,
+)
+from .message_builders import (
+    build_assistant_message,
+    build_chat_completion_response,
+    build_code_changes_summary,
+    build_tool_message,
+    build_user_message,
+)
+from .types import (
+    ConversionResult,
+    FeedbackScore,
+    SpanData,
+    ToolCall,
+    TraceData,
+    TraceMetadata,
+    TraceRecord,
+)
 
 
 def group_records_by_generation(
-    records: List[Dict[str, Any]]
-) -> Dict[str, List[Dict[str, Any]]]:
+    records: List[TraceRecord],
+) -> Dict[str, List[TraceRecord]]:
     """
     Group records by generation_id.
 
@@ -429,7 +53,7 @@ def group_records_by_generation(
     Returns:
         Dictionary mapping generation_id to list of records.
     """
-    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    grouped: Dict[str, List[TraceRecord]] = {}
 
     for record in records:
         generation_id = record.get("generation_id")
@@ -444,86 +68,16 @@ def group_records_by_generation(
     return grouped
 
 
-# =============================================================================
-# Span Building
-# =============================================================================
-
-
-def _build_span_for_tool(
-    record: Dict[str, Any],
-    trace_id: str,
-    project_name: str,
-) -> Dict[str, Any]:
-    """Build span data for a tool execution record."""
-    data = record.get("data", {})
-    tool_type = data.get("tool_type", "unknown")
-    
-    start_time = _parse_timestamp(record.get("timestamp"))
-    duration_ms = data.get("duration_ms")
-    end_time = _calculate_end_time(start_time, duration_ms)
-    
-    if tool_type == "shell":
-        command = data.get("command", "")
-        span_name = f"Shell: {_shorten_command(command)}"
-        span_type = "tool"
-        span_input = {"command": command}
-        if data.get("cwd"):
-            span_input["cwd"] = data["cwd"]
-        span_output: Dict[str, Any] = {}
-        if data.get("output"):
-            span_output["output"] = data["output"]
-        if duration_ms is not None:
-            span_output["duration_ms"] = round(duration_ms, 2)
-    elif tool_type == "file_edit":
-        file_path = data.get("file_path", "unknown")
-        span_name = f"Edit: {_shorten_path(file_path)}"
-        span_type = "general"
-        span_input = {"file_path": file_path}
-        if data.get("edits"):
-            span_input["edits"] = data["edits"]
-        span_output = {}
-        if data.get("line_ranges"):
-            span_output["line_ranges"] = data["line_ranges"]
-    else:
-        span_name = f"Tool: {tool_type}"
-        span_type = "general"
-        span_input = data
-        span_output = {}
-    
-    return {
-        "id": id_helpers.generate_id(timestamp=start_time),
-        "trace_id": trace_id,
-        "project_name": project_name,
-        "name": span_name,
-        "type": span_type,
-        "start_time": start_time,
-        "end_time": end_time,
-        "input": span_input or None,
-        "output": span_output or None,
-        "metadata": {
-            "record_id": record.get("id"),
-            "tool_type": tool_type,
-        },
-        "tags": ["agent-trace"],
-    }
-
-
-# =============================================================================
-# Main Conversion Functions
-# =============================================================================
-
-
 def convert_generation_to_trace_and_spans(
     generation_id: str,
-    records: List[Dict[str, Any]],
+    records: List[TraceRecord],
     project_name: str,
-) -> Dict[str, Any]:
+) -> ConversionResult:
     """
     Convert records with same generation_id to Opik trace + spans.
 
-    Both input and output are in OpenAI messages format:
-    - Input: [{"role": "user", "content": "..."}]
-    - Output: [{"role": "assistant", ...}, {"role": "tool", ...}, ...]
+    Input format: OpenAI messages array ready to send to LLM
+    Output format: OpenAI chat completion response
 
     Args:
         generation_id: The generation ID grouping these records.
@@ -540,14 +94,16 @@ def convert_generation_to_trace_and_spans(
         raise ValueError("Cannot convert empty record list")
 
     # Sort by timestamp
-    sorted_records = sorted(records, key=lambda r: _parse_timestamp(r.get("timestamp")))
+    sorted_records = sorted(
+        records, key=lambda r: parse_timestamp(r.get("timestamp"))
+    )
 
     # Categorize records by event type
-    user_messages: List[Dict[str, Any]] = []
-    assistant_responses: List[Dict[str, Any]] = []
-    assistant_thoughts: List[Dict[str, Any]] = []
-    tool_executions: List[Dict[str, Any]] = []
-    
+    user_messages: List[TraceRecord] = []
+    assistant_responses: List[TraceRecord] = []
+    assistant_thoughts: List[TraceRecord] = []
+    tool_executions: List[TraceRecord] = []
+
     for record in sorted_records:
         event = record.get("event", "")
         if event == "user_message":
@@ -562,42 +118,38 @@ def convert_generation_to_trace_and_spans(
     # Calculate time bounds
     first_record = sorted_records[0]
     last_record = sorted_records[-1]
-    trace_start_time = _parse_timestamp(first_record.get("timestamp"))
-    last_start_time = _parse_timestamp(last_record.get("timestamp"))
-    
+    trace_start_time = parse_timestamp(first_record.get("timestamp"))
+    last_start_time = parse_timestamp(last_record.get("timestamp"))
+
     # Try to get duration from last record
     last_data = last_record.get("data", {})
-    trace_end_time = _calculate_end_time(last_start_time, last_data.get("duration_ms"))
+    trace_end_time = calculate_end_time(last_start_time, last_data.get("duration_ms"))
 
     # Build conversation messages in OpenAI chat format
-    # All messages except the final assistant response go into INPUT
-    # The final assistant response goes into OUTPUT as a chat completion object
-    
     conversation_messages: List[Dict[str, Any]] = []
-    
+
     # Add user message
     if user_messages:
-        conversation_messages.append(_build_user_message(user_messages[-1]))
-    
+        conversation_messages.append(build_user_message(user_messages[-1]))
+
     # If we have tool executions, build the assistant message with tool_calls
     if tool_executions:
-        # Build assistant message with tool_calls
-        assistant_msg = _build_assistant_message(
-            response_records=[],  # Final response comes later
+        assistant_msg = build_assistant_message(
+            response_records=[],
             thought_records=assistant_thoughts,
             tool_records=tool_executions,
         )
         conversation_messages.append(assistant_msg)
-        
+
         # Add tool result messages for each tool execution
         for tool_record in tool_executions:
-            conversation_messages.append(_build_tool_message(tool_record))
-    
+            conversation_messages.append(build_tool_message(tool_record))
+
     # Build the final assistant message for OUTPUT
-    final_assistant_content = None
-    final_tool_calls = None
-    
-    # Add final assistant response (if we have one from afterAgentResponse)
+    final_assistant_content: Optional[str] = None
+    final_tool_calls: Optional[List[ToolCall]] = None
+
+    # Add final assistant response
     if assistant_responses:
         final_response = assistant_responses[-1]
         content = final_response.get("data", {}).get("content", "")
@@ -609,84 +161,75 @@ def convert_generation_to_trace_and_spans(
         reasoning = "\n\n".join(filter(None, thoughts))
         if reasoning:
             final_assistant_content = f"[Thinking]\n{reasoning}"
-    
-    # Add code changes summary to the final content (if there were file edits)
-    code_changes_summary = _build_code_changes_summary(tool_executions)
+
+    # Add code changes summary to the final content
+    code_changes_summary = build_code_changes_summary(tool_executions)
     if code_changes_summary:
         if final_assistant_content:
             final_assistant_content = f"{final_assistant_content}\n\n{code_changes_summary}"
         else:
             final_assistant_content = code_changes_summary
-    
-    # If no final content but we have tool calls, the output is the tool calls
+
+    # If no final content but we have tool calls, build tool_calls for output
     if not final_assistant_content and tool_executions:
-        # Build tool_calls for the output
         final_tool_calls = []
         for record in tool_executions:
             record_id = record.get("id", "")
             data = record.get("data", {})
             tool_type = data.get("tool_type", "unknown")
-            
+
             if tool_type == "shell":
-                arguments = {"command": data.get("command", "")}
+                arguments: Dict[str, Any] = {"command": data.get("command", "")}
                 if data.get("cwd"):
                     arguments["cwd"] = data["cwd"]
-                final_tool_calls.append({
-                    "id": f"call_{record_id}",
-                    "type": "function",
-                    "function": {
-                        "name": "shell",
-                        "arguments": json.dumps(arguments),
-                    },
-                })
+                final_tool_calls.append(
+                    {
+                        "id": f"call_{record_id}",
+                        "type": "function",
+                        "function": {
+                            "name": "shell",
+                            "arguments": json.dumps(arguments),
+                        },
+                    }
+                )
             elif tool_type == "file_edit":
                 file_path = data.get("file_path", "")
                 arguments = {"file_path": file_path}
                 edits = data.get("edits", [])
                 if edits:
                     arguments["edit_count"] = len(edits)
-                final_tool_calls.append({
-                    "id": f"call_{record_id}",
-                    "type": "function",
-                    "function": {
-                        "name": "file_edit",
-                        "arguments": json.dumps(arguments),
-                    },
-                })
-    
+                final_tool_calls.append(
+                    {
+                        "id": f"call_{record_id}",
+                        "type": "function",
+                        "function": {
+                            "name": "file_edit",
+                            "arguments": json.dumps(arguments),
+                        },
+                    }
+                )
+
     # Build trace INPUT: all messages ready to be sent to LLM
     trace_input = {"messages": conversation_messages} if conversation_messages else None
-    
+
     # Build trace OUTPUT: OpenAI chat completion response format
-    # https://platform.openai.com/docs/api-reference/chat/object
-    model = first_record.get("model")
-    
-    final_message: Dict[str, Any] = {
-        "role": "assistant",
-        "content": final_assistant_content,
-        "refusal": None,
-    }
-    if final_tool_calls:
-        final_message["tool_calls"] = final_tool_calls
-    
-    trace_output = {
-        "id": f"chatcmpl-{generation_id[:20]}" if generation_id else "chatcmpl-unknown",
-        "object": "chat.completion",
-        "created": int(trace_start_time.timestamp()),
-        "model": model or "unknown",
-        "choices": [
-            {
-                "index": 0,
-                "message": final_message,
-                "finish_reason": "stop" if final_assistant_content else "tool_calls",
-            }
-        ],
-    }
+    model = first_record.get("model") or "unknown"
+    trace_output = build_chat_completion_response(
+        generation_id=generation_id,
+        model=model,
+        created_timestamp=int(trace_start_time.timestamp()),
+        content=final_assistant_content,
+        tool_calls=final_tool_calls,
+    )
 
     # Build trace name
-    edit_count = sum(1 for r in tool_executions if r.get("data", {}).get("tool_type") == "file_edit")
-    shell_count = sum(1 for r in tool_executions if r.get("data", {}).get("tool_type") == "shell")
-    
+    edit_count = sum(
+        1 for r in tool_executions if r.get("data", {}).get("tool_type") == "file_edit"
+    )
+    shell_count = sum(
+        1 for r in tool_executions if r.get("data", {}).get("tool_type") == "shell"
+    )
+
     parts = []
     if edit_count > 0:
         parts.append(f"{edit_count} edit{'s' if edit_count > 1 else ''}")
@@ -694,14 +237,14 @@ def convert_generation_to_trace_and_spans(
         parts.append(f"{shell_count} command{'s' if shell_count > 1 else ''}")
     trace_name = f"Agent Turn: {', '.join(parts)}" if parts else "Agent Turn"
 
-    # Build trace metadata (include generation_id, conversation_id, and git user)
+    # Build trace metadata
     conversation_id = first_record.get("conversation_id")
     user_email = first_record.get("user_email")
-    
-    trace_metadata: Dict[str, Any] = {
+
+    trace_metadata: TraceMetadata = {
         "source": "cursor-agent-trace",
     }
-    if model:
+    if model and model != "unknown":
         trace_metadata["model"] = model
     if generation_id and not generation_id.startswith("_standalone_"):
         trace_metadata["generation_id"] = generation_id
@@ -712,9 +255,9 @@ def convert_generation_to_trace_and_spans(
 
     # Calculate feedback scores
     duration_seconds = (trace_end_time - trace_start_time).total_seconds()
-    lines_changed = _count_lines_changed(tool_executions)
-    
-    feedback_scores: List[Dict[str, Any]] = [
+    lines_changed = count_lines_changed(tool_executions)
+
+    feedback_scores: List[FeedbackScore] = [
         {"name": "duration_seconds", "value": round(duration_seconds, 2)},
         {"name": "lines_added", "value": lines_changed["lines_added"]},
         {"name": "lines_deleted", "value": lines_changed["lines_deleted"]},
@@ -724,7 +267,7 @@ def convert_generation_to_trace_and_spans(
     trace_id = id_helpers.generate_id(timestamp=trace_start_time)
 
     # Build trace data
-    trace_data = {
+    trace_data: TraceData = {
         "id": trace_id,
         "project_name": project_name,
         "name": trace_name,
@@ -740,12 +283,12 @@ def convert_generation_to_trace_and_spans(
     }
 
     # Build spans for tool executions
-    spans_data = [
+    spans_data: List[SpanData] = [
         _build_span_for_tool(record, trace_id, project_name)
         for record in tool_executions
     ]
 
-    # Adjust end times for spans without duration (use next span's start time)
+    # Adjust end times for spans without duration
     for i, span in enumerate(spans_data):
         if span["start_time"] == span["end_time"]:
             if i + 1 < len(spans_data):
@@ -756,81 +299,50 @@ def convert_generation_to_trace_and_spans(
     return {"trace": trace_data, "spans": spans_data}
 
 
-# =============================================================================
-# Legacy Support
-# =============================================================================
-
-
-def group_traces_by_generation(
-    traces: List[Dict[str, Any]]
-) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Legacy function: Group traces by generation_id from metadata.
-    
-    For backward compatibility with old trace format.
-    """
-    grouped: Dict[str, List[Dict[str, Any]]] = {}
-
-    for trace in traces:
-        # Try new format first
-        generation_id = trace.get("generation_id")
-        
-        # Fall back to old format (metadata.generation_id)
-        if not generation_id:
-            metadata = trace.get("metadata") or {}
-            generation_id = metadata.get("generation_id")
-
-        if generation_id:
-            key = generation_id
-        else:
-            key = f"_standalone_{trace.get('id', id_helpers.generate_id())}"
-
-        grouped.setdefault(key, []).append(trace)
-
-    return grouped
-
-
-def convert_agent_trace_to_span_data(
-    trace: Dict[str, Any],
+def _build_span_for_tool(
+    record: TraceRecord,
     trace_id: str,
     project_name: str,
-) -> Dict[str, Any]:
-    """
-    Legacy function: Convert old-format Agent Trace record to span data.
-    """
-    # Check if this is new format
-    if "event" in trace:
-        return _build_span_for_tool(trace, trace_id, project_name)
-    
-    # Old format handling
-    metadata = trace.get("metadata") or {}
-    
-    start_time = _parse_timestamp(trace.get("timestamp"))
-    end_time = _calculate_end_time(start_time, metadata.get("duration_ms"))
-    
-    # Determine type from old format
-    command = metadata.get("command")
-    files = trace.get("files", [])
-    file_path = files[0].get("path") if files else None
-    
-    if command:
-        span_name = f"Shell: {_shorten_command(command)}"
+) -> SpanData:
+    """Build span data for a tool execution record."""
+    data = record.get("data", {})
+    tool_type = data.get("tool_type", "unknown")
+
+    start_time = parse_timestamp(record.get("timestamp"))
+    duration_ms = data.get("duration_ms")
+    end_time = calculate_end_time(start_time, duration_ms)
+
+    span_input: Dict[str, Any]
+    span_output: Dict[str, Any]
+
+    if tool_type == "shell":
+        command = data.get("command", "")
+        span_name = f"Shell: {shorten_command(command)}"
         span_type = "tool"
         span_input = {"command": command}
-        span_output: Dict[str, Any] = {}
-        if metadata.get("duration_ms"):
-            span_output["duration_ms"] = round(metadata["duration_ms"], 2)
-    elif file_path and file_path not in (".shell-history", ".sessions"):
-        span_name = f"Edit: {_shorten_path(file_path)}"
+        if data.get("cwd"):
+            span_input["cwd"] = data["cwd"]
+        span_output = {}
+        if data.get("output"):
+            span_output["output"] = data["output"]
+        if duration_ms is not None:
+            span_output["duration_ms"] = round(duration_ms, 2)
+    elif tool_type == "file_edit":
+        file_path = data.get("file_path", "unknown")
+        span_name = f"Edit: {shorten_path(file_path)}"
         span_type = "general"
         span_input = {"file_path": file_path}
+        if data.get("edits"):
+            span_input["edits"] = data["edits"]
         span_output = {}
+        if data.get("line_ranges"):
+            span_output["line_ranges"] = data["line_ranges"]
     else:
-        span_name = "Agent Operation"
+        span_name = f"Tool: {tool_type}"
         span_type = "general"
-        span_input = {}
+        span_input = dict(data)
         span_output = {}
-    
+
     return {
         "id": id_helpers.generate_id(timestamp=start_time),
         "trace_id": trace_id,
@@ -841,6 +353,9 @@ def convert_agent_trace_to_span_data(
         "end_time": end_time,
         "input": span_input or None,
         "output": span_output or None,
-        "metadata": {"record_id": trace.get("id")},
+        "metadata": {
+            "record_id": record.get("id"),
+            "tool_type": tool_type,
+        },
         "tags": ["agent-trace"],
     }

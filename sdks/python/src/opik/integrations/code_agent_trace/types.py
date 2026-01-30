@@ -1,65 +1,233 @@
 """
-Type definitions for Agent Trace spec v1.0.
+Type definitions for Code Agent Trace integration.
 
-Agent Trace Spec: https://github.com/cursor/agent-trace
+This module defines strict TypedDict types for trace records from
+AI coding tools like Cursor, Claude Code, and other AI coding agents.
 """
 
 from typing import Any, Dict, List, Optional, TypedDict
 
 
-class AgentTraceContributor(TypedDict, total=False):
-    """Contributor information."""
-
-    type: str  # "human" | "ai" | "mixed" | "unknown"
-    model_id: Optional[str]
+# =============================================================================
+# OpenAI Message Format Types
+# =============================================================================
 
 
-class AgentTraceRange(TypedDict, total=False):
-    """Line range information."""
+class TextContentPart(TypedDict):
+    """Text content part in OpenAI message format."""
 
-    start_line: int
-    end_line: int
-    content_hash: Optional[str]
-    contributor: Optional[AgentTraceContributor]
+    type: str  # "text"
+    text: str
 
 
-class AgentTraceConversation(TypedDict, total=False):
-    """Conversation information."""
+class ImageUrlDetail(TypedDict, total=False):
+    """Image URL detail in OpenAI message format."""
 
-    url: Optional[str]
-    contributor: Optional[AgentTraceContributor]
-    ranges: List[AgentTraceRange]
-    related: Optional[List[Dict[str, str]]]
+    url: str
+    detail: str
 
 
-class AgentTraceFileEntry(TypedDict, total=False):
-    """File entry."""
+class ImageContentPart(TypedDict):
+    """Image content part in OpenAI message format."""
+
+    type: str  # "image_url"
+    image_url: ImageUrlDetail
+
+
+class FileDetail(TypedDict, total=False):
+    """File detail in OpenAI message format."""
 
     path: str
-    conversations: List[AgentTraceConversation]
+    type: str
 
 
-class AgentTraceVcs(TypedDict, total=False):
-    """VCS information."""
+class FileContentPart(TypedDict):
+    """File content part in OpenAI message format."""
 
-    type: str  # "git" | "jj" | "hg" | "svn"
-    revision: str
+    type: str  # "file"
+    file: FileDetail
 
 
-class AgentTraceTool(TypedDict, total=False):
-    """Tool information."""
+class ToolCallFunction(TypedDict):
+    """Tool call function in OpenAI message format."""
 
     name: str
-    version: Optional[str]
+    arguments: str  # JSON string
 
 
-class AgentTraceRecord(TypedDict, total=False):
-    """Agent Trace record (v1.0 spec)."""
+class ToolCall(TypedDict):
+    """Tool call in OpenAI message format."""
+
+    id: str
+    type: str  # "function"
+    function: ToolCallFunction
+
+
+class UserMessage(TypedDict):
+    """User message in OpenAI format."""
+
+    role: str  # "user"
+    content: List[Any]  # List of content parts
+
+
+class AssistantMessage(TypedDict, total=False):
+    """Assistant message in OpenAI format."""
+
+    role: str  # "assistant"
+    content: Optional[str]
+    refusal: Optional[str]
+    audio: Optional[Any]
+    function_call: Optional[Any]
+    tool_calls: Optional[List[ToolCall]]
+    reasoning_content: Optional[str]
+
+
+class ToolMessage(TypedDict):
+    """Tool result message in OpenAI format."""
+
+    role: str  # "tool"
+    tool_call_id: str
+    name: str
+    content: str
+
+
+class ChatCompletionChoice(TypedDict):
+    """Choice in OpenAI chat completion response."""
+
+    index: int
+    message: AssistantMessage
+    finish_reason: str
+
+
+class ChatCompletionResponse(TypedDict):
+    """OpenAI chat completion response format."""
+
+    id: str
+    object: str  # "chat.completion"
+    created: int
+    model: str
+    choices: List[ChatCompletionChoice]
+
+
+# =============================================================================
+# Trace Record Types (from Cursor hooks)
+# =============================================================================
+
+
+class ShellExecutionData(TypedDict, total=False):
+    """Data for shell execution tool."""
+
+    tool_type: str  # "shell"
+    command: str
+    output: str
+    cwd: str
+    duration_ms: float
+
+
+class FileEditData(TypedDict, total=False):
+    """Data for file edit tool."""
+
+    tool_type: str  # "file_edit"
+    file_path: str
+    edits: List[Dict[str, str]]  # {"old_string": ..., "new_string": ...}
+    line_ranges: List[Dict[str, int]]  # {"start_line": ..., "end_line": ...}
+
+
+class UserMessageData(TypedDict, total=False):
+    """Data for user message event."""
+
+    content: str
+    attachments: List[Dict[str, str]]
+
+
+class AssistantMessageData(TypedDict, total=False):
+    """Data for assistant message event."""
+
+    content: str
+
+
+class TraceRecord(TypedDict, total=False):
+    """
+    A single trace record from Cursor hooks.
+
+    This represents one event captured by the trace-hook.ts script.
+    """
 
     version: str
     id: str
     timestamp: str
-    vcs: Optional[AgentTraceVcs]
-    tool: Optional[AgentTraceTool]
-    files: List[AgentTraceFileEntry]
-    metadata: Optional[Dict[str, Any]]
+    event: str  # "user_message", "assistant_message", "tool_execution", etc.
+    conversation_id: str
+    generation_id: str
+    model: str
+    user_email: str
+    data: Dict[str, Any]
+
+
+# =============================================================================
+# Opik Data Types
+# =============================================================================
+
+
+class FeedbackScore(TypedDict):
+    """Feedback score for a trace."""
+
+    name: str
+    value: float
+
+
+class TraceMetadata(TypedDict, total=False):
+    """Metadata for an Opik trace."""
+
+    source: str
+    model: str
+    generation_id: str
+    conversation_id: str
+    user: str
+
+
+class SpanData(TypedDict, total=False):
+    """Data for creating an Opik span."""
+
+    id: str
+    trace_id: str
+    project_name: str
+    name: str
+    type: str
+    start_time: Any  # datetime.datetime
+    end_time: Any  # datetime.datetime
+    input: Optional[Dict[str, Any]]
+    output: Optional[Dict[str, Any]]
+    metadata: Dict[str, Any]
+    tags: List[str]
+
+
+class TraceData(TypedDict, total=False):
+    """Data for creating an Opik trace."""
+
+    id: str
+    project_name: str
+    name: str
+    start_time: Any  # datetime.datetime
+    end_time: Any  # datetime.datetime
+    input: Optional[Dict[str, Any]]
+    output: Optional[Dict[str, Any]]
+    metadata: TraceMetadata
+    tags: List[str]
+    thread_id: Optional[str]
+    error_info: Optional[Any]
+    feedback_scores: List[FeedbackScore]
+
+
+class ConversionResult(TypedDict):
+    """Result of converting records to trace and spans."""
+
+    trace: TraceData
+    spans: List[SpanData]
+
+
+class LinesChanged(TypedDict):
+    """Count of lines added and deleted."""
+
+    lines_added: int
+    lines_deleted: int

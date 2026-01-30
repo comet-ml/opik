@@ -1,19 +1,21 @@
 """
-Public API for logging Agent Trace data to Opik.
+Public API for logging Code Agent Trace data to Opik.
 
-This module provides functions for uploading Agent Trace records
+This module provides functions for uploading trace records
 from tools like Cursor, Claude Code, and other AI coding agents.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
+import opik
 from opik.api_objects import opik_client, trace
 
 from .converters import convert_generation_to_trace_and_spans
+from .types import TraceRecord
 
 
 def log_code_agent_turn(
-    trace_records: List[Dict[str, Any]],
+    trace_records: List[TraceRecord],
     project_name: Optional[str] = None,
 ) -> trace.Trace:
     """
@@ -23,8 +25,7 @@ def log_code_agent_turn(
     individual operations (file edits, shell commands) within a single agent turn.
 
     All trace_records MUST have the same generation_id. Use this function when you
-    have already grouped records by generation_id. For batch processing of multiple
-    turns, group records by generation_id first and call this function for each group.
+    have already grouped records by generation_id.
 
     Mapping:
     - generation_id → one Opik trace (the agent turn)
@@ -33,7 +34,7 @@ def log_code_agent_turn(
     - timestamp + duration_ms → start_time and end_time
 
     Args:
-        trace_records: List of Agent Trace records for a single agent turn.
+        trace_records: List of trace records for a single agent turn.
             All records must have the same generation_id.
         project_name: The name of the project. If not set, uses the default
             project from Opik configuration.
@@ -68,15 +69,10 @@ def log_code_agent_turn(
     if not trace_records:
         raise ValueError("trace_records cannot be empty")
 
-    # Validate all records have the same generation_id (support both formats)
+    # Validate all records have the same generation_id
     generation_ids = set()
     for record in trace_records:
-        # New format: generation_id at top level
         gen_id = record.get("generation_id")
-        # Old format: generation_id in metadata
-        if not gen_id:
-            metadata = record.get("metadata") or {}
-            gen_id = metadata.get("generation_id")
         generation_ids.add(gen_id)
 
     if len(generation_ids) > 1:
@@ -85,7 +81,10 @@ def log_code_agent_turn(
             f"Found {len(generation_ids)} different generation_ids: {generation_ids}"
         )
 
-    generation_id = generation_ids.pop() or f"_standalone_{trace_records[0].get('id', 'unknown')}"
+    generation_id = (
+        generation_ids.pop()
+        or f"_standalone_{trace_records[0].get('id', 'unknown')}"
+    )
 
     # Get cached client
     client = opik_client.get_client_cached()
@@ -140,5 +139,4 @@ def log_code_agent_turn(
 
 def flush() -> None:
     """Flush pending Opik data to the backend."""
-    client = opik_client.get_client_cached()
-    client.flush()
+    opik.flush_tracker()

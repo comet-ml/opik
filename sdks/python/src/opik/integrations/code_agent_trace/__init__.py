@@ -1,11 +1,9 @@
 """
 Code Agent Trace Integration for Opik.
 
-This integration allows you to upload Agent Trace data from AI coding tools
+This integration allows you to upload trace data from AI coding tools
 like Cursor, Claude Code, and other AI coding agents to Opik for visibility
 and attribution tracking.
-
-Agent Trace Spec: https://github.com/cursor/agent-trace
 
 Example:
     ```python
@@ -43,37 +41,32 @@ CLI Usage:
 """
 
 from .api import flush, log_code_agent_turn
-from .converters import (
-    convert_agent_trace_to_span_data,
-    convert_generation_to_trace_and_spans,
-    group_records_by_generation,
-    group_traces_by_generation,
-)
+from .converters import convert_generation_to_trace_and_spans, group_records_by_generation
 from .types import (
-    AgentTraceContributor,
-    AgentTraceConversation,
-    AgentTraceFileEntry,
-    AgentTraceRange,
-    AgentTraceRecord,
-    AgentTraceTool,
-    AgentTraceVcs,
+    ChatCompletionResponse,
+    ConversionResult,
+    FeedbackScore,
+    LinesChanged,
+    SpanData,
+    TraceData,
+    TraceMetadata,
+    TraceRecord,
 )
 
 __all__ = [
     # Main API
     "log_code_agent_turn",
     "flush",
-    # Converters (for advanced use)
+    # Converters
     "convert_generation_to_trace_and_spans",
-    "convert_agent_trace_to_span_data",
     "group_records_by_generation",
-    "group_traces_by_generation",  # Legacy
     # Types
-    "AgentTraceRecord",
-    "AgentTraceContributor",
-    "AgentTraceRange",
-    "AgentTraceConversation",
-    "AgentTraceFileEntry",
-    "AgentTraceVcs",
-    "AgentTraceTool",
+    "TraceRecord",
+    "TraceData",
+    "SpanData",
+    "TraceMetadata",
+    "FeedbackScore",
+    "LinesChanged",
+    "ConversionResult",
+    "ChatCompletionResponse",
 ]
