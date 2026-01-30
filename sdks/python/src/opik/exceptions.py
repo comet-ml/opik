@@ -163,3 +163,9 @@ class SearchTimeoutError(OpikException):
     """Exception raised when a search times out."""
 
     pass
+
+
+class DatasetViewImmutableError(OpikException):
+    """Exception raised when attempting to modify a read-only DatasetView."""
+
+    pass

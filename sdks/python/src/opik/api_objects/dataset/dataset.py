@@ -343,6 +343,18 @@ class Dataset:
 
         return dataset_items_as_dicts
 
+    def _get_stream_filters(self) -> Optional[str]:
+        """
+        Get the filter string to apply when streaming items.
+
+        This method can be overridden by subclasses (e.g., DatasetView) to provide
+        a filter string that will be passed to the backend during streaming.
+
+        Returns:
+            Optional filter string in JSON format, or None for no filtering.
+        """
+        return None
+
     def __internal_api__stream_items_as_dataclasses__(
         self,
         nb_samples: Optional[int] = None,
@@ -374,6 +386,9 @@ class Dataset:
         items_yielded = 0
         dataset_items_ids_left = set(dataset_item_ids) if dataset_item_ids else None
 
+        # Get filters from subclass (e.g., DatasetView) or None for regular Dataset
+        filters = self._get_stream_filters()
+
         while should_retrieve_more_items:
             # Wrap the streaming call in retry logic so we can resume from last_retrieved_id
             @retry_decorator.opik_rest_retry
@@ -383,6 +398,7 @@ class Dataset:
                         dataset_name=self._name,
                         last_retrieved_id=last_retrieved_id,
                         steam_limit=batch_size,
+                        filters=filters,
                     ),
                     item_class=rest_dataset_item_read.DatasetItem,
                     nb_samples=nb_samples,

@@ -1,7 +1,11 @@
+import pytest
+
 import opik
-from . import verifiers
+from opik import exceptions
 from opik.api_objects.dataset import dataset_item
+from opik.api_objects.dataset.dataset_view import DatasetView
 from opik.api_objects import helpers
+from . import verifiers
 
 
 def test_create_and_populate_dataset__happyflow(
@@ -141,3 +145,104 @@ def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
         description=DESCRIPTION,
         dataset_items=[],
     )
+
+
+def test_get_dataset_with_filter__returns_filtered_items_and_is_immutable(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """Test that get_dataset with filter returns correct filtered items and DatasetView is immutable."""
+    DESCRIPTION = "E2E test dataset for filtering"
+
+    # Create dataset with items that have different data.category values
+    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of France?"},
+                "expected_output": {"output": "Paris"},
+                "category": "geography",
+            },
+            {
+                "input": {"question": "What is 2 + 2?"},
+                "expected_output": {"output": "4"},
+                "category": "math",
+            },
+            {
+                "input": {"question": "What is the capital of Poland?"},
+                "expected_output": {"output": "Warsaw"},
+                "category": "geography",
+            },
+        ]
+    )
+
+    # Get filtered view - only items with data.category="geography"
+    filtered_view = opik_client.get_dataset(
+        name=dataset_name,
+        filter_string='data.category = "geography"',
+    )
+
+    # Verify it returns a DatasetView
+    assert isinstance(filtered_view, DatasetView)
+    assert filtered_view.filter_string == 'data.category = "geography"'
+
+    # Verify correct items are returned
+    filtered_items = list(filtered_view.__internal_api__stream_items_as_dataclasses__())
+    assert len(filtered_items) == 2
+
+    # Verify items content - should be geography questions only
+    inputs = {item.input["question"] for item in filtered_items}
+    assert inputs == {
+        "What is the capital of France?",
+        "What is the capital of Poland?",
+    }
+
+    # Verify DatasetView is immutable - insert should raise error
+    with pytest.raises(exceptions.DatasetViewImmutableError):
+        filtered_view.insert([{"input": "test"}])
+
+    # Verify DatasetView is immutable - update should raise error
+    with pytest.raises(exceptions.DatasetViewImmutableError):
+        filtered_view.update([{"id": "test-id", "input": "test"}])
+
+    # Verify DatasetView is immutable - delete should raise error
+    with pytest.raises(exceptions.DatasetViewImmutableError):
+        filtered_view.delete(["test-id"])
+
+    # Verify DatasetView is immutable - clear should raise error
+    with pytest.raises(exceptions.DatasetViewImmutableError):
+        filtered_view.clear()
+
+
+def test_get_dataset_with_filter__filter_excludes_all_items__returns_empty_view(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """Test that get_dataset with filter that matches no items returns empty DatasetView."""
+    DESCRIPTION = "E2E test dataset for empty filter"
+
+    # Create dataset with items
+    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of France?"},
+                "category": "geography",
+            },
+            {
+                "input": {"question": "What is the capital of Germany?"},
+                "category": "geography",
+            },
+        ]
+    )
+
+    # Get filtered view with filter that matches no items
+    filtered_view = opik_client.get_dataset(
+        name=dataset_name,
+        filter_string='data.category = "nonexistent"',
+    )
+
+    # Verify it returns a DatasetView
+    assert isinstance(filtered_view, DatasetView)
+
+    # Verify no items are returned
+    filtered_items = list(filtered_view.__internal_api__stream_items_as_dataclasses__())
+    assert len(filtered_items) == 0

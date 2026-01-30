@@ -4,135 +4,303 @@ simple filters without "and" or "or" operators.
 """
 
 import json
-
+from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple, List
 
-COLUMNS = {
-    "id": "string",
-    "name": "string",
-    "status": "string",
-    "start_time": "date_time",
-    "end_time": "date_time",
-    "input": "string",
-    "output": "string",
-    "metadata": "dictionary",
-    "feedback_scores": "feedback_scores_number",
-    "tags": "list",
-    "usage.total_tokens": "number",
-    "usage.prompt_tokens": "number",
-    "usage.completion_tokens": "number",
-    "duration": "number",
-    "number_of_messages": "number",
-    "created_by": "string",
-    "thread_id": "string",
-    "total_estimated_cost": "number",
-    "type": "string",
-    "model": "string",
-    "provider": "string",
-    "template_structure": "string",
-}
 
-SUPPORTED_OPERATORS = {
-    "id": ["=", "contains", "not_contains", "starts_with", "ends_with", "!=", ">", "<"],
-    "name": [
-        "=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        "!=",
-        ">",
-        "<",
-    ],
-    "status": ["=", "contains", "not_contains"],
-    "start_time": ["=", ">", "<", ">=", "<="],
-    "end_time": ["=", ">", "<", ">=", "<="],
-    "input": [
-        "=",
-        "contains",
-        "not_contains",
-    ],
-    "output": ["=", "contains", "not_contains"],
-    "metadata": ["=", "contains", ">", "<"],
-    "feedback_scores": ["=", ">", "<", ">=", "<=", "is_empty", "is_not_empty"],
-    "tags": ["contains"],
-    "usage.total_tokens": ["=", "!=", ">", "<", ">=", "<="],
-    "usage.prompt_tokens": ["=", "!=", ">", "<", ">=", "<="],
-    "usage.completion_tokens": ["=", "!=", ">", "<", ">=", "<="],
-    "duration": ["=", "!=", ">", "<", ">=", "<="],
-    "number_of_messages": ["=", "!=", ">", "<", ">=", "<="],
-    "created_by": [
-        "=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        "!=",
-        ">",
-        "<",
-    ],
-    "thread_id": [
-        "=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        "!=",
-        ">",
-        "<",
-    ],
-    "total_estimated_cost": ["=", "!=", ">", "<", ">=", "<="],
-    "type": [
-        "=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        "!=",
-        ">",
-        "<",
-    ],
-    "model": [
-        "=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        "!=",
-        ">",
-        "<",
-    ],
-    "provider": [
-        "=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        "!=",
-        ">",
-        "<",
-    ],
-    "default": [
-        "=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        "!=",
-        ">",
-        "<",
-    ],
-    "template_structure": [
-        "=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        "!=",
-    ],
-}
+class OQLConfig(ABC):
+    """Abstract base class for OQL configuration."""
+
+    @property
+    @abstractmethod
+    def columns(self) -> Dict[str, str]:
+        """Return the supported columns and their types."""
+        pass
+
+    @property
+    @abstractmethod
+    def supported_operators(self) -> Dict[str, List[str]]:
+        """Return the supported operators for each column."""
+        pass
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        """Return fields that support nested key access via dot notation."""
+        return ["usage", "feedback_scores", "metadata"]
+
+
+class TraceSpanOQLConfig(OQLConfig):
+    """OQL configuration for traces and spans filtering."""
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        return {
+            "id": "string",
+            "name": "string",
+            "status": "string",
+            "start_time": "date_time",
+            "end_time": "date_time",
+            "input": "string",
+            "output": "string",
+            "metadata": "dictionary",
+            "feedback_scores": "feedback_scores_number",
+            "tags": "list",
+            "usage.total_tokens": "number",
+            "usage.prompt_tokens": "number",
+            "usage.completion_tokens": "number",
+            "duration": "number",
+            "number_of_messages": "number",
+            "created_by": "string",
+            "thread_id": "string",
+            "total_estimated_cost": "number",
+            "type": "string",
+            "model": "string",
+            "provider": "string",
+            "template_structure": "string",
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        return {
+            "id": [
+                "=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                "!=",
+                ">",
+                "<",
+            ],
+            "name": [
+                "=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                "!=",
+                ">",
+                "<",
+            ],
+            "status": ["=", "contains", "not_contains"],
+            "start_time": ["=", ">", "<", ">=", "<="],
+            "end_time": ["=", ">", "<", ">=", "<="],
+            "input": [
+                "=",
+                "contains",
+                "not_contains",
+            ],
+            "output": ["=", "contains", "not_contains"],
+            "metadata": ["=", "contains", ">", "<"],
+            "feedback_scores": ["=", ">", "<", ">=", "<=", "is_empty", "is_not_empty"],
+            "tags": ["contains"],
+            "usage.total_tokens": ["=", "!=", ">", "<", ">=", "<="],
+            "usage.prompt_tokens": ["=", "!=", ">", "<", ">=", "<="],
+            "usage.completion_tokens": ["=", "!=", ">", "<", ">=", "<="],
+            "duration": ["=", "!=", ">", "<", ">=", "<="],
+            "number_of_messages": ["=", "!=", ">", "<", ">=", "<="],
+            "created_by": [
+                "=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                "!=",
+                ">",
+                "<",
+            ],
+            "thread_id": [
+                "=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                "!=",
+                ">",
+                "<",
+            ],
+            "total_estimated_cost": ["=", "!=", ">", "<", ">=", "<="],
+            "type": [
+                "=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                "!=",
+                ">",
+                "<",
+            ],
+            "model": [
+                "=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                "!=",
+                ">",
+                "<",
+            ],
+            "provider": [
+                "=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                "!=",
+                ">",
+                "<",
+            ],
+            "default": [
+                "=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                "!=",
+                ">",
+                "<",
+            ],
+            "template_structure": [
+                "=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                "!=",
+            ],
+        }
+
+
+class DatasetItemOQLConfig(OQLConfig):
+    """OQL configuration for dataset item filtering.
+
+    Based on backend's DatasetItemField enum and FilterQueryBuilder.
+    See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/DatasetItemField.java
+    """
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        # Maps to DatasetItemField enum values and their FieldType
+        return {
+            "id": "string",  # FieldType.STRING
+            "data": "map",  # FieldType.MAP - supports nested key access
+            "full_data": "string",  # FieldType.STRING - toString(data)
+            "source": "string",  # FieldType.STRING
+            "trace_id": "string",  # FieldType.STRING
+            "span_id": "string",  # FieldType.STRING
+            "tags": "list",  # FieldType.LIST
+            "created_at": "date_time",  # FieldType.DATE_TIME
+            "last_updated_at": "date_time",  # FieldType.DATE_TIME
+            "created_by": "string",  # FieldType.STRING
+            "last_updated_by": "string",  # FieldType.STRING
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        # Based on ANALYTICS_DB_OPERATOR_MAP in FilterQueryBuilder.java
+        # Operators supported per FieldType
+        return {
+            # STRING fields: =, !=, contains, not_contains, starts_with, ends_with, >, <
+            "id": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                "<",
+            ],
+            "full_data": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                "<",
+            ],
+            "source": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                "<",
+            ],
+            "trace_id": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                "<",
+            ],
+            "span_id": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                "<",
+            ],
+            "created_by": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                "<",
+            ],
+            "last_updated_by": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                "<",
+            ],
+            # MAP fields: =, !=, contains, not_contains, starts_with, ends_with (with key access)
+            "data": ["=", "!=", "contains", "not_contains", "starts_with", "ends_with"],
+            # LIST fields: =, !=, contains, not_contains, is_empty, is_not_empty
+            "tags": ["=", "!=", "contains", "not_contains", "is_empty", "is_not_empty"],
+            # DATE_TIME fields: =, !=, >, >=, <, <=
+            "created_at": ["=", "!=", ">", ">=", "<", "<="],
+            "last_updated_at": ["=", "!=", ">", ">=", "<", "<="],
+            # Default for unknown fields (dynamic fields)
+            "default": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                "<",
+            ],
+        }
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        # Fields that support nested key access via dot notation (data.key_name)
+        return ["data"]
+
 
 OPERATORS_WITHOUT_VALUES = {"is_empty", "is_not_empty"}
+
+# Default config for backward compatibility
+_DEFAULT_CONFIG = TraceSpanOQLConfig()
 
 
 class OpikQueryLanguage:
@@ -153,14 +321,25 @@ class OpikQueryLanguage:
     The parse method works by iterating over the string character by character and extracting / validating the tokens.
     """
 
-    def __init__(self, query_string: Optional[str]):
+    def __init__(self, query_string: Optional[str], config: Optional[OQLConfig] = None):
         self.query_string = query_string or ""
+        self._config = config or _DEFAULT_CONFIG
 
         self._cursor = 0
         self._filter_expressions = self._parse_expressions()
         self.parsed_filters = None
         if self._filter_expressions is not None:
             self.parsed_filters = json.dumps(self._filter_expressions)
+
+    @classmethod
+    def for_traces(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+        """Factory method for trace/span filtering."""
+        return cls(query_string, TraceSpanOQLConfig())
+
+    @classmethod
+    def for_dataset_items(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+        """Factory method for dataset item filtering."""
+        return cls(query_string, DatasetItemOQLConfig())
 
     def get_filter_expressions(self) -> Optional[List[Dict[str, Any]]]:
         return self._filter_expressions
@@ -223,6 +402,9 @@ class OpikQueryLanguage:
         # Skip whitespace
         self._skip_whitespace()
 
+        columns = self._config.columns
+        dictionary_fields = self._config.dictionary_fields
+
         # Parse the field name
         start = self._cursor
         while self._cursor < len(self.query_string) and self._is_valid_field_char(
@@ -232,7 +414,10 @@ class OpikQueryLanguage:
         field = self.query_string[start : self._cursor]
 
         # Parse the key if it exists
-        if self.query_string[self._cursor] == ".":
+        if (
+            self._cursor < len(self.query_string)
+            and self.query_string[self._cursor] == "."
+        ):
             # Skip the "."
             self._cursor += 1
 
@@ -257,30 +442,34 @@ class OpikQueryLanguage:
                 )  # Replace doubled quotes with single quotes
                 self._cursor += 1
 
-            # Keys are only supported for usage, feedback_scores and metadata
-            if field not in ["usage", "feedback_scores", "metadata"]:
-                raise ValueError(
-                    f"Field {field}.{key} is not supported, only the fields {COLUMNS.keys()} are supported."
-                )
-            elif field == "usage":
-                if key not in ["total_tokens", "prompt_tokens", "completion_tokens"]:
+            # Special handling for usage.X fields (trace/span specific)
+            # These are treated as flat fields, not dictionary access
+            if field == "usage":
+                composite_field = f"usage.{key}"
+                if composite_field in columns:
+                    return {
+                        "field": composite_field,
+                        "key": "",
+                        "type": columns[composite_field],
+                    }
+                else:
                     raise ValueError(
                         f"When querying usage, {key} is not supported, only usage.total_tokens, usage.prompt_tokens and usage.completion_tokens are supported."
                     )
-                else:
-                    return {
-                        "field": f"usage.{key}",
-                        "key": "",
-                        "type": COLUMNS[f"usage.{key}"],
-                    }
-            elif field in COLUMNS:
-                return {"field": field, "key": key, "type": COLUMNS[field]}
+
+            # Keys are only supported for dictionary fields
+            if field not in dictionary_fields:
+                raise ValueError(
+                    f"Field {field}.{key} is not supported, only the fields {list(columns.keys())} are supported."
+                )
+            elif field in columns:
+                return {"field": field, "key": key, "type": columns[field]}
             else:
                 # defaults to string
                 return {"field": field, "key": key, "type": "string"}
 
-        elif field in COLUMNS:
-            return {"field": field, "key": "", "type": COLUMNS[field]}
+        elif field in columns:
+            return {"field": field, "key": "", "type": columns[field]}
         else:
             # defaults to string
             return {"field": field, "key": "", "type": "string"}
@@ -289,7 +478,9 @@ class OpikQueryLanguage:
         # Skip whitespace
         self._skip_whitespace()
 
-        if parsed_field not in SUPPORTED_OPERATORS:
+        supported_operators = self._config.supported_operators
+
+        if parsed_field not in supported_operators:
             parsed_field = "default"
 
         # Parse the operator
@@ -306,9 +497,9 @@ class OpikQueryLanguage:
                 operator = self.query_string[self._cursor]
                 self._cursor += 1
 
-            if operator not in SUPPORTED_OPERATORS[parsed_field]:
+            if operator not in supported_operators[parsed_field]:
                 raise ValueError(
-                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {SUPPORTED_OPERATORS[parsed_field]} are supported."
+                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {supported_operators[parsed_field]} are supported."
                 )
             return {"operator": operator}
         else:
@@ -320,9 +511,9 @@ class OpikQueryLanguage:
                 self._cursor += 1
 
             operator = self.query_string[start : self._cursor]
-            if operator not in SUPPORTED_OPERATORS[parsed_field]:
+            if operator not in supported_operators[parsed_field]:
                 raise ValueError(
-                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {SUPPORTED_OPERATORS[parsed_field]} are supported."
+                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {supported_operators[parsed_field]} are supported."
                 )
             return {"operator": operator}
 

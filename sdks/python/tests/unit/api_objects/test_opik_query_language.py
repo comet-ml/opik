@@ -247,7 +247,7 @@ from opik.api_objects.opik_query_language import OpikQueryLanguage
     ],
 )
 def test_valid_oql_expressions(filter_string, expected):
-    oql = OpikQueryLanguage(filter_string)
+    oql = OpikQueryLanguage.for_traces(filter_string)
     parsed = json.loads(oql.parsed_filters)
     assert len(parsed) == len(expected)
 
@@ -283,10 +283,10 @@ def test_valid_oql_expressions(filter_string, expected):
 )
 def test_invalid_oql_expressions(filter_string, error_pattern):
     with pytest.raises(ValueError, match=error_pattern):
-        OpikQueryLanguage(filter_string)
+        OpikQueryLanguage.for_traces(filter_string)
 
 
 @pytest.mark.parametrize("filter_string", [None, ""])
 def test_empty_filter(filter_string):
-    oql = OpikQueryLanguage(filter_string)
+    oql = OpikQueryLanguage.for_traces(filter_string)
     assert oql.parsed_filters is None
