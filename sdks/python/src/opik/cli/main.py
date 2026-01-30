@@ -5,6 +5,7 @@ from typing import Optional
 
 import click
 
+from . import code_agent_trace
 from . import configure
 from . import exports
 from . import harbor
@@ -40,6 +41,7 @@ def cli(ctx: click.Context, api_key: Optional[str]) -> None:
 
 
 # Register all commands
+cli.add_command(code_agent_trace.code_agent_trace)
 cli.add_command(configure.configure)
 cli.add_command(proxy.proxy)
 cli.add_command(healthcheck.healthcheck)
