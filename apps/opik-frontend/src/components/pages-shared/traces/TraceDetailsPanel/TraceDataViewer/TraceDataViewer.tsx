@@ -288,15 +288,14 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               </TooltipWrapper>
             )}
           </div>
-          <div className="pl-1">
-            <TagList
-              data={data}
-              tags={data.tags}
-              projectId={projectId}
-              traceId={traceId}
-              spanId={spanId}
-            />
-          </div>
+          <TagList
+            data={data}
+            tags={data.tags}
+            projectId={projectId}
+            traceId={traceId}
+            spanId={spanId}
+            className="pl-1"
+          />
         </div>
 
         <Tabs defaultValue="input" value={selectedTab!} onValueChange={setTab}>
