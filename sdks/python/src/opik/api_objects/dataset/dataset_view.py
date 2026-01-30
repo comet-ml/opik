@@ -104,6 +104,18 @@ class DatasetView(Dataset):
             f"filter_string='{self._filter_string}')"
         )
 
+    def _raise_read_only_exception(self) -> None:
+        """
+        Raise DatasetViewImmutableError for mutation operations.
+
+        Raises:
+            DatasetViewImmutableError: Always raised - DatasetView is read-only.
+        """
+        raise exceptions.DatasetViewImmutableError(
+            "Cannot modify items in a DatasetView. "
+            "Use to_dataset() to create a mutable dataset from this view."
+        )
+
     # Override mutation methods to raise errors
 
     def insert(self, items: Sequence[Dict[str, Any]]) -> None:
@@ -113,10 +125,7 @@ class DatasetView(Dataset):
         Raises:
             DatasetViewImmutableError: Always raised - DatasetView is read-only.
         """
-        raise exceptions.DatasetViewImmutableError(
-            "Cannot insert items into a DatasetView. "
-            "Use to_dataset() to create a mutable dataset from this view."
-        )
+        self._raise_read_only_exception()
 
     def update(self, items: List[Dict[str, Any]]) -> None:
         """
@@ -125,10 +134,7 @@ class DatasetView(Dataset):
         Raises:
             DatasetViewImmutableError: Always raised - DatasetView is read-only.
         """
-        raise exceptions.DatasetViewImmutableError(
-            "Cannot update items in a DatasetView. "
-            "Use to_dataset() to create a mutable dataset from this view."
-        )
+        self._raise_read_only_exception()
 
     def delete(self, items_ids: List[str]) -> None:
         """
@@ -137,10 +143,7 @@ class DatasetView(Dataset):
         Raises:
             DatasetViewImmutableError: Always raised - DatasetView is read-only.
         """
-        raise exceptions.DatasetViewImmutableError(
-            "Cannot delete items from a DatasetView. "
-            "Use to_dataset() to create a mutable dataset from this view."
-        )
+        self._raise_read_only_exception()
 
     def clear(self) -> None:
         """
@@ -149,10 +152,7 @@ class DatasetView(Dataset):
         Raises:
             DatasetViewImmutableError: Always raised - DatasetView is read-only.
         """
-        raise exceptions.DatasetViewImmutableError(
-            "Cannot clear a DatasetView. "
-            "Use to_dataset() to create a mutable dataset from this view."
-        )
+        self._raise_read_only_exception()
 
     def insert_from_json(
         self,
@@ -166,10 +166,7 @@ class DatasetView(Dataset):
         Raises:
             DatasetViewImmutableError: Always raised - DatasetView is read-only.
         """
-        raise exceptions.DatasetViewImmutableError(
-            "Cannot insert items into a DatasetView. "
-            "Use to_dataset() to create a mutable dataset from this view."
-        )
+        self._raise_read_only_exception()
 
     def read_jsonl_from_file(
         self,
@@ -183,10 +180,7 @@ class DatasetView(Dataset):
         Raises:
             DatasetViewImmutableError: Always raised - DatasetView is read-only.
         """
-        raise exceptions.DatasetViewImmutableError(
-            "Cannot insert items into a DatasetView. "
-            "Use to_dataset() to create a mutable dataset from this view."
-        )
+        self._raise_read_only_exception()
 
     def insert_from_pandas(
         self,
@@ -200,10 +194,7 @@ class DatasetView(Dataset):
         Raises:
             DatasetViewImmutableError: Always raised - DatasetView is read-only.
         """
-        raise exceptions.DatasetViewImmutableError(
-            "Cannot insert items into a DatasetView. "
-            "Use to_dataset() to create a mutable dataset from this view."
-        )
+        self._raise_read_only_exception()
 
     # Override filter method to apply the view's filter
 
