@@ -47,6 +47,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static java.util.Collections.emptyList;
 
 @ImplementedBy(DatasetItemVersionDAOImpl.class)
 public interface DatasetItemVersionDAO {
@@ -71,6 +72,9 @@ public interface DatasetItemVersionDAO {
             List<ExperimentsComparisonFilter> filters);
 
     Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId);
+
+    Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId,
+            @NonNull List<DatasetItemFilter> filters);
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
 
@@ -1609,13 +1613,21 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
             UUID lastRetrievedId) {
-        log.info("Streaming dataset items by datasetId '{}', versionId '{}', limit '{}', lastRetrievedId '{}'",
-                datasetId, versionId, limit, lastRetrievedId);
+        return getItems(datasetId, versionId, limit, lastRetrievedId, emptyList());
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
+            UUID lastRetrievedId, @NonNull List<DatasetItemFilter> filters) {
 
         ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS);
         if (lastRetrievedId != null) {
             template.add("lastRetrievedId", true);
         }
+
+        addDatasetItemFiltersToTemplate(template, filters);
+
         String query = template.render();
 
         return asyncTemplate.stream(connection -> {
@@ -1629,6 +1641,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             } else {
                 statement.bind("offset", 0);
             }
+
+            bindDatasetItemFilters(statement, filters);
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "stream_version_items");
 

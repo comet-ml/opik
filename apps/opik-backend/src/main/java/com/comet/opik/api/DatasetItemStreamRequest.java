@@ -17,7 +17,8 @@ public record DatasetItemStreamRequest(
         @NotBlank String datasetName,
         UUID lastRetrievedId,
         @Min(1) @Max(2000) Integer steamLimit,
-        String datasetVersion) {
+        String datasetVersion,
+        String filters) {
 
     private static final int DEFAULT_STREAM_LIMIT = 2000;
 

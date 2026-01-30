@@ -79,7 +79,8 @@ public interface DatasetItemService {
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
-    Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
+    Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request,
+            List<DatasetItemFilter> filters, Visibility visibility);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
@@ -797,8 +798,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
-            Visibility visibility) {
-        log.info("Getting dataset items by '{}' on workspaceId '{}'", request, workspaceId);
+            @NonNull List<DatasetItemFilter> filters, Visibility visibility) {
+        log.info("Getting dataset items for dataset '{}' (hasFilters={}), version='{}', workspaceId='{}'",
+                request.datasetName(), !filters.isEmpty(),
+                request.datasetVersion(), workspaceId);
+
         return Mono
                 .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
@@ -822,7 +826,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         return Mono.fromCallable(() -> versionService.resolveVersionId(workspaceId, dataset.id(),
                                 versionHashOrTag))
                                 .flatMapMany(versionId -> versionDao.getItems(dataset.id(), versionId,
-                                        request.steamLimit(), request.lastRetrievedId()));
+                                        request.steamLimit(), request.lastRetrievedId(), filters));
                     }
 
                     // Case 2: Feature toggle ON and no version specified - use latest version
@@ -836,7 +840,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         log.info("Streaming from latest version '{}' for dataset '{}'", versionId,
                                                 dataset.id());
                                         return versionDao.getItems(dataset.id(), versionId, request.steamLimit(),
-                                                request.lastRetrievedId());
+                                                request.lastRetrievedId(), filters);
                                     } else {
                                         // No version exists yet - return empty
                                         log.warn("No versions exist for dataset '{}', returning empty stream",
@@ -848,7 +852,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                     // Case 3: Feature toggle OFF - use legacy table
                     log.info("Feature toggle OFF, using legacy table for streaming dataset '{}' items", dataset.id());
-                    return dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId());
+                    return dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId(), filters);
                 });
     }
 
