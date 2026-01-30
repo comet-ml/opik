@@ -93,7 +93,7 @@ class DatasetView(Dataset):
     @property
     def dataset_items_count(self) -> Optional[int]:
         """
-        Always None for DatasetView as the count in not known before the items are fetched.
+        Always None for DatasetView as the count is not known before the items are fetched.
         """
         #  Do not fetch the unfiltered dataset count from the backend.
         return self._dataset_items_count
