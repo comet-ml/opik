@@ -303,7 +303,7 @@ class TestConvertGenerationToTraceAndSpans:
         assert result["trace"]["name"] == "Agent Turn: 1 edit"
 
     def test_convert__with_user_message__includes_in_input(self):
-        """Test that user message is included in trace input as OpenAI format."""
+        """Test that user message and tool interactions are in input."""
         records: List[Dict[str, Any]] = [
             {
                 "id": "record-1",
@@ -327,24 +327,33 @@ class TestConvertGenerationToTraceAndSpans:
             project_name="test-project",
         )
 
-        # Input should be in OpenAI messages format with content as array
+        # Input should contain all conversation messages (user + assistant with tool_calls + tool results)
         input_messages = result["trace"]["input"]["messages"]
-        assert len(input_messages) == 1
+        assert len(input_messages) == 3  # user, assistant with tool_calls, tool result
+        
+        # First message is user
         assert input_messages[0]["role"] == "user"
-        # Content is now an array of content parts
         content = input_messages[0]["content"]
         assert len(content) == 1
         assert content[0]["type"] == "text"
         assert content[0]["text"] == "Please fix the bug"
+        
+        # Second message is assistant with tool_calls
+        assert input_messages[1]["role"] == "assistant"
+        assert "tool_calls" in input_messages[1]
+        
+        # Third message is tool result
+        assert input_messages[2]["role"] == "tool"
 
     def test_convert__with_assistant_response__includes_in_output(self):
-        """Test that assistant response is included in output messages."""
+        """Test that assistant response is in output as chat completion format."""
         records: List[Dict[str, Any]] = [
             {
                 "id": "record-1",
                 "timestamp": "2024-01-30T08:00:00Z",
                 "event": "user_message",
                 "generation_id": "gen-1",
+                "model": "gpt-4",
                 "data": {"content": "Hello"},
             },
             {
@@ -352,6 +361,7 @@ class TestConvertGenerationToTraceAndSpans:
                 "timestamp": "2024-01-30T08:00:05Z",
                 "event": "assistant_message",
                 "generation_id": "gen-1",
+                "model": "gpt-4",
                 "data": {"content": "I'll help you with that."},
             },
         ]
@@ -362,28 +372,29 @@ class TestConvertGenerationToTraceAndSpans:
             project_name="test-project",
         )
 
-        # Input should have user message with content as array
+        # Input should have user message
         input_messages = result["trace"]["input"]["messages"]
         assert len(input_messages) == 1
         assert input_messages[0]["role"] == "user"
-        content = input_messages[0]["content"]
-        assert content[0]["type"] == "text"
-        assert content[0]["text"] == "Hello"
         
-        # Output should have assistant message
-        output_messages = result["trace"]["output"]["messages"]
-        assert len(output_messages) == 1
-        assert output_messages[0]["role"] == "assistant"
-        assert output_messages[0]["content"] == "I'll help you with that."
+        # Output should be OpenAI chat completion format
+        output = result["trace"]["output"]
+        assert output["object"] == "chat.completion"
+        assert "choices" in output
+        assert len(output["choices"]) == 1
+        assert output["choices"][0]["message"]["role"] == "assistant"
+        assert output["choices"][0]["message"]["content"] == "I'll help you with that."
+        assert output["choices"][0]["finish_reason"] == "stop"
 
-    def test_convert__with_tool_calls__includes_tool_messages(self):
-        """Test that tool executions create tool messages in output."""
+    def test_convert__with_tool_calls__includes_tool_messages_in_input(self):
+        """Test that tool executions are in input, output has tool_calls."""
         records: List[Dict[str, Any]] = [
             {
                 "id": "record-1",
                 "timestamp": "2024-01-30T08:00:00Z",
                 "event": "tool_execution",
                 "generation_id": "gen-1",
+                "model": "gpt-4",
                 "data": {
                     "tool_type": "shell",
                     "command": "npm install",
@@ -399,10 +410,16 @@ class TestConvertGenerationToTraceAndSpans:
             project_name="test-project",
         )
 
-        messages = result["trace"]["output"]["messages"]
-        # Should have assistant message with tool_calls and tool result message
-        assert any(m.get("role") == "assistant" for m in messages)
-        assert any(m.get("role") == "tool" for m in messages)
+        # Input should have assistant with tool_calls and tool result
+        input_messages = result["trace"]["input"]["messages"]
+        assert any(m.get("role") == "assistant" for m in input_messages)
+        assert any(m.get("role") == "tool" for m in input_messages)
+        
+        # Output should be chat completion format with tool_calls
+        output = result["trace"]["output"]
+        assert output["object"] == "chat.completion"
+        assert output["choices"][0]["message"]["tool_calls"] is not None
+        assert output["choices"][0]["finish_reason"] == "tool_calls"
 
     def test_convert__multiple_operations__correct_name(self):
         """Test conversion of multiple operations has correct name."""

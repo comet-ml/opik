@@ -569,15 +569,15 @@ def convert_generation_to_trace_and_spans(
     last_data = last_record.get("data", {})
     trace_end_time = _calculate_end_time(last_start_time, last_data.get("duration_ms"))
 
-    # Build trace input (OpenAI messages format - user message)
-    input_messages: List[Dict[str, Any]] = []
-    if user_messages:
-        input_messages.append(_build_user_message(user_messages[-1]))
+    # Build conversation messages in OpenAI chat format
+    # All messages except the final assistant response go into INPUT
+    # The final assistant response goes into OUTPUT as a chat completion object
     
-    trace_input = {"messages": input_messages} if input_messages else None
-
-    # Build trace output (OpenAI messages format)
-    output_messages: List[Dict[str, Any]] = []
+    conversation_messages: List[Dict[str, Any]] = []
+    
+    # Add user message
+    if user_messages:
+        conversation_messages.append(_build_user_message(user_messages[-1]))
     
     # If we have tool executions, build the assistant message with tool_calls
     if tool_executions:
@@ -587,40 +587,101 @@ def convert_generation_to_trace_and_spans(
             thought_records=assistant_thoughts,
             tool_records=tool_executions,
         )
-        output_messages.append(assistant_msg)
+        conversation_messages.append(assistant_msg)
         
         # Add tool result messages for each tool execution
         for tool_record in tool_executions:
-            output_messages.append(_build_tool_message(tool_record))
+            conversation_messages.append(_build_tool_message(tool_record))
+    
+    # Build the final assistant message for OUTPUT
+    final_assistant_content = None
+    final_tool_calls = None
     
     # Add final assistant response (if we have one from afterAgentResponse)
     if assistant_responses:
         final_response = assistant_responses[-1]
         content = final_response.get("data", {}).get("content", "")
         if content:
-            output_messages.append({
-                "role": "assistant",
-                "content": content,
-            })
+            final_assistant_content = content
     elif not tool_executions and assistant_thoughts:
         # If no tools, no response but we have thoughts, include them
         thoughts = [r.get("data", {}).get("content", "") for r in assistant_thoughts]
         reasoning = "\n\n".join(filter(None, thoughts))
         if reasoning:
-            output_messages.append({
-                "role": "assistant",
-                "content": f"[Thinking]\n{reasoning}",
-            })
+            final_assistant_content = f"[Thinking]\n{reasoning}"
     
-    # Add code changes summary at the end (if there were file edits)
+    # Add code changes summary to the final content (if there were file edits)
     code_changes_summary = _build_code_changes_summary(tool_executions)
     if code_changes_summary:
-        output_messages.append({
-            "role": "assistant",
-            "content": code_changes_summary,
-        })
-
-    trace_output = {"messages": output_messages} if output_messages else None
+        if final_assistant_content:
+            final_assistant_content = f"{final_assistant_content}\n\n{code_changes_summary}"
+        else:
+            final_assistant_content = code_changes_summary
+    
+    # If no final content but we have tool calls, the output is the tool calls
+    if not final_assistant_content and tool_executions:
+        # Build tool_calls for the output
+        final_tool_calls = []
+        for record in tool_executions:
+            record_id = record.get("id", "")
+            data = record.get("data", {})
+            tool_type = data.get("tool_type", "unknown")
+            
+            if tool_type == "shell":
+                arguments = {"command": data.get("command", "")}
+                if data.get("cwd"):
+                    arguments["cwd"] = data["cwd"]
+                final_tool_calls.append({
+                    "id": f"call_{record_id}",
+                    "type": "function",
+                    "function": {
+                        "name": "shell",
+                        "arguments": json.dumps(arguments),
+                    },
+                })
+            elif tool_type == "file_edit":
+                file_path = data.get("file_path", "")
+                arguments = {"file_path": file_path}
+                edits = data.get("edits", [])
+                if edits:
+                    arguments["edit_count"] = len(edits)
+                final_tool_calls.append({
+                    "id": f"call_{record_id}",
+                    "type": "function",
+                    "function": {
+                        "name": "file_edit",
+                        "arguments": json.dumps(arguments),
+                    },
+                })
+    
+    # Build trace INPUT: all messages ready to be sent to LLM
+    trace_input = {"messages": conversation_messages} if conversation_messages else None
+    
+    # Build trace OUTPUT: OpenAI chat completion response format
+    # https://platform.openai.com/docs/api-reference/chat/object
+    model = first_record.get("model")
+    
+    final_message: Dict[str, Any] = {
+        "role": "assistant",
+        "content": final_assistant_content,
+        "refusal": None,
+    }
+    if final_tool_calls:
+        final_message["tool_calls"] = final_tool_calls
+    
+    trace_output = {
+        "id": f"chatcmpl-{generation_id[:20]}" if generation_id else "chatcmpl-unknown",
+        "object": "chat.completion",
+        "created": int(trace_start_time.timestamp()),
+        "model": model or "unknown",
+        "choices": [
+            {
+                "index": 0,
+                "message": final_message,
+                "finish_reason": "stop" if final_assistant_content else "tool_calls",
+            }
+        ],
+    }
 
     # Build trace name
     edit_count = sum(1 for r in tool_executions if r.get("data", {}).get("tool_type") == "file_edit")
@@ -634,7 +695,6 @@ def convert_generation_to_trace_and_spans(
     trace_name = f"Agent Turn: {', '.join(parts)}" if parts else "Agent Turn"
 
     # Build trace metadata (include generation_id, conversation_id, and git user)
-    model = first_record.get("model")
     conversation_id = first_record.get("conversation_id")
     user_email = first_record.get("user_email")
     
