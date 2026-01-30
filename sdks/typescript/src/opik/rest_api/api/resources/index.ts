@@ -28,6 +28,7 @@ export * from "./llmProviderKey/client/requests/index.js";
 export * as llmProviderKey from "./llmProviderKey/index.js";
 export * from "./llmProviderKey/types/index.js";
 export * as manualEvaluation from "./manualEvaluation/index.js";
+export * as ollama from "./ollama/index.js";
 export * as openTelemetryIngestion from "./openTelemetryIngestion/index.js";
 export * from "./optimizations/client/requests/index.js";
 export * as optimizations from "./optimizations/index.js";

@@ -7,6 +7,7 @@ export const ProviderApiKeyProvider = {
     Openrouter: "openrouter",
     VertexAi: "vertex-ai",
     Bedrock: "bedrock",
+    Ollama: "ollama",
     CustomLlm: "custom-llm",
     OpikFree: "opik-free",
 } as const;
