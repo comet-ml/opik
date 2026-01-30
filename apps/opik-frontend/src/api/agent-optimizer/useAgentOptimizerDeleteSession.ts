@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AGENT_OPTIMIZER_HISTORY_KEY } from "./useAgentOptimizerHistory";
 
-const BASE_AGENT_OPTIMIZER_URL = import.meta.env.VITE_BASE_AGENT_OPTIMIZER_URL || "http://localhost:8000";
+const BASE_AGENT_OPTIMIZER_URL =
+  import.meta.env.VITE_BASE_AGENT_OPTIMIZER_URL || "http://localhost:5000";
 
 type UseAgentOptimizerDeleteSessionParams = {
   traceId: string;

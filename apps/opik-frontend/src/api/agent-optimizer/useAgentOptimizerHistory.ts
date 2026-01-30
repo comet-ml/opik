@@ -2,7 +2,8 @@ import { QueryConfig } from "@/api/api";
 import { OptimizerHistoryResponse } from "@/types/agent-optimizer";
 import { useQuery } from "@tanstack/react-query";
 
-const BASE_AGENT_OPTIMIZER_URL = import.meta.env.VITE_BASE_AGENT_OPTIMIZER_URL || "http://localhost:8000";
+const BASE_AGENT_OPTIMIZER_URL =
+  import.meta.env.VITE_BASE_AGENT_OPTIMIZER_URL || "http://localhost:5000";
 
 export const AGENT_OPTIMIZER_HISTORY_KEY = "agent-optimizer-history";
 

@@ -19,12 +19,17 @@ const DiffChange: React.FC<{ change: Change; mode: DiffMode }> = ({
 }) => {
   if (!change.added && !change.removed) {
     // Unchanged content
-    return <span className="text-muted-foreground">{change.value}</span>;
+    return (
+      <span className="whitespace-pre-wrap text-muted-foreground">
+        {change.value}
+      </span>
+    );
   }
 
   return (
     <span
       className={cn(
+        "whitespace-pre-wrap",
         mode === "lines" ? "block p-0.5 rounded-[2px]" : "rounded-[2px] px-0.5",
         {
           "text-diff-removed-text bg-diff-removed-bg line-through":

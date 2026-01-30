@@ -17,10 +17,10 @@ const OptimizerChatInput: React.FC<OptimizerChatInputProps> = ({
   if (isRunning) {
     return (
       <div className="flex items-center justify-center gap-2 py-2">
-        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         <span className="text-sm text-muted-foreground">Processing...</span>
         <Button variant="outline" size="sm" onClick={onStop}>
-          <StopCircle className="mr-2 h-4 w-4" />
+          <StopCircle className="mr-2 size-4" />
           Stop
         </Button>
       </div>
@@ -28,7 +28,7 @@ const OptimizerChatInput: React.FC<OptimizerChatInputProps> = ({
   }
 
   return (
-    <div className="text-center text-sm text-muted-foreground py-2">
+    <div className="py-2 text-center text-sm text-muted-foreground">
       Respond to prompts above to continue the optimization process.
     </div>
   );

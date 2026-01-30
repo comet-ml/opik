@@ -1,23 +1,98 @@
 import React, { useState } from "react";
-import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { AgentOptimizerMessage, UserResponse } from "@/types/agent-optimizer";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import TextDiff from "@/components/shared/CodeDiff/TextDiff";
+
+// Helper component for expandable text content
+const ExpandableText: React.FC<{
+  text: string;
+  maxLength?: number;
+  className?: string;
+  preformatted?: boolean;
+}> = ({ text, maxLength = 300, className = "", preformatted = false }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const needsTruncation = text.length > maxLength;
+  const displayText =
+    isExpanded || !needsTruncation
+      ? text
+      : text.substring(0, maxLength) + "...";
+
+  const content = preformatted ? (
+    <pre className={`whitespace-pre-wrap break-words ${className}`}>
+      {displayText}
+    </pre>
+  ) : (
+    <div className={`whitespace-pre-wrap break-words ${className}`}>
+      {displayText}
+    </div>
+  );
+
+  if (!needsTruncation) {
+    return content;
+  }
+
+  return (
+    <div>
+      {content}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="mt-1 flex items-center gap-1 text-xs text-primary hover:underline"
+      >
+        {isExpanded ? (
+          <>
+            <ChevronUp className="size-3" />
+            Show less
+          </>
+        ) : (
+          <>
+            <ChevronDown className="size-3" />
+            Show more
+          </>
+        )}
+      </button>
+    </div>
+  );
+};
 
 interface OptimizerChatMessageProps {
   message: AgentOptimizerMessage;
   onRespond?: (response: UserResponse) => void;
+  /** Whether this is the last message in the list - used to determine if progress messages should show as completed */
+  isLastMessage?: boolean;
 }
 
 const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
   message,
   onRespond,
+  isLastMessage = false,
 }) => {
   const [inputValue, setInputValue] = useState("");
   const [assertions, setAssertions] = useState<string[]>([""]);
   const [selectedOption, setSelectedOption] = useState<string>("");
+  const [expandedPrompts, setExpandedPrompts] = useState<Set<number>>(
+    new Set(),
+  );
+
+  const togglePromptExpanded = (idx: number) => {
+    setExpandedPrompts((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  };
 
   const handleSubmit = () => {
     if (!onRespond) return;
@@ -64,14 +139,16 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
   if (message.type === "header") {
     return (
       <div className="my-4">
-        <h2 className="text-2xl font-bold border-b-2 pb-2">{message.content}</h2>
+        <h2 className="border-b-2 pb-2 text-2xl font-bold">
+          {message.content}
+        </h2>
       </div>
     );
   }
 
   if (message.type === "system_message") {
     return (
-      <div className="my-2 text-sm text-muted-foreground whitespace-pre-wrap">
+      <div className="my-2 whitespace-pre-wrap text-sm text-muted-foreground">
         {message.content}
       </div>
     );
@@ -80,7 +157,7 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
   if (message.type === "success_message") {
     return (
       <Alert className="my-2 border-green-500 bg-green-50">
-        <CheckCircle2 className="h-4 w-4 text-green-600" />
+        <CheckCircle2 className="size-4 text-green-600" />
         <AlertDescription className="text-green-800">
           {message.content}
         </AlertDescription>
@@ -91,7 +168,7 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
   if (message.type === "error") {
     return (
       <Alert className="my-2 border-red-500 bg-red-50">
-        <XCircle className="h-4 w-4 text-red-600" />
+        <XCircle className="size-4 text-red-600" />
         <AlertDescription className="text-red-800">
           {message.content}
         </AlertDescription>
@@ -102,8 +179,8 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
   if (message.type === "warning") {
     return (
       <Alert className="my-2 border-yellow-500 bg-yellow-50">
-        <AlertTriangle className="h-4 w-4 text-yellow-600" />
-        <AlertDescription className="text-yellow-800 whitespace-pre-wrap">
+        <AlertTriangle className="size-4 text-yellow-600" />
+        <AlertDescription className="whitespace-pre-wrap text-yellow-800">
           {message.content}
         </AlertDescription>
       </Alert>
@@ -111,11 +188,25 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
   }
 
   if (message.type === "progress") {
+    // Don't show progress messages if there are messages after this one
+    // (meaning the operation completed and moved on)
+    if (!isLastMessage) {
+      return null;
+    }
+
+    // Show spinner only for ongoing progress (last message)
     return (
       <div className="my-2 flex items-center gap-2 text-sm text-muted-foreground">
-        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         <span>{message.content}</span>
-        {message.status && <span className="text-xs">({message.status})</span>}
+      </div>
+    );
+  }
+
+  if (message.type === "optimization_progress") {
+    return (
+      <div className="my-1 text-xs italic text-muted-foreground/70">
+        {message.content}
       </div>
     );
   }
@@ -128,13 +219,15 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
           {message.assertionResults.map((result, idx) => (
             <div key={idx} className="flex items-start gap-2">
               {result.passed ? (
-                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+                <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-green-600" />
               ) : (
-                <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+                <XCircle className="mt-0.5 size-5 shrink-0 text-red-600" />
               )}
               <div className="flex-1">
                 <div className="font-medium">{result.assertion}</div>
-                <div className="text-sm text-muted-foreground">{result.reason}</div>
+                <div className="text-sm text-muted-foreground">
+                  {result.reason}
+                </div>
               </div>
             </div>
           ))}
@@ -153,9 +246,12 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
               <div className="mb-2 font-medium">
                 [{change.id}] {change.promptName} - {change.changeType}
               </div>
-              <div className="space-y-1 text-sm font-mono">
-                <div className="text-red-600">- {change.originalContent.substring(0, 100)}...</div>
-                <div className="text-green-600">+ {change.modifiedContent.substring(0, 100)}...</div>
+              <div className="overflow-x-auto font-mono text-sm">
+                <TextDiff
+                  content1={change.originalContent}
+                  content2={change.modifiedContent}
+                  mode="lines"
+                />
               </div>
             </div>
           ))}
@@ -164,38 +260,91 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
     );
   }
 
-  if (message.type === "trace_info" && message.traceData) {
+  if (message.type === "trace_info") {
     return (
       <div className="my-4 rounded-lg border p-4">
         <h3 className="mb-3 font-semibold">{message.content}</h3>
-        <div className="space-y-3 text-sm">
-          <div>
-            <div className="font-medium">Input:</div>
-            <pre className="mt-1 overflow-auto rounded bg-muted p-2">
-              {JSON.stringify(message.traceData.input_data, null, 2)}
-            </pre>
-          </div>
-          <div>
-            <div className="font-medium">Output:</div>
-            <div className="mt-1 rounded bg-muted p-2">{message.traceData.final_output}</div>
-          </div>
-          <div>
-            <div className="font-medium">Prompts ({message.traceData.prompts.length}):</div>
-            <div className="mt-1 space-y-2">
-              {message.traceData.prompts.map((p, idx) => (
-                <div key={idx} className="rounded bg-muted p-2">
-                  <div className="font-medium">{p.name} ({p.type})</div>
-                  <div className="text-xs text-muted-foreground">{p.preview}</div>
+        {message.traceData ? (
+          <div className="space-y-4 text-sm">
+            {/* Prompts section first since the title mentions prompts */}
+            {message.traceData.prompts &&
+              message.traceData.prompts.length > 0 && (
+                <div>
+                  <div className="mb-2 font-medium">Prompts:</div>
+                  <div className="space-y-2">
+                    {message.traceData.prompts.map((p, idx) => (
+                      <div key={idx} className="rounded border bg-muted/50 p-3">
+                        <button
+                          onClick={() => togglePromptExpanded(idx)}
+                          className="flex w-full items-center justify-between text-left"
+                        >
+                          <span className="font-medium">
+                            {p.name}{" "}
+                            <span className="text-xs text-muted-foreground">
+                              ({p.type})
+                            </span>
+                          </span>
+                          {expandedPrompts.has(idx) ? (
+                            <ChevronUp className="size-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="size-4 text-muted-foreground" />
+                          )}
+                        </button>
+                        {expandedPrompts.has(idx) && (
+                          <div className="mt-2 whitespace-pre-wrap rounded bg-background p-2 text-xs text-muted-foreground">
+                            {p.preview}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+            {/* Input section */}
+            <div>
+              <div className="mb-1 font-medium">Input:</div>
+              <div className="rounded bg-muted p-2">
+                <ExpandableText
+                  text={JSON.stringify(message.traceData.input_data, null, 2)}
+                  maxLength={500}
+                  preformatted
+                  className="text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Output section */}
+            <div>
+              <div className="mb-1 font-medium">Output:</div>
+              <div className="rounded bg-muted p-2">
+                <ExpandableText
+                  text={message.traceData.final_output}
+                  maxLength={500}
+                  className="text-xs"
+                />
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            Loading trace data...
+          </div>
+        )}
       </div>
     );
   }
 
+  // For options_menu messages:
+  // - If it's the last message AND waitingForResponse is true -> show the menu
+  // - Otherwise -> hide (user already selected an option)
   if (message.type === "options_menu" && message.options) {
+    const shouldShowMenu = message.waitingForResponse && isLastMessage;
+
+    if (!shouldShowMenu) {
+      return null;
+    }
+
     return (
       <div className="my-4 rounded-lg border p-4">
         <h3 className="mb-3 font-semibold">{message.content}</h3>
@@ -214,7 +363,6 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
                   });
                 }
               }}
-              disabled={!message.waitingForResponse}
             >
               {option.label}
             </Button>
@@ -224,7 +372,17 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
     );
   }
 
-  if (message.type === "user_input_request" && message.waitingForResponse) {
+  // For user_input_request messages:
+  // - If it's the last message AND waitingForResponse is true -> show the input form
+  // - Otherwise -> hide (user already responded)
+  if (message.type === "user_input_request") {
+    const shouldShowInput = message.waitingForResponse && isLastMessage;
+
+    // Hide after user has responded
+    if (!shouldShowInput) {
+      return null;
+    }
+
     if (message.inputSubtype === "assertions") {
       return (
         <div className="my-4 rounded-lg border p-4">
@@ -273,39 +431,37 @@ const OptimizerChatMessage: React.FC<OptimizerChatMessageProps> = ({
         <h3 className="mb-3 font-semibold">{message.content}</h3>
         {message.inputSubtype === "confirmation" ? (
           <div className="flex gap-2">
-            <Button onClick={() => {
-              setInputValue("y");
-              onRespond?.({ responseType: "confirmation", data: "y" });
-            }}>
+            <Button
+              onClick={() => {
+                setInputValue("y");
+                onRespond?.({ responseType: "confirmation", data: "y" });
+              }}
+            >
               Yes
             </Button>
-            <Button variant="outline" onClick={() => {
-              setInputValue("n");
-              onRespond?.({ responseType: "confirmation", data: "n" });
-            }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setInputValue("n");
+                onRespond?.({ responseType: "confirmation", data: "n" });
+              }}
+            >
               No
             </Button>
           </div>
         ) : (
           <div className="flex gap-2">
-            {message.inputSubtype === "choice" ? (
-              <Textarea
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Enter your choice (e.g., a, t1,2, s1, v1, n)"
-                rows={2}
-              />
-            ) : (
-              <Input
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder={
-                  message.inputSubtype === "agent_endpoint"
-                    ? "http://localhost:8001/chat (optional)"
+            <Input
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder={
+                message.inputSubtype === "choice"
+                  ? "Enter your choice (e.g., a, t1,2, s1, v1, n)"
+                  : message.inputSubtype === "agent_endpoint"
+                    ? "http://localhost:8001/chat"
                     : "Enter value"
-                }
-              />
-            )}
+              }
+            />
             <Button onClick={handleSubmit}>Submit</Button>
           </div>
         )}

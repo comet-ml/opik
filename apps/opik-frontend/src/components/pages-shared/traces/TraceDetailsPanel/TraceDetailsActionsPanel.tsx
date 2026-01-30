@@ -116,9 +116,9 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const isAIInspectorEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
   );
-  const isAgentOptimizerEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED, // Using same toggle for now
-  );
+
+  const isAgentOptimizerEnabled = true; // TODO: useIsFeatureEnabled(FeatureToggleKeys.TOGGLE_OPIK_TRACE_OPTIMIZER_ENABLED);
+
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const { toast } = useToast();
 
@@ -139,13 +139,14 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       {
         name: "SEPARATOR",
         size: 25,
-        visible: isAIInspectorEnabled || isAgentOptimizerEnabled || hasAgentGraph,
+        visible:
+          isAIInspectorEnabled || isAgentOptimizerEnabled || hasAgentGraph,
       },
       { name: "MORE", size: 32, visible: true },
     ];
 
     return elements.reduce((acc, e) => acc + (e.visible ? e.size : 0), 0);
-  }, [hasAgentGraph, hasThread, isAIInspectorEnabled]);
+  }, [hasAgentGraph, hasThread, isAIInspectorEnabled, isAgentOptimizerEnabled]);
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     setIsSmall(node.clientWidth < minPanelWidth + SEARCH_SPACE_RESERVATION);

@@ -5,7 +5,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { MoreHorizontal, Trash } from "lucide-react";
+import { MoreHorizontal, RefreshCw } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 
 import {
@@ -22,7 +23,9 @@ import {
 import { Tag } from "@/components/ui/tag";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import Loader from "@/components/shared/Loader/Loader";
-import useAgentOptimizerHistory from "@/api/agent-optimizer/useAgentOptimizerHistory";
+import useAgentOptimizerHistory, {
+  AGENT_OPTIMIZER_HISTORY_KEY,
+} from "@/api/agent-optimizer/useAgentOptimizerHistory";
 import useAgentOptimizerRunStreaming from "@/api/agent-optimizer/useAgentOptimizerRunStreaming";
 import useAgentOptimizerDeleteSession from "@/api/agent-optimizer/useAgentOptimizerDeleteSession";
 import {
@@ -49,9 +52,11 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
     messages: [],
   });
   const [isRunning, setIsRunning] = useState(false);
+  const [hasAutoStarted, setHasAutoStarted] = useState(false);
   const abortControllerRef = useRef<AbortController>();
   const { toast } = useToast();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   const startStreaming = useCallback(() => {
     abortControllerRef.current = new AbortController();
@@ -72,21 +77,47 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
 
   useEffect(() => {
     setChat({ value: "", messages: [] });
+    setHasAutoStarted(false);
     stopStreaming();
   }, [traceId, stopStreaming]);
 
   useEffect(() => {
     const historyMessages = historyData?.content || [];
+    const debugInfo = {
+      chatMessagesLength: chat.messages.length,
+      historyMessagesLength: historyMessages.length,
+      isRunning,
+      isHistoryPending,
+      hasAutoStarted,
+      willLoadHistory:
+        chat.messages.length === 0 &&
+        historyMessages.length > 0 &&
+        !isRunning &&
+        !isHistoryPending &&
+        !hasAutoStarted,
+    };
+    console.log("[TraceAgentOptimizer] History load useEffect:", debugInfo);
 
     if (
       chat.messages.length === 0 &&
       historyMessages.length > 0 &&
       !isRunning &&
-      !isHistoryPending
+      !isHistoryPending &&
+      !hasAutoStarted // Don't load history if we've already started a fresh session
     ) {
+      console.log(
+        "[TraceAgentOptimizer] Loading history messages into chat. Count:",
+        historyMessages.length,
+      );
       setChat((prev) => ({ ...prev, messages: historyMessages }));
     }
-  }, [historyData?.content, chat.messages.length, isRunning, isHistoryPending]);
+  }, [
+    historyData?.content,
+    chat.messages.length,
+    isRunning,
+    isHistoryPending,
+    hasAutoStarted,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -96,43 +127,79 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
     };
   }, [traceId]);
 
-  // Auto-scroll
+  // Auto-scroll when new messages are added
   useEffect(() => {
-    if (scrollContainerRef.current && isRunning) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    if (scrollContainerRef.current && chat.messages.length > 0) {
+      // Use requestAnimationFrame to ensure DOM has updated
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop =
+            scrollContainerRef.current.scrollHeight;
+        }
+      });
     }
-  }, [chat.messages, isRunning]);
+  }, [chat.messages]);
 
   const noMessages = useMemo(() => !chat.messages.length, [chat.messages]);
 
   const runStreaming = useAgentOptimizerRunStreaming({ traceId });
 
   const { mutate: deleteMutate } = useAgentOptimizerDeleteSession();
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showStartFreshConfirm, setShowStartFreshConfirm] = useState(false);
 
-  const updateMessage = useCallback(
-    (messageId: string, updates: Partial<AgentOptimizerMessage>) => {
-      setChat((prev) => ({
-        ...prev,
-        messages: prev.messages.map((m) =>
-          m.id === messageId ? { ...m, ...updates } : m,
-        ),
-      }));
+  const addOrUpdateMessage = useCallback(
+    (output: Partial<AgentOptimizerMessage>) => {
+      if (!output.id) {
+        console.warn("[TraceAgentOptimizer] Chunk has no ID, skipping");
+        return;
+      }
+
+      console.log(
+        "[TraceAgentOptimizer] Received chunk - ID:",
+        output.id,
+        "Type:",
+        output.type,
+        "Has traceData:",
+        !!output.traceData,
+      );
+
+      setChat((prev) => {
+        const existingIndex = prev.messages.findIndex(
+          (m) => m.id === output.id,
+        );
+        if (existingIndex >= 0) {
+          // Update existing - deep merge to preserve nested data like traceData
+          const newMessages = [...prev.messages];
+          const existingMessage = newMessages[existingIndex];
+          newMessages[existingIndex] = {
+            ...existingMessage,
+            ...output,
+            // Deep merge traceData if both exist
+            traceData: output.traceData || existingMessage.traceData,
+          } as AgentOptimizerMessage;
+          console.log(
+            "[TraceAgentOptimizer] Updated message ID:",
+            output.id,
+            "traceData:",
+            !!newMessages[existingIndex].traceData,
+          );
+          return { ...prev, messages: newMessages };
+        } else {
+          // Add new
+          const newMessage = output as AgentOptimizerMessage;
+          console.log(
+            "[TraceAgentOptimizer] Adding new message ID:",
+            output.id,
+          );
+          return {
+            ...prev,
+            messages: [...prev.messages, newMessage],
+          };
+        }
+      });
     },
     [],
   );
-
-  const handleDeleteSession = useCallback(() => {
-    stopStreaming();
-    deleteMutate(
-      { traceId },
-      {
-        onSuccess: () => {
-          setChat((prev) => ({ ...prev, value: "", messages: [] }));
-        },
-      },
-    );
-  }, [traceId, deleteMutate, stopStreaming]);
 
   const startSession = useCallback(async () => {
     const abortController = startStreaming();
@@ -140,31 +207,7 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
     try {
       const { error } = await runStreaming({
         signal: abortController.signal,
-        onAddChunk: (output) => {
-          if (output.id) {
-            // Check if message exists
-            setChat((prev) => {
-              const existingIndex = prev.messages.findIndex(
-                (m) => m.id === output.id,
-              );
-              if (existingIndex >= 0) {
-                // Update existing
-                const newMessages = [...prev.messages];
-                newMessages[existingIndex] = {
-                  ...newMessages[existingIndex],
-                  ...output,
-                } as AgentOptimizerMessage;
-                return { ...prev, messages: newMessages };
-              } else {
-                // Add new
-                return {
-                  ...prev,
-                  messages: [...prev.messages, output as AgentOptimizerMessage],
-                };
-              }
-            });
-          }
-        },
+        onAddChunk: addOrUpdateMessage,
       });
 
       if (error) {
@@ -180,38 +223,50 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
     } finally {
       stopStreaming();
     }
-  }, [runStreaming, toast, stopStreaming, startStreaming]);
+  }, [runStreaming, toast, stopStreaming, startStreaming, addOrUpdateMessage]);
+
+  const handleStartFresh = useCallback(() => {
+    console.log("[TraceAgentOptimizer] Starting fresh - clearing session");
+    stopStreaming();
+
+    // First, clear local state immediately
+    setChat((prev) => ({ ...prev, value: "", messages: [] }));
+    setHasAutoStarted(true); // Prevent auto-start from firing, we'll manually start
+
+    // Remove the query cache completely (not just invalidate) to prevent stale data
+    queryClient.removeQueries({
+      queryKey: [AGENT_OPTIMIZER_HISTORY_KEY, { traceId }],
+    });
+
+    // Then delete the backend session
+    deleteMutate(
+      { traceId },
+      {
+        onSuccess: () => {
+          console.log(
+            "[TraceAgentOptimizer] Session deleted successfully, starting new session...",
+          );
+          startSession();
+        },
+      },
+    );
+  }, [traceId, deleteMutate, stopStreaming, startSession, queryClient]);
 
   const handleUserResponse = useCallback(
     async (response: UserResponse) => {
+      console.log(
+        "[TraceAgentOptimizer] handleUserResponse - Type:",
+        response.responseType,
+        "Data:",
+        response.data,
+      );
       const abortController = startStreaming();
 
       try {
         const { error } = await runStreaming({
           response,
           signal: abortController.signal,
-          onAddChunk: (output) => {
-            if (output.id) {
-              setChat((prev) => {
-                const existingIndex = prev.messages.findIndex(
-                  (m) => m.id === output.id,
-                );
-                if (existingIndex >= 0) {
-                  const newMessages = [...prev.messages];
-                  newMessages[existingIndex] = {
-                    ...newMessages[existingIndex],
-                    ...output,
-                  } as AgentOptimizerMessage;
-                  return { ...prev, messages: newMessages };
-                } else {
-                  return {
-                    ...prev,
-                    messages: [...prev.messages, output as AgentOptimizerMessage],
-                  };
-                }
-              });
-            }
-          },
+          onAddChunk: addOrUpdateMessage,
         });
 
         if (error) {
@@ -228,15 +283,54 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
         stopStreaming();
       }
     },
-    [runStreaming, toast, stopStreaming, startStreaming],
+    [runStreaming, toast, stopStreaming, startStreaming, addOrUpdateMessage],
   );
 
-  // Start session on mount if no messages
+  // Start session on mount if no messages and no history (only on initial load)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (noMessages && !isHistoryPending && !isRunning) {
-      startSession();
+    const historyMessages = historyData?.content || [];
+    const debugInfo = {
+      noMessages,
+      isHistoryPending,
+      isRunning,
+      hasAutoStarted,
+      historyMessagesLength: historyMessages.length,
+      chatMessagesLength: chat.messages.length,
+      willAutoStart:
+        noMessages &&
+        !isHistoryPending &&
+        !isRunning &&
+        !hasAutoStarted &&
+        historyMessages.length === 0,
+    };
+    console.log(
+      "[TraceAgentOptimizer] Auto-start useEffect triggered:",
+      debugInfo,
+    );
+
+    if (noMessages && !isHistoryPending && !isRunning && !hasAutoStarted) {
+      // Only auto-start if there's no history
+      if (historyMessages.length === 0) {
+        console.log("[TraceAgentOptimizer] Auto-starting session...");
+        startSession();
+        setHasAutoStarted(true);
+      } else {
+        console.log(
+          "[TraceAgentOptimizer] History exists, not auto-starting. History length:",
+          historyMessages.length,
+        );
+      }
     }
-  }, [noMessages, isHistoryPending, isRunning, startSession]);
+    // Only run when these specific values change, not when startSession changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    noMessages,
+    isHistoryPending,
+    isRunning,
+    hasAutoStarted,
+    historyData?.content,
+  ]);
 
   const renderEmptyState = () => {
     return (
@@ -245,8 +339,8 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
           Agent Optimizer
         </div>
         <div className="comet-body-s mb-8 text-center text-muted-slate">
-          Optimize your agent prompts to fix issues and improve performance.
-          The optimizer will guide you through the process.
+          Optimize your agent prompts to fix issues and improve performance. The
+          optimizer will guide you through the process.
         </div>
       </div>
     );
@@ -269,11 +363,11 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem
-              onClick={() => setShowClearConfirm(true)}
-              disabled={noMessages}
+              onClick={() => setShowStartFreshConfirm(true)}
+              disabled={noMessages || isRunning}
             >
-              <Trash className="mr-2 size-4" />
-              Clear conversation
+              <RefreshCw className="mr-2 size-4" />
+              Start fresh
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -291,11 +385,12 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
               renderEmptyState()
             ) : (
               <div className="flex w-full flex-col gap-2 py-4">
-                {chat.messages.map((m) => (
+                {chat.messages.map((m, idx) => (
                   <OptimizerChatMessage
                     key={m.id}
                     message={m}
                     onRespond={handleUserResponse}
+                    isLastMessage={idx === chat.messages.length - 1}
                   />
                 ))}
               </div>
@@ -318,13 +413,13 @@ const TraceAgentOptimizer: React.FC<TraceAgentOptimizerProps> = ({
         </div>
       </div>
       <ConfirmDialog
-        open={showClearConfirm}
-        setOpen={setShowClearConfirm}
-        onConfirm={handleDeleteSession}
-        title="Clear conversation?"
-        description="This will remove the current optimizer session for this trace. You cannot undo this action."
-        confirmText="Clear"
-        confirmButtonVariant="destructive"
+        open={showStartFreshConfirm}
+        setOpen={setShowStartFreshConfirm}
+        onConfirm={handleStartFresh}
+        title="Start fresh?"
+        description="This will clear the current session and start a new optimization process from the beginning. You cannot undo this action."
+        confirmText="Start Fresh"
+        confirmButtonVariant="default"
       />
     </DetailsActionSectionLayout>
   );

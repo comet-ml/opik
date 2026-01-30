@@ -1,32 +1,33 @@
 // Message types matching backend
-export type AgentOptimizerMessageType = 
-  | 'header'
-  | 'trace_info'
-  | 'prompt_list'
-  | 'warning'
-  | 'user_input_request'
-  | 'options_menu'
-  | 'diff_view'
-  | 'progress'
-  | 'assertion_results'
-  | 'test_result'
-  | 'success_message'
-  | 'error'
-  | 'system_message';
+export type AgentOptimizerMessageType =
+  | "header"
+  | "trace_info"
+  | "prompt_list"
+  | "warning"
+  | "user_input_request"
+  | "options_menu"
+  | "diff_view"
+  | "progress"
+  | "optimization_progress"
+  | "assertion_results"
+  | "test_result"
+  | "success_message"
+  | "error"
+  | "system_message";
 
 // User input request subtypes
 export type UserInputRequestSubtype =
-  | 'agent_endpoint'
-  | 'assertions'
-  | 'choice'
-  | 'text_input'
-  | 'confirmation';
+  | "agent_endpoint"
+  | "assertions"
+  | "choice"
+  | "text_input"
+  | "confirmation";
 
 // Change item for diffs
 export interface ChangeItem {
   id: string;
   promptName: string;
-  changeType: 'system' | 'user' | 'assistant' | 'text';
+  changeType: "system" | "user" | "assistant" | "text";
   messageIndex: number | null;
   originalContent: string;
   modifiedContent: string;
@@ -52,29 +53,29 @@ export interface AgentOptimizerMessage {
   type: AgentOptimizerMessageType;
   content: string;
   timestamp: number;
-  
+
   // For user_input_request
   inputSubtype?: UserInputRequestSubtype;
-  
+
   // For options_menu
   options?: MenuOption[];
   allowMultiple?: boolean;
-  
+
   // For diff_view
   changes?: ChangeItem[];
-  
+
   // For assertion_results
   assertionResults?: AssertionResult[];
-  
+
   // For progress
   step?: string;
   iteration?: number;
   maxIterations?: number;
   status?: string;
-  
+
   // For trace_info
   traceData?: {
-    input_data: any;
+    input_data: unknown;
     final_output: string;
     prompts: Array<{
       name: string;
@@ -83,10 +84,10 @@ export interface AgentOptimizerMessage {
       messages?: Array<{ role: string; content: string }>;
     }>;
   };
-  
+
   // For test_result
   testPassed?: boolean;
-  
+
   // State flags
   isLoading?: boolean;
   isError?: boolean;
@@ -105,8 +106,8 @@ export interface SessionState {
 
 // Response types
 export interface UserResponse {
-  responseType: UserInputRequestSubtype | 'menu_selection' | 'menu_choice';
-  data: any; // Type depends on responseType
+  responseType: UserInputRequestSubtype | "menu_selection" | "menu_choice";
+  data: unknown; // Type depends on responseType
 }
 
 // History response
