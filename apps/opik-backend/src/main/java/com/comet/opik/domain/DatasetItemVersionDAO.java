@@ -414,6 +414,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	FROM experiment_items ei
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
             	WHERE ei.workspace_id = :workspace_id
+            	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
             	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
             	LIMIT 1 BY ei.id
             ),
@@ -504,7 +505,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     WHERE workspace_id = :workspace_id
                     AND dataset_id = :datasetId
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY dataset_version_id, id
+                    LIMIT 1 BY id
                 ) AS div_dedup
                 INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div_dedup.id
                 LEFT JOIN experiments_resolved e ON e.id = ei_inner.experiment_id
@@ -665,11 +666,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     WHERE workspace_id = :workspace_id
                     AND dataset_id = :datasetId
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY dataset_version_id, id
+                    LIMIT 1 BY id
                 ) AS div_dedup
                 INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div_dedup.id
                 LEFT JOIN experiments_resolved e ON e.id = ei_inner.experiment_id
                 WHERE div_dedup.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
+                LIMIT 1 BY id
             ),
             feedback_scores_combined_raw AS (
                 SELECT
@@ -1429,7 +1431,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             WHERE workspace_id = :workspace_id
                             AND dataset_id = :datasetId
                             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                            LIMIT 1 BY dataset_version_id, id
+                            LIMIT 1 BY id
                         ) AS div_dedup
                         INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div_dedup.id
                         LEFT JOIN experiments_resolved e ON e.id = ei_inner.experiment_id
