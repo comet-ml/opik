@@ -293,7 +293,7 @@ def build_code_changes_summary(file_edit_records: List[TraceRecord]) -> Optional
         if all_ranges:
             lines.append(f"**Lines modified:** {', '.join(all_ranges)}")
 
-        # Show edit details (diffs) with line numbers
+        # Show edit details in unified diff format
         for edit_data in edits_list:
             edits = edit_data.get("edits", [])
             line_ranges = edit_data.get("line_ranges", [])
@@ -302,36 +302,40 @@ def build_code_changes_summary(file_edit_records: List[TraceRecord]) -> Optional
                 old_str = edit.get("old_string", "")
                 new_str = edit.get("new_string", "")
 
-                # Get start line for this edit if available
+                if not old_str and not new_str:
+                    continue
+
+                # Get start line for this edit
                 start_line = 1
                 if idx < len(line_ranges):
                     start_line = line_ranges[idx].get("start_line", 1) or 1
 
-                if old_str or new_str:
-                    lines.append("")
-                    lines.append("```diff")
+                # Count lines for unified diff header
+                old_lines = old_str.split("\n") if old_str else []
+                new_lines = new_str.split("\n") if new_str else []
+                old_count = len(old_lines)
+                new_count = len(new_lines)
 
-                    # Show removed lines with line numbers
-                    if old_str:
-                        old_lines = old_str.split("\n")
-                        for i, line in enumerate(old_lines[:10]):
-                            line_num = start_line + i
-                            # Preserve original indentation
-                            lines.append(f"-{line_num:4d} | {line}")
-                        if len(old_lines) > 10:
-                            lines.append("-     | ... (truncated)")
+                # Build unified diff header: @@ -start,count +start,count @@
+                lines.append("")
+                lines.append("```diff")
+                lines.append(
+                    f"@@ -{start_line},{old_count} +{start_line},{new_count} @@"
+                )
 
-                    # Show added lines with line numbers
-                    if new_str:
-                        new_lines = new_str.split("\n")
-                        for i, line in enumerate(new_lines[:10]):
-                            line_num = start_line + i
-                            # Preserve original indentation
-                            lines.append(f"+{line_num:4d} | {line}")
-                        if len(new_lines) > 10:
-                            lines.append("+     | ... (truncated)")
+                # Show removed lines (preserve tabs and spaces exactly)
+                for i, line in enumerate(old_lines[:15]):
+                    lines.append(f"-{line}")
+                if len(old_lines) > 15:
+                    lines.append("-... (truncated)")
 
-                    lines.append("```")
+                # Show added lines (preserve tabs and spaces exactly)
+                for i, line in enumerate(new_lines[:15]):
+                    lines.append(f"+{line}")
+                if len(new_lines) > 15:
+                    lines.append("+... (truncated)")
+
+                lines.append("```")
 
         lines.append("")
 
