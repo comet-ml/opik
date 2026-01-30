@@ -1,5 +1,5 @@
 """
-Integration tests for code_agent_trace using fake_backend.
+Unit tests for code_agent_trace using fake_backend.
 
 Tests the full flow of logging agent traces to Opik.
 """
@@ -10,7 +10,7 @@ from pathlib import Path
 import opik
 from opik.integrations.code_agent_trace import log_code_agent_turn
 
-from ...testlib import (
+from tests.testlib import (
     ANY_BUT_NONE,
     FeedbackScoreModel,
     SpanModel,
