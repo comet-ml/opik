@@ -13,17 +13,18 @@ import uniqBy from "lodash/uniqBy";
 
 import { Groups } from "@/types/groups";
 import {
-  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
   ColumnData,
   DynamicColumn,
   COLUMN_TYPE,
   COLUMN_DATASET_ID,
   COLUMN_PROJECT_ID,
   COLUMN_METADATA_ID,
+  COLUMN_NAME_ID,
   SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { getExperimentScore, RowWithScores } from "./scoresUtils";
-import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   buildGroupFieldName,
   buildGroupFieldNameForMeta,
@@ -37,8 +38,9 @@ import TextCell from "@/components/shared/DataTableCells/TextCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import {
   generateActionsColumDef,
-  generateGroupedRowCellDef,
   generateDataRowCellDef,
+  generateGroupedRowCellDef,
+  generateSelectColumDef,
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -78,9 +80,13 @@ export const useExperimentsTableConfig = <
   setSortedColumns,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    `${storageKeyPrefix}-selected-columns`,
+    `${storageKeyPrefix}-selected-columns-v2`,
     {
-      defaultValue: defaultSelectedColumns,
+      defaultValue: migrateSelectedColumns(
+        `${storageKeyPrefix}-selected-columns`,
+        defaultSelectedColumns,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 
@@ -280,38 +286,51 @@ export const useExperimentsTableConfig = <
       );
     });
 
-    const baseColumns = [
-      generateDataRowCellDef<T>(
-        {
-          id: COLUMN_NAME_ID,
-          label: "Name",
-          type: COLUMN_TYPE.string,
-          cell: ResourceCell as never,
-          customMeta: {
-            nameKey: "name",
-            idKey: "dataset_id",
-            resource: RESOURCE_TYPE.experiment,
-            getSearch: (data: Experiment) => ({
-              experiments: [data.id],
-            }),
-          },
-          headerCheckbox: true,
-          sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-          size: 200,
-        },
-        checkboxClickHandler,
-      ),
-      ...groupColumns,
-      ...convertColumnDataToColumn<T, T>(defaultColumns, {
+    const hasGrouping = groups.length > 0;
+    const nameColumn = defaultColumns.find((col) => col.id === COLUMN_NAME_ID);
+    const columnsWithoutName = defaultColumns.filter(
+      (col) => col.id !== COLUMN_NAME_ID,
+    );
+
+    const firstColumn =
+      hasGrouping && nameColumn
+        ? generateDataRowCellDef<T>(
+            {
+              ...nameColumn,
+              cell: ResourceCell as never,
+              customMeta: {
+                nameKey: "name",
+                idKey: "dataset_id",
+                resource: RESOURCE_TYPE.experiment,
+                getSearch: (data: Experiment) => ({
+                  experiments: [data.id],
+                }),
+              },
+            },
+            checkboxClickHandler,
+          )
+        : generateSelectColumDef<T>();
+
+    const regularColumns = convertColumnDataToColumn<T, T>(
+      hasGrouping && nameColumn ? columnsWithoutName : defaultColumns,
+      {
         columnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
-      }),
-      ...convertColumnDataToColumn<T, T>(scoresColumnsData, {
-        columnsOrder: scoresColumnsOrder,
-        selectedColumns,
-        sortableColumns: sortableBy,
-      }),
+      },
+    );
+
+    const scoresColumns = convertColumnDataToColumn<T, T>(scoresColumnsData, {
+      columnsOrder: scoresColumnsOrder,
+      selectedColumns,
+      sortableColumns: sortableBy,
+    });
+
+    const baseColumns = [
+      firstColumn,
+      ...groupColumns,
+      ...regularColumns,
+      ...scoresColumns,
     ];
 
     if (actionsCell) {
@@ -355,7 +374,10 @@ export const useExperimentsTableConfig = <
 
   const columnPinningConfig = useMemo(() => {
     return {
-      left: [COLUMN_NAME_ID, ...groupFieldNames],
+      left:
+        groupFieldNames.length > 0
+          ? [COLUMN_NAME_ID, ...groupFieldNames]
+          : [COLUMN_SELECT_ID],
       right: [],
     } as ColumnPinningState;
   }, [groupFieldNames]);
