@@ -39,6 +39,24 @@ class CostServiceTest {
     }
 
     @Test
+    void calculateCostForAudioSpeechUsesCharacterCount() {
+        // tts-1 at $0.000015 per character, 1000 characters → $0.015
+        BigDecimal cost = CostService.calculateCost("tts-1", "openai",
+                Map.of("input_characters", 1000), null);
+
+        assertThat(cost).isEqualByComparingTo("0.015");
+    }
+
+    @Test
+    void calculateCostForAudioSpeechHD() {
+        // tts-1-hd at $0.000030 per character, 500 characters → $0.015
+        BigDecimal cost = CostService.calculateCost("tts-1-hd", "openai",
+                Map.of("input_characters", 500), null);
+
+        assertThat(cost).isEqualByComparingTo("0.015");
+    }
+
+    @Test
     void calculateCostFallsBackToMetadataWhenNoMatchingModelFound() {
         ObjectNode metadata = OBJECT_MAPPER.createObjectNode();
         metadata.putObject("cost")
