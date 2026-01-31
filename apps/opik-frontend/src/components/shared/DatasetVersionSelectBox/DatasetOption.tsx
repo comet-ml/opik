@@ -1,45 +1,73 @@
 import React from "react";
-import { ChevronRight, Check } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Dataset } from "@/types/datasets";
 
 interface DatasetOptionProps {
   dataset: Dataset;
-  workspaceName: string;
   isSelected: boolean;
   isOpen: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
+  showChevron: boolean;
+  onMainAreaClick: () => void;
+  onChevronMouseEnter: () => void;
+  onChevronMouseLeave: () => void;
 }
 
 const DatasetOption = React.forwardRef<HTMLDivElement, DatasetOptionProps>(
-  ({ dataset, isSelected, isOpen, onMouseEnter, onMouseLeave }, ref) => {
+  (
+    {
+      dataset,
+      isSelected,
+      isOpen,
+      showChevron,
+      onMainAreaClick,
+      onChevronMouseEnter,
+      onChevronMouseLeave,
+    },
+    ref,
+  ) => {
+    const isHighlighted = isSelected || isOpen;
+
     return (
       <div
         ref={ref}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        className={cn(
-          "comet-body-s group relative flex min-h-10 h-auto w-full cursor-pointer gap-2 rounded-sm px-2 pl-12 py-2 hover:bg-primary-foreground/80",
-          {
-            "bg-primary-foreground/50": isOpen,
-            "bg-primary-foreground": isSelected,
-          },
-        )}
+        className="comet-body-s group relative flex h-auto min-h-10 w-full gap-1 rounded-sm p-px"
       >
-        {isSelected && (
-          <Check className="absolute left-5 top-3 size-4 text-muted-slate" />
-        )}
-        <TooltipWrapper content={dataset.name}>
-          <div className="mt-0.5 flex flex-col gap-0.5">
-            <span className="flex-1 truncate">{dataset.name}</span>
-            <span className="comet-body-s flex max-w-[220px] text-light-slate">
-              {dataset.description}
-            </span>
+        <div
+          onClick={onMainAreaClick}
+          className={cn(
+            "flex flex-1 cursor-pointer items-start gap-2 rounded px-2 py-2 group-hover:bg-primary-foreground",
+            isHighlighted && "bg-primary-foreground",
+          )}
+        >
+          <div className="mt-0.5 size-4 shrink-0">
+            {isSelected && <Check className="size-4 text-muted-slate" />}
           </div>
-        </TooltipWrapper>
-        <ChevronRight className="ml-auto mr-3 mt-1 size-4 shrink-0 text-light-slate" />
+          <TooltipWrapper content={dataset.name}>
+            <div className="flex flex-col gap-0.5">
+              <span className="max-w-[220px] truncate">{dataset.name}</span>
+              {dataset.description && (
+                <span className="comet-body-s max-w-[220px] text-light-slate">
+                  {dataset.description}
+                </span>
+              )}
+            </div>
+          </TooltipWrapper>
+        </div>
+
+        {showChevron && (
+          <div
+            onMouseEnter={onChevronMouseEnter}
+            onMouseLeave={onChevronMouseLeave}
+            className={cn(
+              "relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3",
+              isHighlighted && "bg-primary-foreground",
+            )}
+          >
+            <ChevronRight className="size-3.5 text-light-slate" />
+          </div>
+        )}
       </div>
     );
   },
