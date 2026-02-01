@@ -459,6 +459,26 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
+  // Declare selectedColumns early so it can be used in excludeFields computation
+  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
+    SELECTED_COLUMNS_KEY,
+    {
+      defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
+    },
+  );
+
+  // Compute exclude parameter based on visible columns
+  const excludeFields = useMemo(() => {
+    const exclude: string[] = [];
+
+    // Exclude experiment field if column is not visible
+    if (!selectedColumns.includes(COLUMN_EXPERIMENT_ID)) {
+      exclude.push("experiment");
+    }
+
+    return exclude;
+  }, [selectedColumns]);
+
   // Enable table data loading after initial render to allow users to change the date filter
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -479,6 +499,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       truncate: truncationEnabled,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      exclude: excludeFields,
     },
     {
       enabled: isTableDataEnabled,
@@ -499,6 +520,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       truncate: false,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      exclude: excludeFields,
     },
     {
       enabled: false,
@@ -575,13 +597,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const columnsStatistic: ColumnsStatistic = useMemo(
     () => statisticData?.stats ?? [],
     [statisticData],
-  );
-
-  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
-    {
-      defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
-    },
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
