@@ -467,17 +467,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
-  // Compute exclude parameter based on visible columns
+  // Compute exclude parameter based on visible columns and data type
   const excludeFields = useMemo(() => {
     const exclude: string[] = [];
 
-    // Exclude experiment field if column is not visible
-    if (!selectedColumns.includes(COLUMN_EXPERIMENT_ID)) {
+    // Only exclude experiment field for traces (not spans) when column is not visible
+    if (
+      type === TRACE_DATA_TYPE.traces &&
+      !selectedColumns.includes(COLUMN_EXPERIMENT_ID)
+    ) {
       exclude.push("experiment");
     }
 
     return exclude;
-  }, [selectedColumns]);
+  }, [type, selectedColumns]);
 
   // Enable table data loading after initial render to allow users to change the date filter
   React.useEffect(() => {
