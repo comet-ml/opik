@@ -1086,7 +1086,9 @@ class TraceDAOImpl implements TraceDAO {
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
-            ), experiments_agg AS (
+            )
+            <if(sort_has_experiment || !exclude_experiment)>
+            , experiments_agg AS (
                 SELECT DISTINCT
                     ei.trace_id,
                     e.id AS experiment_id,
@@ -1107,6 +1109,7 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY id
                 ) e ON ei.experiment_id = e.id
             )
+            <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
