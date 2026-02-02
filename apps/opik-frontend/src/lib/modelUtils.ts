@@ -33,6 +33,35 @@ export const getDefaultTemperatureForModel = (
 };
 
 /**
+ * Checks if a Gemini model supports thinking level parameter
+ * Currently Gemini 3 Pro and Gemini 3 Flash support thinking level
+ *
+ * @param model - The model type to check
+ * @returns true if the model supports thinking level, false otherwise
+ */
+export const supportsGeminiThinkingLevel = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => {
+  return (
+    model === PROVIDER_MODEL_TYPE.GEMINI_3_PRO ||
+    model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH
+  );
+};
+
+/**
+ * Checks if a Vertex AI model supports thinking level parameter
+ * Currently only Vertex AI Gemini 3 Pro supports thinking level
+ *
+ * @param model - The model type to check
+ * @returns true if the model supports thinking level, false otherwise
+ */
+export const supportsVertexAIThinkingLevel = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => {
+  return model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO;
+};
+
+/**
  * Updates provider config to ensure reasoning models have temperature >= 1.0
  * This function ensures that OpenAI reasoning models (GPT-5 family, O-series)
  * have their temperature set to at least 1.0, as they don't support temperature < 1
