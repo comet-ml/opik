@@ -78,9 +78,7 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   }, [inputDetection, transformedInput, outputMappedResult]);
 
   // Get usage info from cached output result
-  const usage = useMemo(() => {
-    return outputMappedResult?.usage;
-  }, [outputMappedResult]);
+  const usage = outputMappedResult?.usage;
 
   // Get all message IDs for expand/collapse all functionality
   const allMessageIds = useMemo(() => {

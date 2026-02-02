@@ -52,8 +52,8 @@ const isCustomInputMessage = (
   // Must have a role field
   if (!m.role || typeof m.role !== "string") return false;
 
-  // Role must be one of the valid OpenAI roles
-  const validRoles = ["system", "user", "assistant", "tool"];
+  // Role must be one of the valid OpenAI roles (including legacy "function" role)
+  const validRoles = ["system", "user", "assistant", "tool", "function"];
   if (!validRoles.includes(m.role)) return false;
 
   // Must have text field (content equivalent)
