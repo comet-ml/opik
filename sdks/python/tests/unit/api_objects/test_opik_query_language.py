@@ -497,6 +497,6 @@ def test_dataset_item_oql__invalid_filters__raises_value_error(filter_string, er
 
 
 @pytest.mark.parametrize("filter_string", [None, ""])
-def test_empty_dataset_item_filter(filter_string):
+def test_dataset_item_oql__empty_filter__returns_none(filter_string):
     oql = OpikQueryLanguage.for_dataset_items(filter_string)
     assert oql.parsed_filters is None
