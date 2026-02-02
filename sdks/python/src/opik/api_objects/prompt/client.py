@@ -29,6 +29,10 @@ class PromptClient:
         metadata: Optional[Dict[str, Any]],
         type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
         template_structure: str = "text",
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
         """
         Creates the prompt detail for the given prompt name and template.
@@ -39,6 +43,10 @@ class PromptClient:
         - metadata: Optional metadata for the prompt.
         - type: The template type (MUSTACHE or JINJA2).
         - template_structure: Either "text" (default) or "chat".
+        - id: Optional unique identifier (UUID) for the prompt.
+        - description: Optional description of the prompt (up to 255 characters).
+        - change_description: Optional description of changes in this version.
+        - tags: Optional list of tags to associate with the prompt.
 
         Returns:
         - A Prompt object for the provided prompt name and template.
@@ -89,6 +97,10 @@ class PromptClient:
                 type=type,
                 metadata=metadata,
                 template_structure=template_structure,
+                id=id,
+                description=description,
+                change_description=change_description,
+                tags=tags,
             )
 
         return prompt_version
@@ -100,19 +112,66 @@ class PromptClient:
         type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
         template_structure: str = "text",
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
-        new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
-            template=prompt,
-            metadata=metadata,
-            type=type,
-        )
-        new_prompt_version_detail: prompt_version_detail.PromptVersionDetail = (
-            self._rest_client.prompts.create_prompt_version(
+        # Check if this is a new prompt (no existing versions)
+        existing_version = self._get_latest_version(name)
+
+        # If it's a new prompt and container-level params are provided, use create_prompt endpoint
+        # which creates both the container and first version in one call
+        if existing_version is None and (
+            id is not None or description is not None or tags is not None
+        ):
+            self._rest_client.prompts.create_prompt(
+                name=name,
+                id=id,
+                description=description,
+                template=prompt,
+                metadata=metadata,
+                change_description=change_description,
+                type=type,
+                template_structure=template_structure,
+                tags=tags,
+            )
+            # After creating, retrieve the version that was created
+            new_prompt_version_detail = (
+                self._rest_client.prompts.retrieve_prompt_version(
+                    name=name,
+                )
+            )
+            # retrieve_prompt_version may not return tags, so we need to set them manually
+            # from the tags we just passed to create_prompt
+            if tags is not None and new_prompt_version_detail.tags is None:
+                # Pydantic objects are frozen, so we need to create a new object with tags
+                new_prompt_version_detail = prompt_version_detail.PromptVersionDetail(
+                    id=new_prompt_version_detail.id,
+                    prompt_id=new_prompt_version_detail.prompt_id,
+                    commit=new_prompt_version_detail.commit,
+                    template=new_prompt_version_detail.template,
+                    metadata=new_prompt_version_detail.metadata,
+                    type=new_prompt_version_detail.type,
+                    change_description=new_prompt_version_detail.change_description,
+                    tags=tags,
+                    variables=new_prompt_version_detail.variables,
+                    template_structure=new_prompt_version_detail.template_structure,
+                    created_at=new_prompt_version_detail.created_at,
+                    created_by=new_prompt_version_detail.created_by,
+                )
+        else:
+            # For existing prompts or when no container-level params, use create_prompt_version
+            new_prompt_version_detail_data = prompt_version_detail.PromptVersionDetail(
+                template=prompt,
+                metadata=metadata,
+                type=type,
+            )
+            new_prompt_version_detail = self._rest_client.prompts.create_prompt_version(
                 name=name,
                 version=new_prompt_version_detail_data,
                 template_structure=template_structure,
             )
-        )
         return new_prompt_version_detail
 
     def _get_latest_version(
@@ -265,10 +324,11 @@ class PromptClient:
                 json.dumps(parsed_filters) if parsed_filters is not None else None
             )
 
-            # Page through all prompt containers and collect name + template_structure
+            # Page through all prompt containers and collect:
+            # (name, template_structure, tags)
             page = 1
             size = 1000
-            prompt_info: List[Tuple[str, str]] = []  # (name, template_structure)
+            prompt_info: List[Tuple[str, str, Optional[List[str]]]] = []
             while True:
                 prompts_page = self._rest_client.prompts.get_prompts(
                     page=page,
@@ -280,7 +340,7 @@ class PromptClient:
                 if len(content) == 0:
                     break
                 prompt_info.extend(
-                    [(p.name, p.template_structure or "text") for p in content]
+                    [(p.name, p.template_structure or "text", p.tags) for p in content]
                 )
                 if len(content) < size:
                     break
@@ -291,11 +351,28 @@ class PromptClient:
 
             # Retrieve latest version for each container name
             results: List[PromptSearchResult] = []
-            for prompt_name, template_structure in prompt_info:
+            for prompt_name, template_structure, tags in prompt_info:
                 try:
                     latest_version = self._rest_client.prompts.retrieve_prompt_version(
                         name=prompt_name,
                     )
+                    # retrieve_prompt_version may not return tags, so we need to set them from get_prompts response
+                    if tags is not None and latest_version.tags is None:
+                        # Pydantic objects are frozen, so we need to create a new object with tags
+                        latest_version = prompt_version_detail.PromptVersionDetail(
+                            id=latest_version.id,
+                            prompt_id=latest_version.prompt_id,
+                            commit=latest_version.commit,
+                            template=latest_version.template,
+                            metadata=latest_version.metadata,
+                            type=latest_version.type,
+                            change_description=latest_version.change_description,
+                            tags=tags,
+                            variables=latest_version.variables,
+                            template_structure=latest_version.template_structure,
+                            created_at=latest_version.created_at,
+                            created_by=latest_version.created_by,
+                        )
                     results.append(
                         PromptSearchResult(
                             name=prompt_name,

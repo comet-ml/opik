@@ -1142,7 +1142,7 @@ def test_langgraph__interrupt_resume__second_trace_has_correct_input(
             "Option 4: General information",
         ]
         response = "Please select one of these options:\n" + "\n".join(
-            f"{i+1}. {opt}" for i, opt in enumerate(options)
+            f"{i + 1}. {opt}" for i, opt in enumerate(options)
         )
 
         # Interrupt execution to wait for user input

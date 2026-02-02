@@ -1015,6 +1015,8 @@ def execute_task(
                 optimizer_params_used=constructor_kwargs,
             )
         except Exception:
+            if test_mode:
+                raise
             return TaskResult(
                 id=task_id,
                 dataset_name=dataset_name,

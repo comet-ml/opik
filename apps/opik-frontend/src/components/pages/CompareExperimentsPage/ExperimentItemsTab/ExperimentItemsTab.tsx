@@ -46,7 +46,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import CompareExperimentsOutputCell from "@/components/pages-shared/experiments/CompareExperimentsOutputCell/CompareExperimentsOutputCell";
 import CompareExperimentsFeedbackScoreCell from "@/components/pages-shared/experiments/CompareExperimentsFeedbackScoreCell/CompareExperimentsFeedbackScoreCell";
@@ -146,12 +146,12 @@ export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
-  "id",
+  COLUMN_ID_ID,
   COLUMN_COMMENTS_ID,
   USER_FEEDBACK_COLUMN_ID,
 ];
@@ -576,12 +576,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         id: COLUMN_ID_ID,
         label: "ID (Dataset item)",
         type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
+        cell: IdCell as never,
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
         size: 180,
         sortable: isColumnSortable(COLUMN_ID_ID, sortableColumns),
         explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_dataset_item],
@@ -681,7 +677,6 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return retVal;
   }, [
     experimentsCount,
-    handleRowClick,
     datasetColumnsData,
     selectedColumns,
     outputColumnsData,

@@ -19,7 +19,7 @@
         <dropwizard.version>5.0.0</dropwizard.version>
         <swagger.version>2.2.33</swagger.version>
         <lombok.version>1.18.38</lombok.version>
-        <mysql.version>9.5.0</mysql.version>
+        <mysql.version>9.6.0</mysql.version>
         <dropwizard-guicey.version>8.0.0</dropwizard-guicey.version>
         <stringtemplate.version>3.51.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>

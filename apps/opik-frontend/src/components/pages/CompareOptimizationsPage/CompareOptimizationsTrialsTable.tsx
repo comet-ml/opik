@@ -12,7 +12,7 @@ import { TABLE_WRAPPER_ATTRIBUTE } from "@/components/layout/PageBodyStickyTable
 export const getRowId = (e: Experiment) => e.id;
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: ["name"],
+  left: [],
   right: [],
 };
 
@@ -61,7 +61,7 @@ const CompareOptimizationsTrialsTable: React.FC<
   const getRowClassName = useCallback(
     (row: Row<Experiment>) => {
       if (highlightedTrialId && row.id === highlightedTrialId) {
-        return "[&_td]:bg-[#e6f7ed] [&:hover_td]:!bg-[#d0f0dc]";
+        return "comet-table-row-best";
       }
       return "";
     },
