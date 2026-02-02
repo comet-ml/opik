@@ -334,12 +334,12 @@ def test__experiment_scores__happy_path(
     )
 
     # Verify experiment scores are present in evaluation result
-    assert (
-        evaluation_result.experiment_scores is not None
-    ), "Experiment scores should not be None"
-    assert (
-        len(evaluation_result.experiment_scores) == 3
-    ), f"Expected 3 experiment scores, got {len(evaluation_result.experiment_scores)}"
+    assert evaluation_result.experiment_scores is not None, (
+        "Experiment scores should not be None"
+    )
+    assert len(evaluation_result.experiment_scores) == 3, (
+        f"Expected 3 experiment scores, got {len(evaluation_result.experiment_scores)}"
+    )
 
     score_names = {score.name for score in evaluation_result.experiment_scores}
     assert score_names == {
@@ -355,17 +355,17 @@ def test__experiment_scores__happy_path(
         retrieved_experiment.id
     )
 
-    assert (
-        experiment_content.experiment_scores is not None
-    ), "Experiment scores should be persisted in backend"
-    assert (
-        len(experiment_content.experiment_scores) == 3
-    ), f"Expected 3 experiment scores in backend, got {len(experiment_content.experiment_scores)}"
+    assert experiment_content.experiment_scores is not None, (
+        "Experiment scores should be persisted in backend"
+    )
+    assert len(experiment_content.experiment_scores) == 3, (
+        f"Expected 3 experiment scores in backend, got {len(experiment_content.experiment_scores)}"
+    )
 
     backend_score_names = {score.name for score in experiment_content.experiment_scores}
-    assert (
-        backend_score_names == {"max_score", "min_score", "avg_score"}
-    ), f"Expected backend score names {{max_score, min_score, avg_score}}, got {backend_score_names}"
+    assert backend_score_names == {"max_score", "min_score", "avg_score"}, (
+        f"Expected backend score names {{max_score, min_score, avg_score}}, got {backend_score_names}"
+    )
 
     # Verify score values are reasonable
     max_score = next(
@@ -378,15 +378,15 @@ def test__experiment_scores__happy_path(
         s for s in evaluation_result.experiment_scores if s.name == "avg_score"
     )
 
-    assert (
-        0.0 <= max_score.value <= 1.0
-    ), f"max_score should be in [0,1], got {max_score.value}"
-    assert (
-        0.0 <= min_score.value <= 1.0
-    ), f"min_score should be in [0,1], got {min_score.value}"
-    assert (
-        0.0 <= avg_score.value <= 1.0
-    ), f"avg_score should be in [0,1], got {avg_score.value}"
-    assert (
-        min_score.value <= avg_score.value <= max_score.value
-    ), f"Score ordering should be min <= avg <= max, got {min_score.value} <= {avg_score.value} <= {max_score.value}"
+    assert 0.0 <= max_score.value <= 1.0, (
+        f"max_score should be in [0,1], got {max_score.value}"
+    )
+    assert 0.0 <= min_score.value <= 1.0, (
+        f"min_score should be in [0,1], got {min_score.value}"
+    )
+    assert 0.0 <= avg_score.value <= 1.0, (
+        f"avg_score should be in [0,1], got {avg_score.value}"
+    )
+    assert min_score.value <= avg_score.value <= max_score.value, (
+        f"Score ordering should be min <= avg <= max, got {min_score.value} <= {avg_score.value} <= {max_score.value}"
+    )
