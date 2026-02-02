@@ -74,7 +74,10 @@ This workflow will:
 - **If no PR found**:
   > "No open PR found for this branch. Please provide the PR link manually:"
   - Prompt for PR link and validate URL format
-  - If provided, fetch PR details using `gh pr view <PR_NUMBER> --json number,url,title,body`
+  - **Extract and validate PR number from URL**: Parse the numeric PR ID from the URL (extract trailing numeric segment, e.g., `5034` from `https://github.com/comet-ml/opik/pull/5034`)
+    - Verify the extracted value contains only digits
+    - If parsing fails or value is not numeric, abort with error: "Invalid PR URL format. Expected: https://github.com/comet-ml/opik/pull/<number>"
+  - If valid, fetch PR details using `gh pr view <PR_NUMBER> --json number,url,title,body` with the sanitized numeric ID
   - If PR cannot be fetched, stop with error message
   - **After successfully fetching PR by manual link**: Extract PR number, URL, title, and description and store PR information for extraction steps (same as "PR found" branch)
 
@@ -97,7 +100,8 @@ This workflow will:
   - If not found or unavailable, skip this field (it's optional)
 
 - **Extract test environment link from PR description and comments**:
-  - First, search PR comments using `gh pr view <PR_NUMBER> --json comments` for test environment deployment messages (look for "Test environment is now available!" or similar)
+  - First, search PR issue comments using `gh pr view <PR_NUMBER> --json comments` for test environment deployment messages (look for "Test environment is now available!" or similar)
+  - Also fetch review comments using `gh api repos/comet-ml/opik/pulls/<PR_NUMBER>/comments` to check for test env links in code review threads
   - Extract URL from comment body (typically in format `https://pr-XXXX.dev.comet.com` or `https://test.opik.com`)
   - If not found in comments, search PR description for URLs in "## Testing" section
   - Look for common test environment patterns: `https://pr-*.dev.comet.com`, `https://test.opik.com`, `https://*.opik.com`, or any `https://` URL

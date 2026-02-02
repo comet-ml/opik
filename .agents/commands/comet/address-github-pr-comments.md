@@ -51,7 +51,19 @@ This workflow will:
 
 - **Fetch review comments**: Use `gh api repos/comet-ml/opik/pulls/<PR_NUMBER>/comments` to retrieve PR review comments
 - **Fetch PR reviews**: Use `gh api repos/comet-ml/opik/pulls/<PR_NUMBER>/reviews` to get all reviews and understand the review context
-- **Fetch review threads**: Use `gh pr view <PR_NUMBER> --json reviewThreads` to get review thread information including resolved status
+- **Fetch review threads**: Use GraphQL to get review thread resolution status:
+  ```bash
+  gh api graphql -f query='
+    query($owner:String!, $name:String!, $number:Int!) {
+      repository(owner:$owner, name:$name) {
+        pullRequest(number:$number) {
+          reviewThreads(first:100) {
+            nodes { isResolved path line }
+          }
+        }
+      }
+    }' -F owner=comet-ml -F name=opik -F number=<PR_NUMBER>
+  ```
 - **Determine pending/unaddressed items**:
   - Prefer unresolved review threads when available
   - Otherwise, treat comments as pending if they are not from the latest code line (not "outdated") or explicitly unresolved, and have no author follow-up confirmation
