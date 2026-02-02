@@ -290,3 +290,213 @@ def test_invalid_oql_expressions(filter_string, error_pattern):
 def test_empty_filter(filter_string):
     oql = OpikQueryLanguage.for_traces(filter_string)
     assert oql.parsed_filters is None
+
+
+@pytest.mark.parametrize(
+    "filter_string, expected",
+    [
+        ('id = "item-123"', [{"field": "id", "operator": "=", "value": "item-123"}]),
+        (
+            'full_data contains "search_term"',
+            [{"field": "full_data", "operator": "contains", "value": "search_term"}],
+        ),
+        (
+            'source = "manual"',
+            [{"field": "source", "operator": "=", "value": "manual"}],
+        ),
+        (
+            'trace_id = "trace-456"',
+            [{"field": "trace_id", "operator": "=", "value": "trace-456"}],
+        ),
+        (
+            'span_id = "span-789"',
+            [{"field": "span_id", "operator": "=", "value": "span-789"}],
+        ),
+        (
+            'tags contains "important"',
+            [{"field": "tags", "operator": "contains", "value": "important"}],
+        ),
+        (
+            "tags is_empty",
+            [{"field": "tags", "operator": "is_empty", "value": ""}],
+        ),
+        (
+            "tags is_not_empty",
+            [{"field": "tags", "operator": "is_not_empty", "value": ""}],
+        ),
+        (
+            'created_by = "user@example.com"',
+            [{"field": "created_by", "operator": "=", "value": "user@example.com"}],
+        ),
+        (
+            'last_updated_by != "admin@example.com"',
+            [
+                {
+                    "field": "last_updated_by",
+                    "operator": "!=",
+                    "value": "admin@example.com",
+                }
+            ],
+        ),
+        (
+            "created_at > 1234567890",
+            [{"field": "created_at", "operator": ">", "value": "1234567890"}],
+        ),
+        (
+            "last_updated_at <= 9876543210",
+            [{"field": "last_updated_at", "operator": "<=", "value": "9876543210"}],
+        ),
+        (
+            'data.input = "test query"',
+            [
+                {
+                    "field": "data",
+                    "key": "input",
+                    "operator": "=",
+                    "value": "test query",
+                }
+            ],
+        ),
+        (
+            'data.expected_output contains "answer"',
+            [
+                {
+                    "field": "data",
+                    "key": "expected_output",
+                    "operator": "contains",
+                    "value": "answer",
+                }
+            ],
+        ),
+        (
+            'data."complex key" = "value"',
+            [
+                {
+                    "field": "data",
+                    "key": "complex key",
+                    "operator": "=",
+                    "value": "value",
+                }
+            ],
+        ),
+        (
+            'data."Escaped ""Quote""" != "test"',
+            [
+                {
+                    "field": "data",
+                    "key": 'Escaped "Quote"',
+                    "operator": "!=",
+                    "value": "test",
+                }
+            ],
+        ),
+        (
+            'id starts_with "item-" AND source = "manual"',
+            [
+                {"field": "id", "operator": "starts_with", "value": "item-"},
+                {"field": "source", "operator": "=", "value": "manual"},
+            ],
+        ),
+        (
+            'data.input contains "query" AND data.expected_output contains "answer"',
+            [
+                {
+                    "field": "data",
+                    "key": "input",
+                    "operator": "contains",
+                    "value": "query",
+                },
+                {
+                    "field": "data",
+                    "key": "expected_output",
+                    "operator": "contains",
+                    "value": "answer",
+                },
+            ],
+        ),
+        (
+            'tags contains "test" AND created_at > 1234567890 AND source = "api"',
+            [
+                {"field": "tags", "operator": "contains", "value": "test"},
+                {"field": "created_at", "operator": ">", "value": "1234567890"},
+                {"field": "source", "operator": "=", "value": "api"},
+            ],
+        ),
+        (
+            'full_data contains "important" AND tags is_not_empty',
+            [
+                {"field": "full_data", "operator": "contains", "value": "important"},
+                {"field": "tags", "operator": "is_not_empty", "value": ""},
+            ],
+        ),
+        (
+            'data.category = "test" AND data.subcategory != "excluded"',
+            [
+                {
+                    "field": "data",
+                    "key": "category",
+                    "operator": "=",
+                    "value": "test",
+                },
+                {
+                    "field": "data",
+                    "key": "subcategory",
+                    "operator": "!=",
+                    "value": "excluded",
+                },
+            ],
+        ),
+    ],
+)
+def test_valid_dataset_item_oql_expressions(filter_string, expected):
+    oql = OpikQueryLanguage.for_dataset_items(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert len(parsed) == len(expected)
+
+    for i, line in enumerate(expected):
+        for key, value in line.items():
+            assert parsed[i][key] == value
+
+
+@pytest.mark.parametrize(
+    "filter_string, error_pattern",
+    [
+        (
+            'metadata.key = "value"',
+            r"Field metadata\.key is not supported.*",
+        ),
+        (
+            "feedback_scores.score > 0.5",
+            r"Field feedback_scores\.score is not supported.*",
+        ),
+        (
+            "created_at contains 123",
+            r"Operator contains is not supported for field created_at.*",
+        ),
+        (
+            "tags > 5",
+            r"Operator > is not supported for field tags.*",
+        ),
+        (
+            "data > 5",
+            r"Operator > is not supported for field data.*",
+        ),
+        (
+            'id = "test" OR source = "manual"',
+            r"Invalid filter string, OR is not currently supported",
+        ),
+        (
+            'source = "test" extra_stuff',
+            r"Invalid filter string, trailing characters.*",
+        ),
+    ],
+)
+def test_invalid_dataset_item_oql_expressions(filter_string, error_pattern):
+    with pytest.raises(ValueError, match=error_pattern):
+        OpikQueryLanguage.for_dataset_items(filter_string)
+
+
+@pytest.mark.parametrize("filter_string", [None, ""])
+def test_empty_dataset_item_filter(filter_string):
+    oql = OpikQueryLanguage.for_dataset_items(filter_string)
+    assert oql.parsed_filters is None
