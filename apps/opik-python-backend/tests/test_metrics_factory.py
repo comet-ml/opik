@@ -387,6 +387,8 @@ class TestGEvalTemplateInterpolation:
 
     def test_geval_without_placeholders_creates_single_instance(self):
         """Test that GEval without placeholders creates a single reusable instance."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
         params = {
             "task_introduction": "Evaluate the response quality",
             "evaluation_criteria": "Is the response helpful and accurate?"
@@ -395,9 +397,16 @@ class TestGEvalTemplateInterpolation:
         
         assert metric_fn.__name__ == "geval"
         assert callable(metric_fn)
+        
+        # Verify no interpolation changes static text
+        dataset_item = {"answer": "42"}
+        assert _interpolate_template(params["task_introduction"], dataset_item) == "Evaluate the response quality"
+        assert _interpolate_template(params["evaluation_criteria"], dataset_item) == "Is the response helpful and accurate?"
 
     def test_geval_with_placeholders_in_criteria(self):
         """Test that GEval with {{field}} placeholders in criteria works."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
         params = {
             "task_introduction": "Evaluate the response",
             "evaluation_criteria": "Check if the output matches the expected answer: {{answer}}"
@@ -406,9 +415,16 @@ class TestGEvalTemplateInterpolation:
         
         assert metric_fn.__name__ == "geval"
         assert callable(metric_fn)
+        
+        # Verify placeholder interpolation in criteria
+        dataset_item = {"answer": "42"}
+        result = _interpolate_template(params["evaluation_criteria"], dataset_item)
+        assert result == "Check if the output matches the expected answer: 42"
 
     def test_geval_with_placeholders_in_task_introduction(self):
         """Test that GEval with {{field}} placeholders in task_introduction works."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
         params = {
             "task_introduction": "You are evaluating a {{topic}} question",
             "evaluation_criteria": "Is the response accurate?"
@@ -417,9 +433,16 @@ class TestGEvalTemplateInterpolation:
         
         assert metric_fn.__name__ == "geval"
         assert callable(metric_fn)
+        
+        # Verify placeholder interpolation in task_introduction
+        dataset_item = {"topic": "math"}
+        result = _interpolate_template(params["task_introduction"], dataset_item)
+        assert result == "You are evaluating a math question"
 
     def test_geval_with_multiple_placeholders(self):
         """Test that GEval with multiple {{field}} placeholders works."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
         params = {
             "task_introduction": "Evaluate the {{task_type}} response for {{domain}}",
             "evaluation_criteria": "Expected answer is {{answer}}. Context: {{context}}"
@@ -428,6 +451,19 @@ class TestGEvalTemplateInterpolation:
         
         assert metric_fn.__name__ == "geval"
         assert callable(metric_fn)
+        
+        # Verify multiple placeholder interpolation
+        dataset_item = {
+            "task_type": "homework",
+            "domain": "algebra", 
+            "answer": "x=5",
+            "context": "solving equations"
+        }
+        intro_result = _interpolate_template(params["task_introduction"], dataset_item)
+        criteria_result = _interpolate_template(params["evaluation_criteria"], dataset_item)
+        
+        assert intro_result == "Evaluate the homework response for algebra"
+        assert criteria_result == "Expected answer is x=5. Context: solving equations"
 
 
 class TestGEvalInterpolationHelpers:

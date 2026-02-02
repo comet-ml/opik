@@ -321,6 +321,9 @@ def _build_geval_metric(params: Dict[str, Any], model: str) -> Callable:
         )
         
         def metric_fn(dataset_item, llm_output):
+            # Note: GEval.score() only accepts 'output' - dataset_item context is embedded
+            # in task_introduction/evaluation_criteria via template interpolation, not passed
+            # separately. GEval's score() ignores any extra kwargs (**ignored_kwargs).
             return geval_metric.score(output=llm_output)
         
         metric_fn.__name__ = "geval"
@@ -344,6 +347,9 @@ def _build_geval_metric(params: Dict[str, Any], model: str) -> Callable:
             model=model
         )
         
+        # Note: GEval.score() only accepts 'output' - dataset_item context is already
+        # embedded in task_introduction/evaluation_criteria above via interpolation.
+        # GEval's score() ignores any extra kwargs (**ignored_kwargs).
         return geval_metric.score(output=llm_output)
     
     metric_fn_with_interpolation.__name__ = "geval"
