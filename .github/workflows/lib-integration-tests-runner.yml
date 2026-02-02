@@ -208,7 +208,7 @@ jobs:
     secrets: inherit
 
   # ========================================
-  # Slack Notification (scheduled runs only)
+  # Slack Notification (manual and scheduled runs only)
   # ========================================
   notify-slack:
     name: "Slack Notification"
@@ -232,7 +232,7 @@ jobs:
       - bedrock_tests
       - litellm_tests
       - harbor_tests
-    if: always() && github.event_name == 'schedule'
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
 
     steps:
       - name: "Send Slack notification"
@@ -262,7 +262,13 @@ jobs:
           [ "${{ needs.harbor_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|Harbor>\n"
           
           FAILURE_COUNT=$(echo -e "$FAILED" | grep -c "•" || echo "0")
-          SCHEDULE_TYPE=$([[ "${{ github.event.schedule }}" == "0 0 * * 0" ]] && echo "Weekly" || echo "Daily")
+          
+          # Determine trigger type for display
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            TRIGGER_TYPE=$([[ "${{ github.event.schedule }}" == "0 0 * * 0" ]] && echo "Weekly Schedule" || echo "Daily Schedule")
+          else
+            TRIGGER_TYPE="Manual Dispatch"
+          fi
           
           # Build message based on status
           if [ "$FAILURE_COUNT" -gt 0 ]; then
@@ -285,7 +291,7 @@ jobs:
               \"blocks\": [
                 {\"type\":\"header\",\"text\":{\"type\":\"plain_text\",\"text\":\"${TITLE}\",\"emoji\":true}},
                 {\"type\":\"section\",\"fields\":[
-                  {\"type\":\"mrkdwn\",\"text\":\"*Schedule:*\n${SCHEDULE_TYPE}\"},
+                  {\"type\":\"mrkdwn\",\"text\":\"*Trigger:*\n${TRIGGER_TYPE}\"},
                   {\"type\":\"mrkdwn\",\"text\":\"*Branch:*\n\`${{ github.ref_name }}\`\"},
                   ${STATUS_FIELD}
                 ]}${FAILED_SECTION},
