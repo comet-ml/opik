@@ -60,6 +60,7 @@ export default function useDatasetVersionSelect({
       },
       {
         enabled: !!datasetIdForVersions,
+        placeholderData: keepPreviousData,
       },
     );
 
