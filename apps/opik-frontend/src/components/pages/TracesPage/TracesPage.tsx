@@ -3,6 +3,7 @@ import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
+import { useMetricDateRangeWithQueryAndStorage } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import LogsTab from "@/components/pages/TracesPage/LogsTab/LogsTab";
@@ -49,10 +50,15 @@ const TracesPage = () => {
 
   const projectName = project?.name || projectId;
 
+  const { intervalStart, intervalEnd } =
+    useMetricDateRangeWithQueryAndStorage();
+
   // Fetch thread statistics to get thread count for determining default logs type
   const { data: threadsStats } = useThreadsStatistic(
     {
       projectId,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
     },
     {
       enabled: !!projectId,
@@ -94,6 +100,15 @@ const TracesPage = () => {
   const isValidLogsType = Object.values(LOGS_TYPE).includes(typeAsLogsType);
 
   const activeTab = isValidProjectTab ? typeAsProjectTab : PROJECT_TAB.logs;
+
+  // Compute valid logsType for LogsTab - normalize to valid LOGS_TYPE or use default
+  const logsType = isValidLogsType ? typeAsLogsType : defaultLogsType;
+
+  // Handle logs type change from LogsTab
+  const handleLogsTypeChange = (newLogsType: LOGS_TYPE) => {
+    setUserSelectedLogsType(newLogsType);
+    setQueryType(newLogsType);
+  };
 
   // Handle tab change - preserve user's selected logs type when returning to Logs tab
   const handleTabChange = (newTab: string) => {
@@ -151,7 +166,8 @@ const TracesPage = () => {
             <LogsTab
               projectId={projectId}
               projectName={projectName}
-              defaultLogsType={defaultLogsType}
+              logsType={logsType}
+              onLogsTypeChange={handleLogsTypeChange}
             />
           </TabsContent>
           <TabsContent value={PROJECT_TAB.metrics}>
