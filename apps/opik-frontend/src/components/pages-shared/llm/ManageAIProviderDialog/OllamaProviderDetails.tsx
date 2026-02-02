@@ -34,6 +34,7 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
   const { toast } = useToast();
   const [connectionTested, setConnectionTested] = useState(false);
   const [connectionSuccess, setConnectionSuccess] = useState(false);
+  const [modelsFetchFailed, setModelsFetchFailed] = useState(false);
 
   const testConnectionMutation = useOllamaTestConnectionMutation();
   const listModelsMutation = useOllamaListModelsMutation();
@@ -46,6 +47,7 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
   useEffect(() => {
     setConnectionTested(false);
     setConnectionSuccess(false);
+    setModelsFetchFailed(false);
   }, [url, apiKey, headers]);
 
   const handleTestConnection = async () => {
@@ -107,12 +109,14 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
       if (models.length > 0) {
         const modelNames = models.map((m) => m.name).join(", ");
         form.setValue("models", modelNames);
+        setModelsFetchFailed(false);
 
         toast({
           title: "Models discovered",
           description: `Found ${models.length} model(s)`,
         });
       } else {
+        setModelsFetchFailed(false);
         toast({
           title: "No models found",
           description: "No models are available on this Ollama instance",
@@ -120,6 +124,7 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
         });
       }
     } catch (error) {
+      setModelsFetchFailed(true);
       toast({
         title: "Failed to fetch models",
         description: "Unable to retrieve models from Ollama",
@@ -221,7 +226,11 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
         type="button"
         variant="outline"
         onClick={handleTestConnection}
-        disabled={!url || testConnectionMutation.isPending}
+        disabled={
+          !url ||
+          testConnectionMutation.isPending ||
+          listModelsMutation.isPending
+        }
         className="w-full"
       >
         {testConnectionMutation.isPending ? (
@@ -236,14 +245,21 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
           </>
         ) : connectionTested ? (
           connectionSuccess ? (
-            <>
-              <CheckCircle2 className="mr-2 size-4 text-green-600" />
-              Connected
-            </>
+            modelsFetchFailed ? (
+              <>
+                <CheckCircle2 className="mr-2 size-4 text-orange-600" />
+                Connected (models failed)
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="mr-2 size-4 text-green-600" />
+                Connected
+              </>
+            )
           ) : (
             <>
               <XCircle className="mr-2 size-4 text-destructive" />
-              Connection failed
+              Connection failed (click to retry)
             </>
           )
         ) : (
