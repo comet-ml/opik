@@ -230,7 +230,7 @@ You can customize the model used by create a new model using the [`LiteLLMChatMo
 
 ### Filtering dataset items
 
-You can evaluate only a subset of your dataset items by using the `filter_string` parameter. This is useful when you want to run experiments on specific categories of data:
+You can evaluate only a subset of your dataset items by using the `dataset_filter_string` parameter. This is useful when you want to run experiments on specific categories of data:
 
 <CodeBlocks>
     ```python title="Python" language="python"
@@ -248,7 +248,7 @@ You can evaluate only a subset of your dataset items by using the `filter_string
             {"role": "user", "content": "Translate the following text to French: {{input}}"},
         ],
         model="gpt-3.5-turbo",
-        filter_string='tags contains "production"',
+        dataset_filter_string='tags contains "production"',
     )
 
     # Evaluate items matching multiple conditions
@@ -258,7 +258,7 @@ You can evaluate only a subset of your dataset items by using the `filter_string
             {"role": "user", "content": "Answer the question: {{question}}"},
         ],
         model="gpt-4",
-        filter_string='data.category = "finance" AND data.difficulty = "hard"',
+        dataset_filter_string='data.category = "finance" AND data.difficulty = "hard"',
     )
     ```
 
