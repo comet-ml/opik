@@ -7,7 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import AttachmentThumbnail from "@/components/shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
-import AttachmentPreviewDialog from "@/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
+import AttachmentPreviewDialog from "@/components/shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
 import { ATTACHMENT_TYPE, AttachmentPreviewData } from "@/types/attachments";
 import { ATTACHMENT_ORDER_MAP } from "@/constants/attachments";
 
