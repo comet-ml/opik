@@ -511,7 +511,7 @@ def evaluate_prompt(
     trial_count: int = 1,
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
-    filter_string: Optional[str] = None,
+    dataset_filter_string: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -565,7 +565,7 @@ def evaluate_prompt(
 
         experiment_tags: List of tags to be associated with the experiment.
 
-        filter_string: Optional OQL filter string to filter dataset items.
+        dataset_filter_string: Optional OQL filter string to filter dataset items.
             Supports filtering by tags, data fields, metadata, etc.
 
             Supported columns include:
@@ -645,7 +645,7 @@ def evaluate_prompt(
             dataset_sampler=dataset_sampler,
             trial_count=trial_count,
             experiment_=experiment,
-            filter_string=filter_string,
+            dataset_filter_string=dataset_filter_string,
         )
 
     total_time = time.time() - start_time

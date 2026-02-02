@@ -29,7 +29,7 @@ class OQLConfig(ABC):
         return ["usage", "feedback_scores", "metadata"]
 
 
-class TraceSpanOQLConfig(OQLConfig):
+class GeneralPurposeOQLConfig(OQLConfig):
     """OQL configuration for traces and spans filtering."""
 
     @property
@@ -300,7 +300,7 @@ class DatasetItemOQLConfig(OQLConfig):
 OPERATORS_WITHOUT_VALUES = {"is_empty", "is_not_empty"}
 
 # Default config for backward compatibility
-_DEFAULT_CONFIG = TraceSpanOQLConfig()
+_DEFAULT_CONFIG = GeneralPurposeOQLConfig()
 
 
 class OpikQueryLanguage:
@@ -340,7 +340,7 @@ class OpikQueryLanguage:
         name, status, metadata, feedback_scores, tags, and usage tokens. Empty or None query_string
         yields no filters; malformed queries raise ValueError during parsing.
         """
-        return cls(query_string, TraceSpanOQLConfig())
+        return cls(query_string, GeneralPurposeOQLConfig())
 
     @classmethod
     def for_dataset_items(cls, query_string: Optional[str]) -> "OpikQueryLanguage":

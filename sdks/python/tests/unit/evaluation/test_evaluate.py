@@ -2820,7 +2820,7 @@ def test_evaluate_prompt__with_filter_string__passes_to_streaming(fake_backend):
             model=MODEL_NAME,
             scoring_metrics=[metrics.Equals()],
             task_threads=1,
-            filter_string=filter_string,
+            dataset_filter_string=filter_string,
         )
 
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
@@ -2874,7 +2874,7 @@ def test_evaluate_prompt__with_filter_string_and_nb_samples__passes_both_paramet
             scoring_metrics=[metrics.Equals()],
             task_threads=1,
             nb_samples=2,
-            filter_string=filter_string,
+            dataset_filter_string=filter_string,
         )
 
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
@@ -2929,7 +2929,7 @@ def test_evaluate_prompt__with_filter_string_and_dataset_sampler__passes_filter_
             scoring_metrics=[metrics.Equals()],
             task_threads=1,
             dataset_sampler=sampler,
-            filter_string=filter_string,
+            dataset_filter_string=filter_string,
         )
 
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
