@@ -1288,10 +1288,20 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ), experiment_items_scope AS (
                 SELECT ei.*
                 FROM experiment_items ei
-                INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
                 WHERE ei.workspace_id = :workspace_id
+                AND ei.experiment_id IN (SELECT id FROM experiments_resolved)
                 ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
                 LIMIT 1 BY ei.id
+            ), trace_data AS (
+                SELECT
+                    id,
+                    project_id,
+                    duration
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_scope)
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
@@ -1302,7 +1312,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                        feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
-                  AND workspace_id = :workspace_id
+                AND workspace_id = :workspace_id
+                AND project_id IN (SELECT DISTINCT project_id FROM trace_data)
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -1314,7 +1325,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     author
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
-                   AND workspace_id = :workspace_id
+                AND workspace_id = :workspace_id
+                AND project_id IN (SELECT DISTINCT project_id FROM trace_data)
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -1346,7 +1358,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     name,
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
-                FROM feedback_scores_combined
+                FROM feedback_scores_combined fsf
+                INNER JOIN trace_data td ON td.id = fsf.entity_id
                 GROUP BY workspace_id, project_id, entity_id, name
             )<if(feedback_scores_empty_filters)>,
             fsc AS (
@@ -1391,7 +1404,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 INNER JOIN dataset_items_by_version dibv ON dibv.id = ei.dataset_item_id
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
-                    SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
+                    SELECT id FROM traces WHERE workspace_id = :workspace_id AND project_id IN (SELECT DISTINCT project_id FROM trace_data) AND <experiment_item_filters>
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>
@@ -1400,6 +1413,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     FROM traces
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     WHERE workspace_id = :workspace_id
+                    AND project_id IN (SELECT DISTINCT project_id FROM trace_data)
                     AND fsc.feedback_scores_count = 0
                 )
                 <endif>
@@ -1443,34 +1457,22 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND <dataset_item_filters>
                 )
                 <endif>
-            ), trace_project_mapping AS (
-                SELECT DISTINCT
-                    id AS trace_id,
-                    project_id,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                        AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                        NULL) as duration
-                FROM traces final
-                WHERE workspace_id = :workspace_id
-                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
             ), traces_with_cost_and_duration AS (
                 SELECT DISTINCT
                     eif.trace_id as trace_id,
-                    tpm.duration as duration,
+                    t.duration as duration,
                     s.total_estimated_cost as total_estimated_cost,
                     s.usage as usage
                 FROM experiment_items_filtered eif
-                INNER JOIN trace_project_mapping tpm ON tpm.trace_id = eif.trace_id
+                INNER JOIN trace_data t ON t.id = eif.trace_id
                 LEFT JOIN (
                     SELECT
                         trace_id,
                         sum(total_estimated_cost) as total_estimated_cost,
                         sumMap(usage) as usage
                     FROM spans final
-                    INNER JOIN trace_project_mapping tpm ON tpm.trace_id = spans.trace_id
                     WHERE workspace_id = :workspace_id
-                    AND project_id = tpm.project_id
+                    AND project_id IN (SELECT DISTINCT project_id FROM trace_data)
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_agg AS (
@@ -1481,14 +1483,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         groupArray(value)
                     ) AS feedback_scores
                 FROM feedback_scores_final
-                WHERE entity_id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
                 GROUP BY workspace_id, project_id, entity_id
             ), feedback_scores_percentiles AS (
                 SELECT
                     name,
                     quantiles(0.5, 0.9, 0.99)(toFloat64(value)) AS percentiles
                 FROM feedback_scores_final
-                WHERE entity_id IN (SELECT DISTINCT trace_id FROM experiment_items_filtered WHERE trace_id IS NOT NULL)
                 GROUP BY name
             ), usage_total_tokens_data AS (
                 SELECT
@@ -2735,8 +2735,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 datasetId, versionId, experimentIds, filters);
 
         var template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS);
-        template.add("dataset_id", datasetId);
-        template.add("version_id", versionId);
+
         if (!experimentIds.isEmpty()) {
             template.add("experiment_ids", true);
         }
@@ -2744,7 +2743,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         applyFiltersToTemplate(template, filters);
 
         String sql = template.render();
-        log.debug("Experiment items stats query: '{}'", sql);
 
         return asyncTemplate.nonTransaction(connection -> {
             Statement statement = connection.createStatement(sql);
@@ -2786,7 +2784,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private void bindStatementParameters(Statement statement, UUID datasetId, UUID versionId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters) {
         statement.bind("datasetId", datasetId);
-        statement.bind("versionId", versionId.toString());
+        statement.bind("versionId", versionId);
         if (!experimentIds.isEmpty()) {
             statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new));
         }
