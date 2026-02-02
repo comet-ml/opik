@@ -112,6 +112,7 @@ init_worktree_ports() {
     # Export for child processes (docker-compose, etc.)
     export OPIK_BACKEND_PORT="$BACKEND_PORT"
     export OPIK_FRONTEND_PORT="$FRONTEND_PORT"
+    export NGINX_PORT="$FRONTEND_PORT"
     export MYSQL_PORT
     export REDIS_PORT
     export CLICKHOUSE_HTTP_PORT

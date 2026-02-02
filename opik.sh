@@ -200,8 +200,8 @@ get_docker_compose_cmd() {
 }
 
 get_ui_url() {
-  local frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' "${COMPOSE_PROJECT_NAME}-frontend-1" 2>/dev/null)
-  echo "http://localhost:${frontend_port:-5173}"
+  local frontend_port="${NGINX_PORT:-${OPIK_FRONTEND_PORT:-5173}}"
+  echo "http://localhost:${frontend_port}"
 }
 
 create_opik_config_if_missing() {

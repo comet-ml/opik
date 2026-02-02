@@ -359,7 +359,7 @@ start_backend() {
     export SERVER_APPLICATION_PORT="$BACKEND_PORT"
     export SERVER_ADMIN_PORT="$BACKEND_ADMIN_PORT"
     export STATE_DB_URL="localhost:${MYSQL_PORT}/opik?createDatabaseIfNotExist=true&rewriteBatchedStatements=true"
-    export REDIS_URL="redis://:opik@localhost:${REDIS_PORT}/0"
+    export REDIS_URL="${REDIS_URL:-redis://:opik@localhost:${REDIS_PORT}/0}"
     export ANALYTICS_DB_PORT="${CLICKHOUSE_HTTP_PORT}"
 
     log_debug "Backend configured with:"
@@ -1009,7 +1009,11 @@ check_port_collisions() {
         "$MYSQL_PORT:MySQL"
         "$REDIS_PORT:Redis"
         "$CLICKHOUSE_HTTP_PORT:ClickHouse HTTP"
+        "$CLICKHOUSE_NATIVE_PORT:ClickHouse Native"
         "$PYTHON_BACKEND_PORT:Python Backend"
+        "$ZOOKEEPER_PORT:Zookeeper"
+        "$MINIO_API_PORT:MinIO API"
+        "$MINIO_CONSOLE_PORT:MinIO Console"
     )
 
     log_info "Checking for port collisions..."
