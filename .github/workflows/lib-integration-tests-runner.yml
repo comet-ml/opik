@@ -52,7 +52,7 @@ on:
       - 'sdks/python/**'
 
 env:
-  SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
   OPIK_SENTRY_ENABLE: False
 
@@ -238,9 +238,9 @@ jobs:
       - name: "🔍 Check Slack configuration"
         id: check-slack
         run: |
-          if [ -z "${{ secrets.ACTION_MONITORING_SLACK }}" ]; then
+          if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
             echo "configured=false" >> $GITHUB_OUTPUT
-            echo "::notice::ACTION_MONITORING_SLACK not configured - Slack notification will be skipped"
+            echo "::notice::SLACK_WEBHOOK_URL not configured - Slack notification will be skipped"
           else
             echo "configured=true" >> $GITHUB_OUTPUT
           fi
@@ -248,7 +248,7 @@ jobs:
       - name: "📢 Send Slack notification"
         if: steps.check-slack.outputs.configured == 'true'
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
           # Gather information
           WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -381,4 +381,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Slack notifications are not configured. To enable them:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Add the webhook URL as a repository secret named \`ACTION_MONITORING_SLACK\`" >> $GITHUB_STEP_SUMMARY
+          echo "Add the webhook URL as a repository secret named \`SLACK_WEBHOOK_URL\`" >> $GITHUB_STEP_SUMMARY
