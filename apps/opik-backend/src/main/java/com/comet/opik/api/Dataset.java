@@ -40,7 +40,7 @@ public record Dataset(
         @JsonView({
                 Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long optimizationCount,
         @JsonView({
-                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) long versionCount,
+                Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long versionCount,
         @JsonView({
                 Dataset.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Instant mostRecentExperimentAt,
         @JsonView({
