@@ -9,17 +9,6 @@ import {
 } from "@/lib/provider";
 import { ProviderGridOption } from "@/components/pages-shared/llm/SetupProviderDialog/ProviderGrid";
 
-/**
- * Function type for generating custom labels for provider options.
- * @param providerType - The provider type
- * @param defaultLabel - The default label from PROVIDERS (optional, for convenience)
- * @returns Custom label string
- */
-export type ProviderLabelGenerator = (
-  providerType: PROVIDER_TYPE,
-  defaultLabel?: string,
-) => string;
-
 interface UseProviderOptionsParams {
   configuredProvidersList?: ProviderObject[];
   includeConfiguredStatus?: boolean;
@@ -28,12 +17,6 @@ interface UseProviderOptionsParams {
    * When true, adds options for creating new Bedrock/Custom provider instances.
    */
   includeAddNewOptions?: boolean;
-  /**
-   * Optional function to customize labels for "Add new" provider options.
-   * Receives the provider type and default label, returns custom label.
-   * Example: (type, label) => `Add ${label}` for "Add Bedrock" style labels.
-   */
-  addNewLabelGenerator?: ProviderLabelGenerator;
 }
 
 export interface ProviderEnabledMap {
@@ -109,14 +92,12 @@ export function useProviderEnabledMap(): ProviderEnabledMap {
  * @param configuredProvidersList - Optional list of already configured providers
  * @param includeConfiguredStatus - Whether to include isConfigured status and configured instances
  * @param includeAddNewOptions - Whether to include "Add new" options for Bedrock and Custom
- * @param addNewLabelGenerator - Optional function to customize labels for "Add new" options
  * @returns Array of provider options filtered by feature toggles
  */
 export function useProviderOptions({
   configuredProvidersList,
   includeConfiguredStatus = false,
   includeAddNewOptions = false,
-  addNewLabelGenerator,
 }: UseProviderOptionsParams = {}): ProviderGridOption[] {
   const providerEnabledMap = useProviderEnabledMap();
 
@@ -207,34 +188,25 @@ export function useProviderOptions({
     // Add "Add new" options for Bedrock, Ollama, and Custom if requested
     if (includeAddNewOptions) {
       if (providerEnabledMap[PROVIDER_TYPE.BEDROCK]) {
-        const defaultLabel = PROVIDERS[PROVIDER_TYPE.BEDROCK].label;
         options.push({
           value: buildComposedProviderKey(PROVIDER_TYPE.BEDROCK),
-          label: addNewLabelGenerator
-            ? addNewLabelGenerator(PROVIDER_TYPE.BEDROCK, defaultLabel)
-            : defaultLabel,
+          label: PROVIDERS[PROVIDER_TYPE.BEDROCK].label,
           providerType: PROVIDER_TYPE.BEDROCK,
         });
       }
 
       if (providerEnabledMap[PROVIDER_TYPE.OLLAMA]) {
-        const defaultLabel = PROVIDERS[PROVIDER_TYPE.OLLAMA].label;
         options.push({
           value: buildComposedProviderKey(PROVIDER_TYPE.OLLAMA),
-          label: addNewLabelGenerator
-            ? addNewLabelGenerator(PROVIDER_TYPE.OLLAMA, defaultLabel)
-            : defaultLabel,
+          label: PROVIDERS[PROVIDER_TYPE.OLLAMA].label,
           providerType: PROVIDER_TYPE.OLLAMA,
         });
       }
 
       if (providerEnabledMap[PROVIDER_TYPE.CUSTOM]) {
-        const defaultLabel = PROVIDERS[PROVIDER_TYPE.CUSTOM].label;
         options.push({
           value: buildComposedProviderKey(PROVIDER_TYPE.CUSTOM),
-          label: addNewLabelGenerator
-            ? addNewLabelGenerator(PROVIDER_TYPE.CUSTOM, defaultLabel)
-            : defaultLabel,
+          label: PROVIDERS[PROVIDER_TYPE.CUSTOM].label,
           providerType: PROVIDER_TYPE.CUSTOM,
         });
       }
@@ -246,6 +218,5 @@ export function useProviderOptions({
     providerEnabledMap,
     includeConfiguredStatus,
     includeAddNewOptions,
-    addNewLabelGenerator,
   ]);
 }
