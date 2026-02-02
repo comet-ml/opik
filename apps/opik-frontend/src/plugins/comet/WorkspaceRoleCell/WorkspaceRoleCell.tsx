@@ -108,7 +108,12 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     setPermissions,
   );
 
-  const isRoleChangeDisabled = isInvitedByEmail || isOrganizationAdmin;
+  const isOwnRole =
+    !!currentUserName &&
+    (row.userName === currentUserName || row.email === currentUserName);
+
+  const isRoleChangeDisabled =
+    isInvitedByEmail || isOrganizationAdmin || isOwnRole;
 
   const trigger = (
     <SelectTrigger
@@ -149,8 +154,11 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     : decisionTreeProps.controlValue || "";
 
   const getTooltipContent = () => {
+    if (isOwnRole) {
+      return "You can't update your own role";
+    }
     if (isOrganizationAdmin) {
-      return "Cannot change workspace role for organization admins";
+      return "You can't change the role, since this user is an organization admin";
     }
     if (isInvitedByEmail) {
       return "Cannot change roles for users invited by email";
