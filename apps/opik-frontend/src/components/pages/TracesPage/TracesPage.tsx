@@ -72,6 +72,15 @@ const TracesPage = () => {
 
   const activeTab = isValidProjectTab ? typeAsProjectTab : PROJECT_TAB.logs;
 
+  // Compute valid logsType for LogsTab - normalize to valid LOGS_TYPE or use default
+  const logsType = isValidLogsType ? typeAsLogsType : defaultLogsType;
+
+  // Handle logs type change from LogsTab
+  const handleLogsTypeChange = (newLogsType: LOGS_TYPE) => {
+    setUserSelectedLogsType(newLogsType);
+    setQueryType(newLogsType);
+  };
+
   // Handle tab change - preserve user's selected logs type when returning to Logs tab
   const handleTabChange = (newTab: string) => {
     if (newTab === PROJECT_TAB.logs) {
@@ -128,7 +137,8 @@ const TracesPage = () => {
             <LogsTab
               projectId={projectId}
               projectName={projectName}
-              defaultLogsType={defaultLogsType}
+              logsType={logsType}
+              onLogsTypeChange={handleLogsTypeChange}
             />
           </TabsContent>
           <TabsContent value={PROJECT_TAB.metrics}>

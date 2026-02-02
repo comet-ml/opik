@@ -1,5 +1,4 @@
 import React from "react";
-import { StringParam, useQueryParam } from "use-query-params";
 import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesSpansTab";
 import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
@@ -7,36 +6,25 @@ import { LOGS_TYPE, TRACE_DATA_TYPE } from "@/constants/traces";
 type LogsTabProps = {
   projectId: string;
   projectName: string;
-  defaultLogsType: LOGS_TYPE;
+  logsType: LOGS_TYPE;
+  onLogsTypeChange: (type: LOGS_TYPE) => void;
 };
 
 const LogsTab: React.FC<LogsTabProps> = ({
   projectId,
   projectName,
-  defaultLogsType,
+  logsType,
+  onLogsTypeChange,
 }) => {
-  const [type = defaultLogsType, setType] = useQueryParam("type", StringParam, {
-    updateType: "replaceIn",
-  });
-
-  // Normalize type to valid LOGS_TYPE, fallback to defaultLogsType
-  const validType = Object.values(LOGS_TYPE).includes(type as LOGS_TYPE)
-    ? (type as LOGS_TYPE)
-    : defaultLogsType;
-
-  const handleLogsTypeChange = (newType: LOGS_TYPE) => {
-    setType(newType);
-  };
-
   const renderContent = () => {
-    switch (validType) {
+    switch (logsType) {
       case LOGS_TYPE.threads:
         return (
           <ThreadsTab
             projectId={projectId}
             projectName={projectName}
-            logsType={validType}
-            onLogsTypeChange={handleLogsTypeChange}
+            logsType={logsType}
+            onLogsTypeChange={onLogsTypeChange}
           />
         );
       case LOGS_TYPE.traces:
@@ -46,8 +34,8 @@ const LogsTab: React.FC<LogsTabProps> = ({
             type={TRACE_DATA_TYPE.traces}
             projectId={projectId}
             projectName={projectName}
-            logsType={validType}
-            onLogsTypeChange={handleLogsTypeChange}
+            logsType={logsType}
+            onLogsTypeChange={onLogsTypeChange}
           />
         );
       case LOGS_TYPE.spans:
@@ -57,8 +45,8 @@ const LogsTab: React.FC<LogsTabProps> = ({
             type={TRACE_DATA_TYPE.spans}
             projectId={projectId}
             projectName={projectName}
-            logsType={validType}
-            onLogsTypeChange={handleLogsTypeChange}
+            logsType={logsType}
+            onLogsTypeChange={onLogsTypeChange}
           />
         );
     }
