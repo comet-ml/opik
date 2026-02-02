@@ -1,0 +1,151 @@
+import React from "react";
+import { Check, X, Circle, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  OptimizationRun,
+  OptimizationChange,
+} from "@/types/agent-intake";
+
+type OptimizationProgressProps = {
+  runs: OptimizationRun[];
+  isComplete: boolean;
+  success?: boolean;
+  changes?: OptimizationChange[];
+};
+
+const OptimizationProgress: React.FC<OptimizationProgressProps> = ({
+  runs,
+  isComplete,
+  success,
+  changes,
+}) => {
+  const renderAssertionIcon = (
+    passed: boolean | undefined,
+    status: string,
+  ) => {
+    if (status === "running") {
+      return <Circle className="size-3.5 text-muted-slate" />;
+    }
+    if (status === "evaluating") {
+      return <Loader2 className="size-3.5 animate-spin text-muted-slate" />;
+    }
+    if (passed === true) {
+      return <Check className="size-3.5 text-green-600" />;
+    }
+    if (passed === false) {
+      return <X className="size-3.5 text-red-500" />;
+    }
+    return <Circle className="size-3.5 text-muted-slate" />;
+  };
+
+  const renderStatusBadge = (status: string) => {
+    if (status === "running") {
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-muted-slate">
+          <Loader2 className="size-3 animate-spin" />
+          Running...
+        </span>
+      );
+    }
+    if (status === "evaluating") {
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-amber-600">
+          <Loader2 className="size-3 animate-spin" />
+          Evaluating...
+        </span>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="mb-4 rounded-lg border bg-background">
+      <div className="border-b px-4 py-3">
+        <div className="comet-body-s-accented text-foreground">
+          Optimization Progress
+        </div>
+      </div>
+
+      <div className="divide-y">
+        {runs.map((run) => (
+          <div key={`${run.label}-${run.iteration}`} className="px-4 py-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span
+                className={cn(
+                  "comet-body-s font-medium",
+                  run.status === "completed" && run.all_passed
+                    ? "text-green-700"
+                    : run.status === "completed" && !run.all_passed
+                      ? "text-foreground"
+                      : "text-muted-slate",
+                )}
+              >
+                {run.label}
+              </span>
+              {run.status !== "completed" && renderStatusBadge(run.status)}
+              {run.status === "completed" && (
+                <span
+                  className={cn(
+                    "text-xs font-medium",
+                    run.all_passed ? "text-green-600" : "text-red-500",
+                  )}
+                >
+                  {run.all_passed ? "All passed" : "Failed"}
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              {run.assertions.map((assertion, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 text-sm text-muted-slate"
+                >
+                  {renderAssertionIcon(assertion.passed, run.status)}
+                  <span
+                    className={cn(
+                      assertion.passed === true && "text-foreground",
+                      assertion.passed === false && "text-red-600",
+                    )}
+                  >
+                    {assertion.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isComplete && (
+        <div
+          className={cn(
+            "border-t px-4 py-3",
+            success ? "bg-green-50" : "bg-red-50",
+          )}
+        >
+          <div
+            className={cn(
+              "comet-body-s-accented mb-1",
+              success ? "text-green-800" : "text-red-800",
+            )}
+          >
+            {success ? "Optimization Complete!" : "Optimization Failed"}
+          </div>
+          {changes && changes.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {changes.map((change, idx) => (
+                <li key={idx} className="flex items-start gap-2 text-sm">
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-green-600" />
+                  <span className="text-green-800">{change.description}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default OptimizationProgress;

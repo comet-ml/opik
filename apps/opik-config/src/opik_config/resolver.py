@@ -7,8 +7,9 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, TypeVar, get_args, get_origin
 
+from opik import Prompt
+
 from .cache import ResolvedConfig
-from .prompt import Prompt
 
 T = TypeVar("T")
 

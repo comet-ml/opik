@@ -15,7 +15,7 @@ import useTraceById from "@/api/traces/useTraceById";
 import Loader from "@/components/shared/Loader/Loader";
 import TraceDataViewer from "./TraceDataViewer/TraceDataViewer";
 import TraceTreeViewer from "./TraceTreeViewer/TraceTreeViewer";
-import TraceAIViewer from "./TraceAIViewer/TraceAIViewer";
+import AgentIntakeViewer from "./AgentIntakeViewer/AgentIntakeViewer";
 import TraceAnnotateViewer from "./TraceAnnotateViewer/TraceAnnotateViewer";
 import NoData from "@/components/shared/NoData/NoData";
 import { Span } from "@/types/traces";
@@ -238,11 +238,11 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                   />
                 )}
                 {activeSection === DetailsActionSection.AIAssistants && (
-                  <TraceAIViewer
+                  <AgentIntakeViewer
                     traceId={traceId}
+                    projectId={projectId}
                     activeSection={activeSection}
                     setActiveSection={setActiveSection}
-                    spans={spansData?.content}
                   />
                 )}
               </ResizablePanel>

@@ -9,6 +9,8 @@ from typing import Any, Callable, Generator, TypeVar, get_type_hints, overload
 
 from opik import opik_context
 
+from opik import Prompt
+
 from .cache import (
     ConfigContext,
     ResolvedConfig,
@@ -19,7 +21,6 @@ from .cache import (
 )
 from .client import ConfigClient, BackendUnavailableError
 from .models import ConfigBehavior
-from .prompt import Prompt
 from .registration import KeyMetadata, queue_registration, set_registration_client
 from .resolver import _decode_value, resolve_with_dedupe
 
@@ -44,11 +45,17 @@ def config_context(
         project_id: Project identifier
         env: Environment (e.g., "prod", "staging")
     """
+    # Ensure mask_id is a string if provided
+    if mask_id is not None and not isinstance(mask_id, str):
+        mask_id = str(mask_id)
+
     # Auto-derive unit_id from trace_id if not provided
     if unit_id is None:
         trace_data = opik_context.get_current_trace_data()
         if trace_data is not None:
-            unit_id = trace_data.id
+            unit_id = str(trace_data.id)
+    elif not isinstance(unit_id, str):
+        unit_id = str(unit_id)
 
     ctx = ConfigContext(
         project_id=project_id,
@@ -64,11 +71,26 @@ def config_context(
 
 
 @contextmanager
-def experiment_context(experiment_id: str | None) -> Generator[None, None, None]:
+def experiment_context(experiment_id_or_request: str | None = None) -> Generator[None, None, None]:
     """
-    Alias for config_context with experiment_id as mask_id.
-    Provided for compatibility with existing code.
+    Set up config context for an experiment.
+
+    Args:
+        experiment_id_or_request: Either an experiment ID string, or a Flask/Starlette
+            request object (will extract X-Opik-Experiment-Id header automatically).
     """
+    experiment_id: str | None = None
+
+    if experiment_id_or_request is None:
+        experiment_id = None
+    elif isinstance(experiment_id_or_request, str):
+        experiment_id = experiment_id_or_request
+    else:
+        # Try to extract from request object (Flask, Starlette, etc.)
+        headers = getattr(experiment_id_or_request, "headers", None)
+        if headers is not None:
+            experiment_id = headers.get("X-Opik-Experiment-Id")
+
     with config_context(mask_id=experiment_id):
         yield
 
@@ -76,7 +98,7 @@ def experiment_context(experiment_id: str | None) -> Generator[None, None, None]
 def _get_default_for_prompt(value: Any) -> Any:
     """Convert a Prompt to a dict for storage."""
     if isinstance(value, Prompt):
-        return {"prompt_name": value.name, "prompt": str(value)}
+        return {"prompt_name": value.name, "prompt": value.prompt}
     return value
 
 
@@ -156,25 +178,49 @@ def _resolve_all_fields(
     return resolve_with_dedupe(cache_key, do_resolve)
 
 
+def _make_json_safe(value: Any) -> Any:
+    """Convert value to JSON-serializable form."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Prompt):
+        return {"prompt_name": value.name, "prompt": value.prompt}
+    if isinstance(value, dict):
+        return {k: _make_json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_make_json_safe(v) for v in value]
+    # For non-serializable objects, convert to string representation
+    return str(value)
+
+
 def _log_config_to_trace(
     mask_id: str | None,
     assigned_variant: str | None,
     resolved_values: dict[str, Any],
 ) -> None:
     """Log config data to the current trace for UI visibility."""
-    trace_data = opik_context.get_current_trace_data()
-    if trace_data is not None:
-        existing_metadata = trace_data.metadata or {}
-        opik_context.update_current_trace(
-            metadata={
-                **existing_metadata,
-                "opik_config": {
-                    "experiment_id": mask_id,
-                    "assigned_variant": assigned_variant,
-                    "values": resolved_values,
+    try:
+        trace_data = opik_context.get_current_trace_data()
+        if trace_data is not None:
+            safe_values = {k: _make_json_safe(v) for k, v in resolved_values.items()}
+
+            tags: list[str] = []
+            if mask_id:
+                tags.append(f"experiment:{mask_id}")
+            if assigned_variant:
+                tags.append(f"variant:{assigned_variant}")
+
+            opik_context.update_current_trace(
+                metadata={
+                    "opik_config": {
+                        "experiment_id": mask_id,
+                        "assigned_variant": assigned_variant,
+                        "values": safe_values,
+                    },
                 },
-            }
-        )
+                tags=tags if tags else None,
+            )
+    except Exception:
+        pass  # Don't fail the main flow if logging fails
 
 
 @overload

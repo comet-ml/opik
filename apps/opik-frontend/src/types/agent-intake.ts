@@ -1,0 +1,145 @@
+import { LLM_MESSAGE_ROLE } from "@/types/llm";
+
+export enum INTAKE_EVENT_TYPE {
+  text_delta = "text_delta",
+  text_done = "text_done",
+  input_hint = "input_hint",
+  config_updated = "config_updated",
+  turn_complete = "turn_complete",
+  intake_complete = "intake_complete",
+}
+
+export enum INPUT_HINT {
+  endpoint_selector = "endpoint_selector",
+  text = "text",
+  textarea = "textarea",
+  yes_no = "yes_no",
+  eval_suite_selector = "eval_suite_selector",
+  no_endpoints_configured = "no_endpoints_configured",
+  none = "none",
+}
+
+export type IntakeEvalSuite = {
+  enabled: boolean;
+  suite_id: string | null;
+  suite_name: string | null;
+};
+
+export type IntakeConfig = {
+  trace_id: string;
+  endpoint_id: string;
+  expected_behaviors: string[];
+  eval_suite: IntakeEvalSuite;
+};
+
+export type IntakeMessageMetadata =
+  | {
+      type: "endpoint_selection";
+      endpointName: string;
+    }
+  | {
+      type: "no_endpoints_choice";
+      choice: "run_myself" | "setup_endpoint";
+    };
+
+export type IntakeMessage = {
+  id: string;
+  role: LLM_MESSAGE_ROLE.user | LLM_MESSAGE_ROLE.assistant;
+  content: string;
+  isLoading?: boolean;
+  isError?: boolean;
+  metadata?: IntakeMessageMetadata;
+};
+
+export type IntakeChatState = {
+  value: string;
+  messages: IntakeMessage[];
+  inputHint: INPUT_HINT;
+  isReady: boolean;
+  config: IntakeConfig | null;
+};
+
+export type IntakeStreamEvent = {
+  type: INTAKE_EVENT_TYPE;
+  content?: string;
+  hint?: INPUT_HINT;
+  config?: IntakeConfig;
+  is_ready?: boolean;
+};
+
+export type IntakeStartRequest = {
+  trace_info?: {
+    prompts?: Array<{ name: string; type: string }>;
+    has_endpoints?: boolean;
+  };
+};
+
+export type IntakeRespondRequest = {
+  message: string;
+};
+
+export type IntakeStatusResponse = {
+  trace_id: string;
+  is_ready: boolean;
+  config: IntakeConfig | null;
+};
+
+// Optimization types
+export enum OPTIMIZE_EVENT_TYPE {
+  optimization_started = "optimization_started",
+  run_status = "run_status",
+  run_result = "run_result",
+  optimization_complete = "optimization_complete",
+}
+
+export type OptimizationStartedEvent = {
+  type: OPTIMIZE_EVENT_TYPE.optimization_started;
+  expected_behaviors: string[];
+};
+
+export type RunStatus = "running" | "evaluating";
+
+export type RunStatusEvent = {
+  type: OPTIMIZE_EVENT_TYPE.run_status;
+  label: string;
+  iteration: number;
+  status: RunStatus;
+};
+
+export type AssertionResult = {
+  name: string;
+  passed?: boolean;
+};
+
+export type RunResultEvent = {
+  type: OPTIMIZE_EVENT_TYPE.run_result;
+  label: string;
+  iteration: number;
+  all_passed: boolean;
+  assertions: AssertionResult[];
+};
+
+export type OptimizationChange = {
+  type: string;
+  description: string;
+};
+
+export type OptimizationCompleteEvent = {
+  type: OPTIMIZE_EVENT_TYPE.optimization_complete;
+  success: boolean;
+  changes: OptimizationChange[];
+};
+
+export type OptimizeStreamEvent =
+  | OptimizationStartedEvent
+  | RunStatusEvent
+  | RunResultEvent
+  | OptimizationCompleteEvent;
+
+export type OptimizationRun = {
+  label: string;
+  iteration: number;
+  status: RunStatus | "completed";
+  assertions: AssertionResult[];
+  all_passed?: boolean;
+};

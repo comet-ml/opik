@@ -248,6 +248,51 @@ def set_mask_override():
     return jsonify({"value_id": value_id}), 201
 
 
+@app.route("/v1/config/prompts/override", methods=["POST"])
+def set_prompt_override():
+    """
+    Set an override for a prompt by its name (simplified API for optimizers).
+
+    The service looks up which config key has this prompt name and sets the override.
+
+    Input:
+    - project_id?: string (default "default")
+    - env?: string (default "prod")
+    - mask_id: string (the experiment/optimization run ID)
+    - prompt_name: string (e.g., "Researcher System Prompt")
+    - value: string (the new prompt text)
+    - variant?: string (default "default")
+    - created_by?: string
+    """
+    data = request.get_json()
+    required = ["mask_id", "prompt_name", "value"]
+    if not data or any(k not in data for k in required):
+        return jsonify({"error": f"Missing required fields: {required}"}), 400
+
+    project_id = data.get("project_id", "default")
+    env = data.get("env", "prod")
+    mask_id = data["mask_id"]
+    prompt_name = data["prompt_name"]
+    prompt_value = data["value"]
+    variant = data.get("variant", "default")
+    created_by = data.get("created_by")
+
+    key = store.find_key_by_prompt_name(project_id, env, prompt_name)
+    if not key:
+        return jsonify({"error": f"No config key found for prompt_name: {prompt_name}"}), 404
+
+    value_id = store.set_mask_override(
+        project_id=project_id,
+        env=env,
+        mask_id=mask_id,
+        variant=variant,
+        key=key,
+        value={"prompt_name": prompt_name, "prompt": prompt_value},
+        created_by=created_by,
+    )
+    return jsonify({"value_id": value_id, "key": key}), 201
+
+
 # =============================================================================
 # History/Debug API
 # =============================================================================

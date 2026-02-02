@@ -40,9 +40,9 @@ class ConfigClient:
             "keys": keys,
         }
         if mask_id is not None:
-            payload["mask_id"] = mask_id
+            payload["mask_id"] = str(mask_id) if not isinstance(mask_id, str) else mask_id
         if unit_id is not None:
-            payload["unit_id"] = unit_id
+            payload["unit_id"] = str(unit_id) if not isinstance(unit_id, str) else unit_id
 
         try:
             response = self._session.post(
@@ -179,5 +179,45 @@ class ConfigClient:
             )
             response.raise_for_status()
             return response.json().get("value_id")
+        except requests.RequestException:
+            return None
+
+    def set_prompt_override(
+        self,
+        mask_id: str,
+        prompt_name: str,
+        value: str,
+        project_id: str = "default",
+        env: str = "prod",
+        variant: str = "default",
+        created_by: str | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        Set an override for a prompt by its name.
+
+        This is a simplified API for optimizers - the service looks up
+        which config key has this prompt name and sets the override.
+
+        Returns dict with value_id and key, or None on failure.
+        """
+        payload: dict[str, Any] = {
+            "project_id": project_id,
+            "env": env,
+            "mask_id": mask_id,
+            "prompt_name": prompt_name,
+            "value": value,
+            "variant": variant,
+        }
+        if created_by:
+            payload["created_by"] = created_by
+
+        try:
+            response = self._session.post(
+                f"{self.base_url}/v1/config/prompts/override",
+                json=payload,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
         except requests.RequestException:
             return None

@@ -112,9 +112,8 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
-  const isAIInspectorEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
-  );
+  // Always show optimize button for mockup
+  const isAIInspectorEnabled = true;
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const { toast } = useToast();
 
@@ -456,7 +455,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           <Separator orientation="vertical" className="mx-1 h-4" />
         )}
         {isAIInspectorEnabled && (
-          <TooltipWrapper content="Debug your trace with AI assistance (OpikAssist)">
+          <TooltipWrapper content="Optimize your agent with AI-powered configuration">
             <Button
               variant="default"
               size={isSmall ? "icon-sm" : "sm"}
@@ -465,7 +464,9 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               }
             >
               <Sparkles className="size-3.5 shrink-0" />
-              {isSmall ? null : <span className="ml-1.5">Debug with AI</span>}
+              {isSmall ? null : (
+                <span className="ml-1.5">Optimize Your Agent</span>
+              )}
             </Button>
           </TooltipWrapper>
         )}

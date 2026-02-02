@@ -524,6 +524,32 @@ class SQLiteConfigStore:
                 for row in rows
             ]
 
+    def find_key_by_prompt_name(self, project_id: str, env: str, prompt_name: str) -> str | None:
+        """
+        Find the config key that has a prompt with the given name.
+
+        Searches published values for prompts where prompt_name matches.
+        Returns the key string (e.g., "AgentConfig.researcher_system_prompt") or None.
+        """
+        with self._transaction() as conn:
+            rows = conn.execute("""
+                SELECT ck.key, cv.value_json
+                FROM config_published cp
+                JOIN config_keys ck ON ck.id = cp.key_id
+                JOIN config_values cv ON cv.id = cp.value_id
+                WHERE cp.project_id = ? AND cp.env = ?
+            """, (project_id, env)).fetchall()
+
+            for row in rows:
+                try:
+                    value = json.loads(row["value_json"])
+                    if isinstance(value, dict) and value.get("prompt_name") == prompt_name:
+                        return row["key"]
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+            return None
+
     def list_published(self, project_id: str, env: str) -> list[dict[str, Any]]:
         """List all published values for an environment."""
         with self._transaction() as conn:

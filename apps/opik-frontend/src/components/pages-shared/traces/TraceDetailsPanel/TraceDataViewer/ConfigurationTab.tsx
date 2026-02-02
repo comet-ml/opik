@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { FlaskConical, Copy, FileText } from "lucide-react";
+import { FlaskConical, Copy, FileText, Split } from "lucide-react";
 
 import { Span, Trace } from "@/types/traces";
 import { Tag } from "@/components/ui/tag";
@@ -13,6 +13,7 @@ type PromptValue = {
 
 type OpikConfigData = {
   experiment_id?: string | null;
+  assigned_variant?: string | null;
   values?: Record<string, unknown>;
 };
 
@@ -82,17 +83,29 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
   }
 
   const hasExperiment = Boolean(configData.experiment_id);
+  const hasVariant = Boolean(configData.assigned_variant);
 
   return (
     <div className="space-y-4">
       {hasExperiment && (
         <div className="flex items-center justify-between rounded-md border bg-purple-50 p-3 dark:bg-purple-950/30">
           <div className="flex items-center gap-2">
-            <FlaskConical className="size-4 text-purple-500" />
-            <span className="text-sm font-medium">Experiment</span>
+            {hasVariant ? (
+              <Split className="size-4 text-blue-500" />
+            ) : (
+              <FlaskConical className="size-4 text-purple-500" />
+            )}
+            <span className="text-sm font-medium">
+              {hasVariant ? "A/B Test" : "Experiment"}
+            </span>
             <code className="rounded bg-background px-2 py-0.5 font-mono text-sm">
               {configData.experiment_id}
             </code>
+            {hasVariant && (
+              <Tag variant="blue" size="sm">
+                Variant {configData.assigned_variant}
+              </Tag>
+            )}
           </div>
           <Button
             variant="ghost"
