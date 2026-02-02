@@ -51,7 +51,7 @@ import { convertColumnDataToColumn, injectColumnCallback } from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { formatDate } from "@/lib/date";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
@@ -358,10 +358,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         id: COLUMN_ID_ID,
         label: "ID",
         type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          asId: true,
-        },
+        cell: IdCell as never,
       },
       ...dynamicDatasetColumns.map(
         ({ label, id, columnType }) =>

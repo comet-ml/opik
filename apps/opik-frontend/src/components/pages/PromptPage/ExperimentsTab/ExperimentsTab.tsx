@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Row, RowSelectionState, ColumnSort } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
+import { useNavigate } from "@tanstack/react-router";
 import {
   JsonParam,
   NumberParam,
@@ -35,7 +36,6 @@ import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
-import { Experiment } from "@/types/datasets";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
@@ -47,7 +47,10 @@ import {
   COLUMN_NAME_ID,
 } from "@/types/shared";
 import { formatDate } from "@/lib/date";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import {
+  RESOURCE_TYPE,
+  RESOURCE_MAP,
+} from "@/components/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/components/ui/separator";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -132,22 +135,33 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     },
   );
 
+  const navigate = useNavigate();
+
+  const handleRowClick = useCallback(
+    (row: GroupedExperiment) => {
+      const experimentResource = RESOURCE_MAP[RESOURCE_TYPE.experiment];
+      navigate({
+        to: experimentResource.url,
+        params: {
+          [experimentResource.param]: row.dataset_id,
+          workspaceName,
+        },
+        search: {
+          experiments: [row.id],
+        },
+      });
+    },
+    [navigate, workspaceName],
+  );
+
   const columnsDef: ColumnData<GroupedExperiment>[] = useMemo(() => {
     return [
       {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: TextCell as never,
         sortable: true,
-        customMeta: {
-          nameKey: "name",
-          idKey: "dataset_id",
-          resource: RESOURCE_TYPE.experiment,
-          getSearch: (data: Experiment) => ({
-            experiments: [data.id],
-          }),
-        },
         size: 200,
       },
       {
@@ -471,6 +485,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         columns={columns}
         aggregationMap={aggregationMap}
         data={experiments}
+        onRowClick={handleRowClick}
         renderCustomRow={renderCustomRowCallback}
         getIsCustomRow={getIsGroupRow}
         sortConfig={sortConfig}

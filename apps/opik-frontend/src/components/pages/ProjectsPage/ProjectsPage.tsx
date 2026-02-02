@@ -17,7 +17,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { ProjectWithStatistic } from "@/types/projects";
@@ -47,7 +47,6 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -98,13 +97,8 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: TextCell as never,
         sortable: true,
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.project,
-        },
       },
       {
         id: "id",

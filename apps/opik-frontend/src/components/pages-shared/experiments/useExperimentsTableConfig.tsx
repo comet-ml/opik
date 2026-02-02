@@ -45,7 +45,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
-import { ExperimentsAggregations } from "@/types/datasets";
+import { Experiment, ExperimentsAggregations } from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -294,7 +294,21 @@ export const useExperimentsTableConfig = <
 
     const firstColumn =
       hasGrouping && nameColumn
-        ? generateDataRowCellDef<T>(nameColumn, checkboxClickHandler)
+        ? generateDataRowCellDef<T>(
+            {
+              ...nameColumn,
+              cell: ResourceCell as never,
+              customMeta: {
+                nameKey: "name",
+                idKey: "dataset_id",
+                resource: RESOURCE_TYPE.experiment,
+                getSearch: (data: Experiment) => ({
+                  experiments: [data.id],
+                }),
+              },
+            },
+            checkboxClickHandler,
+          )
         : generateSelectColumDef<T>();
 
     const regularColumns = convertColumnDataToColumn<T, T>(

@@ -29,7 +29,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -42,7 +42,6 @@ import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCall
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/NoAnnotationQueuesPage";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { formatDate } from "@/lib/date";
@@ -114,13 +113,8 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
+    cell: TextCell as never,
     sortable: true,
-    customMeta: {
-      nameKey: "name",
-      idKey: "id",
-      resource: RESOURCE_TYPE.annotationQueue,
-    },
   },
   ...SHARED_COLUMNS,
   {

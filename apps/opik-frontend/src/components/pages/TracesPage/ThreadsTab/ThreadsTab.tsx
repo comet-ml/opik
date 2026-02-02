@@ -53,7 +53,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
@@ -166,10 +166,7 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     id: COLUMN_ID_ID,
     label: "ID",
     type: COLUMN_TYPE.string,
-    cell: LinkCell as never,
-    customMeta: {
-      asId: true,
-    },
+    cell: IdCell as never,
     sortable: true,
   },
   ...SHARED_COLUMNS,
@@ -251,6 +248,7 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_ID_ID,
+  "start_time",
   "first_message",
   "last_message",
   "number_of_messages",
@@ -506,7 +504,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       defaultValue: migrateSelectedColumns(
         SELECTED_COLUMNS_KEY,
         DEFAULT_SELECTED_COLUMNS,
-        [COLUMN_ID_ID],
+        [COLUMN_ID_ID, "start_time"],
       ),
     },
   );

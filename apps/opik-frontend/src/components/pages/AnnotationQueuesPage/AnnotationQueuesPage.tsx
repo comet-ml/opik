@@ -29,6 +29,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import AnnotateQueueCell from "@/components/pages-shared/annotation-queues/AnnotateQueueCell";
@@ -130,13 +131,8 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     id: COLUMN_NAME_ID,
     label: "Name",
     type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
+    cell: TextCell as never,
     sortable: true,
-    customMeta: {
-      nameKey: "name",
-      idKey: "id",
-      resource: RESOURCE_TYPE.annotationQueue,
-    },
   },
   ...SHARED_COLUMNS,
   {
