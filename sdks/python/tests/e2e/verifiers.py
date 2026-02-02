@@ -705,12 +705,12 @@ def verify_dataset_filtered_items(
     dataset = opik_client.get_dataset(name=dataset_name)
 
     filtered_items = dataset.get_items(filter_string=filter_string)
-    assert (
-        len(filtered_items) == expected_count
-    ), f"Expected {expected_count} items, got {len(filtered_items)}"
+    assert len(filtered_items) == expected_count, (
+        f"Expected {expected_count} items, got {len(filtered_items)}"
+    )
 
     if expected_count > 0:
         inputs = {item["input"]["question"] for item in filtered_items}
-        assert (
-            inputs == expected_inputs
-        ), f"Input mismatch: {inputs} != {expected_inputs}"
+        assert inputs == expected_inputs, (
+            f"Input mismatch: {inputs} != {expected_inputs}"
+        )
