@@ -491,7 +491,7 @@ def test_dataset_item_oql__valid_filters__happyflow(filter_string, expected):
         ),
     ],
 )
-def test_invalid_dataset_item_oql_expressions(filter_string, error_pattern):
+def test_dataset_item_oql__invalid_filters__raises_value_error(filter_string, error_pattern):
     with pytest.raises(ValueError, match=error_pattern):
         OpikQueryLanguage.for_dataset_items(filter_string)
 
