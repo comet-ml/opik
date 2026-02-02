@@ -418,7 +418,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	FROM experiment_items ei
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
             	WHERE ei.workspace_id = :workspace_id
-            	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
             	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
             	LIMIT 1 BY ei.id
             ),
