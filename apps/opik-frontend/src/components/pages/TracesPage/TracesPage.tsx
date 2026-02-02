@@ -2,7 +2,6 @@ import { StringParam, useQueryParam } from "use-query-params";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
-import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import LogsTab from "@/components/pages/TracesPage/LogsTab/LogsTab";
@@ -21,7 +20,6 @@ import ViewSelector, {
   VIEW_TYPE,
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import { LOGS_TYPE } from "@/constants/traces";
-import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 enum PROJECT_TAB {
   logs = "logs",
@@ -49,29 +47,8 @@ const TracesPage = () => {
 
   const projectName = project?.name || projectId;
 
-  // Fetch thread statistics to get thread count for determining default logs type
-  const { data: threadsStats } = useThreadsStatistic(
-    {
-      projectId,
-    },
-    {
-      enabled: !!projectId,
-      refetchOnMount: false,
-    },
-  );
-
-  // Extract thread count from statistics
-  const threadCountStat = threadsStats?.stats?.find(
-    (stat) =>
-      stat.name === "thread_count" &&
-      stat.type === STATISTIC_AGGREGATION_TYPE.COUNT,
-  );
-  const threadCount =
-    (threadCountStat?.type === STATISTIC_AGGREGATION_TYPE.COUNT
-      ? threadCountStat.value
-      : 0) ?? 0;
-  const defaultLogsType =
-    threadCount > 0 ? LOGS_TYPE.threads : LOGS_TYPE.traces;
+  // Default to traces - always use traces as the default logs type
+  const defaultLogsType = LOGS_TYPE.traces;
 
   // Remember the user's selected LOGS_TYPE to preserve their choice across tab switches
   const [userSelectedLogsType, setUserSelectedLogsType] =
