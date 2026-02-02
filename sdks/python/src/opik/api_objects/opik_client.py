@@ -803,24 +803,15 @@ class Opik:
             name=name,
         )
 
-    def get_dataset(
-        self,
-        name: str,
-    ) -> dataset.Dataset:
+    def get_dataset(self, name: str) -> dataset.Dataset:
         """
-        Get dataset by name.
+        Get dataset by name
 
         Args:
             name: The name of the dataset
 
         Returns:
-            dataset.Dataset: The dataset object.
-
-        Example:
-            >>> client = opik.Opik()
-            >>> dataset = client.get_dataset(name="my_dataset")
-            >>> # Get filtered items using filter_string parameter
-            >>> filtered_items = dataset.get_items(filter_string='tags contains "failed"')
+            dataset.Dataset: dataset object associated with the name passed.
         """
         dataset_fern: dataset_public.DatasetPublic = (
             self._rest_client.datasets.get_dataset_by_identifier(dataset_name=name)

@@ -566,7 +566,19 @@ def evaluate_prompt(
         experiment_tags: List of tags to be associated with the experiment.
 
         filter_string: Optional OQL filter string to filter dataset items.
-            Only items matching the filter will be evaluated.
+            Supports filtering by tags, data fields, metadata, etc.
+
+            Supported columns include:
+            - `id`, `source`, `trace_id`, `span_id`: String fields
+            - `data`: Dictionary field (use dot notation, e.g., "data.category")
+            - `tags`: List field (use "contains" operator)
+            - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
+            - `created_by`, `last_updated_by`: String fields
+
+            Examples:
+            - `tags contains "failed"` - Items with 'failed' tag
+            - `data.category = "test"` - Items with specific data field value
+            - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
