@@ -187,28 +187,20 @@ export function useProviderOptions({
 
     // Add "Add new" options for Bedrock, Ollama, and Custom if requested
     if (includeAddNewOptions) {
-      if (providerEnabledMap[PROVIDER_TYPE.BEDROCK]) {
-        options.push({
-          value: buildComposedProviderKey(PROVIDER_TYPE.BEDROCK),
-          label: PROVIDERS[PROVIDER_TYPE.BEDROCK].label,
-          providerType: PROVIDER_TYPE.BEDROCK,
-        });
-      }
+      const addNewProviderTypes = [
+        PROVIDER_TYPE.BEDROCK,
+        PROVIDER_TYPE.OLLAMA,
+        PROVIDER_TYPE.CUSTOM,
+      ] as const;
 
-      if (providerEnabledMap[PROVIDER_TYPE.OLLAMA]) {
-        options.push({
-          value: buildComposedProviderKey(PROVIDER_TYPE.OLLAMA),
-          label: PROVIDERS[PROVIDER_TYPE.OLLAMA].label,
-          providerType: PROVIDER_TYPE.OLLAMA,
-        });
-      }
-
-      if (providerEnabledMap[PROVIDER_TYPE.CUSTOM]) {
-        options.push({
-          value: buildComposedProviderKey(PROVIDER_TYPE.CUSTOM),
-          label: PROVIDERS[PROVIDER_TYPE.CUSTOM].label,
-          providerType: PROVIDER_TYPE.CUSTOM,
-        });
+      for (const type of addNewProviderTypes) {
+        if (providerEnabledMap[type]) {
+          options.push({
+            value: buildComposedProviderKey(type),
+            label: PROVIDERS[type].label,
+            providerType: type,
+          });
+        }
       }
     }
 
