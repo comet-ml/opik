@@ -24,12 +24,10 @@ const GEvalMetricConfigs = ({
 }: GEvalMetricConfigsProps) => {
   const taskIntroEditorRef = useRef<EditorView | null>(null);
   const evalCriteriaEditorRef = useRef<EditorView | null>(null);
+  const lastFocusedEditorRef = useRef<EditorView | null>(null);
 
-  const insertVariableAtCursor = (
-    editorRef: React.RefObject<EditorView | null>,
-    variable: string,
-  ) => {
-    const view = editorRef.current;
+  const handleVariableSelect = (variable: string) => {
+    const view = lastFocusedEditorRef.current ?? evalCriteriaEditorRef.current;
     const variableText = `{{${variable}}}`;
 
     if (view) {
@@ -58,6 +56,9 @@ const GEvalMetricConfigs = ({
             onCreateEditor={(view) => {
               taskIntroEditorRef.current = view;
             }}
+            onFocus={() => {
+              lastFocusedEditorRef.current = taskIntroEditorRef.current;
+            }}
             theme={codeMirrorPromptTheme}
             value={configs.task_introduction ?? ""}
             onChange={(value) =>
@@ -73,12 +74,6 @@ const GEvalMetricConfigs = ({
             extensions={[EditorView.lineWrapping, mustachePlugin]}
           />
         </div>
-        <DatasetVariablesHint
-          datasetVariables={datasetVariables}
-          onSelect={(variable) =>
-            insertVariableAtCursor(taskIntroEditorRef, variable)
-          }
-        />
       </div>
 
       <div className="space-y-2">
@@ -95,6 +90,9 @@ const GEvalMetricConfigs = ({
             onCreateEditor={(view) => {
               evalCriteriaEditorRef.current = view;
             }}
+            onFocus={() => {
+              lastFocusedEditorRef.current = evalCriteriaEditorRef.current;
+            }}
             theme={codeMirrorPromptTheme}
             value={configs.evaluation_criteria ?? ""}
             onChange={(value) =>
@@ -110,13 +108,12 @@ const GEvalMetricConfigs = ({
             extensions={[EditorView.lineWrapping, mustachePlugin]}
           />
         </div>
-        <DatasetVariablesHint
-          datasetVariables={datasetVariables}
-          onSelect={(variable) =>
-            insertVariableAtCursor(evalCriteriaEditorRef, variable)
-          }
-        />
       </div>
+
+      <DatasetVariablesHint
+        datasetVariables={datasetVariables}
+        onSelect={handleVariableSelect}
+      />
     </div>
   );
 };
