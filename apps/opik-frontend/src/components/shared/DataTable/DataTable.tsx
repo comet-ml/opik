@@ -69,6 +69,7 @@ declare module "@tanstack/react-table" {
     enableUserFeedbackEditing?: boolean;
     projectId?: string;
     projectName?: string;
+    paddedLayout?: boolean;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -327,12 +328,15 @@ const DataTable = <TData, TValue>({
         <TableCell
           key={cell.id}
           data-cell-id={cell.id}
-          style={getCommonPinningStyles({
-            column: cell.column,
-            applyStickyWorkaround: stickyBorderWorkaround,
-            forceGroup: true,
-            table,
-          })}
+          style={{
+            ...getCommonPinningStyles({
+              column: cell.column,
+              applyStickyWorkaround: stickyBorderWorkaround,
+              forceGroup: true,
+              table,
+            }),
+            ...(table.options.meta?.paddedLayout && { paddingLeft: 12 }),
+          }}
           className={getCommonPinningClasses({
             column: cell.column,
             forceGroup: true,
