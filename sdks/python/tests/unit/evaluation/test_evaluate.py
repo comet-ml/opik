@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import Any, Dict, List
 from unittest import mock
 import pytest
@@ -20,6 +21,93 @@ from opik.evaluation.evaluator import _build_prompt_evaluation_task
 
 from ...testlib import ANY_BUT_NONE, ANY_STRING, ANY_LIST, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
+
+
+def create_mock_dataset(
+    name: str = "the-dataset-name",
+    items: List[dataset_item.DatasetItem] = None,
+) -> mock.MagicMock:
+    """Create a mock dataset with streaming support."""
+    mock_dataset = mock.MagicMock(
+        spec=[
+            "__internal_api__stream_items_as_dataclasses__",
+            "id",
+            "dataset_items_count",
+        ]
+    )
+    mock_dataset.name = name
+    mock_dataset.dataset_items_count = None
+    if items is not None:
+        mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
+            items
+        )
+    return mock_dataset
+
+
+def create_mock_experiment() -> tuple[mock.Mock, mock.Mock, mock.Mock]:
+    """Create mock experiment and related mocks for patching.
+
+    Returns:
+        Tuple of (mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id)
+    """
+    mock_experiment = mock.Mock()
+    mock_create_experiment = mock.Mock()
+    mock_create_experiment.return_value = mock_experiment
+
+    mock_get_experiment_url_by_id = mock.Mock()
+    mock_get_experiment_url_by_id.return_value = "any_url"
+
+    return mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id
+
+
+def create_mock_model(
+    model_name: str = "gpt-3.5-turbo",
+    response_content: str = "Hello, world!",
+) -> tuple[mock.Mock, mock.Mock]:
+    """Create mock model and factory for evaluate_prompt tests.
+
+    Returns:
+        Tuple of (mock_models_factory_get, mock_model)
+    """
+    mock_models_factory_get = mock.Mock()
+    mock_model = mock.Mock()
+    mock_model.model_name = model_name
+    mock_model.generate_provider_response.return_value = mock.Mock(
+        choices=[mock.Mock(message=mock.Mock(content=response_content))]
+    )
+    mock_models_factory_get.return_value = mock_model
+
+    return mock_models_factory_get, mock_model
+
+
+@contextmanager
+def patch_evaluation_dependencies(
+    mock_create_experiment: mock.Mock,
+    mock_get_experiment_url_by_id: mock.Mock,
+    mock_models_factory_get: mock.Mock = None,
+):
+    """Context manager to patch evaluation dependencies.
+
+    Args:
+        mock_create_experiment: Mock for opik_client.Opik.create_experiment
+        mock_get_experiment_url_by_id: Mock for url_helpers.get_experiment_url_by_id
+        mock_models_factory_get: Optional mock for models_factory.get (for evaluate_prompt tests)
+    """
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", mock_create_experiment
+    ):
+        with mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
+        ):
+            if mock_models_factory_get is not None:
+                with mock.patch.object(
+                    models_factory,
+                    "get",
+                    mock_models_factory_get,
+                ):
+                    yield
+            else:
+                yield
 
 
 def test_evaluate__happyflow(
@@ -2694,4 +2782,159 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
         dataset_item_ids=None,
         batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
+    )
+
+
+def test_evaluate_prompt__with_filter_string__passes_to_streaming(fake_backend):
+    """Test that evaluate_prompt correctly passes filter_string to streaming method."""
+    MODEL_NAME = "gpt-3.5-turbo"
+    filter_string = 'tags contains "important"'
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+        ]
+    )
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    mock_models_factory_get, mock_model = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[
+                {"role": "user", "content": "LLM response: {{input}}"},
+            ],
+            experiment_name="the-experiment-name",
+            model=MODEL_NAME,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            filter_string=filter_string,
+        )
+
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
+        nb_samples=None,
+        dataset_item_ids=None,
+        batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=filter_string,
+    )
+
+
+def test_evaluate_prompt__with_filter_string_and_nb_samples__passes_both_parameters(
+    fake_backend,
+):
+    """Test that evaluate_prompt correctly passes both filter_string and nb_samples to streaming method."""
+    MODEL_NAME = "gpt-3.5-turbo"
+    filter_string = 'data.category = "test"'
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                question="What is the capital of France?",
+                reference="Paris",
+            ),
+        ]
+    )
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    mock_models_factory_get, mock_model = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[
+                {"role": "user", "content": "LLM response: {{input}}"},
+            ],
+            experiment_name="the-experiment-name",
+            model=MODEL_NAME,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            nb_samples=2,
+            filter_string=filter_string,
+        )
+
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
+        nb_samples=2,
+        dataset_item_ids=None,
+        batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=filter_string,
+    )
+
+
+def test_evaluate_prompt__with_filter_string_and_dataset_sampler__passes_filter_string(
+    fake_backend,
+):
+    """Test that evaluate_prompt passes filter_string even when dataset_sampler is used."""
+    MODEL_NAME = "gpt-3.5-turbo"
+    sampler = samplers.RandomDatasetSampler(max_samples=1)
+    filter_string = 'created_at >= "2024-01-01T00:00:00Z"'
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                question="What is the capital of France?",
+                reference="Paris",
+            ),
+        ]
+    )
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    mock_models_factory_get, mock_model = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[
+                {"role": "user", "content": "LLM response: {{input}}"},
+            ],
+            experiment_name="the-experiment-name",
+            model=MODEL_NAME,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            dataset_sampler=sampler,
+            filter_string=filter_string,
+        )
+
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
+        nb_samples=None,
+        dataset_item_ids=None,
+        batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=filter_string,
     )
