@@ -146,11 +146,11 @@ spec:
                 SHOULD_DELETE=1
               fi
               
-              # Check if has label app.kubernetes.io/name=zookeeper (but not zookeeper-opik)
+              # Check if has selector matchLabel app.kubernetes.io/name=zookeeper (but not zookeeper-opik)
               if [ $SHOULD_DELETE -eq 0 ]; then
-                ZOOKEEPER_LABEL=$(kubectl get statefulset $ZOOKEEPER_STS -n $NAMESPACE -o jsonpath='{.metadata.labels.app\.kubernetes\.io/name}' 2>/dev/null || echo "")
-                if [ "$ZOOKEEPER_LABEL" = "zookeeper" ] && [ "$ZOOKEEPER_STS" != "zookeeper-opik" ]; then
-                  echo "Zookeeper StatefulSet $ZOOKEEPER_STS has label app.kubernetes.io/name=zookeeper"
+                ZOOKEEPER_SELECTOR=$(kubectl get statefulset $ZOOKEEPER_STS -n $NAMESPACE -o jsonpath='{.spec.selector.matchLabels.app\.kubernetes\.io/name}' 2>/dev/null || echo "")
+                if [ "$ZOOKEEPER_SELECTOR" = "zookeeper" ] && [ "$ZOOKEEPER_STS" != "zookeeper-opik" ]; then
+                  echo "Zookeeper StatefulSet $ZOOKEEPER_STS has selector matchLabel app.kubernetes.io/name=zookeeper"
                   SHOULD_DELETE=1
                 fi
               fi
