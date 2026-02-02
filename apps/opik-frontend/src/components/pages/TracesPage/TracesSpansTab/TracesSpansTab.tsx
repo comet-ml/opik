@@ -29,6 +29,7 @@ import useTracesOrSpansList, {
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
   COLUMN_COMMENTS_ID,
+  COLUMN_EXPERIMENT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_SPAN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAIL_STATISTIC_ID,
@@ -72,6 +73,8 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
@@ -89,6 +92,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
+import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -107,7 +111,7 @@ import { SelectItem } from "@/components/ui/select";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
-import { Filter } from "@/types/filters";
+import { Filter, FilterOperator } from "@/types/filters";
 import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
@@ -427,6 +431,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   placeholder: "Select span score",
                 },
               },
+              [COLUMN_EXPERIMENT_ID]: {
+                keyComponent: ExperimentsSelectBox,
+                keyComponentProps: {
+                  className: "w-full min-w-72",
+                  projectId,
+                },
+                defaultOperator: "=" as FilterOperator,
+                operators: [{ label: "=", value: "=" as FilterOperator }],
+              },
             }
           : {}),
         [COLUMN_GUARDRAILS_ID]: {
@@ -445,6 +458,29 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
+
+  // Declare selectedColumns early so it can be used in excludeFields computation
+  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
+    SELECTED_COLUMNS_KEY,
+    {
+      defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
+    },
+  );
+
+  // Compute exclude parameter based on visible columns and data type
+  const excludeFields = useMemo(() => {
+    const exclude: string[] = [];
+
+    // Only exclude experiment field for traces (not spans) when column is not visible
+    if (
+      type === TRACE_DATA_TYPE.traces &&
+      !selectedColumns.includes(COLUMN_EXPERIMENT_ID)
+    ) {
+      exclude.push("experiment");
+    }
+
+    return exclude;
+  }, [type, selectedColumns]);
 
   // Enable table data loading after initial render to allow users to change the date filter
   React.useEffect(() => {
@@ -466,6 +502,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       truncate: truncationEnabled,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      exclude: excludeFields,
     },
     {
       enabled: isTableDataEnabled,
@@ -486,6 +523,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       truncate: false,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      exclude: excludeFields,
     },
     {
       enabled: false,
@@ -562,13 +600,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const columnsStatistic: ColumnsStatistic = useMemo(
     () => statisticData?.stats ?? [],
     [statisticData],
-  );
-
-  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
-    {
-      defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
-    },
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
@@ -841,6 +872,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               },
               explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
             },
+            {
+              id: COLUMN_EXPERIMENT_ID,
+              label: "Experiment",
+              type: COLUMN_TYPE.string,
+              cell: ResourceCell as never,
+              customMeta: {
+                nameKey: "experiment.name",
+                idKey: "experiment.dataset_id",
+                resource: RESOURCE_TYPE.experiment,
+                getSearch: (row: BaseTraceData) => ({
+                  experiments: [get(row, "experiment.id")],
+                }),
+              },
+            },
           ]
         : []),
       ...(type === TRACE_DATA_TYPE.spans
@@ -906,8 +951,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               type: COLUMN_TYPE.string,
             },
             {
-              id: "experiment_id",
-              label: "Experiment ID",
+              id: COLUMN_EXPERIMENT_ID,
+              label: "Experiment",
               type: COLUMN_TYPE.string,
             },
             {

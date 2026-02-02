@@ -27,6 +27,7 @@ type UseTracesOrSpansListParams = {
   truncate?: boolean;
   fromTime?: string;
   toTime?: string;
+  exclude?: string[];
 };
 
 export type TracesOrSpansListData = {
