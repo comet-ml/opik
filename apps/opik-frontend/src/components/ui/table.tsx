@@ -76,7 +76,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "relative p-0 text-left align-middle font-medium text-light-slate [&:has([role=checkbox])]:pr-0 [&:first-child:not(:has([role=checkbox]))_[data-header-wrapper=true]]:pl-5 [&:last-child_[data-header-wrapper=true]]:pr-5",
+      "relative p-0 text-left align-middle font-medium text-light-slate [&:has([role=checkbox])]:pr-0 [&:last-child_[data-header-wrapper=true]]:pr-5",
       className,
     )}
     {...props}
@@ -91,7 +91,7 @@ const TableCell = React.forwardRef<
   <td
     ref={ref}
     className={cn(
-      "comet-fix-cell-height relative p-0 align-middle [&:has([role=checkbox])]:pr-0 [&:first-child:not(:has([role=checkbox]))_[data-cell-wrapper=true]]:pl-5 [&:last-child_[data-cell-wrapper=true]]:pr-5 group-hover/row:bg-primary-foreground",
+      "comet-fix-cell-height relative p-0 align-middle [&:has([role=checkbox])]:pr-0 [&:last-child_[data-cell-wrapper=true]]:pr-5 group-hover/row:bg-primary-foreground",
       className,
     )}
     {...props}

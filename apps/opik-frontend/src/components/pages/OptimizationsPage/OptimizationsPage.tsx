@@ -455,7 +455,6 @@ const OptimizationsPage: React.FunctionComponent = () => {
           groupingConfig={GROUPING_CONFIG}
           getRowId={getRowId}
           columnPinning={DEFAULT_COLUMN_PINNING}
-          meta={{ paddedLayout: true }}
           noData={
             <DataTableNoData title={noDataText}>
               {noData && (

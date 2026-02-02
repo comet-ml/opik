@@ -577,6 +577,12 @@
   }
 }
 
+td:first-child [data-cell-wrapper="true"],
+th:first-child [data-header-wrapper="true"] {
+  --cell-left-padding: 20px;
+  padding-left: var(--cell-left-padding);
+}
+
 // rewrite padding for first cell for tables that takes full width with sticky behaviour
 .comet-sticky-table {
   thead:before {
@@ -603,7 +609,7 @@
 
   td:first-child [data-cell-wrapper="true"],
   th:first-child [data-header-wrapper="true"] {
-    padding-left: 12px !important;
+    padding-left: 24px !important;
   }
 
   td:last-child [data-cell-wrapper="true"],
