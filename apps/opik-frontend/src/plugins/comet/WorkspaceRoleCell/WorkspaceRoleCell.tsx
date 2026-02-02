@@ -21,6 +21,7 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   const value = context.getValue();
   const row = context.row.original;
   const isInvitedByEmail = !row.isMember;
+  const isOrganizationAdmin = row.isAdmin;
 
   const currentUserName = useLoggedInUserName();
 
@@ -107,16 +108,18 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     setPermissions,
   );
 
+  const isRoleChangeDisabled = isInvitedByEmail || isOrganizationAdmin;
+
   const trigger = (
     <SelectTrigger
       className="-ml-1 h-auto border-none bg-transparent px-1 py-0.5 disabled:bg-transparent [&>span]:block [&>span]:truncate"
       onClick={(e) => {
         e.stopPropagation();
-        if (isInvitedByEmail) {
+        if (isRoleChangeDisabled) {
           e.preventDefault();
         }
       }}
-      disabled={isInvitedByEmail}
+      disabled={isRoleChangeDisabled}
     >
       <SelectValue placeholder={value}>{value}</SelectValue>
     </SelectTrigger>
@@ -145,6 +148,16 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     ? row.roleId || ""
     : decisionTreeProps.controlValue || "";
 
+  const getTooltipContent = () => {
+    if (isOrganizationAdmin) {
+      return "Cannot change workspace role for organization admins";
+    }
+    if (isInvitedByEmail) {
+      return "Cannot change roles for users invited by email";
+    }
+    return "";
+  };
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
@@ -159,15 +172,15 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
             return;
           }
           setIsSelectOpen(open);
-          if (open && !isInvitedByEmail) {
+          if (open && !isRoleChangeDisabled) {
             setPopoverData(row);
           }
         }}
         onValueChange={handleValueChange}
-        disabled={isInvitedByEmail}
+        disabled={isRoleChangeDisabled}
       >
-        {isInvitedByEmail ? (
-          <TooltipWrapper content="Cannot change roles for users invited by email">
+        {isRoleChangeDisabled ? (
+          <TooltipWrapper content={getTooltipContent()}>
             {trigger}
           </TooltipWrapper>
         ) : (
