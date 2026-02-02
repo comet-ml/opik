@@ -235,33 +235,24 @@ jobs:
     if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
 
     steps:
-      - name: "Send Slack notification"
-        if: env.SLACK_WEBHOOK_URL != ''
-        env:
-          WORKFLOW_URL: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      - name: "🔍 Check Slack configuration"
+        id: check-slack
         run: |
-          # Collect failed test suites
-          FAILED=""
-          [ "${{ needs.openai_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|OpenAI>\n"
-          [ "${{ needs.langchain_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|LangChain>\n"
-          [ "${{ needs.langchain_legacy_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|LangChain Legacy>\n"
-          [ "${{ needs.llama_index_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|LlamaIndex>\n"
-          [ "${{ needs.anthropic_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|Anthropic>\n"
-          [ "${{ needs.aisuite_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|AISuite>\n"
-          [ "${{ needs.haystack_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|Haystack>\n"
-          [ "${{ needs.guardrails_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|Guardrails>\n"
-          [ "${{ needs.dspy_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|DSPy>\n"
-          [ "${{ needs.crewai_v0_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|CrewAI v0>\n"
-          [ "${{ needs.crewai_v1_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|CrewAI v1>\n"
-          [ "${{ needs.genai_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|GenAI>\n"
-          [ "${{ needs.adk_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|ADK>\n"
-          [ "${{ needs.adk_legacy_1_3_0_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|ADK Legacy 1.3.0>\n"
-          [ "${{ needs.evaluation_metrics_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|Evaluation Metrics>\n"
-          [ "${{ needs.bedrock_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|Bedrock>\n"
-          [ "${{ needs.litellm_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|LiteLLM>\n"
-          [ "${{ needs.harbor_tests.result }}" == "failure" ] && FAILED="${FAILED}• <${WORKFLOW_URL}|Harbor>\n"
-          
-          FAILURE_COUNT=$(echo -e "$FAILED" | grep -c "•" || echo "0")
+          if [ -z "${{ secrets.ACTION_MONITORING_SLACK }}" ]; then
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::ACTION_MONITORING_SLACK not configured - Slack notification will be skipped"
+          else
+            echo "configured=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "📢 Send Slack notification"
+        if: steps.check-slack.outputs.configured == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
+        run: |
+          # Gather information
+          WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          BRANCH="${{ github.ref_name }}"
           
           # Determine trigger type for display
           if [ "${{ github.event_name }}" == "schedule" ]; then
@@ -270,32 +261,124 @@ jobs:
             TRIGGER_TYPE="Manual Dispatch"
           fi
           
-          # Build message based on status
+          # Collect failed test suites
+          FAILED_SUITES=""
+          [ "${{ needs.openai_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|OpenAI>\n"
+          [ "${{ needs.langchain_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|LangChain>\n"
+          [ "${{ needs.langchain_legacy_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|LangChain Legacy>\n"
+          [ "${{ needs.llama_index_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|LlamaIndex>\n"
+          [ "${{ needs.anthropic_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Anthropic>\n"
+          [ "${{ needs.aisuite_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|AISuite>\n"
+          [ "${{ needs.haystack_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Haystack>\n"
+          [ "${{ needs.guardrails_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Guardrails>\n"
+          [ "${{ needs.dspy_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|DSPy>\n"
+          [ "${{ needs.crewai_v0_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|CrewAI v0>\n"
+          [ "${{ needs.crewai_v1_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|CrewAI v1>\n"
+          [ "${{ needs.genai_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|GenAI>\n"
+          [ "${{ needs.adk_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|ADK>\n"
+          [ "${{ needs.adk_legacy_1_3_0_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|ADK Legacy 1.3.0>\n"
+          [ "${{ needs.evaluation_metrics_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Evaluation Metrics>\n"
+          [ "${{ needs.bedrock_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Bedrock>\n"
+          [ "${{ needs.litellm_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|LiteLLM>\n"
+          [ "${{ needs.harbor_tests.result }}" == "failure" ] && FAILED_SUITES="${FAILED_SUITES}• <${WORKFLOW_URL}|Harbor>\n"
+          
+          FAILURE_COUNT=$(echo -e "$FAILED_SUITES" | grep -c "•" || echo "0")
+          
+          # Determine status
           if [ "$FAILURE_COUNT" -gt 0 ]; then
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="Failed"
             COLOR="danger"
-            TITLE="❌ Python SDK Integration Tests Failed"
-            STATUS_FIELD="{\"type\":\"mrkdwn\",\"text\":\"*Failed:*\n${FAILURE_COUNT} suite(s)\"}"
-            FAILED_ESCAPED=$(echo -e "$FAILED" | sed 's/"/\\"/g')
-            FAILED_SECTION=",{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"*Failed Test Suites:*\n${FAILED_ESCAPED}\"}}"
+            FAILED_SECTION=$(cat << INNER_EOF
+          ,
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "*Failed Test Suites:*\n$(echo -e "$FAILED_SUITES")"
+                    }
+                  }
+          INNER_EOF
+          )
           else
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="Passed"
             COLOR="good"
-            TITLE="✅ Python SDK Integration Tests Passed"
-            STATUS_FIELD="{\"type\":\"mrkdwn\",\"text\":\"*Status:*\nAll tests passed\"}"
             FAILED_SECTION=""
           fi
           
+          # Build payload
+          cat << EOF > payload.json
+          {
+            "attachments": [
+              {
+                "color": "$COLOR",
+                "blocks": [
+                  {
+                    "type": "header",
+                    "text": {
+                      "type": "plain_text",
+                      "text": "$STATUS_EMOJI Python SDK Integration Tests $STATUS_TEXT",
+                      "emoji": true
+                    }
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Trigger:*\n$TRIGGER_TYPE"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Branch:*\n\`$BRANCH\`"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Failed:*\n$FAILURE_COUNT suite(s)"
+                      }
+                    ]
+                  }$FAILED_SECTION,
+                  {
+                    "type": "actions",
+                    "elements": [
+                      {
+                        "type": "button",
+                        "text": {
+                          "type": "plain_text",
+                          "text": "🔍 View Workflow",
+                          "emoji": true
+                        },
+                        "url": "$WORKFLOW_URL"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          
           # Send notification
-          curl -s -X POST -H 'Content-type: application/json' --data "{
-            \"attachments\": [{
-              \"color\": \"${COLOR}\",
-              \"blocks\": [
-                {\"type\":\"header\",\"text\":{\"type\":\"plain_text\",\"text\":\"${TITLE}\",\"emoji\":true}},
-                {\"type\":\"section\",\"fields\":[
-                  {\"type\":\"mrkdwn\",\"text\":\"*Trigger:*\n${TRIGGER_TYPE}\"},
-                  {\"type\":\"mrkdwn\",\"text\":\"*Branch:*\n\`${{ github.ref_name }}\`\"},
-                  ${STATUS_FIELD}
-                ]}${FAILED_SECTION},
-                {\"type\":\"actions\",\"elements\":[{\"type\":\"button\",\"text\":{\"type\":\"plain_text\",\"text\":\"View Workflow\",\"emoji\":true},\"url\":\"${WORKFLOW_URL}\"}]}
-              ]
-            }]
-          }" "${{ env.SLACK_WEBHOOK_URL }}"
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H 'Content-type: application/json' \
+            --data @payload.json \
+            "$SLACK_WEBHOOK_URL")
+          
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Slack notification sent successfully"
+          else
+            echo "⚠️ Slack notification failed with HTTP code: $HTTP_CODE"
+            cat payload.json
+            exit 1
+          fi
+
+      - name: "ℹ️ Slack not configured"
+        if: steps.check-slack.outputs.configured != 'true'
+        run: |
+          echo "## 📢 Slack Notification Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Slack notifications are not configured. To enable them:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Add the webhook URL as a repository secret named \`ACTION_MONITORING_SLACK\`" >> $GITHUB_STEP_SUMMARY
