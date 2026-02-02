@@ -85,7 +85,7 @@ Call opik api on http://localhost:5173/api
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
-| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.10 |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.5.4 |
 
 ## Values
 
@@ -448,6 +448,8 @@ Call opik api on http://localhost:5173/api
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
+| zookeeper.selectorLabels.instance | string | `"opik"` |  |
+| zookeeper.selectorLabels.name | string | `"zookeeper-opik"` |  |
 | zookeeper.serverIdOffset | int | `1` |  |
 
 ----------------------------------------------
