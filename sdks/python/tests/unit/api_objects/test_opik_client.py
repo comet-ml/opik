@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock, Mock
 
 from opik.api_objects import opik_client
-from opik.api_objects.dataset import Dataset, DatasetView
+from opik.api_objects.dataset import Dataset
 from opik.message_processing import messages
 from opik.types import BatchFeedbackScoreDict
 
@@ -379,75 +379,4 @@ class TestOpikClientGetDataset:
                 result = opik_client_.get_dataset(name="test_dataset")
 
         assert isinstance(result, Dataset)
-        assert not isinstance(result, DatasetView)
         assert result.name == "test_dataset"
-
-    def test_get_dataset__with_filter__returns_dataset_view(self):
-        """Verify get_dataset with filter_string returns a DatasetView object."""
-        opik_client_ = opik_client.Opik()
-
-        # Create a mock for the REST client response
-        mock_dataset_public = Mock()
-        mock_dataset_public.description = "Test description"
-        mock_dataset_public.dataset_items_count = 10
-
-        with patch.object(
-            opik_client_._rest_client.datasets,
-            "get_dataset_by_identifier",
-            return_value=mock_dataset_public,
-        ):
-            result = opik_client_.get_dataset(
-                name="test_dataset",
-                filter_string="tags contains 'failed'",
-            )
-
-        assert isinstance(result, DatasetView)
-        assert result.name == "test_dataset"
-        assert result.filter_string == "tags contains 'failed'"
-
-    def test_get_dataset__with_empty_filter__returns_dataset(self):
-        """Verify get_dataset with None filter returns a Dataset object."""
-        opik_client_ = opik_client.Opik()
-
-        # Create a mock for the REST client response
-        mock_dataset_public = Mock()
-        mock_dataset_public.description = "Test description"
-        mock_dataset_public.dataset_items_count = 10
-
-        with patch.object(
-            opik_client_._rest_client.datasets,
-            "get_dataset_by_identifier",
-            return_value=mock_dataset_public,
-        ):
-            with patch.object(
-                opik_client_._rest_client.datasets,
-                "stream_dataset_items",
-                return_value=iter([]),
-            ):
-                result = opik_client_.get_dataset(
-                    name="test_dataset", filter_string=None
-                )
-
-        assert isinstance(result, Dataset)
-        assert not isinstance(result, DatasetView)
-
-    def test_get_dataset__view_preserves_description(self):
-        """Verify DatasetView preserves the source dataset description."""
-        opik_client_ = opik_client.Opik()
-
-        # Create a mock for the REST client response
-        mock_dataset_public = Mock()
-        mock_dataset_public.description = "Original description"
-        mock_dataset_public.dataset_items_count = 10
-
-        with patch.object(
-            opik_client_._rest_client.datasets,
-            "get_dataset_by_identifier",
-            return_value=mock_dataset_public,
-        ):
-            result = opik_client_.get_dataset(
-                name="test_dataset",
-                filter_string="tags contains 'test'",
-            )
-
-        assert result._description == "Original description"

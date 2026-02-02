@@ -685,7 +685,7 @@ def verify_chat_prompt_version(
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
 
 
-def verify_dataset_view(
+def verify_dataset_filtered_items(
     opik_client: opik.Opik,
     dataset_name: str,
     filter_string: str,
@@ -693,32 +693,18 @@ def verify_dataset_view(
     expected_inputs: Set[str],
 ) -> None:
     """
-    Verifies that a DatasetView has the expected properties and is immutable.
+    Verifies that filtering dataset items with filter_string returns the expected results.
 
     Args:
         opik_client: The Opik client instance
         dataset_name: The name of the dataset to retrieve
         filter_string: The filter string to apply
-        expected_count: Expected number of items in the filtered view
+        expected_count: Expected number of items matching the filter
         expected_inputs: Set of expected question strings from input field
     """
-    from opik.api_objects.dataset import dataset_view
-    from opik import exceptions
+    dataset = opik_client.get_dataset(name=dataset_name)
 
-    filtered_view = opik_client.get_dataset(
-        name=dataset_name,
-        filter_string=filter_string,
-    )
-
-    assert isinstance(
-        filtered_view, dataset_view.DatasetView
-    ), f"Expected DatasetView, got {type(filtered_view)}"
-
-    assert (
-        filtered_view.filter_string == filter_string
-    ), f"Filter string mismatch: {filtered_view.filter_string} != {filter_string}"
-
-    filtered_items = filtered_view.get_items()
+    filtered_items = dataset.get_items(filter_string=filter_string)
     assert (
         len(filtered_items) == expected_count
     ), f"Expected {expected_count} items, got {len(filtered_items)}"
@@ -728,15 +714,3 @@ def verify_dataset_view(
         assert (
             inputs == expected_inputs
         ), f"Input mismatch: {inputs} != {expected_inputs}"
-
-    with pytest.raises(exceptions.DatasetViewImmutableError):
-        filtered_view.insert([{"input": "test"}])
-
-    with pytest.raises(exceptions.DatasetViewImmutableError):
-        filtered_view.update([{"id": "test-id", "input": "test"}])
-
-    with pytest.raises(exceptions.DatasetViewImmutableError):
-        filtered_view.delete(["test-id"])
-
-    with pytest.raises(exceptions.DatasetViewImmutableError):
-        filtered_view.clear()

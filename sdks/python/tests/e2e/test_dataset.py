@@ -143,10 +143,10 @@ def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
     )
 
 
-def test_get_dataset_with_filter__returns_filtered_items_and_is_immutable(
+def test_get_items_with_filter__returns_filtered_items(
     opik_client: opik.Opik, dataset_name: str
 ):
-    """Test that get_dataset with filter returns correct filtered items and DatasetView is immutable."""
+    """Test that get_items with filter_string returns correct filtered items."""
     DESCRIPTION = "E2E test dataset for filtering"
 
     # Create dataset with items that have different data.category values
@@ -171,7 +171,7 @@ def test_get_dataset_with_filter__returns_filtered_items_and_is_immutable(
         ]
     )
 
-    verifiers.verify_dataset_view(
+    verifiers.verify_dataset_filtered_items(
         opik_client=opik_client,
         dataset_name=dataset_name,
         filter_string='data.category = "geography"',
@@ -183,10 +183,10 @@ def test_get_dataset_with_filter__returns_filtered_items_and_is_immutable(
     )
 
 
-def test_get_dataset_with_filter__filter_excludes_all_items__returns_empty_view(
+def test_get_items_with_filter__filter_excludes_all_items__returns_empty_list(
     opik_client: opik.Opik, dataset_name: str
 ):
-    """Test that get_dataset with filter that matches no items returns empty DatasetView."""
+    """Test that get_items with filter that matches no items returns empty list."""
     DESCRIPTION = "E2E test dataset for empty filter"
 
     # Create dataset with items
@@ -204,7 +204,7 @@ def test_get_dataset_with_filter__filter_excludes_all_items__returns_empty_view(
         ]
     )
 
-    verifiers.verify_dataset_view(
+    verifiers.verify_dataset_filtered_items(
         opik_client=opik_client,
         dataset_name=dataset_name,
         filter_string='data.category = "nonexistent"',

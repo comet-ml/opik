@@ -350,9 +350,8 @@ You can download a dataset from Opik using the `get_dataset` method:
 
 ## Filtering datasets programmatically
 
-You can retrieve a filtered view of a dataset by passing a `filter_string` parameter to the `get_dataset` method.
-When a filter is specified, a `DatasetView` object is returned instead of a regular `Dataset`. The `DatasetView`
-is a read-only view that only includes items matching your filter criteria.
+You can filter dataset items using the `filter_string` parameter on the `get_items()` method or when
+running evaluations with `evaluate_prompt()`. This allows you to work with specific subsets of your data.
 
 ### Basic filtering
 
@@ -361,20 +360,19 @@ is a read-only view that only includes items matching your filter criteria.
   from opik import Opik
 
   client = Opik()
+  dataset = client.get_dataset(name="my_dataset")
 
-  # Get a filtered view of the dataset
-  failed_tests = client.get_dataset(
-      name="my_dataset",
-      filter_string='tags contains "failed"'
+  # Get filtered items
+  failed_items = dataset.get_items(filter_string='tags contains "failed"')
+
+  # Use filtered items in evaluation
+  from opik.evaluation import evaluate_prompt
+  results = evaluate_prompt(
+      dataset=dataset,
+      filter_string='tags contains "failed"',
+      messages=[{"role": "user", "content": "{{input}}"}],
+      model="gpt-4"
   )
-
-  # All read operations work normally
-  items = failed_tests.get_items()
-  df = failed_tests.to_pandas()
-
-  # Use the filtered view in evaluation
-  from opik.evaluation import evaluate
-  results = evaluate(dataset=failed_tests, task=my_task)
   ```
 </CodeBlocks>
 
@@ -402,88 +400,47 @@ The filter string uses Opik Query Language (OQL) syntax. Supported columns inclu
   from opik import Opik
 
   client = Opik()
+  dataset = client.get_dataset(name="my_dataset")
 
   # Filter by tag
-  failed_tests = client.get_dataset(
-      name="my_dataset",
-      filter_string='tags contains "failed"'
-  )
+  failed_items = dataset.get_items(filter_string='tags contains "failed"')
 
   # Filter by data field
-  specific_category = client.get_dataset(
-      name="my_dataset",
-      filter_string='data.category = "finance"'
-  )
+  finance_items = dataset.get_items(filter_string='data.category = "finance"')
 
   # Filter by date
-  recent_items = client.get_dataset(
-      name="my_dataset",
+  recent_items = dataset.get_items(
       filter_string='created_at >= "2024-06-01T00:00:00Z"'
   )
 
   # Multiple conditions
-  complex_filter = client.get_dataset(
-      name="my_dataset",
+  filtered_items = dataset.get_items(
       filter_string='tags contains "production" AND data.difficulty = "hard"'
   )
   ```
 </CodeBlocks>
 
-### DatasetView behavior
+### Using filters in evaluation
 
-The `DatasetView` object is read-only to ensure data integrity. Attempting to modify
-a `DatasetView` will raise a `DatasetViewImmutableError`:
-
-<CodeBlocks>
-  ```python title="Python" language="python"
-  from opik import Opik
-
-  client = Opik()
-  filtered_view = client.get_dataset(
-      name="my_dataset",
-      filter_string='tags contains "test"'
-  )
-
-  # ❌ This will raise DatasetViewImmutableError
-  filtered_view.insert([{"input": "new item"}])
-
-  # ❌ This will also raise DatasetViewImmutableError
-  filtered_view.delete(["item-1"])
-  ```
-</CodeBlocks>
-
-### Converting a DatasetView to a Dataset
-
-If you need to create a mutable dataset from a filtered view, use the `to_dataset()` method:
+You can pass `filter_string` to `evaluate_prompt()` to evaluate only a subset of dataset items:
 
 <CodeBlocks>
   ```python title="Python" language="python"
   from opik import Opik
+  from opik.evaluation import evaluate_prompt
 
   client = Opik()
+  dataset = client.get_dataset(name="my_dataset")
 
-  # Get filtered view
-  failed_tests = client.get_dataset(
-      name="my_tests",
-      filter_string='tags contains "failed"'
+  # Evaluate only items with specific tags
+  results = evaluate_prompt(
+      dataset=dataset,
+      messages=[{"role": "user", "content": "Answer: {{question}}"}],
+      model="gpt-4",
+      filter_string='tags contains "production"',
   )
-
-  # Convert to a new mutable dataset
-  new_dataset = failed_tests.to_dataset(
-      name="failed_tests_copy",
-      description="Copy of failed test cases for investigation"
-  )
-
-  # Now you can modify the new dataset
-  new_dataset.insert([{"input": "new test", "expected_output": "result"}])
   ```
 </CodeBlocks>
-
-<Tip>
-  The `to_dataset()` method creates a new dataset on the backend and copies all items from
-  the filtered view. This is useful when you want to create a subset of your data for
-  focused work or archival purposes.
-</Tip>
 
 ## Running experiments with dataset versions
 

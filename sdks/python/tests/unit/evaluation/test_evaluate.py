@@ -1032,6 +1032,7 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
         nb_samples=10,
         dataset_item_ids=None,
         batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=None,
     )
 
     # Also verify that only 3 items were actually processed
@@ -2511,6 +2512,7 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
         nb_samples=None,
         dataset_item_ids=None,
         batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=None,
     )
 
 
@@ -2565,6 +2567,7 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
         nb_samples=None,
         dataset_item_ids=["dataset-item-id-1"],
         batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=None,
     )
 
 
@@ -2626,6 +2629,7 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
         nb_samples=None,
         dataset_item_ids=None,
         batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=None,
     )
 
 
@@ -2689,4 +2693,5 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
         nb_samples=2,
         dataset_item_ids=None,
         batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=None,
     )

@@ -806,77 +806,36 @@ class Opik:
     def get_dataset(
         self,
         name: str,
-        filter_string: Optional[str] = None,
-    ) -> Union[dataset.Dataset, dataset.DatasetView]:
+    ) -> dataset.Dataset:
         """
-        Get dataset by name, optionally filtered by OQL filter string.
-
-        When a filter_string is provided, returns a DatasetView object which is a
-        read-only view of the filtered dataset. The DatasetView prevents remote
-        modifications but allows all read operations (get_items, to_pandas, to_json).
-        Use `to_dataset()` on the DatasetView to create a mutable copy.
+        Get dataset by name.
 
         Args:
             name: The name of the dataset
-            filter_string: Optional OQL filter string to filter dataset items.
-                Supports filtering by tags, data fields, metadata, etc.
-
-                Supported columns include:
-                - `id`, `source`, `trace_id`, `span_id`: String fields
-                - `data`: Dictionary field (use dot notation, e.g., "data.category")
-                - `tags`: List field (use "contains" operator)
-                - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
-                - `created_by`, `last_updated_by`: String fields
-
-                Examples:
-                - `tags contains "failed"` - Items with 'failed' tag
-                - `data.category = "test"` - Items with specific data field value
-                - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
-                - `tags contains "failed" AND data.priority = "high"` - Multiple conditions
 
         Returns:
-            dataset.Dataset: Full dataset object if no filter specified.
-            dataset.DatasetView: Read-only filtered view if filter_string is specified.
+            dataset.Dataset: The dataset object.
 
         Example:
             >>> client = opik.Opik()
-            >>> # Get full dataset
-            >>> full_dataset = client.get_dataset(name="my_dataset")
-            >>> # Get filtered view
-            >>> failed_tests = client.get_dataset(
-            ...     name="my_dataset",
-            ...     filter_string="tags contains 'failed'"
-            ... )
-            >>> # Use filtered view in evaluation
-            >>> results = evaluate(dataset=failed_tests, task=my_task)
+            >>> dataset = client.get_dataset(name="my_dataset")
+            >>> # Get filtered items using filter_string parameter
+            >>> filtered_items = dataset.get_items(filter_string='tags contains "failed"')
         """
         dataset_fern: dataset_public.DatasetPublic = (
             self._rest_client.datasets.get_dataset_by_identifier(dataset_name=name)
         )
 
-        if filter_string is None:
-            # Return full dataset
-            dataset_ = dataset.Dataset(
-                name=name,
-                description=dataset_fern.description,
-                rest_client=self._rest_client,
-                dataset_items_count=dataset_fern.dataset_items_count,
-            )
+        dataset_ = dataset.Dataset(
+            name=name,
+            description=dataset_fern.description,
+            rest_client=self._rest_client,
+            dataset_items_count=dataset_fern.dataset_items_count,
+        )
 
-            dataset_.__internal_api__sync_hashes__()
+        dataset_.__internal_api__sync_hashes__()
 
-            return dataset_
-        else:
-            # Return filtered view
-            # Note: We don't sync hashes for DatasetView since it's read-only
-            # and syncing would require streaming all filtered items
-            return dataset.DatasetView(
-                name=name,
-                description=dataset_fern.description,
-                rest_client=self._rest_client,
-                filter_string=filter_string,
-                dataset_items_count=None,  # Count not available for filtered view
-            )
+        return dataset_
 
     def get_datasets(
         self,
