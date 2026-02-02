@@ -39,7 +39,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
-import { detectLLMMessages } from "@/components/shared/SyntaxHighlighter/llmMessages";
+import { detectLLMMessages } from "@/components/shared/PrettyLLMMessage/llmMessages";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";

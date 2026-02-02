@@ -13,7 +13,7 @@ import { useSMEFlow } from "../SMEFlowContext";
 import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
 import useTraceById from "@/api/traces/useTraceById";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
-import { MediaProvider } from "@/components/shared/SyntaxHighlighter/llmMessages";
+import { MediaProvider } from "@/components/shared/PrettyLLMMessage/llmMessages";
 import AttachmentsList from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes

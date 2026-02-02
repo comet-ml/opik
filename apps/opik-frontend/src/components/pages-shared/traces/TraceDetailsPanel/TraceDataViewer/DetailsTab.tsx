@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
-import { MediaProvider } from "@/components/shared/SyntaxHighlighter/llmMessages";
+import { MediaProvider } from "@/components/shared/PrettyLLMMessage/llmMessages";
 import {
   Accordion,
   AccordionContent,

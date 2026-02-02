@@ -6,8 +6,8 @@ import {
   detectLLMMessages,
   LLMMessageDescriptor,
   LLMBlockDescriptor,
-} from "@/components/shared/SyntaxHighlighter/llmMessages";
-import { getProvider } from "@/components/shared/SyntaxHighlighter/llmMessages/providers/registry";
+} from "@/components/shared/PrettyLLMMessage/llmMessages";
+import { getProvider } from "@/components/shared/PrettyLLMMessage/llmMessages/providers/registry";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,

@@ -311,6 +311,103 @@ const formatAsToolResult = (
 };
 
 /**
+ * Common content mapping configuration
+ */
+interface ContentMappingConfig {
+  content: string | OpenAIContentItem[] | null | undefined;
+  role: MessageRole;
+  messageRole: MessageRole;
+  name?: string;
+  toolCalls?: OpenAIToolCall[];
+  audio?: OpenAIAudio;
+}
+
+/**
+ * Builds block descriptors from message content.
+ * Shared helper that handles text, multimodal content, tool calls, and tool results.
+ *
+ * This consolidates the common logic between standard OpenAI messages and custom input messages.
+ */
+const buildContentBlocks = (
+  config: ContentMappingConfig,
+): LLMBlockDescriptor[] => {
+  const { content, role, messageRole, name, toolCalls, audio } = config;
+  const blocks: LLMBlockDescriptor[] = [];
+
+  // Handle string content
+  if (typeof content === "string") {
+    // For tool role (including normalized legacy "function" role), format as code
+    if (role === "tool") {
+      blocks.push(formatAsToolResult(content, name));
+    } else {
+      blocks.push({
+        blockType: "text",
+        component: PrettyLLMMessage.TextBlock,
+        props: {
+          children: content,
+          role,
+          showMoreButton: true,
+        },
+      });
+    }
+  }
+  // Handle array content (multimodal)
+  else if (Array.isArray(content)) {
+    processMultimodalContent(content, role, blocks);
+  }
+
+  // Handle audio messages (message-level audio, not content-level)
+  if (audio) {
+    // Add audio player block if data is present
+    if (audio.data) {
+      blocks.push({
+        blockType: "audio",
+        component: PrettyLLMMessage.AudioPlayerBlock,
+        props: {
+          audios: [
+            {
+              url: audio.data,
+              name: audio.id,
+            },
+          ],
+        },
+      });
+    }
+
+    // Add transcript as text block if present
+    if (audio.transcript) {
+      blocks.push({
+        blockType: "text",
+        component: PrettyLLMMessage.TextBlock,
+        props: {
+          children: audio.transcript,
+          role,
+          showMoreButton: true,
+        },
+      });
+    }
+  }
+
+  // Handle tool calls (assistant requesting tools)
+  if (toolCalls && toolCalls.length > 0) {
+    mapToolCalls(toolCalls, blocks);
+  }
+
+  // Handle tool result messages (for non-string content)
+  if (messageRole === "tool" && content && typeof content !== "string") {
+    blocks.push(formatAsToolResult(content, name));
+
+    // Remove any text blocks that duplicate the tool content
+    return blocks.filter(
+      (block) =>
+        !(block.blockType === "text" && block.props.children === content),
+    );
+  }
+
+  return blocks;
+};
+
+/**
  * Converts custom input message content to block descriptors.
  * Handles messages with 'text' field instead of 'content'.
  */
@@ -318,41 +415,13 @@ const mapCustomInputMessageContent = (
   message: OpenAICustomInputMessage,
   role: MessageRole,
 ): LLMBlockDescriptor[] => {
-  const blocks: LLMBlockDescriptor[] = [];
-
-  // Handle string text
-  if (typeof message.text === "string") {
-    blocks.push({
-      blockType: "text",
-      component: PrettyLLMMessage.TextBlock,
-      props: {
-        children: message.text,
-        role,
-        showMoreButton: true,
-      },
-    });
-  }
-  // Handle array content (multimodal)
-  else if (Array.isArray(message.text)) {
-    processMultimodalContent(message.text, role, blocks);
-  }
-
-  // Handle tool calls (assistant requesting tools)
-  if (message.tool_calls && message.tool_calls.length > 0) {
-    mapToolCalls(message.tool_calls, blocks);
-  }
-
-  // Handle tool result messages
-  if (message.role === "tool" && message.text) {
-    blocks.push(formatAsToolResult(message.text, message.name));
-
-    return blocks.filter(
-      (block) =>
-        !(block.blockType === "text" && block.props.children === message.text),
-    );
-  }
-
-  return blocks;
+  return buildContentBlocks({
+    content: message.text,
+    role,
+    messageRole: message.role,
+    name: message.name,
+    toolCalls: message.tool_calls,
+  });
 };
 
 /**
@@ -364,85 +433,14 @@ const mapMessageContent = (
   message: OpenAIMessage,
   role: MessageRole,
 ): LLMBlockDescriptor[] => {
-  const blocks: LLMBlockDescriptor[] = [];
-
-  // Handle string content
-  if (typeof message.content === "string") {
-    // For tool role (including normalized legacy "function" role), format as code
-    if (role === "tool") {
-      blocks.push(formatAsToolResult(message.content, message.name));
-    } else {
-      blocks.push({
-        blockType: "text",
-        component: PrettyLLMMessage.TextBlock,
-        props: {
-          children: message.content,
-          role,
-          showMoreButton: true,
-        },
-      });
-    }
-  }
-  // Handle array content (multimodal)
-  else if (Array.isArray(message.content)) {
-    processMultimodalContent(message.content, role, blocks);
-  }
-
-  // Handle audio messages (message-level audio, not content-level)
-  if (message.audio) {
-    // Add audio player block if data is present
-    if (message.audio.data) {
-      blocks.push({
-        blockType: "audio",
-        component: PrettyLLMMessage.AudioPlayerBlock,
-        props: {
-          audios: [
-            {
-              url: message.audio.data,
-              name: message.audio.id,
-            },
-          ],
-        },
-      });
-    }
-
-    // Add transcript as text block if present
-    if (message.audio.transcript) {
-      blocks.push({
-        blockType: "text",
-        component: PrettyLLMMessage.TextBlock,
-        props: {
-          children: message.audio.transcript,
-          role,
-          showMoreButton: true,
-        },
-      });
-    }
-  }
-
-  // Handle tool calls (assistant requesting tools)
-  if (message.tool_calls && message.tool_calls.length > 0) {
-    mapToolCalls(message.tool_calls, blocks);
-  }
-
-  // Handle tool result messages (only for non-string content)
-  if (
-    message.role === "tool" &&
-    message.content &&
-    typeof message.content !== "string"
-  ) {
-    blocks.push(formatAsToolResult(message.content, message.name));
-
-    // Remove any text blocks that duplicate the tool content
-    return blocks.filter(
-      (block) =>
-        !(
-          block.blockType === "text" && block.props.children === message.content
-        ),
-    );
-  }
-
-  return blocks;
+  return buildContentBlocks({
+    content: message.content,
+    role,
+    messageRole: message.role,
+    name: message.name,
+    toolCalls: message.tool_calls,
+    audio: message.audio,
+  });
 };
 
 /**

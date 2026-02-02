@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { ATTACHMENT_TYPE, ParsedMediaData } from "@/types/attachments";
 import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { PrettyLLMMessageImageBlockProps } from "./types";
-import { useMediaContext } from "@/components/shared/SyntaxHighlighter/llmMessages/MediaContext";
+import { useMediaContext } from "@/components/shared/PrettyLLMMessage/llmMessages/MediaContext";
 
 /**
  * Pure presentation component for displaying images in LLM messages.

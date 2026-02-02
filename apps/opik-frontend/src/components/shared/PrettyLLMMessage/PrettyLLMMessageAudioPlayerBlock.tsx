@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import AudioPlayer from "@/components/shared/AudioPlayer/AudioPlayer";
 import { PrettyLLMMessageAudioPlayerBlockProps } from "./types";
-import { useMediaContext } from "@/components/shared/SyntaxHighlighter/llmMessages/MediaContext";
+import { useMediaContext } from "@/components/shared/PrettyLLMMessage/llmMessages/MediaContext";
 
 /**
  * Pure presentation component for displaying audio in LLM messages.
