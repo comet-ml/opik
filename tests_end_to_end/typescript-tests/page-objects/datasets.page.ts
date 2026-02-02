@@ -13,7 +13,10 @@ export class DatasetsPage extends BasePage {
   }
 
   async selectDatasetByName(name: string): Promise<void> {
-    await this.page.getByText(name, { exact: true }).first().click();
+    await this.page
+      .getByRole('row')
+      .filter({ has: this.page.getByRole('cell', { name, exact: true }) })
+      .click();
   }
 
   async searchDataset(datasetName: string): Promise<void> {
