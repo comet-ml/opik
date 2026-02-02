@@ -115,7 +115,6 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
     workspaceName,
     search,
     openDatasetId,
-    selectedDatasetId: datasetId,
   });
 
   const selectedDataset = useMemo(
