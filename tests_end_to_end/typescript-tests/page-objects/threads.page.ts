@@ -57,7 +57,7 @@ export class ThreadsPage {
   }
 
   async openThreadContent(threadId: string): Promise<void> {
-    await this.page.getByRole('button', { name: threadId }).click();
+    await this.page.getByRole('cell', { name: threadId, exact: true }).click();
   }
 
   async checkMessageInThread(message: string, isOutput: boolean = false): Promise<void> {
