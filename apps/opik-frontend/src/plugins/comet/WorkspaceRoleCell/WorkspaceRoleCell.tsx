@@ -4,8 +4,6 @@ import debounce from "lodash/debounce";
 import { Select, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import useUserPermission from "@/plugins/comet/useUserPermission";
-import { getKeyForChangingRole } from "@/plugins/comet/lib/permissions";
 import { UserPermission, WorkspaceMember } from "@/plugins/comet/types";
 import WorkspaceRolePopover from "@/plugins/comet/WorkspaceRolePopover";
 import WorkspaceRolesSelectContent from "./WorkspaceRolesSelectContent";
@@ -24,8 +22,6 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   const isOrganizationAdmin = row.isAdmin;
 
   const currentUserName = useLoggedInUserName();
-
-  const { getPermissionStatus } = useUserPermission();
 
   const workspace = useWorkspace();
 
@@ -74,15 +70,6 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     };
   }, [debouncedUpdatePermissions]);
 
-  const ifChangeWsRoleDisabled =
-    !currentUserName ||
-    !getPermissionStatus(
-      getKeyForChangingRole(
-        currentUserName,
-        popoverData?.userName || popoverData?.email || "",
-      ),
-    );
-
   const setPermissions = (newPermissions: UserPermission[]) => {
     const userName = popoverData?.userName || popoverData?.email;
 
@@ -102,9 +89,6 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
   const decisionTreeProps = useManageUsersRolePopover(
     popoverData?.permissions || [],
-    popoverData?.userName || "",
-    ifChangeWsRoleDisabled,
-    !!popoverData?.isAdmin,
     setPermissions,
   );
 
