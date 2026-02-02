@@ -24,7 +24,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, name, className }) => {
   } = useAudioPlayer({ url });
 
   return (
-    <div className={cn("rounded-md border p-2 bg-[#F8FAFC]", className)}>
+    <div
+      className={cn("rounded-md border p-2 bg-primary-foreground", className)}
+    >
       {/* Header: Filename and Duration */}
       <div className="mb-1 flex items-center justify-between">
         <span className="truncate text-xs" style={{ color: "#45575F" }}>

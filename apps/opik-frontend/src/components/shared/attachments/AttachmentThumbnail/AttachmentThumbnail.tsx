@@ -1,7 +1,8 @@
 import React, { useCallback, useMemo } from "react";
 import { DownloadIcon, Expand, ExternalLink } from "lucide-react";
 
-import { cn, isSameDomainUrl, isOpikS3AttachmentUrl } from "@/lib/utils";
+import { cn, isSameDomainUrl } from "@/lib/utils";
+import { isOpikS3AttachmentUrl } from "@/lib/attachments";
 import { ATTACHMENT_TYPE, AttachmentPreviewData } from "@/types/attachments";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     <div
       key={name}
       className={cn(
-        "group relative h-[200px] min-w-[200px] max-w-[300px] rounded-md border p-3 pt-8 bg-[#F8FAFC]",
+        "group relative h-[200px] min-w-[200px] max-w-[300px] rounded-md border p-3 pt-8 bg-primary-foreground",
         isExpandable && "cursor-pointer",
       )}
       onClick={expandClickHandler}
