@@ -152,8 +152,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
 
   const renderNestedList = () => {
     return filteredDatasets.map((dataset) => {
-      const hasMultipleVersions =
-        dataset.version_count === undefined || dataset.version_count > 1;
+      const hasMultipleVersions = dataset.version_count > 1;
       const isOpen = dataset.id === openDatasetId && hasMultipleVersions;
       const isSelected = dataset.id === datasetId;
 

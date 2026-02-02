@@ -18,7 +18,7 @@ export interface Dataset {
   most_recent_optimization_at: string;
   last_created_optimization_at: string;
   optimization_count: number;
-  version_count?: number;
+  version_count: number;
   tags?: string[];
   created_at: string;
   last_updated_at: string;
