@@ -97,7 +97,10 @@ const useNavigationBlocker = ({
   const showSaveAndLeave = isFunction(onSaveAndLeave);
 
   const DialogComponent = (
-    <Dialog open={showDialog} onOpenChange={(open) => !open && handleCancelNavigation()}>
+    <Dialog
+      open={showDialog}
+      onOpenChange={(open) => !open && handleCancelNavigation()}
+    >
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
