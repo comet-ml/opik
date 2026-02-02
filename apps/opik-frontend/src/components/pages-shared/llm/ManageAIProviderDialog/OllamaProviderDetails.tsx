@@ -247,7 +247,7 @@ const OllamaProviderDetails: React.FC<OllamaProviderDetailsProps> = ({
           connectionSuccess ? (
             modelsFetchFailed ? (
               <>
-                <CheckCircle2 className="mr-2 size-4 text-orange-600" />
+                <CheckCircle2 className="mr-2 size-4 text-warning" />
                 Connected (models failed)
               </>
             ) : (
