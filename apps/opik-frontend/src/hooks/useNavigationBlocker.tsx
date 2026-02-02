@@ -8,7 +8,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 
@@ -109,29 +108,23 @@ const useNavigationBlocker = ({
         <DialogFooter>
           {showSaveAndLeave && (
             <>
-              <DialogClose asChild>
-                <Button variant="destructive" onClick={handleConfirmNavigation}>
-                  {confirmText}
-                </Button>
-              </DialogClose>
+              <Button variant="destructive" onClick={handleConfirmNavigation}>
+                {confirmText}
+              </Button>
               <div className="flex-auto"></div>
             </>
           )}
-          <DialogClose asChild>
-            <Button variant="outline" onClick={handleCancelNavigation}>
-              {cancelText}
-            </Button>
-          </DialogClose>
+          <Button variant="outline" onClick={handleCancelNavigation}>
+            {cancelText}
+          </Button>
           {showSaveAndLeave ? (
             <Button variant="default" onClick={handleSaveAndLeave}>
               {saveAndLeaveText}
             </Button>
           ) : (
-            <DialogClose asChild>
-              <Button variant="destructive" onClick={handleConfirmNavigation}>
-                {confirmText}
-              </Button>
-            </DialogClose>
+            <Button variant="destructive" onClick={handleConfirmNavigation}>
+              {confirmText}
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>

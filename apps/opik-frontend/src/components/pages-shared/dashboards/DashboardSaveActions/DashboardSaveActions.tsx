@@ -197,7 +197,7 @@ const DashboardSaveActions: React.FunctionComponent<
         onCreateSuccess={handleSaveAsSuccess}
         navigateOnCreate={navigateOnCreate}
         defaultProjectId={mixedConfig?.projectIds?.[0]}
-        defaultExperimentIds={mixedConfig?.experimentIds}
+        defaultExperimentIds={mixedConfig?.experimentIds?.slice()}
         defaultExperimentDataSource={mixedConfig?.experimentDataSource}
       />
 
