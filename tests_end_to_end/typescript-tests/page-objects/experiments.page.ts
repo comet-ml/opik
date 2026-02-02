@@ -36,7 +36,7 @@ export class ExperimentsPage extends BasePage {
 
   async clickExperiment(name: string): Promise<void> {
     await this.searchExperiment(name);
-    await this.page.getByRole('link', { name }).first().click();
+    await this.page.getByRole('cell', { name, exact: true }).click();
   }
 
   async deleteExperiment(name: string): Promise<void> {

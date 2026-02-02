@@ -36,10 +36,7 @@ export class PromptsPage extends BasePage {
 
   async clickPrompt(name: string): Promise<void> {
     await this.searchPrompt(name);
-    await this.page
-      .getByRole('row')
-      .filter({ has: this.page.getByRole('cell', { name, exact: true }) })
-      .click();
+    await this.page.getByRole('cell', { name, exact: true }).click();
   }
 
   async deletePrompt(name: string): Promise<void> {

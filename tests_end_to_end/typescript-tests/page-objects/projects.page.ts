@@ -7,10 +7,7 @@ export class ProjectsPage extends BasePage {
   }
 
   async clickProject(projectName: string): Promise<void> {
-    await this.page
-      .getByRole('row')
-      .filter({ has: this.page.getByRole('cell', { name: projectName, exact: true }) })
-      .click();
+    await this.page.getByRole('cell', { name: projectName, exact: true }).click();
   }
 
   async searchProject(projectName: string): Promise<void> {

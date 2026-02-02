@@ -13,10 +13,9 @@ export class DatasetsPage extends BasePage {
   }
 
   async selectDatasetByName(name: string): Promise<void> {
-    await this.page
-      .getByRole('row')
-      .filter({ has: this.page.getByRole('cell', { name, exact: true }) })
-      .click();
+    await this.page.getByRole('cell', { name, exact: true }).click();
+    // Wait for navigation to dataset items page
+    await this.page.waitForURL(/\/items/);
   }
 
   async searchDataset(datasetName: string): Promise<void> {
