@@ -89,20 +89,6 @@ type ManageAIProviderDialogProps = {
   configuredProvidersList?: ProviderObject[];
 };
 
-// Label generator for "Add new" options
-const addNewLabelGenerator = (providerType: PROVIDER_TYPE) => {
-  if (providerType === PROVIDER_TYPE.BEDROCK) {
-    return "Add Bedrock provider";
-  }
-  if (providerType === PROVIDER_TYPE.OLLAMA) {
-    return "Ollama";
-  }
-  if (providerType === PROVIDER_TYPE.CUSTOM) {
-    return "Add vLLM / Custom provider";
-  }
-  return "Add provider";
-};
-
 const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
   providerKey,
   open,
@@ -123,7 +109,6 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     configuredProvidersList: effectiveConfiguredProvidersList,
     includeConfiguredStatus: true,
     includeAddNewOptions: true,
-    addNewLabelGenerator,
   });
 
   const [step, setStep] = useState<Step>(providerKey ? "configure" : "select");
