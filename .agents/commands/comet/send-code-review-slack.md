@@ -47,18 +47,19 @@ This workflow will:
 
 ### 1. Preflight & Environment Check
 
-- **Check GitHub MCP**: Test GitHub MCP availability by attempting to fetch repository info using `get_file_contents` for `comet-ml/opik`
-  > If unavailable, respond with: "This command needs the GitHub MCP server. Please enable it, then run: `npm run install-mcp`."  
+- **Check `gh` CLI**: Test availability by running `gh auth status`
+  > If unavailable or not authenticated, respond with: "This command needs the GitHub CLI (`gh`). Please install it (`brew install gh` on macOS) and authenticate with `gh auth login`."
+  > If installed via Homebrew but not found, add `/opt/homebrew/bin` to PATH in `~/.zshenv`: `echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshenv` and restart Claude Code/Cursor.
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Get current branch name
-- **Check Slack MCP availability**: 
+- **Check Slack MCP availability**:
   - Use Slack MCP tool `channels_list` to test availability (from `ghcr.io/korotovsky/slack-mcp-server`)
   - Call with minimal parameters (for example: `limit: 1`) so that both public and private channels can be returned
   - This custom MCP server uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) to post messages as your authenticated user account
   - The server must be configured with `mcp-server --transport stdio` in the Docker args and have the `conversations_add_message` tool enabled (e.g., via `SLACK_MCP_ADD_MESSAGE_TOOL=true`) so the final send step can succeed
   - If Slack MCP tool is available and callable: Proceed with message sending via MCP (messages will post as user)
-  - If Slack MCP is not available or tool call fails: 
+  - If Slack MCP is not available or tool call fails:
     > "Slack MCP is not available. Please configure Slack MCP according to `.agents/SLACK_MCP_SETUP.md` and restart Cursor IDE."
     > Stop here.
 
@@ -66,14 +67,14 @@ This workflow will:
 
 ### 2. Find GitHub PR for Current Branch
 
-- **Search for PR**: Use GitHub MCP to find an open PR for the current branch in `comet-ml/opik`
-- **If PR found**: 
+- **Search for PR**: Use `gh pr list --head <branch-name> --state open --json number,url,title,body` to find an open PR for the current branch
+- **If PR found**:
   - Extract PR number, URL, title, and description
   - Store PR information for extraction steps
-- **If no PR found**: 
+- **If no PR found**:
   > "No open PR found for this branch. Please provide the PR link manually:"
   - Prompt for PR link and validate URL format
-  - If provided, fetch PR details using GitHub MCP
+  - If provided, fetch PR details using `gh pr view <PR_NUMBER> --json number,url,title,body`
   - If PR cannot be fetched, stop with error message
   - **After successfully fetching PR by manual link**: Extract PR number, URL, title, and description and store PR information for extraction steps (same as "PR found" branch)
 
@@ -90,13 +91,13 @@ This workflow will:
   - **Build Jira URL**: Construct Jira link as `https://comet-ml.atlassian.net/browse/{TICKET}` (e.g., `https://comet-ml.atlassian.net/browse/OPIK-1234`)
 
 - **Extract Baz approved status (optional)**:
-  - Try to fetch PR status checks using GitHub MCP
+  - Try to fetch PR status checks using `gh pr checks <PR_NUMBER>`
   - Look for status checks or CI checks that might indicate "Baz approved" or similar approval status
   - If found, store the status (e.g., "Baz approved: ✅" or "Baz status: pending")
-  - If not found or unavailable, skip this field (it\'s optional)
+  - If not found or unavailable, skip this field (it's optional)
 
 - **Extract test environment link from PR description and comments**:
-  - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
+  - First, search PR comments using `gh pr view <PR_NUMBER> --json comments` for test environment deployment messages (look for "Test environment is now available!" or similar)
   - Extract URL from comment body (typically in format `https://pr-XXXX.dev.comet.com` or `https://test.opik.com`)
   - If not found in comments, search PR description for URLs in "## Testing" section
   - Look for common test environment patterns: `https://pr-*.dev.comet.com`, `https://test.opik.com`, `https://*.opik.com`, or any `https://` URL
@@ -106,17 +107,17 @@ This workflow will:
   - Validate URL format and store
 
 - **Extract component summaries from PR description**:
-  - **FE summary**: 
+  - **FE summary**:
     - Look for mentions of "frontend", "FE", "React", "UI", or `[FE]` tag in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Frontend summary not found in PR. Enter frontend summary (one line, optional - press Enter to skip):"
-  
-  - **BE summary**: 
+
+  - **BE summary**:
     - Look for mentions of "backend", "BE", "Java", "API", or `[BE]` tag in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip):"
-  
-  - **Python summary**: 
+
+  - **Python summary**:
     - Look for mentions of "Python", "Python SDK", "SDK", or Python-related changes in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Python summary not found in PR. Enter Python summary (one line, optional - press Enter to skip):"
@@ -144,9 +145,9 @@ This workflow will:
   Hi team,
 
   Please review the following PR:
-  
+
   {{user_customization_text_if_provided}}
-  
+
   :jira_epic: jira link: {{Jira_URL}}
   :github: pr link: {{PR_link}}
   :test_tube: test env link: {{test_env}}
@@ -171,7 +172,7 @@ This workflow will:
   Hi team,
 
   Please review the following PR:
-  
+
   :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
   :github: pr link: https://github.com/comet-ml/opik/pull/1234
   :test_tube: test env link: https://test.opik.com
@@ -210,9 +211,9 @@ This workflow will:
 
 ### 7. Verification & Summary
 
-- **Display confirmation**: 
+- **Display confirmation**:
   > "✅ Slack message sent successfully to #code-review channel"
-  
+
 - **Show message preview**: Display the formatted message that was sent
 - **Provide next steps**: Remind user to check Slack channel for delivery
 
@@ -222,36 +223,36 @@ This workflow will:
 
 ### **Slack MCP Errors**
 
-- **Slack MCP unavailable**: 
+- **Slack MCP unavailable**:
   - Check if Slack MCP server is properly configured according to `.agents/SLACK_MCP_SETUP.md`
   - Verify Docker is installed and running (`docker --version`)
   - Verify the Docker image can be pulled: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
   - Restart Cursor IDE after configuring MCP
-- **Slack MCP tool not found**: 
+- **Slack MCP tool not found**:
   - Verify `conversations_add_message` tool is available from `ghcr.io/korotovsky/slack-mcp-server`
   - Ensure `mcp-server --transport stdio` is included in Docker args (see `.agents/SLACK_MCP_SETUP.md`)
   - Ensure `SLACK_MCP_ADD_MESSAGE_TOOL=true` is set in Docker args (see `.agents/SLACK_MCP_SETUP.md`)
   - Check Cursor Settings > Features > MCP for error messages
   - Ensure MCP server is running and properly configured
   - Check Docker logs if the container fails to start
-- **MCP authentication errors**: 
+- **MCP authentication errors**:
   - Check `SLACK_MCP_XOXP_TOKEN` configuration (should start with `xoxp-` for user token) - see `.agents/SLACK_MCP_SETUP.md`
   - Verify token is not expired
   - Reinstall Slack app to workspace if needed
   - Ensure token has `chat:write` scope in **User Token Scopes** (not Bot Token Scopes) - see `.agents/SLACK_MCP_SETUP.md`
-- **Docker errors**: 
+- **Docker errors**:
   - Ensure Docker is running: `docker ps`
   - Check if Docker can pull the image: `docker pull ghcr.io/korotovsky/slack-mcp-server:latest`
   - Verify Docker has network access to reach Slack API
-- **Channel access errors**: 
+- **Channel access errors**:
   - Verify channel name `#code-review` exists
   - Ensure you have `chat:write` scope in User Token Scopes (see `.agents/SLACK_MCP_SETUP.md`)
   - Check that you are a member of the channel (join it if needed)
   - Try using channel ID instead of name if issues persist
 
-### **GitHub MCP Errors**
+### **CLI Errors**
 
-- **GitHub MCP unavailable**: Stop immediately after testing and provide setup instructions
+- **`gh` CLI unavailable**: Stop immediately after testing and provide setup instructions (`gh auth login`)
 - **PR not found**: Prompt for manual PR link or stop if user cancels
 - **PR fetch failure**: Show error details and suggest manual input
 
@@ -274,7 +275,7 @@ This workflow will:
 
 The command is successful when:
 
-1. ✅ GitHub MCP is available and accessible
+1. ✅ `gh` CLI is available and authenticated
 2. ✅ PR is found for current branch (or manually provided)
 3. ✅ Slack MCP is available and configured with `SLACK_MCP_XOXP_TOKEN` (User OAuth Token)
 4. ✅ Jira ticket is extracted from PR or provided manually
@@ -288,7 +289,7 @@ The command is successful when:
 
 ## Notes
 
-- **GitHub MCP Required**: Uses GitHub MCP to fetch PR information automatically
+- **`gh` CLI Required**: Uses `gh` CLI to fetch PR information automatically
 - **Slack MCP Required**: Uses custom Slack MCP server (`ghcr.io/korotovsky/slack-mcp-server`) for sending messages
   - Configure according to `.agents/SLACK_MCP_SETUP.md`
   - Uses `SLACK_MCP_XOXP_TOKEN` (User OAuth Token) - messages are posted as your authenticated user account
@@ -323,7 +324,10 @@ The command is successful when:
 
 # 2. Restart Cursor IDE to load the MCP configuration
 
-# 3. Run command (on a branch with an open PR)
+# 3. Ensure gh CLI is installed and authenticated
+gh auth status
+
+# 4. Run command (on a branch with an open PR)
 cursor send-code-review-slack
 ```
 
@@ -342,7 +346,7 @@ cursor send-code-review-slack
 
 # Output:
 # ✅ Slack message sent successfully to #code-review channel
-# 
+#
 # Message sent:
 # :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
 # :github: pr link: https://github.com/comet-ml/opik/pull/1234
