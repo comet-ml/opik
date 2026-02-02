@@ -2,6 +2,7 @@ import React, { useCallback, useMemo } from "react";
 import { DownloadIcon, Expand, ExternalLink } from "lucide-react";
 
 import { cn, isSameDomainUrl } from "@/lib/utils";
+import { isOpikS3AttachmentUrl } from "@/lib/attachments";
 import { ATTACHMENT_TYPE, AttachmentPreviewData } from "@/types/attachments";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/components/ui/button";
@@ -21,12 +22,7 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
   const Icon = ATTACHMENT_ICON_MAP[type];
 
   const allowedDomain = useMemo(() => {
-    return (
-      isSameDomainUrl(url) ||
-      /^https:\/\/s3\.amazonaws\.com\/([^\s/]+)\/opik\/attachment\/(\S+)$/.test(
-        url,
-      )
-    );
+    return isSameDomainUrl(url) || isOpikS3AttachmentUrl(url);
   }, [url]);
   const showDownload = url.startsWith("data:") || allowedDomain;
 
@@ -49,16 +45,16 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     <div
       key={name}
       className={cn(
-        "group relative h-[200px] min-w-[200px] max-w-[300px] rounded-md border p-3 pt-10",
+        "group relative h-[200px] min-w-[200px] max-w-[300px] rounded-md border p-3 pt-8 bg-primary-foreground",
         isExpandable && "cursor-pointer",
       )}
       onClick={expandClickHandler}
     >
-      <div className="absolute inset-x-0 top-0 flex h-10 items-center justify-between gap-2 truncate px-3 py-2">
+      <div className="absolute inset-x-0 top-0 flex h-8 items-center justify-between gap-2 truncate px-3 py-2">
         <TooltipWrapper content={name}>
-          <span className="truncate">{name}</span>
+          <span className="comet-body-xs truncate text-[#45575F]">{name}</span>
         </TooltipWrapper>
-        <div className="hidden shrink-0 items-center gap-1 group-hover:flex">
+        <div className="-mr-1 hidden shrink-0 items-center gap-1 group-hover:flex">
           {isExpandable && (
             <TooltipWrapper content="Open in fullscreen">
               <Button
@@ -66,15 +62,16 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
                 size="icon-2xs"
                 onClick={expandClickHandler}
                 aria-label="Open in fullscreen"
+                className="w-4"
               >
-                <Expand />
+                <Expand className="text-light-slate" />
               </Button>
             </TooltipWrapper>
           )}
           <TooltipWrapper
             content={showDownload ? "Download" : "Open in new tab"}
           >
-            <Button variant="ghost" size="icon-2xs" asChild>
+            <Button variant="ghost" size="icon-2xs" className="w-4" asChild>
               <a
                 href={url}
                 download={name}
@@ -82,7 +79,11 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
               >
-                {showDownload ? <DownloadIcon /> : <ExternalLink />}
+                {showDownload ? (
+                  <DownloadIcon className="text-light-slate" />
+                ) : (
+                  <ExternalLink className="text-light-slate" />
+                )}
               </a>
             </Button>
           </TooltipWrapper>
@@ -93,7 +94,7 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
           src={url}
           loading="lazy"
           alt={name}
-          className="size-full object-contain"
+          className="size-full rounded-sm object-contain"
         />
       ) : type === ATTACHMENT_TYPE.VIDEO ? (
         <VideoThumbnail videoUrl={url} name={name} />

@@ -1,10 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   ATTACHMENT_TYPE,
   AttachmentPreviewData,
   ParsedMediaData,
 } from "@/types/attachments";
-import AttachmentThumbnail from "@/components/pages-shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
+import AttachmentThumbnail from "@/components/shared/attachments/AttachmentThumbnail/AttachmentThumbnail";
 import AttachmentPreviewDialog from "@/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
 
 type ImagesListWrapperProps = {
@@ -16,19 +16,15 @@ const ImagesListWrapper: React.FC<ImagesListWrapperProps> = ({ media }) => {
     null,
   );
 
-  const previewDataArray = useMemo(() => {
-    return media.map((item) => ({
-      name: item.name,
-      url: item.url,
-      type: item.type,
-    }));
-  }, [media]);
-
+  // No deduplication - display all media items as passed by parent
+  // This allows LLM message components to show multiple placeholders
+  // that resolve to the same URL (e.g., [image_0] and [image_1])
+  // Deduplication should be done at the data source level if needed
   return (
     <div className="flex flex-wrap gap-2">
-      {previewDataArray.map((data) => (
+      {media.map((data, index) => (
         <AttachmentThumbnail
-          key={data.url}
+          key={`${data.url}-${index}`}
           previewData={data}
           onExpand={setPreviewData}
         />
