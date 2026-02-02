@@ -43,11 +43,7 @@ import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import {
   generateActionsColumDef,
@@ -130,6 +126,18 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
 ];
 
 const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    sortable: true,
+    customMeta: {
+      nameKey: "name",
+      idKey: "id",
+      resource: RESOURCE_TYPE.annotationQueue,
+    },
+  },
   ...SHARED_COLUMNS,
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
@@ -173,11 +181,12 @@ const FILTER_COLUMNS: ColumnData<AnnotationQueue>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "instructions",
   COLUMN_FEEDBACK_SCORES_ID,
   "progress",
@@ -197,6 +206,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-annotation-queues-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "workspace-annotation-queues-columns-width";
 const COLUMNS_ORDER_KEY = "workspace-annotation-queues-columns-order";
 const COLUMNS_SORT_KEY = "workspace-annotation-queues-columns-sort";
@@ -257,9 +267,13 @@ export const AnnotationQueuesPage: React.FC = () => {
     defaultValue: ROW_HEIGHT.small,
   });
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
@@ -337,18 +351,6 @@ export const AnnotationQueuesPage: React.FC = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<AnnotationQueue>(),
-      mapColumnDataFields<AnnotationQueue, AnnotationQueue>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.annotationQueue,
-        },
-      }),
       ...convertColumnDataToColumn<AnnotationQueue, AnnotationQueue>(
         DEFAULT_COLUMNS,
         {

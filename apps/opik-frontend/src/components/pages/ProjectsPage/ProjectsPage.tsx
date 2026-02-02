@@ -40,7 +40,7 @@ import {
   ColumnData,
   HeaderIconType,
 } from "@/types/shared";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
 import {
@@ -58,17 +58,19 @@ import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell"
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
 const SELECTED_COLUMNS_KEY = "projects-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "projects-columns-width";
 const COLUMNS_ORDER_KEY = "projects-columns-order";
 const COLUMNS_SORT_KEY = "projects-columns-sort";
 const PAGINATION_SIZE_KEY = "projects-pagination-size";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "total_estimated_cost_sum",
   "duration.p50",
   "last_updated_at",
@@ -92,6 +94,18 @@ const ProjectsPage: React.FunctionComponent = () => {
 
   const columnsDef: ColumnData<ProjectWithStatistic>[] = useMemo(() => {
     return [
+      {
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        cell: ResourceCell as never,
+        sortable: true,
+        customMeta: {
+          nameKey: "name",
+          idKey: "id",
+          resource: RESOURCE_TYPE.project,
+        },
+      },
       {
         id: "id",
         label: "ID",
@@ -311,9 +325,13 @@ const ProjectsPage: React.FunctionComponent = () => {
   const noDataText = noData ? "There are no projects yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 
@@ -337,18 +355,6 @@ const ProjectsPage: React.FunctionComponent = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<ProjectWithStatistic>(),
-      mapColumnDataFields<ProjectWithStatistic, ProjectWithStatistic>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        sortable: true,
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.project,
-        },
-      }),
       ...convertColumnDataToColumn<ProjectWithStatistic, ProjectWithStatistic>(
         columnsDef,
         {

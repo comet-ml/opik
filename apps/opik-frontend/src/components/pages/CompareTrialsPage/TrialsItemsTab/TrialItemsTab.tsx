@@ -45,7 +45,7 @@ import { useTruncationEnabled } from "@/components/server-sync-provider";
 import {
   convertColumnDataToColumn,
   hasAnyVisibleColumns,
-  mapColumnDataFields,
+  migrateSelectedColumns,
 } from "@/lib/table";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsColumns";
@@ -72,6 +72,7 @@ const REFETCH_INTERVAL = 30000;
 const COLUMN_EXPERIMENT_NAME_ID = "experiment_name";
 
 const SELECTED_COLUMNS_KEY = "compare-trials-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "compare-trials-columns-width";
 const COLUMNS_ORDER_KEY = "compare-trials-columns-order";
 const DYNAMIC_COLUMNS_KEY = "compare-trials-dynamic-columns";
@@ -94,11 +95,21 @@ export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = [COLUMN_ID_ID];
+
+const DEFAULT_COLUMNS: ColumnData<ExperimentsCompare>[] = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID (Dataset item)",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+    size: 165,
+  },
+];
 
 export type TrialItemsTabProps = {
   objectiveName?: string;
@@ -173,9 +184,13 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   });
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_ID_ID],
+      ),
     },
   );
 
@@ -370,14 +385,16 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   const columns = useMemo(() => {
     const retVal = [
-      mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
-        id: COLUMN_ID_ID,
-        label: "ID (Dataset item)",
-        type: COLUMN_TYPE.string,
-        cell: IdCell as never,
-        verticalAlignment: calculateVerticalAlignment(experimentsCount),
-        size: 165,
-      }),
+      ...convertColumnDataToColumn<ExperimentsCompare, ExperimentsCompare>(
+        DEFAULT_COLUMNS.map((col) => ({
+          ...col,
+          verticalAlignment: calculateVerticalAlignment(experimentsCount),
+        })),
+        {
+          selectedColumns,
+          columnsOrder,
+        },
+      ),
     ];
 
     if (hasAnyVisibleColumns(datasetColumnsData, selectedColumns)) {
@@ -572,7 +589,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
             setType={setHeight}
           />
           <ColumnsButton
-            columns={datasetColumnsData}
+            columns={[...DEFAULT_COLUMNS, ...datasetColumnsData]}
             selectedColumns={selectedColumns}
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}

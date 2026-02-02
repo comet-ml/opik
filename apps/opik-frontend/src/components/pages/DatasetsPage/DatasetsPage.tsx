@@ -32,11 +32,7 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import {
@@ -51,12 +47,24 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 export const getRowId = (d: Dataset) => d.id;
 
 const SELECTED_COLUMNS_KEY = "datasets-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "datasets-columns-width";
 const COLUMNS_ORDER_KEY = "datasets-columns-order";
 const COLUMNS_SORT_KEY = "datasets-columns-sort";
 const PAGINATION_SIZE_KEY = "datasets-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    cell: ResourceCell as never,
+    customMeta: {
+      nameKey: "name",
+      idKey: "id",
+      resource: RESOURCE_TYPE.dataset,
+    },
+  },
   {
     id: "id",
     label: "ID",
@@ -152,11 +160,12 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "description",
   "dataset_items_count",
   "most_recent_experiment_at",
@@ -218,9 +227,13 @@ const DatasetsPage: React.FunctionComponent = () => {
   const noDataText = noData ? "There are no datasets yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 
@@ -244,18 +257,6 @@ const DatasetsPage: React.FunctionComponent = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Dataset>(),
-      mapColumnDataFields<Dataset, Dataset>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.dataset,
-        },
-        sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-      }),
       ...convertColumnDataToColumn<Dataset, Dataset>(DEFAULT_COLUMNS, {
         columnsOrder,
         selectedColumns,

@@ -35,6 +35,7 @@ import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
+import { Experiment } from "@/types/datasets";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
@@ -43,6 +44,7 @@ import {
   COLUMN_ID_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
+  COLUMN_NAME_ID,
 } from "@/types/shared";
 import { formatDate } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
@@ -75,6 +77,7 @@ const COLUMNS_SORT_KEY = "prompt-experiments-columns-sort";
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "prompt",
   COLUMN_DATASET_ID,
   "created_at",
@@ -131,6 +134,22 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
 
   const columnsDef: ColumnData<GroupedExperiment>[] = useMemo(() => {
     return [
+      {
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        cell: ResourceCell as never,
+        sortable: true,
+        customMeta: {
+          nameKey: "name",
+          idKey: "dataset_id",
+          resource: RESOURCE_TYPE.experiment,
+          getSearch: (data: Experiment) => ({
+            experiments: [data.id],
+          }),
+        },
+        size: 200,
+      },
       {
         id: "prompt",
         label: "Prompt commit",
@@ -387,15 +406,17 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     [setGroupLimit],
   );
 
-  // Filter out dataset column when grouping by dataset
+  // Filter out dataset column when grouping by dataset and name column when grouping is enabled
   const availableColumns = useMemo(() => {
     const isGroupingByDataset = groups.some(
       (g) => g.field === COLUMN_DATASET_ID,
     );
-    if (isGroupingByDataset) {
-      return columnsDef.filter((col) => col.id !== COLUMN_DATASET_ID);
-    }
-    return columnsDef;
+
+    return columnsDef.filter((col) => {
+      if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
+      if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
+      return true;
+    });
   }, [groups, columnsDef]);
 
   if (isPending || isFeedbackScoresPending) {
@@ -446,6 +467,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         </div>
       </PageBodyStickyContainer>
       <DataTable
+        key={hasGroups ? "grouped" : "ungrouped"}
         columns={columns}
         aggregationMap={aggregationMap}
         data={experiments}

@@ -52,11 +52,7 @@ import {
   buildDynamicMetadataColumns,
 } from "@/lib/metadata";
 import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import Loader from "@/components/shared/Loader/Loader";
@@ -228,11 +224,12 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
 ];
 
 const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
+  COLUMN_ID_ID,
   "name",
   "input",
   "output",
@@ -242,6 +239,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "traces-columns-width";
 const COLUMNS_ORDER_KEY = "traces-columns-order";
 const COLUMNS_SORT_KEY_SUFFIX = "-columns-sort";
@@ -461,9 +459,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   // Declare selectedColumns early so it can be used in excludeFields computation
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_TRACES_PAGE_COLUMNS,
+        [COLUMN_ID_ID],
+      ),
     },
   );
 
@@ -845,6 +847,17 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const columnData = useMemo(() => {
     return [
+      {
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: LinkCell as never,
+        customMeta: {
+          callback: handleRowClick,
+          asId: true,
+        },
+        sortable: true,
+      },
       ...SHARED_COLUMNS,
       ...(type === TRACE_DATA_TYPE.traces
         ? [
@@ -933,7 +946,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         : []),
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
-  }, [type, handleThreadIdClick, isGuardrailsEnabled]);
+  }, [type, handleRowClick, handleThreadIdClick, isGuardrailsEnabled]);
 
   const filtersColumnData = useMemo(() => {
     return [
@@ -1025,17 +1038,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Trace | Span>(),
-      mapColumnDataFields<BaseTraceData, Span | Trace>({
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
-        sortable: isColumnSortable(COLUMN_ID_ID, sortableBy),
-      }),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(columnData, {
         columnsOrder,
         selectedColumns,
@@ -1067,7 +1069,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       ),
     ];
   }, [
-    handleRowClick,
     sortableBy,
     columnData,
     columnsOrder,
