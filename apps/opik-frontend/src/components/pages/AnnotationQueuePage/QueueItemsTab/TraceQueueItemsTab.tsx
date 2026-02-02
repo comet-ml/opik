@@ -52,6 +52,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
@@ -84,10 +85,7 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     id: COLUMN_ID_ID,
     label: "ID",
     type: COLUMN_TYPE.string,
-    cell: LinkCell as never,
-    customMeta: {
-      asId: true,
-    },
+    cell: IdCell as never,
     sortable: true,
   },
   {
@@ -467,6 +465,21 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     [workspaceName, annotationQueue.project_id],
   );
 
+  const handleThreadIdClick = useCallback(
+    (row: Trace) => {
+      if (!row || !row.thread_id) return;
+
+      const url = generateTracesURL(
+        workspaceName,
+        annotationQueue.project_id,
+        "threads",
+        row.thread_id,
+      );
+      window.open(url, "_blank");
+    },
+    [workspaceName, annotationQueue.project_id],
+  );
+
   const columns = useMemo(() => {
     const convertedColumns = convertColumnDataToColumn<Trace, Trace>(
       TRACE_COLUMNS,
@@ -479,7 +492,11 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
 
     return [
       generateSelectColumDef<Trace>(),
-      ...injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick),
+      ...injectColumnCallback(
+        convertedColumns,
+        "thread_id",
+        handleThreadIdClick,
+      ),
       ...convertColumnDataToColumn<Trace, Trace>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
         selectedColumns,
@@ -499,7 +516,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     scoresColumnsData,
     scoresColumnsOrder,
     annotationQueue.id,
-    handleRowClick,
+    handleThreadIdClick,
   ]);
 
   const sortConfig = useMemo(
