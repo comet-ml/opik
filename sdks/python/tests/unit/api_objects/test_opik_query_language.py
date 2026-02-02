@@ -448,7 +448,7 @@ def test_empty_filter(filter_string):
         ),
     ],
 )
-def test_valid_dataset_item_oql_expressions(filter_string, expected):
+def test_dataset_item_oql__valid_filters__happyflow(filter_string, expected):
     oql = OpikQueryLanguage.for_dataset_items(filter_string)
     parsed = json.loads(oql.parsed_filters)
     assert len(parsed) == len(expected)
