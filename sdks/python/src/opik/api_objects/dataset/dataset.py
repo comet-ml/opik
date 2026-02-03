@@ -54,6 +54,8 @@ class DatasetExportOperations(abc.ABC):
         self,
         nb_samples: Optional[int] = None,
         batch_size: Optional[int] = None,
+        dataset_item_ids: Optional[List[str]] = None,
+        filter_string: Optional[str] = None,
     ) -> Iterator[dataset_item.DatasetItem]:
         """
         Stream dataset items as DatasetItem objects.
@@ -61,6 +63,8 @@ class DatasetExportOperations(abc.ABC):
         Args:
             nb_samples: Maximum number of items to retrieve.
             batch_size: Maximum number of items to fetch per batch.
+            dataset_item_ids: Optional list of specific item IDs to retrieve.
+            filter_string: Optional OQL filter string to filter dataset items.
 
         Yields:
             DatasetItem objects one at a time.
@@ -120,9 +124,24 @@ class DatasetVersion(DatasetExportOperations):
         return self._dataset_name
 
     @property
+    def name(self) -> str:
+        """The name of the dataset this version belongs to (alias for dataset_name)."""
+        return self._dataset_name
+
+    @property
     def dataset_id(self) -> str:
         """The unique identifier of the dataset this version belongs to."""
         return self._dataset_id
+
+    @property
+    def id(self) -> str:
+        """The unique identifier of the dataset this version belongs to (alias for dataset_id)."""
+        return self._dataset_id
+
+    @property
+    def dataset_items_count(self) -> Optional[int]:
+        """Total number of items in this version (alias for items_total)."""
+        return self._version_info.items_total
 
     @property
     def version_hash(self) -> Optional[str]:
@@ -184,12 +203,16 @@ class DatasetVersion(DatasetExportOperations):
         self,
         nb_samples: Optional[int] = None,
         batch_size: Optional[int] = None,
+        dataset_item_ids: Optional[List[str]] = None,
+        filter_string: Optional[str] = None,
     ) -> Iterator[dataset_item.DatasetItem]:
         return rest_operations.stream_dataset_items(
             rest_client=self._rest_client,
             dataset_name=self._dataset_name,
             nb_samples=nb_samples,
             batch_size=batch_size,
+            dataset_item_ids=dataset_item_ids,
+            filter_string=filter_string,
             dataset_version=self._version_info.version_hash,
         )
 
