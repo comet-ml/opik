@@ -207,6 +207,9 @@ def test_opik_tracer_with_sample_agent_sse(
     )
 
 
+@pytest.mark.skip(
+    reason="Skipping due to flakiness with OpenAI API calls. Re-enable once https://github.com/google/adk-python/pull/4303 is merged."
+)
 @pytest.mark.parametrize("start_api_server", ["sample_agent_openai"], indirect=True)
 def test_opik_tracer_with_sample_agent__openai(
     opik_client_unique_project_name, start_api_server
