@@ -73,6 +73,7 @@ class OpikConnectionMonitor:
     def reset(self) -> None:
         self.disconnect_time = 0.0
         self.disconnect_reason = None
+        self._has_server_connection = True
 
     def connection_failed(self, failure_reason: Optional[str]) -> None:
         """
@@ -93,8 +94,21 @@ class OpikConnectionMonitor:
         self._has_server_connection = False
 
     def tick(self) -> ConnectionStatus:
-        """Invoked at each appropriate execution tick. If appropriate, this method will attempt to check
-        connectivity using the registered connection probe."""
+        """
+        Checks and updates the connection status during a timed heartbeat event.
+
+        This method ensures that the connection is actively monitored, sends probe
+        requests to check the connection status if necessary, and updates the last
+        heartbeat timestamp.
+
+        Returns:
+            ConnectionStatus: Indicates the current status of the connection. It may
+            return one of the following statuses:
+            - `ConnectionStatus.connection_ok`: The connection is active.
+            - `ConnectionStatus.connection_failed`: The connection is not active.
+            - Result based on the probe check indicating whether the connection is
+              healthy or not.
+        """
         next_beat = self.last_beat + self.ping_interval
         now = time.time()
         if next_beat <= now:
