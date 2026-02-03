@@ -36,6 +36,16 @@ import {
 
 type ConfirmType = "load" | "reset" | "save";
 
+// Helper to safely parse template JSON string
+const parseTemplateJson = (template: string | undefined): unknown => {
+  if (!template) return null;
+  try {
+    return JSON.parse(template);
+  } catch {
+    return template; // Return as-is if not valid JSON
+  }
+};
+
 export interface ImprovePromptConfig {
   model: string;
   provider: COMPOSED_PROVIDER_TYPE | "";
@@ -167,10 +177,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       name: promptData!.name,
       id: promptData!.id,
       version: {
-        template: promptData!.latest_version?.template || "",
+        template: parseTemplateJson(promptData!.latest_version?.template),
         id: promptData!.latest_version?.id || "",
         ...(promptData!.latest_version?.commit && {
           commit: promptData!.latest_version.commit,
+        }),
+        ...(promptData!.latest_version?.metadata && {
+          metadata: promptData!.latest_version.metadata,
         }),
       },
     };
@@ -282,10 +295,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         name: promptData.name,
         id: promptData.id,
         version: {
-          template: promptData.latest_version?.template || "",
+          template: parseTemplateJson(promptData.latest_version?.template),
           id: promptData.latest_version?.id || "",
           ...(promptData.latest_version?.commit && {
             commit: promptData.latest_version.commit,
+          }),
+          ...(promptData.latest_version?.metadata && {
+            metadata: promptData.latest_version.metadata,
           }),
         },
       };
@@ -345,10 +361,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         name: promptData.name,
         id: promptData.id,
         version: {
-          template: promptData.latest_version?.template || "",
+          template: parseTemplateJson(promptData.latest_version?.template),
           id: promptData.latest_version?.id || "",
           ...(promptData.latest_version?.commit && {
             commit: promptData.latest_version.commit,
+          }),
+          ...(promptData.latest_version?.metadata && {
+            metadata: promptData.latest_version.metadata,
           }),
         },
       };

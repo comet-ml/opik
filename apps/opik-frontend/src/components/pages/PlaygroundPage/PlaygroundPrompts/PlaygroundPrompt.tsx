@@ -50,6 +50,16 @@ import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 import { PromptLibraryMetadata } from "@/types/playground";
 
+// Helper to safely parse template JSON string
+const parseTemplateJson = (template: string | undefined): unknown => {
+  if (!template) return null;
+  try {
+    return JSON.parse(template);
+  } catch {
+    return template; // Return as-is if not valid JSON
+  }
+};
+
 interface PlaygroundPromptProps {
   workspaceName: string;
   index: number;
@@ -131,10 +141,13 @@ const PlaygroundPrompt = ({
         name: chatPromptData.name,
         id: chatPromptData.id,
         version: {
-          template: chatPromptVersionData.template || "",
+          template: parseTemplateJson(chatPromptVersionData.template),
           id: chatPromptVersionData.id,
           ...(chatPromptVersionData.commit && {
             commit: chatPromptVersionData.commit,
+          }),
+          ...(chatPromptVersionData.metadata && {
+            metadata: chatPromptVersionData.metadata,
           }),
         },
       };

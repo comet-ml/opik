@@ -33,9 +33,10 @@ export interface PromptLibraryMetadata {
   name: string;
   id: string;
   version: {
-    template: string;
+    template: unknown; // Parsed JSON template (not stringified)
     commit?: string;
     id: string;
+    metadata?: object; // Prompt version metadata (e.g., { created_from: "opik_ui", type: "messages_json" })
   };
 }
 
