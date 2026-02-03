@@ -94,7 +94,12 @@ def display_messages(messages: list[dict[str, Any]], prefix: str = "") -> None:
             console.print(rich.text.Text(prefix) + rich.text.Text.from_ansi(line))
 
 
-def _display_tools(tools: list[dict[str, Any]] | None, prefix: str = "") -> None:
+def _display_tools(
+    tools: list[dict[str, Any]] | None,
+    *,
+    prefix: str = "",
+    tool_use_allowed: bool | None = None,
+) -> None:
     """Display tools with optional prefix for each line."""
     if not tools:
         return
@@ -106,6 +111,8 @@ def _display_tools(tools: list[dict[str, Any]] | None, prefix: str = "") -> None
         name, sep, rest = summary.partition(":")
         if sep:
             tool_text.append(name.strip())
+            if tool_use_allowed is False:
+                tool_text.append(" (disabled)", style="red")
             tool_text.append(": ")
             tool_text.append(rest.strip(), style="dim")
         else:
@@ -189,11 +196,16 @@ def _display_chat_prompt_messages_and_tools(
     if chat_p.tools:
         tool_text = rich.text.Text()
         tool_text.append("\n")
+        tool_use_allowed = True
+        if isinstance(chat_p.model_kwargs, dict):
+            tool_use_allowed = bool(chat_p.model_kwargs.get("allow_tool_use", True))
         for tool in chat_p.tools:
             summary = format_tool_summary(tool)
             name, sep, rest = summary.partition(":")
             if sep:
                 tool_text.append(name.strip())
+                if not tool_use_allowed:
+                    tool_text.append(" (disabled)", style="red")
                 tool_text.append(": ")
                 tool_text.append(rest.strip(), style="dim")
             else:
@@ -306,6 +318,7 @@ def display_configuration(
     optimizer_config: dict[str, Any],
     verbose: int = 1,
     tools: list[dict[str, Any]] | None = None,
+    tool_use_allowed: bool | None = None,
 ) -> None:
     """Displays the LLM messages and optimizer configuration using Rich panels."""
     if verbose < 1:
@@ -343,7 +356,7 @@ def display_configuration(
         tools = None
 
     if tools and not has_prompt_tools:
-        _display_tools(tools)
+        _display_tools(tools, tool_use_allowed=tool_use_allowed)
 
     selection_summary = None
     if isinstance(messages, (chat_prompt.ChatPrompt, dict)):

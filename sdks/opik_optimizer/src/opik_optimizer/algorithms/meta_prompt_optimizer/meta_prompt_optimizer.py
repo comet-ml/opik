@@ -291,10 +291,18 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 if optimize_tools:
                     from ...utils.toolcalling import toolcalling as toolcalling_utils
+                    from ...utils.display import display_tool_description
 
                     if not is_single_prompt_optimization:
                         raise ValueError(
                             "Tool description optimization only supports single prompts."
+                        )
+                    reporter = None
+                    if self.verbose >= 1:
+                        reporter = toolcalling_utils.make_tool_description_reporter(
+                            lambda text, name: display_tool_description(
+                                text, title=f"tool: {name}", style="cyan"
+                            )
                         )
                     single_candidates = (
                         toolcalling_utils.generate_tool_description_candidates(
@@ -308,6 +316,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             project_name=self.project_name,
                             build_history_context_fn=self._build_history_context,
                             tool_names=tool_names,
+                            tool_description_reporter=reporter,
                         )
                     )
                     prompt_key = next(iter(best_prompts.keys()))

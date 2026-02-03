@@ -78,10 +78,12 @@ class OptimizationRunDisplay:
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         optimizer_config: dict[str, Any],
     ) -> None:
+        tool_use_allowed = optimizer_config.get("allow_tool_use")
         display_terminal.display_configuration(
             messages=prompt,
             optimizer_config=optimizer_config,
             verbose=self._verbose,
+            tool_use_allowed=tool_use_allowed,
         )
 
     def baseline_evaluation(self, context: OptimizationContext) -> ContextManager[Any]:

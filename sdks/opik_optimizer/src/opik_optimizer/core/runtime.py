@@ -341,6 +341,7 @@ def show_configuration(
         optimizer_config["n_samples_minibatch"] = context.n_samples_minibatch
     if "n_samples_strategy" not in optimizer_config and context.n_samples_strategy:
         optimizer_config["n_samples_strategy"] = context.n_samples_strategy
+    optimizer_config.setdefault("allow_tool_use", context.allow_tool_use)
 
     optimizer._display.show_configuration(
         prompt=prompt,

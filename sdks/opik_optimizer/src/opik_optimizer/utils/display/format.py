@@ -198,9 +198,28 @@ def summarize_selection_policy(
 def format_tool_summary(tool: dict[str, Any]) -> str:
     """Format a concise tool summary showing only name and description."""
     function_block = tool.get("function", {})
-    name = function_block.get("name") or tool.get("name", "unknown_tool")
-    description = function_block.get("description", "No description")
-    return f"{name}: {description}"
+    function_name = function_block.get("name") or tool.get("name", "unknown_tool")
+    description = function_block.get("description") or tool.get("description")
+    if not description:
+        description = "No description"
+
+    display_name = function_name
+    mcp_block = tool.get("mcp")
+    if isinstance(mcp_block, dict):
+        server_label = mcp_block.get("server_label")
+        tool_block = mcp_block.get("tool")
+        tool_name = None
+        if isinstance(tool_block, dict):
+            tool_name = tool_block.get("name")
+        tool_name = tool_name or mcp_block.get("name")
+        if server_label and tool_name:
+            display_name = f"{server_label}.{tool_name}"
+            if function_name and function_name != tool_name:
+                display_name = f"{display_name} (function {function_name})"
+        elif server_label and function_name:
+            display_name = f"{server_label}.{function_name}"
+
+    return f"{display_name}: {description}"
 
 
 def build_plaintext_summary(
