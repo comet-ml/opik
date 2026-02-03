@@ -64,11 +64,11 @@ data:
     {{- else }}
     {{- /* Fallback to hardcoded defaults if cacheControl is not defined (backward compatibility) */ -}}
     map $uri $cache_control_header {
-      "~assets/.*\.(js|css)$"              "public, max-age=604800, immutable";
-      "~(images/.*|assets/.*)\.(jpg|jpeg|png|gif|svg|webp|ico)$" "public, max-age=2592000";
-      "~assets/.*\.(woff|woff2|ttf|eot)$"  "public, max-age=2592000";
-      "~assets/.*\.json$"                  "public, max-age=86400";
-      default                              "no-cache, must-revalidate";
+      ~assets/.*\.(js|css)$              "public, max-age=604800, immutable";
+      ~(images/.*|assets/.*)\.(jpg|jpeg|png|gif|svg|webp|ico)$ "public, max-age=2592000";
+      ~assets/.*\.(woff|woff2|ttf|eot)$  "public, max-age=2592000";
+      ~assets/.*\.json$                  "public, max-age=86400";
+      default                            "no-cache, must-revalidate";
     }
     {{- end }}
 
@@ -102,7 +102,7 @@ data:
         {{- end -}}
         {{- if and $cspEnabled .Values.component.frontend.contentSecurityPolicy }}
         # Content Security Policy (CSP)
-        add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" .Values.component.frontend.contentSecurityPolicy }};" always;
+        add_header Content-Security-Policy "{{ include "opik.cspHeaderValue" .Values.component.frontend.contentSecurityPolicy }}" always;
         {{- end }}
         {{- /* Backward compatibility: support deprecated hstsEnabled flag */ -}}
         {{- if .Values.component.frontend.hstsEnabled }}
