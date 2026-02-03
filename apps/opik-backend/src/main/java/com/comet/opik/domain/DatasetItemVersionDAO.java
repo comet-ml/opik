@@ -1290,14 +1290,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ), experiment_items_scope AS (
                 SELECT ei.*
                 FROM experiment_items ei
-                JOIN experiments_resolved e ON e.id = ei.experiment_id
+                INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
                 WHERE ei.workspace_id = :workspace_id
                 ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
                 LIMIT 1 BY ei.id
             ), experiment_items_trace_scope AS (
                 SELECT DISTINCT ei.trace_id
                 FROM experiment_items ei
-                JOIN experiments_resolved e ON e.id = ei.experiment_id
+                INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
                 WHERE ei.workspace_id = :workspace_id
                 <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
             ), trace_data AS (
