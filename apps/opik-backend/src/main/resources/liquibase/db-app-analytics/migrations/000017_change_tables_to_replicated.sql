@@ -284,6 +284,8 @@ SETTINGS index_granularity = 8192
 --rollback DROP TABLE default.DATABASECHANGELOG1;
 
 --changeset liyaka:change-tables-to-replicated-20 id:migrate-databasechangelog
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM system.tables WHERE database = 'default' AND name = 'DATABASECHANGELOG'
 ALTER TABLE default.DATABASECHANGELOG1 ATTACH PARTITION tuple() FROM default.DATABASECHANGELOG;
 ALTER TABLE default.DATABASECHANGELOG DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE default.DATABASECHANGELOG SYNC SETTINGS max_table_size_to_drop = 0;
@@ -304,6 +306,8 @@ SETTINGS index_granularity = 8192
 --rollback DROP TABLE default.DATABASECHANGELOGLOCK1;
 
 --changeset liyaka:change-tables-to-replicated-22 id:migrate-databasechangeloglock
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:1 SELECT count(*) FROM system.tables WHERE database = 'default' AND name = 'DATABASECHANGELOGLOCK'
 ALTER TABLE default.DATABASECHANGELOGLOCK1 ATTACH PARTITION tuple() FROM default.DATABASECHANGELOGLOCK;
 ALTER TABLE default.DATABASECHANGELOGLOCK DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE default.DATABASECHANGELOGLOCK SYNC SETTINGS max_table_size_to_drop = 0;
