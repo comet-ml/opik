@@ -97,7 +97,9 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     (row.userName === currentUserName || row.email === currentUserName);
 
   const isRoleChangeDisabled =
-    isInvitedByEmail || isOrganizationAdmin || isOwnRole;
+    isInvitedByEmail ||
+    isOwnRole ||
+    (!isPermissionsManagementEnabled && isOrganizationAdmin);
 
   const trigger = (
     <SelectTrigger
