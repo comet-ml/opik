@@ -27,7 +27,12 @@ import {
   OnChangeFn,
 } from "@/types/shared";
 import { Filters } from "@/types/filters";
-import { ExperimentReference, Span, SPAN_TYPE, Trace } from "@/types/traces";
+import {
+  ExperimentItemReference,
+  Span,
+  SPAN_TYPE,
+  Trace,
+} from "@/types/traces";
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
@@ -123,7 +128,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const { mutate } = useTraceDeleteMutation();
 
   const hasThread = Boolean(setThreadId && threadId);
-  const experiment: ExperimentReference | undefined = (treeData[0] as Trace)
+  const experiment: ExperimentItemReference | undefined = (treeData[0] as Trace)
     ?.experiment;
 
   const minPanelWidth = useMemo(() => {

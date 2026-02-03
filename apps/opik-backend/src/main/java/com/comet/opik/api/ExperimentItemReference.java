@@ -19,20 +19,20 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Schema(description = "Experiment reference with ID, name, dataset ID, and dataset item ID")
-public record ExperimentReference(
+public record ExperimentItemReference(
         @NotNull @Schema(description = "Experiment ID") UUID id,
         @NotNull @Schema(description = "Experiment name") String name,
         @NotNull @Schema(description = "Dataset ID") UUID datasetId,
         @NotNull @Schema(description = "Dataset Item ID") UUID datasetItemId)
         implements
-            Comparable<ExperimentReference> {
+            Comparable<ExperimentItemReference> {
 
-    private static final Comparator<ExperimentReference> COMPARATOR = Comparator
-            .comparing(ExperimentReference::name)
-            .thenComparing(ExperimentReference::id, Comparator.reverseOrder());
+    private static final Comparator<ExperimentItemReference> COMPARATOR = Comparator
+            .comparing(ExperimentItemReference::name)
+            .thenComparing(ExperimentItemReference::id, Comparator.reverseOrder());
 
     @Override
-    public int compareTo(ExperimentReference other) {
+    public int compareTo(ExperimentItemReference other) {
         return COMPARATOR.compare(this, other);
     }
 }

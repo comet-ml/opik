@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
-import com.comet.opik.api.ExperimentReference;
+import com.comet.opik.api.ExperimentItemReference;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
@@ -2897,7 +2897,7 @@ class TraceDAOImpl implements TraceDAO {
                 .toList());
     }
 
-    private ExperimentReference mapExperiment(Set<Trace.TraceField> exclude, Row row) {
+    private ExperimentItemReference mapExperiment(Set<Trace.TraceField> exclude, Row row) {
         String experimentIdStr = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_id", String.class);
         String experimentDatasetIdStr = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_dataset_id",
                 String.class);
@@ -2918,7 +2918,7 @@ class TraceDAOImpl implements TraceDAO {
         UUID experimentDatasetItemId = UUID.fromString(experimentDatasetItemIdStr);
         String experimentName = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_name", String.class);
 
-        return ExperimentReference.builder()
+        return ExperimentItemReference.builder()
                 .id(experimentId)
                 .name(experimentName)
                 .datasetId(experimentDatasetId)

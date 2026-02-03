@@ -6355,7 +6355,7 @@ class TracesResourceTest {
     @Nested
     @DisplayName("Experiment Reference:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class ExperimentReferenceTest {
+    class ExperimentItemReferenceTest {
 
         @Builder(toBuilder = true)
         private record TestContext(String workspaceName, String workspaceId, String projectName, UUID projectId,
@@ -6391,7 +6391,7 @@ class TracesResourceTest {
 
         @Test
         @DisplayName("When traces are linked to experiments, then experiment reference is returned")
-        void getTraces__whenTracesLinkedToExperiments__thenReturnExperimentReference() {
+        void getTraces__whenTracesLinkedToExperiments__thenReturnExperimentItemReference() {
             // Given: Create workspace, project, and dataset
             var context = setupWorkspaceProjectDataset();
 
@@ -6469,7 +6469,7 @@ class TracesResourceTest {
 
         @Test
         @DisplayName("When trace is linked to experiment, then getById returns experiment reference")
-        void getTraceById__whenTraceLinkedToExperiment__thenReturnExperimentReference() {
+        void getTraceById__whenTraceLinkedToExperiment__thenReturnExperimentItemReference() {
             // Given: Create workspace, project, and dataset
             var context = setupWorkspaceProjectDataset();
 
