@@ -57,6 +57,65 @@ REASONING_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
 ).strip()
 
 
+TOOL_DESCRIPTION_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
+    """You are an expert prompt engineer. Your task is to improve tool descriptions for LLM tool calling.
+
+        Focus on making the tool description more effective by:
+        1. Clearly stating when the tool should be used
+        2. Explicitly listing required and optional arguments
+        3. Describing how tool outputs must be used in the final answer
+        4. Keeping the description concise but unambiguous
+
+        CRITICAL CONSTRAINTS:
+        1. Do NOT add or remove tools.
+        2. Do NOT change tool names or parameter schemas.
+        3. Only update the tool description text.
+
+        Return a JSON object with this structure:
+        {
+          "prompts": [
+            {
+              "tool_descriptions": {
+                "tool_name": "new description",
+                "other_tool": "new description"
+              },
+              "improvement_focus": "...",
+              "reasoning": "..."
+            }
+          ]
+        }"""
+).strip()
+
+
+TOOL_DESCRIPTION_USER_PROMPT_TEMPLATE = textwrap.dedent(
+    """Current tools:
+{tool_blocks}
+
+Current best score: {best_score:.4f}
+{history_context}
+
+Generate [{prompts_per_round}] improved descriptions for the tools listed above.
+Each description should clarify expected input arguments and set explicit expectations
+for how the tool output must be used in the final response.
+Avoid changing unrelated parts of the prompt. Focus only on tool description text.
+
+Return a JSON object of the form:
+{{
+  "prompts": [
+    {{
+      "tool_descriptions": {{
+        "tool_name": "new description",
+        "other_tool": "new description"
+      }},
+      "improvement_focus": "...",
+      "reasoning": "..."
+    }}
+  ]
+}}
+"""
+).strip()
+
+
 def build_reasoning_system_prompt(
     allow_user_prompt_optimization: bool = True,
     mode: str = "single",
@@ -134,6 +193,14 @@ def build_reasoning_system_prompt(
             ]
         }""",
     )
+
+
+def build_tool_description_system_prompt(
+    *,
+    template: str | None = None,
+) -> str:
+    """Build the system prompt for tool description optimization."""
+    return (template or TOOL_DESCRIPTION_SYSTEM_PROMPT_TEMPLATE).strip()
 
 
 # Meta-prompt template sections
@@ -309,6 +376,24 @@ def build_candidate_generation_user_prompt(
     )
 
     return result.replace("{start}", START_DELIM).replace("{end}", END_DELIM)
+
+
+def build_tool_description_user_prompt(
+    tool_blocks: str,
+    best_score: float,
+    history_context: str,
+    prompts_per_round: int,
+    *,
+    template: str | None = None,
+) -> str:
+    """Build the user prompt for generating improved tool descriptions."""
+    template = template or TOOL_DESCRIPTION_USER_PROMPT_TEMPLATE
+    return template.format(
+        tool_blocks=tool_blocks,
+        best_score=best_score,
+        history_context=history_context,
+        prompts_per_round=prompts_per_round,
+    )
 
 
 def build_pattern_extraction_system_prompt(

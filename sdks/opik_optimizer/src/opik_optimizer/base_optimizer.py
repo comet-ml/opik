@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, cast, overload, Literal
 from collections.abc import Iterator
 import logging
+import warnings
 import time
 from abc import ABC
 import random
@@ -67,6 +68,7 @@ except importlib.metadata.PackageNotFoundError:  # pragma: no cover - dev instal
 class BaseOptimizer(ABC):
     # Subclasses define their prompts here
     DEFAULT_PROMPTS: dict[str, str] = {}
+    supports_tool_optimization: bool = False
     # ------------------------------------------------------------------
     # Input validation & setup
     # ------------------------------------------------------------------
@@ -138,8 +140,14 @@ class BaseOptimizer(ABC):
         self._reporter: Any | None = None
         self._display: RunDisplay = display or OptimizationRunDisplay(verbose=verbose)
 
-        # Initialize prompt library with overrides
-        self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
+        # Initialize prompt library with overrides (include MCP defaults)
+        from .utils.toolcalling import prompts as toolcalling_prompts
+
+        prompt_defaults = {
+            **toolcalling_prompts.MCP_PROMPT_DEFAULTS,
+            **self.DEFAULT_PROMPTS,
+        }
+        self._prompts = PromptLibrary(prompt_defaults, prompt_overrides)
 
     @property
     def prompts(self) -> PromptLibrary:
@@ -401,12 +409,47 @@ class BaseOptimizer(ABC):
         optimization_id: str | None = None,
         max_trials: int = 10,
         optimize_prompt: bool | str | list[str] | None = "system",
+        optimize_tools: bool | dict[str, bool] | None = None,
         **extra_params: Any,
     ) -> OptimizationContext:
         # Normalize prompt input
         optimizable_prompts, is_single_prompt_optimization = (
             self._normalize_prompt_input(prompt)
         )
+
+        from .utils.toolcalling import toolcalling as toolcalling_utils
+
+        optimize_tools = toolcalling_utils.validate_optimization_flags(
+            optimize_prompt=bool(optimize_prompt),
+            optimize_tools=optimize_tools,
+            supports_tool_optimization=self.supports_tool_optimization,
+            warn_unsupported=True,
+        )
+        if optimize_tools and not is_single_prompt_optimization:
+            raise ValueError(
+                "Tool description optimization only supports single prompts."
+            )
+        if optimize_tools:
+            extra_params["optimize_tools"] = optimize_tools
+
+        tool_names: list[str] | None = None
+        if optimize_tools and is_single_prompt_optimization:
+            single_prompt = next(iter(optimizable_prompts.values()))
+            resolved_prompt, tool_names = self._resolve_toolcalling(
+                single_prompt, optimize_tools=optimize_tools
+            )
+            optimizable_prompts = {
+                resolved_prompt.name: cast(chat_prompt.ChatPrompt, resolved_prompt)
+            }
+        else:
+            resolved_prompts, tool_names = self._resolve_toolcalling(
+                optimizable_prompts
+            )
+            optimizable_prompts = cast(
+                dict[str, chat_prompt.ChatPrompt], resolved_prompts
+            )
+        if tool_names is not None:
+            extra_params["tool_names"] = tool_names
 
         # Validate optimization inputs
         self._validate_optimization_inputs(
@@ -489,6 +532,13 @@ class BaseOptimizer(ABC):
             setattr(self, "allow_user_prompt_optimization", "user" in optimizable_roles)
 
         # Return optimization context
+        allow_tool_use_flag = bool(extra_params.get("allow_tool_use", True))
+        allow_tool_use_flag = (
+            allow_tool_use_flag
+            and toolcalling_utils.should_allow_tool_use(optimizable_prompts)
+        )
+        extra_params["allow_tool_use"] = allow_tool_use_flag
+
         context = OptimizationContext(
             prompts=optimizable_prompts,
             initial_prompts=initial_prompts,
@@ -506,7 +556,7 @@ class BaseOptimizer(ABC):
             n_samples_strategy=resolved_strategy,
             max_trials=max_trials,
             project_name=project_name,
-            allow_tool_use=bool(extra_params.get("allow_tool_use", True)),
+            allow_tool_use=allow_tool_use_flag,
             baseline_score=None,
             extra_params=extra_params,
             dataset_split=dataset_split,
@@ -516,6 +566,19 @@ class BaseOptimizer(ABC):
         self.set_default_dataset_split(dataset_split)
         self.n_samples_strategy = resolved_strategy
         return context
+
+    def _resolve_toolcalling(
+        self,
+        prompt_or_prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        *,
+        optimize_tools: bool | dict[str, bool] | None = None,
+    ) -> tuple[
+        chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt], list[str] | None
+    ]:
+        """Normalize MCP tool entries into function-calling tools."""
+        from .utils.toolcalling.toolcalling import resolve_prompt_tools
+
+        return resolve_prompt_tools(prompt_or_prompts, optimize_tools=optimize_tools)
 
     def _calculate_baseline(self, context: OptimizationContext) -> float:
         """
@@ -1189,6 +1252,7 @@ class BaseOptimizer(ABC):
         max_trials: int,
         allow_tool_use: bool,
         optimize_prompt: bool | str | list[str] | None,
+        optimize_tools: bool | dict[str, bool] | None,
         extra_kwargs: dict[str, Any],
     ) -> OptimizationContext:
         # Reset counters at the start of each optimization run
@@ -1211,6 +1275,7 @@ class BaseOptimizer(ABC):
             auto_continue=auto_continue,
             allow_tool_use=allow_tool_use,
             optimize_prompt=optimize_prompt,
+            optimize_tools=optimize_tools,
             **extra_kwargs,
         )
         debug_log(
@@ -1318,6 +1383,7 @@ class BaseOptimizer(ABC):
         max_trials: int,
         allow_tool_use: bool,
         optimize_prompt: bool | str | list[str] | None,
+        optimize_tools: bool | dict[str, bool] | None,
         extra_kwargs: dict[str, Any],
     ) -> dict[str, Any]:
         return {
@@ -1336,6 +1402,7 @@ class BaseOptimizer(ABC):
             "max_trials": max_trials,
             "allow_tool_use": allow_tool_use,
             "optimize_prompt": optimize_prompt,
+            "optimize_tools": optimize_tools,
             "extra_kwargs": extra_kwargs,
         }
 
@@ -1444,6 +1511,7 @@ class BaseOptimizer(ABC):
         max_trials: int = 10,
         allow_tool_use: bool = True,
         optimize_prompt: bool | str | list[str] | None = "system",
+        optimize_tools: bool | dict[str, bool] | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -1478,6 +1546,8 @@ class BaseOptimizer(ABC):
            max_trials: Maximum number of optimization trials
            allow_tool_use: Whether tools may be executed during evaluation (default True)
            optimize_prompt: Which prompt roles to allow for optimization
+           optimize_tools: Optional tool optimization selector. Only supported by optimizers that
+               explicitly document tool optimization support.
            **kwargs: Additional arguments passed to _setup_optimization and _run_optimization
 
         Returns:
@@ -1500,6 +1570,7 @@ class BaseOptimizer(ABC):
                 max_trials=max_trials,
                 allow_tool_use=allow_tool_use,
                 optimize_prompt=optimize_prompt,
+                optimize_tools=optimize_tools,
                 extra_kwargs=kwargs,
             )
         )
@@ -1517,6 +1588,19 @@ class BaseOptimizer(ABC):
                 context=context,
                 baseline_score=baseline_score,
             )
+
+    def optimize_mcp(self, *args: Any, **kwargs: Any) -> OptimizationResult:
+        """Deprecated: use optimize_prompt(..., optimize_tools=True)."""
+        warnings.warn(
+            "optimize_mcp is deprecated. Use optimize_prompt(..., optimize_tools=True) "
+            "with MCP tools defined in ChatPrompt.tools.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        raise RuntimeError(
+            "optimize_mcp has been removed. Use optimize_prompt(..., optimize_tools=True) "
+            "with MCP tools in ChatPrompt.tools."
+        )
 
     def get_history_entries(self) -> list[dict[str, Any]]:
         """
