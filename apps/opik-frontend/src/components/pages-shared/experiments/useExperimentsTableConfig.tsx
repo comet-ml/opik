@@ -306,6 +306,7 @@ export const useExperimentsTableConfig = <
                   experiments: [data.id],
                 }),
               },
+              headerCheckbox: true,
             },
             checkboxClickHandler,
           )
