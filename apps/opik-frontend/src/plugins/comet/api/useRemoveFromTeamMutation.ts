@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
+import { WORKSPACE_USERS_ROLES_QUERY_KEY } from "./useWorkspaceUsersRoles";
 
 export interface RemoveFromTeamVariables {
   teamId: string;
@@ -48,6 +49,12 @@ export function useRemoveFromTeamMutation() {
       });
       queryClient.invalidateQueries({
         queryKey: ["workspace-permissions", { workspaceId: variables.teamId }],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [
+          WORKSPACE_USERS_ROLES_QUERY_KEY,
+          { workspaceId: variables.teamId },
+        ],
       });
     },
     onError: (error) => {
