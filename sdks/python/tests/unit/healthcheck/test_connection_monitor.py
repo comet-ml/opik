@@ -87,7 +87,7 @@ class TestOpikConnectionMonitorTick:
 
         mock_probe.check_connection.assert_called_once_with(timeout=2.0)
         assert status == ConnectionStatus.connection_ok
-        assert monitor._last_beat == 100.0
+        assert monitor.last_beat == 100.0
 
     def test_tick__interval_not_passed__skips_check(self, mock_probe):
         monitor = OpikConnectionMonitor(
@@ -95,14 +95,14 @@ class TestOpikConnectionMonitorTick:
             check_timeout=2.0,
             probe=mock_probe,
         )
-        monitor._last_beat = 100.0
+        monitor.last_beat = 100.0
 
         with mock.patch("time.time", return_value=103.0):
             status = monitor.tick()
 
         mock_probe.check_connection.assert_not_called()
         assert status == ConnectionStatus.connection_ok
-        assert monitor._last_beat == 100.0
+        assert monitor.last_beat == 100.0
 
     def test_tick__not_connected_and_interval_not_passed__returns_connection_failed(
         self, mock_probe
@@ -112,15 +112,15 @@ class TestOpikConnectionMonitorTick:
             check_timeout=2.0,
             probe=mock_probe,
         )
-        monitor._last_beat = 100.0
-        monitor._has_server_connection = False
+        monitor.last_beat = 100.0
+        monitor.connection_failed("Some reason")
 
         with mock.patch("time.time", return_value=103.0):
             status = monitor.tick()
 
         mock_probe.check_connection.assert_not_called()
         assert status == ConnectionStatus.connection_failed
-        assert monitor._last_beat == 100.0
+        assert monitor.last_beat == 100.0
 
     def test_tick__probe_returns_unhealthy__detects_connection_failure(
         self, mock_probe
@@ -140,7 +140,7 @@ class TestOpikConnectionMonitorTick:
         assert status == ConnectionStatus.connection_failed
         assert monitor.has_server_connection is False
         assert monitor.disconnect_reason == "Connection timeout"
-        assert monitor._last_beat == 100.0
+        assert monitor.last_beat == 100.0
 
     def test_tick__probe_returns_healthy_after_disconnect__detects_connection_restored(
         self, mock_probe
@@ -153,14 +153,16 @@ class TestOpikConnectionMonitorTick:
             check_timeout=2.0,
             probe=mock_probe,
         )
-        monitor._has_server_connection = False
+        # mark as disconnected
+        monitor.connection_failed("Some reason")
 
+        # the next tick should return connection_restored
         with mock.patch("time.time", return_value=100.0):
             status = monitor.tick()
 
         assert status == ConnectionStatus.connection_restored
         assert monitor.has_server_connection is True
-        assert monitor._last_beat == 100.0
+        assert monitor.last_beat == 100.0
 
 
 class TestOpikConnectionMonitorIntegration:

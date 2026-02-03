@@ -59,9 +59,9 @@ class OpikConnectionMonitor:
         """
         self._check_timeout = check_timeout
         self._has_server_connection = True
-        self._last_beat = float("-inf")
         self._probe = probe
 
+        self.last_beat = float("-inf")
         self.ping_interval = ping_interval
         self.disconnect_time = 0.0
         self.disconnect_reason: Optional[str] = None
@@ -95,10 +95,10 @@ class OpikConnectionMonitor:
     def tick(self) -> ConnectionStatus:
         """Invoked at each appropriate execution tick. If appropriate, this method will attempt to check
         connectivity using the registered connection probe."""
-        next_beat = self._last_beat + self.ping_interval
+        next_beat = self.last_beat + self.ping_interval
         now = time.time()
         if next_beat <= now:
-            self._last_beat = now
+            self.last_beat = now
             result = self._probe.check_connection(timeout=self._check_timeout)
             return self._on_ping_result(
                 result.is_healthy, failure_reason=result.error_message
