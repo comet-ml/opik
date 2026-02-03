@@ -582,6 +582,78 @@ describe("Duplicate media detection", () => {
   });
 });
 
+describe("SVG data URI extraction", () => {
+  it("should extract SVG data URI images", () => {
+    // Simple SVG: red circle on white background
+    const svgDataURI =
+      "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0id2hpdGUiLz48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0MCIgZmlsbD0icmVkIi8+PC9zdmc+";
+    const input = { text: `Check this SVG: ${svgDataURI}` };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(svgDataURI);
+    expect(result.media[0].name).toBe("Base64: [image_0]");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
+    expect(result.formattedData).toEqual({
+      text: "Check this SVG: [image_0]",
+    });
+  });
+
+  it("should extract SVG in complex nested object", () => {
+    const svgDataURI = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=";
+    const input = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: `Here is an SVG: ${svgDataURI}` },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(svgDataURI);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
+  });
+
+  it("should extract multiple SVG data URIs", () => {
+    const svg1 = "data:image/svg+xml;base64,PHN2ZyBpZD0iMSI+PC9zdmc+";
+    const svg2 = "data:image/svg+xml;base64,PHN2ZyBpZD0iMiI+PC9zdmc+";
+    const input = { text: `SVG 1: ${svg1} and SVG 2: ${svg2}` };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(2);
+    expect(result.media[0].url).toBe(svg1);
+    expect(result.media[0].name).toBe("Base64: [image_0]");
+    expect(result.media[1].url).toBe(svg2);
+    expect(result.media[1].name).toBe("Base64: [image_1]");
+  });
+
+  it("should extract SVG alongside other image formats", () => {
+    const svgDataURI = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=";
+    const pngDataURI = "data:image/png;base64,iVBORw0KGgo";
+    const jpegDataURI = "data:image/jpeg;base64,/9j/";
+    const input = {
+      text: `SVG: ${svgDataURI}, PNG: ${pngDataURI}, JPEG: ${jpegDataURI}`,
+    };
+
+    const result = processInputData(input);
+    expect(result.media).toHaveLength(3);
+
+    // All should be extracted as images
+    expect(result.media.every((m) => m.type === ATTACHMENT_TYPE.IMAGE)).toBe(
+      true,
+    );
+
+    // Verify each URL is present
+    expect(result.media.some((m) => m.url === svgDataURI)).toBe(true);
+    expect(result.media.some((m) => m.url === pngDataURI)).toBe(true);
+    expect(result.media.some((m) => m.url === jpegDataURI)).toBe(true);
+  });
+});
+
 describe("Audio content extraction", () => {
   it("should extract audio from input_audio content type", () => {
     const input = {

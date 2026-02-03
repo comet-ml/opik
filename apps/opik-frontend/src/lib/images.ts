@@ -221,7 +221,7 @@ export const hasAudioExtension = (url: string): boolean => {
 
 const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
 export const DATA_IMAGE_REGEX = new RegExp(
-  `data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}`,
+  `data:image/[^;]+;base64,${IMAGE_CHARS_REGEX}`,
   "g",
 );
 // Exclude characters that are invalid in URLs: whitespace, quotes, angle brackets, curly braces, backslash, pipe, caret, backtick
