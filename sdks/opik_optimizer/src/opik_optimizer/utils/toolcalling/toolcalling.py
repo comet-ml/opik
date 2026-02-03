@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import logging
 import warnings
 from typing import Any
@@ -14,6 +15,7 @@ from litellm.exceptions import BadRequestError
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...utils import prompt_segments
+from ... import constants
 from ...utils.display import format as display_format
 from ...utils.display import display_text_block
 from . import prompts as toolcalling_prompts
@@ -246,6 +248,14 @@ def prepare_tool_optimization(
             )
             for segment in tool_segments
         ]
+    # Limit the number of tools to optimize at once
+    max_tools = constants.DEFAULT_MAX_TOOL_OPTIMIZATION
+    if tool_names is not None and len(tool_names) > max_tools:
+        raise ValueError(
+            "optimize_tools supports at most "
+            f"{max_tools} tools (requested {len(tool_names)}). "
+            "Pass optimize_tools as a dict to select tools or reduce MCP tools."
+        )
     return resolved_prompt, tool_names
 
 

@@ -207,18 +207,59 @@ class OptimizationHistoryState:
     def _normalize_candidate_payload(candidate: Any) -> Any:
         if candidate is None:
             return None
+        def _tool_display_name(tool: dict[str, Any]) -> str:
+            function_block = tool.get("function", {})
+            function_name = function_block.get("name") or tool.get("name", "unknown_tool")
+            mcp_block = tool.get("mcp")
+            if isinstance(mcp_block, dict):
+                server_label = mcp_block.get("server_label")
+                tool_block = mcp_block.get("tool")
+                tool_name = None
+                if isinstance(tool_block, dict):
+                    tool_name = tool_block.get("name")
+                tool_name = tool_name or mcp_block.get("name")
+                if server_label and tool_name:
+                    display_name = f"{server_label}.{tool_name}"
+                    if function_name and function_name != tool_name:
+                        display_name = f"{display_name} (function {function_name})"
+                    return display_name
+                if server_label:
+                    return f"{server_label}.{function_name}"
+            return str(function_name)
+
+        def _summarize_tools(prompt_obj: Any) -> list[str] | None:
+            tools = getattr(prompt_obj, "tools", None)
+            if not tools:
+                return None
+            summaries = []
+            for tool in tools:
+                if isinstance(tool, dict):
+                    summaries.append(_tool_display_name(tool))
+            return summaries or None
+
         # Normalize prompts to messages format to match baseline evaluation format
         # Always use dict format: {prompt_name: messages}
         if isinstance(candidate, chat_prompt.ChatPrompt):
             # Single prompt: normalize to dict format with prompt name as key
             prompt_name = getattr(candidate, "name", "prompt")
-            return {prompt_name: candidate.get_messages()}
+            payload: dict[str, Any] = {"messages": candidate.get_messages()}
+            tool_summaries = _summarize_tools(candidate)
+            if tool_summaries:
+                payload["tools"] = tool_summaries
+            return {prompt_name: payload}
         if isinstance(candidate, dict):
             # Check if it's a dict of ChatPrompts
             first_value = next(iter(candidate.values())) if candidate else None
             if isinstance(first_value, chat_prompt.ChatPrompt):
                 # Multi-prompt: normalize to dict[str, list[dict]]
-                return {k: p.get_messages() for k, p in candidate.items()}
+                normalized: dict[str, Any] = {}
+                for key, prompt_obj in candidate.items():
+                    payload = {"messages": prompt_obj.get_messages()}
+                    tool_summaries = _summarize_tools(prompt_obj)
+                    if tool_summaries:
+                        payload["tools"] = tool_summaries
+                    normalized[key] = payload
+                return normalized
             # Otherwise, keep as-is (already a dict, not ChatPrompts)
             return candidate
         return {"value": candidate}

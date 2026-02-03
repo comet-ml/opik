@@ -98,6 +98,25 @@ def format_prompt_messages(
     return json.dumps(messages, indent=2)
 
 
+def format_prompt_payload(payload: Any, *, pretty: bool = True) -> str:
+    """Format prompt payloads that may include tools or bundled prompts."""
+    if isinstance(payload, list):
+        return format_prompt_messages(payload, pretty=pretty)
+    if isinstance(payload, dict):
+        if "messages" in payload and isinstance(payload.get("messages"), list):
+            text = format_prompt_messages(payload["messages"], pretty=pretty)
+            tools = payload.get("tools")
+            if tools:
+                tool_line = ", ".join(map(str, tools))
+                text = f"{text}\n  [TOOLS]: {tool_line}"
+            return text
+        parts: list[str] = []
+        for name, value in payload.items():
+            formatted = format_prompt_payload(value, pretty=pretty)
+            parts.append(f"{name}:\n{formatted}")
+        return "\n".join(parts)
+    return str(payload)
+
 def redact_prompt_payload(prompt_or_payload: Any) -> Any:
     """Summarize prompt payloads for safe display/history."""
     if isinstance(prompt_or_payload, dict):

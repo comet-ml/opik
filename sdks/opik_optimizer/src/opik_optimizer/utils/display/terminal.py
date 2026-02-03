@@ -884,6 +884,16 @@ def display_tool_description(description: str, title: str, style: str) -> None:
     console.print(panel)
 
 
+def display_tools_panel(
+    tools: list[dict[str, Any]] | None,
+    *,
+    prefix: str = DEFAULT_DISPLAY_PREFIX,
+    tool_use_allowed: bool | None = None,
+) -> None:
+    """Render the tools panel with an optional prefix."""
+    _display_tools(tools, prefix=prefix, tool_use_allowed=tool_use_allowed)
+
+
 def display_text_block(text: str, style: str = "") -> None:
     """Print a prefixed single-line text block."""
     console = get_console()
