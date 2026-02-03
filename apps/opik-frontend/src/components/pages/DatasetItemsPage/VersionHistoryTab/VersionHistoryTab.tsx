@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { ColumnPinningState } from "@tanstack/react-table";
+import { keepPreviousData } from "@tanstack/react-query";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -73,11 +74,21 @@ const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
 
-  const { data: versionsData, isLoading } = useDatasetVersionsList({
-    datasetId,
-    page,
-    size,
-  });
+  const {
+    data: versionsData,
+    isLoading,
+    isPlaceholderData,
+    isFetching,
+  } = useDatasetVersionsList(
+    {
+      datasetId,
+      page,
+      size,
+    },
+    {
+      placeholderData: keepPreviousData,
+    },
+  );
 
   const columns = useMemo(() => {
     const baseColumns = convertColumnDataToColumn<
@@ -119,6 +130,7 @@ const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
             </div>
           </DataTableNoData>
         }
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <DataTablePagination
         page={page}
