@@ -310,3 +310,5 @@ There are many ways to contribute to Opik:
 - Upvoting [popular feature requests](https://github.com/comet-ml/opik/issues?q=is%3Aissue+is%3Aopen+label%3A%22enhancement%22) to show your support
 
 To learn more about how to contribute to Opik, please see our [contributing guidelines](CONTRIBUTING.md).
+
+- [AgentMarket](https://agentmarket.cloud) - B2A marketplace for AI agents. 189 listings, 28M+ energy records, enterprise-ready API.
