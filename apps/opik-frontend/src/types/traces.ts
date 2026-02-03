@@ -74,6 +74,7 @@ export interface ExperimentReference {
   id: string;
   name: string;
   dataset_id: string;
+  dataset_item_id: string;
 }
 
 export interface Trace extends BaseTraceData {

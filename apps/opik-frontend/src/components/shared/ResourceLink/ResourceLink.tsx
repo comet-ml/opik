@@ -28,6 +28,7 @@ export enum RESOURCE_TYPE {
   datasetItem,
   prompt,
   experiment,
+  experimentItem,
   optimization,
   trial,
   annotationQueue,
@@ -75,6 +76,14 @@ export const RESOURCE_MAP = {
     param: "datasetId",
     deleted: "Deleted experiment",
     label: "experiment",
+    color: "var(--color-burgundy)",
+  },
+  [RESOURCE_TYPE.experimentItem]: {
+    url: "/$workspaceName/experiments/$datasetId/compare",
+    icon: FlaskConical,
+    param: "datasetId",
+    deleted: "Deleted experiment item",
+    label: "experiment item",
     color: "var(--color-burgundy)",
   },
   [RESOURCE_TYPE.optimization]: {
