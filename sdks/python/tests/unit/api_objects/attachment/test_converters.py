@@ -406,3 +406,50 @@ def test_attachment_to_message__bytes_data_write_fails__error_reraised():
                 project_name=project_name,
                 url_override=url_override,
             )
+
+
+def test_attachment_to_message__base64_string(request):
+    """Test that base64-encoded string is decoded and written to temp file."""
+    import base64
+
+    url_override = "https://example.com"
+    entity_id = "123"
+    project_name = "test-project"
+    original_content = b"This is test content for base64 encoding"
+    base64_string = base64.b64encode(original_content).decode("utf-8")
+
+    attachment_data = attachment.Attachment(
+        data=base64_string,
+        file_name="test.txt",
+        content_type="text/plain",
+    )
+
+    message = converters.attachment_to_message(
+        attachment_data=attachment_data,
+        entity_type="trace",
+        entity_id=entity_id,
+        project_name=project_name,
+        url_override=url_override,
+    )
+
+    request.addfinalizer(
+        lambda: os.path.exists(message.file_path) and os.unlink(message.file_path)
+    )
+
+    # A temp file should be created
+    assert os.path.exists(message.file_path)
+    assert message.file_path != base64_string
+
+    # delete_after_upload should be True for base64 data
+    assert message.delete_after_upload is True
+
+    # Verify file content matches the decoded bytes
+    with open(message.file_path, "rb") as f:
+        assert f.read() == original_content
+
+    # Other fields should be preserved
+    assert message.file_name == "test.txt"
+    assert message.mime_type == "text/plain"
+    assert message.entity_type == "trace"
+    assert message.entity_id == entity_id
+    assert message.project_name == project_name
