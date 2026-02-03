@@ -90,6 +90,10 @@ const DataTablePagination = ({
     }
   }, [total, page, size, pageChange]);
 
+  if (total === 0) {
+    return null;
+  }
+
   return (
     <div
       className={`flex flex-row justify-end ${isMinimal ? "gap-1" : "gap-4"} ${
