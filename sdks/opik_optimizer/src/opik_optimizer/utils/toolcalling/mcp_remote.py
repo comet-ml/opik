@@ -8,12 +8,51 @@ mirrors the stdio helpers in ``mcp`` but over HTTP/SSE.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any, TypeVar, cast
 from collections.abc import Coroutine, Mapping
 
 from .mcp import ToolCallingDependencyError
+from .session_pool import SessionPool
+from ...utils import throttle as _throttle
 
 _T = TypeVar("_T")
+_toolcalling_limiter = _throttle.get_toolcalling_rate_limiter()
+_POOL = SessionPool()
+
+
+def _remote_key(url: str, headers: Mapping[str, str]) -> str:
+    payload = {"url": url, "headers": dict(headers)}
+    return json.dumps(payload, sort_keys=True, default=str)
+
+
+async def _get_or_create_client(
+    url: str, headers: Mapping[str, str]
+) -> tuple[Any, Any]:
+    key = _remote_key(url, headers)
+    return await _POOL.get_or_create(
+        key,
+        lambda: _start_client(url, headers),
+    )
+
+
+async def _start_client(url: str, headers: Mapping[str, str]) -> tuple[Any, Any]:
+    ClientSession, streamablehttp_client = _load_remote_sdk()
+    transport_cm = streamablehttp_client(url, headers=dict(headers))
+    read_stream, write_stream, _get_session_id = await transport_cm.__aenter__()
+    session = cast(type[Any], ClientSession)(read_stream, write_stream)
+    if hasattr(session, "__aenter__"):
+        await session.__aenter__()
+    if hasattr(session, "initialize"):
+        await session.initialize()
+    return session, transport_cm
+
+
+async def _close_client(session_bundle: tuple[Any, Any]) -> None:
+    session, transport_cm = session_bundle
+    if hasattr(session, "__aexit__"):
+        await session.__aexit__(None, None, None)
+    await transport_cm.__aexit__(None, None, None)
 
 
 def _load_remote_sdk() -> tuple[Any, Any]:
@@ -43,31 +82,18 @@ def _run_sync(coro: Coroutine[Any, Any, _T]) -> _T:
 
 def list_tools_from_remote(url: str, headers: Mapping[str, str]) -> Any:
     """List tools from a remote MCP server over StreamableHTTP."""
+    _toolcalling_limiter.acquire()
 
     async def _inner() -> Any:
-        ClientSession, streamablehttp_client = _load_remote_sdk()
-        async with streamablehttp_client(url, headers=dict(headers)) as (
-            read_stream,
-            write_stream,
-            _get_session_id,
-        ):
-            session = cast(type[Any], ClientSession)(read_stream, write_stream)
-            if hasattr(session, "__aenter__"):
-                await session.__aenter__()
-            if hasattr(session, "initialize"):
-                await session.initialize()
-            try:
-                if hasattr(session, "list_tools"):
-                    response = await session.list_tools()
-                    return getattr(response, "tools", response)
-                if hasattr(session, "tools"):
-                    return await session.tools()
-                raise RuntimeError("MCP session missing list_tools")
-            finally:
-                if hasattr(session, "__aexit__"):
-                    await session.__aexit__(None, None, None)
+        session, _transport = await _get_or_create_client(url, headers)
+        if hasattr(session, "list_tools"):
+            response = await session.list_tools()
+            return getattr(response, "tools", response)
+        if hasattr(session, "tools"):
+            return await session.tools()
+        raise RuntimeError("MCP session missing list_tools")
 
-    return _run_sync(_inner())
+    return _POOL.run(_inner())
 
 
 def call_tool_from_remote(
@@ -77,23 +103,13 @@ def call_tool_from_remote(
     arguments: dict[str, Any],
 ) -> Any:
     """Invoke a tool on a remote MCP server over StreamableHTTP."""
+    _toolcalling_limiter.acquire()
 
     async def _inner() -> Any:
-        ClientSession, streamablehttp_client = _load_remote_sdk()
-        async with streamablehttp_client(url, headers=dict(headers)) as (
-            read_stream,
-            write_stream,
-            _get_session_id,
-        ):
-            session = cast(type[Any], ClientSession)(read_stream, write_stream)
-            if hasattr(session, "__aenter__"):
-                await session.__aenter__()
-            if hasattr(session, "initialize"):
-                await session.initialize()
-            try:
-                return await session.call_tool(name=tool_name, arguments=arguments)
-            finally:
-                if hasattr(session, "__aexit__"):
-                    await session.__aexit__(None, None, None)
+        session, _transport = await _get_or_create_client(url, headers)
+        return await session.call_tool(name=tool_name, arguments=arguments)
 
-    return _run_sync(_inner())
+    return _POOL.run(_inner())
+
+
+_POOL.set_closer(lambda session_bundle: _close_client(session_bundle))

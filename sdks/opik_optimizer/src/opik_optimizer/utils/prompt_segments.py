@@ -19,6 +19,7 @@ from ..api_objects import chat_prompt
 
 
 PROMPT_SEGMENT_PREFIX_TOOL = "tool:"
+PROMPT_SEGMENT_PREFIX_TOOL_PARAM = "tool_param:"
 PROMPT_SEGMENT_PREFIX_MESSAGE = "message:"
 
 
@@ -35,6 +36,9 @@ class PromptSegment:
     def is_tool(self) -> bool:
         return self.segment_id.startswith(PROMPT_SEGMENT_PREFIX_TOOL)
 
+    def is_tool_param(self) -> bool:
+        return self.segment_id.startswith(PROMPT_SEGMENT_PREFIX_TOOL_PARAM)
+
 
 def _normalise_tool(tool: dict[str, Any]) -> dict[str, Any]:
     """Return tools in the ``{"function": {...}}`` structure for consistency."""
@@ -50,6 +54,11 @@ def _normalise_tool(tool: dict[str, Any]) -> dict[str, Any]:
     }
     normalised = {"function": function_block, **normalised}
     return normalised
+
+
+def tool_param_segment_id(tool_name: str, param_name: str) -> str:
+    """Return the segment id for a tool parameter description."""
+    return f"{PROMPT_SEGMENT_PREFIX_TOOL_PARAM}{tool_name}::{param_name}"
 
 
 def extract_prompt_segments(prompt: chat_prompt.ChatPrompt) -> list[PromptSegment]:
@@ -121,6 +130,30 @@ def extract_prompt_segments(prompt: chat_prompt.ChatPrompt) -> list[PromptSegmen
                     },
                 )
             )
+            parameters = function_block.get("parameters") or {}
+            if isinstance(parameters, dict):
+                properties = parameters.get("properties") or {}
+                if isinstance(properties, dict):
+                    for param_name, param_schema in properties.items():
+                        if not isinstance(param_name, str):
+                            continue
+                        description = ""
+                        if isinstance(param_schema, dict):
+                            description = str(param_schema.get("description", ""))
+                        segments.append(
+                            PromptSegment(
+                                segment_id=tool_param_segment_id(tool_name, param_name),
+                                kind="tool_param",
+                                role="tool",
+                                content=description,
+                                metadata={
+                                    "tool_name": tool_name,
+                                    "param_name": param_name,
+                                    "param_schema": param_schema,
+                                    "raw_tool": normalised,
+                                },
+                            )
+                        )
 
     return segments
 
@@ -154,6 +187,17 @@ def apply_segment_updates(
 
     tools = copy.deepcopy(prompt.tools) if prompt.tools else None
     if tools:
+        tool_param_updates: dict[str, dict[str, str]] = {}
+        for segment_id, replacement in updates.items():
+            if not segment_id.startswith(PROMPT_SEGMENT_PREFIX_TOOL_PARAM):
+                continue
+            raw = segment_id[len(PROMPT_SEGMENT_PREFIX_TOOL_PARAM) :]
+            if "::" not in raw:
+                continue
+            tool_name, param_name = raw.split("::", 1)
+            if not tool_name or not param_name:
+                continue
+            tool_param_updates.setdefault(tool_name, {})[param_name] = replacement
         for tool in tools:
             normalised = _normalise_tool(tool)
             function_block = normalised.get("function", {})
@@ -164,6 +208,21 @@ def apply_segment_updates(
             replacement = updates.get(segment_id)
             if replacement is not None:
                 function_block["description"] = replacement
+            param_updates = tool_param_updates.get(tool_name)
+            if param_updates:
+                parameters = function_block.get("parameters")
+                if not isinstance(parameters, dict):
+                    parameters = {}
+                    function_block["parameters"] = parameters
+                properties = parameters.get("properties")
+                if not isinstance(properties, dict):
+                    properties = {}
+                    parameters["properties"] = properties
+                for param_name, new_desc in param_updates.items():
+                    schema = properties.get(param_name)
+                    if not isinstance(schema, dict):
+                        continue
+                    schema["description"] = new_desc
             tool.update(normalised)
 
     return chat_prompt.ChatPrompt(

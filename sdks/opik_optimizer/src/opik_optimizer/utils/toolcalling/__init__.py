@@ -19,7 +19,14 @@ from .tool_factory import (
     cursor_mcp_config_to_tools,
     resolve_toolcalling_tools,
 )
-from .toolcalling import generate_tool_description_candidates, prepare_tool_optimization
+from .toolcalling import (
+    generate_tool_description_candidates,
+    prepare_tool_optimization,
+    resolve_prompt_tools,
+    should_allow_tool_use,
+    report_tool_descriptions,
+    make_tool_description_reporter,
+)
 from . import prompts as toolcalling_prompts
 
 __all__ = [
@@ -37,6 +44,10 @@ __all__ = [
     "resolve_toolcalling_tools",
     "generate_tool_description_candidates",
     "prepare_tool_optimization",
+    "resolve_prompt_tools",
+    "should_allow_tool_use",
+    "report_tool_descriptions",
+    "make_tool_description_reporter",
     "system_prompt_from_tool",
     "tools_from_signatures",
     "validate_tool_arguments",

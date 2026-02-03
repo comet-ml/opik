@@ -19,6 +19,8 @@ from typing import Any, TypeVar, cast
 from collections.abc import Coroutine, Iterable, Mapping
 
 from . import prompts as mcp_prompts
+from .session_pool import SessionPool
+from ...utils import throttle as _throttle
 
 ClientSession: type[Any] | None = None
 StdioClientFactory: type[Any] | None = None
@@ -26,8 +28,40 @@ StdioServerParameters: type[Any] | None = None
 types_mod: Any | None = None
 
 _T = TypeVar("_T")
+_toolcalling_limiter = _throttle.get_toolcalling_rate_limiter()
+_POOL = SessionPool()
 
 TOOL_ENTRY_KEY = "function"
+
+
+def _manifest_key(manifest: ToolCallingManifest) -> str:
+    payload = {
+        "command": manifest.command,
+        "args": manifest.args,
+        "env": manifest.env,
+        "name": manifest.name,
+    }
+    return json.dumps(payload, sort_keys=True, default=str)
+
+
+async def _get_or_create_client(
+    manifest: ToolCallingManifest,
+) -> ToolCallingClient:
+    key = _manifest_key(manifest)
+    return await _POOL.get_or_create(key, lambda: _start_client(manifest))
+
+
+async def _start_client(manifest: ToolCallingManifest) -> ToolCallingClient:
+    client = ToolCallingClient(manifest)
+    await client.__aenter__()
+    return client
+
+
+async def _close_client(client: ToolCallingClient) -> None:
+    await client.__aexit__(None, None, None)
+
+
+_POOL.set_closer(lambda client: _close_client(client))
 
 
 @dataclass
@@ -299,24 +333,26 @@ def run_sync(coro: Coroutine[Any, Any, _T]) -> _T:
 
 def list_tools_from_manifest(manifest: ToolCallingManifest) -> Any:
     """List tools from a stdio MCP server defined by the manifest."""
+    _toolcalling_limiter.acquire()
 
     async def _inner() -> Any:
-        async with ToolCallingClient(manifest) as client:
-            return await client.list_tools()
+        client = await _get_or_create_client(manifest)
+        return await client.list_tools()
 
-    return run_sync(_inner())
+    return _POOL.run(_inner())
 
 
 def call_tool_from_manifest(
     manifest: ToolCallingManifest, tool_name: str, arguments: dict[str, Any]
 ) -> Any:
     """Invoke a tool on a stdio MCP server defined by the manifest."""
+    _toolcalling_limiter.acquire()
 
     async def _inner() -> Any:
-        async with ToolCallingClient(manifest) as client:
-            return await client.call_tool(tool_name, arguments)
+        client = await _get_or_create_client(manifest)
+        return await client.call_tool(tool_name, arguments)
 
-    return run_sync(_inner())
+    return _POOL.run(_inner())
 
 
 def response_to_text(response: object) -> str:

@@ -25,6 +25,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
 import warnings
 from dataclasses import dataclass
 from typing import Any
@@ -319,6 +320,22 @@ def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]
     if not isinstance(servers, Mapping):
         raise ValueError("Cursor MCP config must include 'mcpServers'.")
 
+    def _resolve_env_value(value: Any, env_key: str) -> Any:
+        if not isinstance(value, str):
+            return value
+        if value.startswith("${env:") and value.endswith("}"):
+            env_name = value[6:-1]
+            return os.environ.get(env_name, "")
+        if value == "":
+            return os.environ.get(env_key, "")
+        return value
+
+    def _resolve_env_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
+        resolved: dict[str, Any] = {}
+        for key, value in mapping.items():
+            resolved[key] = _resolve_env_value(value, key)
+        return resolved
+
     tools: list[dict[str, Any]] = []
     for server_label, server in servers.items():
         if not isinstance(server, Mapping):
@@ -327,13 +344,24 @@ def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]
         if "url" in server:
             entry["server_url"] = server.get("url")
             if "headers" in server:
-                entry["headers"] = server.get("headers")
+                headers = server.get("headers")
+                entry["headers"] = (
+                    _resolve_env_mapping(headers)
+                    if isinstance(headers, Mapping)
+                    else headers
+                )
             if "auth" in server:
-                entry["auth"] = server.get("auth")
+                auth = server.get("auth")
+                entry["auth"] = (
+                    _resolve_env_mapping(auth) if isinstance(auth, Mapping) else auth
+                )
         else:
             entry["command"] = server.get("command")
             entry["args"] = server.get("args", [])
-            entry["env"] = server.get("env", {})
+            env = server.get("env", {})
+            entry["env"] = (
+                _resolve_env_mapping(env) if isinstance(env, Mapping) else env
+            )
         tools.append(entry)
 
     return tools
@@ -505,7 +533,52 @@ def _call_remote_tool(
     headers = server.get("headers") or {}
     if not url:
         raise ValueError("Remote MCP server missing 'url'")
-    return call_tool_from_remote(url, headers, tool_name, arguments)
+    response = call_tool_from_remote(url, headers, tool_name, arguments)
+    _log_remote_tool_response(tool_name, response)
+    return response
+
+
+def _log_remote_tool_response(tool_name: str, response: Any) -> None:
+    text = response_to_text(response)
+    if "quota exceeded" in text.lower():
+        logger.warning(
+            "MCP remote tool quota exceeded name=%s response=%s",
+            tool_name,
+            _snippet(text),
+        )
+
+    meta = _extract_response_meta(response)
+    if meta:
+        status = (
+            meta.get("status")
+            or meta.get("status_code")
+            or meta.get("http_status")
+            or meta.get("httpStatus")
+        )
+        logger.debug(
+            "MCP remote tool meta name=%s status=%s meta=%s",
+            tool_name,
+            status,
+            meta,
+        )
+
+
+def _extract_response_meta(response: Any) -> dict[str, Any] | None:
+    meta = getattr(response, "meta", None) or getattr(response, "_meta", None)
+    if isinstance(meta, dict) and meta:
+        return meta
+    content = getattr(response, "content", None)
+    if isinstance(content, list):
+        for item in content:
+            item_meta = getattr(item, "meta", None) or getattr(item, "_meta", None)
+            if isinstance(item_meta, dict) and item_meta:
+                return item_meta
+    return None
+
+
+def _snippet(text: str, max_length: int = 160) -> str:
+    cleaned = " ".join(text.replace("\n", " ").replace("\t", " ").split())
+    return cleaned if len(cleaned) <= max_length else f"{cleaned[:max_length]}..."
 
 
 def list_tools_from_remote(url: str, headers: Mapping[str, str]) -> Any:
