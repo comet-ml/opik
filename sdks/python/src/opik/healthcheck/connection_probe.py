@@ -61,10 +61,8 @@ class ConnectionProbe:
                     is_healthy=False,
                     error_message=f"Unexpected status code: {response.status_code}",
                 )
-        except httpx.ConnectTimeout as e:
-            return ProbeResult(
-                is_healthy=False, error_message=f"Connection timeout: {e}"
-            )
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            return ProbeResult(is_healthy=False, error_message=f"Connection error: {e}")
         except Exception as e:
             LOGGER.exception(
                 "Unexpected error while checking connection to server: %s",
