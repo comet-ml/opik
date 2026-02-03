@@ -11,7 +11,7 @@ import isUndefined from "lodash/isUndefined";
 import isEqual from "fast-deep-equal";
 
 import { OnChangeFn } from "@/types/shared";
-import { LLMMessage, MessageContent, PromptLibraryMetadata } from "@/types/llm";
+import { LLMMessage, MessageContent } from "@/types/llm";
 import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import { Separator } from "@/components/ui/separator";
@@ -32,19 +32,10 @@ import {
   convertMessageToMessagesJson,
   parsePromptVersionContent,
   parseChatTemplateToLLMMessages,
+  buildPromptLibraryMetadata,
 } from "@/lib/llm";
 
 type ConfirmType = "load" | "reset" | "save";
-
-// Helper to safely parse template JSON string
-const parseTemplateJson = (template: string | undefined): unknown => {
-  if (!template) return null;
-  try {
-    return JSON.parse(template);
-  } catch {
-    return template; // Return as-is if not valid JSON
-  }
-};
 
 export interface ImprovePromptConfig {
   model: string;
@@ -173,24 +164,10 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   );
 
   const resetHandler = useCallback(() => {
-    const metadata: PromptLibraryMetadata = {
-      name: promptData!.name,
-      id: promptData!.id,
-      version: {
-        template: parseTemplateJson(promptData!.latest_version?.template),
-        id: promptData!.latest_version?.id || "",
-        ...(promptData!.latest_version?.commit && {
-          commit: promptData!.latest_version.commit,
-        }),
-        ...(promptData!.latest_version?.metadata && {
-          metadata: promptData!.latest_version.metadata,
-        }),
-      },
-    };
     onChangeMessage({
       content: parsePromptVersionContent(promptData!.latest_version),
       promptVersionId: promptData!.latest_version?.id,
-      promptLibraryMetadata: metadata,
+      promptLibraryMetadata: buildPromptLibraryMetadata(promptData!),
     });
   }, [onChangeMessage, promptData]);
 
@@ -291,21 +268,9 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       !message.promptLibraryMetadata &&
       !saveWarning
     ) {
-      const metadata: PromptLibraryMetadata = {
-        name: promptData.name,
-        id: promptData.id,
-        version: {
-          template: parseTemplateJson(promptData.latest_version?.template),
-          id: promptData.latest_version?.id || "",
-          ...(promptData.latest_version?.commit && {
-            commit: promptData.latest_version.commit,
-          }),
-          ...(promptData.latest_version?.metadata && {
-            metadata: promptData.latest_version.metadata,
-          }),
-        },
-      };
-      onChangeMessage({ promptLibraryMetadata: metadata });
+      onChangeMessage({
+        promptLibraryMetadata: buildPromptLibraryMetadata(promptData),
+      });
     }
   }, [
     promptId,
@@ -357,25 +322,11 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       if (onClearOtherPromptLinks) {
         onClearOtherPromptLinks();
       }
-      const metadata: PromptLibraryMetadata = {
-        name: promptData.name,
-        id: promptData.id,
-        version: {
-          template: parseTemplateJson(promptData.latest_version?.template),
-          id: promptData.latest_version?.id || "",
-          ...(promptData.latest_version?.commit && {
-            commit: promptData.latest_version.commit,
-          }),
-          ...(promptData.latest_version?.metadata && {
-            metadata: promptData.latest_version.metadata,
-          }),
-        },
-      };
       onChangeMessage({
         content: parsePromptVersionContent(promptData.latest_version),
         promptVersionId: promptData.latest_version?.id,
         promptId: promptData.id,
-        promptLibraryMetadata: metadata,
+        promptLibraryMetadata: buildPromptLibraryMetadata(promptData),
       });
       setIsLoading(false);
     }
