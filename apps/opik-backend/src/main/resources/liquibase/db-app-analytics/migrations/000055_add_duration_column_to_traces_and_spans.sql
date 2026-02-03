@@ -18,6 +18,6 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}'
             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
             (dateDiff('microsecond', start_time, end_time) / 1000.0),
             NULL);
-
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS `duration`;
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS `duration`;
+
