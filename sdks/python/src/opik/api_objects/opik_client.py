@@ -1428,6 +1428,10 @@ class Opik:
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> prompt_module.Prompt:
         """
         Creates a new text prompt with the given name and template.
@@ -1438,6 +1442,10 @@ class Opik:
             prompt: The template content of the prompt.
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
+            id: Optional unique identifier (UUID) for the prompt.
+            description: Optional description of the prompt (up to 255 characters).
+            change_description: Optional description of changes in this version.
+            tags: Optional list of tags to associate with the prompt.
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
@@ -1448,7 +1456,14 @@ class Opik:
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         prompt_version = prompt_client_.create_prompt(
-            name=name, prompt=prompt, metadata=metadata, type=type
+            name=name,
+            prompt=prompt,
+            metadata=metadata,
+            type=type,
+            id=id,
+            description=description,
+            change_description=change_description,
+            tags=tags,
         )
         return prompt_module.Prompt.from_fern_prompt_version(name, prompt_version)
 
@@ -1458,6 +1473,10 @@ class Opik:
         messages: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
         type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+        id: Optional[str] = None,
+        description: Optional[str] = None,
+        change_description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ) -> prompt_module.ChatPrompt:
         """
         Creates a new chat prompt with the given name and message templates.
@@ -1468,6 +1487,10 @@ class Opik:
             messages: List of message dictionaries with 'role' and 'content' fields.
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
+            id: Optional unique identifier (UUID) for the prompt.
+            description: Optional description of the prompt (up to 255 characters).
+            change_description: Optional description of changes in this version.
+            tags: Optional list of tags to associate with the prompt.
 
         Returns:
             A ChatPrompt object containing details of the created or retrieved chat prompt.
@@ -1477,7 +1500,14 @@ class Opik:
             ApiError: If there is an error during the creation of the prompt.
         """
         return prompt_module.ChatPrompt(
-            name=name, messages=messages, metadata=metadata, type=type
+            name=name,
+            messages=messages,
+            metadata=metadata,
+            type=type,
+            id=id,
+            description=description,
+            change_description=change_description,
+            tags=tags,
         )
 
     def get_prompt(
@@ -1661,7 +1691,7 @@ class Opik:
         Returns:
             List[Union[Prompt, ChatPrompt]]: A list of Prompt and/or ChatPrompt instances found.
         """
-        oql = opik_query_language.OpikQueryLanguage(filter_string or "")
+        oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string or "")
         parsed_filters = oql.get_filter_expressions()
 
         prompt_client_ = prompt_client.PromptClient(self._rest_client)

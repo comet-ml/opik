@@ -35,6 +35,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: false,
+  [FeatureToggleKeys.OLLAMA_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: false,
 };
 

@@ -20,6 +20,7 @@ type UseTracesListParams = {
   truncate?: boolean;
   fromTime?: string;
   toTime?: string;
+  exclude?: string[];
 };
 
 export type UseTracesListResponse = {
@@ -40,6 +41,7 @@ const getTracesList = async (
     truncate,
     fromTime,
     toTime,
+    exclude,
   }: UseTracesListParams,
 ) => {
   const searchByIDFilters = generateSearchByIDFilters(search);
@@ -58,6 +60,8 @@ const getTracesList = async (
       truncate,
       ...(fromTime && { from_time: fromTime }),
       ...(toTime && { to_time: toTime }),
+      ...(exclude &&
+        exclude.length > 0 && { exclude: JSON.stringify(exclude) }),
     },
   });
 

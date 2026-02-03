@@ -36,6 +36,7 @@ import {
   COLUMN_ID_ID,
   COLUMN_METADATA_ID,
   COLUMN_PROJECT_ID,
+  COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
@@ -88,6 +89,7 @@ const PAGINATION_SIZE_KEY = "experiments-pagination-size";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
   COLUMN_PROJECT_ID,
   "created_at",
@@ -153,6 +155,14 @@ const ExperimentsPage: React.FC = () => {
 
   const columnsDef: ColumnData<GroupedExperiment>[] = useMemo(() => {
     return [
+      {
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        cell: TextCell as never,
+        sortable: true,
+        size: 200,
+      },
       {
         id: COLUMN_ID_ID,
         label: "ID",
@@ -444,7 +454,7 @@ const ExperimentsPage: React.FC = () => {
     [setGroupLimit],
   );
 
-  // Filter out dataset/project columns when grouping by dataset/project
+  // Filter out name and dataset/project columns when grouping by dataset/project
   const availableColumns = useMemo(() => {
     const isGroupingByDataset = groups.some(
       (g) => g.field === COLUMN_DATASET_ID,
@@ -456,6 +466,7 @@ const ExperimentsPage: React.FC = () => {
     return columnsDef.filter((col) => {
       if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
       if (isGroupingByProject && col.id === COLUMN_PROJECT_ID) return false;
+      if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
       return true;
     });
   }, [groups, columnsDef]);
@@ -713,6 +724,7 @@ const ExperimentsPage: React.FC = () => {
         </div>
       </PageBodyStickyContainer>
       <DataTable
+        key={hasGroups ? "grouped" : "ungrouped"}
         columns={columns}
         aggregationMap={aggregationMap}
         data={experiments}

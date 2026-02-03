@@ -27,7 +27,12 @@ import {
   OnChangeFn,
 } from "@/types/shared";
 import { Filters } from "@/types/filters";
-import { Span, SPAN_TYPE, Trace } from "@/types/traces";
+import {
+  ExperimentItemReference,
+  Span,
+  SPAN_TYPE,
+  Trace,
+} from "@/types/traces";
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
@@ -42,6 +47,8 @@ import {
 import { SelectItem } from "@/components/ui/select";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import NavigationTag from "@/components/shared/NavigationTag/NavigationTag";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import SelectBox, {
   SelectBoxProps,
@@ -74,7 +81,7 @@ type TraceDetailsActionsPanelProps = {
   spanId: string;
   threadId?: string;
   setThreadId?: OnChangeFn<string | null | undefined>;
-  onClose: () => void;
+  onDelete: () => void;
   isSpansLazyLoading: boolean;
   search?: string;
   setSearch: OnChangeFn<string | undefined>;
@@ -95,7 +102,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   spanId,
   threadId,
   setThreadId,
-  onClose,
+  onDelete,
   isSpansLazyLoading,
   search,
   setSearch,
@@ -121,10 +128,13 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const { mutate } = useTraceDeleteMutation();
 
   const hasThread = Boolean(setThreadId && threadId);
+  const experiment: ExperimentItemReference | undefined = (treeData[0] as Trace)
+    ?.experiment;
 
   const minPanelWidth = useMemo(() => {
     const elements = [
-      { name: "SEPARATOR", size: 25, visible: hasThread },
+      { name: "SEPARATOR", size: 25, visible: hasThread || !!experiment },
+      { name: "VIEW_IN_EXPERIMENT", size: 140, visible: !!experiment },
       { name: "GO_TO_THREAD", size: 110, visible: hasThread },
       { name: "PADDING", size: 24, visible: true },
       { name: "FILTER", size: 60, visible: true },
@@ -140,19 +150,19 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
     ];
 
     return elements.reduce((acc, e) => acc + (e.visible ? e.size : 0), 0);
-  }, [hasAgentGraph, hasThread, isAIInspectorEnabled]);
+  }, [hasAgentGraph, hasThread, isAIInspectorEnabled, experiment]);
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     setIsSmall(node.clientWidth < minPanelWidth + SEARCH_SPACE_RESERVATION);
   });
 
   const handleTraceDelete = useCallback(() => {
-    onClose();
+    onDelete();
     mutate({
       traceId,
       projectId,
     });
-  }, [onClose, mutate, traceId, projectId]);
+  }, [onDelete, mutate, traceId, projectId]);
 
   const getDataToExport = useCallback(
     (treeData: Array<Trace | Span>) => {
@@ -417,18 +427,34 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
 
   return (
     <div ref={ref} className="flex flex-auto items-center justify-between">
-      {setThreadId && threadId ? (
+      {hasThread || experiment ? (
         <div className="flex items-center">
           <Separator orientation="vertical" className="mx-3 h-4" />
-          <TooltipWrapper content="Go to thread">
-            <Button
-              variant="outline"
-              size={isSmall ? "icon-sm" : "sm"}
-              onClick={() => setThreadId(threadId)}
-            >
-              {isSmall ? <MessagesSquare /> : "Go to thread"}
-            </Button>
-          </TooltipWrapper>
+          {experiment && (
+            <NavigationTag
+              id={experiment.dataset_id}
+              name="View in experiment"
+              resource={RESOURCE_TYPE.experimentItem}
+              search={{
+                experiments: [experiment.id],
+                row: experiment.dataset_item_id,
+              }}
+              tooltipContent={`View this item in experiment: ${experiment.name}`}
+              className="h-8"
+              isSmall={isSmall}
+            />
+          )}
+          {hasThread && (
+            <TooltipWrapper content="Go to thread">
+              <Button
+                variant="outline"
+                size={isSmall ? "icon-sm" : "sm"}
+                onClick={() => setThreadId!(threadId)}
+              >
+                {isSmall ? <MessagesSquare /> : "Go to thread"}
+              </Button>
+            </TooltipWrapper>
+          )}
         </div>
       ) : (
         <div />

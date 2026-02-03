@@ -55,13 +55,7 @@ export class TracesPage {
   }
 
   async clickFirstTraceWithName(traceName: string): Promise<void> {
-    await this.page
-      .getByRole('row')
-      .filter({ hasText: traceName })
-      .first()
-      .getByRole('button')
-      .first()
-      .click();
+    await this.page.getByRole('cell', { name: traceName, exact: true }).first().click();
   }
 
   async checkTraceAttachment(attachmentName?: string): Promise<void> {
