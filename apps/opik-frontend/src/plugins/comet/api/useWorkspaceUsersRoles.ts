@@ -1,6 +1,8 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig } from "../api";
 
+export const WORKSPACE_USERS_ROLES_QUERY_KEY = "workspace-users-roles";
+
 interface PermissionMismatch {
   message: string;
 }
@@ -42,7 +44,7 @@ const useWorkspaceUsersRoles = (
   options?: QueryConfig<WorkspaceUserRole[]>,
 ) => {
   return useQuery({
-    queryKey: ["workspace-users-roles", { workspaceId }],
+    queryKey: [WORKSPACE_USERS_ROLES_QUERY_KEY, { workspaceId }],
     queryFn: (context) => getWorkspaceUsersRoles(context, workspaceId),
     ...options,
   });
