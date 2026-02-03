@@ -48,6 +48,7 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
+import { buildPromptLibraryMetadataFromVersion } from "@/lib/llm";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -106,6 +107,7 @@ const PlaygroundPrompt = ({
 
   const {
     chatPromptData,
+    chatPromptVersionData,
     loadedChatPromptRef,
     chatPromptTemplate,
     hasUnsavedChatPromptChanges,
@@ -114,6 +116,54 @@ const PlaygroundPrompt = ({
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
   });
+
+  // Store promptLibraryMetadata when a chat prompt is successfully loaded and unchanged
+  useEffect(() => {
+    // Clear metadata immediately when switching to a different prompt (before new data loads)
+    // This prevents stale metadata from being used during the loading period
+    if (
+      prompt?.promptLibraryMetadata &&
+      selectedChatPromptId !== prompt.promptLibraryMetadata.id
+    ) {
+      updatePrompt(promptId, { promptLibraryMetadata: undefined });
+      return;
+    }
+
+    // Set metadata when prompt is loaded from library and unchanged
+    if (
+      selectedChatPromptId &&
+      chatPromptData &&
+      chatPromptVersionData &&
+      chatPromptData.id === selectedChatPromptId &&
+      !hasUnsavedChatPromptChanges
+    ) {
+      const metadata = buildPromptLibraryMetadataFromVersion(
+        chatPromptData,
+        chatPromptVersionData,
+      );
+      // Only update if metadata is different to avoid infinite loops
+      if (
+        metadata &&
+        (!prompt?.promptLibraryMetadata ||
+          prompt.promptLibraryMetadata.version.id !== metadata.version.id)
+      ) {
+        updatePrompt(promptId, { promptLibraryMetadata: metadata });
+      }
+    }
+
+    // Clear metadata when prompt has unsaved changes (was edited)
+    if (hasUnsavedChatPromptChanges && prompt?.promptLibraryMetadata) {
+      updatePrompt(promptId, { promptLibraryMetadata: undefined });
+    }
+  }, [
+    selectedChatPromptId,
+    chatPromptData,
+    chatPromptVersionData,
+    hasUnsavedChatPromptChanges,
+    promptId,
+    updatePrompt,
+    prompt?.promptLibraryMetadata,
+  ]);
 
   const provider = providerResolver(model);
 
