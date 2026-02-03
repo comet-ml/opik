@@ -1,6 +1,6 @@
 --liquibase formatted sql
 --changeset thiagohora:000055_add_duration_column_to_traces
-
+--comment: Add materialized duration columns to traces and spans tables
 -- Add materialized duration column to traces table
 -- Duration is calculated as the difference between end_time and start_time in milliseconds
 -- Returns NULL if end_time or start_time is NULL, or if start_time is the epoch (1970-01-01)
