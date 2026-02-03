@@ -2,7 +2,6 @@ import React from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SelectContent, SelectItem } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import useManageUsersRolePopover from "@/plugins/comet/WorkspaceRoleCell/useManageUsersRolePopover";
 
 const WorkspaceRolePopover = ({
@@ -21,27 +20,15 @@ const WorkspaceRolePopover = ({
           <SelectItem
             key={option.key}
             value={option.value}
-            disabled={option.disabled}
             description={option.text}
           >
             <span className="font-medium">{option.label}</span>
           </SelectItem>
         );
 
-        const itemWithTooltip = option.tooltip ? (
-          <TooltipWrapper
-            content={option.tooltip.title}
-            side={option.tooltip.placement || "left"}
-          >
-            <div>{selectItem}</div>
-          </TooltipWrapper>
-        ) : (
-          selectItem
-        );
-
         return (
           <React.Fragment key={option.key}>
-            {itemWithTooltip}
+            {selectItem}
             {option.list && isSelected && (
               <div className="ml-7 mt-1 space-y-2 px-2 pb-2">
                 {option.list.options.map((checkboxOption) => (

@@ -1,13 +1,11 @@
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import find from "lodash/find";
 import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import useCurrentOrganization from "./useCurrentOrganization";
 import useUserPermissions from "./useUserPermissions";
-import { MANAGEMENT_PERMISSION } from "@/plugins/comet/constants/permissions";
 import { ManagementPermissionsNames, ORGANIZATION_ROLE_TYPE } from "./types";
 import {
   getPermissionByType,
-  getPermissionStatusByKey,
   isUserPermissionValid,
 } from "@/plugins/comet/lib/permissions";
 
@@ -67,42 +65,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [workspacePermissions, isWorkspaceOwner],
   );
 
-  const getPermissionStatus = useCallback(
-    (permissionKey: MANAGEMENT_PERMISSION) => {
-      if (!currentOrganization) return false;
-
-      if (
-        permissionKey ===
-        MANAGEMENT_PERMISSION.CHANGE_WORKSPACE_ROLE_FOR_YOURSELF
-      ) {
-        return false;
-      }
-
-      if (isAdmin) return true;
-
-      if (!userPermissions?.length || !workspacePermissions?.length) {
-        return false;
-      }
-
-      return getPermissionStatusByKey({
-        permissionKey,
-        inviteUsersStatus: canInviteMembers,
-        onlyAdminsCanInviteOutsideOrganizationStatus:
-          currentOrganization?.onlyAdminsInviteByEmail,
-        managementStatus: isWorkspaceOwner,
-      });
-    },
-    [
-      canInviteMembers,
-      isWorkspaceOwner,
-      isAdmin,
-      currentOrganization,
-      userPermissions?.length,
-      workspacePermissions?.length,
-    ],
-  );
-
-  return { canInviteMembers, isWorkspaceOwner, getPermissionStatus };
+  return { canInviteMembers, isWorkspaceOwner };
 };
 
 export default useUserPermission;

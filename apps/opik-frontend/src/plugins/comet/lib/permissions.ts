@@ -1,7 +1,4 @@
-import {
-  MANAGEMENT_PERMISSION,
-  WORKSPACE_OWNER_VALUE,
-} from "@/plugins/comet/constants/permissions";
+import { WORKSPACE_OWNER_VALUE } from "@/plugins/comet/constants/permissions";
 import {
   ManagementPermissionsNames,
   UserPermission,
@@ -38,41 +35,3 @@ export const updatePermissionByType = (
 
     return permission;
   });
-
-export const getKeyForChangingRole = (
-  currentUserName: string,
-  userName: string,
-) => {
-  return currentUserName === userName
-    ? MANAGEMENT_PERMISSION.CHANGE_WORKSPACE_ROLE_FOR_YOURSELF
-    : MANAGEMENT_PERMISSION.CHANGE_WORKSPACE_ROLE;
-};
-
-export const getPermissionStatusByKey = ({
-  permissionKey,
-  inviteUsersStatus,
-  onlyAdminsCanInviteOutsideOrganizationStatus,
-  managementStatus,
-}: {
-  permissionKey: MANAGEMENT_PERMISSION;
-  inviteUsersStatus: boolean;
-  onlyAdminsCanInviteOutsideOrganizationStatus: boolean;
-  managementStatus: boolean;
-}) => {
-  if (permissionKey === MANAGEMENT_PERMISSION.INVITE_USERS_FROM_ORGANIZATION)
-    return inviteUsersStatus;
-
-  if (
-    permissionKey === MANAGEMENT_PERMISSION.INVITE_USERS_OUT_OF_ORGANIZATION
-  ) {
-    if (onlyAdminsCanInviteOutsideOrganizationStatus) return false;
-    return inviteUsersStatus;
-  }
-
-  if (permissionKey === MANAGEMENT_PERMISSION.CHANGE_WORKSPACE_ROLE) {
-    return managementStatus;
-  }
-
-  console.error(`${permissionKey} is not considered for the system`);
-  return false;
-};
