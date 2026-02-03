@@ -605,9 +605,7 @@ describe("SVG data URI extraction", () => {
       messages: [
         {
           role: "user",
-          content: [
-            { type: "text", text: `Here is an SVG: ${svgDataURI}` },
-          ],
+          content: [{ type: "text", text: `Here is an SVG: ${svgDataURI}` }],
         },
       ],
     };
