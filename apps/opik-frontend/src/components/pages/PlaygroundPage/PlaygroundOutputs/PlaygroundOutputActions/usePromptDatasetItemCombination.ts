@@ -16,6 +16,7 @@ import {
   VideoPart,
   AudioPart,
   ProviderMessageType,
+  PromptLibraryMetadata,
 } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
 import isUndefined from "lodash/isUndefined";
@@ -220,6 +221,23 @@ const usePromptDatasetItemCombination = ({
           id,
         }));
 
+        // Get prompt library metadata - prefer prompt-level (CHAT prompts), fallback to message-level (TEXT prompts)
+        // Only include metadata if promptId matches (prompt is still linked to library)
+        let promptLibraryMetadata: PromptLibraryMetadata | undefined =
+          prompt.promptLibraryMetadata;
+
+        // For TEXT prompts, check message-level metadata
+        if (!promptLibraryMetadata) {
+          const messageWithMetadata = prompt.messages.find(
+            (m) =>
+              m.promptLibraryMetadata &&
+              m.promptId === m.promptLibraryMetadata.id,
+          );
+          if (messageWithMetadata?.promptLibraryMetadata) {
+            promptLibraryMetadata = messageWithMetadata.promptLibraryMetadata;
+          }
+        }
+
         const run = await runStreaming({
           model: prompt.model,
           messages: providerMessages,
@@ -240,6 +258,7 @@ const usePromptDatasetItemCombination = ({
           ...run,
           providerMessages,
           promptLibraryVersions,
+          promptLibraryMetadata,
           configs: prompt.configs,
           model: prompt.model,
           provider: prompt.provider,
