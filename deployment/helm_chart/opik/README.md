@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.1](https://img.shields.io/badge/Version-1.10.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.1](https://img.shields.io/badge/AppVersion-1.10.1-informational?style=flat-square)
+![Version: 1.10.2](https://img.shields.io/badge/Version-1.10.2-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.2](https://img.shields.io/badge/AppVersion-1.10.2-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -85,7 +85,7 @@ Call opik api on http://localhost:5173/api
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
-| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.10 |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.5.4 |
 
 ## Values
 
@@ -448,6 +448,8 @@ Call opik api on http://localhost:5173/api
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
+| zookeeper.selectorLabels.instance | string | `"opik"` |  |
+| zookeeper.selectorLabels.name | string | `"zookeeper-opik"` |  |
 | zookeeper.serverIdOffset | int | `1` |  |
 
 ----------------------------------------------
