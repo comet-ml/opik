@@ -14,17 +14,45 @@ from litellm.exceptions import BadRequestError
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
 from ...utils import prompt_segments
-from ... import _llm_calls, reporting_utils
-from ...algorithms.meta_prompt_optimizer import prompts as meta_prompts
-from ...algorithms.meta_prompt_optimizer import reporting
-from ...algorithms.meta_prompt_optimizer.ops import (
-    candidate_ops as meta_candidate_ops,
-)
+from ...utils.display import format as display_format
+from ...utils.display import display_text_block
+from . import prompts as toolcalling_prompts
 from .tool_factory import ToolCallingFactory
 
 logger = logging.getLogger(__name__)
 
 ToolDescriptionReporter = Callable[[str, str, dict[str, Any]], None]
+
+
+class CandidateGenerationReporter:
+    def __init__(self, num_prompts: int, selection_summary: str | None = None) -> None:
+        self.num_prompts = num_prompts
+        self.selection_summary = selection_summary
+
+    def set_generated_prompts(self, generated_count: int) -> None:
+        summary = f" ({self.selection_summary})" if self.selection_summary else ""
+        cap_text = (
+            f" (cap {self.num_prompts})" if generated_count > self.num_prompts else ""
+        )
+        display_text_block(
+            f"│      Successfully generated {generated_count} candidate prompt{'' if generated_count == 1 else 's'}{cap_text}{summary}",
+            style="dim",
+        )
+        display_text_block("│")
+
+
+def display_candidate_generation_report(
+    num_prompts: int, verbose: int = 1, selection_summary: str | None = None
+) -> CandidateGenerationReporter:
+    if verbose >= 1:
+        display_text_block(
+            f"│    Generating up to {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}:",
+        )
+        if selection_summary:
+            display_text_block(
+                f"│      Evaluation settings: {selection_summary}", style="dim"
+            )
+    return CandidateGenerationReporter(num_prompts, selection_summary)
 
 
 def resolve_prompt_tools(
@@ -186,123 +214,122 @@ def generate_tool_description_candidates(
     tool_description_reporter: ToolDescriptionReporter | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     """Generate candidate prompts that only update tool descriptions."""
-    with reporting.display_candidate_generation_report(
+    from ...core import llm_calls as _llm_calls
+
+    candidate_generation_report = display_candidate_generation_report(
         optimizer.prompts_per_round,
         verbose=optimizer.verbose,
-        selection_summary=reporting_utils.summarize_selection_policy(current_prompt),
-    ) as candidate_generation_report:
-        metric_name = getattr(metric, "__name__", "metric")
-        logger.debug(
-            "\nGenerating tool descriptions for round %s (score=%.4f, metric=%s)",
-            round_num + 1,
-            best_score,
-            metric_name,
-        )
+        selection_summary=display_format.summarize_selection_policy(current_prompt),
+    )
 
-        tool_segments = _resolve_tool_segments(current_prompt, tool_names)
-        if tool_description_reporter:
-            for segment in tool_segments:
-                tool_name = segment.segment_id.replace(
-                    prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
-                )
-                tool_description_reporter(segment.content, tool_name, segment.metadata)
-        history_context = build_history_context_fn(previous_rounds)
-        tool_blocks_str = _build_tool_blocks(tool_segments)
+    metric_name = getattr(metric, "__name__", "metric")
+    logger.debug(
+        "\nGenerating tool descriptions for round %s (score=%.4f, metric=%s)",
+        round_num + 1,
+        best_score,
+        metric_name,
+    )
 
-        tool_description_user_template = optimizer.get_prompt("tool_description_user")
-        tool_description_system_template = optimizer.get_prompt(
-            "tool_description_system"
-        )
-        user_prompt = meta_prompts.build_tool_description_user_prompt(
-            tool_blocks=tool_blocks_str,
-            best_score=best_score,
-            history_context=history_context,
-            prompts_per_round=optimizer.prompts_per_round,
-            template=tool_description_user_template,
-        )
-
-        try:
-            metadata_for_call = meta_candidate_ops._build_metadata_for_call(
-                optimizer=optimizer,
-                call_type="optimization_algorithm",
-                optimization_id=optimization_id,
-                project_name=project_name,
+    tool_segments = _resolve_tool_segments(current_prompt, tool_names)
+    if tool_description_reporter:
+        for segment in tool_segments:
+            tool_name = segment.segment_id.replace(
+                prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
             )
+            tool_description_reporter(segment.content, tool_name, segment.metadata)
+    history_context = build_history_context_fn(previous_rounds)
+    tool_blocks_str = _build_tool_blocks(tool_segments)
 
-            response = _llm_calls.call_model(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": meta_prompts.build_tool_description_system_prompt(
-                            template=tool_description_system_template
-                        ),
-                    },
-                    {"role": "user", "content": user_prompt},
-                ],
-                model=optimizer.model,
-                model_parameters=optimizer.model_parameters,
-                metadata=metadata_for_call,
-                optimization_id=optimization_id,
-                project_name=project_name,
-                return_all=_llm_calls.requested_multiple_candidates(
-                    optimizer.model_parameters
-                ),
-                response_model=ToolDescriptionCandidatesResponse,
-            )
+    tool_description_user_template = optimizer.get_prompt("tool_description_user")
+    tool_description_system_template = optimizer.get_prompt("tool_description_system")
+    user_prompt = toolcalling_prompts.build_tool_description_user_prompt(
+        tool_blocks=tool_blocks_str,
+        best_score=best_score,
+        history_context=history_context,
+        prompts_per_round=optimizer.prompts_per_round,
+        template=tool_description_user_template,
+    )
 
-            responses = response if isinstance(response, list) else [response]
+    try:
+        metadata_for_call = _llm_calls.build_llm_call_metadata(
+            optimizer=optimizer,
+            call_type="optimization_algorithm",
+        )
 
-            allowed_tools = set(tool_names) if tool_names else None
-            candidates: list[chat_prompt.ChatPrompt] = []
-            for response_item in responses:
-                for candidate in response_item.prompts:
-                    updates: dict[str, str] = {}
-                    for tool_name, description in candidate.tool_descriptions.items():
-                        if allowed_tools is not None and tool_name not in allowed_tools:
-                            continue
+        response = _llm_calls.call_model(
+            messages=[
+                {
+                    "role": "system",
+                    "content": toolcalling_prompts.build_tool_description_system_prompt(
+                        template=tool_description_system_template
+                    ),
+                },
+                {"role": "user", "content": user_prompt},
+            ],
+            model=optimizer.model,
+            model_parameters=optimizer.model_parameters,
+            metadata=metadata_for_call,
+            optimization_id=optimization_id,
+            project_name=project_name,
+            return_all=_llm_calls.requested_multiple_candidates(
+                optimizer.model_parameters
+            ),
+        )
+
+        response_payloads = response if isinstance(response, list) else [response]
+        responses: list[ToolDescriptionCandidatesResponse] = []
+        for payload in response_payloads:
+            if not isinstance(payload, str):
+                payload = json.dumps(payload, default=str)
+            responses.append(ToolDescriptionCandidatesResponse.model_validate_json(payload))
+
+        allowed_tools = set(tool_names) if tool_names else None
+        candidates: list[chat_prompt.ChatPrompt] = []
+        for response_item in responses:
+            for candidate in response_item.prompts:
+                updates: dict[str, str] = {}
+                for tool_name, description in candidate.tool_descriptions.items():
+                    if allowed_tools is not None and tool_name not in allowed_tools:
+                        continue
+                    if not description or not isinstance(description, str):
+                        continue
+                    segment_id = (
+                        f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{tool_name}"
+                    )
+                    updates[segment_id] = description.strip()
+                parameter_descriptions = candidate.parameter_descriptions or {}
+                for tool_name, params in parameter_descriptions.items():
+                    if allowed_tools is not None and tool_name not in allowed_tools:
+                        continue
+                    if not isinstance(params, dict):
+                        continue
+                    for param_name, description in params.items():
                         if not description or not isinstance(description, str):
                             continue
-                        segment_id = (
-                            f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{tool_name}"
+                        segment_id = prompt_segments.tool_param_segment_id(
+                            tool_name, param_name
                         )
                         updates[segment_id] = description.strip()
-                    parameter_descriptions = candidate.parameter_descriptions or {}
-                    for tool_name, params in parameter_descriptions.items():
-                        if allowed_tools is not None and tool_name not in allowed_tools:
-                            continue
-                        if not isinstance(params, dict):
-                            continue
-                        for param_name, description in params.items():
-                            if not description or not isinstance(description, str):
-                                continue
-                            segment_id = prompt_segments.tool_param_segment_id(
-                                tool_name, param_name
-                            )
-                            updates[segment_id] = description.strip()
-                    if not updates:
-                        logger.warning(
-                            "Skipping tool description candidate with no updates"
-                        )
-                        continue
-                    updated_prompt = prompt_segments.apply_segment_updates(
-                        current_prompt, updates
+                if not updates:
+                    logger.warning(
+                        "Skipping tool description candidate with no updates"
                     )
-                    candidates.append(updated_prompt)
+                    continue
+                updated_prompt = prompt_segments.apply_segment_updates(
+                    current_prompt, updates
+                )
+                candidates.append(updated_prompt)
 
-            if not candidates:
-                raise ValueError("No valid tool description candidates returned.")
+        if not candidates:
+            raise ValueError("No valid tool description candidates returned.")
 
-            candidate_generation_report.set_generated_prompts()
-            return candidates
+        candidate_generation_report.set_generated_prompts(len(candidates))
+        return candidates
 
-        except Exception as exc:
-            if isinstance(
-                exc, (_llm_calls.StructuredOutputParsingError, BadRequestError)
-            ):
-                raise
-            raise ValueError(
-                f"Unexpected error during tool description generation: {exc}"
-            )
+    except Exception as exc:
+        if isinstance(exc, (_llm_calls.StructuredOutputParsingError, BadRequestError)):
+            raise
+        raise ValueError(f"Unexpected error during tool description generation: {exc}")
 
 
 def _resolve_tool_segments(

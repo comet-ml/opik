@@ -64,15 +64,15 @@ class SessionPool:
         self._sessions[key] = session
         return session
 
-    async def close_all(self, closer: Callable[[Any], Coroutine[Any, Any, None]]) -> None:
+    async def close_all(
+        self, closer: Callable[[Any], Coroutine[Any, Any, None]]
+    ) -> None:
         sessions = list(self._sessions.values())
         self._sessions.clear()
         for session in sessions:
             await closer(session)
 
-    def set_closer(
-        self, closer: Callable[[Any], Coroutine[Any, Any, None]]
-    ) -> None:
+    def set_closer(self, closer: Callable[[Any], Coroutine[Any, Any, None]]) -> None:
         self._closer = closer
 
     def shutdown(self) -> None:

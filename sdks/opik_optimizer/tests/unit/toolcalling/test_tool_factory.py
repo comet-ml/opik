@@ -8,8 +8,13 @@ from opik_optimizer.utils.toolcalling.tool_factory import (
 )
 
 
-def test_tool_factory__resolves_mcp_tools(monkeypatch) -> None:
-    def _fake_get_signature(self, server, tool_name, signature_override):
+def test_tool_factory__resolves_mcp_tools(monkeypatch: Any) -> None:
+    def _fake_get_signature(
+        self: ToolCallingFactory,
+        server: dict[str, Any],
+        tool_name: str,
+        signature_override: dict[str, Any] | None,
+    ) -> ToolSignature:
         return ToolSignature(
             name=tool_name,
             description="mcp tool",
@@ -40,8 +45,8 @@ def test_tool_factory__resolves_mcp_tools(monkeypatch) -> None:
     assert "context7.get-library-docs" in function_map
 
 
-def test_tool_factory__keeps_pre_resolved_tools(monkeypatch) -> None:
-    def _fake_callable(**_kwargs):
+def test_tool_factory__keeps_pre_resolved_tools(monkeypatch: Any) -> None:
+    def _fake_callable(**_kwargs: Any) -> str:
         return "ok"
 
     monkeypatch.setattr(
@@ -73,7 +78,7 @@ def test_tool_factory__keeps_pre_resolved_tools(monkeypatch) -> None:
     assert "context7.get-library-docs" in function_map
 
 
-def test_tool_factory__resolves_remote_mcp_tool(monkeypatch) -> None:
+def test_tool_factory__resolves_remote_mcp_tool(monkeypatch: Any) -> None:
     class FakeTool:
         def __init__(self, name: str, description: str, input_schema: dict[str, Any]):
             self.name = name

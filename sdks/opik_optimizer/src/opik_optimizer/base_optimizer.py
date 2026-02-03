@@ -438,9 +438,8 @@ class BaseOptimizer(ABC):
             resolved_prompt, tool_names = self._resolve_toolcalling(
                 single_prompt, optimize_tools=optimize_tools
             )
-            optimizable_prompts = {
-                resolved_prompt.name: cast(chat_prompt.ChatPrompt, resolved_prompt)
-            }
+            resolved_prompt = cast(chat_prompt.ChatPrompt, resolved_prompt)
+            optimizable_prompts = {resolved_prompt.name: resolved_prompt}
         else:
             resolved_prompts, tool_names = self._resolve_toolcalling(
                 optimizable_prompts

@@ -23,6 +23,7 @@ def test_prompt_segments__update_tool_description() -> None:
     )
     assert updated.tools is not None
     assert updated.tools[0]["function"]["description"] == "new description"
+    assert prompt.tools is not None
     assert prompt.tools[0]["function"]["description"] == "old description"
 
 

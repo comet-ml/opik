@@ -325,6 +325,8 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         if (prompt.model_kwargs or {}).get("n", 1) != 1:
             # TODO: Support multi-choice tool execution by selecting a single candidate.
             prompt.model_kwargs["n"] = 1
+        if prompt.tools is None:
+            raise ValueError("prompt.tools must be set before tool-enabled invocation")
         # Normalize MCP tool entries into function-calling tools + callables.
         tools_for_call, function_map = resolve_toolcalling_tools(
             prompt.tools, prompt.function_map
