@@ -14,28 +14,27 @@ export class DatasetItemsPage {
   async removeDefaultColumns() {
     await this.page.getByTestId('columns-button').click();
 
-    const createdToggle = this.page
-      .getByRole('button', { name: 'Created', exact: true })
-      .getByRole('checkbox');
-    if (await createdToggle.isChecked()) {
-      await createdToggle.click();
-    }
+    // Wait for the columns menu to be visible
+    await this.page.getByRole('menu').waitFor({ state: 'visible' });
 
-    const lastUpdatedToggle = this.page
-      .getByRole('button', { name: 'Last updated' })
-      .getByRole('checkbox');
-    if (await lastUpdatedToggle.isChecked()) {
-      await lastUpdatedToggle.click();
-    }
+    // Use a helper to toggle columns off - re-query each time to avoid stale elements
+    const toggleColumnOff = async (columnName: string, exact: boolean = false) => {
+      const checkbox = this.page
+        .getByRole('menu')
+        .getByRole('button', { name: columnName, exact })
+        .getByRole('checkbox');
+      if (await checkbox.isChecked()) {
+        await checkbox.click();
+        await this.page.waitForTimeout(100);
+      }
+    };
 
-    const createdByToggle = this.page
-      .getByRole('button', { name: 'Created by', exact: true })
-      .getByRole('checkbox');
-    if (await createdByToggle.isChecked()) {
-      await createdByToggle.click();
-    }
+    await toggleColumnOff('Created', true);
+    await toggleColumnOff('Last updated', false);
+    await toggleColumnOff('Created by', true);
 
     await this.page.keyboard.press('Escape');
+    await this.page.getByRole('menu').waitFor({ state: 'hidden' });
   }
 
   async deleteFirstItemAndGetContent(): Promise<Record<string, string>> {
@@ -49,17 +48,8 @@ export class DatasetItemsPage {
 
     for (let cellIndex = 0; cellIndex < cells.length - 2; cellIndex++) {
       const cell = cells[cellIndex + 1];
-      let content = '';
-
-      if (cellIndex === 0) {
-        await cell.getByRole('button').hover();
-        await row.getByRole('button').nth(1).click();
-        content = await this.page.evaluate(() => (navigator as any).clipboard.readText());
-      } else {
-        content = (await cell.textContent()) || '';
-      }
-
-      item[keys[cellIndex]] = content;
+      const content = (await cell.textContent()) || '';
+      item[keys[cellIndex]] = content.trim();
     }
 
     await row.getByRole('button', { name: 'Actions menu' }).click();
@@ -99,18 +89,7 @@ export class DatasetItemsPage {
       // Iterate through cells, skipping first (checkbox) and last (actions)
       for (let cellIndex = 0; cellIndex < cells.length - 2; cellIndex++) {
         const cell = cells[cellIndex + 1];
-        let content = '';
-
-        // First data column (ID) - copy from clipboard as it may be truncated
-        if (cellIndex === 0) {
-          await cell.getByRole('button').hover();
-          await row.getByRole('button').nth(1).click();
-          await this.page.waitForTimeout(50);
-          content = await this.page.evaluate(() => (navigator as any).clipboard.readText());
-        } else {
-          content = (await cell.textContent()) || '';
-        }
-
+        const content = (await cell.textContent()) || '';
         item[keys[cellIndex]] = content.trim();
       }
 
