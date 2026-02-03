@@ -656,7 +656,7 @@ serviceToggles:
   datasetExportEnabled: ${DATASET_EXPORT_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
-  optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"true"}
+  optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not OpenAI provider is enabled
   openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}
