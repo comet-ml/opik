@@ -603,12 +603,12 @@
 
   td:first-child [data-cell-wrapper="true"],
   th:first-child [data-header-wrapper="true"] {
-    padding-left: 24px !important;
+    padding-left: 24px;
   }
 
   td:last-child [data-cell-wrapper="true"],
   th:last-child [data-header-wrapper="true"] {
-    padding-right: 24px !important;
+    padding-right: 24px;
   }
 }
 

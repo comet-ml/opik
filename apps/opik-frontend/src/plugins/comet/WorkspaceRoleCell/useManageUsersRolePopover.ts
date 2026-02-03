@@ -12,7 +12,6 @@ import {
   WORKSPACE_MEMBER_VALUE,
   WORKSPACE_OWNER_VALUE,
 } from "@/plugins/comet/constants/permissions";
-import { useLoggedInUserName } from "@/store/AppStore";
 
 export interface WorkspaceMemberPermission {
   key: ManagementPermissionsNames;
@@ -22,18 +21,12 @@ export interface WorkspaceMemberPermission {
 
 const useManageUsersRolePopover = (
   permissions: UserPermission[] = [],
-  username: string,
-  ifChangeWsRoleDisabled: boolean,
-  ifUserAdmin: boolean,
   setPermissions: (permissions: UserPermission[]) => void,
 ) => {
-  const currentUserName = useLoggedInUserName();
   const wsManagementPermissionValue = getPermissionByType(
     permissions,
     ManagementPermissionsNames.MANAGEMENT,
   )?.permissionValue;
-  const ifChangeMadeForCurrentUser = currentUserName === username;
-  const isDisabled = ifChangeWsRoleDisabled || ifUserAdmin;
 
   const onRadioChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,16 +89,6 @@ const useManageUsersRolePopover = (
           label: "Workspace Member",
           text: "Limited permissions. You can give customized ones",
           controlType: "radio" as const,
-          disabled: isDisabled,
-          tooltip: isDisabled
-            ? {
-                arrow: true,
-                title: ifChangeMadeForCurrentUser
-                  ? "You can't update your own role"
-                  : "You can't change the role, since this user is an organization admin",
-                placement: "left" as const,
-              }
-            : null,
           list:
             wsManagementPermissionValue === WORKSPACE_MEMBER_VALUE
               ? {
@@ -120,8 +103,6 @@ const useManageUsersRolePopover = (
   }, [
     permissions,
     wsManagementPermissionValue,
-    ifChangeMadeForCurrentUser,
-    isDisabled,
     onRadioChange,
     onCheckboxChange,
   ]);

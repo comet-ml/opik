@@ -328,6 +328,7 @@ class EvaluationEngine:
         dataset_sampler: Optional[samplers.BaseDatasetSampler],
         trial_count: int,
         experiment_: Optional[experiment.Experiment],
+        dataset_filter_string: Optional[str] = None,
     ) -> List[test_result.TestResult]:
         # Can't use streaming with these parameters yet, so fallback to non-streaming
         use_streaming = (
@@ -341,6 +342,7 @@ class EvaluationEngine:
                 nb_samples=nb_samples,
                 dataset_item_ids=dataset_item_ids,
                 batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+                filter_string=dataset_filter_string,
             )
         else:
             LOGGER.info("Dataset streaming disabled due to evaluation parameters")
@@ -349,6 +351,7 @@ class EvaluationEngine:
                     nb_samples=nb_samples,
                     dataset_item_ids=dataset_item_ids,
                     batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+                    filter_string=dataset_filter_string,
                 )
             )
 

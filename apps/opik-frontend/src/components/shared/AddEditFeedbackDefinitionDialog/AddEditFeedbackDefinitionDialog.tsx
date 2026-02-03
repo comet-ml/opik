@@ -7,6 +7,7 @@ import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogClose,
   DialogContent,
   DialogFooter,
@@ -149,55 +150,57 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        {isEdit && (
-          <ExplainerCallout
-            Icon={MessageCircleWarning}
-            className="mb-2"
-            isDismissable={false}
-            {...EXPLAINERS_MAP[
-              EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition
-            ]}
-          />
-        )}
-        <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="feedbackDefinitionName">Name</Label>
-          <Input
-            id="feedbackDefinitionName"
-            placeholder="Feedback definition name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="feedbackDefinitionDescription">Description</Label>
-          <Textarea
-            id="feedbackDefinitionDescription"
-            placeholder="Feedback definition description"
-            className="min-h-20"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            maxLength={255}
-          />
-        </div>
-        <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="feedbackDefinitionType">Type</Label>
-          <SelectBox
-            id="feedbackDefinitionType"
-            value={type}
-            onChange={(type) => {
-              setDetails(undefined);
-              setType(type as CreateFeedbackDefinition["type"]);
-            }}
-            options={TYPE_OPTIONS}
-          />
-        </div>
-        <div className="flex max-h-[400px] flex-col gap-4 overflow-y-auto">
-          <FeedbackDefinitionDetails
-            onChange={setDetails}
-            type={type}
-            details={details}
-          />
-        </div>
+        <DialogAutoScrollBody>
+          {isEdit && (
+            <ExplainerCallout
+              Icon={MessageCircleWarning}
+              className="mb-2"
+              isDismissable={false}
+              {...EXPLAINERS_MAP[
+                EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition
+              ]}
+            />
+          )}
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="feedbackDefinitionName">Name</Label>
+            <Input
+              id="feedbackDefinitionName"
+              placeholder="Feedback definition name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="feedbackDefinitionDescription">Description</Label>
+            <Textarea
+              id="feedbackDefinitionDescription"
+              placeholder="Feedback definition description"
+              className="min-h-20"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              maxLength={255}
+            />
+          </div>
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="feedbackDefinitionType">Type</Label>
+            <SelectBox
+              id="feedbackDefinitionType"
+              value={type}
+              onChange={(type) => {
+                setDetails(undefined);
+                setType(type as CreateFeedbackDefinition["type"]);
+              }}
+              options={TYPE_OPTIONS}
+            />
+          </div>
+          <div className="flex flex-col gap-4">
+            <FeedbackDefinitionDetails
+              onChange={setDetails}
+              type={type}
+              details={details}
+            />
+          </div>
+        </DialogAutoScrollBody>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
