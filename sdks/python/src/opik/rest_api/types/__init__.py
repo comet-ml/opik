@@ -259,6 +259,8 @@ from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
 from .experiment_public_status import ExperimentPublicStatus
 from .experiment_public_type import ExperimentPublicType
+from .experiment_reference import ExperimentReference
+from .experiment_reference_public import ExperimentReferencePublic
 from .experiment_score import ExperimentScore
 from .experiment_score_public import ExperimentScorePublic
 from .experiment_score_write import ExperimentScoreWrite
@@ -787,6 +789,8 @@ __all__ = [
     "ExperimentPublic",
     "ExperimentPublicStatus",
     "ExperimentPublicType",
+    "ExperimentReference",
+    "ExperimentReferencePublic",
     "ExperimentScore",
     "ExperimentScorePublic",
     "ExperimentScoreWrite",

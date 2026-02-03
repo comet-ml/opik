@@ -10868,6 +10868,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentItemBulkRecord"
+    ExperimentReference:
+      required:
+      - dataset_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+      description: "Experiment reference with ID, name, and dataset ID"
+      readOnly: true
     GuardrailsValidation:
       type: object
       properties:
@@ -11090,6 +11110,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentReference"
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -14885,6 +14907,26 @@ components:
           enum:
           - passed
           - failed
+    ExperimentReference_Public:
+      required:
+      - dataset_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+      description: "Experiment reference with ID, name, and dataset ID"
+      readOnly: true
     GuardrailsValidation_Public:
       type: object
       properties:
@@ -15009,6 +15051,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentReference_Public"
     TraceThread:
       type: object
       properties:

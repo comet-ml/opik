@@ -35,4 +35,5 @@ export interface Trace {
     hasToolSpans?: boolean;
     /** List of unique provider names from all spans in this trace, sorted alphabetically */
     providers?: string[];
+    experiment?: OpikApi.ExperimentReference;
 }

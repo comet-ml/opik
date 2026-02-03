@@ -187,6 +187,8 @@ export * from "./ExperimentPagePublic.js";
 export * from "./ExperimentPublic.js";
 export * from "./ExperimentPublicStatus.js";
 export * from "./ExperimentPublicType.js";
+export * from "./ExperimentReference.js";
+export * from "./ExperimentReferencePublic.js";
 export * from "./ExperimentScore.js";
 export * from "./ExperimentScorePublic.js";
 export * from "./ExperimentScoreWrite.js";

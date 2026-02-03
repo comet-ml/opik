@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { Comment } from "./Comment.js";
 import { ErrorInfo } from "./ErrorInfo.js";
+import { ExperimentReference } from "./ExperimentReference.js";
 import { FeedbackScore } from "./FeedbackScore.js";
 import { GuardrailsValidation } from "./GuardrailsValidation.js";
 import { JsonListString } from "./JsonListString.js";
@@ -45,6 +46,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
     hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
     providers: core.serialization.list(core.serialization.string()).optional(),
+    experiment: ExperimentReference.optional(),
 });
 
 export declare namespace Trace {
@@ -77,5 +79,6 @@ export declare namespace Trace {
         llm_span_count?: number | null;
         has_tool_spans?: boolean | null;
         providers?: string[] | null;
+        experiment?: ExperimentReference.Raw | null;
     }
 }
