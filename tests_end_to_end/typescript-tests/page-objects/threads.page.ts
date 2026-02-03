@@ -57,7 +57,13 @@ export class ThreadsPage {
   }
 
   async openThreadContent(threadId: string): Promise<void> {
-    await this.page.getByRole('button', { name: threadId }).click();
+    // Click on the row containing the thread ID (not the ID cell itself, which copies to clipboard)
+    await this.page
+      .getByRole('row')
+      .filter({ has: this.page.getByRole('cell', { name: threadId, exact: true }) })
+      .click();
+    // Wait for thread panel to be visible
+    await this.threadContainer.waitFor({ state: 'visible' });
   }
 
   async checkMessageInThread(message: string, isOutput: boolean = false): Promise<void> {

@@ -36,7 +36,9 @@ export class PromptsPage extends BasePage {
 
   async clickPrompt(name: string): Promise<void> {
     await this.searchPrompt(name);
-    await this.page.getByRole('link', { name }).first().click();
+    await this.page.getByRole('cell', { name, exact: true }).click();
+    // Wait for navigation to prompt details page (UUID pattern)
+    await this.page.waitForURL(/\/prompts\/[0-9a-f-]{36}/);
   }
 
   async deletePrompt(name: string): Promise<void> {
@@ -95,8 +97,7 @@ export class PromptDetailsPage {
       const cells = row.locator('td');
 
       const commitIdCell = cells.nth(1);
-      const commitIdLink = commitIdCell.locator('a');
-      const commitId = await commitIdLink.textContent();
+      const commitId = await commitIdCell.textContent();
 
       const promptCell = cells.nth(2);
       const promptCode = promptCell.locator('code');

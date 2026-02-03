@@ -36,7 +36,9 @@ export class ExperimentsPage extends BasePage {
 
   async clickExperiment(name: string): Promise<void> {
     await this.searchExperiment(name);
-    await this.page.getByRole('link', { name }).first().click();
+    await this.page.getByRole('cell', { name, exact: true }).click();
+    // Wait for navigation to experiment details page (UUID pattern)
+    await this.page.waitForURL(/\/experiments\/[0-9a-f-]{36}/);
   }
 
   async deleteExperiment(name: string): Promise<void> {
