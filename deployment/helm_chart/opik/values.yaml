@@ -703,6 +703,9 @@ zookeeper:
       value: "512M"
     - name: ZOO_DATA_DIR
       value: "/bitnami/zookeeper/data"
+  selectorLabels:
+    name: zookeeper-opik
+    instance: opik
 
     # resources:
     #   requests:
