@@ -25,7 +25,6 @@ const VersionOption: React.FC<VersionOptionProps> = ({
       className={cn(
         "flex h-auto min-h-10 flex-col cursor-pointer justify-center py-2 pl-12 min-w-40 focus:bg-primary-foreground focus:text-foreground",
         {
-          "bg-primary-foreground/50": isSelected,
           "bg-primary-foreground": isSelected,
         },
       )}
