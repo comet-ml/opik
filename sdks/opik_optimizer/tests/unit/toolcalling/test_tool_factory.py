@@ -9,8 +9,6 @@ from opik_optimizer.utils.toolcalling.tool_factory import (
 
 
 def test_tool_factory__resolves_mcp_tools(monkeypatch) -> None:
-    factory = ToolCallingFactory()
-
     def _fake_get_signature(self, server, tool_name, signature_override):
         return ToolSignature(
             name=tool_name,
@@ -43,8 +41,6 @@ def test_tool_factory__resolves_mcp_tools(monkeypatch) -> None:
 
 
 def test_tool_factory__keeps_pre_resolved_tools(monkeypatch) -> None:
-    factory = ToolCallingFactory()
-
     def _fake_callable(**_kwargs):
         return "ok"
 
@@ -99,7 +95,10 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch) -> None:
             FakeTool(
                 name="get-library-docs",
                 description="remote docs tool",
-                input_schema={"type": "object", "properties": {"query": {"type": "string"}}},
+                input_schema={
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
             )
         ]
 
