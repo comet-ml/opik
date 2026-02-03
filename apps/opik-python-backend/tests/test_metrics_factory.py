@@ -385,6 +385,26 @@ def my_metric(dataset_item, llm_output):
 class TestGEvalTemplateInterpolation:
     """Tests for GEval metric template interpolation with dataset item fields."""
 
+    def test_geval_with_none_params_uses_defaults(self):
+        """Test that GEval handles explicit None params without crashing."""
+        # Callers may explicitly pass None for optional fields
+        params = {
+            "task_introduction": None,
+            "evaluation_criteria": None
+        }
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+
+    def test_geval_with_missing_params_uses_defaults(self):
+        """Test that GEval handles missing params using defaults."""
+        params = {}
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+
     def test_geval_without_placeholders_creates_single_instance(self):
         """Test that GEval without placeholders creates a single reusable instance."""
         from opik_backend.studio.metrics import _interpolate_template
@@ -518,6 +538,36 @@ class TestGEvalInterpolationHelpers:
         result = _interpolate_template(template, dataset_item)
         
         assert result == "Count: 123, Active: True"
+
+    def test_interpolate_template_dotted_keys(self):
+        """Test interpolating keys with dots (e.g., user.name)."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "User: {{user.name}}, ID: {{user.id}}"
+        dataset_item = {"user.name": "Alice", "user.id": "12345"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "User: Alice, ID: 12345"
+
+    def test_interpolate_template_hyphenated_keys(self):
+        """Test interpolating keys with hyphens (e.g., answer-key)."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "Answer: {{answer-key}}, Type: {{response-type}}"
+        dataset_item = {"answer-key": "correct", "response-type": "multiple-choice"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "Answer: correct, Type: multiple-choice"
+
+    def test_interpolate_template_mixed_special_chars(self):
+        """Test interpolating keys with mixed dots, hyphens, and underscores."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        template = "Value: {{var_with-special.chars}}"
+        dataset_item = {"var_with-special.chars": "complex_value"}
+        result = _interpolate_template(template, dataset_item)
+        
+        assert result == "Value: complex_value"
 
     def test_has_template_placeholders_true(self):
         """Test detecting placeholders in text."""

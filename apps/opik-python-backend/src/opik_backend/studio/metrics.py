@@ -251,6 +251,9 @@ def _interpolate_template(template: str, dataset_item: Dict[str, Any]) -> str:
     Replaces {{field_name}} placeholders with values from the dataset item.
     If a field is not found, the placeholder is left unchanged.
     
+    Supports field names with alphanumerics, underscores, dots, and hyphens
+    (e.g., {{answer}}, {{user.name}}, {{answer-key}}).
+    
     Args:
         template: String containing {{field_name}} placeholders
         dataset_item: Dictionary of dataset item fields
@@ -270,7 +273,8 @@ def _interpolate_template(template: str, dataset_item: Dict[str, Any]) -> str:
             return str(dataset_item[field_name])
         return match.group(0)  # Leave unchanged if not found
     
-    return re.sub(r'\{\{\s*(\w+)\s*\}\}', replace_match, template)
+    # Match field names with alphanumerics, underscores, dots, and hyphens
+    return re.sub(r'\{\{\s*([\w.-]+)\s*\}\}', replace_match, template)
 
 
 def _has_template_placeholders(text: str) -> bool:
@@ -303,8 +307,9 @@ def _build_geval_metric(params: Dict[str, Any], model: str) -> Callable:
         and dataset_item={"answer": "Paris"}, the LLM judge will see:
         "Check if output matches expected: Paris"
     """
-    task_intro_template = params.get("task_introduction", "Evaluate the output")
-    eval_criteria_template = params.get("evaluation_criteria", "")
+    # Normalize nullable params to strings - callers may pass explicit None
+    task_intro_template = params.get("task_introduction") or "Evaluate the output"
+    eval_criteria_template = params.get("evaluation_criteria") or ""
     
     # Check if templates contain placeholders that need runtime interpolation
     needs_interpolation = (
