@@ -1,4 +1,6 @@
 import { CellContext } from "@tanstack/react-table";
+import { AlertTriangle } from "lucide-react";
+import { Tag } from "@/components/ui/tag";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { WorkspaceMember } from "./types";
@@ -19,7 +21,12 @@ const WorkspaceMemberWarningCell = (
       tableMetadata={context.table.options.meta}
     >
       <TooltipWrapper content={mismatch.message}>
-        <span>Permissions mismatch</span>
+        <Tag variant="yellow" size="md">
+          <div className="flex items-center gap-1">
+            <AlertTriangle className="size-3 shrink-0" />
+            <span className="truncate">Permissions mismatch</span>
+          </div>
+        </Tag>
       </TooltipWrapper>
     </CellWrapper>
   );
