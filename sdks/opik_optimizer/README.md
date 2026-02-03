@@ -15,9 +15,9 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 
 ## 🎯 Key Features
 
-* **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` methods
+* **Standardized API**: All optimizers follow the same interface for `optimize_prompt()`
 * **Optimizer Chaining**: Results from one optimizer can be used as input for another
-* **MCP Support**: Built-in support for Model Context Protocol tool calling
+* **MCP Support**: Built-in support for Model Context Protocol tool calling with `ChatPrompt.tools`
 * **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
 * **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
 * **Multimodal Prompts**: Supports OpenAI-style content parts (text, image, audio, video) across optimizers
@@ -221,12 +221,32 @@ result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric
 ### True Tool Optimization (MCP) - Beta
 
 ```python
-from opik_optimizer import MetaPromptOptimizer
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
 # MCP tool optimization is currently in Beta
 # See scripts/litellm_metaprompt_context7_mcp_example.py for working examples
 optimizer = MetaPromptOptimizer(model="gpt-4")
 # MCP tools are configured through mcp.json manifests
+prompt = ChatPrompt(
+    system="Use the docs tool when needed.",
+    user="{user_query}",
+    tools=[
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "command": "npx",
+            "args": ["-y", "@upstash/context7-mcp"],
+            "env": {},
+            "allowed_tools": ["get-library-docs"],
+        }
+    ],
+)
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=metric,
+    optimize_tools=True,
+)
 ```
 
 For comprehensive documentation on tool optimization, see the [Tool Optimization Guide](https://www.comet.com/docs/opik/agent_optimization/algorithms/tool_optimization).
@@ -276,7 +296,41 @@ pip install mcp
 python scripts/litellm_metaprompt_context7_mcp_example.py
 ```
 
-Underlying utilities are available in `src/opik_optimizer/utils/{prompt_segments,mcp,mcp_simulator}.py`.
+Underlying utilities are available in `src/opik_optimizer/{utils/toolcalling,utils/prompt_segments}.py`.
+
+Local vs remote MCP configuration examples:
+
+```python
+from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
+
+local_tool = {
+    "type": "mcp",
+    "server_label": "local_docs",
+    "command": "npx",
+    "args": ["-y", "@upstash/context7-mcp"],
+    "env": {},
+    "allowed_tools": ["get-library-docs"],
+}
+
+remote_tool = {
+    "type": "mcp",
+    "server_label": "remote_docs",
+    "server_url": "https://mcp.example.com",
+    "headers": {"Authorization": "Bearer $TOKEN"},
+    "allowed_tools": ["search-docs"],
+}
+
+cursor_config = {
+    "mcpServers": {
+        "context7": {
+            "url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+        }
+    }
+}
+
+tools = cursor_mcp_config_to_tools(cursor_config)
+```
 
 <Note>
   **Important:** True tool optimization (MCP) is currently in **Beta**. Most examples show **agent optimization** (optimizing prompts for agents that use tools), which is different from optimizing the tools themselves.
