@@ -462,6 +462,50 @@ You can use the `nb_samples` parameter to specify the number of samples to use f
 
 </CodeBlocks>
 
+### Evaluating a filtered subset of the dataset
+
+You can evaluate only a subset of your dataset items by using the `dataset_filter_string` parameter. This is useful when you want to run experiments on specific categories of data or test particular scenarios:
+
+<CodeBlocks>
+    ```python title="Python" language="python"
+    from opik.evaluation import evaluate
+
+    # Evaluate only items with specific tags
+    evaluation = evaluate(
+        experiment_name="Production test cases",
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+        dataset_filter_string='tags contains "production"',
+    )
+
+    # Evaluate items matching multiple conditions
+    evaluation = evaluate(
+        experiment_name="Hard finance questions",
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+        dataset_filter_string='data.category = "finance" AND data.difficulty = "hard"',
+    )
+
+    # Filter by date range
+    evaluation = evaluate(
+        experiment_name="Recent test cases",
+        dataset=dataset,
+        task=evaluation_task,
+        scoring_metrics=[hallucination_metric],
+        dataset_filter_string='created_at >= "2024-06-01T00:00:00Z"',
+    )
+    ```
+
+</CodeBlocks>
+
+The filter uses Opik Query Language (OQL) syntax. For more details on filter syntax and supported columns, see [Filtering syntax](/evaluation/manage_datasets#filter-syntax).
+
+<Tip>
+  You can combine filtering with other parameters like `nb_samples` to evaluate a specific number of items from a filtered subset.
+</Tip>
+
 ### Sampling the dataset for evaluation
 
 You can use the `dataset_sampler` parameter to specify the instance of dataset sampler to use for sampling the dataset.
