@@ -687,3 +687,34 @@ def verify_chat_prompt_version(
         f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
     )
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
+
+
+def verify_dataset_filtered_items(
+    opik_client: opik.Opik,
+    dataset_name: str,
+    filter_string: str,
+    expected_count: int,
+    expected_inputs: Set[str],
+) -> None:
+    """
+    Verifies that filtering dataset items with filter_string returns the expected results.
+
+    Args:
+        opik_client: The Opik client instance
+        dataset_name: The name of the dataset to retrieve
+        filter_string: The filter string to apply
+        expected_count: Expected number of items matching the filter
+        expected_inputs: Set of expected question strings from input field
+    """
+    dataset = opik_client.get_dataset(name=dataset_name)
+
+    filtered_items = dataset.get_items(filter_string=filter_string)
+    assert len(filtered_items) == expected_count, (
+        f"Expected {expected_count} items, got {len(filtered_items)}"
+    )
+
+    if expected_count > 0:
+        inputs = {item["input"]["question"] for item in filtered_items}
+        assert inputs == expected_inputs, (
+            f"Input mismatch: {inputs} != {expected_inputs}"
+        )

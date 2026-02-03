@@ -49,7 +49,7 @@ def export_traces(
             from opik.api_objects import opik_query_language
 
             # Try to parse the filter to validate syntax
-            oql = opik_query_language.OpikQueryLanguage(filter_string)
+            oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string)
             if oql.get_filter_expressions() is None and filter_string.strip():
                 console.print(
                     f"[red]Error: Invalid filter syntax: Filter '{filter_string}' could not be parsed.[/red]"
@@ -112,7 +112,9 @@ def export_traces(
                 if filter_string:
                     from opik.api_objects import opik_query_language
 
-                    oql = opik_query_language.OpikQueryLanguage(filter_string)
+                    oql = opik_query_language.OpikQueryLanguage.for_traces(
+                        filter_string
+                    )
                     parsed_filter = oql.parsed_filters  # This is the JSON string
                     if debug:
                         debug_print(
@@ -293,7 +295,7 @@ def export_project_by_name(
                 from opik.api_objects import opik_query_language
 
                 # Try to parse the filter to validate syntax
-                oql = opik_query_language.OpikQueryLanguage(filter_string)
+                oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string)
                 if oql.get_filter_expressions() is None and filter_string.strip():
                     console.print(
                         f"[red]Error: Invalid filter syntax: Filter '{filter_string}' could not be parsed.[/red]"

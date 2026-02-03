@@ -42,7 +42,7 @@ class ExperimentsClient:
         # prepare filter expression
         if filter_string is not None:
             filter_expression = json.dumps(
-                opik_query_language.OpikQueryLanguage(
+                opik_query_language.OpikQueryLanguage.for_traces(
                     filter_string
                 ).get_filter_expressions()
             )
