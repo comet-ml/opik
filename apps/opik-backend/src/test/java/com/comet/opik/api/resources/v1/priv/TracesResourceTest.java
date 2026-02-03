@@ -6461,9 +6461,54 @@ class TracesResourceTest {
             assertThat(actualTrace1.experiment().id()).isEqualTo(experimentId);
             assertThat(actualTrace1.experiment().name()).isEqualTo(experiment.name());
             assertThat(actualTrace1.experiment().datasetId()).isEqualTo(context.datasetId());
+            assertThat(actualTrace1.experiment().datasetItemId()).isEqualTo(experimentItem.datasetItemId());
 
             // Verify trace2 has no experiment reference
             assertThat(actualTrace2.experiment()).isNull();
+        }
+
+        @Test
+        @DisplayName("When trace is linked to experiment, then getById returns experiment reference")
+        void getTraceById__whenTraceLinkedToExperiment__thenReturnExperimentReference() {
+            // Given: Create workspace, project, and dataset
+            var context = setupWorkspaceProjectDataset();
+
+            // Create experiment
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("experiment")
+                    .datasetName(context.datasetName())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, context.workspaceName());
+
+            // Create trace
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-with-experiment")
+                    .startTime(Instant.now())
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, context.workspaceName());
+
+            // Link trace to experiment
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .traceId(trace.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem), API_KEY, context.workspaceName());
+
+            // When: Get trace by ID
+            var actualTrace = traceResourceClient.getById(trace.id(), context.workspaceName(), API_KEY);
+
+            // Then: Verify experiment reference is returned
+            assertThat(actualTrace.experiment()).isNotNull();
+            assertThat(actualTrace.experiment().id()).isEqualTo(experimentId);
+            assertThat(actualTrace.experiment().name()).isEqualTo(experiment.name());
+            assertThat(actualTrace.experiment().datasetId()).isEqualTo(context.datasetId());
+            assertThat(actualTrace.experiment().datasetItemId()).isEqualTo(experimentItem.datasetItemId());
         }
 
         @ParameterizedTest
