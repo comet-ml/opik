@@ -29,6 +29,16 @@ export type MessageContent =
   | string
   | Array<TextPart | ImagePart | VideoPart | AudioPart>;
 
+export interface PromptLibraryMetadata {
+  name: string;
+  id: string;
+  version: {
+    template: string;
+    commit?: string;
+    id: string;
+  };
+}
+
 export interface LLMMessage {
   id: string;
   content: MessageContent;
@@ -36,6 +46,7 @@ export interface LLMMessage {
   promptId?: string;
   promptVersionId?: string;
   autoImprove?: boolean;
+  promptLibraryMetadata?: PromptLibraryMetadata;
 }
 
 export type ProviderMessageType = Omit<LLMMessage, "id"> & {

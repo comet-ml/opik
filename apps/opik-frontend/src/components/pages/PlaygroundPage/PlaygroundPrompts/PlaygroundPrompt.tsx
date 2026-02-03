@@ -48,6 +48,7 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
+import { PromptLibraryMetadata } from "@/types/playground";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -106,6 +107,7 @@ const PlaygroundPrompt = ({
 
   const {
     chatPromptData,
+    chatPromptVersionData,
     loadedChatPromptRef,
     chatPromptTemplate,
     hasUnsavedChatPromptChanges,
@@ -114,6 +116,55 @@ const PlaygroundPrompt = ({
     messages,
     onMessagesLoaded: handleChatPromptMessagesLoaded,
   });
+
+  // Store promptLibraryMetadata when a chat prompt is successfully loaded and unchanged
+  useEffect(() => {
+    // Set metadata when prompt is loaded from library and unchanged
+    if (
+      selectedChatPromptId &&
+      chatPromptData &&
+      chatPromptVersionData &&
+      chatPromptData.id === selectedChatPromptId &&
+      !hasUnsavedChatPromptChanges
+    ) {
+      const metadata: PromptLibraryMetadata = {
+        name: chatPromptData.name,
+        id: chatPromptData.id,
+        version: {
+          template: chatPromptVersionData.template || "",
+          id: chatPromptVersionData.id,
+          ...(chatPromptVersionData.commit && {
+            commit: chatPromptVersionData.commit,
+          }),
+        },
+      };
+      // Only update if metadata is different to avoid infinite loops
+      if (
+        !prompt?.promptLibraryMetadata ||
+        prompt.promptLibraryMetadata.version.id !== metadata.version.id
+      ) {
+        updatePrompt(promptId, { promptLibraryMetadata: metadata });
+      }
+    }
+
+    // Clear metadata when prompt has unsaved changes (was edited)
+    if (hasUnsavedChatPromptChanges && prompt?.promptLibraryMetadata) {
+      updatePrompt(promptId, { promptLibraryMetadata: undefined });
+    }
+
+    // Clear metadata when no chat prompt is selected
+    if (!selectedChatPromptId && prompt?.promptLibraryMetadata) {
+      updatePrompt(promptId, { promptLibraryMetadata: undefined });
+    }
+  }, [
+    selectedChatPromptId,
+    chatPromptData,
+    chatPromptVersionData,
+    hasUnsavedChatPromptChanges,
+    promptId,
+    updatePrompt,
+    prompt?.promptLibraryMetadata,
+  ]);
 
   const provider = providerResolver(model);
 

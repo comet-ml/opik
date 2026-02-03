@@ -11,7 +11,7 @@ import isUndefined from "lodash/isUndefined";
 import isEqual from "fast-deep-equal";
 
 import { OnChangeFn } from "@/types/shared";
-import { LLMMessage, MessageContent } from "@/types/llm";
+import { LLMMessage, MessageContent, PromptLibraryMetadata } from "@/types/llm";
 import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import { Separator } from "@/components/ui/separator";
@@ -163,9 +163,21 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   );
 
   const resetHandler = useCallback(() => {
+    const metadata: PromptLibraryMetadata = {
+      name: promptData!.name,
+      id: promptData!.id,
+      version: {
+        template: promptData!.latest_version?.template || "",
+        id: promptData!.latest_version?.id || "",
+        ...(promptData!.latest_version?.commit && {
+          commit: promptData!.latest_version.commit,
+        }),
+      },
+    };
     onChangeMessage({
       content: parsePromptVersionContent(promptData!.latest_version),
       promptVersionId: promptData!.latest_version?.id,
+      promptLibraryMetadata: metadata,
     });
   }, [onChangeMessage, promptData]);
 
@@ -256,6 +268,38 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     setIsHoldActionsVisible(isPromptSelectBoxOpenedRef.current || saveWarning);
   }, [saveWarning, setIsHoldActionsVisible]);
 
+  // This effect sets promptLibraryMetadata for messages that already have promptId
+  // but no metadata (e.g., loaded from persisted state before metadata feature was added)
+  // Only set metadata if the prompt hasn't been edited (saveWarning is false)
+  useEffect(() => {
+    if (
+      promptId &&
+      promptData?.id === promptId &&
+      !message.promptLibraryMetadata &&
+      !saveWarning
+    ) {
+      const metadata: PromptLibraryMetadata = {
+        name: promptData.name,
+        id: promptData.id,
+        version: {
+          template: promptData.latest_version?.template || "",
+          id: promptData.latest_version?.id || "",
+          ...(promptData.latest_version?.commit && {
+            commit: promptData.latest_version.commit,
+          }),
+        },
+      };
+      onChangeMessage({ promptLibraryMetadata: metadata });
+    }
+  }, [promptId, promptData, message.promptLibraryMetadata, saveWarning, onChangeMessage]);
+
+  // Clear promptLibraryMetadata when the prompt is edited (saveWarning becomes true)
+  useEffect(() => {
+    if (saveWarning && message.promptLibraryMetadata) {
+      onChangeMessage({ promptLibraryMetadata: undefined });
+    }
+  }, [saveWarning, message.promptLibraryMetadata, onChangeMessage]);
+
   // This effect is used to set the template and promptVersionId after it is loaded,
   // after it was set in handleUpdateExternalPromptId function
   useEffect(() => {
@@ -291,10 +335,22 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       if (onClearOtherPromptLinks) {
         onClearOtherPromptLinks();
       }
+      const metadata: PromptLibraryMetadata = {
+        name: promptData.name,
+        id: promptData.id,
+        version: {
+          template: promptData.latest_version?.template || "",
+          id: promptData.latest_version?.id || "",
+          ...(promptData.latest_version?.commit && {
+            commit: promptData.latest_version.commit,
+          }),
+        },
+      };
       onChangeMessage({
         content: parsePromptVersionContent(promptData.latest_version),
         promptVersionId: promptData.latest_version?.id,
         promptId: promptData.id,
+        promptLibraryMetadata: metadata,
       });
       setIsLoading(false);
     }
