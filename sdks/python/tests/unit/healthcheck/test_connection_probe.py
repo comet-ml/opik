@@ -22,8 +22,19 @@ def mock_response():
     return mock.MagicMock()
 
 
-def test_check_connection_returns_healthy_on_200(mock_client, mock_response):
-    mock_response.status_code = 200
+@pytest.mark.parametrize(
+    "status_code,expected_healthy,expected_error",
+    [
+        (200, True, None),
+        (404, False, "Unexpected status code: 404"),
+        (500, False, "Unexpected status code: 500"),
+        (503, False, "Unexpected status code: 503"),
+    ],
+)
+def test_check_connection__various_status_codes__returns_expected_health_status(
+    mock_client, mock_response, status_code, expected_healthy, expected_error
+):
+    mock_response.status_code = status_code
     mock_client.get.return_value = mock_response
 
     with mock.patch(
@@ -35,59 +46,11 @@ def test_check_connection_returns_healthy_on_200(mock_client, mock_response):
         result = probe.check_connection(timeout=5.0)
 
     mock_client.get.assert_called_once_with(PING_URL, timeout=5.0)
-    assert result.is_healthy is True
-    assert result.error_message is None
+    assert result.is_healthy is expected_healthy
+    assert result.error_message == expected_error
 
 
-def test_check_connection_returns_unhealthy_on_non_200(mock_client, mock_response):
-    mock_response.status_code = 500
-    mock_client.get.return_value = mock_response
-
-    with mock.patch(
-        "opik.healthcheck.connection_probe.url_helpers"
-    ) as mock_url_helpers:
-        mock_url_helpers.get_is_alive_ping_url.return_value = PING_URL
-        probe = ConnectionProbe(base_url=BASE_URL, client=mock_client)
-
-        result = probe.check_connection(timeout=5.0)
-
-    assert result.is_healthy is False
-    assert result.error_message == "Unexpected status code: 500"
-
-
-def test_check_connection_returns_unhealthy_on_404(mock_client, mock_response):
-    mock_response.status_code = 404
-    mock_client.get.return_value = mock_response
-
-    with mock.patch(
-        "opik.healthcheck.connection_probe.url_helpers"
-    ) as mock_url_helpers:
-        mock_url_helpers.get_is_alive_ping_url.return_value = PING_URL
-        probe = ConnectionProbe(base_url=BASE_URL, client=mock_client)
-
-        result = probe.check_connection(timeout=5.0)
-
-    assert result.is_healthy is False
-    assert result.error_message == "Unexpected status code: 404"
-
-
-def test_check_connection_returns_unhealthy_on_503(mock_client, mock_response):
-    mock_response.status_code = 503
-    mock_client.get.return_value = mock_response
-
-    with mock.patch(
-        "opik.healthcheck.connection_probe.url_helpers"
-    ) as mock_url_helpers:
-        mock_url_helpers.get_is_alive_ping_url.return_value = PING_URL
-        probe = ConnectionProbe(base_url=BASE_URL, client=mock_client)
-
-        result = probe.check_connection(timeout=5.0)
-
-    assert result.is_healthy is False
-    assert result.error_message == "Unexpected status code: 503"
-
-
-def test_check_connection_handles_connect_timeout(mock_client):
+def test_check_connection__connect_timeout__returns_unhealthy(mock_client):
     mock_client.get.side_effect = httpx.ConnectTimeout("Connection timed out")
 
     with mock.patch(
@@ -102,7 +65,7 @@ def test_check_connection_handles_connect_timeout(mock_client):
     assert "Connection timeout:" in result.error_message
 
 
-def test_check_connection_handles_unexpected_exception(mock_client):
+def test_check_connection__unexpected_exception__returns_unhealthy(mock_client):
     mock_client.get.side_effect = RuntimeError("Unexpected network error")
 
     with mock.patch(
@@ -118,7 +81,7 @@ def test_check_connection_handles_unexpected_exception(mock_client):
     assert "Unexpected network error" in result.error_message
 
 
-def test_check_connection_handles_connection_error(mock_client):
+def test_check_connection__connection_error__returns_unhealthy(mock_client):
     mock_client.get.side_effect = httpx.ConnectError("Failed to connect")
 
     with mock.patch(
@@ -133,7 +96,9 @@ def test_check_connection_handles_connection_error(mock_client):
     assert "Unexpected error:" in result.error_message
 
 
-def test_check_connection_uses_provided_timeout(mock_client, mock_response):
+def test_check_connection__custom_timeout__uses_provided_timeout(
+    mock_client, mock_response
+):
     mock_response.status_code = 200
     mock_client.get.return_value = mock_response
 
@@ -148,7 +113,7 @@ def test_check_connection_uses_provided_timeout(mock_client, mock_response):
     mock_client.get.assert_called_once_with(PING_URL, timeout=10.0)
 
 
-def test_check_connection_logs_unexpected_exception(mock_client):
+def test_check_connection__unexpected_exception__logs_error(mock_client, capture_log):
     mock_client.get.side_effect = ValueError("Some unexpected error")
 
     with mock.patch(
@@ -157,10 +122,7 @@ def test_check_connection_logs_unexpected_exception(mock_client):
         mock_url_helpers.get_is_alive_ping_url.return_value = PING_URL
         probe = ConnectionProbe(base_url=BASE_URL, client=mock_client)
 
-        with mock.patch("opik.healthcheck.connection_probe.LOGGER") as mock_logger:
-            result = probe.check_connection(timeout=5.0)
+        result = probe.check_connection(timeout=5.0)
 
     assert result.is_healthy is False
-    mock_logger.exception.assert_called_once()
-    call_args = mock_logger.exception.call_args
-    assert "Unexpected error while checking connection to server" in call_args[0][0]
+    assert "Unexpected error while checking connection to server" in capture_log.text

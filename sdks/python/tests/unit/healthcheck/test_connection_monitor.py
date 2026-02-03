@@ -15,7 +15,7 @@ def mock_probe():
 class TestOpikConnectionMonitorReset:
     """Tests for OpikConnectionMonitor.reset method."""
 
-    def test_reset_clears_disconnect_info(self, mock_probe):
+    def test_reset__called__clears_disconnect_info(self, mock_probe):
         monitor = OpikConnectionMonitor(
             ping_interval=5.0,
             check_timeout=2.0,
@@ -33,7 +33,7 @@ class TestOpikConnectionMonitorReset:
 class TestOpikConnectionMonitorConnectionFailed:
     """Tests for OpikConnectionMonitor.connection_failed method."""
 
-    def test_connection_failed_sets_disconnect_info_on_first_failure(self, mock_probe):
+    def test_connection_failed__first_failure__sets_disconnect_info(self, mock_probe):
         monitor = OpikConnectionMonitor(
             ping_interval=5.0,
             check_timeout=2.0,
@@ -47,7 +47,9 @@ class TestOpikConnectionMonitorConnectionFailed:
         assert monitor.disconnect_time == 12345.0
         assert monitor.disconnect_reason == "Network error"
 
-    def test_connection_failed_ignores_subsequent_failures(self, mock_probe):
+    def test_connection_failed__subsequent_failures__preserves_first_failure_info(
+        self, mock_probe
+    ):
         monitor = OpikConnectionMonitor(
             ping_interval=5.0,
             check_timeout=2.0,
@@ -70,7 +72,7 @@ class TestOpikConnectionMonitorConnectionFailed:
 class TestOpikConnectionMonitorTick:
     """Tests for OpikConnectionMonitor.tick method."""
 
-    def test_tick_performs_check_when_interval_passed(self, mock_probe):
+    def test_tick__interval_passed__performs_check(self, mock_probe):
         mock_probe.check_connection.return_value = ProbeResult(
             is_healthy=True, error_message=None
         )
@@ -87,7 +89,7 @@ class TestOpikConnectionMonitorTick:
         assert status == ConnectionStatus.connection_ok
         assert monitor._last_beat == 100.0
 
-    def test_tick_skips_check_when_interval_not_passed(self, mock_probe):
+    def test_tick__interval_not_passed__skips_check(self, mock_probe):
         monitor = OpikConnectionMonitor(
             ping_interval=5.0,
             check_timeout=2.0,
@@ -102,7 +104,7 @@ class TestOpikConnectionMonitorTick:
         assert status == ConnectionStatus.connection_ok
         assert monitor._last_beat == 100.0
 
-    def test_tick_returns_connection_failed_when_not_connected_and_interval_not_passed(
+    def test_tick__not_connected_and_interval_not_passed__returns_connection_failed(
         self, mock_probe
     ):
         monitor = OpikConnectionMonitor(
@@ -120,7 +122,9 @@ class TestOpikConnectionMonitorTick:
         assert status == ConnectionStatus.connection_failed
         assert monitor._last_beat == 100.0
 
-    def test_tick_detects_connection_failure(self, mock_probe):
+    def test_tick__probe_returns_unhealthy__detects_connection_failure(
+        self, mock_probe
+    ):
         mock_probe.check_connection.return_value = ProbeResult(
             is_healthy=False, error_message="Connection timeout"
         )
@@ -138,7 +142,9 @@ class TestOpikConnectionMonitorTick:
         assert monitor.disconnect_reason == "Connection timeout"
         assert monitor._last_beat == 100.0
 
-    def test_tick_detects_connection_restored(self, mock_probe):
+    def test_tick__probe_returns_healthy_after_disconnect__detects_connection_restored(
+        self, mock_probe
+    ):
         mock_probe.check_connection.return_value = ProbeResult(
             is_healthy=True, error_message=None
         )
@@ -160,7 +166,7 @@ class TestOpikConnectionMonitorTick:
 class TestOpikConnectionMonitorIntegration:
     """Integration tests for OpikConnectionMonitor."""
 
-    def test_full_lifecycle_connect_disconnect_reconnect(self, mock_probe):
+    def test_lifecycle__connect_disconnect_reconnect__happyflow(self, mock_probe):
         monitor = OpikConnectionMonitor(
             ping_interval=1.0,
             check_timeout=0.5,
