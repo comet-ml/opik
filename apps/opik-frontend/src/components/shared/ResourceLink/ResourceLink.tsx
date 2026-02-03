@@ -148,6 +148,7 @@ type ResourceLinkProps = {
   gapSize?: number;
   tooltipContent?: string;
   asTag?: boolean;
+  isSmall?: boolean;
   isDeleted?: boolean;
   className?: string;
 };
@@ -164,6 +165,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
   gapSize = 2,
   tooltipContent = "",
   asTag = false,
+  isSmall = false,
   isDeleted = false,
   className,
 }) => {
@@ -199,6 +201,7 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
               gapSize === 3 && "gap-3",
               gapSize === 4 && "gap-4",
               deleted && "opacity-50 cursor-default",
+              isSmall && "size-8 justify-center",
               className,
             )}
           >
@@ -211,26 +214,30 @@ const ResourceLink: React.FunctionComponent<ResourceLinkProps> = ({
               )}
               style={{ color: props.color }}
             />
-            <div
-              className={cn(
-                "truncate",
-                variant === "transparent" && [
-                  "text-muted-slate",
-                  "comet-body-s-accented",
-                ],
-              )}
-            >
-              {text}
-            </div>
-            {!deleted && (
-              <ArrowUpRight
-                className={cn(
-                  "shrink-0 text-muted-slate",
-                  iconsSize === 3 && "size-3",
-                  iconsSize === 4 && "size-4",
-                  iconsSize === 5 && "size-5",
+            {!isSmall && (
+              <>
+                <div
+                  className={cn(
+                    "truncate",
+                    variant === "transparent" && [
+                      "text-muted-slate",
+                      "comet-body-s-accented",
+                    ],
+                  )}
+                >
+                  {text}
+                </div>
+                {!deleted && (
+                  <ArrowUpRight
+                    className={cn(
+                      "shrink-0 text-muted-slate",
+                      iconsSize === 3 && "size-3",
+                      iconsSize === 4 && "size-4",
+                      iconsSize === 5 && "size-5",
+                    )}
+                  />
                 )}
-              />
+              </>
             )}
           </Tag>
         </TooltipWrapper>

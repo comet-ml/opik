@@ -436,6 +436,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               }}
               tooltipContent={`View this item in experiment: ${experiment.name}`}
               className="h-8"
+              isSmall={isSmall}
             />
           )}
           {hasThread && (
