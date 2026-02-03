@@ -253,7 +253,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
 
   const noDataText = useMemo(() => {
     if (isDraftMode && deletedIds.size > 0 && totalCount !== deletedIds.size) {
-      return "No rows on this page";
+      return "All dataset items on this page have been deleted";
     }
     return "There are no dataset items yet";
   }, [isDraftMode, deletedIds.size, totalCount]);

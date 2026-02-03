@@ -1,5 +1,5 @@
 import React from "react";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Dataset } from "@/types/datasets";
@@ -9,6 +9,8 @@ interface DatasetOptionProps {
   isSelected: boolean;
   isOpen: boolean;
   showChevron: boolean;
+  isDisabled?: boolean;
+  disabledTooltip?: string;
   onMainAreaClick: () => void;
   onChevronMouseEnter: () => void;
   onChevronMouseLeave: () => void;
@@ -21,6 +23,8 @@ const DatasetOption = React.forwardRef<HTMLDivElement, DatasetOptionProps>(
       isSelected,
       isOpen,
       showChevron,
+      isDisabled = false,
+      disabledTooltip,
       onMainAreaClick,
       onChevronMouseEnter,
       onChevronMouseLeave,
@@ -29,16 +33,28 @@ const DatasetOption = React.forwardRef<HTMLDivElement, DatasetOptionProps>(
   ) => {
     const isHighlighted = isSelected || isOpen;
 
+    const handleClick = () => {
+      if (!isDisabled) {
+        onMainAreaClick();
+      }
+    };
+
     return (
       <div
         ref={ref}
-        className="comet-body-s group relative flex h-auto min-h-10 w-full gap-1 rounded-sm p-px"
+        className={cn(
+          "comet-body-s group relative flex h-auto min-h-10 w-full gap-1 rounded-sm p-px",
+          isDisabled && "opacity-50",
+        )}
       >
         <div
-          onClick={onMainAreaClick}
+          onClick={handleClick}
           className={cn(
-            "flex flex-1 cursor-pointer items-start gap-2 rounded px-2 py-2 group-hover:bg-primary-foreground",
-            isHighlighted && "bg-primary-foreground",
+            "flex flex-1 items-start gap-2 rounded px-2 py-2",
+            isDisabled
+              ? "cursor-not-allowed"
+              : "cursor-pointer group-hover:bg-primary-foreground",
+            isHighlighted && !isDisabled && "bg-primary-foreground",
           )}
         >
           <div className="mt-0.5 size-4 shrink-0">
@@ -56,17 +72,25 @@ const DatasetOption = React.forwardRef<HTMLDivElement, DatasetOptionProps>(
           </TooltipWrapper>
         </div>
 
-        {showChevron && (
-          <div
-            onMouseEnter={onChevronMouseEnter}
-            onMouseLeave={onChevronMouseLeave}
-            className={cn(
-              "relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3",
-              isHighlighted && "bg-primary-foreground",
-            )}
-          >
-            <ChevronRight className="size-3.5 text-light-slate" />
+        {isDisabled ? (
+          <div className="relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3">
+            <TooltipWrapper content={disabledTooltip}>
+              <Info className="size-3.5 text-light-slate" />
+            </TooltipWrapper>
           </div>
+        ) : (
+          showChevron && (
+            <div
+              onMouseEnter={onChevronMouseEnter}
+              onMouseLeave={onChevronMouseLeave}
+              className={cn(
+                "relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3",
+                isHighlighted && "bg-primary-foreground",
+              )}
+            >
+              <ChevronRight className="size-3.5 text-light-slate" />
+            </div>
+          )
         )}
       </div>
     );

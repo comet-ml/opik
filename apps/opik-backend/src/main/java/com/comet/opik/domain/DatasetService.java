@@ -614,8 +614,6 @@ class DatasetServiceImpl implements DatasetService {
 
         Map<UUID, DatasetVersion> latestVersionsByDatasetId = fetchLatestVersionsByDatasetIds(ids);
 
-        Map<UUID, Long> versionCounts = fetchVersionCountsByDatasetIds(ids);
-
         return datasets.stream()
                 .map(dataset -> {
                     var resume = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
@@ -639,7 +637,6 @@ class DatasetServiceImpl implements DatasetService {
                             .experimentCount(resume.experimentCount())
                             .datasetItemsCount(itemsCount)
                             .optimizationCount(optimizationSummary.optimizationCount())
-                            .versionCount(versionCounts.getOrDefault(dataset.id(), 0L))
                             .mostRecentExperimentAt(resume.mostRecentExperimentAt())
                             .mostRecentOptimizationAt(optimizationSummary.mostRecentOptimizationAt())
                             .latestVersion(DatasetVersionMapper.INSTANCE.toDatasetVersionSummary(latestVersion))
@@ -660,21 +657,6 @@ class DatasetServiceImpl implements DatasetService {
             List<DatasetVersion> latestVersions = dao.findLatestVersionsByDatasetIds(datasetIds, workspaceId);
             return latestVersions.stream()
                     .collect(toMap(DatasetVersion::datasetId, Function.identity()));
-        });
-    }
-
-    private Map<UUID, Long> fetchVersionCountsByDatasetIds(Set<UUID> datasetIds) {
-        if (datasetIds.isEmpty()) {
-            return Map.of();
-        }
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        return template.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(DatasetVersionDAO.class);
-            List<DatasetVersionCount> versionCounts = dao.findVersionCountsByDatasetIds(datasetIds, workspaceId);
-            return versionCounts.stream()
-                    .collect(toMap(DatasetVersionCount::datasetId, DatasetVersionCount::versionCount));
         });
     }
 

@@ -151,9 +151,9 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
 
   const renderNestedList = () => {
     return filteredDatasets.map((dataset) => {
-      const hasMultipleVersions = dataset.version_count > 1;
-      const isOpen = dataset.id === openDatasetId && hasMultipleVersions;
+      const isOpen = dataset.id === openDatasetId;
       const isSelected = dataset.id === datasetId;
+      const isEmpty = !dataset.latest_version;
 
       return (
         <Popover key={dataset.id} open={isOpen}>
@@ -162,44 +162,42 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
               dataset={dataset}
               isSelected={isSelected}
               isOpen={isOpen}
-              showChevron={hasMultipleVersions}
+              showChevron={!isEmpty}
+              isDisabled={isEmpty}
+              disabledTooltip="This dataset is empty"
               onMainAreaClick={() => handleSelectLatestVersion(dataset)}
-              onChevronMouseEnter={() =>
-                hasMultipleVersions && handleOpenVersions(dataset.id)
-              }
+              onChevronMouseEnter={() => handleOpenVersions(dataset.id)}
               onChevronMouseLeave={debouncedCloseVersions}
             />
           </PopoverTrigger>
 
-          {hasMultipleVersions && (
-            <PopoverContent
-              side="right"
-              align="start"
-              className="max-h-[400px] overflow-y-auto p-0.5"
-              onMouseEnter={() => handleOpenVersions(dataset.id)}
-              onMouseLeave={debouncedCloseVersions}
-              hideWhenDetached
-            >
-              {isLoadingVersions ? (
-                <div className="flex items-center justify-center py-4">
-                  <Spinner />
-                </div>
-              ) : versions.length === 0 ? (
-                <div className="comet-body-s flex min-w-40 items-center justify-center py-2 text-muted-slate">
-                  No versions
-                </div>
-              ) : (
-                versions.map((version) => (
-                  <VersionOption
-                    key={version.id}
-                    version={version}
-                    datasetId={dataset.id}
-                    isSelected={selectedVersionId === version.id}
-                  />
-                ))
-              )}
-            </PopoverContent>
-          )}
+          <PopoverContent
+            side="right"
+            align="start"
+            className="max-h-[400px] overflow-y-auto p-0.5"
+            onMouseEnter={() => handleOpenVersions(dataset.id)}
+            onMouseLeave={debouncedCloseVersions}
+            hideWhenDetached
+          >
+            {isLoadingVersions ? (
+              <div className="flex items-center justify-center py-4">
+                <Spinner />
+              </div>
+            ) : versions.length === 0 ? (
+              <div className="comet-body-s flex min-w-40 items-center justify-center py-2 text-muted-slate">
+                No versions
+              </div>
+            ) : (
+              versions.map((version) => (
+                <VersionOption
+                  key={version.id}
+                  version={version}
+                  datasetId={dataset.id}
+                  isSelected={selectedVersionId === version.id}
+                />
+              ))
+            )}
+          </PopoverContent>
         </Popover>
       );
     });
