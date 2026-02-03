@@ -1,7 +1,7 @@
 import opik
-from . import verifiers
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects import helpers
+from . import verifiers
 
 
 def test_create_and_populate_dataset__happyflow(
@@ -140,4 +140,74 @@ def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
         name=dataset_name,
         description=DESCRIPTION,
         dataset_items=[],
+    )
+
+
+def test_get_items_with_filter__returns_filtered_items(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """Test that get_items with filter_string returns correct filtered items."""
+    DESCRIPTION = "E2E test dataset for filtering"
+
+    # Create dataset with items that have different data.category values
+    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of France?"},
+                "expected_output": {"output": "Paris"},
+                "category": "geography",
+            },
+            {
+                "input": {"question": "What is 2 + 2?"},
+                "expected_output": {"output": "4"},
+                "category": "math",
+            },
+            {
+                "input": {"question": "What is the capital of Poland?"},
+                "expected_output": {"output": "Warsaw"},
+                "category": "geography",
+            },
+        ]
+    )
+
+    verifiers.verify_dataset_filtered_items(
+        opik_client=opik_client,
+        dataset_name=dataset_name,
+        filter_string='data.category = "geography"',
+        expected_count=2,
+        expected_inputs={
+            "What is the capital of France?",
+            "What is the capital of Poland?",
+        },
+    )
+
+
+def test_get_items_with_filter__filter_excludes_all_items__returns_empty_list(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """Test that get_items with filter that matches no items returns empty list."""
+    DESCRIPTION = "E2E test dataset for empty filter"
+
+    # Create dataset with items
+    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of France?"},
+                "category": "geography",
+            },
+            {
+                "input": {"question": "What is the capital of Germany?"},
+                "category": "geography",
+            },
+        ]
+    )
+
+    verifiers.verify_dataset_filtered_items(
+        opik_client=opik_client,
+        dataset_name=dataset_name,
+        filter_string='data.category = "nonexistent"',
+        expected_count=0,
+        expected_inputs=set(),
     )
