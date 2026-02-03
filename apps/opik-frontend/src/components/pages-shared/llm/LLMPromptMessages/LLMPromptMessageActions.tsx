@@ -291,7 +291,13 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       };
       onChangeMessage({ promptLibraryMetadata: metadata });
     }
-  }, [promptId, promptData, message.promptLibraryMetadata, saveWarning, onChangeMessage]);
+  }, [
+    promptId,
+    promptData,
+    message.promptLibraryMetadata,
+    saveWarning,
+    onChangeMessage,
+  ]);
 
   // Clear promptLibraryMetadata when the prompt is edited (saveWarning becomes true)
   useEffect(() => {
