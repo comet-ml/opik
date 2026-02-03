@@ -8,7 +8,7 @@ import warnings
 from typing import Any
 from collections.abc import Callable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from litellm.exceptions import BadRequestError
 
 from ...api_objects import chat_prompt
@@ -132,30 +132,79 @@ def validate_optimization_flags(
     return optimize_tools
 
 
+class ToolDescriptionUpdate(BaseModel):
+    """Single tool description update."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., description="Tool name")
+    description: str = Field(..., description="Updated tool description")
+
+
 class ToolDescriptionCandidate(BaseModel):
     """Response model for a tool description candidate."""
 
-    tool_descriptions: dict[str, str] = Field(
-        ..., description="Updated tool descriptions keyed by tool name"
+    model_config = ConfigDict(extra="forbid")
+
+    tool_descriptions: list[ToolDescriptionUpdate] = Field(
+        ..., description="Updated tool descriptions"
     )
-    parameter_descriptions: dict[str, dict[str, str]] | None = Field(
-        None,
-        description="Updated parameter descriptions keyed by tool and parameter name",
+    improvement_focus: str = Field(
+        ..., description="What aspect the description improves"
     )
-    improvement_focus: str | None = Field(
-        None, description="What aspect the description improves"
-    )
-    reasoning: str | None = Field(
-        None, description="Explanation for the updated description"
+    reasoning: str = Field(
+        ..., description="Explanation for the updated description"
     )
 
 
 class ToolDescriptionCandidatesResponse(BaseModel):
     """Response model for tool description candidate generation."""
 
+    model_config = ConfigDict(extra="forbid")
+
     prompts: list[ToolDescriptionCandidate] = Field(
         ..., description="List of tool description candidates"
     )
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, _core_schema: Any, _handler: Any
+    ) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "prompts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "tool_descriptions": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "properties": {
+                                        "name": {"type": "string"},
+                                        "description": {"type": "string"},
+                                    },
+                                    "required": ["name", "description"],
+                                },
+                            },
+                            "improvement_focus": {"type": "string"},
+                            "reasoning": {"type": "string"},
+                        },
+                        "required": [
+                            "tool_descriptions",
+                            "improvement_focus",
+                            "reasoning",
+                        ],
+                    },
+                }
+            },
+            "required": ["prompts"],
+        }
 
 
 def prepare_tool_optimization(
@@ -274,21 +323,19 @@ def generate_tool_description_candidates(
             return_all=_llm_calls.requested_multiple_candidates(
                 optimizer.model_parameters
             ),
+            response_model=ToolDescriptionCandidatesResponse,
         )
 
-        response_payloads = response if isinstance(response, list) else [response]
-        responses: list[ToolDescriptionCandidatesResponse] = []
-        for payload in response_payloads:
-            if not isinstance(payload, str):
-                payload = json.dumps(payload, default=str)
-            responses.append(ToolDescriptionCandidatesResponse.model_validate_json(payload))
+        responses = response if isinstance(response, list) else [response]
 
         allowed_tools = set(tool_names) if tool_names else None
         candidates: list[chat_prompt.ChatPrompt] = []
         for response_item in responses:
             for candidate in response_item.prompts:
                 updates: dict[str, str] = {}
-                for tool_name, description in candidate.tool_descriptions.items():
+                for tool_update in candidate.tool_descriptions:
+                    tool_name = tool_update.name
+                    description = tool_update.description
                     if allowed_tools is not None and tool_name not in allowed_tools:
                         continue
                     if not description or not isinstance(description, str):
@@ -297,19 +344,6 @@ def generate_tool_description_candidates(
                         f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{tool_name}"
                     )
                     updates[segment_id] = description.strip()
-                parameter_descriptions = candidate.parameter_descriptions or {}
-                for tool_name, params in parameter_descriptions.items():
-                    if allowed_tools is not None and tool_name not in allowed_tools:
-                        continue
-                    if not isinstance(params, dict):
-                        continue
-                    for param_name, description in params.items():
-                        if not description or not isinstance(description, str):
-                            continue
-                        segment_id = prompt_segments.tool_param_segment_id(
-                            tool_name, param_name
-                        )
-                        updates[segment_id] = description.strip()
                 if not updates:
                     logger.warning(
                         "Skipping tool description candidate with no updates"

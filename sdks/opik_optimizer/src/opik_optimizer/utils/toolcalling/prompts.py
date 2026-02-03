@@ -98,15 +98,18 @@ TOOL_DESCRIPTION_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
         {
           "prompts": [
             {
-              "tool_descriptions": {
-                "tool_name": "new description",
-                "other_tool": "new description"
-              },
+              "tool_descriptions": [
+                {"name": "tool_name", "description": "new description"},
+                {"name": "other_tool", "description": "new description"}
+              ],
               "improvement_focus": "...",
               "reasoning": "..."
             }
           ]
-        }"""
+        }
+
+        All keys are required. If you have no improvement_focus or reasoning, return
+        an empty string."""
 ).strip()
 
 
@@ -126,15 +129,18 @@ Return a JSON object of the form:
 {{
   "prompts": [
     {{
-      "tool_descriptions": {{
-        "tool_name": "new description",
-        "other_tool": "new description"
-      }},
+      "tool_descriptions": [
+        {{"name": "tool_name", "description": "new description"}},
+        {{"name": "other_tool", "description": "new description"}}
+      ],
       "improvement_focus": "...",
       "reasoning": "..."
     }}
   ]
 }}
+
+All keys are required. If you have no improvement_focus or reasoning, return
+an empty string.
 """
 ).strip()
 

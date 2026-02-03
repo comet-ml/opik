@@ -7,6 +7,8 @@ This module contains all the prompt templates used by the optimizer for:
 
 import textwrap
 
+from ...utils.toolcalling import prompts as toolcalling_prompts
+
 # Constants for variable delimiters
 START_DELIM = "{"
 END_DELIM = "}"
@@ -56,8 +58,6 @@ REASONING_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
         {output_format}"""
 ).strip()
 
-
-from ...utils.toolcalling import prompts as toolcalling_prompts
 
 TOOL_DESCRIPTION_SYSTEM_PROMPT_TEMPLATE = (
     toolcalling_prompts.TOOL_DESCRIPTION_SYSTEM_PROMPT_TEMPLATE
