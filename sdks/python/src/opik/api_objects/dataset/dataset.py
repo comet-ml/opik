@@ -190,7 +190,7 @@ class DatasetVersion(DatasetExportOperations):
             dataset_name=self._dataset_name,
             nb_samples=nb_samples,
             batch_size=batch_size,
-            dataset_version=self._version_info.version_name,
+            dataset_version=self._version_info.version_hash,
         )
 
     def get_items(self, nb_samples: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -308,6 +308,25 @@ class Dataset(DatasetExportOperations):
             )
             self._dataset_items_count = dataset_info.dataset_items_count
         return self._dataset_items_count
+
+    def get_current_version_name(self) -> Optional[str]:
+        """
+        Get the current version name of the dataset.
+
+        The version name is fetched from the backend and reflects the latest
+        committed version after any mutation operations (insert, update, delete).
+
+        Returns:
+            The current version name (e.g., 'v1', 'v2'), or None if no version exists.
+        """
+        versions_response = self._rest_client.datasets.list_dataset_versions(
+            id=self.id,
+            page=1,
+            size=1,
+        )
+        if not versions_response.content:
+            return None
+        return versions_response.content[0].version_name
 
     def _insert_batch_with_retry(
         self,
@@ -619,7 +638,7 @@ class Dataset(DatasetExportOperations):
 
         self.insert(new_items)
 
-    def get_dataset_version(self, version_name: str) -> DatasetVersion:
+    def get_version_view(self, version_name: str) -> DatasetVersion:
         """
         Get a read-only view of a specific dataset version.
 
@@ -638,7 +657,7 @@ class Dataset(DatasetExportOperations):
 
         Example:
             >>> dataset = client.get_dataset("my_dataset")
-            >>> version = dataset.get_dataset_version("v1")
+            >>> version = dataset.get_version_view("v1")
             >>> items = version.get_items()
         """
         version_info = rest_operations.find_version_by_name(
