@@ -1,11 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import debounce from "lodash/debounce";
+import { KeyboardEvent, useMemo, useRef, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -15,7 +8,16 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Database, Plus, X, Search, GitCommitVertical } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  Database,
+  GitCommitVertical,
+  Info,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -29,7 +31,6 @@ import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDataset
 import useDatasetVersionSelect, {
   DEFAULT_LOADED_DATASETS,
 } from "./useDatasetVersionSelect";
-import DatasetOption from "./DatasetOption";
 import VersionOption from "./VersionOption";
 import { Dataset } from "@/types/datasets";
 import {
@@ -52,7 +53,7 @@ interface DatasetVersionSelectBoxProps {
   buttonClassName?: string;
 }
 
-const DatasetEmptyState = () => {
+function DatasetEmptyState() {
   return (
     <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
       <div className="comet-body-s-accented pb-1 text-foreground">
@@ -63,9 +64,9 @@ const DatasetEmptyState = () => {
       </div>
     </div>
   );
-};
+}
 
-const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
+function DatasetVersionSelectBox({
   value,
   versionName,
   onChange,
@@ -73,7 +74,7 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
   disabled = false,
   showClearButton = true,
   buttonClassName,
-}) => {
+}: DatasetVersionSelectBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const resetDialogKeyRef = useRef(0);
 
@@ -81,23 +82,6 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
   const [openDatasetId, setOpenDatasetId] = useState<string | null>(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const debouncedCloseVersions = useCallback(
-    debounce(() => setOpenDatasetId(null), 150),
-    [],
-  );
-
-  const handleOpenVersions = (datasetId: string) => {
-    debouncedCloseVersions.cancel();
-    setOpenDatasetId(datasetId);
-  };
-
-  useEffect(() => {
-    return () => {
-      debouncedCloseVersions.cancel();
-    };
-  }, [debouncedCloseVersions]);
 
   const parsed = parseDatasetVersionKey(value);
   const datasetId = parsed?.datasetId ?? null;
@@ -126,9 +110,8 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
     ? `${selectedDataset.name} / ${versionName ?? ""}`
     : null;
 
-  const handleDatasetCreated = async (newDataset: Dataset) => {
+  const handleDatasetCreated = (newDataset: Dataset) => {
     const latestVersion = newDataset.latest_version!;
-
     const formattedValue = formatDatasetVersionKey(
       newDataset.id,
       latestVersion.id,
@@ -154,51 +137,92 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
       const isOpen = dataset.id === openDatasetId;
       const isSelected = dataset.id === datasetId;
       const isEmpty = !dataset.latest_version;
+      const isHighlighted = isSelected || isOpen;
 
       return (
-        <Popover key={dataset.id} open={isOpen}>
-          <PopoverTrigger asChild>
-            <DatasetOption
-              dataset={dataset}
-              isSelected={isSelected}
-              isOpen={isOpen}
-              showChevron={!isEmpty}
-              isDisabled={isEmpty}
-              disabledTooltip="This dataset is empty"
-              onMainAreaClick={() => handleSelectLatestVersion(dataset)}
-              onChevronMouseEnter={() => handleOpenVersions(dataset.id)}
-              onChevronMouseLeave={debouncedCloseVersions}
-            />
-          </PopoverTrigger>
-
-          <PopoverContent
-            side="right"
-            align="start"
-            className="max-h-[400px] overflow-y-auto p-0.5"
-            onMouseEnter={() => handleOpenVersions(dataset.id)}
-            onMouseLeave={debouncedCloseVersions}
-            hideWhenDetached
-          >
-            {isLoadingVersions ? (
-              <div className="flex items-center justify-center py-4">
-                <Spinner />
-              </div>
-            ) : versions.length === 0 ? (
-              <div className="comet-body-s flex min-w-40 items-center justify-center py-2 text-muted-slate">
-                No versions
-              </div>
-            ) : (
-              versions.map((version) => (
-                <VersionOption
-                  key={version.id}
-                  version={version}
-                  datasetId={dataset.id}
-                  isSelected={selectedVersionId === version.id}
-                />
-              ))
+        <div
+          key={dataset.id}
+          className={cn(
+            "comet-body-s group relative flex h-auto min-h-10 w-full gap-1 rounded-sm p-px",
+            isEmpty && "opacity-50",
+          )}
+        >
+          <div
+            onClick={() => !isEmpty && handleSelectLatestVersion(dataset)}
+            className={cn(
+              "flex flex-1 items-start gap-2 rounded px-2 py-2",
+              isEmpty
+                ? "cursor-not-allowed"
+                : "cursor-pointer group-hover:bg-primary-foreground",
+              isHighlighted && !isEmpty && "bg-primary-foreground",
             )}
-          </PopoverContent>
-        </Popover>
+          >
+            <div className="mt-0.5 size-4 shrink-0">
+              {isSelected && <Check className="size-4 text-muted-slate" />}
+            </div>
+            <TooltipWrapper content={dataset.name}>
+              <div className="flex flex-col gap-0.5">
+                <span className="max-w-[220px] truncate">{dataset.name}</span>
+                {dataset.description && (
+                  <span className="comet-body-s max-w-[220px] text-light-slate">
+                    {dataset.description}
+                  </span>
+                )}
+              </div>
+            </TooltipWrapper>
+          </div>
+
+          {isEmpty ? (
+            <div className="relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3">
+              <TooltipWrapper content="This dataset is empty">
+                <Info className="size-3.5 text-light-slate" />
+              </TooltipWrapper>
+            </div>
+          ) : (
+            <Popover open={isOpen}>
+              <PopoverTrigger asChild>
+                <div
+                  onMouseEnter={() => setOpenDatasetId(dataset.id)}
+                  onMouseLeave={() => setOpenDatasetId(null)}
+                  className={cn(
+                    "relative flex w-8 shrink-0 cursor-pointer justify-center self-stretch rounded pt-3",
+                    isHighlighted && "bg-primary-foreground",
+                  )}
+                >
+                  <ChevronRight className="size-3.5 text-light-slate" />
+                </div>
+              </PopoverTrigger>
+
+              <PopoverContent
+                side="right"
+                align="start"
+                sideOffset={0}
+                className="max-h-[400px] overflow-y-auto p-0.5"
+                onMouseEnter={() => setOpenDatasetId(dataset.id)}
+                onMouseLeave={() => setOpenDatasetId(null)}
+              >
+                {isLoadingVersions ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Spinner />
+                  </div>
+                ) : versions.length === 0 ? (
+                  <div className="comet-body-s flex min-w-40 items-center justify-center py-2 text-muted-slate">
+                    No versions
+                  </div>
+                ) : (
+                  versions.map((version) => (
+                    <VersionOption
+                      key={version.id}
+                      version={version}
+                      datasetId={dataset.id}
+                      isSelected={selectedVersionId === version.id}
+                    />
+                  ))
+                )}
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
       );
     });
   };
@@ -243,12 +267,12 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
     );
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key.length === 1) {
       event.preventDefault();
       setSearch((prev) => prev + event.key);
+      inputRef.current?.focus();
     }
-    inputRef.current?.focus();
   };
 
   return (
@@ -363,6 +387,6 @@ const DatasetVersionSelectBox: React.FC<DatasetVersionSelectBoxProps> = ({
       />
     </>
   );
-};
+}
 
 export default DatasetVersionSelectBox;
