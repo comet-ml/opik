@@ -29,6 +29,17 @@ export type MessageContent =
   | string
   | Array<TextPart | ImagePart | VideoPart | AudioPart>;
 
+export interface PromptLibraryMetadata {
+  name: string;
+  id: string;
+  version: {
+    template: unknown; // Parsed JSON template (not stringified)
+    commit?: string;
+    id: string;
+    metadata?: object; // Prompt version metadata (e.g., { created_from: "opik_ui", type: "messages_json" })
+  };
+}
+
 export interface LLMMessage {
   id: string;
   content: MessageContent;
@@ -36,6 +47,7 @@ export interface LLMMessage {
   promptId?: string;
   promptVersionId?: string;
   autoImprove?: boolean;
+  promptLibraryMetadata?: PromptLibraryMetadata;
 }
 
 export type ProviderMessageType = Omit<LLMMessage, "id"> & {

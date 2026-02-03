@@ -23,9 +23,21 @@ type RawPromptData = {
   version: {
     commit: string;
     id: string;
-    template: string;
+    template: unknown; // Can be string (legacy) or parsed JSON object (new format)
     metadata?: object;
   };
+};
+
+// Helper to ensure template is always a string for PromptVersion
+// The template from trace metadata can be either a string (legacy) or parsed JSON object (new format)
+const normalizeTemplate = (template: unknown): string => {
+  if (typeof template === "string") {
+    return template;
+  }
+  if (template !== null && template !== undefined) {
+    return JSON.stringify(template, null, 2);
+  }
+  return "";
 };
 
 type PromptsTabProps = {
@@ -38,10 +50,17 @@ const convertRawPromptToPromptWithLatestVersion = (
 ): PromptWithLatestVersion => {
   const date = new Date().toISOString();
 
+  // Use existing metadata or create default metadata for messages_json format
+  // This ensures parsePromptVersionContent knows how to parse the template correctly
+  const metadata = rawPrompt.version.metadata ?? {
+    created_from: "opik_ui",
+    type: "messages_json",
+  };
+
   const promptVersion: PromptVersion = {
     id: rawPrompt.version.id,
-    template: rawPrompt.version.template,
-    metadata: rawPrompt.version.metadata ?? {},
+    template: normalizeTemplate(rawPrompt.version.template),
+    metadata,
     commit: rawPrompt.version.commit,
     prompt_id: rawPrompt.id,
     created_at: date, // We don't have this in raw data, using current time
@@ -109,11 +128,13 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   }, [rawPrompts, showOptimizerPrompts]);
 
   const renderPrompts = () => {
-    if (!prompts || prompts.length === 0) return null;
+    if (!prompts || prompts.length === 0 || !rawPrompts) return null;
 
     return prompts.map((promptInfo: PromptWithLatestVersion, index: number) => {
       const promptName = promptInfo?.name || `Prompt ${index + 1}`;
-      const promptContent = promptInfo?.latest_version?.template || promptInfo;
+      // Use raw template (object) for JSON display, fallback to promptInfo for edge cases
+      const rawTemplate = rawPrompts[index]?.version?.template;
+      const promptContent = rawTemplate ?? promptInfo;
       const commitHash = promptInfo?.latest_version?.commit;
       const promptId = promptInfo?.id;
 
