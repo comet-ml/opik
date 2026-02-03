@@ -8328,12 +8328,14 @@ class DatasetsResourceTest {
             // Generate random feedback scores using PODAM
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
+                    .projectName(trace1.projectName())
                     .name("accuracy")
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
+                    .projectName(trace2.projectName())
                     .name("accuracy")
                     .source(ScoreSource.SDK)
                     .build();
@@ -8509,18 +8511,21 @@ class DatasetsResourceTest {
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
                     .name("quality")
+                    .projectName(trace1.projectName())
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
                     .name("quality")
+                    .projectName(trace2.projectName())
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore3 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace3.id())
                     .name("quality")
+                    .projectName(trace3.projectName())
                     .source(ScoreSource.SDK)
                     .build();
 

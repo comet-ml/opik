@@ -1278,7 +1278,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_STATS = """
             WITH experiments_resolved AS (
-                SELECT *
+                SELECT
+                    id,
+                    COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_version_id
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND dataset_id = :datasetId
@@ -1288,20 +1290,30 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ), experiment_items_scope AS (
                 SELECT ei.*
                 FROM experiment_items ei
+                JOIN experiments_resolved e ON e.id = ei.experiment_id
                 WHERE ei.workspace_id = :workspace_id
-                AND ei.experiment_id IN (SELECT id FROM experiments_resolved)
                 ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
                 LIMIT 1 BY ei.id
+            ), experiment_items_trace_scope AS (
+                SELECT DISTINCT ei.trace_id
+                FROM experiment_items ei
+                JOIN experiments_resolved e ON e.id = ei.experiment_id
+                WHERE ei.workspace_id = :workspace_id
+                <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
             ), trace_data AS (
                 SELECT
                     id,
-                    project_id,
                     duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_scope)
+                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+            ), target_projects AS (
+                SELECT DISTINCT project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
             ), feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
@@ -1313,7 +1325,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                 AND workspace_id = :workspace_id
-                AND project_id IN (SELECT DISTINCT project_id FROM trace_data)
+                AND project_id IN (SELECT project_id FROM target_projects)
+                AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -1326,7 +1339,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
                 AND workspace_id = :workspace_id
-                AND project_id IN (SELECT DISTINCT project_id FROM trace_data)
+                AND project_id IN (SELECT project_id FROM target_projects)
+                AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -1372,49 +1386,39 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>,
-            experiment_version_mapping AS (
-                SELECT
-                    ei.id AS experiment_item_id,
-                    ei.experiment_id,
-                    ei.dataset_item_id,
-                    COALESCE(nullIf(e.dataset_version_id, ''), :versionId) AS resolved_version_id
-                FROM experiment_items_scope ei
-                LEFT JOIN experiments_resolved e ON e.id = ei.experiment_id
-            ),
-            dataset_items_by_version AS (
-                SELECT
-                    div.id,
-                    div.dataset_item_id,
-                    evm.resolved_version_id
-                FROM dataset_item_versions div
-                INNER JOIN experiment_version_mapping evm ON evm.dataset_item_id = div.id
-                WHERE div.workspace_id = :workspace_id
-                AND div.dataset_id = :datasetId
-                AND div.dataset_version_id = evm.resolved_version_id
-                ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
-                LIMIT 1 BY div.id
-            ),
-            experiment_items_filtered AS (
+             experiment_items_filtered AS (
                 SELECT
                     ei.id,
                     ei.experiment_id,
                     ei.dataset_item_id,
                     ei.trace_id
                 FROM experiment_items_scope ei
-                INNER JOIN dataset_items_by_version dibv ON dibv.id = ei.dataset_item_id
+                INNER JOIN (
+                    SELECT
+                        div.id,
+                        div.dataset_item_id
+                    FROM dataset_item_versions div
+                    WHERE div.workspace_id = :workspace_id
+                    AND div.dataset_id = :datasetId
+                    AND div.dataset_version_id IN (SELECT resolved_version_id FROM experiments_resolved)
+                    ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
+                    LIMIT 1 BY div.id
+                ) dibv ON dibv.id = ei.dataset_item_id
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
-                    SELECT id FROM traces WHERE workspace_id = :workspace_id AND project_id IN (SELECT DISTINCT project_id FROM trace_data) AND <experiment_item_filters>
+                    SELECT id FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id IN (SELECT project_id FROM target_projects)
+                    AND id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                    AND <experiment_item_filters>
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>
                 AND ei.trace_id IN (
-                    SELECT id
-                    FROM traces
-                    LEFT JOIN fsc ON fsc.entity_id = traces.id
-                    WHERE workspace_id = :workspace_id
-                    AND project_id IN (SELECT DISTINCT project_id FROM trace_data)
-                    AND fsc.feedback_scores_count = 0
+                    SELECT t.id
+                    FROM trace_data t
+                    LEFT JOIN fsc ON fsc.entity_id = t.id
+                    WHERE fsc.feedback_scores_count = 0
                 )
                 <endif>
                 <if(feedback_scores_filters)>
@@ -1440,21 +1444,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             div_dedup.last_updated_at AS last_updated_at,
                             div_dedup.created_by AS created_by,
                             div_dedup.last_updated_by AS last_updated_by,
-                            div_dedup.dataset_version_id AS dataset_version_id,
-                            COALESCE(nullIf(e.dataset_version_id, ''), :versionId) AS resolved_version
+                            div_dedup.dataset_version_id AS dataset_version_id
                         FROM (
                             SELECT *
                             FROM dataset_item_versions
                             WHERE workspace_id = :workspace_id
                             AND dataset_id = :datasetId
+                            AND dataset_version_id IN (SELECT resolved_version_id FROM experiments_resolved)
                             ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                             LIMIT 1 BY id
                         ) AS div_dedup
-                        INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div_dedup.id
-                        LEFT JOIN experiments_resolved e ON e.id = ei_inner.experiment_id
                     ) AS versioned
-                    WHERE dataset_version_id = resolved_version
-                    AND <dataset_item_filters>
+                    WHERE <dataset_item_filters>
                 )
                 <endif>
             ), traces_with_cost_and_duration AS (
@@ -1470,9 +1471,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         trace_id,
                         sum(total_estimated_cost) as total_estimated_cost,
                         sumMap(usage) as usage
-                    FROM spans final
+                    FROM spans FINAL
                     WHERE workspace_id = :workspace_id
-                    AND project_id IN (SELECT DISTINCT project_id FROM trace_data)
+                    AND project_id IN (SELECT project_id FROM target_projects)
+                    AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_agg AS (
@@ -1489,6 +1491,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     name,
                     quantiles(0.5, 0.9, 0.99)(toFloat64(value)) AS percentiles
                 FROM feedback_scores_final
+                WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
                 GROUP BY name
             ), usage_total_tokens_data AS (
                 SELECT
