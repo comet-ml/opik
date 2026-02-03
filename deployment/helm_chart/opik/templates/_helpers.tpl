@@ -107,10 +107,11 @@ Note: Directives are sorted alphabetically to ensure deterministic output
 {{- define "opik.cspHeaderValue" -}}
 {{- if . -}}
 {{-   $cspParts := list -}}
+{{-   $cspMap := . -}}
 {{-   $sortedKeys := keys . | sortAlpha -}}
 {{-   range $sortedKeys -}}
 {{-     $directive := . -}}
-{{-     $sources := index $ $directive -}}
+{{-     $sources := index $cspMap $directive -}}
 {{-     $cspParts = append $cspParts (printf "%s %s" $directive (join " " $sources)) -}}
 {{-   end -}}
 {{-   join "; " $cspParts -}}
