@@ -17,4 +17,6 @@ export const datasetErrorMessages = {
     `Failed to insert items from JSON: ${error}`,
   DATASET_JSON_PARSE_ERROR: (error: string) =>
     `Failed to parse JSON input: ${error}`,
+  DATASET_VERSION_NOT_FOUND: (versionName: string, datasetName: string) =>
+    `Dataset version '${versionName}' not found in dataset '${datasetName}'`,
 };

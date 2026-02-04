@@ -1,10 +1,18 @@
 import { generateId } from "@/utils/generateId";
 import { DatasetItem, DatasetItemData } from "./DatasetItem";
+import { DatasetVersion } from "./DatasetVersion";
 import { OpikClient } from "@/client/Client";
-import { DatasetItemPublic, DatasetItemWrite } from "@/rest_api/api";
+import {
+  DatasetItemPublic,
+  DatasetItemWrite,
+  DatasetVersionPublic,
+} from "@/rest_api/api";
 import { parseNdjsonStreamToArray, splitIntoBatches } from "@/utils/stream";
 import { logger } from "@/utils/logger";
-import { DatasetItemMissingIdError } from "@/errors";
+import {
+  DatasetItemMissingIdError,
+  DatasetVersionNotFoundError,
+} from "@/errors";
 import {
   JsonItemNotObjectError,
   JsonNotArrayError,
@@ -336,6 +344,104 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
         return;
       }
       throw error;
+    }
+  }
+
+  /**
+   * Get a read-only view of a specific dataset version.
+   *
+   * @param versionName The version name to retrieve (e.g., "v1", "v2")
+   * @returns A DatasetVersion object for the specified version
+   * @throws DatasetVersionNotFoundError if the version doesn't exist
+   */
+  public async getVersionView(versionName: string): Promise<DatasetVersion<T>> {
+    const versionInfo = await this.findVersionByName(versionName);
+
+    if (!versionInfo) {
+      throw new DatasetVersionNotFoundError(versionName, this.name);
+    }
+
+    return new DatasetVersion<T>(this.name, this.id, versionInfo, this.opik);
+  }
+
+  /**
+   * Get the current (latest) version name.
+   *
+   * @returns The version name (e.g., "v1") or undefined if no versions exist
+   */
+  public async getCurrentVersionName(): Promise<string | undefined> {
+    const versionInfo = await this.getVersionInfo();
+    return versionInfo?.versionName;
+  }
+
+  /**
+   * Get the current (latest) version info.
+   *
+   * @returns The DatasetVersionPublic object or undefined if no versions exist
+   */
+  public async getVersionInfo(): Promise<DatasetVersionPublic | undefined> {
+    try {
+      const response = await this.opik.api.datasets.listDatasetVersions(
+        this.id,
+        { page: 1, size: 1 }
+      );
+
+      const versions = response.content ?? [];
+      if (versions.length === 0) {
+        return undefined;
+      }
+
+      return versions[0];
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Find a version by its name (e.g., "v1", "v2").
+   * Uses paginated search to find the version.
+   *
+   * @param versionName The version name to find
+   * @returns The DatasetVersionPublic or undefined if not found
+   */
+  private async findVersionByName(
+    versionName: string
+  ): Promise<DatasetVersionPublic | undefined> {
+    const pageSize = 100;
+    let page = 1;
+
+    while (true) {
+      try {
+        const response = await this.opik.api.datasets.listDatasetVersions(
+          this.id,
+          { page, size: pageSize }
+        );
+
+        const versions = response.content ?? [];
+        if (versions.length === 0) {
+          return undefined;
+        }
+
+        const found = versions.find((v) => v.versionName === versionName);
+        if (found) {
+          return found;
+        }
+
+        // If we got fewer results than page size, we've reached the end
+        if (versions.length < pageSize) {
+          return undefined;
+        }
+
+        page++;
+      } catch (error) {
+        if (error instanceof OpikApiError && error.statusCode === 404) {
+          return undefined;
+        }
+        throw error;
+      }
     }
   }
 }
