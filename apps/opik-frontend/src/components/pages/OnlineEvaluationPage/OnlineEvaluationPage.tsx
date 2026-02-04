@@ -29,6 +29,7 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -47,7 +48,6 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
-import Loader from "@/components/shared/Loader/Loader";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { capitalizeFirstLetter } from "@/lib/utils";
@@ -349,7 +349,11 @@ export const OnlineEvaluationPage: React.FC = () => {
     [],
   );
 
-  if (!isPending && noData && rows.length === 0 && page === 1) {
+  if (isPending) {
+    return <Loader />;
+  }
+
+  if (noData && rows.length === 0 && page === 1) {
     return (
       <>
         <NoRulesPage openModal={handleNewRuleClick} Wrapper={NoDataPage} />
@@ -406,34 +410,29 @@ export const OnlineEvaluationPage: React.FC = () => {
           </Button>
         </div>
       </div>
-      {isPending ? (
-        <Loader />
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            data={rows}
-            sortConfig={sortConfig}
-            resizeConfig={resizeConfig}
-            selectionConfig={{
-              rowSelection,
-              setRowSelection,
-            }}
-            getRowId={getRowId}
-            columnPinning={DEFAULT_COLUMN_PINNING}
-            noData={<DataTableNoData title={noDataText} />}
-          />
-          <div className="py-4">
-            <DataTablePagination
-              page={page as number}
-              pageChange={setPage}
-              size={size as number}
-              sizeChange={setSize}
-              total={data?.total ?? 0}
-            ></DataTablePagination>
-          </div>
-        </>
-      )}
+      <DataTable
+        columns={columns}
+        data={rows}
+        sortConfig={sortConfig}
+        resizeConfig={resizeConfig}
+        selectionConfig={{
+          rowSelection,
+          setRowSelection,
+        }}
+        getRowId={getRowId}
+        columnPinning={DEFAULT_COLUMN_PINNING}
+        noData={<DataTableNoData title={noDataText} />}
+        showLoadingOverlay={isPlaceholderData && isFetching}
+      />
+      <div className="py-4">
+        <DataTablePagination
+          page={page as number}
+          pageChange={setPage}
+          size={size as number}
+          sizeChange={setSize}
+          total={data?.total ?? 0}
+        ></DataTablePagination>
+      </div>
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
         open={isDialogOpen}
