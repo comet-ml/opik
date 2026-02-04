@@ -41,7 +41,7 @@ import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCall
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/NoAnnotationQueuesPage";
-import Loader from "@/components/shared/Loader/Loader";
+import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { formatDate } from "@/lib/date";
@@ -368,26 +368,11 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
     return "No annotation queues";
   }, [search]);
 
-  const noData = !search && !filters.length;
-
-  if (!isLoading && noData && rows.length === 0 && page === 1) {
-    return (
-      <>
-        <NoAnnotationQueuesPage
-          openModal={handleNewQueue}
-          Wrapper={NoDataPage}
-          height={188}
-          className="px-6"
-        />
-        <AddEditAnnotationQueueDialog
-          key={resetDialogKeyRef.current}
-          open={openDialog}
-          setOpen={setOpenDialog}
-          projectId={projectId}
-        />
-      </>
-    );
-  }
+  const noData = !search && filters.length === 0;
+  const showEmptyState =
+    !isLoading && noData && rows.length === 0 && page === 1;
+  const canInteractWithTable =
+    !isLoading && !showEmptyState && rows.length > 0;
 
   return (
     <>
@@ -424,6 +409,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
+            disabled={!canInteractWithTable}
           />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
@@ -431,48 +417,56 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
+            disabled={!canInteractWithTable}
           />
           <Button size="sm" onClick={handleNewQueue}>
             Create new queue
           </Button>
         </div>
       </PageBodyStickyContainer>
-      {isLoading ? (
-        <Loader />
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            data={rows}
-            sortConfig={sortConfig}
-            resizeConfig={resizeConfig}
-            selectionConfig={{
-              rowSelection,
-              setRowSelection,
-            }}
-            getRowId={getRowId}
-            rowHeight={height as ROW_HEIGHT}
-            columnPinning={DEFAULT_COLUMN_PINNING}
-            noData={<DataTableNoData title={noDataText} />}
-            onRowClick={handleRowClick}
-            TableWrapper={PageBodyStickyTableWrapper}
-            stickyHeader
+      <DataTableStateHandler
+        isLoading={isLoading}
+        isEmpty={showEmptyState}
+        emptyState={
+          <NoAnnotationQueuesPage
+            openModal={handleNewQueue}
+            Wrapper={NoDataPage}
+            className="px-6"
           />
-          <PageBodyStickyContainer
-            className="py-4"
-            direction="horizontal"
-            limitWidth
-          >
-            <DataTablePagination
-              page={page as number}
-              pageChange={setPage}
-              size={size as number}
-              sizeChange={setSize}
-              total={data?.total ?? 0}
-            />
-          </PageBodyStickyContainer>
-        </>
-      )}
+        }
+      >
+        <DataTable
+          columns={columns}
+          data={rows}
+          sortConfig={sortConfig}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          onRowClick={handleRowClick}
+          TableWrapper={PageBodyStickyTableWrapper}
+          stickyHeader
+          showLoadingOverlay={isPlaceholderData && isFetching}
+        />
+        <PageBodyStickyContainer
+          className="py-4"
+          direction="horizontal"
+          limitWidth
+        >
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+          />
+        </PageBodyStickyContainer>
+      </DataTableStateHandler>
 
       <AddEditAnnotationQueueDialog
         key={resetDialogKeyRef.current}

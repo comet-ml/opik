@@ -81,7 +81,7 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-import Loader from "@/components/shared/Loader/Loader";
+import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
@@ -588,6 +588,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     () => data?.content ?? [],
     [data?.content],
   );
+
+  const showEmptyState =
+    !isTableLoading && noData && rows.length === 0 && page === 1;
+  const canInteractWithTable =
+    !isTableLoading && !showEmptyState && rows.length > 0;
 
   // Extract metadata paths directly from loaded traces/spans data
   const metadataPaths = useMemo(() => {
@@ -1255,6 +1260,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
+            disabled={!canInteractWithTable}
           />
           <ColumnsButton
             columns={columnData}
@@ -1268,54 +1274,53 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 ? metadataColumnsData.map((col) => col.id)
                 : []
             }
+            disabled={!canInteractWithTable}
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
 
-      {noData && rows.length === 0 && page === 1 && !isTableLoading ? (
-        <NoTracesPage />
-      ) : isTableLoading ? (
-        <Loader />
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            columnsStatistic={columnsStatistic}
-            data={rows}
-            onRowClick={handleRowClick}
-            activeRowId={activeRowId ?? ""}
-            sortConfig={sortConfig}
-            resizeConfig={resizeConfig}
-            selectionConfig={{
-              rowSelection,
-              setRowSelection,
-            }}
-            getRowId={getRowId}
-            rowHeight={height as ROW_HEIGHT}
-            columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
-            noData={<DataTableNoData title={noDataText} />}
-            TableWrapper={PageBodyStickyTableWrapper}
-            stickyHeader
-            meta={meta}
-            showLoadingOverlay={isPlaceholderData && isFetching}
+      <DataTableStateHandler
+        isLoading={isTableLoading}
+        isEmpty={showEmptyState}
+        emptyState={<NoTracesPage />}
+      >
+        <DataTable
+          columns={columns}
+          columnsStatistic={columnsStatistic}
+          data={rows}
+          onRowClick={handleRowClick}
+          activeRowId={activeRowId ?? ""}
+          sortConfig={sortConfig}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          TableWrapper={PageBodyStickyTableWrapper}
+          stickyHeader
+          meta={meta}
+          showLoadingOverlay={isPlaceholderData && isFetching}
+        />
+        <PageBodyStickyContainer
+          className="py-4"
+          direction="horizontal"
+          limitWidth
+        >
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+            supportsTruncation
+            truncationEnabled={truncationEnabled}
           />
-          <PageBodyStickyContainer
-            className="py-4"
-            direction="horizontal"
-            limitWidth
-          >
-            <DataTablePagination
-              page={page as number}
-              pageChange={setPage}
-              size={size as number}
-              sizeChange={setSize}
-              total={data?.total ?? 0}
-              supportsTruncation
-              truncationEnabled={truncationEnabled}
-            />
-          </PageBodyStickyContainer>
-        </>
-      )}
+        </PageBodyStickyContainer>
+      </DataTableStateHandler>
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}
