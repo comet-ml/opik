@@ -205,6 +205,7 @@ def resolve_toolcalling_tools(
     resolved_tools: list[dict[str, Any]] = []
     resolved_map = dict(function_map or {})
     factory = factory or ToolCallingFactory()
+    occupied_names = _collect_function_names(tools, resolved_map)
 
     for tool in tools:
         if not isinstance(tool, dict):
@@ -225,13 +226,14 @@ def resolve_toolcalling_tools(
                     f"MCP server '{server_label}' did not return any tools."
                 )
 
-            existing_names = _collect_function_names(resolved_tools, resolved_map)
+            existing_names = occupied_names
             for tool_name in allowed_tools:
                 signature = factory._get_signature(server, tool_name, None)
                 function_name = _resolve_function_name(
                     tool_name, server_label, existing_names
                 )
                 existing_names.add(function_name)
+                occupied_names.add(function_name)
                 parameters = _strip_schema_field(signature.parameters)
                 function_entry = {
                     "type": "function",
@@ -257,12 +259,17 @@ def resolve_toolcalling_tools(
 
         if "mcp" not in tool:
             resolved_tools.append(copy.deepcopy(tool))
+            if tool.get("type") == "function":
+                function_name = tool.get("function", {}).get("name")
+                if function_name:
+                    occupied_names.add(function_name)
             continue
 
         if "function" in tool and tool.get("type") == "function":
             function_name = tool.get("function", {}).get("name")
             if function_name:
                 resolved_tools.append(copy.deepcopy(tool))
+                occupied_names.add(function_name)
                 if function_name not in resolved_map:
                     mcp_block = tool.get("mcp", {})
                     tool_block = (
@@ -277,8 +284,9 @@ def resolve_toolcalling_tools(
                 continue
 
         resolved = factory.resolve_tool_entry(tool)
-        resolved_tools.append(resolved.function_entry)
-        resolved_map.setdefault(resolved.function_name, resolved.callable)
+            resolved_tools.append(resolved.function_entry)
+            resolved_map.setdefault(resolved.function_name, resolved.callable)
+            occupied_names.add(resolved.function_name)
 
     return resolved_tools, resolved_map
 
