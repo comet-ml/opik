@@ -142,7 +142,7 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="n_samples_minibatch" type="int | None" optional={true}>Optional number of samples for inner-loop minibatches (defaults to n_samples).</ParamField>
 <ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy for subsampling (default: "random_sorted").</ParamField>
 <ParamField path="auto_continue" type="bool" optional={true} defaultValue="False" />
-<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true} />
+<ParamField path="agent" type="OptimizableAgent | None" optional={true}>Optional custom agent instance for executing prompts. If not provided, a default LiteLLM-based agent is used. Pass an **instance** of your agent class (e.g., `agent=MyAgent()`), not the class itself.</ParamField>
 <ParamField path="project_name" type="str" optional={true} defaultValue="Optimization" />
 <ParamField path="max_trials" type="int" optional={true} defaultValue="5" />
 <ParamField path="max_retries" type="int" optional={true} defaultValue="2" />

@@ -37,7 +37,7 @@ dataset = hotpot(count=300)
 
 def levenshtein_ratio(dataset_item, llm_output):
     return LevenshteinRatio().score(
-        reference=dataset_item["answer"], 
+        reference=dataset_item["answer"],
         output=llm_output
     )
 
@@ -73,7 +73,12 @@ if TYPE_CHECKING:
     from opik_optimizer.api_objects import chat_prompt
 
 class ADKAgent(OptimizableAgent):
-    project_name = "adk-agent"
+    """Custom agent that integrates with Google's Agent Development Kit (ADK)."""
+
+    def __init__(self, project_name: str = "adk-agent"):
+        super().__init__()
+        self.project_name = project_name
+        # Initialize your ADK client or any framework-specific setup here
 
     def invoke_agent(
         self,
@@ -85,17 +90,44 @@ class ADKAgent(OptimizableAgent):
         # Single-prompt agents extract the prompt from the dict
         if len(prompts) > 1:
             raise ValueError("ADKAgent only supports single-prompt optimization.")
-        
+
         prompt = list(prompts.values())[0]
         messages = prompt.get_messages(dataset_item)
-        
+
         # Your framework-specific execution logic here
         # ... create ADK agent, run it, return response ...
-        
+
         return response
 ```
 
-The key points:
+To use your custom agent with the optimizer, you need to **create an instance** of your agent class and pass it using the `agent` parameter:
+
+```python
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+
+prompt = ChatPrompt(
+    system="You are a helpful assistant.",
+    user="{question}",
+    model="openai/gpt-4o-mini"
+)
+
+# Create an instance of your custom agent
+custom_agent = ADKAgent(project_name="my-adk-project")
+
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o")
+result = optimizer.optimize_prompt(
+    prompt=prompt,
+    agent=custom_agent,  # Pass the agent instance (not the class)
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    max_trials=5,
+    n_samples=50
+)
+```
+
+**Key points:**
+- Create an instance of your agent: `custom_agent = ADKAgent()`
+- Pass the instance using `agent=custom_agent` (not `agent_class=`)
 - Extract the single prompt from `prompts` dict: `prompt = list(prompts.values())[0]`
 - Get formatted messages: `messages = prompt.get_messages(dataset_item)`
 - Execute using your framework and return the response string
@@ -126,7 +158,7 @@ from openai import OpenAI
 
 class AnalyzeRespondAgent(OptimizableAgent):
     """Two-step agent: analyze input, then respond based on analysis."""
-    
+
     def __init__(self, model: str = "gpt-4o-mini"):
         super().__init__()
         self.model = model
@@ -142,7 +174,7 @@ class AnalyzeRespondAgent(OptimizableAgent):
         # Step 1: Analyze the input
         analyze_prompt = prompts["analyze"]
         analyze_messages = analyze_prompt.get_messages(dataset_item)
-        
+
         analyze_response = self.client.chat.completions.create(
             model=self.model,
             messages=analyze_messages,
@@ -155,19 +187,22 @@ class AnalyzeRespondAgent(OptimizableAgent):
         # Pass analysis result to the respond prompt
         respond_context = {**dataset_item, "analysis": analysis}
         respond_messages = respond_prompt.get_messages(respond_context)
-        
+
         respond_response = self.client.chat.completions.create(
             model=self.model,
             messages=respond_messages,
             seed=seed,
         )
-        
+
         return respond_response.choices[0].message.content
 ```
 
 ### Using the multi-prompt agent
 
-When optimizing, pass a dictionary of prompts instead of a single prompt:
+When optimizing a multi-prompt workflow, you need to:
+1. Define a dictionary of prompts (each prompt handles one step)
+2. Create an instance of your custom agent
+3. Pass both to the optimizer
 
 ```python
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
@@ -187,10 +222,13 @@ prompts = {
     ),
 }
 
+# Create an instance of your custom agent
+agent = AnalyzeRespondAgent(model="gpt-4o-mini")
+
 optimizer = MetaPromptOptimizer(model="openai/gpt-4o")
 result = optimizer.optimize_prompt(
-    prompt=prompts,  # Pass dict of prompts
-    agent_class=AnalyzeRespondAgent,  # Use your custom agent
+    prompt=prompts,  # Pass dictionary of prompts
+    agent=agent,  # Pass your agent instance (not the class)
     dataset=dataset,
     metric=levenshtein_ratio,
     max_trials=5,
@@ -200,7 +238,7 @@ result = optimizer.optimize_prompt(
 result.display()
 ```
 
-The optimizer will optimize both prompts in the dictionary, trying different combinations to improve performance.
+The optimizer will test different versions of both prompts, trying various combinations to find what works best together.
 
 <Note>
   The prompts dict keys (like "analyze" and "respond") are used to identify which prompt to optimize. The optimizer can optimize all prompts or specific ones based on the `optimize_prompt` parameter.
@@ -269,7 +307,7 @@ dataset = hotpot(count=300)
 
 def metric(dataset_item, llm_output):
     return LevenshteinRatio().score(
-        reference=dataset_item["answer"], 
+        reference=dataset_item["answer"],
         output=llm_output
     )
 
@@ -305,6 +343,8 @@ from opik_optimizer.datasets import hotpot
 from openai import OpenAI
 
 class TwoStepAgent(OptimizableAgent):
+    """A two-step agent that first analyzes, then responds."""
+
     def __init__(self, model: str = "gpt-4o-mini"):
         super().__init__()
         self.model = model
@@ -317,7 +357,7 @@ class TwoStepAgent(OptimizableAgent):
         allow_tool_use: bool = False,
         seed: int | None = None,
     ) -> str:
-        # First step
+        # First step: Analyze the question
         step1_prompt = prompts["step1"]
         step1_messages = step1_prompt.get_messages(dataset_item)
         step1_response = self.client.chat.completions.create(
@@ -327,8 +367,9 @@ class TwoStepAgent(OptimizableAgent):
         )
         step1_result = step1_response.choices[0].message.content
 
-        # Second step uses result from first step
+        # Second step: Generate answer using the analysis
         step2_prompt = prompts["step2"]
+        # Pass the analysis result to the second prompt
         step2_context = {**dataset_item, "step1_result": step1_result}
         step2_messages = step2_prompt.get_messages(step2_context)
         step2_response = self.client.chat.completions.create(
@@ -336,10 +377,10 @@ class TwoStepAgent(OptimizableAgent):
             messages=step2_messages,
             seed=seed,
         )
-        
+
         return step2_response.choices[0].message.content
 
-# Define multi-prompt workflow
+# Define the two prompts in your workflow
 prompts = {
     "step1": ChatPrompt(
         system="Analyze the question and identify key information.",
@@ -357,9 +398,12 @@ dataset = hotpot(count=300)
 
 def metric(dataset_item, llm_output):
     return LevenshteinRatio().score(
-        reference=dataset_item["answer"], 
+        reference=dataset_item["answer"],
         output=llm_output
     )
+
+# Create an instance of your agent
+agent = TwoStepAgent(model="gpt-4o-mini")
 
 optimizer = HRPO(
     model="openai/gpt-4o-mini",
@@ -369,7 +413,7 @@ optimizer = HRPO(
 
 result = optimizer.optimize_prompt(
     prompt=prompts,
-    agent_class=TwoStepAgent,
+    agent=agent,  # Pass the agent instance
     dataset=dataset,
     metric=metric,
     max_trials=5,
