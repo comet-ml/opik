@@ -437,7 +437,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                AND project_id IN :target_project_ids
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
             ),
             feedback_scores_combined_raw AS (
@@ -451,7 +451,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
-                  AND project_id IN :target_project_ids
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                   AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 UNION ALL
                 SELECT workspace_id,
@@ -464,7 +464,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
-                  AND project_id IN :target_project_ids
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                   AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
             ),
             feedback_scores_with_ranking AS (
@@ -582,7 +582,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     output
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                AND project_id IN :target_project_ids
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND id IN (SELECT trace_id FROM experiment_items_final)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -662,6 +662,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             FROM traces
             WHERE workspace_id = :workspace_id
             AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -705,7 +706,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     visibility_mode
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                AND project_id IN :target_project_ids
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -751,7 +752,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
-                  AND project_id IN :target_project_ids
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                   AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 UNION ALL
                 SELECT
@@ -771,7 +772,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
-                  AND project_id IN :target_project_ids
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                   AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
             ),
             feedback_scores_with_ranking AS (
@@ -907,7 +908,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     entity_id
                 FROM comments
                 WHERE workspace_id = :workspace_id
-                AND project_id IN :target_project_ids
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -995,7 +996,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         sumMap(usage) AS usage
                     FROM spans final
                     WHERE workspace_id = :workspace_id
-                    AND project_id IN :target_project_ids
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                     GROUP BY workspace_id, project_id, trace_id
                 ) s ON t.id = s.trace_id
@@ -1366,7 +1367,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                 AND workspace_id = :workspace_id
-                AND project_id IN :target_project_ids
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 UNION ALL
                 SELECT
@@ -1380,7 +1381,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
                 AND workspace_id = :workspace_id
-                AND project_id IN :target_project_ids
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
@@ -1449,7 +1450,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND ei.trace_id IN (
                     SELECT id FROM traces
                     WHERE workspace_id = :workspace_id
-                    AND project_id IN :target_project_ids
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND id IN (SELECT trace_id FROM experiment_items_trace_scope)
                     AND <experiment_item_filters>
                 )
@@ -1514,7 +1515,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         sumMap(usage) as usage
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id
-                    AND project_id IN :target_project_ids
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
@@ -1903,6 +1904,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             }
                         }
 
+                        // Add target project IDs flag to template (from separate query to reduce traces table scans)
+                        if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                            template.add("has_target_projects", true);
+                        }
+
                         String query = template.render();
 
                         var statement = connection.createStatement(query)
@@ -1913,7 +1919,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .bind("offset", (page - 1) * size);
 
                         // Bind target project IDs (from separate query to reduce traces table scans)
-                        statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                        if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                            statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                        }
 
                         // Bind experiment IDs as array
                         if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
@@ -1961,6 +1969,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 template.add("experiment_ids", true);
             }
+
+            template.add("log_comment", "get_target_project_ids:workspace_id:" + workspaceId);
 
             String query = template.render();
 
@@ -2035,12 +2045,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 // Add filters and search criteria using helper method
                 addFiltersToTemplate(template, criteria);
 
+                // Add target project IDs flag to template (from separate query to reduce traces table scans)
+                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                    template.add("has_target_projects", true);
+                }
+
                 var statement = connection.createStatement(template.render())
                         .bind("datasetId", criteria.datasetId())
                         .bind("versionId", versionId.toString());
 
                 // Bind target project IDs (from separate query to reduce traces table scans)
-                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                    statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                }
 
                 if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
                     statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
@@ -2832,6 +2849,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                         applyFiltersToTemplate(template, filters);
 
+                        // Add target project IDs flag to template (from separate query to reduce traces table scans)
+                        if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                            template.add("has_target_projects", true);
+                        }
+
                         String sql = template.render();
 
                         return asyncTemplate.nonTransaction(connection -> {
@@ -2839,7 +2861,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             bindStatementParameters(statement, datasetId, versionId, experimentIds, filters);
 
                             // Bind target project IDs (from separate query to reduce traces table scans)
-                            statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                            }
 
                             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                                     .flatMap(result -> result.map(
