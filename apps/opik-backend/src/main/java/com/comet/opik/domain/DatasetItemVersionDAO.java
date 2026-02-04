@@ -663,7 +663,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     // Query to fetch versioned dataset items with their associated experiment items
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
             WITH experiments_resolved AS (
-                SELECT *
+                SELECT
+                    *,
+                    COALESCE(nullIf(dataset_version_id, ''), :versionId) AS resolved_dataset_version_id
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND dataset_id = :datasetId
@@ -678,6 +680,35 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	WHERE ei.workspace_id = :workspace_id
             	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
             	LIMIT 1 BY ei.id
+            ),
+            experiment_items_trace_scope AS (
+                SELECT DISTINCT ei.trace_id
+                FROM experiment_items ei
+                INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
+                WHERE ei.workspace_id = :workspace_id
+                <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
+            ),
+            target_projects AS (
+                SELECT DISTINCT project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+            ),
+            trace_data AS (
+                SELECT
+                    id,
+                    duration,
+                    <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
+                    <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
+                    output as full_output,
+                    input as full_input,
+                    metadata,
+                    visibility_mode
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ),
             dataset_items_resolved AS (
                 SELECT
@@ -696,14 +727,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     SELECT *
                     FROM dataset_item_versions
                     WHERE workspace_id = :workspace_id
-                    AND dataset_id = :datasetId
+                    AND dataset_id  = :datasetId
+                    AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiments_resolved)
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS div_dedup
-                INNER JOIN experiment_items_scope ei_inner ON ei_inner.dataset_item_id = div_dedup.id
-                LEFT JOIN experiments_resolved e ON e.id = ei_inner.experiment_id
-                WHERE div_dedup.dataset_version_id = COALESCE(nullIf(e.dataset_version_id, ''), :versionId)
-                LIMIT 1 BY id
             ),
             feedback_scores_combined_raw AS (
                 SELECT
@@ -723,7 +751,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                  AND project_id IN (SELECT project_id FROM target_projects)
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -742,7 +771,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                  AND project_id IN (SELECT project_id FROM target_projects)
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
             ),
             feedback_scores_with_ranking AS (
                 SELECT workspace_id,
@@ -838,11 +868,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND trace_id IN (
                     SELECT
                         id
-                    FROM traces
+                    FROM trace_data t
                     <if(feedback_scores_empty_filters)>
-                        LEFT JOIN fsc ON fsc.entity_id = traces.id
+                    LEFT JOIN fsc ON fsc.entity_id = t.id
                     <endif>
-                    WHERE workspace_id = :workspace_id
+                    WHERE 1 = 1
                     <if(experiment_item_filters)>
                     AND <experiment_item_filters>
                     <endif>
@@ -858,8 +888,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     <if(feedback_scores_empty_filters)>
                     AND fsc.feedback_scores_count = 0
                     <endif>
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
                 )
                 <endif>
                 <if(dataset_item_filters)>
@@ -867,7 +895,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     SELECT id FROM dataset_items_resolved WHERE <dataset_item_filters>
                 )
                 <endif>
-            	ORDER BY id DESC, last_updated_at DESC
             )
             , comments_final AS (
                 SELECT
@@ -880,7 +907,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     entity_id
                 FROM comments
                 WHERE workspace_id = :workspace_id
-                AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
+                AND project_id IN (SELECT project_id FROM target_projects)
+                AND entity_id IN (SELECT trace_id FROM experiment_items_trace_scope)
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
@@ -897,15 +925,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 di.item_last_updated_at AS last_updated_at,
                 di.item_created_by AS created_by,
                 di.item_last_updated_by AS last_updated_by,
-                argMax(tfs.duration, ei.created_at) AS duration,
-                argMax(tfs.total_estimated_cost, ei.created_at) AS total_estimated_cost,
-                argMax(tfs.usage, ei.created_at) AS usage,
-                argMax(tfs.feedback_scores, ei.created_at) AS feedback_scores,
-                argMax(tfs.input, ei.created_at) AS input,
-                argMax(tfs.output, ei.created_at) AS output,
-                argMax(tfs.metadata, ei.created_at) AS metadata,
-                argMax(tfs.visibility_mode, ei.created_at) AS visibility_mode,
-                argMax(tfs.comments_array_agg, ei.created_at) AS comments,
+                argMax(tfs.duration, ei.id) AS duration,
+                argMax(tfs.total_estimated_cost, ei.id) AS total_estimated_cost,
+                argMax(tfs.usage, ei.id) AS usage,
+                argMax(tfs.feedback_scores, ei.id) AS feedback_scores,
+                argMax(tfs.input, ei.id) AS input,
+                argMax(tfs.output, ei.id) AS output,
+                argMax(tfs.metadata, ei.id) AS metadata,
+                argMax(tfs.visibility_mode, ei.id) AS visibility_mode,
+                argMax(tfs.comments_array_agg, ei.id) AS comments,
                 groupArray(tuple(
                     ei.id,
                     ei.experiment_id,
@@ -932,6 +960,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     t.id,
                     t.input,
                     t.output,
+                    t.full_input,
+                    t.full_output,
                     t.metadata,
                     t.duration,
                     t.visibility_mode,
@@ -955,34 +985,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         groupArray(fs.value)
                     ) AS feedback_scores,
                     groupUniqArray(tuple(c.*)) AS comments_array_agg
-                FROM (
-                    SELECT
-                        id,
-                       if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                         NULL) AS duration,
-                        <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
-                        <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
-                        metadata,
-                        visibility_mode
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items_final)
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS t
+                FROM trace_data AS t
                 LEFT JOIN feedback_scores_final AS fs ON t.id = fs.entity_id
                 LEFT JOIN comments_final AS c ON t.id = c.entity_id
                 LEFT JOIN (
-                SELECT
-                    trace_id,
-                    SUM(total_estimated_cost) AS total_estimated_cost,
-                    sumMap(usage) AS usage
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                AND trace_id IN (SELECT trace_id FROM experiment_items_scope)
-                GROUP BY workspace_id, trace_id
+                    SELECT
+                        trace_id,
+                        SUM(total_estimated_cost) AS total_estimated_cost,
+                        sumMap(usage) AS usage
+                    FROM spans final
+                    WHERE workspace_id = :workspace_id
+                    AND project_id IN (SELECT project_id FROM target_projects)
+                    AND trace_id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                    GROUP BY workspace_id, project_id, trace_id
                 ) s ON t.id = s.trace_id
                 GROUP BY
                     t.id,
@@ -991,6 +1006,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     t.metadata,
                     t.duration,
                     t.visibility_mode,
+                    t.full_input,
+                    t.full_output,
                     s.total_estimated_cost,
                     s.usage
             ) AS tfs ON ei.trace_id = tfs.id
@@ -1007,7 +1024,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 di.item_created_by,
                 di.item_last_updated_by
             <if(search)>
-            HAVING multiSearchAnyCaseInsensitive(toString(data_final), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(input), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(output), :searchTerms)
+            HAVING multiSearchAnyCaseInsensitive(toString(data_final), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(argMax(tfs.full_input, ei.id)), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(argMax(tfs.full_output, ei.id)), :searchTerms)
             <endif>
             <if(filters)>
             HAVING <filters>
@@ -1015,7 +1032,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <if(sorting)>
             ORDER BY <sorting>
             <else>
-            ORDER BY created_at DESC
+            ORDER BY id DESC
             <endif>
             LIMIT :limit
             OFFSET :offset
