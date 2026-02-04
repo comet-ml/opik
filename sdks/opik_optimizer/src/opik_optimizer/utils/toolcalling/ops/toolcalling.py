@@ -26,11 +26,15 @@ ToolDescriptionReporter = Callable[[str, str, dict[str, Any]], None]
 
 
 class CandidateGenerationReporter:
+    """Reporter for candidate generation display output."""
+
     def __init__(self, num_prompts: int, selection_summary: str | None = None) -> None:
+        """Create a reporter for a prompt cap and selection summary."""
         self.num_prompts = num_prompts
         self.selection_summary = selection_summary
 
     def set_generated_prompts(self, generated_count: int) -> None:
+        """Display a summary line for generated candidate counts."""
         summary = f" ({self.selection_summary})" if self.selection_summary else ""
         cap_text = (
             f" (cap {self.num_prompts})" if generated_count > self.num_prompts else ""
@@ -45,6 +49,7 @@ class CandidateGenerationReporter:
 def display_candidate_generation_report(
     num_prompts: int, verbose: int = 1, selection_summary: str | None = None
 ) -> CandidateGenerationReporter:
+    """Display the candidate generation header and return a reporter."""
     if verbose >= 1:
         display_text_block(
             f"│    Generating up to {num_prompts} candidate prompt{'' if num_prompts == 1 else 's'}:",
@@ -196,6 +201,7 @@ class ToolDescriptionCandidatesResponse(BaseModel):
     def __get_pydantic_json_schema__(
         cls, _core_schema: Any, _handler: Any
     ) -> dict[str, Any]:
+        """Return a strict JSON schema for OpenAI structured outputs."""
         return {
             "type": "object",
             "additionalProperties": False,
@@ -441,6 +447,7 @@ def _resolve_tool_segments(
     current_prompt: chat_prompt.ChatPrompt,
     tool_names: list[str] | None,
 ) -> list[prompt_segments.PromptSegment]:
+    """Return tool-related prompt segments filtered by allowed tools."""
     segments = prompt_segments.extract_prompt_segments(current_prompt)
     tool_segments = [segment for segment in segments if segment.is_tool()]
     if not tool_segments:
@@ -494,6 +501,7 @@ def make_tool_description_reporter(
         name: str,
         metadata: dict[str, Any],
     ) -> None:
+        """Format tool descriptions and parameters for display."""
         signature = ""
         raw_tool = metadata.get("raw_tool") or {}
         parameters = (
@@ -515,6 +523,7 @@ def make_tool_description_reporter(
 
 
 def _build_tool_blocks(segments: list[prompt_segments.PromptSegment]) -> str:
+    """Return formatted tool blocks for a list of tool segments."""
     blocks: list[str] = []
     for segment in segments:
         tool_name = segment.segment_id.replace(

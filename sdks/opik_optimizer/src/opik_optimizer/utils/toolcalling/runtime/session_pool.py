@@ -16,6 +16,7 @@ class SessionPool:
     """Run coroutines on a dedicated loop thread and cache sessions."""
 
     def __init__(self) -> None:
+        """Initialize an empty session pool with no event loop."""
         self._lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
@@ -24,6 +25,7 @@ class SessionPool:
         atexit.register(self.shutdown)
 
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        """Return the shared event loop, creating it if needed."""
         if self._loop is not None:
             return self._loop
 
@@ -34,6 +36,7 @@ class SessionPool:
             loop = asyncio.new_event_loop()
 
             def _run() -> None:
+                """Run the event loop forever in a background thread."""
                 asyncio.set_event_loop(loop)
                 loop.run_forever()
 
@@ -44,6 +47,7 @@ class SessionPool:
             return loop
 
     def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
+        """Run a coroutine on the pool loop and return its result."""
         loop = self._ensure_loop()
         future = asyncio.run_coroutine_threadsafe(coro, loop)
         try:
@@ -58,6 +62,7 @@ class SessionPool:
         key: str,
         factory: Callable[[], Coroutine[Any, Any, Any]],
     ) -> Any:
+        """Return an existing session or create it with the factory."""
         if key in self._sessions:
             return self._sessions[key]
         session = await factory()
@@ -67,15 +72,18 @@ class SessionPool:
     async def close_all(
         self, closer: Callable[[Any], Coroutine[Any, Any, None]]
     ) -> None:
+        """Close all cached sessions using the provided closer."""
         sessions = list(self._sessions.values())
         self._sessions.clear()
         for session in sessions:
             await closer(session)
 
     def set_closer(self, closer: Callable[[Any], Coroutine[Any, Any, None]]) -> None:
+        """Register a closer coroutine used during shutdown."""
         self._closer = closer
 
     def shutdown(self) -> None:
+        """Shut down the pool and close all sessions."""
         loop = self._loop
         if loop is None:
             return
@@ -87,6 +95,7 @@ class SessionPool:
         loop.call_soon_threadsafe(loop.stop)
 
     async def _shutdown_async(self) -> None:
+        """Async helper to close sessions during shutdown."""
         if self._closer is None:
             return None
         await self.close_all(self._closer)

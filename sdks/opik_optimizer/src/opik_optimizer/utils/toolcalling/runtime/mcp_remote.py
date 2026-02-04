@@ -22,6 +22,7 @@ _POOL = SessionPool()
 
 
 def _remote_key(url: str, headers: Mapping[str, str]) -> str:
+    """Return a stable cache key for remote MCP sessions."""
     payload = {"url": url, "headers": dict(headers)}
     return json.dumps(payload, sort_keys=True, default=str)
 
@@ -29,6 +30,7 @@ def _remote_key(url: str, headers: Mapping[str, str]) -> str:
 async def _get_or_create_client(
     url: str, headers: Mapping[str, str]
 ) -> tuple[Any, Any]:
+    """Return a cached remote client session or create one."""
     key = _remote_key(url, headers)
     return await _POOL.get_or_create(
         key,
@@ -37,6 +39,7 @@ async def _get_or_create_client(
 
 
 async def _start_client(url: str, headers: Mapping[str, str]) -> tuple[Any, Any]:
+    """Start a remote MCP client session and return session + transport."""
     ClientSession, streamablehttp_client = _load_remote_sdk()
     transport_cm = streamablehttp_client(url, headers=dict(headers))
     read_stream, write_stream, _get_session_id = await transport_cm.__aenter__()
@@ -49,6 +52,7 @@ async def _start_client(url: str, headers: Mapping[str, str]) -> tuple[Any, Any]
 
 
 async def _close_client(session_bundle: tuple[Any, Any]) -> None:
+    """Close a remote MCP client session bundle."""
     session, transport_cm = session_bundle
     if hasattr(session, "__aexit__"):
         await session.__aexit__(None, None, None)
@@ -85,6 +89,7 @@ def list_tools_from_remote(url: str, headers: Mapping[str, str]) -> Any:
     _toolcalling_limiter.acquire()
 
     async def _inner() -> Any:
+        """Async inner to list tools over a remote session."""
         session, _transport = await _get_or_create_client(url, headers)
         if hasattr(session, "list_tools"):
             response = await session.list_tools()
@@ -106,6 +111,7 @@ def call_tool_from_remote(
     _toolcalling_limiter.acquire()
 
     async def _inner() -> Any:
+        """Async inner to call a tool over a remote session."""
         session, _transport = await _get_or_create_client(url, headers)
         return await session.call_tool(name=tool_name, arguments=arguments)
 

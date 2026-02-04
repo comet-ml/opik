@@ -35,6 +35,7 @@ TOOL_ENTRY_KEY = "function"
 
 
 def _manifest_key(manifest: ToolCallingManifest) -> str:
+    """Return a stable cache key for a manifest."""
     payload = {
         "command": manifest.command,
         "args": manifest.args,
@@ -47,17 +48,20 @@ def _manifest_key(manifest: ToolCallingManifest) -> str:
 async def _get_or_create_client(
     manifest: ToolCallingManifest,
 ) -> ToolCallingClient:
+    """Return a cached client for a manifest, creating if needed."""
     key = _manifest_key(manifest)
     return await _POOL.get_or_create(key, lambda: _start_client(manifest))
 
 
 async def _start_client(manifest: ToolCallingManifest) -> ToolCallingClient:
+    """Start a new ToolCallingClient for a manifest."""
     client = ToolCallingClient(manifest)
     await client.__aenter__()
     return client
 
 
 async def _close_client(client: ToolCallingClient) -> None:
+    """Close a ToolCallingClient instance."""
     await client.__aexit__(None, None, None)
 
 
@@ -76,6 +80,7 @@ class ToolSignature:
 
     @classmethod
     def from_tool_entry(cls, entry: Mapping[str, Any]) -> ToolSignature:
+        """Build a ToolSignature from a function tool entry."""
         if TOOL_ENTRY_KEY not in entry:
             raise ValueError("Tool entry missing 'function' block")
 
@@ -100,6 +105,7 @@ class ToolSignature:
         )
 
     def to_tool_entry(self) -> dict[str, Any]:
+        """Return a function tool entry for this signature."""
         entry = copy.deepcopy(self.extra)
         entry.update(
             {
@@ -115,10 +121,12 @@ class ToolSignature:
         return entry
 
     def segment_update(self) -> tuple[str, str]:
+        """Return the prompt segment id + description for this tool."""
         return (f"tool:{self.name}", self.description)
 
 
 def load_mcp_signature(path: Path) -> list[ToolSignature]:
+    """Load a list of tool signatures from a JSON file."""
     data = json.loads(Path(path).read_text())
 
     if isinstance(data, dict) and "tools" in data:
@@ -131,15 +139,18 @@ def load_mcp_signature(path: Path) -> list[ToolSignature]:
 
 
 def dump_mcp_signature(signatures: Iterable[ToolSignature], path: Path) -> None:
+    """Write tool signatures to disk as JSON."""
     payload = [signature.to_tool_entry() for signature in signatures]
     Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True))
 
 
 def tools_from_signatures(signatures: Iterable[ToolSignature]) -> list[dict[str, Any]]:
+    """Convert tool signatures to function tool entries."""
     return [signature.to_tool_entry() for signature in signatures]
 
 
 def signature_updates(signatures: Iterable[ToolSignature]) -> dict[str, str]:
+    """Return a mapping of segment ids to descriptions."""
     return dict(signature.segment_update() for signature in signatures)
 
 
@@ -181,6 +192,7 @@ class ToolCallingDependencyError(RuntimeError):
 
 
 def _load_sdk() -> tuple[Any, Any, Any, Any]:
+    """Import MCP SDK components and return the required classes."""
     candidates = (
         (
             "mcp.client.session",
@@ -236,6 +248,7 @@ class ToolCallingManifest:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> ToolCallingManifest:
+        """Build a ToolCallingManifest from a mapping."""
         command = data.get("command")
         if not command:
             raise ValueError("mcp.json missing 'command'")
@@ -248,6 +261,7 @@ class ToolCallingManifest:
 
     @classmethod
     def from_json(cls, path: Path) -> ToolCallingManifest:
+        """Load a ToolCallingManifest from a JSON file."""
         return cls.from_dict(json.loads(Path(path).read_text()))
 
 
@@ -255,6 +269,7 @@ class ToolCallingClient:
     """Async MCP client wrapper for stdio servers."""
 
     def __init__(self, manifest: ToolCallingManifest) -> None:
+        """Initialize a ToolCallingClient for a manifest."""
         if _SDK_ERROR is not None:
             raise ToolCallingDependencyError(str(_SDK_ERROR))
         if (
@@ -270,6 +285,7 @@ class ToolCallingClient:
         self._write_stream: Any | None = None
 
     async def __aenter__(self) -> ToolCallingClient:
+        """Start the MCP client session and return self."""
         server_params = cast(type[Any], StdioServerParameters)(
             command=self.manifest.command,
             args=self.manifest.args,
@@ -296,6 +312,7 @@ class ToolCallingClient:
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> bool | None:
+        """Close the MCP client session."""
         if self._session is not None:
             if hasattr(self._session, "__aexit__"):
                 await self._session.__aexit__(exc_type, exc, tb)
@@ -304,6 +321,7 @@ class ToolCallingClient:
         return None
 
     async def list_tools(self) -> Any:
+        """List tools available from the MCP session."""
         if self._session is None:
             raise RuntimeError("MCP session not started")
         if hasattr(self._session, "list_tools"):
@@ -314,6 +332,7 @@ class ToolCallingClient:
         raise RuntimeError("MCP session missing list_tools")
 
     async def get_tool(self, tool_name: str) -> Any:
+        """Return a tool definition by name."""
         tools = await self.list_tools()
         for tool in tools:
             if tool.name == tool_name:
@@ -321,6 +340,7 @@ class ToolCallingClient:
         raise ValueError(f"Tool '{tool_name}' not found")
 
     async def call_tool(self, tool_name: str, arguments: Mapping[str, Any]) -> Any:
+        """Call a tool on the MCP session."""
         if self._session is None:
             raise RuntimeError("MCP session not started")
         return await self._session.call_tool(name=tool_name, arguments=arguments)
@@ -336,6 +356,7 @@ def list_tools_from_manifest(manifest: ToolCallingManifest) -> Any:
     _toolcalling_limiter.acquire()
 
     async def _inner() -> Any:
+        """Async inner to list tools with a cached client."""
         client = await _get_or_create_client(manifest)
         return await client.list_tools()
 
@@ -349,6 +370,7 @@ def call_tool_from_manifest(
     _toolcalling_limiter.acquire()
 
     async def _inner() -> Any:
+        """Async inner to call a tool with a cached client."""
         client = await _get_or_create_client(manifest)
         return await client.call_tool(tool_name, arguments)
 
@@ -374,6 +396,7 @@ def response_to_text(response: object) -> str:
 
 
 def _format_json_block(data: Mapping[str, Any]) -> str:
+    """Format JSON data into a stable, compact string."""
     return json.dumps(data, sort_keys=True)
 
 
@@ -444,6 +467,7 @@ def system_prompt_from_tool(
 
 
 def extract_description_from_system(system_prompt: str) -> str | None:
+    """Extract a tool description block from a system prompt."""
     if (
         mcp_prompts.PROMPT_TOOL_HEADER not in system_prompt
         or mcp_prompts.PROMPT_TOOL_FOOTER not in system_prompt
@@ -459,6 +483,7 @@ def extract_description_from_system(system_prompt: str) -> str | None:
 def load_tool_signature_from_manifest(
     manifest: ToolCallingManifest, tool_name: str
 ) -> ToolSignature:
+    """Load a tool signature from a manifest by tool name."""
     tools = list_tools_from_manifest(manifest)
     tool = next(
         (tool for tool in tools if getattr(tool, "name", None) == tool_name), None
@@ -488,6 +513,7 @@ def score_query_tool(
     description: str,
     argument_key: str = "query",
 ) -> float:
+    """Score how well a tool description matches dataset queries."""
     successes = 0
     total = 0
     description_tokens = set(description.lower().split())
@@ -523,6 +549,7 @@ def score_url_tool(
     description: str,
     argument_key: str = "url",
 ) -> float:
+    """Score how well a tool description matches dataset URLs."""
     from urllib.parse import urlparse
 
     successes = 0

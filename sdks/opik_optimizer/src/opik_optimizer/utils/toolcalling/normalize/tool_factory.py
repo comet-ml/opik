@@ -63,6 +63,7 @@ class ToolCallingFactory:
     """
 
     def __init__(self) -> None:
+        """Initialize a ToolCallingFactory with an empty signature cache."""
         self._signature_cache: dict[str, ToolSignature] = {}
 
     def resolve_prompt(
@@ -136,6 +137,7 @@ class ToolCallingFactory:
         """Build a callable that executes the MCP tool and returns text output."""
 
         def _callable(**arguments: Any) -> str:
+            """Execute the MCP tool and return a text response."""
             response = self._call_tool(server, tool_name, arguments)
             return response_to_text(response)
 
@@ -332,6 +334,7 @@ def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]
         raise ValueError("Cursor MCP config must include 'mcpServers'.")
 
     def _resolve_env_value(value: Any, env_key: str) -> Any:
+        """Resolve ${env:VAR} tokens or empty values using environment variables."""
         if not isinstance(value, str):
             return value
         if value.startswith("${env:") and value.endswith("}"):
@@ -342,6 +345,7 @@ def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]
         return value
 
     def _resolve_env_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
+        """Resolve env tokens in a mapping for headers/auth/env values."""
         resolved: dict[str, Any] = {}
         for key, value in mapping.items():
             resolved[key] = _resolve_env_value(value, key)
@@ -379,6 +383,7 @@ def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]
 
 
 def _normalize_openai_mcp_tool(entry: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize an OpenAI-style MCP tool entry into internal schema."""
     if entry.get("type") != "mcp":
         raise ValueError("MCP tool entry must have type='mcp'.")
 
@@ -438,6 +443,7 @@ def _normalize_openai_mcp_tool(entry: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _warn_require_approval() -> None:
+    """Emit a one-time warning when MCP tool execution requires approval."""
     global _REQUIRE_APPROVAL_WARNED
     if _REQUIRE_APPROVAL_WARNED:
         return
@@ -452,6 +458,7 @@ def _warn_require_approval() -> None:
 def _collect_function_names(
     tools: list[dict[str, Any]], function_map: dict[str, Callable]
 ) -> set[str]:
+    """Collect function names from tools and an existing function map."""
     names = set(function_map.keys())
     for tool in tools:
         if tool.get("type") == "function" or "function" in tool:
@@ -465,6 +472,7 @@ def _collect_function_names(
 def _resolve_function_name(
     tool_name: str, server_label: str, existing_names: set[str]
 ) -> str:
+    """Return a collision-free function name given existing names."""
     if tool_name not in existing_names:
         return tool_name
 
@@ -481,6 +489,7 @@ def _resolve_function_name(
 
 
 def _list_tool_names(server: Mapping[str, Any]) -> list[str]:
+    """Return tool names available for a given MCP server."""
     server_type = server.get("type")
     if server_type == "stdio":
         manifest = ToolCallingManifest.from_dict(server)
@@ -502,6 +511,7 @@ def _list_tool_names(server: Mapping[str, Any]) -> list[str]:
 
 
 def _strip_schema_field(parameters: Mapping[str, Any]) -> dict[str, Any]:
+    """Remove schema metadata fields from a parameter schema."""
     cleaned = dict(parameters) if parameters else {}
     cleaned.pop("$schema", None)
     return cleaned
@@ -510,6 +520,7 @@ def _strip_schema_field(parameters: Mapping[str, Any]) -> dict[str, Any]:
 def _load_remote_tool_signature(
     server: Mapping[str, Any], tool_name: str
 ) -> ToolSignature:
+    """Fetch a tool signature from a remote MCP server."""
     url = server.get("url")
     headers = server.get("headers") or {}
     if not url:
@@ -540,6 +551,7 @@ def _load_remote_tool_signature(
 def _call_remote_tool(
     server: Mapping[str, Any], tool_name: str, arguments: dict[str, Any]
 ) -> Any:
+    """Invoke a remote MCP tool with provided arguments."""
     url = server.get("url")
     headers = server.get("headers") or {}
     if not url:
@@ -550,6 +562,7 @@ def _call_remote_tool(
 
 
 def _log_remote_tool_response(tool_name: str, response: Any) -> None:
+    """Log remote MCP tool response metadata and quota warnings."""
     text = response_to_text(response)
     if "quota exceeded" in text.lower():
         logger.warning(
@@ -575,6 +588,7 @@ def _log_remote_tool_response(tool_name: str, response: Any) -> None:
 
 
 def _extract_response_meta(response: Any) -> dict[str, Any] | None:
+    """Extract response metadata from MCP responses if present."""
     meta = getattr(response, "meta", None) or getattr(response, "_meta", None)
     if isinstance(meta, dict) and meta:
         return meta
@@ -588,6 +602,7 @@ def _extract_response_meta(response: Any) -> dict[str, Any] | None:
 
 
 def _snippet(text: str, max_length: int = 160) -> str:
+    """Return a single-line truncated snippet for logging."""
     cleaned = " ".join(text.replace("\n", " ").replace("\t", " ").split())
     return cleaned if len(cleaned) <= max_length else f"{cleaned[:max_length]}..."
 

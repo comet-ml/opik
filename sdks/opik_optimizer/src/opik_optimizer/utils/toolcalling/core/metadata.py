@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ... import prompt_segments
+from ....utils import prompt_segments
 from . import components
 
 
