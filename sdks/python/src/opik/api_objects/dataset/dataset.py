@@ -93,6 +93,20 @@ class DatasetExportOperations(abc.ABC):
         dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
         return converters.to_json(dataset_items, keys_mapping={})
 
+    @abc.abstractmethod
+    def get_version_info(
+        self,
+    ) -> Optional[dataset_version_public.DatasetVersionPublic]:
+        """
+        Get version information for experiment association.
+
+        Returns:
+            DatasetVersionPublic containing version metadata (id, version_name, etc.).
+            For Dataset, returns info about the current/latest version, or None if no version exists.
+            For DatasetVersion, returns info about this specific version.
+        """
+        raise NotImplementedError
+
 
 class DatasetVersion(DatasetExportOperations):
     """
@@ -137,6 +151,11 @@ class DatasetVersion(DatasetExportOperations):
     def id(self) -> str:
         """The unique identifier of the dataset this version belongs to (alias for dataset_id)."""
         return self._dataset_id
+
+    @property
+    def version_id(self) -> Optional[str]:
+        """The unique identifier of this specific version."""
+        return self._version_info.id
 
     @property
     def dataset_items_count(self) -> Optional[int]:
@@ -232,6 +251,18 @@ class DatasetVersion(DatasetExportOperations):
             for item in self.__internal_api__stream_items_as_dataclasses__(nb_samples)
         ]
         return dataset_items_as_dicts
+
+    @override
+    def get_version_info(
+        self,
+    ) -> Optional[dataset_version_public.DatasetVersionPublic]:
+        """
+        Get version information for this specific dataset version.
+
+        Returns:
+            DatasetVersionPublic containing this version's metadata.
+        """
+        return self._version_info
 
 
 def _ensure_rest_api_call_respecting_rate_limit(
@@ -342,6 +373,20 @@ class Dataset(DatasetExportOperations):
         Returns:
             The current version name (e.g., 'v1', 'v2'), or None if no version exists.
         """
+        version_info = self.get_version_info()
+        return version_info.version_name if version_info else None
+
+    @override
+    def get_version_info(
+        self,
+    ) -> Optional[dataset_version_public.DatasetVersionPublic]:
+        """
+        Get version information for the current (latest) dataset version.
+
+        Returns:
+            DatasetVersionPublic containing the current version's metadata,
+            or None if no version exists yet.
+        """
         versions_response = self._rest_client.datasets.list_dataset_versions(
             id=self.id,
             page=1,
@@ -349,7 +394,7 @@ class Dataset(DatasetExportOperations):
         )
         if not versions_response.content:
             return None
-        return versions_response.content[0].version_name
+        return versions_response.content[0]
 
     def _insert_batch_with_retry(
         self,

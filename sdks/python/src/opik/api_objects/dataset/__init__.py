@@ -1,4 +1,4 @@
-from .dataset import Dataset, DatasetVersion
+from .dataset import Dataset, DatasetVersion, DatasetExportOperations
 
 
-__all__ = ["Dataset", "DatasetVersion"]
+__all__ = ["Dataset", "DatasetVersion", "DatasetExportOperations"]
