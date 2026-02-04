@@ -1,23 +1,75 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any, List, TypeVar, Type, Union
+import time
+from typing import Optional, Dict, Any, List, TypeVar, Type, Union, Callable
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
 from .. import config, datetime_helpers, logging_messages, id_helpers
 from ..message_processing import messages
 from ..rest_api import client as rest_api_client
+from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
     span_filter_public,
     trace_filter_public,
     trace_thread_filter,
 )
+from ..rate_limit import rate_limit
 from ..types import BatchFeedbackScoreDict
 
 # Re-export for backward compatibility
 generate_id = id_helpers.generate_id
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _ensure_rest_api_call_respecting_rate_limit(
+    rest_callable: Callable[[], Any],
+) -> Any:
+    """
+    Execute a REST API call with automatic retry on rate limit (429) errors.
+
+    This function handles HTTP 429 rate limit errors by waiting for the duration
+    specified in the response headers and retrying the request. Regular retries
+    for other errors are handled by the underlying rest client.
+
+    Args:
+        rest_callable: A callable that performs the REST API call.
+
+    Returns:
+        The result of the successful REST API call.
+
+    Raises:
+        ApiError: If the error is not a 429 rate limit error.
+    """
+    while True:
+        try:
+            result = rest_callable()
+            return result
+        except ApiError as exception:
+            if exception.status_code == 429:
+                # Parse rate limit headers to get retry delay
+                if exception.headers is not None:
+                    rate_limiter = rate_limit.parse_rate_limit(exception.headers)
+                    if rate_limiter is not None:
+                        retry_after = rate_limiter.retry_after()
+                        LOGGER.info(
+                            "Rate limited (HTTP 429), retrying in %s seconds",
+                            retry_after,
+                        )
+                        time.sleep(retry_after)
+                        continue
+
+                # Fallback: wait 1 second if no header available
+                LOGGER.info(
+                    "Rate limited (HTTP 429) with no retry-after header, retrying in 1 second"
+                )
+                time.sleep(1)
+                continue
+
+            # Re-raise if not a 429 error
+            raise
+
 
 FilterParsedItemT = TypeVar(
     "FilterParsedItemT",

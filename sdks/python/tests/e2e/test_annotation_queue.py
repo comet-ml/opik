@@ -101,8 +101,8 @@ def test_annotation_queue__add_threads__happyflow(
     """Test creating an annotation queue and adding threads to it."""
     # Thread IDs must be valid UUIDs for annotation queue API
     # Use full UUIDs and store them to filter later
-    thread_id_1 = str(uuid.uuid4())
-    thread_id_2 = str(uuid.uuid4())
+    thread_id_1 = "thread_1"
+    thread_id_2 = "thread_2"
     thread_ids = {thread_id_1, thread_id_2}
 
     # Create traces that belong to threads
@@ -153,11 +153,11 @@ def test_annotation_queue__add_threads__happyflow(
     assert queue.scope == "thread"
 
     # Get threads from API and filter by our thread IDs
-    all_threads = threads_client.search_threads(
+    threads = threads_client.search_threads(
         project_name=temporary_project_name,
-        max_results=100,
+        filter_string=f'id = "{thread_id_1}" or id = "{thread_id_2}"',
+        max_results=10,
     )
-    threads = [t for t in all_threads if t.id in thread_ids]
     assert len(threads) == 2
 
     # Add threads to queue

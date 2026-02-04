@@ -1,6 +1,5 @@
 import functools
 import logging
-import time
 from typing import (
     Optional,
     Any,
@@ -13,10 +12,9 @@ from typing import (
 
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import trace_public, trace_thread
-from opik.rest_api.core.api_error import ApiError
 from opik.message_processing.batching import sequence_splitter
-from opik.rate_limit import rate_limit
 from opik.api_objects.trace import trace_client
+from opik.api_objects.helpers import _ensure_rest_api_call_respecting_rate_limit
 import opik.exceptions as exceptions
 
 LOGGER = logging.getLogger(__name__)
@@ -47,51 +45,6 @@ def _require_scope(
         return wrapper  # type: ignore[return-value]
 
     return decorator
-
-
-def _ensure_rest_api_call_respecting_rate_limit(
-    rest_callable: Callable[[], Any],
-) -> Any:
-    """
-    Execute a REST API call with automatic retry on rate limit (429) errors.
-
-    This function handles HTTP 429 rate limit errors by waiting for the duration
-    specified in the response headers and retrying the request. Regular retries
-    for other errors are handled by the underlying rest client.
-
-    Args:
-        rest_callable: A callable that performs the REST API call.
-
-    Returns:
-        The result of the successful REST API call.
-
-    Raises:
-        ApiError: If the error is not a 429 rate limit error.
-    """
-    while True:
-        try:
-            result = rest_callable()
-            return result
-        except ApiError as exception:
-            if exception.status_code == 429:
-                if exception.headers is not None:
-                    rate_limiter = rate_limit.parse_rate_limit(exception.headers)
-                    if rate_limiter is not None:
-                        retry_after = rate_limiter.retry_after()
-                        LOGGER.info(
-                            "Rate limited (HTTP 429), retrying in %s seconds",
-                            retry_after,
-                        )
-                        time.sleep(retry_after)
-                        continue
-
-                LOGGER.info(
-                    "Rate limited (HTTP 429) with no retry-after header, retrying in 1 second"
-                )
-                time.sleep(1)
-                continue
-
-            raise
 
 
 class AnnotationQueue:
