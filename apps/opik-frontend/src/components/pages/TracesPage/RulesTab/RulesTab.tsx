@@ -297,8 +297,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   const showEmptyState =
     !isPending && noData && rows.length === 0 && page === 1;
-  const canInteractWithTable =
-    !isPending && !showEmptyState && rows.length > 0;
+  const canInteractWithTable = !isPending && !showEmptyState && rows.length > 0;
 
   return (
     <>
@@ -341,7 +340,13 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
       <DataTableStateHandler
         isLoading={isPending}
         isEmpty={showEmptyState}
-        emptyState={<NoRulesPage openModal={handleNewRuleClick} Wrapper={NoDataPage} className="px-6" />}
+        emptyState={
+          <NoRulesPage
+            openModal={handleNewRuleClick}
+            Wrapper={NoDataPage}
+            className="px-6"
+          />
+        }
       >
         <DataTable
           columns={columns}

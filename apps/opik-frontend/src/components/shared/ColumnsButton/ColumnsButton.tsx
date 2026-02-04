@@ -191,7 +191,12 @@ const ColumnsButton = <TColumnData,>({
     <DropdownMenu onOpenChange={openStateChangeHandler}>
       <TooltipWrapper content="Columns">
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon-sm" data-testid="columns-button" disabled={disabled}>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            data-testid="columns-button"
+            disabled={disabled}
+          >
             <Columns3 className="size-3.5" />
           </Button>
         </DropdownMenuTrigger>

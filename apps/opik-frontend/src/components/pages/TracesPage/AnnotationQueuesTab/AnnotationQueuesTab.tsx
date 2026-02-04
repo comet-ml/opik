@@ -371,8 +371,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
   const noData = !search && filters.length === 0;
   const showEmptyState =
     !isLoading && noData && rows.length === 0 && page === 1;
-  const canInteractWithTable =
-    !isLoading && !showEmptyState && rows.length > 0;
+  const canInteractWithTable = !isLoading && !showEmptyState && rows.length > 0;
 
   return (
     <>
