@@ -20,6 +20,7 @@ from .tool_factory import (
     resolve_toolcalling_tools,
 )
 from .toolcalling import (
+    build_tool_blocks_from_prompt,
     generate_tool_description_candidates,
     prepare_tool_optimization,
     resolve_prompt_tools,
@@ -43,6 +44,7 @@ __all__ = [
     "response_to_text",
     "resolve_toolcalling_tools",
     "generate_tool_description_candidates",
+    "build_tool_blocks_from_prompt",
     "prepare_tool_optimization",
     "resolve_prompt_tools",
     "should_allow_tool_use",

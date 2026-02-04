@@ -284,9 +284,9 @@ def resolve_toolcalling_tools(
                 continue
 
         resolved = factory.resolve_tool_entry(tool)
-            resolved_tools.append(resolved.function_entry)
-            resolved_map.setdefault(resolved.function_name, resolved.callable)
-            occupied_names.add(resolved.function_name)
+        resolved_tools.append(resolved.function_entry)
+        resolved_map.setdefault(resolved.function_name, resolved.callable)
+        occupied_names.add(resolved.function_name)
 
     return resolved_tools, resolved_map
 

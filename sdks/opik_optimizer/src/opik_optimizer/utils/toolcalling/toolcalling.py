@@ -531,3 +531,26 @@ def _build_tool_blocks(segments: list[prompt_segments.PromptSegment]) -> str:
         )
         blocks.append(block)
     return "\n\n".join(blocks)
+
+
+def build_tool_blocks_from_prompt(
+    prompt: chat_prompt.ChatPrompt,
+    tool_names: list[str] | None = None,
+) -> str:
+    """Return formatted tool blocks for a prompt.
+
+    Example:
+        blocks = build_tool_blocks_from_prompt(prompt, tool_names=["search"])
+    """
+    segments = prompt_segments.extract_prompt_segments(prompt)
+    tool_segments = [segment for segment in segments if segment.is_tool()]
+    if tool_names:
+        allowed = {
+            f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{name}" for name in tool_names
+        }
+        tool_segments = [
+            segment for segment in tool_segments if segment.segment_id in allowed
+        ]
+    if not tool_segments:
+        return ""
+    return _build_tool_blocks(tool_segments)
