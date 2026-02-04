@@ -340,9 +340,11 @@ def _build_geval_metric(params: Dict[str, Any], model: str) -> Callable:
     logger.info("GEval metric using template interpolation for dataset item fields")
     
     def metric_fn_with_interpolation(dataset_item, llm_output):
+        # Normalize dataset_item to prevent TypeError if None is passed
+        item = dataset_item or {}
         # Interpolate dataset item fields into templates
-        task_intro = _interpolate_template(task_intro_template, dataset_item)
-        eval_criteria = _interpolate_template(eval_criteria_template, dataset_item)
+        task_intro = _interpolate_template(task_intro_template, item)
+        eval_criteria = _interpolate_template(eval_criteria_template, item)
         
         # Create GEval with interpolated values
         # GEval internally caches chain-of-thought by (task_intro, criteria, model)

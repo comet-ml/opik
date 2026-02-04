@@ -405,6 +405,23 @@ class TestGEvalTemplateInterpolation:
         assert metric_fn.__name__ == "geval"
         assert callable(metric_fn)
 
+    def test_geval_with_placeholders_handles_none_dataset_item(self):
+        """Test that GEval with placeholders handles None dataset_item without crashing."""
+        from opik_backend.studio.metrics import _interpolate_template
+        
+        params = {
+            "task_introduction": "Evaluate the {{topic}} response",
+            "evaluation_criteria": "Check if output matches {{answer}}"
+        }
+        metric_fn = MetricFactory.build("geval", params, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "geval"
+        assert callable(metric_fn)
+        
+        # Verify interpolation with None returns template unchanged (placeholders preserved)
+        result = _interpolate_template(params["evaluation_criteria"], {})
+        assert result == "Check if output matches {{answer}}"
+
     def test_geval_without_placeholders_creates_single_instance(self):
         """Test that GEval without placeholders creates a single reusable instance."""
         from opik_backend.studio.metrics import _interpolate_template
