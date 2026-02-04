@@ -17,7 +17,9 @@ from ....api_objects.types import (
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
+from ....api_objects import chat_prompt
 from ....utils.prompt_library import PromptLibrary
+from . import tool_ops
 
 
 logger = logging.getLogger(__name__)
@@ -113,7 +115,12 @@ def _crossover_messages(
 
 
 def deap_crossover(
-    ind1: Any, ind2: Any, verbose: int = 1, rng: random.Random | None = None
+    ind1: Any,
+    ind2: Any,
+    *,
+    optimizer: Any | None = None,
+    verbose: int = 1,
+    rng: random.Random | None = None,
 ) -> tuple[Any, Any]:
     """Crossover operation that preserves semantic meaning.
 
@@ -160,6 +167,16 @@ def deap_crossover(
     metadata_1 = getattr(ind1, "prompts_metadata", {})
     metadata_2 = getattr(ind2, "prompts_metadata", {})
     merged_metadata = {**metadata_2, **metadata_1}
+
+    # Apply tool updates if optimizing tools
+    if optimizer is not None and getattr(optimizer, "_optimize_tools", None):
+        merged_metadata = tool_ops.apply_tool_updates_to_metadata(
+            optimizer=optimizer,
+            child_data=child1_data,
+            metadata=merged_metadata,
+            metric=metric,
+        )
+
     setattr(child1, "prompts_metadata", copy.deepcopy(merged_metadata))
     setattr(child2, "prompts_metadata", copy.deepcopy(merged_metadata))
 
@@ -259,6 +276,7 @@ def llm_deap_crossover(
     use_semantic: bool = False,
     verbose: int = 1,
     rng: random.Random | None = None,
+    optimizer: Any | None = None,
 ) -> tuple[Any, Any]:
     """Perform crossover by asking an LLM to blend two parent prompts.
 
@@ -352,6 +370,15 @@ def llm_deap_crossover(
         metadata_1 = getattr(ind1, "prompts_metadata", {})
         metadata_2 = getattr(ind2, "prompts_metadata", {})
         merged_metadata = {**metadata_2, **metadata_1}
+
+        # Apply tool updates if optimizing tools
+        if optimizer is not None and getattr(optimizer, "_optimize_tools", None):
+            merged_metadata = tool_ops.apply_tool_updates_to_metadata(
+                optimizer=optimizer,
+                child_data=child1_data,
+                metadata=merged_metadata,
+                metric=metric,
+            )
         setattr(child1, "prompts_metadata", copy.deepcopy(merged_metadata))
         setattr(child2, "prompts_metadata", copy.deepcopy(merged_metadata))
 
@@ -361,4 +388,5 @@ def llm_deap_crossover(
         logger.warning(
             f"LLM-driven crossover failed: {e}. Falling back to DEAP crossover."
         )
-        return deap_crossover(ind1, ind2, verbose=verbose)
+        return deap_crossover(ind1, ind2, optimizer=optimizer, verbose=verbose)
+
