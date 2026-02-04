@@ -455,17 +455,22 @@ SUPPORTED_MESSAGE_TYPES = {
     messages.UpdateTraceMessage.message_type: messages.UpdateTraceMessage,
     messages.CreateSpanMessage.message_type: messages.CreateSpanMessage,
     messages.UpdateSpanMessage.message_type: messages.UpdateSpanMessage,
+    messages.AddTraceFeedbackScoresBatchMessage.message_type: messages.AddTraceFeedbackScoresBatchMessage,
+    messages.AddSpanFeedbackScoresBatchMessage.message_type: messages.AddSpanFeedbackScoresBatchMessage,
+    messages.AddThreadsFeedbackScoresBatchMessage.message_type: messages.AddThreadsFeedbackScoresBatchMessage,
+    messages.CreateSpansBatchMessage.message_type: messages.CreateSpansBatchMessage,
+    messages.CreateTraceBatchMessage.message_type: messages.CreateTraceBatchMessage,
+    messages.GuardrailBatchMessage.message_type: messages.GuardrailBatchMessage,
+    messages.CreateExperimentItemsBatchMessage.message_type: messages.CreateExperimentItemsBatchMessage,
+    messages.AttachmentSupportingMessage.message_type: messages.AttachmentSupportingMessage,
 }
 
 
 def db_message_to_message(db_message: DBMessage) -> messages.BaseMessage:
     message_dict = json.loads(db_message.json)
-    if db_message.type in SUPPORTED_MESSAGE_TYPES:
-        message_class = SUPPORTED_MESSAGE_TYPES[db_message.type]
-        message: messages.BaseMessage = messages.from_db_message_dict(
-            message_class, message_dict
-        )
-    else:
+
+    message_class = SUPPORTED_MESSAGE_TYPES.get(db_message.type)
+    if message_class is None:
         raise ValueError(f"Unsupported message type: {db_message.type}")
 
-    return message
+    return messages.from_db_message_dict(message_class, message_dict)

@@ -6,6 +6,7 @@ from typing import Optional, Any, Dict, List, Union, Literal, Set, Type, TypeVar
 
 from . import arguments_utils
 from .preprocessing import constants
+from ..rest_api.core import pydantic_utilities
 from ..rest_api.types import span_write, trace_write
 from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
@@ -14,7 +15,29 @@ T = TypeVar("T", bound="BaseMessage")
 
 
 def from_db_message_dict(message_class: Type[T], data: Dict[str, Any]) -> T:
-    return message_class(**data)
+    """Deserialize a message from a dict.
+
+    Handles fields with init=False by filtering them from constructor args
+    and restoring them after object creation.
+    """
+    # Get field info for the message class
+    fields_info = {f.name: f for f in dataclasses.fields(message_class)}
+    init_fields = {name for name, f in fields_info.items() if f.init}
+
+    # Split data into init and non-init fields
+    init_data = {k: v for k, v in data.items() if k in init_fields}
+    non_init_data = {
+        k: v for k, v in data.items() if k in fields_info and k not in init_fields
+    }
+
+    # Create the object with init fields
+    obj = message_class(**init_data)
+
+    # Restore non-init fields
+    for key, value in non_init_data.items():
+        setattr(obj, key, value)
+
+    return obj
 
 
 @dataclasses.dataclass
@@ -214,6 +237,12 @@ class AddFeedbackScoresBatchMessage(BaseMessage):
 
     message_type = "AddFeedbackScoresBatchMessage"
 
+    def __post_init__(self) -> None:
+        self.batch = _deserialize_base_message_batch(self.batch, FeedbackScoreMessage)
+
+    def as_db_message_dict(self) -> Dict[str, Any]:
+        return _serialize_base_message_batch_to_dict(self.__dict__, self.batch)
+
 
 @dataclasses.dataclass
 class AddTraceFeedbackScoresBatchMessage(AddFeedbackScoresBatchMessage):
@@ -245,12 +274,26 @@ class AddThreadsFeedbackScoresBatchMessage(BaseMessage):
 
     message_type = "AddThreadsFeedbackScoresBatchMessage"
 
+    def __post_init__(self) -> None:
+        self.batch = _deserialize_base_message_batch(
+            self.batch, ThreadsFeedbackScoreMessage
+        )
+
+    def as_db_message_dict(self) -> Dict[str, Any]:
+        return _serialize_base_message_batch_to_dict(self.__dict__, self.batch)
+
 
 @dataclasses.dataclass
 class CreateSpansBatchMessage(BaseMessage):
     batch: List[span_write.SpanWrite]
 
     message_type = "CreateSpansBatchMessage"
+
+    def __post_init__(self) -> None:
+        self.batch = _deserialize_pydantic_batch(self.batch, span_write.SpanWrite)
+
+    def as_db_message_dict(self) -> Dict[str, Any]:
+        return _serialize_pydantic_batch_to_dict(self.__dict__, self.batch)
 
     @staticmethod
     def fields_to_anonymize() -> Set[str]:
@@ -262,6 +305,12 @@ class CreateTraceBatchMessage(BaseMessage):
     batch: List[trace_write.TraceWrite]
 
     message_type = "CreateTraceBatchMessage"
+
+    def __post_init__(self) -> None:
+        self.batch = _deserialize_pydantic_batch(self.batch, trace_write.TraceWrite)
+
+    def as_db_message_dict(self) -> Dict[str, Any]:
+        return _serialize_pydantic_batch_to_dict(self.__dict__, self.batch)
 
     @staticmethod
     def fields_to_anonymize() -> Set[str]:
@@ -293,6 +342,14 @@ class GuardrailBatchMessage(BaseMessage):
 
     message_type = "GuardrailBatchMessage"
 
+    def __post_init__(self) -> None:
+        self.batch = _deserialize_base_message_batch(
+            self.batch, GuardrailBatchItemMessage
+        )
+
+    def as_db_message_dict(self) -> Dict[str, Any]:
+        return _serialize_base_message_batch_to_dict(self.__dict__, self.batch)
+
     def as_payload_dict(self) -> Dict[str, Any]:
         data = super().as_payload_dict()
         data.pop("supports_batching")
@@ -321,6 +378,12 @@ class CreateExperimentItemsBatchMessage(BaseMessage):
 
     message_type = "CreateExperimentItemsBatchMessage"
 
+    def __post_init__(self) -> None:
+        self.batch = _deserialize_base_message_batch(self.batch, ExperimentItemMessage)
+
+    def as_db_message_dict(self) -> Dict[str, Any]:
+        return _serialize_base_message_batch_to_dict(self.__dict__, self.batch)
+
 
 @dataclasses.dataclass
 class CreateAttachmentMessage(BaseMessage):
@@ -341,3 +404,53 @@ class AttachmentSupportingMessage(BaseMessage):
     original_message: BaseMessage
 
     message_type = "AttachmentSupportingMessage"
+
+    def __post_init__(self) -> None:
+        if isinstance(self.original_message, dict):
+            self.original_message = CreateAttachmentMessage(**self.original_message)
+
+    def as_db_message_dict(self) -> Dict[str, Any]:
+        original_message_dict = self.original_message.as_db_message_dict()
+        return {**self.__dict__, "original_message": original_message_dict}
+
+
+def _deserialize_base_message_batch(
+    batch: List[Any],
+    item_class: Type[T],
+) -> List[T]:
+    """Convert dict items in a batch to BaseMessage-derived objects."""
+    return [
+        from_db_message_dict(item_class, item) if isinstance(item, dict) else item
+        for item in batch
+    ]
+
+
+def _deserialize_pydantic_batch(
+    batch: List[Any],
+    item_class: Type[pydantic_utilities.T],
+) -> List[Any]:
+    """Convert dict items in a batch to Pydantic model objects."""
+    return [
+        pydantic_utilities.parse_obj_as(item_class, item)
+        if isinstance(item, dict)
+        else item
+        for item in batch
+    ]
+
+
+def _serialize_base_message_batch_to_dict(
+    instance_dict: Dict[str, Any],
+    batch: List[T],
+) -> Dict[str, Any]:
+    """Serialize a BaseMessage batch to dict."""
+    batch_items = [item.as_db_message_dict() for item in batch]
+    return {**instance_dict, "batch": batch_items}
+
+
+def _serialize_pydantic_batch_to_dict(
+    instance_dict: Dict[str, Any],
+    batch: List[Any],
+) -> Dict[str, Any]:
+    """Serialize a Pydantic model batch to dict."""
+    batch_items = [item.dict() for item in batch]
+    return {**instance_dict, "batch": batch_items}
