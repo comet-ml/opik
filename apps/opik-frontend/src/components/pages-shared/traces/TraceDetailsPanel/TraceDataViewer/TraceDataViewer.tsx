@@ -91,16 +91,22 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   // Get transformed data from useUnifiedMedia - single source of truth for LLM messages detection
   const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
 
-  // Detect if Messages tab should be shown (both input AND output support LLM pretty mode)
+  // Detect if Messages tab should be shown
+  // Show tab if: at least one field is valid AND neither field is invalid
   // Using transformedInput/transformedOutput ensures consistency with MessagesTab rendering
   const canShowMessagesTab = useMemo(() => {
-    const inputDetection = detectLLMMessages(transformedInput, {
+    const input = detectLLMMessages(transformedInput, {
       fieldType: "input",
     });
-    const outputDetection = detectLLMMessages(transformedOutput, {
+    const output = detectLLMMessages(transformedOutput, {
       fieldType: "output",
     });
-    return inputDetection.supported && outputDetection.supported;
+
+    const hasValid = input.supported || output.supported;
+    const hasInvalid =
+      (!input.supported && !input.empty) || (!output.supported && !output.empty);
+
+    return hasValid && !hasInvalid;
   }, [transformedInput, transformedOutput]);
 
   // Default tab: Messages if available, otherwise Details
