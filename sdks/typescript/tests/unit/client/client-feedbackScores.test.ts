@@ -1,5 +1,6 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { MockInstance } from "vitest";
 import { Opik, FeedbackScoreData } from "opik";
-import { MockInstance } from "vitest";
 
 interface FeedbackScoreTestConfig {
   entityType: "trace" | "span";
@@ -139,6 +140,111 @@ function createFeedbackScoreTests(config: FeedbackScoreTestConfig): void {
         reason: "Excellent response",
         projectName: "test-project",
         source: "sdk",
+      });
+    });
+
+    describe("edge cases", () => {
+      it("should handle decimal score values correctly", () => {
+        logMethod(client)([
+          { id: entityId, name: "precision-1", value: 0.123456 },
+          { id: altEntityId1, name: "precision-2", value: 0.999999 },
+          { id: altEntityId2, name: "precision-3", value: 0.0 },
+        ]);
+
+        expect(batchQueueSpy).toHaveBeenCalledTimes(3);
+        expect(batchQueueSpy).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ value: 0.123456 })
+        );
+        expect(batchQueueSpy).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ value: 0.999999 })
+        );
+        expect(batchQueueSpy).toHaveBeenNthCalledWith(
+          3,
+          expect.objectContaining({ value: 0.0 })
+        );
+      });
+
+      it("should handle boundary score values", () => {
+        logMethod(client)([
+          { id: entityId, name: "boundary-min", value: 0.0 },
+          { id: altEntityId1, name: "boundary-max", value: 1.0 },
+        ]);
+
+        expect(batchQueueSpy).toHaveBeenCalledTimes(2);
+        expect(batchQueueSpy).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ value: 0.0 })
+        );
+        expect(batchQueueSpy).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ value: 1.0 })
+        );
+      });
+
+      it("should handle special characters in reason field", () => {
+        const specialReason =
+          'Contains "quotes", newlines,\nand unicode: 日本語 🎉';
+
+        logMethod(client)([
+          {
+            id: entityId,
+            name: "special-chars",
+            value: 0.5,
+            reason: specialReason,
+          },
+        ]);
+
+        expect(batchQueueSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            reason: specialReason,
+          })
+        );
+      });
+
+      it("should handle very long reason strings", () => {
+        const longReason = "This is a detailed explanation. ".repeat(50).trim();
+
+        logMethod(client)([
+          {
+            id: entityId,
+            name: "long-reason",
+            value: 0.75,
+            reason: longReason,
+          },
+        ]);
+
+        expect(batchQueueSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            reason: longReason,
+          })
+        );
+      });
+
+      it("should handle multiple sequential batch calls", () => {
+        // First batch
+        logMethod(client)([{ id: entityId, name: "batch-1", value: 0.5 }]);
+
+        // Second batch
+        logMethod(client)([{ id: entityId, name: "batch-2", value: 0.6 }]);
+
+        // Third batch
+        logMethod(client)([{ id: entityId, name: "batch-3", value: 0.7 }]);
+
+        expect(batchQueueSpy).toHaveBeenCalledTimes(3);
+        expect(batchQueueSpy).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ name: "batch-1", value: 0.5 })
+        );
+        expect(batchQueueSpy).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ name: "batch-2", value: 0.6 })
+        );
+        expect(batchQueueSpy).toHaveBeenNthCalledWith(
+          3,
+          expect.objectContaining({ name: "batch-3", value: 0.7 })
+        );
       });
     });
   });
