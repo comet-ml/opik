@@ -248,7 +248,7 @@ jobs:
       - name: "📢 Send Slack notification"
         if: steps.check-slack.outputs.configured == 'true'
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_USER_ID: ${{ secrets.SLACK_SDK_TESTS_NOTIFY_USER_ID }}
         run: |
           # Gather information
@@ -407,4 +407,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Slack notifications are not configured. To enable them:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Add the webhook URL as a repository secret named \`ACTION_MONITORING_SLACK\`" >> $GITHUB_STEP_SUMMARY
+          echo "Add the webhook URL as a repository secret named \`SLACK_WEBHOOK_URL\`" >> $GITHUB_STEP_SUMMARY
