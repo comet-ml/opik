@@ -1,4 +1,5 @@
 from . import _logging, environment, error_tracking, package_version
+from .api_objects.annotation_queue import AnnotationQueue
 from .api_objects.attachment import Attachment
 from .api_objects.dataset import Dataset
 from .api_objects.experiment.experiment_item import (
@@ -38,6 +39,7 @@ _logging.setup()
 __version__ = package_version.VERSION
 __all__ = [
     "__version__",
+    "AnnotationQueue",
     "Attachment",
     "evaluate",
     "evaluate_prompt",

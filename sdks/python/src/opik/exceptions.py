@@ -169,3 +169,22 @@ class SearchTimeoutError(OpikException):
     """Exception raised when a search times out."""
 
     pass
+
+
+class AnnotationQueueScopeMismatch(OpikException):
+    """Exception raised when attempting to add/remove items with the wrong scope."""
+
+    def __init__(
+        self,
+        item_type: str,
+        queue_scope: str,
+    ):
+        self.item_type = item_type
+        self.queue_scope = queue_scope
+
+    def __str__(self) -> str:
+        expected_type = "threads" if self.queue_scope == "thread" else "traces"
+        return (
+            f"Cannot use {self.item_type} on an annotation queue with scope '{self.queue_scope}'. "
+            f"This queue only accepts {expected_type}."
+        )

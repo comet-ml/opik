@@ -103,6 +103,106 @@ The SME interface provides:
 4. **Add comments**: Optional text feedback
 5. **Submit and continue**: Move to the next item
 
+## Managing Queues with Python SDK
+
+You can create and manage annotation queues programmatically using the Python SDK. This is useful for automating the process of adding items to queues based on specific criteria.
+
+### Creating an Annotation Queue
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Create a trace annotation queue
+queue = client.create_annotation_queue(
+    name="High Priority Traces",
+    scope="trace",
+    description="Traces that need review",
+    instructions="Check for accuracy and completeness",
+    feedback_definition_names=["relevance", "accuracy"]
+)
+
+print(f"Created queue: {queue.name} (ID: {queue.id})")
+```
+
+### Adding Traces to a Queue
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Get an existing queue
+queue = client.get_annotation_queue("queue-id")
+
+# Search for traces and add them to the queue
+traces = client.search_traces(project_name="my-project")
+queue.add_traces(traces[:10])
+
+# For a single trace, wrap it in a list
+single_trace = client.get_trace_content("trace-id")
+queue.add_traces([single_trace])
+```
+
+### Working with Thread Queues
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Create a thread annotation queue
+thread_queue = client.create_annotation_queue(
+    name="Thread Review Queue",
+    scope="thread",
+    description="Threads needing review"
+)
+
+# Get threads and add them to the queue
+threads_client = client.get_threads_client()
+threads = threads_client.search_threads(project_name="my-project")
+thread_queue.add_threads(threads[:10])
+```
+
+### Updating and Deleting Queues
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Get an existing queue
+queue = client.get_annotation_queue("queue-id")
+
+# Update queue properties
+queue.update(
+    description="Updated description",
+    instructions="New instructions for reviewers"
+)
+
+# Remove traces from the queue
+traces = client.search_traces(project_name="my-project")
+queue.remove_traces(traces[:5])
+
+# Delete the queue
+queue.delete()
+```
+
+### Listing Annotation Queues
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Get all annotation queues for a project
+queues = client.get_annotation_queues(project_name="my-project")
+
+for queue in queues:
+    print(f"Queue: {queue.name}, Scope: {queue.scope}, Items: {queue.items_count}")
+```
+
 ## Learn more
 
 You can learn more about Opik's annotation and evaluation features in:

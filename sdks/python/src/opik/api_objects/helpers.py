@@ -6,6 +6,7 @@ import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
 from .. import config, datetime_helpers, logging_messages, id_helpers
 from ..message_processing import messages
+from ..rest_api import client as rest_api_client
 from ..rest_api.types import (
     span_filter_public,
     trace_filter_public,
@@ -42,6 +43,26 @@ def datetime_to_iso8601_if_not_None(
         return None
 
     return datetime_helpers.datetime_to_iso8601(value)
+
+
+def _resolve_project_id_by_name(
+    rest_client: rest_api_client.OpikApi, project_name: str
+) -> str:
+    """
+    Resolve a project name to its project ID.
+
+    Args:
+        rest_client: The REST API client instance.
+        project_name: The name of the project.
+
+    Returns:
+        The project ID.
+
+    Raises:
+        ApiError: If the project is not found or if there's an API error.
+    """
+    project = rest_client.projects.retrieve_project(name=project_name)
+    return project.id
 
 
 def resolve_child_span_project_name(

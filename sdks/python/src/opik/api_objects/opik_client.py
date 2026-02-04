@@ -17,6 +17,8 @@ from . import (
     span,
     trace,
 )
+from .annotation_queue import annotation_queue
+from .annotation_queue import rest_operations as annotation_queue_rest_operations
 from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
@@ -1757,6 +1759,117 @@ class Opik:
             An instance of the ExperimentsClient initialized with a cached REST client.
         """
         return experiments_client.ExperimentsClient(self._rest_client)
+
+    def create_annotation_queue(
+        self,
+        name: str,
+        scope: Literal["trace", "thread"],
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+        instructions: Optional[str] = None,
+        comments_enabled: Optional[bool] = None,
+        feedback_definition_names: Optional[List[str]] = None,
+    ) -> annotation_queue.AnnotationQueue:
+        """
+        Create a new annotation queue.
+
+        Args:
+            name: The name of the annotation queue.
+            scope: The scope of the queue, either 'trace' or 'thread'.
+            project_name: The name of the project. If not provided, uses the client's default project.
+            description: An optional description of the queue.
+            instructions: Optional instructions for reviewers.
+            comments_enabled: Whether to enable comments on items.
+            feedback_definition_names: Optional list of feedback definition names.
+
+        Returns:
+            annotation_queue.AnnotationQueue: The created annotation queue object.
+        """
+        if project_name is None:
+            project_name = self._project_name
+
+        project_id = helpers._resolve_project_id_by_name(
+            self._rest_client, project_name
+        )
+        queue_id = id_helpers.generate_id()
+
+        self._rest_client.annotation_queues.create_annotation_queue(
+            id=queue_id,
+            project_id=project_id,
+            name=name,
+            scope=scope,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+        )
+
+        return annotation_queue.AnnotationQueue(
+            id=queue_id,
+            name=name,
+            project_id=project_id,
+            scope=scope,
+            rest_client=self._rest_client,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=list(feedback_definition_names)
+            if feedback_definition_names
+            else None,
+            items_count=0,
+        )
+
+    def get_annotation_queue(self, queue_id: str) -> annotation_queue.AnnotationQueue:
+        """
+        Get an annotation queue by its ID.
+
+        Args:
+            queue_id: The ID of the annotation queue.
+
+        Returns:
+            annotation_queue.AnnotationQueue: The annotation queue object.
+        """
+        return annotation_queue_rest_operations.get_annotation_queue_by_id(
+            rest_client=self._rest_client,
+            queue_id=queue_id,
+        )
+
+    def get_annotation_queues(
+        self,
+        project_name: Optional[str] = None,
+        max_results: int = 100,
+    ) -> List[annotation_queue.AnnotationQueue]:
+        """
+        Get all annotation queues for a project.
+
+        Args:
+            project_name: The name of the project. If not provided, uses the client's default project.
+            max_results: Maximum number of queues to return. Defaults to 100.
+
+        Returns:
+            List[annotation_queue.AnnotationQueue]: A list of annotation queue objects.
+        """
+        project_id: Optional[str] = None
+        project_id = helpers._resolve_project_id_by_name(
+            self._rest_client, project_name or self._project_name
+        )
+
+        return annotation_queue_rest_operations.get_annotation_queues(
+            rest_client=self._rest_client,
+            project_id=project_id,
+            max_results=max_results,
+        )
+
+    def delete_annotation_queue(self, queue_id: str) -> None:
+        """
+        Delete an annotation queue by its ID.
+
+        Args:
+            queue_id: The ID of the annotation queue to delete.
+        """
+        self._rest_client.annotation_queues.delete_annotation_queue_batch(
+            ids=[queue_id]
+        )
 
 
 @functools.lru_cache()
