@@ -1,4 +1,5 @@
 import useLocalStorageState from "use-local-storage-state";
+import { keepPreviousData } from "@tanstack/react-query";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import { PLAYGROUND_SELECTED_DATASET_VERSION_KEY } from "@/constants/llm";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
@@ -36,6 +37,7 @@ export const useValidatedDatasetVersion =
       {
         enabled: !!parsed,
         retry: false,
+        placeholderData: keepPreviousData,
       },
     );
 
