@@ -382,14 +382,25 @@ public class DatasetResourceClient {
 
     public DatasetItemPage getDatasetItemsWithExperimentItems(UUID datasetId, List<UUID> experimentIds, String apiKey,
             String workspaceName) {
+        return getDatasetItemsWithExperimentItems(datasetId, experimentIds, null, apiKey, workspaceName);
+    }
+
+    public DatasetItemPage getDatasetItemsWithExperimentItems(UUID datasetId, List<UUID> experimentIds, String search,
+            String apiKey, String workspaceName) {
         var experimentIdsQueryParam = JsonUtils.writeValueAsString(experimentIds);
 
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+        var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(datasetId.toString())
                 .path("items")
                 .path("experiments")
                 .path("items")
-                .queryParam("experiment_ids", experimentIdsQueryParam)
+                .queryParam("experiment_ids", experimentIdsQueryParam);
+
+        if (search != null && !search.isBlank()) {
+            webTarget = webTarget.queryParam("search", search);
+        }
+
+        try (var response = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
