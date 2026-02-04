@@ -454,7 +454,7 @@ def _collect_function_names(
 ) -> set[str]:
     names = set(function_map.keys())
     for tool in tools:
-        if tool.get("type") == "function":
+        if tool.get("type") == "function" or "function" in tool:
             function_block = tool.get("function", {})
             name = function_block.get("name")
             if name:
