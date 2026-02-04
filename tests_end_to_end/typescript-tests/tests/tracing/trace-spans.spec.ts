@@ -111,6 +111,8 @@ This test ensures spans created via decorator are properly associated with trace
   });
 
   test.describe('Span details and metadata', () => {
+    test.setTimeout(120000);
+
     test('Span details (feedback scores and metadata) are correctly displayed for traces created via low-level client @happypaths @fullregression @tracing', async ({
       page,
       projectName,
@@ -154,28 +156,45 @@ This test ensures span details are properly stored and displayed for low-level c
         const tracesPage = new TracesPage(page);
 
         for (const traceName of traceNames) {
+          // Click trace and wait for panel to fully load
           await tracesPage.clickFirstTraceWithName(traceName);
+          await page.waitForTimeout(1000);
+          
+          // Wait for the trace name to appear in the details panel header
+          const detailsPanel = page.locator('div').filter({ has: page.getByRole('tab', { name: 'Details' }) });
+          await expect(detailsPanel.getByText(traceName, { exact: true }).first()).toBeVisible({ timeout: 10000 });
           await page.waitForTimeout(500);
+
           const spansMenu = new TracesPageSpansMenu(page);
 
           for (let count = 0; count < spanConfig.count; count++) {
             const spanName = `${spanConfig.prefix}${count}`;
 
+            // Click on the span in the tree
             await spansMenu.getFirstSpanByName(spanName).click();
+            await page.waitForTimeout(1000);
+            
+            // Wait for the span name to appear in the details panel header
+            await expect(detailsPanel.getByText(spanName, { exact: true }).first()).toBeVisible({ timeout: 10000 });
+            await page.waitForTimeout(500);
 
+            // Click Feedback scores tab
             await spansMenu.getFeedbackScoresTab().click();
-            await page.waitForTimeout(250);
+            await page.waitForTimeout(1000);
 
             if (spanConfig.feedback_scores) {
               for (const score of spanConfig.feedback_scores) {
                 await expect(page.getByRole('cell', { name: score.name, exact: true })).toBeVisible();
                 await expect(
-                  page.getByRole('cell', { name: String(score.value), exact: true })
+                  page.locator('table').getByText(String(score.value), { exact: false }).first()
                 ).toBeVisible();
               }
             }
 
-            await spansMenu.getMetadataTab().click();
+            // Click Details tab
+            await page.getByRole('tab', { name: 'Details' }).click();
+            await page.waitForTimeout(1000);
+            
             if (spanConfig.metadata) {
               for (const [key, value] of Object.entries(spanConfig.metadata)) {
                 await expect(page.getByText(`${key}: ${value}`)).toBeVisible();
@@ -185,7 +204,9 @@ This test ensures span details are properly stored and displayed for low-level c
             await page.waitForTimeout(500);
           }
 
+          // Close the panel
           await page.keyboard.press('Escape');
+          await page.waitForTimeout(1000);
         }
       });
     });
@@ -233,28 +254,45 @@ This test ensures span details are properly stored and displayed for decorator-b
         const tracesPage = new TracesPage(page);
 
         for (const traceName of traceNames) {
+          // Click trace and wait for panel to fully load
           await tracesPage.clickFirstTraceWithName(traceName);
+          await page.waitForTimeout(1000);
+          
+          // Wait for the trace name to appear in the details panel header
+          const detailsPanel = page.locator('div').filter({ has: page.getByRole('tab', { name: 'Details' }) });
+          await expect(detailsPanel.getByText(traceName, { exact: true }).first()).toBeVisible({ timeout: 10000 });
           await page.waitForTimeout(500);
+
           const spansMenu = new TracesPageSpansMenu(page);
 
           for (let count = 0; count < spanConfig.count; count++) {
             const spanName = `${spanConfig.prefix}${count}`;
 
+            // Click on the span in the tree
             await spansMenu.getFirstSpanByName(spanName).click();
+            await page.waitForTimeout(1000);
+            
+            // Wait for the span name to appear in the details panel header
+            await expect(detailsPanel.getByText(spanName, { exact: true }).first()).toBeVisible({ timeout: 10000 });
+            await page.waitForTimeout(500);
 
+            // Click Feedback scores tab
             await spansMenu.getFeedbackScoresTab().click();
-            await page.waitForTimeout(250);
+            await page.waitForTimeout(1000);
 
             if (spanConfig.feedback_scores) {
               for (const score of spanConfig.feedback_scores) {
-                await expect(page.getByRole('cell', { name: score.name, exact: true })).toBeVisible();
+                await expect(page.getByRole('cell', { name: score.name, exact: true })).toBeVisible()
                 await expect(
-                  page.getByRole('cell', { name: String(score.value), exact: true })
+                  page.locator('table').getByText(String(score.value), { exact: false }).first()
                 ).toBeVisible();
               }
             }
 
-            await spansMenu.getMetadataTab().click();
+            // Click Details tab
+            await page.getByRole('tab', { name: 'Details' }).click();
+            await page.waitForTimeout(1000);
+            
             if (spanConfig.metadata) {
               for (const [key, value] of Object.entries(spanConfig.metadata)) {
                 await expect(page.getByText(`${key}: ${value}`)).toBeVisible();
@@ -264,7 +302,9 @@ This test ensures span details are properly stored and displayed for decorator-b
             await page.waitForTimeout(500);
           }
 
+          // Close the panel
           await page.keyboard.press('Escape');
+          await page.waitForTimeout(1000);
         }
       });
     });

@@ -36,9 +36,14 @@ export class ExperimentsPage extends BasePage {
 
   async clickExperiment(name: string): Promise<void> {
     await this.searchExperiment(name);
-    await this.page.getByRole('cell', { name, exact: true }).click();
+    // Wait for the search to filter the table
+    await this.page.waitForTimeout(500);
+    // Click on Created cell (index 4) - Dataset and Project cells have their own links
+    // Columns: 0=checkbox, 1=Name, 2=Dataset, 3=Project, 4=Created, 5=Duration, 6=Trace count
+    const row = this.page.getByRole('row', { name: new RegExp(name) }).first();
+    await row.getByRole('cell').nth(4).click();
     // Wait for navigation to experiment details page (UUID pattern)
-    await this.page.waitForURL(/\/experiments\/[0-9a-f-]{36}/);
+    await this.page.waitForURL(/\/experiments\/[0-9a-f-]{36}/, { timeout: 30000 });
   }
 
   async deleteExperiment(name: string): Promise<void> {

@@ -139,6 +139,16 @@ public interface DatasetVersionService {
     DatasetVersion getVersionById(String workspaceId, UUID datasetId, UUID versionId);
 
     /**
+     * Gets a specific version by its version name (e.g., 'v1', 'v373').
+     *
+     * @param datasetId the dataset ID
+     * @param versionName the version name (e.g., 'v1', 'v373')
+     * @return the version
+     * @throws NotFoundException if the version is not found
+     */
+    DatasetVersion getVersionByName(UUID datasetId, String versionName);
+
+    /**
      * Gets multiple versions by their IDs.
      *
      * @param versionIds the collection of version IDs to retrieve
@@ -274,6 +284,20 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             return dao.findById(versionId, workspaceId)
                     .orElseThrow(() -> new NotFoundException(
                             ERROR_VERSION_NOT_FOUND.formatted(versionId.toString(), datasetId)));
+        });
+    }
+
+    @Override
+    public DatasetVersion getVersionByName(@NonNull UUID datasetId, @NonNull String versionName) {
+        log.info("Getting version by name '{}' for dataset '{}'", versionName, datasetId);
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.findByVersionName(datasetId, versionName, workspaceId)
+                    .orElseThrow(() -> new NotFoundException(
+                            "Version '%s' not found for dataset '%s'".formatted(versionName, datasetId)));
         });
     }
 

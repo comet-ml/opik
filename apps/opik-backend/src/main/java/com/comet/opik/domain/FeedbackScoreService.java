@@ -5,17 +5,13 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
-import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.Visibility;
-import com.comet.opik.domain.threads.TraceThreadCriteria;
-import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
-import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -41,7 +37,6 @@ import java.util.stream.Collectors;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
-import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.groupingBy;
 
 @ImplementedBy(FeedbackScoreServiceImpl.class)
@@ -70,7 +65,7 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 
-    Mono<Void> deleteThreadManualScores(Set<UUID> threadModelId, UUID projectId);
+    Mono<Void> deleteAllThreadScores(Set<UUID> threadModelIds, UUID projectId);
 }
 
 @Slf4j
@@ -286,18 +281,18 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> deleteThreadManualScores(@NotNull Set<UUID> threadModelId, @NotNull UUID projectId) {
-        if (threadModelId.isEmpty()) {
-            log.info("No thread model IDs provided for deletion of manual scores in projectId '{}'", projectId);
+    public Mono<Void> deleteAllThreadScores(@NotNull Set<UUID> threadModelIds, @NotNull UUID projectId) {
+        if (threadModelIds.isEmpty()) {
+            log.info("No thread model IDs provided for deletion of all scores in projectId '{}'", projectId);
             return Mono.empty();
         }
 
-        return dao.deleteThreadManualScores(threadModelId, projectId)
+        return dao.deleteAllThreadScores(threadModelIds, projectId)
                 .doOnNext(count -> {
                     if (count > 0) {
-                        log.info("Deleted '{}' manual scores for threads in projectId '{}'", count, projectId);
+                        log.info("Deleted '{}' scores (all sources) for threads in projectId '{}'", count, projectId);
                     } else {
-                        log.info("No manual scores found to delete for projectId '{}'", projectId);
+                        log.info("No scores found to delete for projectId '{}'", projectId);
                     }
                 })
                 .then();
@@ -375,54 +370,14 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             .collectMap(Map.Entry::getKey, Map.Entry::getValue)
                             .map(threadIdMap -> bindThreadModelId(projectDto, threadIdMap))
                             .filter(projectDtoWithThreads -> !projectDtoWithThreads.scores().isEmpty())
-                            // score the batch of threads with resolved thread model IDs
-                            .flatMap(this::validateThreadStatus)
+                            // Thread status validation removed - feedback scores can now be added to threads
+                            // regardless of their active/inactive status. The status concept is kept only
+                            // for online scoring cooling period.
                             .flatMap(
                                     validatedProjectDto -> dao.scoreBatchOfThreads(validatedProjectDto.scores(),
                                             author));
                 })
                 .reduce(0L, Long::sum);
-    }
-
-    private Mono<ProjectDto<FeedbackScoreBatchItemThread>> validateThreadStatus(
-            ProjectDto<FeedbackScoreBatchItemThread> dto) {
-        Set<String> expectedCloseThreadIds = dto.scores.stream()
-                .map(FeedbackScoreItem::threadId)
-                .collect(Collectors.toSet());
-
-        Set<UUID> ids = dto.scores.stream()
-                .map(FeedbackScoreItem::id)
-                .collect(Collectors.toSet());
-
-        var criteria = TraceThreadCriteria.builder()
-                .projectId(dto.project().id())
-                .ids(List.copyOf(ids))
-                .status(TraceThreadStatus.INACTIVE)
-                .build();
-
-        return traceThreadService.getThreadsByProject(1, ids.size(), criteria)
-                .flatMap(threads -> {
-                    List<String> openedThreads = threads.stream()
-                            .map(TraceThreadModel::threadId)
-                            .filter(not(expectedCloseThreadIds::contains))
-                            .toList();
-
-                    if (!threads.isEmpty() && openedThreads.isEmpty()) {
-                        return Mono.just(dto); // All threads are closed, proceed with scoring
-                    }
-
-                    return Mono.error(new ClientErrorException(buildError(openedThreads, expectedCloseThreadIds)));
-                });
-    }
-
-    private Response buildError(List<String> openedThreads, Set<String> expectedCloseThreadIds) {
-        return Response.status(Response.Status.CONFLICT).entity(
-                new ErrorMessage(Response.Status.CONFLICT.getStatusCode(),
-                        "Threads must be closed before scoring. Thread IDs are active: '[%s]'".formatted(
-                                String.join(", ", openedThreads.isEmpty()
-                                        ? expectedCloseThreadIds.stream().sorted().toList()
-                                        : openedThreads.stream().sorted().toList()))))
-                .build();
     }
 
     private Mono<Map.Entry<String, UUID>> getOrCreateThread(ProjectDto<FeedbackScoreBatchItemThread> projectDto,
