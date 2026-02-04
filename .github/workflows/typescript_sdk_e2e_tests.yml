@@ -69,7 +69,7 @@ jobs:
         working-directory: sdks/typescript
         run: |
           # once OPIK-3910 is fixed we can revert to npm run test:integration
-          npm run test:ci
+          npm run test:integration
 
       - name: Keep BE log in case of failure
         if: failure()
