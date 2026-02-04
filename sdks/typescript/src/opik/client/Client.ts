@@ -5,7 +5,7 @@ import * as OpikApi from "@/rest_api/api";
 import { Trace } from "@/tracer/Trace";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
-import { getProjectUrl } from "@/utils/url";
+import { getProjectUrlByTraceId } from "@/utils/url";
 import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
@@ -101,16 +101,12 @@ export class OpikClient {
     clients.push(this);
   }
 
-  private displayTraceLog = (projectName: string) => {
+  private displayTraceLog = (traceId: string, projectName: string) => {
     if (projectName === this.lastProjectNameLogged || !this.config.apiUrl) {
       return;
     }
 
-    const projectUrl = getProjectUrl({
-      apiUrl: this.config.apiUrl,
-      projectName,
-      workspaceName: this.config.workspaceName,
-    });
+    const projectUrl = getProjectUrlByTraceId(traceId, this.config.apiUrl);
 
     logger.info(
       `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`
@@ -134,7 +130,7 @@ export class OpikClient {
 
     this.traceBatchQueue.create(trace.data);
     logger.debug("Trace added to the queue with ID:", trace.data.id);
-    this.displayTraceLog(projectName);
+    this.displayTraceLog(trace.data.id, projectName);
 
     return trace;
   };
