@@ -140,8 +140,11 @@ client = opik.Opik()
 queue = client.get_annotation_queue("queue-id")
 
 # Search for traces and add them to the queue
-traces = client.search_traces(project_name="my-project")
-queue.add_traces(traces[:10])
+traces = client.search_traces(
+  project_name="my-project",
+  filter_string='feedback_scores.user_frustration > 0.5'
+)
+queue.add_traces(traces)
 
 # For a single trace, wrap it in a list
 single_trace = client.get_trace_content("trace-id")
@@ -164,8 +167,11 @@ thread_queue = client.create_annotation_queue(
 
 # Get threads and add them to the queue
 threads_client = client.get_threads_client()
-threads = threads_client.search_threads(project_name="my-project")
-thread_queue.add_threads(threads[:10])
+important_threads = threads_client.search_threads(
+  project_name="my-project",
+  filter_string='tags contains "important"'
+)
+thread_queue.add_threads(important_threads)
 ```
 
 ### Updating and Deleting Queues
@@ -180,13 +186,16 @@ queue = client.get_annotation_queue("queue-id")
 
 # Update queue properties
 queue.update(
-    description="Updated description",
-    instructions="New instructions for reviewers"
+    description="Traces that need a thorough review",
+    instructions="Check the conversation tone"
 )
 
 # Remove traces from the queue
-traces = client.search_traces(project_name="my-project")
-queue.remove_traces(traces[:5])
+short_traces = client.search_traces(
+  project_name="my-project",
+  filter_string='duration < 10'
+)
+queue.remove_traces(short_traces)
 
 # Delete the queue
 queue.delete()
