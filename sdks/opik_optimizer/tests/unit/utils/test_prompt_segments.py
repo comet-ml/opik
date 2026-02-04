@@ -78,3 +78,27 @@ def test_prompt_segments__update_multiple_segments() -> None:
     assert prompt.messages is not None
     assert prompt.messages[0]["content"] == "Base system"
     assert prompt.messages[1]["content"] == "Ask about {topic}"
+
+
+def test_prompt_segments__preserves_untouched_messages() -> None:
+    prompt = ChatPrompt(
+        messages=[
+            {"role": "system", "content": "System stays"},
+            {"role": "user", "content": "User stays"},
+            {"role": "assistant", "content": "Assistant stays"},
+        ]
+    )
+
+    updated = prompt_segments.apply_segment_updates(
+        prompt, {"message:1": "User updated"}
+    )
+
+    assert updated.messages is not None
+    assert updated.messages[0]["content"] == "System stays"
+    assert updated.messages[1]["content"] == "User updated"
+    assert updated.messages[2]["content"] == "Assistant stays"
+
+    assert prompt.messages is not None
+    assert prompt.messages[0]["content"] == "System stays"
+    assert prompt.messages[1]["content"] == "User stays"
+    assert prompt.messages[2]["content"] == "Assistant stays"

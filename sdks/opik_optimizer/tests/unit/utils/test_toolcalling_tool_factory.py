@@ -98,7 +98,7 @@ def test_tool_factory__avoids_name_collisions(monkeypatch: Any) -> None:
 
     monkeypatch.setattr(ToolCallingFactory, "_get_signature", _fake_get_signature)
 
-    tools = [
+    tools: list[dict[str, Any]] = [
         {
             "type": "mcp",
             "server_label": "context7",
