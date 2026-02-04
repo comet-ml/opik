@@ -55,6 +55,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -70,6 +73,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -349,32 +353,27 @@ class DatasetVersionResourceTest {
             assertThat(version.isLatest()).isTrue();
         }
 
-        @Test
-        @DisplayName("Error: Retrieve non-existent version")
-        void retrieveVersion__whenVersionNotFound__thenReturn404() {
-            // Given
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 1); // Create only v1
-
-            // When
-            try (var response = datasetResourceClient.callRetrieveVersion(datasetId, "v999", API_KEY, TEST_WORKSPACE)) {
-                // Then
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-            }
+        static Stream<Arguments> invalidVersionScenarios() {
+            return Stream.of(
+                    Arguments.of("v999", HttpStatus.SC_NOT_FOUND, "non-existent version"),
+                    Arguments.of("invalid", HttpStatus.SC_UNPROCESSABLE_ENTITY, "invalid format"),
+                    Arguments.of("v", HttpStatus.SC_UNPROCESSABLE_ENTITY, "missing version number"),
+                    Arguments.of("1", HttpStatus.SC_UNPROCESSABLE_ENTITY, "missing 'v' prefix"));
         }
 
-        @Test
-        @DisplayName("Error: Invalid version name format")
-        void retrieveVersion__whenInvalidFormat__thenReturn422() {
+        @ParameterizedTest(name = "Error: {2}")
+        @MethodSource("invalidVersionScenarios")
+        void retrieveVersion__whenInvalidInput__thenReturnExpectedError(
+                String versionName, int expectedStatus, String scenario) {
             // Given
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 1);
 
-            // When - Try to retrieve with invalid format
-            try (var response = datasetResourceClient.callRetrieveVersion(datasetId, "invalid", API_KEY,
+            // When
+            try (var response = datasetResourceClient.callRetrieveVersion(datasetId, versionName, API_KEY,
                     TEST_WORKSPACE)) {
-                // Then - Dropwizard returns 422 Unprocessable Entity for validation errors
-                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+                // Then
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
             }
         }
     }
