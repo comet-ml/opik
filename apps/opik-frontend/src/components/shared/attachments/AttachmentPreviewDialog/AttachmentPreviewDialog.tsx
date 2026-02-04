@@ -1,5 +1,5 @@
 import React from "react";
-import ReactPlayer from "react-player";
+import ReactPlayer from "react-player/lazy";
 
 import { ATTACHMENT_TYPE } from "@/types/attachments";
 import {
@@ -8,8 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import PDFPreview from "@/components/pages-shared/attachments/PDFPreview/PDFPreview";
-import TextPreview from "@/components/pages-shared/attachments/TextPreview/TextPreview";
+import PDFPreview from "@/components/shared/attachments/PDFPreview/PDFPreview";
+import TextPreview from "@/components/shared/attachments/TextPreview/TextPreview";
 import ZoomPanContainer from "@/components/shared/ZoomPanContainer/ZoomPanContainer";
 
 export type AttachmentPreviewProps = {

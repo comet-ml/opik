@@ -351,7 +351,7 @@ const ExperimentsPage: React.FC = () => {
     maxExpandedDeepestGroups: MAX_EXPANDED_DEEPEST_GROUPS,
   });
 
-  const { data, isPending, isPlaceholderData, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
     useGroupedExperimentsList({
       workspaceName,
       groupLimit,
@@ -753,6 +753,7 @@ const ExperimentsPage: React.FC = () => {
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

@@ -211,7 +211,7 @@ const AlertsPage: React.FunctionComponent = () => {
     [],
   );
 
-  const { data, isPending } = useAlertsList(
+  const { data, isPending, isPlaceholderData, isFetching } = useAlertsList(
     {
       workspaceName,
       search: search!,
@@ -371,6 +371,7 @@ const AlertsPage: React.FunctionComponent = () => {
               )}
             </DataTableNoData>
           }
+          showLoadingOverlay={isPlaceholderData && isFetching}
         />
         <div className="py-4">
           <DataTablePagination
