@@ -435,7 +435,7 @@ def _semantic_mutation(
             f"      Error in semantic mutation, this is usually a parsing error: {e}",
             verbose=verbose,
         )
-        return prompt
+        return prompt.copy()
 
 
 def _radical_innovation_mutation(
@@ -495,7 +495,7 @@ def _radical_innovation_mutation(
             logger.warning(
                 f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."
             )
-            return prompt
+            return prompt.copy()
         constrained_messages = apply_role_constraints(
             prompt.get_messages(), new_messages, allowed_roles
         )
@@ -518,7 +518,7 @@ def _radical_innovation_mutation(
         logger.warning(
             f"Radical innovation mutation failed for prompt '{json.dumps(prompt.get_messages())[:50]}...': {e}. Returning original."
         )
-        return prompt
+        return prompt.copy()
 
 
 def deap_mutation(
