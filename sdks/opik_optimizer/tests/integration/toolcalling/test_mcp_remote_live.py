@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 import pytest
 
 from opik_optimizer.utils.toolcalling import mcp_remote
@@ -55,28 +57,33 @@ def test_mcp_remote_live__context7_without_api_key() -> None:
     for name in sorted(openai_tools_by_name):
         openai_tool = openai_tools_by_name[name]
         cursor_tool = cursor_tools_by_name[name]
-        assert openai_tool["function"]["description"] == cursor_tool["function"][
-            "description"
-        ]
-        assert openai_tool["function"]["parameters"] == cursor_tool["function"][
-            "parameters"
-        ]
-        assert openai_tool.get("mcp") is not None
-        assert cursor_tool.get("mcp") is not None
-        assert openai_tool["mcp"]["server_label"] == cursor_tool["mcp"]["server_label"]
-        assert openai_tool["mcp"]["tool"]["name"] == cursor_tool["mcp"]["tool"]["name"]
-        assert openai_tool["mcp"]["allowed_tools"] == cursor_tool["mcp"][
-            "allowed_tools"
-        ]
-        assert openai_tool["mcp"]["server"]["type"] == cursor_tool["mcp"]["server"][
-            "type"
-        ]
-        assert openai_tool["mcp"]["server"]["url"] == cursor_tool["mcp"]["server"][
-            "url"
-        ]
+        assert (
+            openai_tool["function"]["description"]
+            == cursor_tool["function"]["description"]
+        )
+        assert (
+            openai_tool["function"]["parameters"]
+            == cursor_tool["function"]["parameters"]
+        )
+        openai_mcp_entry = cast(dict[str, Any], openai_tool.get("mcp"))
+        cursor_mcp_entry = cast(dict[str, Any], cursor_tool.get("mcp"))
+        assert openai_mcp_entry and cursor_mcp_entry
+        assert openai_mcp_entry["server_label"] == cursor_mcp_entry["server_label"]
+        assert openai_mcp_entry["tool"]["name"] == cursor_mcp_entry["tool"]["name"]
+        assert openai_mcp_entry["allowed_tools"] == cursor_mcp_entry["allowed_tools"]
+        assert openai_mcp_entry["server"]["type"] == cursor_mcp_entry["server"]["type"]
+        assert openai_mcp_entry["server"]["url"] == cursor_mcp_entry["server"]["url"]
 
-    openai_mcp = [tool.get("mcp") for tool in resolved_openai if tool.get("mcp")]
-    cursor_mcp = [tool.get("mcp") for tool in resolved_cursor if tool.get("mcp")]
-    assert openai_mcp and cursor_mcp
-    assert openai_mcp[0]["server"]["type"] == "remote"
-    assert cursor_mcp[0]["server"]["type"] == "remote"
+    openai_mcp_list = [
+        cast(dict[str, Any], tool.get("mcp"))
+        for tool in resolved_openai
+        if tool.get("mcp")
+    ]
+    cursor_mcp_list = [
+        cast(dict[str, Any], tool.get("mcp"))
+        for tool in resolved_cursor
+        if tool.get("mcp")
+    ]
+    assert openai_mcp_list and cursor_mcp_list
+    assert openai_mcp_list[0]["server"]["type"] == "remote"
+    assert cursor_mcp_list[0]["server"]["type"] == "remote"
