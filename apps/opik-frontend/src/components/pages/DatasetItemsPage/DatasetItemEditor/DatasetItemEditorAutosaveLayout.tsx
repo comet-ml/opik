@@ -15,7 +15,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 import { processInputData } from "@/lib/images";
-import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { useDatasetItemEditorAutosaveContext } from "./DatasetItemEditorAutosaveContext";
 import DatasetItemEditorForm from "./DatasetItemEditorForm";
 

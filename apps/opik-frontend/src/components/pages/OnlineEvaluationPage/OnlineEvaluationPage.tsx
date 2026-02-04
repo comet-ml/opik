@@ -186,7 +186,7 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = useRulesList(
+  const { data, isPending, isPlaceholderData, isFetching } = useRulesList(
     {
       page: page as number,
       size: size as number,

@@ -365,14 +365,6 @@ running evaluations with `evaluate_prompt()`. This allows you to work with speci
   # Get filtered items
   failed_items = dataset.get_items(filter_string='tags contains "failed"')
 
-  # Use filtered items in evaluation
-  from opik.evaluation import evaluate_prompt
-  results = evaluate_prompt(
-      dataset=dataset,
-      dataset_filter_string='tags contains "failed"',
-      messages=[{"role": "user", "content": "{{input}}"}],
-      model="gpt-4"
-  )
   ```
 </CodeBlocks>
 
@@ -416,28 +408,6 @@ The filter string uses Opik Query Language (OQL) syntax. Supported columns inclu
   # Multiple conditions
   filtered_items = dataset.get_items(
       filter_string='tags contains "production" AND data.difficulty = "hard"'
-  )
-  ```
-</CodeBlocks>
-
-### Using filters in evaluation
-
-You can pass `dataset_filter_string` to `evaluate_prompt()` to evaluate only a subset of dataset items:
-
-<CodeBlocks>
-  ```python title="Python" language="python"
-  from opik import Opik
-  from opik.evaluation import evaluate_prompt
-
-  client = Opik()
-  dataset = client.get_dataset(name="my_dataset")
-
-  # Evaluate only items with specific tags
-  results = evaluate_prompt(
-      dataset=dataset,
-      messages=[{"role": "user", "content": "Answer: {{question}}"}],
-      model="gpt-4",
-      dataset_filter_string='tags contains "production"',
   )
   ```
 </CodeBlocks>
