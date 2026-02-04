@@ -286,7 +286,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     [annotationQueue.id, filters],
   );
 
-  const { data, isPending } = useThreadsList(
+  const { data, isPending, isPlaceholderData, isFetching } = useThreadsList(
     {
       projectId: annotationQueue.project_id,
       sorting: sortedColumns,
@@ -553,6 +553,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

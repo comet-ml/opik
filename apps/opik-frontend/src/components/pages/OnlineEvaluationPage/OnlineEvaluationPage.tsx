@@ -186,7 +186,7 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = useRulesList(
+  const { data, isPending, isPlaceholderData, isFetching } = useRulesList(
     {
       page: page as number,
       size: size as number,
@@ -422,6 +422,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

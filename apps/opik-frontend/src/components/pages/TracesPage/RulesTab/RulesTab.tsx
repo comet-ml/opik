@@ -164,7 +164,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = useRulesList(
+  const { data, isPending, isPlaceholderData, isFetching } = useRulesList(
     {
       projectId,
       page: page as number,
@@ -370,6 +370,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

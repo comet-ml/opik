@@ -280,23 +280,24 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const truncationEnabled = useTruncationEnabled();
 
-  const { data, isPending } = useCompareExperimentsList(
-    {
-      workspaceName,
-      datasetId,
-      experimentsIds,
-      filters,
-      sorting,
-      search: search as string,
-      truncate: truncationEnabled,
-      page: page as number,
-      size: size as number,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useCompareExperimentsList(
+      {
+        workspaceName,
+        datasetId,
+        experimentsIds,
+        filters,
+        sorting,
+        search: search as string,
+        truncate: truncationEnabled,
+        page: page as number,
+        size: size as number,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
 
   const { refetch: refetchExportData } = useCompareExperimentsList(
     {
@@ -884,6 +885,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         TableBody={DataTableVirtualBody}
         stickyHeader
         meta={meta}
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

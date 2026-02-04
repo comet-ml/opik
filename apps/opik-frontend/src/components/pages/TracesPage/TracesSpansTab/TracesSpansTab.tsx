@@ -494,26 +494,27 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, refetch } = useTracesOrSpansList(
-    {
-      projectId,
-      type: type as TRACE_DATA_TYPE,
-      sorting: sortedColumns,
-      filters,
-      page: page as number,
-      size: size as number,
-      search: search as string,
-      truncate: truncationEnabled,
-      fromTime: intervalStart,
-      toTime: intervalEnd,
-      exclude: excludeFields,
-    },
-    {
-      enabled: isTableDataEnabled,
-      refetchInterval: REFETCH_INTERVAL,
-      refetchOnMount: false,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+    useTracesOrSpansList(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+        sorting: sortedColumns,
+        filters,
+        page: page as number,
+        size: size as number,
+        search: search as string,
+        truncate: truncationEnabled,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+        exclude: excludeFields,
+      },
+      {
+        enabled: isTableDataEnabled,
+        refetchInterval: REFETCH_INTERVAL,
+        refetchOnMount: false,
+      },
+    );
 
   const { refetch: refetchExportData } = useTracesOrSpansList(
     {
@@ -1295,6 +1296,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             TableWrapper={PageBodyStickyTableWrapper}
             stickyHeader
             meta={meta}
+            showLoadingOverlay={isPlaceholderData && isFetching}
           />
           <PageBodyStickyContainer
             className="py-4"

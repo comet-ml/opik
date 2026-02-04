@@ -6,6 +6,7 @@ import last from "lodash/last";
 import { TableBody } from "@/components/ui/table";
 import { DataTableBodyProps } from "@/components/shared/DataTable/DataTableBody";
 import usePageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/usePageBodyScrollContainer";
+import { cn } from "@/lib/utils";
 
 const ROW_BORDER_SIZE = 1;
 const MIN_OVER_SCAN_ROWS = 2;
@@ -16,6 +17,7 @@ export const DataTableVirtualBody = <TData,>({
   table,
   renderRow,
   renderNoData,
+  showLoadingOverlay = false,
 }: DataTableBodyProps<TData>) => {
   const { scrollContainer, tableOffset } = usePageBodyScrollContainer();
   const { height } = table.options.meta?.rowHeightStyle ?? { height: "44" };
@@ -70,7 +72,11 @@ export const DataTableVirtualBody = <TData,>({
   };
 
   return (
-    <TableBody>{rows?.length ? renderVirtualRows() : renderNoData()}</TableBody>
+    <TableBody
+      className={cn(showLoadingOverlay && "comet-table-body-loading-overlay")}
+    >
+      {rows?.length ? renderVirtualRows() : renderNoData()}
+    </TableBody>
   );
 };
 

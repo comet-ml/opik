@@ -270,7 +270,12 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending: isLoading } = useAnnotationQueuesList(
+  const {
+    data,
+    isPending: isLoading,
+    isPlaceholderData,
+    isFetching,
+  } = useAnnotationQueuesList(
     {
       search: search as string,
       page: page as number,
@@ -452,6 +457,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
         onRowClick={handleRowClick}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

@@ -370,25 +370,26 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, refetch } = useThreadList(
-    {
-      projectId,
-      sorting: sortedColumns,
-      filters,
-      page: page as number,
-      size: size as number,
-      search: search as string,
-      truncate: truncationEnabled,
-      fromTime: intervalStart,
-      toTime: intervalEnd,
-    },
-    {
-      enabled: isTableDataEnabled,
-      placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
-      refetchOnMount: false,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+    useThreadList(
+      {
+        projectId,
+        sorting: sortedColumns,
+        filters,
+        page: page as number,
+        size: size as number,
+        search: search as string,
+        truncate: truncationEnabled,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+      },
+      {
+        enabled: isTableDataEnabled,
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+        refetchOnMount: false,
+      },
+    );
 
   const { refetch: refetchExportData } = useThreadList(
     {
@@ -743,6 +744,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             TableWrapper={PageBodyStickyTableWrapper}
             stickyHeader
             meta={meta}
+            showLoadingOverlay={isPlaceholderData && isFetching}
           />
           <PageBodyStickyContainer
             className="py-4"
