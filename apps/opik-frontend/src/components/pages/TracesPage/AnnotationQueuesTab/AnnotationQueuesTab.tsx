@@ -24,7 +24,6 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
-import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
@@ -42,6 +41,7 @@ import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCall
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/NoAnnotationQueuesPage";
+import Loader from "@/components/shared/Loader/Loader";
 
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { formatDate } from "@/lib/date";
@@ -365,11 +365,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
 
   const noData = !search && !filters.length;
 
-  if (isLoading) {
-    return <Loader />;
-  }
-
-  if (noData && rows.length === 0 && page === 1) {
+  if (!isLoading && noData && rows.length === 0 && page === 1) {
     return (
       <>
         <NoAnnotationQueuesPage
@@ -436,36 +432,42 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
           </Button>
         </div>
       </PageBodyStickyContainer>
-      <DataTable
-        columns={columns}
-        data={rows}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        onRowClick={handleRowClick}
-        TableWrapper={PageBodyStickyTableWrapper}
-        stickyHeader
-      />
-      <PageBodyStickyContainer
-        className="py-4"
-        direction="horizontal"
-        limitWidth
-      >
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
-        />
-      </PageBodyStickyContainer>
+      {isLoading ? (
+        <Loader />
+      ) : (
+        <>
+          <DataTable
+            columns={columns}
+            data={rows}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            rowHeight={height as ROW_HEIGHT}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={<DataTableNoData title={noDataText} />}
+            onRowClick={handleRowClick}
+            TableWrapper={PageBodyStickyTableWrapper}
+            stickyHeader
+          />
+          <PageBodyStickyContainer
+            className="py-4"
+            direction="horizontal"
+            limitWidth
+          >
+            <DataTablePagination
+              page={page as number}
+              pageChange={setPage}
+              size={size as number}
+              sizeChange={setSize}
+              total={data?.total ?? 0}
+            />
+          </PageBodyStickyContainer>
+        </>
+      )}
 
       <AddEditAnnotationQueueDialog
         key={resetDialogKeyRef.current}

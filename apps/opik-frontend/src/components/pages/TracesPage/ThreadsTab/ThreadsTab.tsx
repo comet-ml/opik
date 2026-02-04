@@ -41,7 +41,6 @@ import {
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoThreadsPage from "@/components/pages/TracesPage/ThreadsTab/NoThreadsPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -69,6 +68,7 @@ import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import Loader from "@/components/shared/Loader/Loader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
@@ -645,9 +645,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
-  if (isPending || isFeedbackScoresNamesPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending || isFeedbackScoresNamesPending;
 
   return (
     <>
@@ -720,8 +718,10 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         </div>
       </PageBodyStickyContainer>
 
-      {noData && rows.length === 0 && page === 1 ? (
+      {noData && rows.length === 0 && page === 1 && !isTableLoading ? (
         <NoThreadsPage />
+      ) : isTableLoading ? (
+        <Loader />
       ) : (
         <>
           <DataTable
