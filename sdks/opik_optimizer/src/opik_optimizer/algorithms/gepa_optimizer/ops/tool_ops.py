@@ -6,6 +6,7 @@ from typing import Any
 from ....utils import prompt_segments
 from ....utils.toolcalling import components as tool_components
 
+
 def build_tool_metadata_by_component(
     *,
     base_prompts: dict[str, Any],
