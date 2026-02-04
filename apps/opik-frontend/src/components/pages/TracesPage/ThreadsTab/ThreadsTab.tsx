@@ -41,7 +41,6 @@ import {
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoThreadsPage from "@/components/pages/TracesPage/ThreadsTab/NoThreadsPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -69,6 +68,7 @@ import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
@@ -646,9 +646,11 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
-  if (isPending || isFeedbackScoresNamesPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending || isFeedbackScoresNamesPending;
+  const showEmptyState =
+    !isTableLoading && noData && rows.length === 0 && page === 1;
+  const canInteractWithTable =
+    !isTableLoading && !showEmptyState && rows.length > 0;
 
   return (
     <>
@@ -709,6 +711,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
+            disabled={!canInteractWithTable}
           />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
@@ -717,52 +720,53 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
+            disabled={!canInteractWithTable}
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
 
-      {noData && rows.length === 0 && page === 1 ? (
-        <NoThreadsPage />
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            columnsStatistic={columnsStatistic}
-            data={rows}
-            onRowClick={handleRowClick}
-            activeRowId={activeRowId ?? ""}
-            sortConfig={sortConfig}
-            resizeConfig={resizeConfig}
-            selectionConfig={{
-              rowSelection,
-              setRowSelection,
-            }}
-            getRowId={getRowId}
-            rowHeight={height as ROW_HEIGHT}
-            columnPinning={DEFAULT_COLUMN_PINNING}
-            noData={<DataTableNoData title={noDataText} />}
-            TableWrapper={PageBodyStickyTableWrapper}
-            stickyHeader
-            meta={meta}
-            showLoadingOverlay={isPlaceholderData && isFetching}
+      <DataTableStateHandler
+        isLoading={isTableLoading}
+        isEmpty={showEmptyState}
+        emptyState={<NoThreadsPage />}
+      >
+        <DataTable
+          columns={columns}
+          columnsStatistic={columnsStatistic}
+          data={rows}
+          onRowClick={handleRowClick}
+          activeRowId={activeRowId ?? ""}
+          sortConfig={sortConfig}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          TableWrapper={PageBodyStickyTableWrapper}
+          stickyHeader
+          meta={meta}
+          showLoadingOverlay={isPlaceholderData && isFetching}
+        />
+        <PageBodyStickyContainer
+          className="py-4"
+          direction="horizontal"
+          limitWidth
+        >
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+            supportsTruncation
+            truncationEnabled={truncationEnabled}
           />
-          <PageBodyStickyContainer
-            className="py-4"
-            direction="horizontal"
-            limitWidth
-          >
-            <DataTablePagination
-              page={page as number}
-              pageChange={setPage}
-              size={size as number}
-              sizeChange={setSize}
-              total={data?.total ?? 0}
-              supportsTruncation
-              truncationEnabled={truncationEnabled}
-            />
-          </PageBodyStickyContainer>
-        </>
-      )}
+        </PageBodyStickyContainer>
+      </DataTableStateHandler>
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}

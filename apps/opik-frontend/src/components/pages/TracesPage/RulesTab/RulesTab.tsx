@@ -23,7 +23,7 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import Loader from "@/components/shared/Loader/Loader";
+import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -295,30 +295,10 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
     [setEditRuleId, setCloneRuleId],
   );
 
-  if (isPending) {
-    return <Loader />;
-  }
-
-  if (noData && rows.length === 0 && page === 1) {
-    return (
-      <>
-        <NoRulesPage
-          openModal={handleNewRuleClick}
-          Wrapper={NoDataPage}
-          height={188}
-          className="px-6"
-        />
-        <AddEditRuleDialog
-          key={resetDialogKeyRef.current}
-          open={isDialogOpen}
-          projectId={projectId}
-          setOpen={handleCloseDialog}
-          rule={dialogRule}
-          mode={dialogMode}
-        />
-      </>
-    );
-  }
+  const showEmptyState =
+    !isPending && noData && rows.length === 0 && page === 1;
+  const canInteractWithTable =
+    !isPending && !showEmptyState && rows.length > 0;
 
   return (
     <>
@@ -351,40 +331,47 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
+            disabled={!canInteractWithTable}
           ></ColumnsButton>
           <Button variant="default" size="sm" onClick={handleNewRuleClick}>
             Create new rule
           </Button>
         </div>
       </PageBodyStickyContainer>
-      <DataTable
-        columns={columns}
-        data={rows}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        TableWrapper={PageBodyStickyTableWrapper}
-        stickyHeader
-        showLoadingOverlay={isPlaceholderData && isFetching}
-      />
-      <PageBodyStickyContainer
-        className="py-4"
-        direction="horizontal"
-        limitWidth
+      <DataTableStateHandler
+        isLoading={isPending}
+        isEmpty={showEmptyState}
+        emptyState={<NoRulesPage openModal={handleNewRuleClick} Wrapper={NoDataPage} className="px-6" />}
       >
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
-        ></DataTablePagination>
-      </PageBodyStickyContainer>
+        <DataTable
+          columns={columns}
+          data={rows}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          TableWrapper={PageBodyStickyTableWrapper}
+          stickyHeader
+          showLoadingOverlay={isPlaceholderData && isFetching}
+        />
+        <PageBodyStickyContainer
+          className="py-4"
+          direction="horizontal"
+          limitWidth
+        >
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+          ></DataTablePagination>
+        </PageBodyStickyContainer>
+      </DataTableStateHandler>
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
         open={isDialogOpen}
