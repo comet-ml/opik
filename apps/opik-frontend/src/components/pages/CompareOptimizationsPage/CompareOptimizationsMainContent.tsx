@@ -23,6 +23,7 @@ type CompareOptimizationsMainContentProps = {
   onColumnsWidthChange: OnChangeFn<Record<string, number>>;
   highlightedTrialId?: string;
   bestExperiment?: Experiment;
+  showLoadingOverlay?: boolean;
 };
 
 const CompareOptimizationsMainContent: React.FC<
@@ -42,6 +43,7 @@ const CompareOptimizationsMainContent: React.FC<
   onColumnsWidthChange,
   highlightedTrialId,
   bestExperiment,
+  showLoadingOverlay,
 }) => {
   const showTrialsView =
     !isStudioOptimization || view === OPTIMIZATION_VIEW_TYPE.TRIALS;
@@ -65,6 +67,7 @@ const CompareOptimizationsMainContent: React.FC<
           columnsWidth={columnsWidth}
           onColumnsWidthChange={onColumnsWidthChange}
           highlightedTrialId={highlightedTrialId}
+          showLoadingOverlay={showLoadingOverlay}
         />
       )}
       {showConfigurationView && optimization?.studio_config && (
