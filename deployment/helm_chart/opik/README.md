@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.1](https://img.shields.io/badge/Version-1.10.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.1](https://img.shields.io/badge/AppVersion-1.10.1-informational?style=flat-square)
+![Version: 1.10.4](https://img.shields.io/badge/Version-1.10.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.4](https://img.shields.io/badge/AppVersion-1.10.4-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -85,7 +85,7 @@ Call opik api on http://localhost:5173/api
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
-| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.10 |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.5.4 |
 
 ## Values
 
@@ -280,30 +280,50 @@ Call opik api on http://localhost:5173/api
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
-| component.frontend.csp.connectSrc[0] | string | `"'self'"` |  |
-| component.frontend.csp.connectSrc[1] | string | `"ws:"` |  |
-| component.frontend.csp.connectSrc[2] | string | `"wss:"` |  |
-| component.frontend.csp.connectSrc[3] | string | `"https:"` |  |
-| component.frontend.csp.enabled | bool | `true` |  |
-| component.frontend.csp.fontSrc[0] | string | `"'self'"` |  |
-| component.frontend.csp.fontSrc[1] | string | `"data:"` |  |
-| component.frontend.csp.fontSrc[2] | string | `"https://fonts.gstatic.com"` |  |
-| component.frontend.csp.frameAncestors[0] | string | `"'none'"` |  |
-| component.frontend.csp.imgSrc[0] | string | `"'self'"` |  |
-| component.frontend.csp.imgSrc[1] | string | `"data:"` |  |
-| component.frontend.csp.imgSrc[2] | string | `"blob:"` |  |
-| component.frontend.csp.imgSrc[3] | string | `"https:"` |  |
-| component.frontend.csp.imgSrc[4] | string | `"http:"` |  |
-| component.frontend.csp.mediaSrc[0] | string | `"'self'"` |  |
-| component.frontend.csp.mediaSrc[1] | string | `"https:"` |  |
-| component.frontend.csp.mediaSrc[2] | string | `"http:"` |  |
-| component.frontend.csp.scriptSrc[0] | string | `"'self'"` |  |
-| component.frontend.csp.scriptSrc[1] | string | `"'unsafe-inline'"` |  |
-| component.frontend.csp.scriptSrc[2] | string | `"'unsafe-eval'"` |  |
-| component.frontend.csp.styleSrc[0] | string | `"'self'"` |  |
-| component.frontend.csp.styleSrc[1] | string | `"'unsafe-inline'"` |  |
-| component.frontend.csp.styleSrc[2] | string | `"https://fonts.googleapis.com"` |  |
+| component.frontend.cacheControl[0].pattern | string | `"~assets/.*\\.(js|css)$"` |  |
+| component.frontend.cacheControl[0].value | string | `"public, max-age=604800, immutable"` |  |
+| component.frontend.cacheControl[1].pattern | string | `"~(images/.*|assets/.*)\\.(jpg|jpeg|png|gif|svg|webp|ico)$"` |  |
+| component.frontend.cacheControl[1].value | string | `"public, max-age=2592000"` |  |
+| component.frontend.cacheControl[2].pattern | string | `"~assets/.*\\.(woff|woff2|ttf|eot)$"` |  |
+| component.frontend.cacheControl[2].value | string | `"public, max-age=2592000"` |  |
+| component.frontend.cacheControl[3].pattern | string | `"~assets/.*\\.json$"` |  |
+| component.frontend.cacheControl[3].value | string | `"public, max-age=86400"` |  |
+| component.frontend.cacheControl[4].pattern | string | `"default"` |  |
+| component.frontend.cacheControl[4].value | string | `"no-cache, must-revalidate"` |  |
+| component.frontend.contentSecurityPolicy.base-uri[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.child-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.connect-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.connect-src[1] | string | `"ws:"` |  |
+| component.frontend.contentSecurityPolicy.connect-src[2] | string | `"wss:"` |  |
+| component.frontend.contentSecurityPolicy.connect-src[3] | string | `"https:"` |  |
+| component.frontend.contentSecurityPolicy.default-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.font-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.font-src[1] | string | `"data:"` |  |
+| component.frontend.contentSecurityPolicy.font-src[2] | string | `"https://fonts.gstatic.com"` |  |
+| component.frontend.contentSecurityPolicy.form-action[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.frame-ancestors[0] | string | `"'none'"` |  |
+| component.frontend.contentSecurityPolicy.img-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.img-src[1] | string | `"data:"` |  |
+| component.frontend.contentSecurityPolicy.img-src[2] | string | `"blob:"` |  |
+| component.frontend.contentSecurityPolicy.img-src[3] | string | `"https:"` |  |
+| component.frontend.contentSecurityPolicy.img-src[4] | string | `"http:"` |  |
+| component.frontend.contentSecurityPolicy.manifest-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.media-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.media-src[1] | string | `"https:"` |  |
+| component.frontend.contentSecurityPolicy.media-src[2] | string | `"http:"` |  |
+| component.frontend.contentSecurityPolicy.object-src[0] | string | `"'none'"` |  |
+| component.frontend.contentSecurityPolicy.script-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.script-src[1] | string | `"'unsafe-inline'"` |  |
+| component.frontend.contentSecurityPolicy.script-src[2] | string | `"'unsafe-eval'"` |  |
+| component.frontend.contentSecurityPolicy.style-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.style-src[1] | string | `"'unsafe-inline'"` |  |
+| component.frontend.contentSecurityPolicy.style-src[2] | string | `"https://fonts.googleapis.com"` |  |
+| component.frontend.contentSecurityPolicy.worker-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.worker-src[1] | string | `"blob:"` |  |
 | component.frontend.enabled | bool | `true` |  |
+| component.frontend.extraServerHeaders.X-Content-Type-Options | string | `"nosniff"` |  |
+| component.frontend.extraServerHeaders.X-Frame-Options | string | `"DENY"` |  |
+| component.frontend.extraServerHeaders.X-XSS-Protection | string | `"0"` |  |
 | component.frontend.hstsEnabled | bool | `false` |  |
 | component.frontend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.frontend.image.repository | string | `"opik-frontend"` |  |
@@ -448,6 +468,8 @@ Call opik api on http://localhost:5173/api
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
+| zookeeper.selectorLabels.instance | string | `"opik"` |  |
+| zookeeper.selectorLabels.name | string | `"zookeeper-opik"` |  |
 | zookeeper.serverIdOffset | int | `1` |  |
 
 ----------------------------------------------

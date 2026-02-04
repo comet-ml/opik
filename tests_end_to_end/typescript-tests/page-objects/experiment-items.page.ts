@@ -24,9 +24,8 @@ export class ExperimentItemsPage {
   async getIdOfNthExperimentItem(n: number): Promise<string> {
     const row = this.page.locator('tr').nth(n + 1);
     const cell = row.locator('td').nth(1);
-    await cell.hover();
-    await cell.getByRole('button').nth(1).click();
-    return await this.page.evaluate(() => (navigator as any).clipboard.readText());
+    const content = (await cell.textContent()) || '';
+    return content.trim();
   }
 
   async getAllItemIdsOnCurrentPage(): Promise<string[]> {
@@ -36,10 +35,8 @@ export class ExperimentItemsPage {
     for (let rowIndex = 2; rowIndex < rows.length; rowIndex++) {
       const row = rows[rowIndex];
       const cell = row.locator('td').nth(1);
-      await cell.hover();
-      await cell.getByRole('button').nth(1).click();
-      const id = await this.page.evaluate(() => (navigator as any).clipboard.readText());
-      ids.push(id);
+      const id = (await cell.textContent()) || '';
+      ids.push(id.trim());
     }
 
     return ids;

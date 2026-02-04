@@ -91,6 +91,9 @@ export interface WorkspaceMember extends APIWorkspaceMember {
   roleId?: string;
   isAdmin: boolean;
   permissions: UserPermission[];
+  permissionMismatch?: {
+    message: string;
+  };
 }
 
 export enum WorkspaceRoleType {

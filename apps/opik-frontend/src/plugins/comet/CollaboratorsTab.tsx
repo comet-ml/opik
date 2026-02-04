@@ -36,10 +36,12 @@ import {
 } from "./types";
 import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
 import WorkspaceMemberActionsCell from "./WorkspaceMemberActionsCell";
+import WorkspaceMemberWarningCell from "./WorkspaceMemberWarningCell";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 import { WorkspaceRolesProvider } from "./WorkspaceRolesContext";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
+const WARNING_COLUMN_ID = "warning";
 
 const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
   {
@@ -62,6 +64,12 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
       const dateString = new Date(row.joinedAt).toISOString();
       return formatDate(dateString);
     },
+  },
+  {
+    id: WARNING_COLUMN_ID,
+    label: "Warning",
+    type: COLUMN_TYPE.errors,
+    cell: WorkspaceMemberWarningCell as never,
   },
   {
     id: "role",
@@ -136,16 +144,20 @@ const CollaboratorsTab = () => {
     );
 
   const columns = useMemo(() => {
+    const columnsToUse = isPermissionsManagementEnabled
+      ? DEFAULT_COLUMNS
+      : DEFAULT_COLUMNS.filter((col) => col.id !== WARNING_COLUMN_ID);
+
     return [
       ...convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
-        DEFAULT_COLUMNS,
+        columnsToUse,
         {},
       ),
       generateActionsColumDef({
         cell: WorkspaceMemberActionsCell,
       }),
     ];
-  }, []);
+  }, [isPermissionsManagementEnabled]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -195,6 +207,7 @@ const CollaboratorsTab = () => {
         roleId: userRoleData?.roleId,
         isAdmin: memberInOrganization?.role === ORGANIZATION_ROLE_TYPE.admin,
         permissions: userPermissions || [],
+        permissionMismatch: userRoleData?.permissionMismatch,
         ...member,
       };
     });
