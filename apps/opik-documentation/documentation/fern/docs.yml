@@ -336,15 +336,66 @@ navigation:
           - page: Dashboards
             path: docs/production/dashboards.mdx
             slug: dashboards
-      - section: Configuration
-        slug: /configuration
+      - section: Administration
+        slug: /administration
         contents:
-          - page: Feedback definitions
-            path: docs/configuration/feedback_definitions.mdx
-            slug: /configuration/feedback_definitions
-          - page: AI Providers
-            path: docs/configuration/ai_providers.mdx
-            slug: ai_providers
+          - page: Overview
+            path: docs/administration/overview.mdx
+            slug: overview
+          - page: Roles and Permissions
+            path: docs/administration/roles_and_permissions.mdx
+            slug: roles_and_permissions
+          - section: Workspace Settings
+            slug: /workspace-settings
+            contents:
+              - page: Overview
+                path: docs/administration/workspace-settings/overview.mdx
+                slug: overview
+              - page: Feedback Definitions
+                path: docs/administration/workspace-settings/feedback_definitions.mdx
+                slug: feedback_definitions
+              - page: AI Providers
+                path: docs/administration/workspace-settings/ai_providers.mdx
+                slug: ai_providers
+              - page: Workspace Preferences
+                path: docs/administration/workspace-settings/workspace_preferences.mdx
+                slug: workspace_preferences
+              - page: Workspace Members
+                path: docs/administration/workspace-settings/workspace_members.mdx
+                slug: workspace_members
+          - section: Admin Dashboard
+            slug: /admin-dashboard
+            contents:
+              - page: Overview
+                path: docs/administration/admin-dashboard/overview.mdx
+                slug: overview
+              - page: Workspaces
+                path: docs/administration/admin-dashboard/workspaces.mdx
+                slug: workspaces
+              - page: Users
+                path: docs/administration/admin-dashboard/users.mdx
+                slug: users
+              - page: Organization Settings
+                path: docs/administration/admin-dashboard/organization_settings.mdx
+                slug: organization_settings
+              - page: Service Accounts
+                path: docs/administration/admin-dashboard/service_accounts.mdx
+                slug: service_accounts
+          - section: Authentication
+            slug: /authentication
+            contents:
+              - page: Overview
+                path: docs/administration/authentication/overview.mdx
+                slug: overview
+              - page: SAML SSO
+                path: docs/administration/authentication/saml.mdx
+                slug: saml
+              - page: OIDC SSO
+                path: docs/administration/authentication/oidc.mdx
+                slug: oidc
+              - page: JWT Authentication
+                path: docs/administration/authentication/jwt.mdx
+                slug: jwt
       - section: Contributing
         slug: /contributing
         contents:
@@ -1417,4 +1468,27 @@ redirects:
     permanent: true
   - source: "/docs/opik/changelog/2024/:slug*"
     destination: "/docs/opik/changelog"
+    permanent: true
+  # Configuration to Workspace Settings redirects (configuration section was renamed and moved)
+  - source: "/docs/opik/configuration"
+    destination: "/docs/opik/administration/workspace-settings/overview"
+    permanent: true
+  - source: "/docs/opik/configuration/feedback_definitions"
+    destination: "/docs/opik/administration/workspace-settings/feedback_definitions"
+    permanent: true
+  - source: "/docs/opik/configuration/ai_providers"
+    destination: "/docs/opik/administration/workspace-settings/ai_providers"
+    permanent: true
+  # Administration restructure redirects (pages moved to admin-dashboard subsection)
+  - source: "/docs/opik/administration/admin_dashboard"
+    destination: "/docs/opik/administration/admin-dashboard/overview"
+    permanent: true
+  - source: "/docs/opik/administration/organizations_and_workspaces"
+    destination: "/docs/opik/administration/admin-dashboard/workspaces"
+    permanent: true
+  - source: "/docs/opik/administration/user_management"
+    destination: "/docs/opik/administration/admin-dashboard/users"
+    permanent: true
+  - source: "/docs/opik/administration/service_accounts"
+    destination: "/docs/opik/administration/admin-dashboard/service_accounts"
     permanent: true
