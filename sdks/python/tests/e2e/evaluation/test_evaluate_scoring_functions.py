@@ -20,6 +20,7 @@ def _wait_for_version(dataset, expected_version: str, timeout: float = 10) -> No
     )
     assert success, f"Expected version '{expected_version}' was not created in time"
 
+
 DATASET_ITEMS = [
     {
         "input": {"question": "What is the of capital of Ukraine?"},
