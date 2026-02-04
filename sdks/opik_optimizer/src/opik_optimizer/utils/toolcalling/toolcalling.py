@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import logging
 import warnings
 from typing import Any
@@ -154,9 +153,7 @@ class ToolDescriptionCandidate(BaseModel):
     improvement_focus: str = Field(
         ..., description="What aspect the description improves"
     )
-    reasoning: str = Field(
-        ..., description="Explanation for the updated description"
-    )
+    reasoning: str = Field(..., description="Explanation for the updated description")
 
 
 class ToolDescriptionCandidatesResponse(BaseModel):
@@ -249,7 +246,7 @@ def prepare_tool_optimization(
             for segment in tool_segments
         ]
     # Limit the number of tools to optimize at once
-    max_tools = constants.DEFAULT_MAX_TOOL_OPTIMIZATION
+    max_tools = constants.DEFAULT_TOOL_CALL_MAX_TOOLS_TO_OPTIMIZE
     if tool_names is not None and len(tool_names) > max_tools:
         raise ValueError(
             "optimize_tools supports at most "
