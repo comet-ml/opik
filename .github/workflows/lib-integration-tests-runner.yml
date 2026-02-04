@@ -325,47 +325,62 @@ jobs:
             COLOR="good"
           fi
           
-          # Build mention text if user ID is configured
-          MENTION_TEXT=""
-          if [ -n "$SLACK_USER_ID" ]; then
-            MENTION_TEXT="👤 cc: <@${SLACK_USER_ID}>"
-          fi
+          # Build blocks array
+          BLOCKS='[]'
           
-          # Build the JSON payload using jq for proper escaping
-          jq -n \
-            --arg color "$COLOR" \
-            --arg title "$STATUS_EMOJI Python SDK Integration Tests $STATUS_TEXT" \
+          # Header
+          BLOCKS=$(echo "$BLOCKS" | jq --arg title "$STATUS_EMOJI Python SDK Integration Tests $STATUS_TEXT" \
+            '. + [{"type": "header", "text": {"type": "plain_text", "text": $title, "emoji": true}}]')
+          
+          # Info fields
+          BLOCKS=$(echo "$BLOCKS" | jq \
             --arg trigger "$TRIGGER_TYPE" \
             --arg branch "$BRANCH" \
             --arg commit_url "https://github.com/${{ github.repository }}/commit/$COMMIT_SHA" \
             --arg short_sha "$SHORT_SHA" \
-            --arg success_count "$SUCCESS_COUNT" \
-            --arg failure_count "$FAILURE_COUNT" \
-            --arg skipped_count "$SKIPPED_COUNT" \
-            --arg success_suites "$SUCCESS_SUITES" \
-            --arg failed_suites "$FAILED_SUITES" \
-            --arg skipped_suites "$SKIPPED_SUITES" \
-            --arg workflow_url "$WORKFLOW_URL" \
-            --arg mention "$MENTION_TEXT" \
-            '{
-              attachments: [{
-                color: $color,
-                blocks: [
-                  {type: "header", text: {type: "plain_text", text: $title, emoji: true}},
-                  {type: "section", fields: [
-                    {type: "mrkdwn", text: ("*Trigger:*\n" + $trigger)},
-                    {type: "mrkdwn", text: ("*Branch:*\n`" + $branch + "`")},
-                    {type: "mrkdwn", text: ("*Commit:*\n<" + $commit_url + "|`" + $short_sha + "`>")}
-                  ]},
-                  {type: "section", text: {type: "mrkdwn", text: ("✅ *Passed:* " + $success_count + "  |  ❌ *Failed:* " + $failure_count + "  |  ⏭️ *Skipped:* " + $skipped_count)}}
-                ]
-                + (if $failed_suites != "" then [{type: "section", text: {type: "mrkdwn", text: ("❌ *Failed:* " + $failed_suites)}}] else [] end)
-                + (if $success_suites != "" then [{type: "section", text: {type: "mrkdwn", text: ("✅ *Passed:* " + $success_suites)}}] else [] end)
-                + (if $skipped_suites != "" then [{type: "section", text: {type: "mrkdwn", text: ("⏭️ *Skipped:* " + $skipped_suites)}}] else [] end)
-                + [{type: "actions", elements: [{type: "button", text: {type: "plain_text", text: "🔍 View Workflow", emoji: true}, url: $workflow_url}]}]
-                + (if $mention != "" then [{type: "context", elements: [{type: "mrkdwn", text: $mention}]}] else [] end)
-              }]
-            }' > payload.json
+            '. + [{"type": "section", "fields": [
+              {"type": "mrkdwn", "text": ("*Trigger:*\n" + $trigger)},
+              {"type": "mrkdwn", "text": ("*Branch:*\n`" + $branch + "`")},
+              {"type": "mrkdwn", "text": ("*Commit:*\n<" + $commit_url + "|`" + $short_sha + "`>")}
+            ]}]')
+          
+          # Summary counts
+          BLOCKS=$(echo "$BLOCKS" | jq \
+            --arg success "$SUCCESS_COUNT" \
+            --arg failed "$FAILURE_COUNT" \
+            --arg skipped "$SKIPPED_COUNT" \
+            '. + [{"type": "section", "text": {"type": "mrkdwn", "text": ("✅ *Passed:* " + $success + "  |  ❌ *Failed:* " + $failed + "  |  ⏭️ *Skipped:* " + $skipped)}}]')
+          
+          # Failed suites (if any)
+          if [ -n "$FAILED_SUITES" ]; then
+            BLOCKS=$(echo "$BLOCKS" | jq --arg suites "$FAILED_SUITES" \
+              '. + [{"type": "section", "text": {"type": "mrkdwn", "text": ("❌ *Failed:* " + $suites)}}]')
+          fi
+          
+          # Success suites (if any)
+          if [ -n "$SUCCESS_SUITES" ]; then
+            BLOCKS=$(echo "$BLOCKS" | jq --arg suites "$SUCCESS_SUITES" \
+              '. + [{"type": "section", "text": {"type": "mrkdwn", "text": ("✅ *Passed:* " + $suites)}}]')
+          fi
+          
+          # Skipped suites (if any)
+          if [ -n "$SKIPPED_SUITES" ]; then
+            BLOCKS=$(echo "$BLOCKS" | jq --arg suites "$SKIPPED_SUITES" \
+              '. + [{"type": "section", "text": {"type": "mrkdwn", "text": ("⏭️ *Skipped:* " + $suites)}}]')
+          fi
+          
+          # Action button
+          BLOCKS=$(echo "$BLOCKS" | jq --arg url "$WORKFLOW_URL" \
+            '. + [{"type": "actions", "elements": [{"type": "button", "text": {"type": "plain_text", "text": "🔍 View Workflow", "emoji": true}, "url": $url}]}]')
+          
+          # Mention (if configured)
+          if [ -n "$SLACK_USER_ID" ]; then
+            BLOCKS=$(echo "$BLOCKS" | jq --arg user_id "$SLACK_USER_ID" \
+              '. + [{"type": "context", "elements": [{"type": "mrkdwn", "text": ("👤 cc: <@" + $user_id + ">")}]}]')
+          fi
+          
+          # Build final payload
+          echo "$BLOCKS" | jq --arg color "$COLOR" '{"attachments": [{"color": $color, "blocks": .}]}' > payload.json
           
           # Debug: show payload
           echo "Payload:"
