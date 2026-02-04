@@ -2,20 +2,12 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import isEqual from "fast-deep-equal";
 
-import { PlaygroundPromptType } from "@/types/playground";
+import {
+  PlaygroundPromptType,
+  PromptLibraryMetadata,
+} from "@/types/playground";
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import { parsePromptVersionContent } from "@/lib/llm";
-
-export interface PromptLibraryMetadata {
-  name: string;
-  id: string;
-  version: {
-    template: unknown;
-    commit?: string;
-    id: string;
-    metadata?: object;
-  };
-}
 
 type NormalizedMessage = { role: string; content: unknown };
 
