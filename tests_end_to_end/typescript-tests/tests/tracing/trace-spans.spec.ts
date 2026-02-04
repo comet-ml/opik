@@ -161,7 +161,11 @@ This test ensures span details are properly stored and displayed for low-level c
           for (let count = 0; count < spanConfig.count; count++) {
             const spanName = `${spanConfig.prefix}${count}`;
 
+            // Click on the span in the tree
             await spansMenu.getFirstSpanByName(spanName).click();
+            if (spanConfig.tags && spanConfig.tags.length > 0) {
+              await expect(page.getByText(spanConfig.tags[0])).toBeVisible({ timeout: 5000 });
+            }
 
             await spansMenu.getFeedbackScoresTab().click();
             await page.waitForTimeout(250);
@@ -175,7 +179,7 @@ This test ensures span details are properly stored and displayed for low-level c
               }
             }
 
-            await spansMenu.getMetadataTab().click();
+            await page.getByRole('tab', { name: 'Details' }).click();
             if (spanConfig.metadata) {
               for (const [key, value] of Object.entries(spanConfig.metadata)) {
                 await expect(page.getByText(`${key}: ${value}`)).toBeVisible();
@@ -240,7 +244,11 @@ This test ensures span details are properly stored and displayed for decorator-b
           for (let count = 0; count < spanConfig.count; count++) {
             const spanName = `${spanConfig.prefix}${count}`;
 
+            // Click on the span in the tree
             await spansMenu.getFirstSpanByName(spanName).click();
+            if (spanConfig.tags && spanConfig.tags.length > 0) {
+              await expect(page.getByText(spanConfig.tags[0])).toBeVisible({ timeout: 5000 });
+            }
 
             await spansMenu.getFeedbackScoresTab().click();
             await page.waitForTimeout(250);
@@ -254,7 +262,8 @@ This test ensures span details are properly stored and displayed for decorator-b
               }
             }
 
-            await spansMenu.getMetadataTab().click();
+            // Metadata is shown within the Details tab, not as a separate tab
+            await page.getByRole('tab', { name: 'Details' }).click();
             if (spanConfig.metadata) {
               for (const [key, value] of Object.entries(spanConfig.metadata)) {
                 await expect(page.getByText(`${key}: ${value}`)).toBeVisible();
