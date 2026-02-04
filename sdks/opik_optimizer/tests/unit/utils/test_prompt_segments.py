@@ -75,3 +75,6 @@ def test_prompt_segments__update_multiple_segments() -> None:
         == "Search the docs and return citations"
     )
     assert updated.tools[0]["function"]["parameters"]["required"] == ["query"]
+    assert prompt.messages is not None
+    assert prompt.messages[0]["content"] == "Base system"
+    assert prompt.messages[1]["content"] == "Ask about {topic}"
