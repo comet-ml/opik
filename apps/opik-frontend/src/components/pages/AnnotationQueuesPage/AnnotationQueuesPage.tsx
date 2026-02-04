@@ -297,7 +297,12 @@ export const AnnotationQueuesPage: React.FC = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending: isLoading } = useAnnotationQueuesList(
+  const {
+    data,
+    isPending: isLoading,
+    isPlaceholderData,
+    isFetching,
+  } = useAnnotationQueuesList(
     {
       workspaceName,
       search: search as string,
@@ -470,6 +475,7 @@ export const AnnotationQueuesPage: React.FC = () => {
         noData={<DataTableNoData title={noDataText} />}
         onRowClick={handleRowClick}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

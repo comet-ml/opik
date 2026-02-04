@@ -208,7 +208,7 @@ const PromptsPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = usePromptsList(
+  const { data, isPending, isPlaceholderData, isFetching } = usePromptsList(
     {
       workspaceName,
       filters,
@@ -375,6 +375,7 @@ const PromptsPage: React.FunctionComponent = () => {
             )}
           </DataTableNoData>
         }
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

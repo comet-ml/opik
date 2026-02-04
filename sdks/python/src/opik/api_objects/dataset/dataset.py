@@ -1,3 +1,4 @@
+import json
 import logging
 import functools
 import time
@@ -13,7 +14,7 @@ from typing import (
     Iterator,
 )
 
-from opik.api_objects import rest_stream_parser
+from opik.api_objects import opik_query_language, rest_stream_parser
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
@@ -326,19 +327,39 @@ class Dataset:
 
         return converters.to_json(dataset_items, keys_mapping={})
 
-    def get_items(self, nb_samples: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_items(
+        self,
+        nb_samples: Optional[int] = None,
+        filter_string: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Retrieve a fixed set number of dataset items dictionaries.
 
         Args:
             nb_samples: The number of samples to retrieve. If not set - all items are returned.
+            filter_string: Optional OQL filter string to filter dataset items.
+                Supports filtering by tags, data fields, metadata, etc.
+
+                Supported columns include:
+                - `id`, `source`, `trace_id`, `span_id`: String fields
+                - `data`: Dictionary field (use dot notation, e.g., "data.category")
+                - `tags`: List field (use "contains" operator)
+                - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
+                - `created_by`, `last_updated_by`: String fields
+
+                Examples:
+                - `tags contains "failed"` - Items with 'failed' tag
+                - `data.category = "test"` - Items with specific data field value
+                - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
 
         Returns:
             A list of dictionaries objects representing the samples.
         """
         dataset_items_as_dicts = [
             {"id": item.id, **item.get_content()}
-            for item in self.__internal_api__stream_items_as_dataclasses__(nb_samples)
+            for item in self.__internal_api__stream_items_as_dataclasses__(
+                nb_samples=nb_samples, filter_string=filter_string
+            )
         ]
 
         return dataset_items_as_dicts
@@ -348,6 +369,7 @@ class Dataset:
         nb_samples: Optional[int] = None,
         batch_size: Optional[int] = None,
         dataset_item_ids: Optional[List[str]] = None,
+        filter_string: Optional[str] = None,
     ) -> Iterator[dataset_item.DatasetItem]:
         """
         Stream dataset items as a generator instead of loading all at once.
@@ -362,6 +384,7 @@ class Dataset:
                         If None, uses the default value from constants.DATASET_STREAM_BATCH_SIZE.
             dataset_item_ids: Optional list of specific item IDs to retrieve. If provided,
                             only items with matching IDs will be yielded.
+            filter_string: Optional OQL filter string to filter dataset items.
 
         Yields:
             DatasetItem objects one at a time
@@ -374,6 +397,14 @@ class Dataset:
         items_yielded = 0
         dataset_items_ids_left = set(dataset_item_ids) if dataset_item_ids else None
 
+        # Parse filter_string if provided
+        filters: Optional[str] = None
+        if filter_string:
+            oql = opik_query_language.OpikQueryLanguage.for_dataset_items(filter_string)
+            filter_expressions = oql.get_filter_expressions()
+            if filter_expressions:
+                filters = json.dumps(filter_expressions)
+
         while should_retrieve_more_items:
             # Wrap the streaming call in retry logic so we can resume from last_retrieved_id
             @retry_decorator.opik_rest_retry
@@ -383,6 +414,7 @@ class Dataset:
                         dataset_name=self._name,
                         last_retrieved_id=last_retrieved_id,
                         steam_limit=batch_size,
+                        filters=filters,
                     ),
                     item_class=rest_dataset_item_read.DatasetItem,
                     nb_samples=nb_samples,

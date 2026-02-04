@@ -348,6 +348,70 @@ You can download a dataset from Opik using the `get_dataset` method:
   ```
 </CodeBlocks>
 
+## Filtering datasets programmatically
+
+You can filter dataset items using the `filter_string` parameter on the `get_items()` method or when
+running evaluations with `evaluate_prompt()`. This allows you to work with specific subsets of your data.
+
+### Basic filtering
+
+<CodeBlocks>
+  ```python title="Python" language="python"
+  from opik import Opik
+
+  client = Opik()
+  dataset = client.get_dataset(name="my_dataset")
+
+  # Get filtered items
+  failed_items = dataset.get_items(filter_string='tags contains "failed"')
+
+  ```
+</CodeBlocks>
+
+### Filter syntax
+
+The filter string uses Opik Query Language (OQL) syntax. Supported columns include:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | String | Unique identifier for the dataset item |
+| `source` | String | Source of the dataset item |
+| `trace_id` | String | Associated trace ID |
+| `span_id` | String | Associated span ID |
+| `data` | Dictionary | Use dot notation for nested fields (e.g., `data.category`) |
+| `tags` | List | Use "contains" operator (e.g., `tags contains "test"`) |
+| `created_at` | DateTime | ISO 8601 format (e.g., `created_at >= "2024-01-01T00:00:00Z"`) |
+| `last_updated_at` | DateTime | ISO 8601 format |
+| `created_by` | String | User who created the item |
+| `last_updated_by` | String | User who last updated the item |
+
+### Filter examples
+
+<CodeBlocks>
+  ```python title="Python" language="python"
+  from opik import Opik
+
+  client = Opik()
+  dataset = client.get_dataset(name="my_dataset")
+
+  # Filter by tag
+  failed_items = dataset.get_items(filter_string='tags contains "failed"')
+
+  # Filter by data field
+  finance_items = dataset.get_items(filter_string='data.category = "finance"')
+
+  # Filter by date
+  recent_items = dataset.get_items(
+      filter_string='created_at >= "2024-06-01T00:00:00Z"'
+  )
+
+  # Multiple conditions
+  filtered_items = dataset.get_items(
+      filter_string='tags contains "production" AND data.difficulty = "hard"'
+  )
+  ```
+</CodeBlocks>
+
 ## Running experiments with dataset versions
 
 When you run an experiment, Opik automatically links it to the specific dataset version that was used. This ensures complete reproducibility—you can always know exactly which data was used for any experiment.

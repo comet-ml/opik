@@ -603,12 +603,35 @@
 
   td:first-child [data-cell-wrapper="true"],
   th:first-child [data-header-wrapper="true"] {
-    padding-left: 24px !important;
+    padding-left: 24px;
   }
 
   td:last-child [data-cell-wrapper="true"],
   th:last-child [data-header-wrapper="true"] {
-    padding-right: 24px !important;
+    padding-right: 24px;
+  }
+}
+
+.comet-table-body-loading-overlay {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background-color: hsl(var(--background) / 0.7);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
 
