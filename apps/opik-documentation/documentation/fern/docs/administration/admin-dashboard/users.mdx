@@ -1,0 +1,54 @@
+---
+headline: Users | Opik Documentation
+og:description: Learn how to manage users and organization roles in your Opik organization.
+og:site_name: Opik Documentation
+og:title: 'Opik Users: Managing Organization Access'
+subtitle: Manage users and organization roles
+title: Users
+---
+
+The Users section in the Admin Dashboard allows organization administrators to view all users, change organization roles, and remove users from the organization.
+
+## Viewing Users
+
+To view all users in your organization:
+
+1. Navigate to the [Admin Dashboard](/administration/admin-dashboard/overview)
+2. Click on **Users** in the sidebar
+
+The list shows each user's name, email, organization role, and when they joined.
+
+## Changing Organization Roles
+
+Organization roles determine high-level access across the organization. See [Roles and Permissions](/administration/roles_and_permissions) for details on available roles.
+
+To change a user's organization role:
+
+1. Navigate to the **Users** section in the Admin Dashboard
+2. Find the user whose role you want to change
+3. Click on the role dropdown
+4. Select the new role
+
+<Warning>
+You cannot change your own organization role. Another admin must make changes to your role. There must always be at least one admin in the organization.
+</Warning>
+
+## Removing Users
+
+To remove a user from your organization:
+
+1. Navigate to the **Users** section in the Admin Dashboard
+2. Find the user you want to remove
+3. Click the **more options** menu (three dots)
+4. Select **Remove from organization**
+5. Confirm the removal
+
+<Warning>
+Removing a user revokes all their access immediately. Their historical data (traces, experiments) is retained. You cannot remove yourself or the last admin from the organization.
+</Warning>
+
+## Related Documentation
+
+- [Roles and Permissions](/administration/roles_and_permissions) - Organization and workspace roles
+- [Workspace Members](/administration/workspace-settings/workspace_members) - Manage users within a workspace
+- [Workspaces](/administration/admin-dashboard/workspaces) - Workspace management

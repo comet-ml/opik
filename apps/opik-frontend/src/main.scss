@@ -612,6 +612,29 @@
   }
 }
 
+.comet-table-body-loading-overlay {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background-color: hsl(var(--background) / 0.7);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
 .comet-compare-optimizations-table {
   thead[data-sticky-vertical] {
     top: 0 !important;

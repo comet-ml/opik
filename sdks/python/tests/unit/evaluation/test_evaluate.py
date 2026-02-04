@@ -2938,3 +2938,201 @@ def test_evaluate_prompt__with_filter_string_and_dataset_sampler__passes_filter_
         batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
+
+
+def test_evaluate__with_filter_string__passes_to_streaming(fake_backend):
+    """Test that evaluate correctly passes filter_string to streaming method."""
+    filter_string = 'tags contains "important"'
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                question="What is the capital of France?",
+                reference="Paris",
+            ),
+        ]
+    )
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="the-experiment-name",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            dataset_filter_string=filter_string,
+        )
+
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
+        nb_samples=None,
+        dataset_item_ids=None,
+        batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=filter_string,
+    )
+
+
+def test_evaluate__with_filter_string_and_nb_samples__passes_both_parameters(
+    fake_backend,
+):
+    """Test that evaluate correctly passes both filter_string and nb_samples to streaming method."""
+    filter_string = 'data.category = "test"'
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                question="What is the capital of France?",
+                reference="Paris",
+            ),
+        ]
+    )
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="the-experiment-name",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            nb_samples=2,
+            dataset_filter_string=filter_string,
+        )
+
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
+        nb_samples=2,
+        dataset_item_ids=None,
+        batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=filter_string,
+    )
+
+
+def test_evaluate__with_filter_string_and_dataset_sampler__passes_filter_string(
+    fake_backend,
+):
+    """Test that evaluate passes filter_string even when dataset_sampler is used."""
+    sampler = samplers.RandomDatasetSampler(max_samples=1)
+    filter_string = 'created_at >= "2024-01-01T00:00:00Z"'
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                question="What is the capital of France?",
+                reference="Paris",
+            ),
+        ]
+    )
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="the-experiment-name",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            dataset_sampler=sampler,
+            dataset_filter_string=filter_string,
+        )
+
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
+        nb_samples=None,
+        dataset_item_ids=None,
+        batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=filter_string,
+    )
+
+
+def test_evaluate_optimization_trial__with_filter_string__passes_to_streaming(
+    fake_backend,
+):
+    """Test that evaluate_optimization_trial correctly passes filter_string to streaming method."""
+    filter_string = 'tags contains "test"'
+
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                question="Hello, world!",
+                reference="Hello, world!",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                question="What is the capital of France?",
+                reference="Paris",
+            ),
+        ]
+    )
+
+    def say_task(dataset_item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-123",
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="the-experiment-name",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            dataset_filter_string=filter_string,
+        )
+
+    mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
+        nb_samples=None,
+        dataset_item_ids=None,
+        batch_size=engine.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        filter_string=filter_string,
+    )
