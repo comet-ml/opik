@@ -12,6 +12,7 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionDiff;
+import com.comet.opik.api.DatasetVersionRetrieveRequest;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.PromptVersion;
@@ -579,6 +580,26 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(restoreRequest));
+    }
+
+    public DatasetVersion retrieveVersion(UUID datasetId, String versionName, String apiKey, String workspaceName) {
+        try (var response = callRetrieveVersion(datasetId, versionName, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public Response callRetrieveVersion(UUID datasetId, String versionName, String apiKey, String workspaceName) {
+        var retrieveRequest = new DatasetVersionRetrieveRequest(versionName);
+
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path("retrieve")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(retrieveRequest));
     }
 
     public void deleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {

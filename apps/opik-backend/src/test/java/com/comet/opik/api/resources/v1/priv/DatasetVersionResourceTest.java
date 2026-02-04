@@ -303,6 +303,83 @@ class DatasetVersionResourceTest {
     }
 
     @Nested
+    @DisplayName("Retrieve Version by Name:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RetrieveVersion {
+
+        @Test
+        @DisplayName("Success: Retrieve version by name")
+        void retrieveVersion__whenValidVersionName__thenReturnVersion() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            final int VERSION_COUNT = 3;
+
+            // Create multiple versions
+            for (int i = 1; i <= VERSION_COUNT; i++) {
+                createDatasetItems(datasetId, 1);
+            }
+
+            // When - Retrieve v1 (first version)
+            var version = datasetResourceClient.retrieveVersion(datasetId, "v1", API_KEY, TEST_WORKSPACE);
+
+            // Then
+            assertThat(version).isNotNull();
+            assertThat(version.versionName()).isEqualTo("v1");
+            assertThat(version.datasetId()).isEqualTo(datasetId);
+        }
+
+        @Test
+        @DisplayName("Success: Retrieve latest version by name")
+        void retrieveVersion__whenLatestVersionName__thenReturnLatestVersion() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            final int VERSION_COUNT = 3;
+
+            // Create multiple versions
+            for (int i = 1; i <= VERSION_COUNT; i++) {
+                createDatasetItems(datasetId, 1);
+            }
+
+            // When - Retrieve v3 (should be latest)
+            var version = datasetResourceClient.retrieveVersion(datasetId, "v3", API_KEY, TEST_WORKSPACE);
+
+            // Then
+            assertThat(version).isNotNull();
+            assertThat(version.versionName()).isEqualTo("v3");
+            assertThat(version.isLatest()).isTrue();
+        }
+
+        @Test
+        @DisplayName("Error: Retrieve non-existent version")
+        void retrieveVersion__whenVersionNotFound__thenReturn404() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1); // Create only v1
+
+            // When
+            try (var response = datasetResourceClient.callRetrieveVersion(datasetId, "v999", API_KEY, TEST_WORKSPACE)) {
+                // Then
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Error: Invalid version name format")
+        void retrieveVersion__whenInvalidFormat__thenReturn422() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            // When - Try to retrieve with invalid format
+            try (var response = datasetResourceClient.callRetrieveVersion(datasetId, "invalid", API_KEY,
+                    TEST_WORKSPACE)) {
+                // Then - Dropwizard returns 422 Unprocessable Entity for validation errors
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("Tag Management:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TagManagement {
