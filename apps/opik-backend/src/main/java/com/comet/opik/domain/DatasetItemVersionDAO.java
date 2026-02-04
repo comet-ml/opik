@@ -436,17 +436,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
             ),
-            trace_data AS (
+            trace_ids AS (
                 SELECT
                     id
-                    <if(experiment_item_filters)>
-                    , output, duration
-                    <endif>
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
-                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ),
             feedback_scores_combined_raw AS (
                 SELECT workspace_id,
@@ -508,7 +503,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
                 FROM feedback_scores_combined fsc
-                INNER JOIN trace_data td ON td.id = fsc.entity_id
+                INNER JOIN trace_ids td ON td.id = fsc.entity_id
                 GROUP BY workspace_id, project_id, entity_id, name
             )
             <if(feedback_scores_empty_filters)>
@@ -550,16 +545,28 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND trace_id IN (
                     SELECT
                         id
-                    FROM trace_data t
+                    FROM (
+                       SELECT
+                            id,
+                            duration,
+                            output,
+                            input,
+                            metadata
+                       FROM traces
+                       WHERE workspace_id = :workspace_id
+                       AND project_id IN (SELECT project_id FROM target_projects)
+                       AND id IN (SELECT trace_id FROM experiment_items_scope)
+                       <if(experiment_item_filters)>
+                       AND <experiment_item_filters>
+                       <endif>
+                       ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                       LIMIT 1 BY id
+                    ) t
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = t.id
                     <endif>
-                    WHERE 1 = 1
-                    <if(experiment_item_filters)>
-                    AND <experiment_item_filters>
-                    <endif>
                     <if(feedback_scores_filters)>
-                    AND id IN (
+                    AND t.id IN (
                         SELECT
                             entity_id
                         FROM feedback_scores_final
@@ -1321,14 +1328,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 SELECT
                     id,
                     duration
-                    <if(experiment_item_filters)>
-                    , output
-                    <endif>
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
+            ), trace_ids AS (
+                SELECT
+                    id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
             ), target_projects AS (
                 SELECT DISTINCT project_id
                 FROM traces
@@ -1393,7 +1403,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
                     max(last_updated_at) AS last_updated_at
                 FROM feedback_scores_combined fsf
-                INNER JOIN trace_data td ON td.id = fsf.entity_id
+                INNER JOIN trace_ids td ON td.id = fsf.entity_id
                 GROUP BY workspace_id, project_id, entity_id, name
             )<if(feedback_scores_empty_filters)>,
             fsc AS (
@@ -1426,15 +1436,29 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ) dibv ON dibv.id = ei.dataset_item_id
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
-                    SELECT id FROM trace_data
-                    WHERE 1 = 1
-                    AND <experiment_item_filters>
+                    SELECT
+                        id
+                    FROM (
+                        SELECT
+                            id,
+                            duration,
+                            input,
+                            output,
+                            metadata
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                        AND project_id IN (SELECT project_id FROM target_projects)
+                        AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    WHERE <experiment_item_filters>
                 )
                 <endif>
                 <if(feedback_scores_empty_filters)>
                 AND ei.trace_id IN (
                     SELECT t.id
-                    FROM trace_data t
+                    FROM trace_ids t
                     LEFT JOIN fsc ON fsc.entity_id = t.id
                     WHERE fsc.feedback_scores_count = 0
                 )
