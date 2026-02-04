@@ -99,6 +99,7 @@
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
     "react-grid-layout": "^1.5.2",
+    "react-h5-audio-player": "^3.10.1",
     "react-hook-form": "^7.54.2",
     "react-hotkeys-hook": "^4.5.1",
     "react-intersection-observer": "^10.0.0",

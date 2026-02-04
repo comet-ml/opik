@@ -1,0 +1,19 @@
+/**
+ * Checks if a URL is a valid Opik S3 attachment URL.
+ * Supports both path-style and virtual-hosted-style S3 URLs:
+ * - Path-style: https://s3.amazonaws.com/<bucket>/opik/attachment/...
+ * - Path-style with region: https://s3.<region>.amazonaws.com/<bucket>/opik/attachment/...
+ * - Virtual-hosted: https://<bucket>.s3.amazonaws.com/opik/attachment/...
+ * - Virtual-hosted with region: https://<bucket>.s3.<region>.amazonaws.com/opik/attachment/...
+ */
+export const isOpikS3AttachmentUrl = (url: string): boolean => {
+  // Path-style: https://s3[.<region>].amazonaws.com/<bucket>/opik/attachment/...
+  const pathStyleRegex =
+    /^https:\/\/s3(?:\.[a-z0-9-]+)?\.amazonaws\.com\/[^/]+\/opik\/attachment\/.+$/;
+
+  // Virtual-hosted: https://<bucket>.s3[.<region>].amazonaws.com/opik/attachment/...
+  const virtualHostedRegex =
+    /^https:\/\/[^/]+\.s3(?:\.[a-z0-9-]+)?\.amazonaws\.com\/opik\/attachment\/.+$/;
+
+  return pathStyleRegex.test(url) || virtualHostedRegex.test(url);
+};
