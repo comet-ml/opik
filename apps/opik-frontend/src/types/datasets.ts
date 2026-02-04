@@ -107,6 +107,7 @@ export enum EXPERIMENT_TYPE {
   MINI_BATCH = "mini-batch",
   LIVE = "live",
   AB = "ab",
+  OPTIMIZER = "optimizer",
 }
 
 export interface Experiment {

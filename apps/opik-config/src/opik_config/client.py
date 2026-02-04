@@ -123,6 +123,7 @@ class ConfigClient:
         env: str,
         mask_id: str,
         is_ab: bool = False,
+        experiment_type: str | None = None,
         distribution: dict[str, int] | None = None,
         salt: str | None = None,
     ) -> bool:
@@ -133,6 +134,8 @@ class ConfigClient:
             "mask_id": mask_id,
             "is_ab": is_ab,
         }
+        if experiment_type:
+            payload["experiment_type"] = experiment_type
         if distribution:
             payload["distribution"] = distribution
         if salt:
@@ -214,6 +217,99 @@ class ConfigClient:
         try:
             response = self._session.post(
                 f"{self.base_url}/v1/config/prompts/override",
+                json=payload,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException:
+            return None
+
+    def commit_experiment_prompt(
+        self,
+        mask_id: str,
+        prompt_name: str,
+        project_id: str = "default",
+        env: str = "prod",
+        variant: str = "default",
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        Commit experiment prompt variant to Opik as permanent version.
+
+        Args:
+            mask_id: Experiment/optimization run ID
+            prompt_name: Name of the prompt (e.g., "Researcher System Prompt")
+            project_id: Project identifier
+            env: Environment
+            variant: Variant to commit (default "default")
+            metadata: Optional metadata to include in the Opik version
+
+        Returns dict with prompt_name, commit, opik_prompt_id, opik_version_id,
+        or None on failure.
+        """
+        payload: dict[str, Any] = {
+            "project_id": project_id,
+            "env": env,
+            "mask_id": mask_id,
+            "prompt_name": prompt_name,
+            "variant": variant,
+        }
+        if metadata:
+            payload["metadata"] = metadata
+
+        try:
+            response = self._session.post(
+                f"{self.base_url}/v1/config/prompts/commit",
+                json=payload,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException:
+            return None
+
+    def get_prompt_version_info(
+        self,
+        prompt_name: str,
+        project_id: str = "default",
+    ) -> dict[str, Any] | None:
+        """
+        Get Opik version info for a prompt.
+
+        Returns dict with prompt_name, commit, opik_prompt_id, opik_version_id,
+        or None if not found.
+        """
+        try:
+            response = self._session.get(
+                f"{self.base_url}/v1/config/prompts/versions/{prompt_name}",
+                params={"project_id": project_id},
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException:
+            return None
+
+    def sync_prompts_to_opik(
+        self,
+        project_id: str = "default",
+        env: str = "prod",
+    ) -> dict[str, Any] | None:
+        """
+        Sync all registered prompts to Opik.
+
+        Returns dict with synced list containing prompt_name, commit, and action,
+        or None on failure.
+        """
+        payload: dict[str, Any] = {
+            "project_id": project_id,
+            "env": env,
+        }
+
+        try:
+            response = self._session.post(
+                f"{self.base_url}/v1/config/prompts/sync",
                 json=payload,
                 timeout=self.timeout,
             )

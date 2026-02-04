@@ -4,21 +4,75 @@ import {
   OptimizeStreamEvent,
   AssertionResult,
   OptimizationChange,
+  PromptChange,
   RunStatus,
+  RegressionResult,
+  RegressionItem,
 } from "@/types/agent-intake";
 
 const INTAKE_BASE_URL = "http://localhost:5008";
 
+export type OptimizationResult = {
+  success: boolean;
+  optimizationId?: string;
+  iterations?: number;
+  changes: OptimizationChange[];
+  promptChanges?: PromptChange[];
+  experimentTraces?: Record<string, string>;
+  finalAssertionResults?: AssertionResult[];
+};
+
 type OptimizeCallbacks = {
   onOptimizationStarted: (expectedBehaviors: string[]) => void;
-  onRunStatus: (label: string, iteration: number, status: RunStatus) => void;
+  onRunStatus: (label: string, iteration: number, status: RunStatus, traceId?: string) => void;
   onRunResult: (
     label: string,
     iteration: number,
     allPassed: boolean,
     assertions: AssertionResult[],
+    traceId?: string,
   ) => void;
-  onOptimizationComplete: (success: boolean, changes: OptimizationChange[]) => void;
+  onRegressionResult: (iteration: number, result: RegressionResult) => void;
+  onOptimizationComplete: (result: OptimizationResult) => void;
+};
+
+type BackendAssertionResult = {
+  text?: string;
+  name?: string;
+  passed?: boolean;
+  reason?: string;
+};
+
+type BackendRegressionItem = {
+  item_id: string;
+  reason: string;
+  failed_assertions: BackendAssertionResult[];
+};
+
+type BackendOptimizeEvent = {
+  type: string;
+  // optimization_started
+  assertions?: BackendAssertionResult[];
+  expected_behaviors?: string[];
+  // run_status / run_result
+  label?: string;
+  iteration?: number;
+  status?: RunStatus;
+  all_passed?: boolean;
+  trace_id?: string;
+  // regression_result
+  items_tested?: number;
+  items_passed?: number;
+  no_regressions?: boolean;
+  regressions?: BackendRegressionItem[];
+  // optimization_complete
+  success?: boolean;
+  optimization_id?: string;
+  iterations?: number;
+  changes?: OptimizationChange[];
+  prompt_changes?: PromptChange[];
+  experiment_traces?: Record<string, string>;
+  final_assertion_results?: BackendAssertionResult[];
 };
 
 async function parseOptimizeSSEStream(
@@ -47,12 +101,12 @@ async function parseOptimizeSSEStream(
         if (!eventStr.trim()) continue;
 
         const lines = eventStr.split(/\r?\n/);
-        let data: OptimizeStreamEvent | null = null;
+        let data: BackendOptimizeEvent | null = null;
 
         for (const line of lines) {
           if (line.startsWith("data:")) {
             try {
-              data = JSON.parse(line.slice(5).trim()) as OptimizeStreamEvent;
+              data = JSON.parse(line.slice(5).trim()) as BackendOptimizeEvent;
             } catch {
               // ignore parse errors
             }
@@ -62,23 +116,74 @@ async function parseOptimizeSSEStream(
         if (!data) continue;
 
         switch (data.type) {
-          case OPTIMIZE_EVENT_TYPE.optimization_started:
-            callbacks.onOptimizationStarted(data.expected_behaviors);
+          case OPTIMIZE_EVENT_TYPE.optimization_started: {
+            // Backend may send `assertions` array or `expected_behaviors` array
+            const behaviors =
+              data.expected_behaviors ||
+              data.assertions?.map((a) => a.text || a.name || "") ||
+              [];
+            callbacks.onOptimizationStarted(behaviors);
             break;
+          }
           case OPTIMIZE_EVENT_TYPE.run_status:
-            callbacks.onRunStatus(data.label, data.iteration, data.status);
+            if (data.label !== undefined && data.iteration !== undefined && data.status) {
+              callbacks.onRunStatus(data.label, data.iteration, data.status, data.trace_id);
+            }
             break;
-          case OPTIMIZE_EVENT_TYPE.run_result:
-            callbacks.onRunResult(
-              data.label,
-              data.iteration,
-              data.all_passed,
-              data.assertions,
-            );
+          case OPTIMIZE_EVENT_TYPE.run_result: {
+            if (data.label !== undefined && data.iteration !== undefined) {
+              // Convert backend assertion format to frontend format
+              const assertions: AssertionResult[] = (data.assertions || []).map((a) => ({
+                name: a.text || a.name || "",
+                passed: a.passed,
+              }));
+              callbacks.onRunResult(
+                data.label,
+                data.iteration,
+                data.all_passed ?? false,
+                assertions,
+                data.trace_id,
+              );
+            }
             break;
-          case OPTIMIZE_EVENT_TYPE.optimization_complete:
-            callbacks.onOptimizationComplete(data.success, data.changes);
+          }
+          case OPTIMIZE_EVENT_TYPE.regression_result: {
+            if (data.iteration !== undefined) {
+              const regressions: RegressionItem[] = (data.regressions || []).map((r) => ({
+                item_id: r.item_id,
+                reason: r.reason,
+                failed_assertions: (r.failed_assertions || []).map((a) => ({
+                  name: a.text || a.name || "",
+                  passed: a.passed,
+                })),
+              }));
+              callbacks.onRegressionResult(data.iteration, {
+                iteration: data.iteration,
+                items_tested: data.items_tested ?? 0,
+                items_passed: data.items_passed ?? 0,
+                no_regressions: data.no_regressions ?? true,
+                regressions,
+              });
+            }
             break;
+          }
+          case OPTIMIZE_EVENT_TYPE.optimization_complete: {
+            const finalAssertions: AssertionResult[] = (data.final_assertion_results || []).map((a) => ({
+              name: a.text || a.name || "",
+              passed: a.passed,
+            }));
+            callbacks.onOptimizationComplete({
+              success: data.success ?? false,
+              optimizationId: data.optimization_id,
+              iterations: data.iterations,
+              changes: data.changes || [],
+              promptChanges: data.prompt_changes,
+              experimentTraces: data.experiment_traces,
+              finalAssertionResults: finalAssertions,
+            });
+            break;
+          }
+          // Ignore other events like "progress", "trace_loaded"
         }
       }
     }
@@ -92,14 +197,32 @@ async function parseOptimizeSSEStream(
   return { error: null };
 }
 
+export type OptimizeEndpointInfo = {
+  name: string;
+  url: string;
+  secret?: string;
+};
+
+export type OptimizeStartRequest = {
+  expected_behaviors: string[];
+  endpoint?: OptimizeEndpointInfo;
+  self_hosted?: boolean;
+  max_iterations?: number;
+};
+
 export function useOptimizeStart(traceId: string) {
   return useCallback(
-    async (callbacks: OptimizeCallbacks, signal: AbortSignal) => {
+    async (
+      request: OptimizeStartRequest,
+      callbacks: OptimizeCallbacks,
+      signal: AbortSignal,
+    ) => {
       const response = await fetch(
         `${INTAKE_BASE_URL}/optimize/${traceId}/start`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
           signal,
         },
       );
@@ -108,4 +231,39 @@ export function useOptimizeStart(traceId: string) {
     },
     [traceId],
   );
+}
+
+export type CommitRequest = {
+  optimization_id: string;
+  prompt_names: string[];
+  project_id?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type CommitResult = {
+  all_success: boolean;
+  committed: Array<{
+    prompt_name: string;
+    prompt_id?: string;
+    commit: string;
+    version_id?: string;
+  }>;
+  errors: Array<{
+    prompt_name: string;
+    error: string;
+  }>;
+};
+
+export async function commitOptimization(request: CommitRequest): Promise<CommitResult> {
+  const response = await fetch(`${INTAKE_BASE_URL}/optimize/commit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Commit failed: ${response.status}`);
+  }
+
+  return response.json();
 }

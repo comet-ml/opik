@@ -153,6 +153,7 @@ def _resolve_all_fields(
                 values=resolved_values,
                 value_ids=response.get("resolved_value_ids", {}),
                 assigned_variant=response.get("assigned_variant"),
+                experiment_type=response.get("experiment_type"),
                 revision=0,  # SQLite backend doesn't use revision
             )
 
@@ -171,7 +172,14 @@ def _resolve_all_fields(
         cache.set(ctx.project_id, ctx.mask_id, qualname, result)
 
         # Log config to trace for UI visibility
-        _log_config_to_trace(ctx.mask_id, result.assigned_variant, result.values)
+        _log_config_to_trace(
+            ctx.mask_id,
+            result.assigned_variant,
+            result.experiment_type,
+            result.values,
+            client=client,
+            project_id=ctx.project_id,
+        )
 
         return result
 
@@ -192,10 +200,41 @@ def _make_json_safe(value: Any) -> Any:
     return str(value)
 
 
+def _get_prompt_versions_for_trace(
+    client: ConfigClient,
+    project_id: str,
+    resolved_values: dict[str, Any],
+) -> dict[str, Any]:
+    """Look up Opik version info for prompts in resolved values."""
+    prompt_versions: dict[str, Any] = {}
+
+    for field_name, value in resolved_values.items():
+        prompt_name: str | None = None
+
+        if isinstance(value, Prompt):
+            prompt_name = value.name
+        elif isinstance(value, dict) and "prompt_name" in value:
+            prompt_name = value["prompt_name"]
+
+        if prompt_name:
+            version_info = client.get_prompt_version_info(prompt_name, project_id)
+            if version_info and version_info.get("commit"):
+                prompt_versions[prompt_name] = {
+                    "commit": version_info.get("commit"),
+                    "opik_prompt_id": version_info.get("opik_prompt_id"),
+                    "opik_version_id": version_info.get("opik_version_id"),
+                }
+
+    return prompt_versions
+
+
 def _log_config_to_trace(
     mask_id: str | None,
     assigned_variant: str | None,
+    experiment_type: str | None,
     resolved_values: dict[str, Any],
+    client: ConfigClient | None = None,
+    project_id: str = "default",
 ) -> None:
     """Log config data to the current trace for UI visibility."""
     try:
@@ -209,14 +248,22 @@ def _log_config_to_trace(
             if assigned_variant:
                 tags.append(f"variant:{assigned_variant}")
 
+            config_metadata: dict[str, Any] = {
+                "experiment_id": mask_id,
+                "experiment_type": experiment_type,
+                "assigned_variant": assigned_variant,
+                "values": safe_values,
+            }
+
+            if client:
+                prompt_versions = _get_prompt_versions_for_trace(
+                    client, project_id, resolved_values
+                )
+                if prompt_versions:
+                    config_metadata["prompt_versions"] = prompt_versions
+
             opik_context.update_current_trace(
-                metadata={
-                    "opik_config": {
-                        "experiment_id": mask_id,
-                        "assigned_variant": assigned_variant,
-                        "values": safe_values,
-                    },
-                },
+                metadata={"opik_config": config_metadata},
                 tags=tags if tags else None,
             )
     except Exception:

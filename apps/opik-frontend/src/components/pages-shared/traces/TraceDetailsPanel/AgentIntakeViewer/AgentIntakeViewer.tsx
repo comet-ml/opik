@@ -28,6 +28,8 @@ import {
 import { useOptimizeStart } from "@/api/agent-intake/useOptimizeStreaming";
 import useEndpoints from "@/api/endpoints/useEndpoints";
 import OptimizationProgress from "./OptimizationProgress";
+import OptimizationChangesPanel from "./OptimizationChangesPanel";
+import CommitSuccessPanel from "./CommitSuccessPanel";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -46,6 +48,7 @@ import { Tag } from "@/components/ui/tag";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { IntakeMessageMetadata, IntakeConfig, INPUT_HINT } from "@/types/agent-intake";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
+import useAppStore from "@/store/AppStore";
 
 interface AgentIntakeViewerProps {
   traceId: string;
@@ -60,6 +63,7 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
   activeSection,
   setActiveSection,
 }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const {
     getSession,
     updateSession,
@@ -70,7 +74,7 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
     clearSession,
   } = useIntakeSessionStore();
   const session = getSession(traceId);
-  const { messages, hasStarted, isReady, config, inputHint, optimization } = session;
+  const { messages, hasStarted, isReady, config, inputHint, optimization, selectedEndpoint } = session;
 
   const [inputValue, setInputValue] = useState("");
   const [isRunning, setIsRunning] = useState(false);
@@ -220,11 +224,21 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
     (endpointId: string) => {
       const endpoint = endpoints.find((e) => e.id === endpointId);
       const displayName = endpoint?.name || endpointId;
+      if (endpoint) {
+        updateSession(traceId, {
+          selectedEndpoint: {
+            id: endpoint.id,
+            name: endpoint.name,
+            url: endpoint.url,
+            secret: endpoint.secret,
+          },
+        });
+      }
       sendMessage(endpointId, {
         metadata: { type: "endpoint_selection", endpointName: displayName },
       });
     },
-    [endpoints, sendMessage],
+    [endpoints, sendMessage, traceId, updateSession],
   );
 
   const handleNoEndpointsChoice = useCallback(
@@ -240,11 +254,15 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+    if (optimizeAbortRef.current) {
+      optimizeAbortRef.current.abort();
+    }
     await intakeDelete();
     clearSession(traceId);
     setInputValue("");
     setIsRunning(false);
     setBehaviorsExpanded(true);
+    optimizationStartedRef.current = false;
   }, [intakeDelete, traceId, clearSession]);
 
   useEffect(() => {
@@ -267,13 +285,27 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
   }, [activeSection]);
 
   // Start optimization when intake is ready
+  const optimizationStartedRef = useRef(false);
+
   useEffect(() => {
-    if (isReady && !optimization.isOptimizing && !optimization.isComplete) {
+    if (isReady && config && !optimization.isOptimizing && !optimization.isComplete && !optimizationStartedRef.current) {
+      optimizationStartedRef.current = true;
+
       const startOptimization = async () => {
         optimizeAbortRef.current = new AbortController();
         updateOptimization(traceId, { isOptimizing: true });
 
         const { error } = await optimizeStart(
+          {
+            expected_behaviors: config.expected_behaviors,
+            endpoint: selectedEndpoint
+              ? {
+                  name: selectedEndpoint.name,
+                  url: selectedEndpoint.url,
+                  secret: selectedEndpoint.secret,
+                }
+              : undefined,
+          },
           {
             onOptimizationStarted: (expectedBehaviors) => {
               const initialAssertions = expectedBehaviors.map((name) => ({
@@ -284,33 +316,47 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
                 iteration: 0,
                 status: "running",
                 assertions: initialAssertions,
+                trace_id: traceId,
               });
             },
-            onRunStatus: (label, iteration, status) => {
+            onRunStatus: (label, iteration, status, runTraceId) => {
               updateOrAddRun(traceId, {
                 label,
                 iteration,
                 status,
-                assertions:
-                  optimization.runs.find((r) => r.iteration === iteration)
-                    ?.assertions || [],
+                assertions: [],
+                trace_id: runTraceId,
               });
             },
-            onRunResult: (label, iteration, allPassed, assertions) => {
+            onRunResult: (label, iteration, allPassed, assertions, runTraceId) => {
               updateOrAddRun(traceId, {
                 label,
                 iteration,
                 status: "completed",
                 all_passed: allPassed,
                 assertions,
+                trace_id: runTraceId,
               });
             },
-            onOptimizationComplete: (success, changes) => {
+            onRegressionResult: (iteration, regressionResult) => {
+              updateOrAddRun(traceId, {
+                label: iteration === 0 ? "Original" : `Iteration ${iteration}`,
+                iteration,
+                status: "completed",
+                assertions: [],
+                regression: regressionResult,
+              });
+            },
+            onOptimizationComplete: (result) => {
               updateOptimization(traceId, {
                 isOptimizing: false,
                 isComplete: true,
-                success,
-                changes,
+                success: result.success,
+                changes: result.changes,
+                optimizationId: result.optimizationId,
+                promptChanges: result.promptChanges,
+                experimentTraces: result.experimentTraces,
+                finalAssertionResults: result.finalAssertionResults,
               });
             },
           },
@@ -331,9 +377,10 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
     }
   }, [
     isReady,
+    config,
+    selectedEndpoint,
     optimization.isOptimizing,
     optimization.isComplete,
-    optimization.runs,
     traceId,
     optimizeStart,
     updateOptimization,
@@ -443,13 +490,68 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
                 {messages.map((m) => (
                   <IntakeChatMessage key={m.id} message={m} />
                 ))}
+                {isRunning && !currentMessageRef.current && (
+                  <div className="mb-2 flex justify-start">
+                    <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-muted/30 px-4 py-2">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="size-3 animate-spin" />
+                        <span className="comet-body-xs">Thinking</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {(optimization.isOptimizing || optimization.isComplete) && (
-                  <OptimizationProgress
-                    runs={optimization.runs}
-                    isComplete={optimization.isComplete}
-                    success={optimization.success}
-                    changes={optimization.changes}
-                  />
+                  <>
+                    <OptimizationProgress
+                      runs={optimization.runs}
+                      isOptimizing={optimization.isOptimizing}
+                      isComplete={optimization.isComplete && !optimization.promptChanges?.length}
+                      success={optimization.success}
+                      cancelled={optimization.cancelled}
+                      changes={optimization.changes}
+                      finalAssertionResults={optimization.finalAssertionResults}
+                      workspaceName={workspaceName}
+                      projectId={projectId}
+                      onCancel={
+                        optimization.isOptimizing
+                          ? () => {
+                              if (optimizeAbortRef.current) {
+                                optimizeAbortRef.current.abort();
+                              }
+                              updateOptimization(traceId, {
+                                isOptimizing: false,
+                                isComplete: true,
+                                success: false,
+                                cancelled: true,
+                              });
+                            }
+                          : undefined
+                      }
+                    />
+                    {optimization.isComplete &&
+                      optimization.success &&
+                      optimization.promptChanges &&
+                      optimization.promptChanges.length > 0 &&
+                      !optimization.commitResult && (
+                        <OptimizationChangesPanel
+                          optimizationId={optimization.optimizationId || ""}
+                          promptChanges={optimization.promptChanges}
+                          onCommitComplete={(result) => {
+                            updateOptimization(traceId, { commitResult: result });
+                          }}
+                          onDiscard={() => {
+                            updateOptimization(traceId, {
+                              promptChanges: [],
+                            });
+                          }}
+                        />
+                      )}
+                    {optimization.commitResult && (
+                      <CommitSuccessPanel
+                        result={optimization.commitResult}
+                      />
+                    )}
+                  </>
                 )}
                 {inputHint === INPUT_HINT.endpoint_selector && !isRunning && (
                   <div className="mb-2 flex justify-start">
@@ -519,16 +621,6 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
                     >
                       Setup an endpoint
                     </Button>
-                  </div>
-                )}
-                {isRunning && !currentMessageRef.current && (
-                  <div className="mb-2 flex justify-start">
-                    <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-br-xl bg-muted/30 px-4 py-2">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Loader2 className="size-3 animate-spin" />
-                        <span className="comet-body-xs">Thinking</span>
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>

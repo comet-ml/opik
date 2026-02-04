@@ -52,6 +52,7 @@ type ConfigMask = {
   mask_id: string;
   name: string;
   is_ab: boolean;
+  experiment_type?: string;
   distribution: Record<string, number> | null;
   created_at: string;
   updated_at: string;
@@ -102,7 +103,9 @@ const fetchConfigExperiments = async (): Promise<Experiment[]> => {
       return {
         id: mask.mask_id,
         name: mask.name,
-        type: mask.is_ab ? EXPERIMENT_TYPE.AB : EXPERIMENT_TYPE.LIVE,
+        type:
+          (mask.experiment_type as EXPERIMENT_TYPE) ||
+          (mask.is_ab ? EXPERIMENT_TYPE.AB : EXPERIMENT_TYPE.LIVE),
         status: "active",
         trace_count: 0,
         created_at: mask.created_at,

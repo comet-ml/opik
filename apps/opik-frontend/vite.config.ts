@@ -47,6 +47,13 @@ export default defineConfig(({ mode }) => {
       // - Development environment matches production architecture
       // Example: /api/v1/projects -> http://localhost:8080/v1/projects
       proxy: {
+        // Route prompt endpoints to config service (for POC demo)
+        "/api/v1/private/prompts": {
+          target: "http://localhost:5050", // Config service with mock prompts
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, ""),
+        },
+        // All other API calls go to Opik backend
         "/api": {
           target: "http://localhost:8080", // Backend server
           changeOrigin: true, // Handle CORS properly

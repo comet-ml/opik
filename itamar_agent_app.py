@@ -1,6 +1,11 @@
 from dotenv import load_dotenv
 load_dotenv(".env.local")
 
+import os
+# Route SDK calls through Vite proxy which routes prompts to config service (5050)
+# and everything else to Opik backend (8080)
+os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5174/api/"
+
 import opik
 from dataclasses import dataclass, field
 from typing import TypedDict, Annotated
@@ -53,22 +58,12 @@ Use the fetch_research_data tool to get information, then create comprehensive r
     # Writer prompts
     writer_system_prompt: Prompt = field(default_factory=lambda: Prompt(
         name="Writer System Prompt",
-        prompt="""You are a skilled technical writer. Your task is to write comprehensive, well-structured reports.
-
-When creating a report:
-- Use clear, professional language
-- Structure information logically with sections
-- Incorporate both research notes and raw data
-- Provide context and explanations
-- Make the report engaging and informative
-- Use markdown formatting for structure
-
-Create polished, publication-ready reports."""
+        prompt="""You are a technical writer. Write a single concise paragraph summary. No headers, no bullet points, no markdown - just one paragraph."""
     ))
-    
+
     writer_user_prompt: Prompt = field(default_factory=lambda: Prompt(
         name="Writer User Prompt",
-        prompt="""Write a comprehensive report on: {topic}
+        prompt="""Summarize this topic in ONE paragraph: {topic}
 
 Research Notes:
 {research_notes}
@@ -76,7 +71,7 @@ Research Notes:
 Raw Data:
 {data}
 
-Please create a well-structured, detailed report incorporating all the information above."""
+Write exactly one paragraph, no formatting."""
     ))
 
 
@@ -424,12 +419,12 @@ tracer = OpikTracer()
 def run_research_agent(topic: str) -> str:
     """
     Execute the research workflow for a given topic.
-    
+
     This function is traced by Opik for observability.
-    
+
     Args:
         topic: The research topic
-        
+
     Returns:
         Final report as a string
     """
@@ -437,6 +432,18 @@ def run_research_agent(topic: str) -> str:
     print("Starting Research Workflow")
     print(f"Topic: {topic}")
     print(f"{'='*60}\n")
+
+    # Debug: Log the current config values (inside trace context)
+    print(f"\n[AGENT] ========== CONFIG VALUES (after overrides) ==========")
+    print(f"[AGENT] researcher_system_prompt.name: {config.researcher_system_prompt.name}")
+    print(f"[AGENT] researcher_system_prompt.prompt:\n{config.researcher_system_prompt.prompt}")
+    print(f"\n[AGENT] researcher_user_prompt.name: {config.researcher_user_prompt.name}")
+    print(f"[AGENT] researcher_user_prompt.prompt:\n{config.researcher_user_prompt.prompt}")
+    print(f"\n[AGENT] writer_system_prompt.name: {config.writer_system_prompt.name}")
+    print(f"[AGENT] writer_system_prompt.prompt:\n{config.writer_system_prompt.prompt}")
+    print(f"\n[AGENT] writer_user_prompt.name: {config.writer_user_prompt.name}")
+    print(f"[AGENT] writer_user_prompt.prompt:\n{config.writer_user_prompt.prompt}")
+    print(f"[AGENT] =============================================\n")
     
     initial_state: ResearchState = {
         "topic": topic,
@@ -473,14 +480,20 @@ def health():
 def chat():
     """
     Main chat endpoint for research requests.
-    
+
     Expects JSON: {"message": "topic to research"}
     Returns JSON: {"response": "final report"}
     """
+    # Debug: Log the experiment ID header
+    experiment_id = request.headers.get("X-Opik-Experiment-Id")
+    print(f"\n[AGENT] ========== INCOMING REQUEST ==========")
+    print(f"[AGENT] X-Opik-Experiment-Id header: {experiment_id}")
+    print(f"[AGENT] Request JSON: {request.json}")
+
     with experiment_context(request):
         topic = request.json.get("message").get("topic")
         final_report = run_research_agent(topic)
-        
+
     return jsonify({"response": final_report})
 
 

@@ -5,14 +5,31 @@ import {
   INPUT_HINT,
   OptimizationRun,
   OptimizationChange,
+  PromptChange,
+  AssertionResult,
 } from "@/types/agent-intake";
+import { CommitResult } from "@/api/agent-intake/useOptimizeStreaming";
+
+export type SelectedEndpoint = {
+  id: string;
+  name: string;
+  url: string;
+  secret?: string;
+};
 
 export interface OptimizationState {
   isOptimizing: boolean;
   isComplete: boolean;
   success?: boolean;
+  cancelled?: boolean;
   runs: OptimizationRun[];
   changes: OptimizationChange[];
+  optimizationId?: string;
+  promptChanges?: PromptChange[];
+  experimentTraces?: Record<string, string>;
+  finalAssertionResults?: AssertionResult[];
+  commitResult?: CommitResult;
+  isCommitting?: boolean;
 }
 
 export interface IntakeSessionState {
@@ -22,6 +39,7 @@ export interface IntakeSessionState {
   config: IntakeConfig | null;
   inputHint: INPUT_HINT;
   optimization: OptimizationState;
+  selectedEndpoint: SelectedEndpoint | null;
 }
 
 const DEFAULT_OPTIMIZATION_STATE: OptimizationState = {
@@ -38,6 +56,7 @@ const DEFAULT_SESSION_STATE: IntakeSessionState = {
   config: null,
   inputHint: INPUT_HINT.text,
   optimization: DEFAULT_OPTIMIZATION_STATE,
+  selectedEndpoint: null,
 };
 
 interface IntakeSessionStore {
@@ -145,7 +164,7 @@ const useIntakeSessionStore = create<IntakeSessionStore>((set, get) => ({
       const newRuns =
         existingIndex >= 0
           ? session.optimization.runs.map((r, i) =>
-              i === existingIndex ? run : r,
+              i === existingIndex ? { ...r, ...run } : r,
             )
           : [...session.optimization.runs, run];
 

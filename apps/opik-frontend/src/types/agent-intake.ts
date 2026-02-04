@@ -89,6 +89,7 @@ export enum OPTIMIZE_EVENT_TYPE {
   optimization_started = "optimization_started",
   run_status = "run_status",
   run_result = "run_result",
+  regression_result = "regression_result",
   optimization_complete = "optimization_complete",
 }
 
@@ -104,6 +105,7 @@ export type RunStatusEvent = {
   label: string;
   iteration: number;
   status: RunStatus;
+  trace_id?: string;
 };
 
 export type AssertionResult = {
@@ -124,10 +126,47 @@ export type OptimizationChange = {
   description: string;
 };
 
+export type RegressionItem = {
+  item_id: string;
+  reason: string;
+  failed_assertions: AssertionResult[];
+};
+
+export type RegressionResult = {
+  iteration: number;
+  items_tested: number;
+  items_passed: number;
+  no_regressions: boolean;
+  regressions: RegressionItem[];
+};
+
+export type PromptMessage = {
+  role: string;
+  content: string;
+};
+
+export type PromptVersion = {
+  name: string;
+  type: "chat" | "text";
+  messages?: PromptMessage[];
+  template?: string;
+};
+
+export type PromptChange = {
+  prompt_name: string;
+  original: PromptVersion;
+  modified: PromptVersion;
+};
+
 export type OptimizationCompleteEvent = {
   type: OPTIMIZE_EVENT_TYPE.optimization_complete;
   success: boolean;
+  optimization_id?: string;
+  iterations?: number;
   changes: OptimizationChange[];
+  prompt_changes?: PromptChange[];
+  experiment_traces?: Record<string, string>;
+  final_assertion_results?: AssertionResult[];
 };
 
 export type OptimizeStreamEvent =
@@ -139,7 +178,9 @@ export type OptimizeStreamEvent =
 export type OptimizationRun = {
   label: string;
   iteration: number;
-  status: RunStatus | "completed";
+  status: RunStatus | "checking_regressions" | "completed";
   assertions: AssertionResult[];
   all_passed?: boolean;
+  trace_id?: string;
+  regression?: RegressionResult;
 };

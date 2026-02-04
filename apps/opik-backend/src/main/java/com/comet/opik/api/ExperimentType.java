@@ -15,7 +15,8 @@ public enum ExperimentType {
     TRIAL("trial"),
     MINI_BATCH("mini-batch"),
     LIVE("live"),
-    AB("ab");
+    AB("ab"),
+    OPTIMIZER("optimizer");
 
     @JsonValue
     private final String value;

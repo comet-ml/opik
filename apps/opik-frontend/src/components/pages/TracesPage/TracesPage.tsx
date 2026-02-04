@@ -10,11 +10,11 @@ import TracesSpansTab from "@/components/pages/TracesPage/TracesSpansTab/TracesS
 import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
-import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
 import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/DashboardsTab";
 import ConfigurationTab from "@/components/pages/TracesPage/ConfigurationTab/ConfigurationTab";
 import ExperimentsTab from "@/components/pages/TracesPage/ExperimentsTab/ExperimentsTab";
 import EndpointsTab from "@/components/pages/TracesPage/EndpointsTab/EndpointsTab";
+import EvalSuitesTab from "@/components/pages/TracesPage/EvalSuitesTab/EvalSuitesTab";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Construction } from "lucide-react";
@@ -89,14 +89,14 @@ const TracesPage = () => {
               <TabsTrigger variant="underline" value="rules">
                 Online evaluation
               </TabsTrigger>
-              <TabsTrigger variant="underline" value="annotation-queues">
-                Annotation queues
-              </TabsTrigger>
               <TabsTrigger variant="underline" value="configuration">
                 Configuration
               </TabsTrigger>
               <TabsTrigger variant="underline" value="endpoints">
                 Endpoints
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="eval-suites">
+                Evaluation Suites
               </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
@@ -123,14 +123,14 @@ const TracesPage = () => {
           <TabsContent value="rules">
             <RulesTab projectId={projectId} />
           </TabsContent>
-          <TabsContent value="annotation-queues">
-            <AnnotationQueuesTab projectId={projectId} />
-          </TabsContent>
           <TabsContent value="configuration">
             <ConfigurationTab projectId={projectId} />
           </TabsContent>
           <TabsContent value="endpoints">
             <EndpointsTab projectId={projectId} />
+          </TabsContent>
+          <TabsContent value="eval-suites">
+            <EvalSuitesTab projectId={projectId} projectName={projectName} />
           </TabsContent>
         </Tabs>
       );

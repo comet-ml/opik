@@ -13,6 +13,7 @@ class ResolvedConfig:
     values: dict[str, Any] = field(default_factory=dict)  # field_name -> resolved value
     value_ids: dict[str, str] = field(default_factory=dict)  # field_name -> backend value ID
     assigned_variant: str | None = None
+    experiment_type: str | None = None
     revision: int = 0
 
 

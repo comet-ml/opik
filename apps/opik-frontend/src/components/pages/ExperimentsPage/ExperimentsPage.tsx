@@ -114,6 +114,10 @@ const DatasetCell = (context: CellContext<GroupedExperiment, unknown>) => {
         <Tag variant="blue" size="sm">
           A/B Test
         </Tag>
+      ) : experimentType === EXPERIMENT_TYPE.OPTIMIZER ? (
+        <Tag variant="orange" size="sm">
+          Optimizer
+        </Tag>
       ) : (
         <Tag variant="red" size="sm">
           Live
@@ -448,7 +452,9 @@ const ExperimentsPage: React.FC = () => {
   const handleRowClick = useCallback(
     (row: GroupedExperiment) => {
       const isLiveExperiment =
-        row.type === EXPERIMENT_TYPE.LIVE || row.type === EXPERIMENT_TYPE.AB;
+        row.type === EXPERIMENT_TYPE.LIVE ||
+        row.type === EXPERIMENT_TYPE.AB ||
+        row.type === EXPERIMENT_TYPE.OPTIMIZER;
 
       if (isLiveExperiment) {
         navigate({

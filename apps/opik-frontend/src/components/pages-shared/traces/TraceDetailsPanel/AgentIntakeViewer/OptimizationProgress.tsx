@@ -1,23 +1,38 @@
 import React from "react";
-import { Check, X, Circle, Loader2 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { Check, X, Circle, Loader2, StopCircle, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   OptimizationRun,
   OptimizationChange,
+  AssertionResult,
 } from "@/types/agent-intake";
 
 type OptimizationProgressProps = {
   runs: OptimizationRun[];
+  isOptimizing?: boolean;
   isComplete: boolean;
   success?: boolean;
+  cancelled?: boolean;
   changes?: OptimizationChange[];
+  finalAssertionResults?: AssertionResult[];
+  onCancel?: () => void;
+  workspaceName?: string;
+  projectId?: string;
 };
 
 const OptimizationProgress: React.FC<OptimizationProgressProps> = ({
   runs,
+  isOptimizing,
   isComplete,
   success,
+  cancelled,
   changes,
+  finalAssertionResults,
+  onCancel,
+  workspaceName,
+  projectId,
 }) => {
   const renderAssertionIcon = (
     passed: boolean | undefined,
@@ -55,42 +70,82 @@ const OptimizationProgress: React.FC<OptimizationProgressProps> = ({
         </span>
       );
     }
+    if (status === "checking_regressions") {
+      return (
+        <span className="flex items-center gap-1.5 text-xs text-blue-600">
+          <Loader2 className="size-3 animate-spin" />
+          Checking regressions...
+        </span>
+      );
+    }
     return null;
   };
 
   return (
     <div className="mb-4 rounded-lg border bg-background">
-      <div className="border-b px-4 py-3">
+      <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="comet-body-s-accented text-foreground">
           Optimization Progress
         </div>
+        {isOptimizing && onCancel && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCancel}
+            className="h-7 gap-1.5 text-xs"
+          >
+            <StopCircle className="size-3.5" />
+            Cancel
+          </Button>
+        )}
       </div>
 
       <div className="divide-y">
         {runs.map((run) => (
           <div key={`${run.label}-${run.iteration}`} className="px-4 py-3">
             <div className="mb-2 flex items-center justify-between">
-              <span
-                className={cn(
-                  "comet-body-s font-medium",
-                  run.status === "completed" && run.all_passed
-                    ? "text-green-700"
-                    : run.status === "completed" && !run.all_passed
-                      ? "text-foreground"
-                      : "text-muted-slate",
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "comet-body-s font-medium",
+                    run.status === "completed" && run.all_passed && (!run.regression || run.regression.no_regressions)
+                      ? "text-green-700"
+                      : run.status === "completed"
+                        ? "text-foreground"
+                        : "text-muted-slate",
+                  )}
+                >
+                  {run.label}
+                </span>
+                {run.trace_id && workspaceName && projectId && run.iteration > 0 && (
+                  <Link
+                    to="/$workspaceName/projects/$projectId/traces"
+                    params={{ workspaceName, projectId }}
+                    search={{ trace: run.trace_id }}
+                    target="_blank"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-muted-slate hover:text-foreground"
+                    title="View trace in new tab"
+                  >
+                    <ExternalLink className="size-3.5" />
+                  </Link>
                 )}
-              >
-                {run.label}
-              </span>
+              </div>
               {run.status !== "completed" && renderStatusBadge(run.status)}
               {run.status === "completed" && (
                 <span
                   className={cn(
                     "text-xs font-medium",
-                    run.all_passed ? "text-green-600" : "text-red-500",
+                    run.all_passed && (!run.regression || run.regression.no_regressions)
+                      ? "text-green-600"
+                      : "text-red-500",
                   )}
                 >
-                  {run.all_passed ? "All passed" : "Failed"}
+                  {!run.all_passed
+                    ? "Failed"
+                    : run.regression && !run.regression.no_regressions
+                      ? "Regressions found"
+                      : "All passed"}
                 </span>
               )}
             </div>
@@ -113,6 +168,30 @@ const OptimizationProgress: React.FC<OptimizationProgressProps> = ({
                 </div>
               ))}
             </div>
+
+            {run.regression && (
+              <div className="mt-3 rounded border bg-muted/20 p-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-muted-slate">Regression Tests</span>
+                  <span className={cn(
+                    "font-medium",
+                    run.regression.no_regressions ? "text-green-600" : "text-red-500"
+                  )}>
+                    {run.regression.items_passed}/{run.regression.items_tested} passed
+                  </span>
+                </div>
+                {!run.regression.no_regressions && run.regression.regressions.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {run.regression.regressions.map((reg, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-xs">
+                        <X className="mt-0.5 size-3 shrink-0 text-red-500" />
+                        <span className="text-red-600">{reg.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -121,17 +200,22 @@ const OptimizationProgress: React.FC<OptimizationProgressProps> = ({
         <div
           className={cn(
             "border-t px-4 py-3",
-            success ? "bg-green-50" : "bg-red-50",
+            success ? "bg-green-50" : cancelled ? "bg-muted/50" : "bg-red-50",
           )}
         >
           <div
             className={cn(
               "comet-body-s-accented mb-1",
-              success ? "text-green-800" : "text-red-800",
+              success ? "text-green-800" : cancelled ? "text-muted-foreground" : "text-red-800",
             )}
           >
-            {success ? "Optimization Complete!" : "Optimization Failed"}
+            {success ? "Optimization Complete!" : cancelled ? "Optimization Cancelled" : "Optimization Did Not Converge"}
           </div>
+          {!success && !cancelled && (
+            <div className="comet-body-s mb-2 text-red-700">
+              The optimizer could not find a configuration that passes all assertions.
+            </div>
+          )}
           {changes && changes.length > 0 && (
             <ul className="mt-2 space-y-1">
               {changes.map((change, idx) => (
@@ -141,6 +225,34 @@ const OptimizationProgress: React.FC<OptimizationProgressProps> = ({
                 </li>
               ))}
             </ul>
+          )}
+          {!success && !cancelled && finalAssertionResults && finalAssertionResults.length > 0 && (
+            <div className="mt-3">
+              <div className="comet-body-xs mb-2 font-medium text-red-800">
+                Final assertion results:
+              </div>
+              <div className="space-y-1">
+                {finalAssertionResults.map((assertion, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    {assertion.passed ? (
+                      <Check className="size-3.5 text-green-600" />
+                    ) : (
+                      <X className="size-3.5 text-red-500" />
+                    )}
+                    <span
+                      className={cn(
+                        assertion.passed ? "text-green-800" : "text-red-700",
+                      )}
+                    >
+                      {assertion.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}
