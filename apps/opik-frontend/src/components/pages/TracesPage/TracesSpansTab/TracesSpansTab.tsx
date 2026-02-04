@@ -1215,6 +1215,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             placeholder="Search by ID"
             className="w-[320px]"
             dimension="sm"
+            disabled={!canInteractWithTable}
           ></SearchInput>
           <FiltersButton
             columns={filtersColumnData}
@@ -1222,6 +1223,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             filters={filters}
             onChange={setFilters}
             layout="icon"
+            disabled={!canInteractWithTable}
           />
         </div>
         <div className="flex items-center gap-2">

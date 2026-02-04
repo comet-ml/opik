@@ -672,6 +672,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             placeholder="Search by ID"
             className="w-[320px]"
             dimension="sm"
+            disabled={!canInteractWithTable}
           ></SearchInput>
           <FiltersButton
             columns={FILTER_COLUMNS}
@@ -679,6 +680,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             onChange={setFilters}
             config={filtersConfig as never}
             layout="icon"
+            disabled={!canInteractWithTable}
           />
         </div>
         <div className="flex items-center gap-2">

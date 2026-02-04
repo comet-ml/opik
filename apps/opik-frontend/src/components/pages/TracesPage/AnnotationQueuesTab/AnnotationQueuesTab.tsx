@@ -37,8 +37,6 @@ import AnnotationQueueProgressCell from "@/components/pages-shared/annotation-qu
 import AnnotationQueueRowActionsCell from "@/components/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
 import AnnotationQueuesActionsPanel from "@/components/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/NoAnnotationQueuesPage";
 import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
@@ -375,12 +373,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_annotation_queues]}
-        />
-      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
@@ -393,6 +385,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
             placeholder="Search by name"
             className="w-[320px]"
             dimension="sm"
+            disabled={!canInteractWithTable}
           />
           <FiltersButton
             columns={FILTER_COLUMNS}
@@ -400,6 +393,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
             filters={filters}
             onChange={setFilters}
             layout="icon"
+            disabled={!canInteractWithTable}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -427,11 +421,7 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
         isLoading={isLoading}
         isEmpty={showEmptyState}
         emptyState={
-          <NoAnnotationQueuesPage
-            openModal={handleNewQueue}
-            Wrapper={NoDataPage}
-            className="px-6"
-          />
+          <NoAnnotationQueuesPage Wrapper={NoDataPage} className="px-6" />
         }
       >
         <DataTable

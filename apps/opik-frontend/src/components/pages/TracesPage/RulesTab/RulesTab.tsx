@@ -43,8 +43,6 @@ import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowAct
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRuleDialog/helpers";
 
@@ -301,12 +299,6 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.whats_online_evaluation]}
-        />
-      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
@@ -319,6 +311,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
             placeholder="Search by ID"
             className="w-[320px]"
             dimension="sm"
+            disabled={!canInteractWithTable}
           ></SearchInput>
         </div>
         <div className="flex items-center gap-2">
@@ -340,13 +333,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
       <DataTableStateHandler
         isLoading={isPending}
         isEmpty={showEmptyState}
-        emptyState={
-          <NoRulesPage
-            openModal={handleNewRuleClick}
-            Wrapper={NoDataPage}
-            className="px-6"
-          />
-        }
+        emptyState={<NoRulesPage Wrapper={NoDataPage} className="px-6" />}
       >
         <DataTable
           columns={columns}
