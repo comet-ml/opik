@@ -408,7 +408,7 @@ class BaseOptimizer(ABC):
         project_name: str | None = None,
         optimization_id: str | None = None,
         max_trials: int = 10,
-        optimize_prompt: bool | str | list[str] | None = "system",
+        optimize_prompts: bool | str | list[str] | None = "system",
         optimize_tools: bool | dict[str, bool] | None = None,
         **extra_params: Any,
     ) -> OptimizationContext:
@@ -420,7 +420,7 @@ class BaseOptimizer(ABC):
         from .utils.toolcalling import toolcalling as toolcalling_utils
 
         optimize_tools = toolcalling_utils.validate_optimization_flags(
-            optimize_prompt=bool(optimize_prompt),
+            optimize_prompts=bool(optimize_prompts),
             optimize_tools=optimize_tools,
             supports_tool_optimization=self.supports_tool_optimization,
             warn_unsupported=True,
@@ -519,12 +519,12 @@ class BaseOptimizer(ABC):
         if not isinstance(resolved_strategy, str) or not resolved_strategy:
             resolved_strategy = constants.DEFAULT_N_SAMPLES_STRATEGY
 
-        optimizable_roles = normalize_optimizable_roles(optimize_prompt)
+        optimizable_roles = normalize_optimizable_roles(optimize_prompts)
         extra_params["optimizable_roles"] = optimizable_roles
         self._optimizable_roles = optimizable_roles
         if not optimizable_roles:
             logger.warning(
-                "optimize_prompt resolved to no roles; prompt content will not be mutated."
+                "optimize_prompts resolved to no roles; prompt content will not be mutated."
             )
 
         if hasattr(self, "allow_user_prompt_optimization"):
@@ -1250,7 +1250,7 @@ class BaseOptimizer(ABC):
         validation_dataset: Dataset | None,
         max_trials: int,
         allow_tool_use: bool,
-        optimize_prompt: bool | str | list[str] | None,
+        optimize_prompts: bool | str | list[str] | None,
         optimize_tools: bool | dict[str, bool] | None,
         extra_kwargs: dict[str, Any],
     ) -> OptimizationContext:
@@ -1273,7 +1273,7 @@ class BaseOptimizer(ABC):
             max_trials=max_trials,
             auto_continue=auto_continue,
             allow_tool_use=allow_tool_use,
-            optimize_prompt=optimize_prompt,
+            optimize_prompts=optimize_prompts,
             optimize_tools=optimize_tools,
             **extra_kwargs,
         )
@@ -1381,7 +1381,7 @@ class BaseOptimizer(ABC):
         validation_dataset: Dataset | None,
         max_trials: int,
         allow_tool_use: bool,
-        optimize_prompt: bool | str | list[str] | None,
+        optimize_prompts: bool | str | list[str] | None,
         optimize_tools: bool | dict[str, bool] | None,
         extra_kwargs: dict[str, Any],
     ) -> dict[str, Any]:
@@ -1400,7 +1400,7 @@ class BaseOptimizer(ABC):
             "validation_dataset": validation_dataset,
             "max_trials": max_trials,
             "allow_tool_use": allow_tool_use,
-            "optimize_prompt": optimize_prompt,
+            "optimize_prompts": optimize_prompts,
             "optimize_tools": optimize_tools,
             "extra_kwargs": extra_kwargs,
         }
@@ -1509,7 +1509,7 @@ class BaseOptimizer(ABC):
         validation_dataset: Dataset | None = None,
         max_trials: int = 10,
         allow_tool_use: bool = True,
-        optimize_prompt: bool | str | list[str] | None = "system",
+        optimize_prompts: bool | str | list[str] | None = "system",
         optimize_tools: bool | dict[str, bool] | None = None,
         *args: Any,
         **kwargs: Any,
@@ -1544,7 +1544,7 @@ class BaseOptimizer(ABC):
            validation_dataset: Optional validation dataset for ranking candidates
            max_trials: Maximum number of optimization trials
            allow_tool_use: Whether tools may be executed during evaluation (default True)
-           optimize_prompt: Which prompt roles to allow for optimization
+           optimize_prompts: Which prompt roles to allow for optimization
            optimize_tools: Optional tool optimization selector. Only supported by optimizers that
                explicitly document tool optimization support.
            **kwargs: Additional arguments passed to _setup_optimization and _run_optimization
@@ -1568,7 +1568,7 @@ class BaseOptimizer(ABC):
                 validation_dataset=validation_dataset,
                 max_trials=max_trials,
                 allow_tool_use=allow_tool_use,
-                optimize_prompt=optimize_prompt,
+                optimize_prompts=optimize_prompts,
                 optimize_tools=optimize_tools,
                 extra_kwargs=kwargs,
             )

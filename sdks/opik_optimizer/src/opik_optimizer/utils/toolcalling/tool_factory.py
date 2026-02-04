@@ -72,10 +72,11 @@ class ToolCallingFactory:
         """Return a new ChatPrompt with tool entries normalized and mapped."""
         if not prompt.tools:
             return prompt
+        original_tools = copy.deepcopy(prompt.tools)
         resolved_tools, resolved_map = resolve_toolcalling_tools(
             prompt.tools, prompt.function_map, factory=self
         )
-        return chat_prompt.ChatPrompt(
+        resolved_prompt = chat_prompt.ChatPrompt(
             name=prompt.name,
             system=prompt.system,
             user=prompt.user,
@@ -85,6 +86,8 @@ class ToolCallingFactory:
             model=prompt.model,
             model_parameters=copy.deepcopy(prompt.model_kwargs or {}),
         )
+        setattr(resolved_prompt, "tools_original", original_tools)
+        return resolved_prompt
 
     def resolve_tool_entry(self, entry: Mapping[str, Any]) -> ToolCallingResolvedTool:
         """Resolve a single legacy MCP tool entry into a function tool plus callable."""

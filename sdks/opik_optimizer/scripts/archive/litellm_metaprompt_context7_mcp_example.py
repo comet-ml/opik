@@ -175,7 +175,7 @@ meta_result = meta_optimizer.optimize_prompt(
     fallback_invoker=lambda args: tool_invocation.invoke(args),
     n_samples=min(5, len(dataset.get_items())),
     tool_panel_style="bright_magenta",
-    optimize_prompt=False,
+    optimize_prompts=False,
     optimize_tools=True,
 )
 

@@ -217,6 +217,15 @@ class OptimizationHistoryState:
                 for tool in tools
             ]
 
+        def _capture_original_tools(prompt_obj: Any) -> list[dict[str, Any]] | None:
+            tools = getattr(prompt_obj, "tools_original", None)
+            if not tools:
+                return None
+            return [
+                dict(tool) if isinstance(tool, dict) else {"value": tool}
+                for tool in tools
+            ]
+
         # Normalize prompts to messages format to match baseline evaluation format
         # Always use dict format: {prompt_name: messages}
         if isinstance(candidate, chat_prompt.ChatPrompt):
@@ -226,6 +235,9 @@ class OptimizationHistoryState:
             tool_payload = _capture_tools(candidate)
             if tool_payload:
                 payload["tools"] = tool_payload
+            original_tools = _capture_original_tools(candidate)
+            if original_tools:
+                payload["tools_original"] = original_tools
             model_kwargs = getattr(candidate, "model_kwargs", None)
             if model_kwargs:
                 payload["model_kwargs"] = model_kwargs
@@ -241,6 +253,9 @@ class OptimizationHistoryState:
                     tool_payload = _capture_tools(prompt_obj)
                     if tool_payload:
                         payload["tools"] = tool_payload
+                    original_tools = _capture_original_tools(prompt_obj)
+                    if original_tools:
+                        payload["tools_original"] = original_tools
                     model_kwargs = getattr(prompt_obj, "model_kwargs", None)
                     if model_kwargs:
                         payload["model_kwargs"] = model_kwargs

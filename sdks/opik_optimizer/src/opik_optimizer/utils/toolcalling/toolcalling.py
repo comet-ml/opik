@@ -77,7 +77,9 @@ def resolve_prompt_tools(
             raise ValueError(
                 "Tool description optimization only supports single prompts."
             )
-        if not any(getattr(prompt, "tools", None) for prompt in prompt_or_prompts.values()):
+        if not any(
+            getattr(prompt, "tools", None) for prompt in prompt_or_prompts.values()
+        ):
             return prompt_or_prompts, None
         factory = ToolCallingFactory()
         resolved = {
@@ -110,17 +112,17 @@ def should_allow_tool_use(
 
 def validate_optimization_flags(
     *,
-    optimize_prompt: bool,
+    optimize_prompts: bool,
     optimize_tools: bool | dict[str, bool] | None,
     supports_tool_optimization: bool,
     warn_unsupported: bool = False,
 ) -> bool | dict[str, bool] | None:
     """Validate optimization flags and normalize tool optimization options."""
-    if not optimize_prompt and not optimize_tools:
-        raise ValueError("optimize_prompt and optimize_tools are both disabled.")
+    if not optimize_prompts and not optimize_tools:
+        raise ValueError("optimize_prompts and optimize_tools are both disabled.")
 
     if optimize_tools and not supports_tool_optimization:
-        if not optimize_prompt:
+        if not optimize_prompts:
             raise ValueError(
                 "Tool-only optimization is not supported by this optimizer."
             )

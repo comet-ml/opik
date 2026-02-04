@@ -44,6 +44,11 @@ def test_tool_factory__resolves_mcp_tools(monkeypatch: Any) -> None:
     assert resolved_tools[0]["function"]["description"] == "mcp tool"
     assert "context7.get-library-docs" in function_map
 
+    prompt = ChatPrompt(system="sys", user="hello", tools=tools)
+    resolved_prompt = ToolCallingFactory().resolve_prompt(prompt)
+    assert resolved_prompt.tools is not None
+    assert getattr(resolved_prompt, "tools_original") == tools
+
 
 def test_tool_factory__keeps_pre_resolved_tools(monkeypatch: Any) -> None:
     def _fake_callable(**_kwargs: Any) -> str:

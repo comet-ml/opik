@@ -1,4 +1,6 @@
-from opik_optimizer.utils.toolcalling.toolcalling import ToolDescriptionCandidatesResponse
+from opik_optimizer.utils.toolcalling.toolcalling import (
+    ToolDescriptionCandidatesResponse,
+)
 
 
 def test_tool_description_schema_includes_param_descriptions() -> None:
