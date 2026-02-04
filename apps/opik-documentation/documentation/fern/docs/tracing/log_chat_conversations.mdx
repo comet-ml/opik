@@ -341,44 +341,45 @@ functionality.
 
 ## Scoring conversations
 
-It is possible to assign conversation level feedback scores. For that, you need to understand how threads work in Opik. Threads are aggregated traces
-that are created when tracking agents or simply traces interconnected by a `thread_id`. In order to score a conversation, we need to ensure that the
-thread is inactive, meaning that no new traces are being created.
-
-<Note>
-  By default, threads are marked as inactive after 15 minutes of inactivity. You can change this value by setting the
-  `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable (If you are using the Opik self-hosted version).
-  On cloud, you can change this setting at workspace level.
-</Note>
-
-Threads are automatically marked as inactive after the timeout period and you can also manually mark a thread as inactive via UI using the `Status` button on top right corner of the thread view.
-
-<Frame>
-  <img src="/img/tracing/chat_conversations_mark_as_inactive.png" />
-</Frame>
-
-Once a thread is inactive, you can assign a feedback score to the thread. This score will be associated to the thread and will be displayed in the thread view.
+You can assign conversation-level feedback scores to threads at any time. Threads are aggregated traces
+that are created when tracking agents or simply traces interconnected by a `thread_id`.
 
 <Frame>
   <img src="/img/tracing/chat_conversations_score.png" />
 </Frame>
 
-And in the conversation list, you can see the feedback score associated to the thread.
+In the conversation list, you can see the feedback scores associated to each thread.
 
 <Frame>
   <img src="/img/tracing/chat_conversations_score_list.png" />
 </Frame>
-
-<Note>
-  Important: The human feedback scores are removed in case the thread is re-activated. This is to avoid any confusion
-  and to ensure that the feedback scores are always based on the full context of the conversation.
-</Note>
 
 You can also tag a thread and add comments to it. This is useful to add additional context during the review process or investigate a specific conversation.
 
 <Frame>
   <img src="/img/tracing/chat_conversation_tags_comments.png" />
 </Frame>
+
+### Thread Online Scoring Rule Cooldown Period
+
+For thread-level online evaluation rules (automatic scoring), Opik waits for a "cooldown period" after the last activity
+in a thread before running the rules. This gives conversations time to settle before automatic evaluation.
+
+<Note>
+  By default, the cooldown period is 15 minutes. You can change this value by setting the
+  `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable (if you are using the Opik self-hosted version).
+  On cloud, you can change this setting at workspace level under "Thread online scoring rule cooldown period".
+</Note>
+
+#### Behavior When Adding Traces to Existing Threads
+
+When a new trace is added to an existing thread, the following happens:
+
+- **All previous feedback scores are deleted**: This includes both manual feedback scores and online evaluation scores. This ensures that the thread is re-evaluated with the complete, updated conversation context.
+- **The cooldown timer restarts**: The timer resets from the moment the new trace is added, ensuring online evaluation waits for the full cooldown period before scoring the updated thread.
+- **Online evaluation re-runs**: Once the cooldown period expires, thread-level online scoring rules will automatically evaluate the complete conversation again.
+
+This behavior ensures that online evaluation scores always reflect the final, complete state of the conversation rather than intermediate states.
 
 ## Advanced Thread Features
 
@@ -403,18 +404,10 @@ You can evaluate entire conversation threads using the thread evaluation feature
 - Multi-turn coherence evaluation
 - User satisfaction scoring across complete interactions
 
-### Thread Lifecycle Management
+### Thread Management
 
-Threads have a lifecycle that affects how you can interact with them:
-
-1. **Active**: New traces can be added to the thread
-2. **Inactive**: No new traces can be added, thread can be scored
-
-<Note>
-  Threads automatically become inactive after 15 minutes of no new trace activity. This timeout can be configured: -
-  **Self-hosted**: Set `OPIK_TRACE_THREAD_TIMEOUT_TO_MARK_AS_INACTIVE` environment variable - **Cloud**: Configure at
-  workspace level in settings
-</Note>
+Threads can have traces added to them at any time, and you can add feedback scores, comments, and tags
+to threads regardless of whether new traces are still being added.
 
 ### Programmatic Thread Management
 
@@ -451,8 +444,6 @@ You can also manage threads programmatically using the Opik SDK:
     ```
 
 </CodeBlocks>
-
-You can mark a thread as inactive by calling [`TracesClient.close_trace_thread`](https://www.comet.com/docs/opik/python-sdk-reference/rest_api/clients/traces.html#opik.rest_api.traces.client.TracesClient.close_trace_thread)
 
 ## Next steps
 

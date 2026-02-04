@@ -16,7 +16,6 @@ import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
 import { BaseTraceData } from "@/types/traces";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { isObjectSpan, isObjectThread } from "@/lib/traces";
-import { ThreadStatus } from "@/types/thread";
 import { ROW_HEIGHT } from "@/types/shared";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
@@ -61,9 +60,8 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     feedbackScore?.last_updated_at,
   ]);
 
-  const isEditingEnabled =
-    (!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
-    enableUserFeedbackEditing;
+  // Editing is now enabled for all threads regardless of status
+  const isEditingEnabled = enableUserFeedbackEditing;
 
   const isUserFeedbackColumn =
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";

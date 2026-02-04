@@ -4,7 +4,6 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Thread, Trace } from "@/types/traces";
-import { ThreadStatus } from "@/types/thread";
 import useAppStore from "@/store/AppStore";
 import {
   Dialog,
@@ -91,17 +90,10 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   const queues = data?.content ?? [];
   const total = data?.total ?? 0;
 
-  const validRows = useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          !isObjectThread(r) || (r as Thread).status === ThreadStatus.INACTIVE,
-      ),
-    [rows],
-  );
+  // All threads can now be added to annotation queues regardless of status
+  const validRows = rows;
 
   const noValidRows = validRows.length === 0;
-  const partialValid = validRows.length !== rows.length;
 
   const handleAddSuccess = useCallback(
     (queue: AnnotationQueue) => {
@@ -216,15 +208,13 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
   };
 
   const renderAlert = () => {
-    const text = noValidRows
-      ? "There are no rows that can be added to annotation queues. Only traces and inactive threads can be added."
-      : "Only traces and inactive threads will be added to annotation queues. Active threads will be excluded.";
-
-    if (noValidRows || partialValid) {
+    if (noValidRows) {
       return (
         <Alert className="mt-4">
           <MessageCircleWarning />
-          <AlertDescription>{text}</AlertDescription>
+          <AlertDescription>
+            There are no rows that can be added to annotation queues.
+          </AlertDescription>
         </Alert>
       );
     }

@@ -8,7 +8,6 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { Thread } from "@/types/traces";
-import { ThreadStatus } from "@/types/thread";
 import {
   METRIC_NAME_TYPE,
   INTERVAL_TYPE,
@@ -125,15 +124,6 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
           keyComponentProps: {
             projectId,
             placeholder: "Select score",
-          },
-        },
-        status: {
-          keyComponentProps: {
-            options: [
-              { value: ThreadStatus.INACTIVE, label: "Inactive" },
-              { value: ThreadStatus.ACTIVE, label: "Active" },
-            ],
-            placeholder: "Select value",
           },
         },
       },
