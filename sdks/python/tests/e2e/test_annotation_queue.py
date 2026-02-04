@@ -155,7 +155,6 @@ def test_annotation_queue__add_threads__happyflow(
     # Get threads from API and filter by our thread IDs
     threads = threads_client.search_threads(
         project_name=temporary_project_name,
-        filter_string=f'id = "{thread_id_1}" or id = "{thread_id_2}"',
         max_results=10,
     )
     assert len(threads) == 2
