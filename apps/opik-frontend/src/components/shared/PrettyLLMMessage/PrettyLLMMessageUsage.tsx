@@ -19,7 +19,7 @@ const PrettyLLMMessageUsage: React.FC<PrettyLLMMessageUsageProps> = ({
     >
       {usage.completion_tokens !== undefined && (
         <>
-          <span className="font-medium">Max completion tokens</span>
+          <span className="font-medium">Completion tokens</span>
           <span>{usage.completion_tokens}</span>
         </>
       )}
