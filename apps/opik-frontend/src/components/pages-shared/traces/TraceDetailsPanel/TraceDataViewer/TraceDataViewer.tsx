@@ -4,6 +4,7 @@ import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
 import {
   Brain,
+  Calendar,
   Clock,
   Coins,
   Hash,
@@ -21,8 +22,8 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import FeedbackScoreHoverCard from "@/components/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TagList from "../TagList/TagList";
-import InputOutputTab from "./InputOutputTab";
-import MetadataTab from "./MatadataTab";
+import MessagesTab from "./MessagesTab";
+import DetailsTab from "./DetailsTab";
 import AgentGraphTab from "./AgentGraphTab";
 import PromptsTab from "./PromptsTab";
 import { formatDuration, formatDate } from "@/lib/date";
@@ -39,8 +40,10 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
+import { detectLLMMessages } from "@/components/shared/PrettyLLMMessage/llmMessages";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 
 type TraceDataViewerProps = {
   graphData?: AgentGraphData;
@@ -85,15 +88,52 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     return Array.isArray(prompts) && prompts.length > 0;
   }, [data.metadata, showOptimizerPrompts]);
 
-  const [tab = "input", setTab] = useQueryParam("traceTab", StringParam, {
+  // Get transformed data from useUnifiedMedia - single source of truth for LLM messages detection
+  const { media, transformedInput, transformedOutput } = useUnifiedMedia(data);
+
+  // Detect if Messages tab should be shown (both input AND output support LLM pretty mode)
+  // Using transformedInput/transformedOutput ensures consistency with MessagesTab rendering
+  const canShowMessagesTab = useMemo(() => {
+    const inputDetection = detectLLMMessages(transformedInput, {
+      fieldType: "input",
+    });
+    const outputDetection = detectLLMMessages(transformedOutput, {
+      fieldType: "output",
+    });
+    return inputDetection.supported && outputDetection.supported;
+  }, [transformedInput, transformedOutput]);
+
+  // Default tab: Messages if available, otherwise Details
+  const defaultTab = canShowMessagesTab ? "messages" : "details";
+
+  const [tab, setTab] = useQueryParam("traceTab", StringParam, {
     updateType: "replaceIn",
   });
 
-  const selectedTab =
-    (tab === "graph" && !hasSpanAgentGraph) ||
-    (tab === "prompts" && !hasPrompts)
-      ? "input"
-      : tab;
+  // Determine the selected tab based on availability
+  const selectedTab = useMemo(() => {
+    // If no tab is set, use the default
+    if (!tab) return defaultTab;
+
+    // Normalize legacy tab values
+    let normalizedTab = tab;
+    if (tab === "input") {
+      normalizedTab = canShowMessagesTab ? "messages" : "details";
+    } else if (tab === "metadata") {
+      normalizedTab = "details";
+    }
+
+    // If messages tab is selected but not available, fall back to details
+    if (normalizedTab === "messages" && !canShowMessagesTab) return "details";
+
+    // If graph tab is selected but not available, fall back to default
+    if (normalizedTab === "graph" && !hasSpanAgentGraph) return defaultTab;
+
+    // If prompts tab is selected but not available, fall back to default
+    if (normalizedTab === "prompts" && !hasPrompts) return defaultTab;
+
+    return normalizedTab;
+  }, [tab, defaultTab, canShowMessagesTab, hasSpanAgentGraph, hasPrompts]);
 
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
@@ -145,6 +185,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const end_time = data.end_time
     ? formatDate(data.end_time, { includeSeconds: true })
     : "";
+  const created_at = data.created_at ? formatDate(data.created_at) : "";
   const estimatedCost = data.total_estimated_cost;
   const model = get(data, "model", null);
   const provider = get(data, "provider", null);
@@ -189,7 +230,17 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               />
             )}
           />
-          <div className="comet-body-s-accented flex w-full items-center gap-3 overflow-x-hidden text-muted-slate">
+          <div className="comet-body-s-accented flex w-full flex-wrap items-center gap-3 pl-1 text-muted-slate">
+            {created_at && (
+              <TooltipWrapper content={`Created at: ${created_at}`}>
+                <div
+                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  data-testid="data-viewer-created-at"
+                >
+                  <Calendar className="size-3 shrink-0" /> {created_at}
+                </div>
+              </TooltipWrapper>
+            )}
             <TooltipWrapper content={durationTooltip}>
               <div
                 className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
@@ -282,13 +333,24 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             projectId={projectId}
             traceId={traceId}
             spanId={spanId}
+            className="pl-1"
           />
         </div>
 
-        <Tabs defaultValue="input" value={selectedTab!} onValueChange={setTab}>
+        <Tabs
+          defaultValue={defaultTab}
+          value={selectedTab!}
+          onValueChange={setTab}
+        >
           <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="input">
-              Input/Output
+            {/* Tab order: Messages (conditional), Details, Feedback scores, Prompts (conditional), Agent graph (conditional) */}
+            {canShowMessagesTab && (
+              <TabsTrigger variant="underline" value="messages">
+                Messages
+              </TabsTrigger>
+            )}
+            <TabsTrigger variant="underline" value="details">
+              Details
             </TabsTrigger>
             <TabsTrigger variant="underline" value="feedback_scores">
               Feedback scores
@@ -296,9 +358,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 className="ml-1"
                 {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
               />
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value="metadata">
-              Metadata
             </TabsTrigger>
             {hasPrompts && (
               <TabsTrigger variant="underline" value="prompts">
@@ -311,8 +370,18 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               </TabsTrigger>
             )}
           </TabsList>
-          <TabsContent value="input">
-            <InputOutputTab
+          {canShowMessagesTab && (
+            <TabsContent value="messages">
+              <MessagesTab
+                transformedInput={transformedInput}
+                transformedOutput={transformedOutput}
+                media={media}
+                isLoading={isSpanInputOutputLoading}
+              />
+            </TabsContent>
+          )}
+          <TabsContent value="details">
+            <DetailsTab
               data={data}
               isLoading={isSpanInputOutputLoading}
               search={search}
@@ -347,9 +416,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 </div>
               )}
             </div>
-          </TabsContent>
-          <TabsContent value="metadata">
-            <MetadataTab data={data} search={search} />
           </TabsContent>
           {hasPrompts && (
             <TabsContent value="prompts">

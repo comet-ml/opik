@@ -1,5 +1,7 @@
 import { logger } from "@/utils/logger";
 import fs from "fs";
+import os from "os";
+import path from "path";
 import ini from "ini";
 import { RequestOptions } from "@/types/request";
 import "dotenv/config";
@@ -19,7 +21,7 @@ export interface ConstructorOpikConfig extends OpikConfig {
   headers?: Record<string, string>;
 }
 
-const CONFIG_FILE_PATH_DEFAULT = "~/.opik.config";
+const CONFIG_FILE_PATH_DEFAULT = path.join(os.homedir(), ".opik.config");
 
 export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions">> = {
   apiKey: "",
@@ -54,20 +56,25 @@ function loadFromEnv(): Partial<OpikConfig> {
   });
 }
 
+function expandPath(filePath: string): string {
+  return filePath.replace(/^~(?=$|\/|\\)/, os.homedir());
+}
+
 function loadFromConfigFile(): Partial<OpikConfig> {
   const configFilePath =
     process.env.OPIK_CONFIG_PATH || CONFIG_FILE_PATH_DEFAULT;
+  const expandedConfigFilePath = expandPath(configFilePath);
 
-  if (!fs.existsSync(configFilePath)) {
+  if (!fs.existsSync(expandedConfigFilePath)) {
     if (process.env.OPIK_CONFIG_PATH) {
-      throw new Error(`Config file not found at ${configFilePath}`);
+      throw new Error(`Config file not found at ${expandedConfigFilePath}`);
     }
 
     return {};
   }
 
   try {
-    const config = ini.parse(fs.readFileSync(configFilePath, "utf8"));
+    const config = ini.parse(fs.readFileSync(expandedConfigFilePath, "utf8"));
 
     if (!config.opik) {
       return {};
@@ -80,7 +87,7 @@ function loadFromConfigFile(): Partial<OpikConfig> {
       workspaceName: config.opik.workspace,
     });
   } catch (error) {
-    logger.error(`Error loading config file ${configFilePath}: ${error}`);
+    logger.error(`Error loading config file ${expandedConfigFilePath}: ${error}`);
 
     return {};
   }

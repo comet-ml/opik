@@ -27,6 +27,7 @@ type UseTracesOrSpansListParams = {
   truncate?: boolean;
   fromTime?: string;
   toTime?: string;
+  exclude?: string[];
 };
 
 export type TracesOrSpansListData = {
@@ -40,6 +41,8 @@ type UseTracesOrSpansListResponse = {
   isPending: boolean;
   isLoading: boolean;
   isError: boolean;
+  isPlaceholderData: boolean;
+  isFetching: boolean;
   refetch: (
     options?: RefetchOptions,
   ) => Promise<QueryObserverResult<TracesOrSpansListData, unknown>>;
@@ -57,6 +60,8 @@ export default function useTracesOrSpansList(
     isError: isTracesError,
     isPending: isTracesPending,
     isLoading: isTracesLoading,
+    isPlaceholderData: isTracesPlaceholderData,
+    isFetching: isTracesFetching,
     refetch: refetchTrace,
   } = useTracesList(params, {
     ...config,
@@ -69,6 +74,8 @@ export default function useTracesOrSpansList(
     isError: isSpansError,
     isPending: isSpansPending,
     isLoading: isSpansLoading,
+    isPlaceholderData: isSpansPlaceholderData,
+    isFetching: isSpansFetching,
     refetch: refetchSpan,
   } = useSpansList(
     {
@@ -86,6 +93,10 @@ export default function useTracesOrSpansList(
   const isError = !isTracesData ? isSpansError : isTracesError;
   const isPending = !isTracesData ? isSpansPending : isTracesPending;
   const isLoading = !isTracesData ? isSpansLoading : isTracesLoading;
+  const isPlaceholderData = !isTracesData
+    ? isSpansPlaceholderData
+    : isTracesPlaceholderData;
+  const isFetching = !isTracesData ? isSpansFetching : isTracesFetching;
   const refetch = !isTracesData ? refetchSpan : refetchTrace;
 
   return {
@@ -94,5 +105,7 @@ export default function useTracesOrSpansList(
     isError,
     isPending,
     isLoading,
+    isPlaceholderData,
+    isFetching,
   } as UseTracesOrSpansListResponse;
 }

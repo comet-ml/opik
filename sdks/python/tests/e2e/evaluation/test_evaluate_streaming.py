@@ -135,9 +135,9 @@ def test_streaming_starts_evaluation_before_complete_download(
     # Verify scoring output: each item should have a score with name "simple_score" and value 1.0
     for item in experiment_items:
         # Check that feedback_scores exists and is not empty
-        assert (
-            item.feedback_scores is not None and len(item.feedback_scores) == 1
-        ), f"Experiment item {item.id} should have exactly 1 feedback score, got {len(item.feedback_scores) if item.feedback_scores else 0}"
+        assert item.feedback_scores is not None and len(item.feedback_scores) == 1, (
+            f"Experiment item {item.id} should have exactly 1 feedback score, got {len(item.feedback_scores) if item.feedback_scores else 0}"
+        )
 
         # Verify the score matches expected structure
         expected_score = FeedbackScoreDict(

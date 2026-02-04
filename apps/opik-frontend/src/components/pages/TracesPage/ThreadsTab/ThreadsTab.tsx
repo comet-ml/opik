@@ -36,8 +36,8 @@ import {
 import { Thread } from "@/types/traces";
 import {
   convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
+  injectColumnCallback,
+  migrateSelectedColumns,
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
@@ -53,7 +53,7 @@ import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
@@ -154,6 +154,13 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
 ];
 
 const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+    sortable: true,
+  },
   ...SHARED_COLUMNS,
   {
     id: `${COLUMN_USAGE_ID}.total_tokens`,
@@ -227,11 +234,13 @@ const FILTER_COLUMNS: ColumnData<Thread>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_ID_ID,
+  "start_time",
   "first_message",
   "last_message",
   "number_of_messages",
@@ -243,6 +252,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "threads-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "threads-columns-width";
 const COLUMNS_ORDER_KEY = "threads-columns-order";
 const COLUMNS_SORT_KEY = "threads-columns-sort";
@@ -352,25 +362,26 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, refetch } = useThreadList(
-    {
-      projectId,
-      sorting: sortedColumns,
-      filters,
-      page: page as number,
-      size: size as number,
-      search: search as string,
-      truncate: truncationEnabled,
-      fromTime: intervalStart,
-      toTime: intervalEnd,
-    },
-    {
-      enabled: isTableDataEnabled,
-      placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
-      refetchOnMount: false,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+    useThreadList(
+      {
+        projectId,
+        sorting: sortedColumns,
+        filters,
+        page: page as number,
+        size: size as number,
+        search: search as string,
+        truncate: truncationEnabled,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+      },
+      {
+        enabled: isTableDataEnabled,
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+        refetchOnMount: false,
+      },
+    );
 
   const { refetch: refetchExportData } = useThreadList(
     {
@@ -472,9 +483,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_ID_ID, "start_time"],
+      ),
     },
   );
 
@@ -530,24 +545,18 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   );
 
   const columns = useMemo(() => {
-    return [
-      generateSelectColumDef<Thread>(),
-      mapColumnDataFields<Thread, Thread>({
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
-        sortable: isColumnSortable(COLUMN_ID_ID, sortableBy),
-      }),
-      ...convertColumnDataToColumn<Thread, Thread>(DEFAULT_COLUMNS, {
+    const convertedColumns = convertColumnDataToColumn<Thread, Thread>(
+      DEFAULT_COLUMNS,
+      {
         columnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
-      }),
+      },
+    );
+
+    return [
+      generateSelectColumDef<Thread>(),
+      ...injectColumnCallback(convertedColumns, COLUMN_ID_ID, handleRowClick),
       ...convertColumnDataToColumn<Thread, Thread>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
         selectedColumns,
@@ -555,12 +564,12 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       }),
     ];
   }, [
-    handleRowClick,
     sortableBy,
     columnsOrder,
     selectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
+    handleRowClick,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -718,6 +727,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             TableWrapper={PageBodyStickyTableWrapper}
             stickyHeader
             meta={meta}
+            showLoadingOverlay={isPlaceholderData && isFetching}
           />
           <PageBodyStickyContainer
             className="py-4"

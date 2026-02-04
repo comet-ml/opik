@@ -85,9 +85,9 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         experiment_tags=experiment_tags,
     )
 
-    assert (
-        evaluation_result.dataset_id == dataset.id
-    ), f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    assert evaluation_result.dataset_id == dataset.id, (
+        f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    )
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
@@ -239,9 +239,9 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         prompts=[prompt],
     )
 
-    assert (
-        evaluation_result.dataset_id == dataset.id
-    ), f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    assert evaluation_result.dataset_id == dataset.id, (
+        f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    )
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
@@ -369,9 +369,9 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
         prompts=[prompt1, prompt2],
     )
 
-    assert (
-        evaluation_result.dataset_id == dataset.id
-    ), f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    assert evaluation_result.dataset_id == dataset.id, (
+        f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    )
 
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
     experiment_items_contents = retrieved_experiment.get_items()
@@ -682,9 +682,9 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         prompts=[prompt],
     )
 
-    assert (
-        evaluation_result.dataset_id == dataset.id
-    ), f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    assert evaluation_result.dataset_id == dataset.id, (
+        f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
+    )
 
 
 def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
@@ -924,7 +924,7 @@ def test_experiment__get_experiment_items__no_feedback_scores(
     items = experiment.get_items()
 
     assert len(items) == 1, (
-        f"Expected 1 experiment item, but got {len(items)}. " f"Items: {items}"
+        f"Expected 1 experiment item, but got {len(items)}. Items: {items}"
     )
     assert items[0].feedback_scores == [], (
         f"Expected empty feedback scores, but got {items[0].feedback_scores}. "
@@ -1013,9 +1013,9 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
         f"Expected experiment score reason to be set, but got None. "
         f"Score: {evaluation_result.experiment_scores[0]}"
     )
-    assert (
-        "Fixed score of 0.8" in evaluation_result.experiment_scores[0].reason
-    ), f"Expected reason to contain 'Fixed score of 0.8', but got: '{evaluation_result.experiment_scores[0].reason}'"
+    assert "Fixed score of 0.8" in evaluation_result.experiment_scores[0].reason, (
+        f"Expected reason to contain 'Fixed score of 0.8', but got: '{evaluation_result.experiment_scores[0].reason}'"
+    )
 
     # Verify experiment was created with experiment scores
     verifiers.verify_experiment(

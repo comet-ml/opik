@@ -3,9 +3,11 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
+import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
 import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
 import com.comet.opik.api.FeedbackScoreItem;
@@ -31,6 +33,9 @@ import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -43,6 +48,8 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
+import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.ThreadCommentResourceClient;
@@ -73,6 +80,7 @@ import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import lombok.Builder;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -219,6 +227,8 @@ class TracesResourceTest {
     private SpanResourceClient spanResourceClient;
     private ThreadCommentResourceClient threadCommentResourceClient;
     private AttachmentResourceClient attachmentResourceClient;
+    private DatasetResourceClient datasetResourceClient;
+    private ExperimentResourceClient experimentResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -235,6 +245,8 @@ class TracesResourceTest {
         this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
         this.threadCommentResourceClient = new ThreadCommentResourceClient(client, baseURI);
         this.attachmentResourceClient = new AttachmentResourceClient(client);
+        this.datasetResourceClient = new DatasetResourceClient(this.client, baseURI);
+        this.experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -6332,6 +6344,377 @@ class TracesResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
                 assertThat(actualResponse.hasEntity()).isTrue();
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Experiment Reference:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ExperimentItemReferenceTest {
+
+        @Builder(toBuilder = true)
+        private record TestContext(String workspaceName, String workspaceId, String projectName, UUID projectId,
+                String datasetName, UUID datasetId) {
+        }
+
+        private TestContext setupWorkspaceProjectDataset() {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(10);
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name(projectName)
+                    .build();
+            UUID projectId = projectResourceClient.createProject(project, API_KEY, workspaceName);
+
+            var datasetName = "dataset-" + RandomStringUtils.secure().nextAlphanumeric(10);
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .name(datasetName)
+                    .build();
+            var datasetId = datasetResourceClient.createDataset(dataset, API_KEY, workspaceName);
+
+            return TestContext.builder()
+                    .workspaceName(workspaceName)
+                    .workspaceId(workspaceId)
+                    .projectName(projectName)
+                    .projectId(projectId)
+                    .datasetName(datasetName)
+                    .datasetId(datasetId)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("When traces are linked to experiments, then experiment reference is returned")
+        void getTraces__whenTracesLinkedToExperiments__thenReturnExperimentItemReference() {
+            // Given: Create workspace, project, and dataset
+            var context = setupWorkspaceProjectDataset();
+
+            // Create experiment
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("experiment")
+                    .datasetName(context.datasetName())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, context.workspaceName());
+
+            // Create traces
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-1")
+                    .startTime(Instant.now())
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-2")
+                    .startTime(Instant.now().plusSeconds(1))
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), API_KEY, context.workspaceName());
+
+            // Link trace1 to experiment
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .traceId(trace1.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem), API_KEY, context.workspaceName());
+
+            // When: Get traces
+            var actualResponse = traceResourceClient.callGetTracesWithQueryParams(
+                    API_KEY,
+                    context.workspaceName(),
+                    Map.of("project_name", context.projectName(), "size", "10"));
+
+            // Then: Verify response
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            var actualPage = actualResponse.readEntity(Trace.TracePage.class);
+            var actualTraces = actualPage.content();
+
+            assertThat(actualTraces).hasSize(2);
+
+            // Find traces by ID
+            var actualTrace1 = actualTraces.stream()
+                    .filter(t -> t.id().equals(trace1.id()))
+                    .findFirst()
+                    .orElseThrow();
+
+            var actualTrace2 = actualTraces.stream()
+                    .filter(t -> t.id().equals(trace2.id()))
+                    .findFirst()
+                    .orElseThrow();
+
+            // Verify trace1 has experiment reference
+            assertThat(actualTrace1.experiment()).isNotNull();
+            assertThat(actualTrace1.experiment().id()).isEqualTo(experimentId);
+            assertThat(actualTrace1.experiment().name()).isEqualTo(experiment.name());
+            assertThat(actualTrace1.experiment().datasetId()).isEqualTo(context.datasetId());
+            assertThat(actualTrace1.experiment().datasetItemId()).isEqualTo(experimentItem.datasetItemId());
+
+            // Verify trace2 has no experiment reference
+            assertThat(actualTrace2.experiment()).isNull();
+        }
+
+        @Test
+        @DisplayName("When trace is linked to experiment, then getById returns experiment reference")
+        void getTraceById__whenTraceLinkedToExperiment__thenReturnExperimentItemReference() {
+            // Given: Create workspace, project, and dataset
+            var context = setupWorkspaceProjectDataset();
+
+            // Create experiment
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("experiment")
+                    .datasetName(context.datasetName())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, context.workspaceName());
+
+            // Create trace
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-with-experiment")
+                    .startTime(Instant.now())
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, context.workspaceName());
+
+            // Link trace to experiment
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .traceId(trace.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem), API_KEY, context.workspaceName());
+
+            // When: Get trace by ID
+            var actualTrace = traceResourceClient.getById(trace.id(), context.workspaceName(), API_KEY);
+
+            // Then: Verify experiment reference is returned
+            assertThat(actualTrace.experiment()).isNotNull();
+            assertThat(actualTrace.experiment().id()).isEqualTo(experimentId);
+            assertThat(actualTrace.experiment().name()).isEqualTo(experiment.name());
+            assertThat(actualTrace.experiment().datasetId()).isEqualTo(context.datasetId());
+            assertThat(actualTrace.experiment().datasetItemId()).isEqualTo(experimentItem.datasetItemId());
+        }
+
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        @DisplayName("When sorting by experiment_id, then traces are sorted by experiment name")
+        void getTraces__whenSortingByExperimentId__thenTracesSortedByExperimentName(Direction direction) {
+            // Given: Create workspace, project, and dataset
+            var context = setupWorkspaceProjectDataset();
+
+            // Create experiments with specific names for sorting
+            var experimentA = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-A")
+                    .datasetName(context.datasetName())
+                    .build();
+            var experimentAId = experimentResourceClient.create(experimentA, API_KEY, context.workspaceName());
+
+            var experimentB = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-B")
+                    .datasetName(context.datasetName())
+                    .build();
+            var experimentBId = experimentResourceClient.create(experimentB, API_KEY, context.workspaceName());
+
+            var experimentC = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-C")
+                    .datasetName(context.datasetName())
+                    .build();
+            var experimentCId = experimentResourceClient.create(experimentC, API_KEY, context.workspaceName());
+
+            // Create traces linked to experiments (in reverse alphabetical order)
+            var traceC = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-c")
+                    .startTime(Instant.now())
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            var traceB = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-b")
+                    .startTime(Instant.now().plusSeconds(1))
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            var traceA = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-a")
+                    .startTime(Instant.now().plusSeconds(2))
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(traceC, traceB, traceA), API_KEY, context.workspaceName());
+
+            // Link traces to experiments
+            var experimentItemC = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentCId)
+                    .traceId(traceC.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItemC), API_KEY, context.workspaceName());
+
+            var experimentItemB = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentBId)
+                    .traceId(traceB.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItemB), API_KEY, context.workspaceName());
+
+            var experimentItemA = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentAId)
+                    .traceId(traceA.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItemA), API_KEY, context.workspaceName());
+
+            // When: Get traces sorted by experiment_id
+            var sortingFields = List.of(
+                    new SortingField(SortableFields.EXPERIMENT_ID, direction));
+            var sortingJson = URLEncoder.encode(JsonUtils.writeValueAsString(sortingFields), StandardCharsets.UTF_8);
+
+            var actualResponse = traceResourceClient.callGetTracesWithQueryParams(
+                    API_KEY,
+                    context.workspaceName(),
+                    Map.of(
+                            "project_name", context.projectName(),
+                            "size", "10",
+                            "sorting", sortingJson));
+
+            // Then: Verify traces are sorted by experiment name
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            var actualPage = actualResponse.readEntity(Trace.TracePage.class);
+            var actualTraces = actualPage.content();
+
+            assertThat(actualTraces).hasSize(3);
+
+            if (direction == Direction.ASC) {
+                assertThat(actualTraces.get(0).experiment().name()).isEqualTo(experimentA.name());
+                assertThat(actualTraces.get(1).experiment().name()).isEqualTo(experimentB.name());
+                assertThat(actualTraces.get(2).experiment().name()).isEqualTo(experimentC.name());
+            } else {
+                assertThat(actualTraces.get(0).experiment().name()).isEqualTo(experimentC.name());
+                assertThat(actualTraces.get(1).experiment().name()).isEqualTo(experimentB.name());
+                assertThat(actualTraces.get(2).experiment().name()).isEqualTo(experimentA.name());
+            }
+        }
+
+        @Test
+        @DisplayName("When filtering by experiment_id, then only traces linked to that experiment are returned")
+        void getTraces__whenFilteringByExperimentId__thenReturnOnlyMatchingTraces() {
+            // Given: Create workspace, project, and dataset
+            var context = setupWorkspaceProjectDataset();
+
+            // Create two experiments
+            var experiment1 = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-1")
+                    .datasetName(context.datasetName())
+                    .build();
+            var experiment1Id = experimentResourceClient.create(experiment1, API_KEY, context.workspaceName());
+
+            var experiment2 = experimentResourceClient.createPartialExperiment()
+                    .name("experiment-2")
+                    .datasetName(context.datasetName())
+                    .build();
+            var experiment2Id = experimentResourceClient.create(experiment2, API_KEY, context.workspaceName());
+
+            // Create traces
+            var trace1 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-1")
+                    .startTime(Instant.now())
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            var trace2 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-2")
+                    .startTime(Instant.now().plusSeconds(1))
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            var trace3 = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(generator.generate())
+                    .projectName(context.projectName())
+                    .name("trace-3")
+                    .startTime(Instant.now().plusSeconds(2))
+                    .feedbackScores(null)
+                    .usage(null)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3), API_KEY, context.workspaceName());
+
+            // Link trace1 and trace2 to experiment1, trace3 to experiment2
+            var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment1Id)
+                    .traceId(trace1.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem1), API_KEY, context.workspaceName());
+
+            var experimentItem2 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment1Id)
+                    .traceId(trace2.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem2), API_KEY, context.workspaceName());
+
+            var experimentItem3 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment2Id)
+                    .traceId(trace3.id())
+                    .feedbackScores(null)
+                    .build();
+            experimentResourceClient.createExperimentItem(Set.of(experimentItem3), API_KEY, context.workspaceName());
+
+            // When: Filter by experiment1Id
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.EXPERIMENT_ID)
+                            .operator(Operator.EQUAL)
+                            .value(experiment1Id.toString())
+                            .build());
+            var filtersJson = URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
+
+            var actualResponse = traceResourceClient.callGetTracesWithQueryParams(
+                    API_KEY,
+                    context.workspaceName(),
+                    Map.of(
+                            "project_name", context.projectName(),
+                            "size", "10",
+                            "filters", filtersJson));
+
+            // Then: Verify only traces linked to experiment1 are returned
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+
+            var actualPage = actualResponse.readEntity(Trace.TracePage.class);
+            var actualTraces = actualPage.content();
+
+            assertThat(actualTraces).hasSize(2);
+            assertThat(actualTraces).extracting(t -> t.experiment().id())
+                    .containsOnly(experiment1Id);
+            assertThat(actualTraces).extracting(Trace::id)
+                    .containsExactlyInAnyOrder(trace1.id(), trace2.id());
         }
     }
 

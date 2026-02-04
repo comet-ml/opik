@@ -171,6 +171,17 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
     };
   }, [spanId, traceId, handleRowSelect, flattenedTree]);
 
+  const handleTraceDelete = useCallback(() => {
+    // Navigate to previous/next trace before deleting, or close if it's the only trace
+    if (hasPreviousRow && onRowChange) {
+      onRowChange(-1);
+    } else if (hasNextRow && onRowChange) {
+      onRowChange(1);
+    } else {
+      onClose();
+    }
+  }, [hasPreviousRow, hasNextRow, onRowChange, onClose]);
+
   const renderContent = () => {
     if (isTracePending || isSpansPending) {
       return <Loader />;
@@ -265,7 +276,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           threadId={trace?.thread_id}
           setThreadId={setThreadId}
           projectId={projectId}
-          onClose={onClose}
+          onDelete={handleTraceDelete}
           isSpansLazyLoading={isSpansLazyLoading}
           search={search}
           setSearch={setSearch}

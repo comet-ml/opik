@@ -17,7 +17,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { EvaluatorsRule } from "@/types/automations";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -51,6 +51,12 @@ import { getUIRuleScope } from "@/components/pages-shared/automations/AddEditRul
 const getRowId = (d: EvaluatorsRule) => d.id;
 
 const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    sortable: true,
+  },
   {
     id: COLUMN_ID_ID,
     label: "ID",
@@ -97,11 +103,12 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "last_updated_at",
   "created_by",
   "created_at",
@@ -111,6 +118,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "project-rules-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "project-rules-columns-width";
 const COLUMNS_ORDER_KEY = "project-rules-columns-order";
 const PAGINATION_SIZE_KEY = "project-rules-pagination-size";
@@ -156,7 +164,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = useRulesList(
+  const { data, isPending, isPlaceholderData, isFetching } = useRulesList(
     {
       projectId,
       page: page as number,
@@ -183,9 +191,13 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const dialogMode = editingRule ? "edit" : cloningRule ? "clone" : "create";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 
@@ -225,11 +237,6 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<EvaluatorsRule>(),
-      mapColumnDataFields<EvaluatorsRule, EvaluatorsRule>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-      }),
       ...convertColumnDataToColumn<EvaluatorsRule, EvaluatorsRule>(
         DEFAULT_COLUMNS,
         {
@@ -363,6 +370,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

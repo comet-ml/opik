@@ -159,11 +159,11 @@ def usage_report(
 
         # Process each workspace
         for idx, workspace in enumerate(workspaces_list, 1):
-            console.print(f"\n[cyan]{'='*60}[/cyan]")
+            console.print(f"\n[cyan]{'=' * 60}[/cyan]")
             console.print(
                 f"[blue]Processing workspace {idx}/{len(workspaces_list)}: {workspace}[/blue]"
             )
-            console.print(f"[cyan]{'='*60}[/cyan]\n")
+            console.print(f"[cyan]{'=' * 60}[/cyan]\n")
 
             try:
                 # Generate output filename for this workspace
@@ -222,7 +222,7 @@ def usage_report(
                     data["statistics"] = stats
 
                     # Save to JSON file
-                    console.print(f"\n[cyan]{'='*60}[/cyan]")
+                    console.print(f"\n[cyan]{'=' * 60}[/cyan]")
                     console.print(f"[blue]Saving data to {workspace_output}...[/blue]")
                     with open(workspace_output, "w") as f:
                         json.dump(data, f, indent=2, default=str)
@@ -232,7 +232,7 @@ def usage_report(
                     )
 
                 # Generate PDF report
-                console.print(f"\n[cyan]{'='*60}[/cyan]")
+                console.print(f"\n[cyan]{'=' * 60}[/cyan]")
                 console.print("[blue]Generating PDF report...[/blue]")
                 try:
                     output_path = Path(workspace_output)
