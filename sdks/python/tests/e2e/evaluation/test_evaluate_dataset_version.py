@@ -16,7 +16,7 @@ def _wait_for_version(dataset, expected_version: str, timeout: float = 10) -> No
     assert success, f"Expected version '{expected_version}' was not created in time"
 
 
-def test_evaluate__with_dataset_version__evaluates_version_items_only(
+def test_evaluate__with_dataset_version__evaluates_version_items_only__happyflow(
     opik_client: opik.Opik, dataset_name: str
 ):
     """Test that opik.evaluate works with DatasetVersion and only evaluates items from that version."""
