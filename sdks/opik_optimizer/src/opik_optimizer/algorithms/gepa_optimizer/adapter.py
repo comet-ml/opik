@@ -13,9 +13,9 @@ from ... import helpers
 from ...core.state import prepare_experiment_config
 from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
-from .ops import tool_ops
-from ...utils.toolcalling import components as tool_components
-from ...utils.toolcalling import segment_updates
+from ...utils.toolcalling.core import components as tool_components
+from ...utils.toolcalling.core import metadata as tool_metadata
+from ...utils.toolcalling.core import segment_updates
 from ...core import runtime
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
@@ -465,7 +465,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         trajectories = eval_batch.trajectories or []
         tool_metadata_by_component: dict[str, str] = {}
         if self._context.extra_params.get("optimize_tools"):
-            tool_metadata_by_component = tool_ops.build_tool_metadata_by_component(
+            tool_metadata_by_component = tool_metadata.build_tool_metadata_by_component(
                 base_prompts=self._base_prompts
             )
 

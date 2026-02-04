@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, create_model, ConfigDict
 
 from ...api_objects import types
-from ...utils.toolcalling.toolcalling import (
+from ...utils.toolcalling.ops.toolcalling import (
     ToolDescriptionUpdate,
     ToolParameterUpdate,
 )

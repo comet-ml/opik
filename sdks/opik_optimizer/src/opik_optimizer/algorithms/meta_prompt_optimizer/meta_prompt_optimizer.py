@@ -292,7 +292,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
 
                 if optimize_tools:
-                    from ...utils.toolcalling import toolcalling as toolcalling_utils
+                    from ...utils.toolcalling.ops import (
+                        toolcalling as toolcalling_utils,
+                    )
                     from ...utils.display import display_tool_description
 
                     if not is_single_prompt_optimization:

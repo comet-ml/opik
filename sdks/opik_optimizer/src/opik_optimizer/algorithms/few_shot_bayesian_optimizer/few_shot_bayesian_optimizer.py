@@ -41,7 +41,7 @@ from . import types
 from . import prompts as few_shot_prompts
 from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
 from collections.abc import Callable
-from ...utils.toolcalling import toolcalling as toolcalling_utils
+from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 

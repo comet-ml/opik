@@ -1,4 +1,4 @@
-from opik_optimizer.utils.toolcalling import mcp_remote
+from opik_optimizer.utils.toolcalling.runtime import mcp_remote
 
 
 def test_mcp_remote__load_sdk() -> None:

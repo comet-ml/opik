@@ -1,6 +1,6 @@
 """Helpers for tool-calling workflows and signature management."""
 
-from .mcp import (
+from .runtime.mcp import (
     ToolCallingDependencyError,
     ToolCallingManifest,
     ToolSignature,
@@ -14,12 +14,12 @@ from .mcp import (
     tools_from_signatures,
     validate_tool_arguments,
 )
-from .tool_factory import (
+from .normalize.tool_factory import (
     ToolCallingFactory,
     cursor_mcp_config_to_tools,
     resolve_toolcalling_tools,
 )
-from .toolcalling import (
+from .ops.toolcalling import (
     build_tool_blocks_from_prompt,
     generate_tool_description_candidates,
     prepare_tool_optimization,
@@ -28,7 +28,6 @@ from .toolcalling import (
     report_tool_descriptions,
     make_tool_description_reporter,
 )
-from . import prompts as toolcalling_prompts
 
 __all__ = [
     "ToolCallingDependencyError",
@@ -53,5 +52,4 @@ __all__ = [
     "system_prompt_from_tool",
     "tools_from_signatures",
     "validate_tool_arguments",
-    "toolcalling_prompts",
 ]

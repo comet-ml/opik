@@ -1,10 +1,12 @@
+"""Shared helpers for tool metadata extraction."""
+
 from __future__ import annotations
 
 import json
 from typing import Any
 
-from ....utils import prompt_segments
-from ....utils.toolcalling import components as tool_components
+from ... import prompt_segments
+from . import components
 
 
 def build_tool_metadata_by_component(
@@ -20,7 +22,7 @@ def build_tool_metadata_by_component(
                 tool_name = segment.segment_id.replace(
                     prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
                 )
-                key = tool_components.tool_component_key(prompt_name, tool_name)
+                key = components.tool_component_key(prompt_name, tool_name)
                 tool_metadata_by_component[key] = json.dumps(
                     segment.metadata.get("raw_tool", {}),
                     sort_keys=True,
@@ -33,7 +35,7 @@ def build_tool_metadata_by_component(
                     param_name, str
                 ):
                     continue
-                key = tool_components.tool_param_component_key(
+                key = components.tool_param_component_key(
                     prompt_name, param_tool_name, param_name
                 )
                 tool_metadata_by_component[key] = json.dumps(

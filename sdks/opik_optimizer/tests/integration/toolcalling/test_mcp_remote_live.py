@@ -2,10 +2,12 @@ from typing import Any, cast
 
 import pytest
 
-from opik_optimizer.utils.toolcalling import mcp_remote
-from opik_optimizer.utils.toolcalling.mcp import ToolCallingDependencyError
-from opik_optimizer.utils.toolcalling.tool_factory import resolve_toolcalling_tools
-from opik_optimizer.utils.toolcalling.tool_factory import cursor_mcp_config_to_tools
+from opik_optimizer.utils.toolcalling.runtime import mcp_remote
+from opik_optimizer.utils.toolcalling.runtime.mcp import ToolCallingDependencyError
+from opik_optimizer.utils.toolcalling.normalize.tool_factory import (
+    resolve_toolcalling_tools,
+    cursor_mcp_config_to_tools,
+)
 
 
 @pytest.mark.integration

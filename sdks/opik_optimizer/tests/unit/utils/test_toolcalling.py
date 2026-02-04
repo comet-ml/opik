@@ -1,5 +1,5 @@
 from opik_optimizer import ChatPrompt
-from opik_optimizer.utils.toolcalling import toolcalling
+from opik_optimizer.utils.toolcalling.ops import toolcalling
 
 
 def test_toolcalling__prepare_tool_optimization_all_tools() -> None:

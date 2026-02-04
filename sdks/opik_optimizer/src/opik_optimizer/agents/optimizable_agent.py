@@ -13,7 +13,7 @@ from ..constants import resolve_project_name, tool_call_max_iterations
 from ..utils.opik_env import set_project_name_env
 from ..utils import throttle as _throttle
 from ..utils.logging import debug_tool_call
-from ..utils.toolcalling.tool_factory import resolve_toolcalling_tools
+from ..utils.toolcalling.normalize.tool_factory import resolve_toolcalling_tools
 from ..utils import prompt_tracing
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()

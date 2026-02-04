@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from opik_optimizer import ChatPrompt
-from opik_optimizer.utils.toolcalling import toolcalling
+from opik_optimizer.utils.toolcalling.ops import toolcalling
 
 
 def _make_tools(n: int) -> list[dict[str, Any]]:

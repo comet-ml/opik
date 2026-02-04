@@ -6,14 +6,12 @@ from typing import Any
 
 from ....utils.candidate import unique_ordered_by_key
 from ....api_objects.types import rebuild_content_with_new_text
-from ....utils.toolcalling import components as tool_components
-from ....utils.toolcalling import segment_updates
+from ....utils.toolcalling.core import components as tool_components
+from ....utils.toolcalling.core import segment_updates
 
 
 TOOL_COMPONENT_PREFIX = tool_components.TOOL_COMPONENT_PREFIX
 TOOL_PARAM_COMPONENT_PREFIX = tool_components.TOOL_PARAM_COMPONENT_PREFIX
-tool_component_key = tool_components.tool_component_key
-tool_param_component_key = tool_components.tool_param_component_key
 
 
 # TODO: Promote to a shared optimizer candidate helper once GEPA selection is generalized.

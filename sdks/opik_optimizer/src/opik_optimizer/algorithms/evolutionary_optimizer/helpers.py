@@ -3,7 +3,7 @@ from typing import Any
 import copy
 import rapidfuzz
 from ...utils.helpers import json_to_dict
-from ...utils.toolcalling import toolcalling as toolcalling_utils
+from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
 from ...utils.text import normalize_llm_text
 
 

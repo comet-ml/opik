@@ -15,8 +15,8 @@ from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...utils.prompt_library import PromptOverrides
 from ...utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
-from ...utils.toolcalling import toolcalling as toolcalling_utils
-from ...utils.toolcalling import segment_updates
+from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
+from ...utils.toolcalling.core import segment_updates
 
 from .rootcause_ops import HierarchicalRootCauseAnalyzer
 from .types import (

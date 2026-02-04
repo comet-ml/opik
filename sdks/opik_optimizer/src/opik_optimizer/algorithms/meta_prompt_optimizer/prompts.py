@@ -7,7 +7,7 @@ This module contains all the prompt templates used by the optimizer for:
 
 import textwrap
 
-from ...utils.toolcalling import prompts as toolcalling_prompts
+from ...utils.toolcalling.ops import prompts as toolcalling_prompts
 
 # Constants for variable delimiters
 START_DELIM = "{"

@@ -143,7 +143,7 @@ class BaseOptimizer(ABC):
         self._display: RunDisplay = display or OptimizationRunDisplay(verbose=verbose)
 
         # Initialize prompt library with overrides (include MCP defaults)
-        from .utils.toolcalling import prompts as toolcalling_prompts
+        from .utils.toolcalling.ops import prompts as toolcalling_prompts
 
         prompt_defaults = {
             **toolcalling_prompts.MCP_PROMPT_DEFAULTS,
@@ -419,7 +419,7 @@ class BaseOptimizer(ABC):
             self._normalize_prompt_input(prompt)
         )
 
-        from .utils.toolcalling import toolcalling as toolcalling_utils
+        from .utils.toolcalling.ops import toolcalling as toolcalling_utils
 
         optimize_tools = toolcalling_utils.validate_optimization_flags(
             optimize_prompts=bool(optimize_prompts),
@@ -577,7 +577,7 @@ class BaseOptimizer(ABC):
         chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt], list[str] | None
     ]:
         """Normalize MCP tool entries into function-calling tools."""
-        from .utils.toolcalling.toolcalling import resolve_prompt_tools
+        from .utils.toolcalling.ops.toolcalling import resolve_prompt_tools
 
         return resolve_prompt_tools(prompt_or_prompts, optimize_tools=optimize_tools)
 

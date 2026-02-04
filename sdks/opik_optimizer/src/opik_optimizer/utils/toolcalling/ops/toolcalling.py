@@ -11,14 +11,14 @@ from collections.abc import Callable
 from pydantic import BaseModel, ConfigDict, Field
 from litellm.exceptions import BadRequestError
 
-from ...api_objects import chat_prompt
-from ...api_objects.types import MetricFunction
-from ...utils import prompt_segments
-from ... import constants
-from ...utils.display import format as display_format
-from ...utils.display import display_text_block
+from ....api_objects import chat_prompt
+from ....api_objects.types import MetricFunction
+from ....utils import prompt_segments
+from .... import constants
+from ....utils.display import format as display_format
+from ....utils.display import display_text_block
 from . import prompts as toolcalling_prompts
-from .tool_factory import ToolCallingFactory
+from ..normalize.tool_factory import ToolCallingFactory
 
 logger = logging.getLogger(__name__)
 
@@ -320,7 +320,7 @@ def generate_tool_description_candidates(
     tool_description_reporter: ToolDescriptionReporter | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     """Generate candidate prompts that only update tool descriptions."""
-    from ...core import llm_calls as _llm_calls
+    from ....core import llm_calls as _llm_calls
 
     candidate_generation_report = display_candidate_generation_report(
         optimizer.prompts_per_round,

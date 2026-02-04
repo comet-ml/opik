@@ -32,7 +32,7 @@ from typing import Any
 from collections.abc import Callable, Mapping
 
 from opik_optimizer.api_objects import chat_prompt
-from .mcp import (
+from ..runtime.mcp import (
     ToolCallingDependencyError,
     ToolCallingManifest,
     ToolSignature,
@@ -595,7 +595,7 @@ def _snippet(text: str, max_length: int = 160) -> str:
 def list_tools_from_remote(url: str, headers: Mapping[str, str]) -> Any:
     """List tools from a remote MCP server using StreamableHTTP."""
     try:
-        from .mcp_remote import list_tools_from_remote as _list
+        from ..runtime.mcp_remote import list_tools_from_remote as _list
     except ToolCallingDependencyError:
         raise
     return _list(url, dict(headers))
@@ -606,7 +606,7 @@ def call_tool_from_remote(
 ) -> Any:
     """Call a remote MCP tool via StreamableHTTP."""
     try:
-        from .mcp_remote import call_tool_from_remote as _call
+        from ..runtime.mcp_remote import call_tool_from_remote as _call
     except ToolCallingDependencyError:
         raise
     return _call(url, dict(headers), tool_name, arguments)

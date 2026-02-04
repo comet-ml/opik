@@ -1,8 +1,8 @@
 from typing import Any
 
 from opik_optimizer import ChatPrompt
-from opik_optimizer.utils.toolcalling.mcp import ToolSignature
-from opik_optimizer.utils.toolcalling.tool_factory import (
+from opik_optimizer.utils.toolcalling.runtime.mcp import ToolSignature
+from opik_optimizer.utils.toolcalling.normalize.tool_factory import (
     ToolCallingFactory,
     resolve_toolcalling_tools,
 )
@@ -162,11 +162,11 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch: Any) -> None:
         return FakeResponse("docs response")
 
     monkeypatch.setattr(
-        "opik_optimizer.utils.toolcalling.tool_factory.list_tools_from_remote",
+        "opik_optimizer.utils.toolcalling.normalize.tool_factory.list_tools_from_remote",
         _fake_list_tools,
     )
     monkeypatch.setattr(
-        "opik_optimizer.utils.toolcalling.tool_factory.call_tool_from_remote",
+        "opik_optimizer.utils.toolcalling.normalize.tool_factory.call_tool_from_remote",
         _fake_call_tool,
     )
 

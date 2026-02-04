@@ -1,4 +1,4 @@
-from opik_optimizer.utils.toolcalling.toolcalling import (
+from opik_optimizer.utils.toolcalling.ops.toolcalling import (
     ToolDescriptionCandidatesResponse,
 )
 

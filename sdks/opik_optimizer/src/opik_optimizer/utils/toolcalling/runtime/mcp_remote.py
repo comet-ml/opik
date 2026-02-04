@@ -14,7 +14,7 @@ from collections.abc import Coroutine, Mapping
 
 from .mcp import ToolCallingDependencyError
 from .session_pool import SessionPool
-from ...utils import throttle as _throttle
+from ... import throttle as _throttle
 
 _T = TypeVar("_T")
 _toolcalling_limiter = _throttle.get_toolcalling_rate_limiter()

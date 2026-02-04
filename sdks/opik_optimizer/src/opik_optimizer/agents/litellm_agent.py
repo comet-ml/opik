@@ -23,7 +23,7 @@ from ..utils.logging import debug_tool_call
 from ..constants import tool_call_max_iterations
 from ..utils.candidate_selection import extract_choice_logprob
 from ..utils import prompt_tracing
-from ..utils.toolcalling.tool_factory import resolve_toolcalling_tools
+from ..utils.toolcalling.normalize.tool_factory import resolve_toolcalling_tools
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

@@ -18,9 +18,9 @@ from types import TracebackType
 from typing import Any, TypeVar, cast
 from collections.abc import Coroutine, Iterable, Mapping
 
-from . import prompts as mcp_prompts
+from ..ops import prompts as mcp_prompts
 from .session_pool import SessionPool
-from ...utils import throttle as _throttle
+from ... import throttle as _throttle
 
 ClientSession: type[Any] | None = None
 StdioClientFactory: type[Any] | None = None

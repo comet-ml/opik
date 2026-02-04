@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import prompt_segments
-from . import components
+from ... import prompt_segments
 from ...api_objects import chat_prompt
+from . import components
 
 
 def apply_tool_updates_from_candidate(
@@ -101,9 +101,9 @@ def build_tool_component_seed(
             )
             if tool_names and tool_name not in tool_names:
                 continue
-            seed[f"{prompt_name}{components.TOOL_COMPONENT_PREFIX}{tool_name}"] = str(
-                segment.content
-            )
+            seed[
+                f"{prompt_name}{components.TOOL_COMPONENT_PREFIX}{tool_name}"
+            ] = str(segment.content)
         elif segment.is_tool_param():
             param_tool_name = segment.metadata.get("tool_name")
             param_name = segment.metadata.get("param_name")

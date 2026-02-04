@@ -4,7 +4,7 @@ import copy
 from typing import Any
 
 from ....api_objects import chat_prompt
-from ....utils.toolcalling import toolcalling as toolcalling_utils
+from ....utils.toolcalling.ops import toolcalling as toolcalling_utils
 
 
 def apply_tool_updates_to_metadata(
