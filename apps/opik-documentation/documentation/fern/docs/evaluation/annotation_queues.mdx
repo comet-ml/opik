@@ -103,9 +103,12 @@ The SME interface provides:
 4. **Add comments**: Optional text feedback
 5. **Submit and continue**: Move to the next item
 
-## Managing Queues with Python SDK
+## Managing Queues programmatically
 
 You can create and manage annotation queues programmatically using the Python SDK. This is useful for automating the process of adding items to queues based on specific criteria.
+
+<Tabs>
+    <Tab value="Python" title="Python">
 
 ### Creating an Annotation Queue
 
@@ -202,6 +205,9 @@ queues = client.get_annotation_queues(project_name="my-project")
 for queue in queues:
     print(f"Queue: {queue.name}, Scope: {queue.scope}, Items: {queue.items_count}")
 ```
+
+    </Tab>
+</Tabs>
 
 ## Learn more
 
