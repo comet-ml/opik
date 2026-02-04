@@ -8,34 +8,16 @@ og:title: Configure AI Providers in Opik
 title: AI Providers
 ---
 
-The AI Providers tab allows you to configure connections to different Large Language Models (LLMs). This page explains how to set up and manage AI provider integrations within Opik.
+AI Providers let you connect LLMs for use in the Playground and Online Evaluation.
 
-## Overview
+## Using AI Providers
 
-Connecting AI providers enables you to:
+Once configured, providers appear in two places:
 
-- Send prompts and receive responses from different LLMs
-- Set up a provider in one place and use it across projects
-- Automatically record model metadata in the Playground
-- Track and analyze traces using online evaluation rules
+1. **Playground** — Test prompts interactively with different models.
+2. **Online Evaluation** — Run LLM-as-a-judge scoring on your traces.
 
-## Managing AI Providers
-
-### Viewing Existing Providers
-
-<Frame>
-  <img src="/img/configuration/ai_providers.png" alt="AI Providers Table" />
-</Frame>
-
-The AI Providers page displays a table of all configured connections with the following columns:
-
-- **Name**: The name or identifier of the API key
-- **Created**: The date and time when the provider was configured
-- **Provider**: The type of AI provider (e.g., OpenAI)
-
-### Adding a New Provider Configuration
-
-To add a new AI provider:
+## Adding a Provider
 
 1. Click the **Add configuration** button in the top-right corner
 
@@ -119,7 +101,7 @@ Azure OpenAI provides enterprise-grade access to OpenAI models through Microsoft
    - Your complete URL should look like: `https://your-company.openai.azure.com/openai/v1`
 
 3. Configure in Opik
-   - In Opik, go to **Configuration → AI Providers**
+   - In Opik, go to **Workspace Settings > AI Providers**
    - Click **"Add Configuration"**
    - Select **"vLLM / Custom provider"** from the dropdown
    - Enter your complete URL in the URL field: `https://your-company.openai.azure.com/openai/v1`
@@ -175,7 +157,7 @@ gcloud iam service-accounts keys create opik-key.json \
 
 Step 1: Create the Custom Role
 
-1. Go to [IAM → Roles](https://console.cloud.google.com/iam-admin/roles)
+1. Go to [IAM > Roles](https://console.cloud.google.com/iam-admin/roles)
 2. Click **Create Role**
 3. Fill in the form:
 
@@ -193,7 +175,7 @@ Step 1: Create the Custom Role
 
 Step 2: Create the Service Account
 
-1. Go to [IAM → Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts)
+1. Go to [IAM > Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts)
 2. Click **Create Service Account**
 3. Fill in:
 
@@ -208,7 +190,7 @@ Step 3: Assign the Role to the Service Account
 1. Go to [IAM](https://console.cloud.google.com/iam-admin/iam)
 2. Find the service account `opik-sa@<my-project>.iam.gserviceaccount.com`
 3. Click the **edit icon**
-4. Click **Add Another Role** → Select your custom role: **Opik**
+4. Click **Add Another Role** > Select your custom role: **Opik**
 5. Click **Save**
 
 Step 4: Create and Download the Key
@@ -216,7 +198,7 @@ Step 4: Create and Download the Key
 1. Go to [Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts)
 2. Click on the `opik-sa` account
 3. Open the **Keys** tab
-4. Click **Add Key → Create new key**
+4. Click **Add Key > Create new key**
 5. Choose **JSON**, click **Create**, and download the file
 
 > **Open the downloaded JSON file**, and **copy its entire content** to be used in the next step.
@@ -225,8 +207,8 @@ Step 4: Create and Download the Key
 
 ##### Final Step: Connect Opik to Vertex AI
 
-1. In Opik, go to **Configuration → AI Providers**
-2. Click **“Add Configuration”**
+1. In Opik, go to **Workspace Settings > AI Providers**
+2. Click **"Add Configuration"**
 3. Set:
 
 - **Provider**: `Vertex AI`
@@ -253,7 +235,7 @@ Before configuring Bedrock in Opik, ensure you have:
 
 ##### Configuring Bedrock in Opik
 
-1. In Opik, go to **Configuration → AI Providers**
+1. In Opik, go to **Workspace Settings > AI Providers**
 2. Click **"Add Configuration"**
 3. Select **"Bedrock"** from the provider dropdown
 4. Fill in the configuration:
@@ -295,7 +277,7 @@ Opik connects to [Ollama](https://ollama.com/) using the OpenAI-compatible API, 
 
 ##### Configuring Ollama in Opik
 
-1. In Opik, go to **Configuration → AI Providers**
+1. In Opik, go to **Workspace Settings > AI Providers**
 2. Click **"Add configuration"**
 3. Select **"Ollama"** from the provider dropdown
 4. Fill in:
@@ -359,31 +341,10 @@ Each custom provider appears as a separate option in the provider dropdown, maki
 
 ## API Key Security
 
-API keys are securely stored and encrypted in the Opik system. Only the name and provider type are visible in the interface after configuration. The actual key values are not displayed after initial setup.
-
-## Using AI Providers
-
-Once configured, AI providers can be used in:
-
-1. **Playground**: For interactive experimentation with different models
-2. **Online Evaluation**: For systematic evaluation of model performance
-
-## Best Practices
-
-- Use descriptive names for your API keys to easily identify their purpose
-- Regularly rotate API keys according to your organization's security policies
-- Create separate keys for development and production environments
-- Monitor usage to manage costs effectively
+API keys are encrypted and stored securely. Only the name and provider type are visible after configuration.
 
 ## Troubleshooting
 
-### Common Issues
-
 - **Authentication Errors**: Ensure your API key is valid and hasn't expired
 - **Access Denied**: Check that your API key has the required permissions for the models you're trying to use
-- **Rate Limiting**: If you're encountering rate limits, consider adjusting your request frequency or contacting your provider to increase your limits
-
-## Additional Resources
-
-- For programmatic configuration of AI providers, see the [API Reference](/reference/rest-api/overview)
-- To learn about using different models in your application, see the [SDK Documentation](/reference/overview)
+- **Rate Limiting**: Adjust your request frequency or contact your provider to increase limits
