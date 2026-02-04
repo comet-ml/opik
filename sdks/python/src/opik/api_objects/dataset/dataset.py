@@ -93,6 +93,42 @@ class DatasetExportOperations(abc.ABC):
         dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
         return converters.to_json(dataset_items, keys_mapping={})
 
+    def get_items(
+        self,
+        nb_samples: Optional[int] = None,
+        filter_string: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve dataset items as a list of dictionaries.
+
+        Args:
+            nb_samples: Maximum number of items to retrieve. If not set, all items are returned.
+            filter_string: Optional OQL filter string to filter dataset items.
+                Supports filtering by tags, data fields, metadata, etc.
+
+                Supported columns include:
+                - `id`, `source`, `trace_id`, `span_id`: String fields
+                - `data`: Dictionary field (use dot notation, e.g., "data.category")
+                - `tags`: List field (use "contains" operator)
+                - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
+                - `created_by`, `last_updated_by`: String fields
+
+                Examples:
+                - `tags contains "failed"` - Items with 'failed' tag
+                - `data.category = "test"` - Items with specific data field value
+                - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
+
+        Returns:
+            A list of dictionaries representing the dataset items.
+        """
+        dataset_items_as_dicts = [
+            {"id": item.id, **item.get_content()}
+            for item in self.__internal_api__stream_items_as_dataclasses__(
+                nb_samples=nb_samples, filter_string=filter_string
+            )
+        ]
+        return dataset_items_as_dicts
+
     @abc.abstractmethod
     def get_version_info(
         self,
@@ -234,23 +270,6 @@ class DatasetVersion(DatasetExportOperations):
             filter_string=filter_string,
             dataset_version=self._version_info.version_hash,
         )
-
-    def get_items(self, nb_samples: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        Retrieve items from this specific dataset version.
-
-        Args:
-            nb_samples: Maximum number of items to retrieve. If not set, all items
-                are returned.
-
-        Returns:
-            A list of dictionaries representing the dataset items in this version.
-        """
-        dataset_items_as_dicts = [
-            {"id": item.id, **item.get_content()}
-            for item in self.__internal_api__stream_items_as_dataclasses__(nb_samples)
-        ]
-        return dataset_items_as_dicts
 
     @override
     def get_version_info(
@@ -564,43 +583,6 @@ class Dataset(DatasetExportOperations):
         ]
 
         self.delete(item_ids)
-
-    def get_items(
-        self,
-        nb_samples: Optional[int] = None,
-        filter_string: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Retrieve a fixed set number of dataset items dictionaries.
-
-        Args:
-            nb_samples: The number of samples to retrieve. If not set - all items are returned.
-            filter_string: Optional OQL filter string to filter dataset items.
-                Supports filtering by tags, data fields, metadata, etc.
-
-                Supported columns include:
-                - `id`, `source`, `trace_id`, `span_id`: String fields
-                - `data`: Dictionary field (use dot notation, e.g., "data.category")
-                - `tags`: List field (use "contains" operator)
-                - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
-                - `created_by`, `last_updated_by`: String fields
-
-                Examples:
-                - `tags contains "failed"` - Items with 'failed' tag
-                - `data.category = "test"` - Items with specific data field value
-                - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
-
-        Returns:
-            A list of dictionaries objects representing the samples.
-        """
-        dataset_items_as_dicts = [
-            {"id": item.id, **item.get_content()}
-            for item in self.__internal_api__stream_items_as_dataclasses__(
-                nb_samples=nb_samples, filter_string=filter_string
-            )
-        ]
-
-        return dataset_items_as_dicts
 
     @override
     def __internal_api__stream_items_as_dataclasses__(

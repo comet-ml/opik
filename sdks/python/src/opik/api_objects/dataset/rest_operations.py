@@ -135,6 +135,11 @@ def find_version_by_name(
 
     Returns:
         The DatasetVersionPublic if found, None otherwise.
+
+    Note:
+        TODO(OPIK-4149): Replace with a dedicated BE endpoint for fetching
+        a single version by name. The current pagination approach can be slow
+        for datasets with many versions.
     """
     page = 1
     page_size = 100

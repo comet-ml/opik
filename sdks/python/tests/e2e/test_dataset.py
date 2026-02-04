@@ -226,50 +226,19 @@ def _wait_for_version(dataset, expected_version: str, timeout: float = 10) -> No
     assert success, f"Expected version '{expected_version}' was not created in time"
 
 
-def test_get_current_version_name__version_changes_after_mutations(
+def test_get_version_view__returns_items_from_specific_version(
     opik_client: opik.Opik, dataset_name: str
 ):
-    """Test that get_current_version_name returns correct version after mutations."""
-    DESCRIPTION = "E2E test dataset for version name"
+    """Test that get_version_view returns items from a specific dataset version.
+
+    Also tests that get_current_version_name returns correct version after mutations.
+    """
+    DESCRIPTION = "E2E test dataset for version view"
 
     dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
 
     # Version should be None before any items are inserted
     assert dataset.get_current_version_name() is None
-
-    # Insert first batch of items
-    dataset.insert(
-        [
-            {
-                "input": {"question": "What is the capital of France?"},
-            },
-        ]
-    )
-    _wait_for_version(dataset, "v1")
-
-    # Insert second batch - should create v2
-    dataset.insert(
-        [
-            {
-                "input": {"question": "What is the capital of Germany?"},
-            },
-        ]
-    )
-    _wait_for_version(dataset, "v2")
-
-    # Delete items - should create v3
-    items = dataset.get_items()
-    dataset.delete([items[0]["id"]])
-    _wait_for_version(dataset, "v3")
-
-
-def test_get_version_view__returns_items_from_specific_version(
-    opik_client: opik.Opik, dataset_name: str
-):
-    """Test that get_version_view returns items from a specific dataset version."""
-    DESCRIPTION = "E2E test dataset for version view"
-
-    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
 
     # Insert first batch of items - creates v1
     dataset.insert(
@@ -311,6 +280,17 @@ def test_get_version_view__returns_items_from_specific_version(
     # Current dataset should also have 2 items
     current_items = dataset.get_items()
     assert len(current_items) == 2
+
+    # Delete an item - should create v3
+    dataset.delete([current_items[0]["id"]])
+    _wait_for_version(dataset, "v3")
+
+    # Get version view for v3 - should have 1 item
+    v3_view = dataset.get_version_view("v3")
+    v3_items = v3_view.get_items()
+    assert len(v3_items) == 1
+    assert v3_view.version_name == "v3"
+    assert v3_view.items_total == 1
 
 
 def test_get_version_view__version_not_found__raises_exception(
