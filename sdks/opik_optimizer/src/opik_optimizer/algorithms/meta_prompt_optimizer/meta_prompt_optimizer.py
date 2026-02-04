@@ -31,6 +31,9 @@ _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 
 class MetaPromptOptimizer(BaseOptimizer):
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
     """
     Meta-Prompt Optimizer that uses LLM-based meta-reasoning to iteratively improve prompts.
 
@@ -71,7 +74,6 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     # Prompt templates for this optimizer
     # Keys match what ops files expect (e.g., optimizer.get_prompt("reasoning_system"))
-    supports_tool_optimization: bool = True
     DEFAULT_PROMPTS: dict[str, str] = {
         "reasoning_system": meta_prompts.REASONING_SYSTEM_PROMPT_TEMPLATE,
         "candidate_generation": meta_prompts.CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE,
