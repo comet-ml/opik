@@ -32,7 +32,6 @@ import {
   convertMessageToMessagesJson,
   parsePromptVersionContent,
   parseChatTemplateToLLMMessages,
-  buildPromptLibraryMetadata,
 } from "@/lib/llm";
 
 type ConfirmType = "load" | "reset" | "save";
@@ -167,7 +166,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     onChangeMessage({
       content: parsePromptVersionContent(promptData!.latest_version),
       promptVersionId: promptData!.latest_version?.id,
-      promptLibraryMetadata: buildPromptLibraryMetadata(promptData!),
     });
   }, [onChangeMessage, promptData]);
 
@@ -258,35 +256,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
     setIsHoldActionsVisible(isPromptSelectBoxOpenedRef.current || saveWarning);
   }, [saveWarning, setIsHoldActionsVisible]);
 
-  // This effect sets promptLibraryMetadata for messages that already have promptId
-  // but no metadata (e.g., loaded from persisted state before metadata feature was added)
-  // Only set metadata if the prompt hasn't been edited (saveWarning is false)
-  useEffect(() => {
-    if (
-      promptId &&
-      promptData?.id === promptId &&
-      !message.promptLibraryMetadata &&
-      !saveWarning
-    ) {
-      onChangeMessage({
-        promptLibraryMetadata: buildPromptLibraryMetadata(promptData),
-      });
-    }
-  }, [
-    promptId,
-    promptData,
-    message.promptLibraryMetadata,
-    saveWarning,
-    onChangeMessage,
-  ]);
-
-  // Clear promptLibraryMetadata when the prompt is edited (saveWarning becomes true)
-  useEffect(() => {
-    if (saveWarning && message.promptLibraryMetadata) {
-      onChangeMessage({ promptLibraryMetadata: undefined });
-    }
-  }, [saveWarning, message.promptLibraryMetadata, onChangeMessage]);
-
   // This effect is used to set the template and promptVersionId after it is loaded,
   // after it was set in handleUpdateExternalPromptId function
   useEffect(() => {
@@ -326,7 +295,6 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         content: parsePromptVersionContent(promptData.latest_version),
         promptVersionId: promptData.latest_version?.id,
         promptId: promptData.id,
-        promptLibraryMetadata: buildPromptLibraryMetadata(promptData),
       });
       setIsLoading(false);
     }

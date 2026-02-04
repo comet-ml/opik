@@ -8,8 +8,8 @@ import {
   LogExperimentPromptVersion,
   LogSpan,
   LogTrace,
-  PromptLibraryMetadata,
 } from "@/types/playground";
+import { PromptLibraryMetadata } from "@/components/pages/PlaygroundPage/useHydratePromptMetadata";
 
 import { SPAN_TYPE } from "@/types/traces";
 import api, {
