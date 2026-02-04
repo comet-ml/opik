@@ -1,8 +1,25 @@
 #!/bin/bash
 
-# Use explicit project name to avoid dependency on compose file location
-# The project name "opik" is defined in docker-compose.yaml
-PROJECT_NAME="opik"
+# Determine the project name using the same logic as opik.sh
+# This ensures we look for containers started by the opik.sh script
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/../.." && pwd)"
+
+# Source worktree utilities to get COMPOSE_PROJECT_NAME
+if [[ -f "$repo_root/scripts/worktree-utils.sh" ]]; then
+    WORKTREE_UTILS_ROOT="$repo_root"
+    source "$repo_root/scripts/worktree-utils.sh"
+    init_worktree_ports
+    PROJECT_NAME="$COMPOSE_PROJECT_NAME"
+else
+    # Fallback: use "opik" as default project name
+    PROJECT_NAME="opik"
+fi
+
+echo "Using Docker Compose project name: $PROJECT_NAME"
+echo "Repo root: $repo_root"
+echo "Available Docker Compose projects:"
+docker compose ls 2>/dev/null || echo "  (none or docker compose ls failed)"
 
 max_retries=5
 wait_interval=3
