@@ -227,15 +227,16 @@ const OptimizationsPage: React.FunctionComponent = () => {
     [],
   );
 
-  const { data, isPending, refetch } = useGroupedOptimizationsList({
-    workspaceName,
-    groupLimit,
-    datasetId: datasetId!,
-    search: search!,
-    page: page!,
-    size: DEFAULT_GROUPS_PER_PAGE,
-    polling: true,
-  });
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+    useGroupedOptimizationsList({
+      workspaceName,
+      groupLimit,
+      datasetId: datasetId!,
+      search: search!,
+      page: page!,
+      size: DEFAULT_GROUPS_PER_PAGE,
+      polling: true,
+    });
 
   const optimizations = useMemo(() => data?.content ?? [], [data?.content]);
 
@@ -464,6 +465,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
               )}
             </DataTableNoData>
           }
+          showLoadingOverlay={isPlaceholderData && isFetching}
         />
         <div className="py-4">
           <DataTablePagination
