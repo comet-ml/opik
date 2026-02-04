@@ -552,7 +552,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 metadata
                            FROM traces
                            WHERE workspace_id = :workspace_id
-                           AND project_id IN (SELECT project_id FROM target_projects)
+                           <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                            AND id IN (SELECT trace_id FROM experiment_items_scope)
                            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                            LIMIT 1 BY id
@@ -882,7 +882,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	WHERE workspace_id = :workspace_id
             	<if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters || dataset_item_filters)>
                 AND trace_id IN (
-                  SELECT 
+                  SELECT
                     id
                   FROM (
                       SELECT
