@@ -21,6 +21,10 @@ Choose the approach that best fits your development needs:
 | **BE-Only Mode** | Backend development only | `scripts/dev-runner.sh --be-only-restart` | Fast |
 | **Infrastructure** | Manual with IDE development | `./opik.sh --infra --port-mapping` | Medium |
 
+<Tip>
+**Working with multiple branches?** Opik supports [multi-worktree development](#multi-worktree-support) - run multiple environments simultaneously with automatic port isolation.
+</Tip>
+
 ## Prerequisites
 
 ### Required Tools
@@ -166,28 +170,32 @@ DEBUG_MODE=true scripts/dev-runner.sh --restart
 #### Service Details
 
 **Backend Process**:
-- Port: 8080
-- Logs: `/tmp/opik-backend.log`
-- PID file: `/tmp/opik-backend.pid`
+- Port: 8080 (default, may vary with [multi-worktree support](#multi-worktree-support))
+- Logs: `/tmp/opik-<worktree-id>-backend.log`
+- PID file: `/tmp/opik-<worktree-id>-backend.pid`
 - CORS enabled for local frontend
 - Auto-built from `apps/opik-backend`
 
 **Frontend Process**:
-- Port: 5174
-- Logs: `/tmp/opik-frontend.log`
-- PID file: `/tmp/opik-frontend.pid`
+- Port: 5174 (default, may vary with [multi-worktree support](#multi-worktree-support))
+- Logs: `/tmp/opik-<worktree-id>-frontend.log`
+- PID file: `/tmp/opik-<worktree-id>-frontend.pid`
 - Hot-reload enabled
-- Proxies API calls to backend at localhost:8080
+- Proxies API calls to backend
 
 **Infrastructure (Docker)**:
 - Same services as Docker mode
-- Ports mapped for local access
+- Ports mapped for local access (may be offset with multi-worktree support)
+
+<Tip>
+Port assignments are shown when the environment starts. With multi-worktree support, ports may be offset from the defaults.
+</Tip>
 
 #### Accessing Services
 
-- **UI**: http://localhost:5174 (local Vite dev server)
-- **Backend API**: http://localhost:8080
-- **Infrastructure**: Same ports as Docker mode
+- **UI**: http://localhost:5174 (local Vite dev server, port may vary)
+- **Backend API**: http://localhost:8080 (port may vary)
+- **Infrastructure**: Same ports as Docker mode (may be offset)
 
 #### SDK Configuration
 
@@ -214,6 +222,10 @@ Or use environment variables:
 export OPIK_URL_OVERRIDE='http://localhost:8080'
 export OPIK_WORKSPACE='default'
 ```
+
+<Note>
+If using [multi-worktree support](#multi-worktree-support), replace `8080` with your actual backend port (shown when the environment starts).
+</Note>
 
 ### 3. BE-Only Mode (Backend Development)
 
@@ -299,6 +311,104 @@ This gives you access to:
 - ClickHouse on port 8123
 - Redis on port 6379
 - MinIO on port 9000
+
+## Multi-Worktree Support
+
+Opik supports running multiple development environments simultaneously from different git worktrees. This is useful when you need to work on multiple features or compare branches side-by-side.
+
+### How It Works
+
+Each worktree automatically gets:
+1. **Unique port assignments** - All services use offset ports to avoid conflicts
+2. **Isolated Docker containers** - Separate container namespaces per worktree
+3. **Separate log and PID files** - No interference between worktrees
+
+The port offset (0-99) is deterministically calculated from an MD5 hash of your project path, ensuring consistent port assignments across restarts.
+
+### Port Assignments
+
+| Service | Base Port | With Offset (e.g., 42) |
+|---------|-----------|------------------------|
+| Backend | 8080 | 8122 |
+| Frontend | 5174 | 5216 |
+| MySQL | 3306 | 3348 |
+| Redis | 6379 | 6421 |
+| ClickHouse HTTP | 8123 | 8165 |
+| ClickHouse Native | 9000 | 9042 |
+| Python Backend | 8000 | 8042 |
+| Zookeeper | 2181 | 2223 |
+| MinIO API | 9001 | 9043 |
+| MinIO Console | 9090 | 9132 |
+
+### Running Multiple Worktrees
+
+```bash
+# Terminal 1: Main branch
+cd ~/opik
+scripts/dev-runner.sh --restart
+# Access at ports based on hash of ~/opik
+
+# Terminal 2: Feature branch
+cd ~/opik-worktrees/feature-xyz
+scripts/dev-runner.sh --restart
+# Access at different ports based on hash of ~/opik-worktrees/feature-xyz
+```
+
+### Manual Port Override
+
+If you need specific ports (e.g., to use standard ports or avoid conflicts):
+
+```bash
+# Use standard ports (offset 0)
+OPIK_PORT_OFFSET=0 scripts/dev-runner.sh --restart
+
+# Use a specific offset
+OPIK_PORT_OFFSET=10 scripts/dev-runner.sh --restart
+```
+
+### Port Collision Detection
+
+The script automatically checks for port conflicts before starting:
+
+```bash
+# If ports are in use, you'll see:
+[ERROR] Port 8122 (Backend) is already in use
+
+Port collision detected! Another process is using one or more required ports.
+This might be caused by:
+  - Another Opik instance running from a different worktree
+  - Stale containers from a previous run
+  - Other services using the same ports
+
+To resolve:
+  1. Stop other Opik instances: ./scripts/dev-runner.sh --stop
+  2. Use a different port offset: export OPIK_PORT_OFFSET=<0-99>
+  3. Check running processes: lsof -i :8122
+```
+
+### Docker Container Naming
+
+Containers are prefixed with the worktree project name:
+
+- Main repo: `opik-opik-mysql-1`, `opik-opik-backend-1`
+- Worktree: `opik-feature-xyz-mysql-1`, `opik-feature-xyz-backend-1`
+
+### SDK Configuration for Worktrees
+
+Configure the SDK to use your worktree's backend port (shown when the environment starts):
+
+```bash
+# Configure SDK (use the backend port shown at startup)
+export OPIK_URL_OVERRIDE='http://localhost:8080'  # or your worktree's port
+export OPIK_WORKSPACE='default'
+```
+
+Or edit `~/.opik.config`:
+```ini
+[opik]
+url_override = http://localhost:8122
+workspace = default
+```
 
 ## Windows Development
 
@@ -432,16 +542,23 @@ docker restart opik-backend-1
 # Check Docker is running
 docker info
 
-# Check port conflicts
-lsof -i :5173  # Frontend
-lsof -i :8080  # Backend
-lsof -i :3306  # MySQL
-lsof -i :8123  # ClickHouse
+# Check port conflicts (ports shown when environment starts)
+lsof -i :5174  # Frontend (default)
+lsof -i :8080  # Backend (default)
+lsof -i :3306  # MySQL (default)
+lsof -i :8123  # ClickHouse (default)
 
 # On Windows
-Get-NetTCPConnection -LocalPort 5173
+Get-NetTCPConnection -LocalPort 5174
 Get-NetTCPConnection -LocalPort 8080
 ```
+
+<Tip>
+If you have port conflicts from another worktree, you can override the port offset:
+```bash
+OPIK_PORT_OFFSET=0 scripts/dev-runner.sh --restart
+```
+</Tip>
 
 ### Build Failures
 

@@ -32,3 +32,171 @@ See:
 
 - https://github.com/Redocly/redoc
 - https://docs.oracle.com/en/java/javase/23/docs/specs/man/jwebserver.html
+
+### `dev-runner.sh`
+
+Development environment runner script for local Opik development. This script manages Docker infrastructure,
+backend, and frontend services for development workflows.
+
+#### Quick Start
+
+```bash
+# Full restart with rebuild (default)
+./scripts/dev-runner.sh
+
+# Or explicitly
+./scripts/dev-runner.sh --restart
+```
+
+#### Available Commands
+
+**Standard Mode** (Backend and Frontend as local processes):
+
+| Command | Description |
+|---------|-------------|
+| `--start` | Start services without rebuilding |
+| `--stop` | Stop all services |
+| `--restart` | Stop, rebuild, and start all services (default) |
+| `--quick-restart` | Quick restart: rebuild backend only, keep infrastructure running |
+| `--verify` | Check status of all services |
+
+**BE-Only Mode** (Backend as local process, Frontend in Docker):
+
+| Command | Description |
+|---------|-------------|
+| `--be-only-start` | Start services without rebuilding |
+| `--be-only-stop` | Stop all services |
+| `--be-only-restart` | Stop, rebuild, and start services |
+| `--be-only-verify` | Check status of services |
+
+**Other Commands**:
+
+| Command | Description |
+|---------|-------------|
+| `--build-be` | Build backend only |
+| `--build-fe` | Build frontend only |
+| `--migrate` | Run database migrations |
+| `--lint-be` | Lint backend code |
+| `--lint-fe` | Lint frontend code |
+| `--logs` | Show recent logs |
+| `--debug` | Enable debug mode (combine with other flags) |
+| `--help` | Show help message |
+
+---
+
+## Multi-Worktree Support
+
+The `dev-runner.sh` and `opik.sh` scripts support running multiple Opik development environments
+simultaneously from different git worktrees. Each worktree automatically gets isolated ports and
+Docker containers.
+
+### How It Works
+
+1. **Worktree Detection**: The script identifies your worktree by its directory name
+2. **Port Offset Calculation**: A deterministic offset (0-99) is calculated from an MD5 hash of your project path
+3. **Port Assignment**: All service ports are offset from their base values
+4. **Docker Isolation**: Each worktree gets a unique Docker Compose project name (`opik-<worktree-id>`)
+
+### Port Assignments
+
+| Service | Base Port | Formula |
+|---------|-----------|---------|
+| Backend | 8080 | 8080 + offset |
+| Frontend | 5174 | 5174 + offset |
+| MySQL | 3306 | 3306 + offset |
+| Redis | 6379 | 6379 + offset |
+| ClickHouse HTTP | 8123 | 8123 + offset |
+| ClickHouse Native | 9000 | 9000 + offset |
+| Python Backend | 8000 | 8000 + offset |
+| Zookeeper | 2181 | 2181 + offset |
+| MinIO API | 9001 | 9001 + offset |
+| MinIO Console | 9090 | 9090 + offset |
+
+### Manual Port Override
+
+If you need to use a specific port offset (e.g., to avoid conflicts or use standard ports):
+
+```bash
+# Use standard ports (offset 0)
+OPIK_PORT_OFFSET=0 ./scripts/dev-runner.sh --restart
+
+# Use a specific offset
+OPIK_PORT_OFFSET=10 ./scripts/dev-runner.sh --restart
+```
+
+### Running Multiple Worktrees
+
+```bash
+# Terminal 1: Main branch
+cd ~/opik
+./scripts/dev-runner.sh --restart
+# Services running on ports based on hash of ~/opik
+
+# Terminal 2: Feature branch worktree
+cd ~/opik-worktrees/feature-xyz
+./scripts/dev-runner.sh --restart
+# Services running on different ports based on hash of ~/opik-worktrees/feature-xyz
+```
+
+### Port Collision Detection
+
+The script automatically checks for port conflicts before starting services. If a collision
+is detected, you'll see an error message with suggestions:
+
+```
+[ERROR] Port 8122 (Backend) is already in use
+
+Port collision detected! Another process is using one or more required ports.
+This might be caused by:
+  - Another Opik instance running from a different worktree
+  - Stale containers from a previous run
+  - Other services using the same ports
+
+To resolve:
+  1. Stop other Opik instances: ./scripts/dev-runner.sh --stop
+  2. Use a different port offset: export OPIK_PORT_OFFSET=<0-99>
+  3. Check running processes: lsof -i :8122
+```
+
+### File Isolation
+
+Each worktree also gets isolated log and PID files:
+
+| File | Path |
+|------|------|
+| Backend PID | `/tmp/opik-<worktree-id>-backend.pid` |
+| Frontend PID | `/tmp/opik-<worktree-id>-frontend.pid` |
+| Backend Log | `/tmp/opik-<worktree-id>-backend.log` |
+| Frontend Log | `/tmp/opik-<worktree-id>-frontend.log` |
+
+### Docker Container Naming
+
+Docker containers are prefixed with the worktree project name:
+
+- Main repo (`opik`): `opik-opik-mysql-1`, `opik-opik-backend-1`, etc.
+- Worktree (`feature-xyz`): `opik-feature-xyz-mysql-1`, `opik-feature-xyz-backend-1`, etc.
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `OPIK_PORT_OFFSET` | Override automatic port offset (0-99) |
+| `DEBUG_MODE=true` | Enable verbose debug output |
+
+### SDK Configuration
+
+When using the Opik SDK with a worktree-based development environment, configure it to use your
+worktree's backend port (shown when you start the environment):
+
+```bash
+# Configure SDK (use the backend port shown at startup)
+export OPIK_URL_OVERRIDE='http://localhost:8080'  # or your worktree's port
+export OPIK_WORKSPACE='default'
+```
+
+Or edit `~/.opik.config`:
+```ini
+[opik]
+url_override = http://localhost:8122
+workspace = default
+```
