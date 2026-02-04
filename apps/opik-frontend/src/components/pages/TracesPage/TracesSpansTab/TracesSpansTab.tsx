@@ -55,7 +55,6 @@ import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -82,6 +81,7 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import Loader from "@/components/shared/Loader/Loader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
@@ -574,6 +574,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       refetchInterval: REFETCH_INTERVAL,
     },
   );
+
+  const isTableLoading =
+    isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending;
 
   const noData = !search && filters.length === 0;
   const noDataText = noData
@@ -1184,10 +1187,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setMetadataColumnsOrder,
   ]);
 
-  if (isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending) {
-    return <Loader />;
-  }
-
   return (
     <>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
@@ -1272,8 +1271,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         </div>
       </PageBodyStickyContainer>
 
-      {noData && rows.length === 0 && page === 1 ? (
+      {noData && rows.length === 0 && page === 1 && !isTableLoading ? (
         <NoTracesPage />
+      ) : isTableLoading ? (
+        <Loader />
       ) : (
         <>
           <DataTable
