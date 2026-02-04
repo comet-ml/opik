@@ -182,6 +182,8 @@ export * from "./ExperimentItemCompare.js";
 export * from "./ExperimentItemCompareTraceVisibilityMode.js";
 export * from "./ExperimentItemPublic.js";
 export * from "./ExperimentItemPublicTraceVisibilityMode.js";
+export * from "./ExperimentItemReference.js";
+export * from "./ExperimentItemReferencePublic.js";
 export * from "./ExperimentItemTraceVisibilityMode.js";
 export * from "./ExperimentPagePublic.js";
 export * from "./ExperimentPublic.js";
