@@ -69,6 +69,8 @@ class BaseOptimizer(ABC):
     # Subclasses define their prompts here
     DEFAULT_PROMPTS: dict[str, str] = {}
     supports_tool_optimization: bool = False
+    supports_prompt_optimization: bool = False
+    supports_multimodal: bool = False
     # ------------------------------------------------------------------
     # Input validation & setup
     # ------------------------------------------------------------------
