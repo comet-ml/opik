@@ -6,7 +6,6 @@ import {
   LLMMessage,
   MessageContent,
   TextPart,
-  PromptLibraryMetadata,
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
 
@@ -301,70 +300,4 @@ export const parseChatTemplateToLLMMessages = (
   } catch {
     return [];
   }
-};
-
-export const parseTemplateJson = (template: string | undefined): unknown => {
-  if (!template) return null;
-  try {
-    return JSON.parse(template);
-  } catch {
-    return template;
-  }
-};
-
-interface PromptDataForMetadata {
-  name: string;
-  id: string;
-  latest_version?: {
-    template?: string;
-    id?: string;
-    commit?: string;
-    metadata?: object;
-  };
-}
-
-export const buildPromptLibraryMetadata = (
-  promptData: PromptDataForMetadata | undefined,
-): PromptLibraryMetadata | undefined => {
-  if (!promptData) return undefined;
-
-  return {
-    name: promptData.name,
-    id: promptData.id,
-    version: {
-      template: parseTemplateJson(promptData.latest_version?.template),
-      id: promptData.latest_version?.id || "",
-      ...(promptData.latest_version?.commit && {
-        commit: promptData.latest_version.commit,
-      }),
-      ...(promptData.latest_version?.metadata && {
-        metadata: promptData.latest_version.metadata,
-      }),
-    },
-  };
-};
-
-interface PromptVersionDataForMetadata {
-  template?: string;
-  id: string;
-  commit?: string;
-  metadata?: object;
-}
-
-export const buildPromptLibraryMetadataFromVersion = (
-  promptData: { name: string; id: string } | undefined,
-  versionData: PromptVersionDataForMetadata | undefined,
-): PromptLibraryMetadata | undefined => {
-  if (!promptData || !versionData) return undefined;
-
-  return {
-    name: promptData.name,
-    id: promptData.id,
-    version: {
-      template: parseTemplateJson(versionData.template),
-      id: versionData.id,
-      ...(versionData.commit && { commit: versionData.commit }),
-      ...(versionData.metadata && { metadata: versionData.metadata }),
-    },
-  };
 };

@@ -1,19 +1,13 @@
 import { HttpStatusCode } from "axios";
 
 import { JsonNode, UsageType } from "@/types/shared";
-import {
-  LLMMessage,
-  ProviderMessageType,
-  PromptLibraryMetadata,
-} from "@/types/llm";
+import { LLMMessage, ProviderMessageType } from "@/types/llm";
 import {
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
   COMPOSED_PROVIDER_TYPE,
 } from "@/types/providers";
 import { SPAN_TYPE } from "@/types/traces";
-
-export type { PromptLibraryMetadata };
 
 export interface PlaygroundPromptType {
   name: string;
@@ -23,7 +17,6 @@ export interface PlaygroundPromptType {
   provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   loadedChatPromptId?: string;
-  promptLibraryMetadata?: PromptLibraryMetadata;
 }
 
 export interface ChatCompletionMessageChoiceType {

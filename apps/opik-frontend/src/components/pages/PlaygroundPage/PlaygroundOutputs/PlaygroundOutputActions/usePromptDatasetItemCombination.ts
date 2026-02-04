@@ -16,7 +16,6 @@ import {
   VideoPart,
   AudioPart,
   ProviderMessageType,
-  PromptLibraryMetadata,
 } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
 import isUndefined from "lodash/isUndefined";
@@ -27,6 +26,7 @@ import set from "lodash/set";
 import isObject from "lodash/isObject";
 import { parseCompletionOutput } from "@/lib/playground";
 import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
+import { useHydratePromptMetadata } from "@/components/pages/PlaygroundPage/useHydratePromptMetadata";
 import { getTextFromMessageContent } from "@/lib/llm";
 
 export interface DatasetItemPromptCombination {
@@ -163,6 +163,7 @@ const usePromptDatasetItemCombination = ({
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
+  const hydratePromptMetadata = useHydratePromptMetadata();
 
   const runStreaming = useCompletionProxyStreaming({
     workspaceName,
@@ -221,22 +222,9 @@ const usePromptDatasetItemCombination = ({
           id,
         }));
 
-        // Get prompt library metadata - prefer prompt-level (CHAT prompts), fallback to message-level (TEXT prompts)
-        // Only include metadata if promptId matches (prompt is still linked to library)
-        let promptLibraryMetadata: PromptLibraryMetadata | undefined =
-          prompt.promptLibraryMetadata;
-
-        // For TEXT prompts, check message-level metadata
-        if (!promptLibraryMetadata) {
-          const messageWithMetadata = prompt.messages.find(
-            (m) =>
-              m.promptLibraryMetadata &&
-              m.promptId === m.promptLibraryMetadata.id,
-          );
-          if (messageWithMetadata?.promptLibraryMetadata) {
-            promptLibraryMetadata = messageWithMetadata.promptLibraryMetadata;
-          }
-        }
+        // Calculate prompt library metadata at execution time
+        // This checks React Query cache to determine if prompt is unchanged from library
+        const promptLibraryMetadata = await hydratePromptMetadata(prompt);
 
         const run = await runStreaming({
           model: prompt.model,
@@ -300,6 +288,7 @@ const usePromptDatasetItemCombination = ({
     [
       isToStopRef,
       hydrateDatasetItemData,
+      hydratePromptMetadata,
       addAbortController,
       updateOutput,
       runStreaming,
