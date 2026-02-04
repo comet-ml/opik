@@ -170,10 +170,12 @@ def deap_crossover(
 
     # Apply tool updates if optimizing tools
     if optimizer is not None and getattr(optimizer, "_optimize_tools", None):
+        tool_names = getattr(optimizer, "_tool_names", None)
         merged_metadata = tool_ops.apply_tool_updates_to_metadata(
             optimizer=optimizer,
             child_data=child1_data,
             metadata=merged_metadata,
+            tool_names=tool_names,
             metric=metric,
         )
 
@@ -373,10 +375,12 @@ def llm_deap_crossover(
 
         # Apply tool updates if optimizing tools
         if optimizer is not None and getattr(optimizer, "_optimize_tools", None):
+            tool_names = getattr(optimizer, "_tool_names", None)
             merged_metadata = tool_ops.apply_tool_updates_to_metadata(
                 optimizer=optimizer,
                 child_data=child1_data,
                 metadata=merged_metadata,
+                tool_names=tool_names,
                 metric=metric,
             )
         setattr(child1, "prompts_metadata", copy.deepcopy(merged_metadata))
@@ -389,4 +393,3 @@ def llm_deap_crossover(
             f"LLM-driven crossover failed: {e}. Falling back to DEAP crossover."
         )
         return deap_crossover(ind1, ind2, optimizer=optimizer, verbose=verbose)
-

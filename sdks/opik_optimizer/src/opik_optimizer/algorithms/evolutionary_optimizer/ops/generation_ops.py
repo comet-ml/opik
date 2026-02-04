@@ -324,6 +324,9 @@ def run_generation(
                 optimization_id=optimizer.current_optimization_id,
                 verbose=optimizer.verbose,
                 prompts=optimizer._prompts,
+                optimize_tools=bool(getattr(optimizer, "_optimize_tools", False)),
+                tool_names=getattr(optimizer, "_tool_names", None),
+                metric=metric,
                 allowed_roles=getattr(optimizer, "_optimizable_roles", None),
                 rng=mutation_rng,
             )

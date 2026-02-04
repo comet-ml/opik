@@ -533,6 +533,9 @@ def deap_mutation(
     optimization_id: str | None,
     verbose: int,
     prompts: PromptLibrary,
+    optimize_tools: bool = False,
+    tool_names: list[str] | None = None,
+    metric: Any | None = None,
     allowed_roles: set[str] | None = None,
     rng: random.Random | None = None,
 ) -> Any:
@@ -628,7 +631,7 @@ def deap_mutation(
                     output_style_guidance=output_style_guidance,
                     prompts=prompts,
                     rng=rng,
-                    optimize_tools=bool(getattr(optimizer, "_optimize_tools", False)),
+                    optimize_tools=optimize_tools,
                     allowed_roles=allowed_roles,
                 )
                 reporting.display_success(
@@ -637,11 +640,11 @@ def deap_mutation(
                 )
 
             # Apply tools to mutated prompt if optimizing tools
-            if optimizer is not None and getattr(optimizer, "_optimize_tools", None):
+            if optimize_tools and optimizer is not None:
                 mutated_prompt = tool_ops.apply_tool_description_update(
                     optimizer=optimizer,
                     prompt=mutated_prompt,
-                    tool_names=getattr(optimizer, "_tool_names", None),
+                    tool_names=tool_names,
                     round_num=0,
                     metric=metric,
                 )
