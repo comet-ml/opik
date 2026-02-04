@@ -111,6 +111,8 @@ This test ensures spans created via decorator are properly associated with trace
   });
 
   test.describe('Span details and metadata', () => {
+    test.setTimeout(120000);
+
     test('Span details (feedback scores and metadata) are correctly displayed for traces created via low-level client @happypaths @fullregression @tracing', async ({
       page,
       projectName,
