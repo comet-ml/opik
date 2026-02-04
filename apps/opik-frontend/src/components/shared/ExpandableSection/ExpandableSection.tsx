@@ -12,6 +12,7 @@ export type ExpandableSectionProps = {
   contentClassName?: string;
   sectionIdx: number;
   queryParamName: string;
+  expanded?: boolean;
 };
 
 const ExpandableSection: React.FC<ExpandableSectionProps> = ({
@@ -22,25 +23,32 @@ const ExpandableSection: React.FC<ExpandableSectionProps> = ({
   contentClassName,
   sectionIdx,
   queryParamName,
+  expanded = false,
 }) => {
-  const [expandedSections = [], setExpandedSections] = useQueryParam(
-    queryParamName,
-    ArrayParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const [sections, setSections] = useQueryParam(queryParamName, ArrayParam, {
+    updateType: "replaceIn",
+  });
+
   const currentSectionIdx = String(sectionIdx);
+  const hasUrlState = sections !== undefined && sections !== null;
+  const isInArray = sections?.includes(currentSectionIdx) ?? false;
 
-  const isExpanded = expandedSections?.includes(currentSectionIdx);
+  // When expanded=true, array tracks collapsed sections (inverted logic)
+  // When expanded=false, array tracks expanded sections (normal logic)
+  const isExpanded = hasUrlState
+    ? expanded
+      ? !isInArray
+      : isInArray
+    : expanded;
+
   const toggleIsExpanded = () => {
-    const filteredExpandedSections =
-      expandedSections?.filter((itm) => itm !== currentSectionIdx) || [];
-    const newExpandedSections = isExpanded
-      ? filteredExpandedSections
-      : [...filteredExpandedSections, currentSectionIdx];
+    const currentSections = sections?.filter((s) => s !== null) ?? [];
 
-    setExpandedSections(newExpandedSections);
+    if (isInArray) {
+      setSections(currentSections.filter((s) => s !== currentSectionIdx));
+    } else {
+      setSections([...currentSections, currentSectionIdx]);
+    }
   };
 
   const displayTitle = count ? `${title} (${count})` : title;
