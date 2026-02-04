@@ -8168,8 +8168,10 @@ class DatasetsResourceTest {
             spanResourceClient.createSpan(span2, apiKey, workspaceName);
 
             // Generate fixed feedback scores for predictable percentile testing
+            // NOTE: projectName must match the trace's project for the feedback score to be associated correctly
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
+                    .projectName(experiment1.name())
                     .name("accuracy")
                     .value(new BigDecimal("0.75"))
                     .source(ScoreSource.SDK)
@@ -8177,6 +8179,7 @@ class DatasetsResourceTest {
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
+                    .projectName(experiment2.name())
                     .name("accuracy")
                     .value(new BigDecimal("0.95"))
                     .source(ScoreSource.SDK)
@@ -8325,12 +8328,14 @@ class DatasetsResourceTest {
             // Generate random feedback scores using PODAM
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
+                    .projectName(trace1.projectName())
                     .name("accuracy")
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
+                    .projectName(trace2.projectName())
                     .name("accuracy")
                     .source(ScoreSource.SDK)
                     .build();
@@ -8506,18 +8511,21 @@ class DatasetsResourceTest {
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
                     .name("quality")
+                    .projectName(trace1.projectName())
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
                     .name("quality")
+                    .projectName(trace2.projectName())
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore3 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace3.id())
                     .name("quality")
+                    .projectName(trace3.projectName())
                     .source(ScoreSource.SDK)
                     .build();
 
