@@ -36,9 +36,14 @@ export class PromptsPage extends BasePage {
 
   async clickPrompt(name: string): Promise<void> {
     await this.searchPrompt(name);
-    await this.page.getByRole('cell', { name, exact: true }).click();
+    // Wait for the search to filter the table
+    await this.page.waitForTimeout(500);
+    // Click on the "Versions" cell within the row to avoid the tooltip that appears on the name cell
+    // Using nth(3) to get the 4th cell (0-indexed: checkbox, name, type, description, versions)
+    const row = this.page.getByRole('row', { name: new RegExp(name) }).first();
+    await row.getByRole('cell').nth(4).click();
     // Wait for navigation to prompt details page (UUID pattern)
-    await this.page.waitForURL(/\/prompts\/[0-9a-f-]{36}/);
+    await this.page.waitForURL(/\/prompts\/[0-9a-f-]{36}/, { timeout: 30000 });
   }
 
   async deletePrompt(name: string): Promise<void> {
