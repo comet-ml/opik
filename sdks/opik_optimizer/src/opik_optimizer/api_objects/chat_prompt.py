@@ -409,3 +409,14 @@ def _validate_legacy_mcp_tool(tool: dict[str, Any]) -> None:
     mcp_block = tool.get("mcp")
     if not isinstance(mcp_block, dict):
         raise ValueError("MCP tool must include an 'mcp' object")
+
+    server = mcp_block.get("server")
+    if not isinstance(server, dict):
+        raise ValueError("MCP tool must include 'mcp.server' config")
+    server_type = server.get("type")
+    if server_type not in {"stdio", "remote"}:
+        raise ValueError("MCP server type must be 'stdio' or 'remote'")
+    if server_type == "stdio" and not server.get("command"):
+        raise ValueError("MCP stdio server must include 'command'")
+    if server_type == "remote" and not server.get("url"):
+        raise ValueError("MCP remote server must include 'url'")

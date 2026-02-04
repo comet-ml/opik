@@ -77,6 +77,8 @@ def resolve_prompt_tools(
             raise ValueError(
                 "Tool description optimization only supports single prompts."
             )
+        if not any(getattr(prompt, "tools", None) for prompt in prompt_or_prompts.values()):
+            return prompt_or_prompts, None
         factory = ToolCallingFactory()
         resolved = {
             name: factory.resolve_prompt(prompt)
@@ -142,6 +144,26 @@ class ToolDescriptionUpdate(BaseModel):
     description: str = Field(..., description="Updated tool description")
 
 
+class ToolParameterDescription(BaseModel):
+    """Single parameter description update."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., description="Parameter name")
+    description: str = Field(..., description="Updated parameter description")
+
+
+class ToolParameterUpdate(BaseModel):
+    """Parameter description updates for a tool."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool_name: str = Field(..., description="Tool name")
+    parameters: list[ToolParameterDescription] = Field(
+        ..., description="Parameter descriptions"
+    )
+
+
 class ToolDescriptionCandidate(BaseModel):
     """Response model for a tool description candidate."""
 
@@ -149,6 +171,9 @@ class ToolDescriptionCandidate(BaseModel):
 
     tool_descriptions: list[ToolDescriptionUpdate] = Field(
         ..., description="Updated tool descriptions"
+    )
+    parameter_descriptions: list[ToolParameterUpdate] | None = Field(
+        None, description="Updated parameter descriptions"
     )
     improvement_focus: str = Field(
         ..., description="What aspect the description improves"
@@ -189,6 +214,29 @@ class ToolDescriptionCandidatesResponse(BaseModel):
                                         "description": {"type": "string"},
                                     },
                                     "required": ["name", "description"],
+                                },
+                            },
+                            "parameter_descriptions": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "properties": {
+                                        "tool_name": {"type": "string"},
+                                        "parameters": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "additionalProperties": False,
+                                                "properties": {
+                                                    "name": {"type": "string"},
+                                                    "description": {"type": "string"},
+                                                },
+                                                "required": ["name", "description"],
+                                            },
+                                        },
+                                    },
+                                    "required": ["tool_name", "parameters"],
                                 },
                             },
                             "improvement_focus": {"type": "string"},
@@ -351,6 +399,20 @@ def generate_tool_description_candidates(
                         f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{tool_name}"
                     )
                     updates[segment_id] = description.strip()
+                param_updates = candidate.parameter_descriptions or []
+                for tool_update in param_updates:
+                    tool_name = tool_update.tool_name
+                    if allowed_tools is not None and tool_name not in allowed_tools:
+                        continue
+                    for param in tool_update.parameters:
+                        param_name = param.name
+                        description = param.description
+                        if not description or not isinstance(description, str):
+                            continue
+                        segment_id = prompt_segments.tool_param_segment_id(
+                            tool_name, param_name
+                        )
+                        updates[segment_id] = description.strip()
                 if not updates:
                     logger.warning(
                         "Skipping tool description candidate with no updates"

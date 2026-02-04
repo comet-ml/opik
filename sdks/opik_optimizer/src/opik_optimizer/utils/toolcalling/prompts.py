@@ -92,7 +92,7 @@ TOOL_DESCRIPTION_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
         CRITICAL CONSTRAINTS:
         1. Do NOT add or remove tools.
         2. Do NOT change tool names or parameter schemas.
-        3. Only update the tool description text.
+        3. Only update tool descriptions and parameter descriptions.
 
         Return a JSON object with this structure:
         {
@@ -101,6 +101,14 @@ TOOL_DESCRIPTION_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
               "tool_descriptions": [
                 {"name": "tool_name", "description": "new description"},
                 {"name": "other_tool", "description": "new description"}
+              ],
+              "parameter_descriptions": [
+                {
+                  "tool_name": "tool_name",
+                  "parameters": [
+                    {"name": "param", "description": "new param description"}
+                  ]
+                }
               ],
               "improvement_focus": "...",
               "reasoning": "..."
@@ -123,7 +131,8 @@ Current best score: {best_score:.4f}
 Generate [{prompts_per_round}] improved descriptions for the tools listed above.
 Each description should clarify expected input arguments and set explicit expectations
 for how the tool output must be used in the final response.
-Avoid changing unrelated parts of the prompt. Focus only on tool description text.
+You may also improve parameter descriptions to be concise and unambiguous.
+Avoid changing unrelated parts of the prompt. Focus only on tool and parameter descriptions.
 
 Return a JSON object of the form:
 {{
@@ -132,6 +141,14 @@ Return a JSON object of the form:
       "tool_descriptions": [
         {{"name": "tool_name", "description": "new description"}},
         {{"name": "other_tool", "description": "new description"}}
+      ],
+      "parameter_descriptions": [
+        {{
+          "tool_name": "tool_name",
+          "parameters": [
+            {{"name": "param", "description": "new param description"}}
+          ]
+        }}
       ],
       "improvement_focus": "...",
       "reasoning": "..."

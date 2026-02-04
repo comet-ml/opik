@@ -299,11 +299,39 @@ class MetaPromptOptimizer(BaseOptimizer):
                         )
                     reporter = None
                     if self.verbose >= 1:
-                        reporter = toolcalling_utils.make_tool_description_reporter(
-                            lambda text, name: display_tool_description(
+                        import json as _json
+                        import rich.text as _rich_text
+
+                        def _reporter(
+                            description: str, name: str, metadata: dict[str, Any]
+                        ) -> None:
+                            text = _rich_text.Text()
+                            text.append(description)
+                            raw_tool = metadata.get("raw_tool") or {}
+                            parameters = (
+                                raw_tool.get("function", {}).get("parameters")
+                                if isinstance(raw_tool, dict)
+                                else None
+                            )
+                            if parameters:
+                                text.append(
+                                    "\n\nTool parameters (reference only):\n",
+                                    style="dim",
+                                )
+                                text.append(
+                                    _json.dumps(
+                                        parameters,
+                                        indent=2,
+                                        sort_keys=True,
+                                        default=str,
+                                    ),
+                                    style="dim",
+                                )
+                            display_tool_description(
                                 text, title=f"tool: {name}", style="cyan"
                             )
-                        )
+
+                        reporter = _reporter
                     single_candidates = (
                         toolcalling_utils.generate_tool_description_candidates(
                             optimizer=self,

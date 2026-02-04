@@ -99,6 +99,7 @@ def _display_tools(
     *,
     prefix: str = "",
     tool_use_allowed: bool | None = None,
+    optimized_tool_names: set[str] | None = None,
 ) -> None:
     """Display tools with optional prefix for each line."""
     if not tools:
@@ -107,10 +108,19 @@ def _display_tools(
     tool_text = rich.text.Text()
     tool_text.append("\n")
     for tool in tools:
+        tool_key = tool.get("function", {}).get("name") or tool.get("name")
+        is_optimized = (
+            tool_key in optimized_tool_names
+            if optimized_tool_names is not None
+            else None
+        )
         summary = format_tool_summary(tool)
         name, sep, rest = summary.partition(":")
         if sep:
-            tool_text.append(name.strip())
+            name_style = "cyan"
+            if is_optimized is False:
+                name_style = "dim"
+            tool_text.append(name.strip(), style=name_style)
             if tool_use_allowed is False:
                 tool_text.append(" (disabled)", style="red")
             tool_text.append(": ")
@@ -133,9 +143,50 @@ def _display_tools(
         display_renderable(panel)
 
 
+def _format_tool_details(tool: dict[str, Any]) -> tuple[rich.text.Text, int]:
+    """Render tool name, description, and parameter descriptions."""
+    text = rich.text.Text()
+    summary = format_tool_summary(tool)
+    name, sep, rest = summary.partition(":")
+    name_len = 0
+    if sep:
+        name_text = name.strip()
+        text.append(name_text)
+        name_len = len(text.plain)
+        text.append(": ")
+        text.append(rest.strip(), style="dim")
+    else:
+        name_text = summary.strip()
+        text.append(name_text)
+        name_len = len(text.plain)
+        text.stylize("dim")
+
+    function_block = tool.get("function", {})
+    parameters = function_block.get("parameters")
+    if isinstance(parameters, dict):
+        properties = parameters.get("properties")
+        if isinstance(properties, dict) and properties:
+            text.append("\n\n", style="dim")
+            text.append("Parameters:", style="dim")
+            for param_name, schema in properties.items():
+                if not isinstance(param_name, str):
+                    continue
+                desc = ""
+                if isinstance(schema, dict):
+                    desc = str(schema.get("description", "")).strip()
+                line = f"\n- {param_name}"
+                if desc:
+                    line += f": {desc}"
+                text.append(line, style="dim")
+    return text, name_len
+
+
 def _display_chat_prompt_messages_and_tools(
     chat_p: chat_prompt.ChatPrompt,
     key: str | None = None,
+    optimizable_roles: set[str] | None = None,
+    optimized_tool_names: set[str] | None = None,
+    show_tool_details: bool = False,
 ) -> list[rich.console.RenderableType]:
     """
     Extract and format messages and tools from a ChatPrompt for display.
@@ -182,6 +233,9 @@ def _display_chat_prompt_messages_and_tools(
             continue
 
         formatted_content = _format_message_content(content_value)
+        if optimizable_roles is not None and role not in optimizable_roles:
+            if isinstance(formatted_content, rich.text.Text):
+                formatted_content.stylize("dim")
         items.append(
             rich.panel.Panel(
                 formatted_content,
@@ -200,16 +254,31 @@ def _display_chat_prompt_messages_and_tools(
         if isinstance(chat_p.model_kwargs, dict):
             tool_use_allowed = bool(chat_p.model_kwargs.get("allow_tool_use", True))
         for tool in chat_p.tools:
-            summary = format_tool_summary(tool)
-            name, sep, rest = summary.partition(":")
-            if sep:
-                tool_text.append(name.strip())
-                if not tool_use_allowed:
-                    tool_text.append(" (disabled)", style="red")
-                tool_text.append(": ")
-                tool_text.append(rest.strip(), style="dim")
+            tool_key = tool.get("function", {}).get("name") or tool.get("name")
+            is_optimized = (
+                tool_key in optimized_tool_names
+                if optimized_tool_names is not None
+                else None
+            )
+            name_style = "cyan"
+            if is_optimized is False:
+                name_style = "dim"
+            if show_tool_details:
+                details, name_len = _format_tool_details(tool)
+                if name_len:
+                    details.stylize(name_style, 0, name_len)
+                tool_text.append(details)
             else:
-                tool_text.append(summary.strip(), style="dim")
+                summary = format_tool_summary(tool)
+                name, sep, rest = summary.partition(":")
+                if sep:
+                    tool_text.append(name.strip(), style=name_style)
+                    if not tool_use_allowed:
+                        tool_text.append(" (disabled)", style="red")
+                    tool_text.append(": ")
+                    tool_text.append(rest.strip(), style="dim")
+                else:
+                    tool_text.append(summary.strip(), style="dim")
             tool_text.append("\n")
         items.append(
             rich.panel.Panel(
@@ -319,6 +388,8 @@ def display_configuration(
     verbose: int = 1,
     tools: list[dict[str, Any]] | None = None,
     tool_use_allowed: bool | None = None,
+    optimizable_roles: set[str] | None = None,
+    optimized_tool_names: set[str] | None = None,
 ) -> None:
     """Displays the LLM messages and optimizer configuration using Rich panels."""
     if verbose < 1:
@@ -334,25 +405,44 @@ def display_configuration(
         messages_dict = cast(dict[str, chat_prompt.ChatPrompt], messages)
         if len(messages_dict) == 1:
             chat_p = list(messages_dict.values())[0]
-            prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=None)
+            prompt_items = _display_chat_prompt_messages_and_tools(
+                chat_p,
+                key=None,
+                optimizable_roles=optimizable_roles,
+                optimized_tool_names=optimized_tool_names,
+            )
             for item in prompt_items:
                 console.print(item)
             has_prompt_tools = bool(chat_p.tools)
         else:
             for key, chat_p in messages_dict.items():
-                prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
+                prompt_items = _display_chat_prompt_messages_and_tools(
+                    chat_p,
+                    key=key,
+                    optimizable_roles=optimizable_roles,
+                    optimized_tool_names=optimized_tool_names,
+                )
                 for item in prompt_items:
                     console.print(item)
                 if chat_p.tools:
                     has_prompt_tools = True
     elif isinstance(messages, chat_prompt.ChatPrompt):
-        prompt_items = _display_chat_prompt_messages_and_tools(messages, key=None)
+        prompt_items = _display_chat_prompt_messages_and_tools(
+            messages,
+            key=None,
+            optimizable_roles=optimizable_roles,
+            optimized_tool_names=optimized_tool_names,
+        )
         for item in prompt_items:
             console.print(item)
         has_prompt_tools = bool(messages.tools)
     elif isinstance(messages, list):
         display_messages(messages)
-        _display_tools(tools)
+        _display_tools(
+            tools,
+            tool_use_allowed=tool_use_allowed,
+            optimized_tool_names=optimized_tool_names,
+        )
         tools = None
 
     if tools and not has_prompt_tools:
@@ -560,11 +650,15 @@ def _build_prompt_panel(result: Any) -> rich.panel.Panel:
             prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], result.prompt)
             for key, chat_p in prompt_dict.items():
                 prompt_items.extend(
-                    _display_chat_prompt_messages_and_tools(chat_p, key=key)
+                    _display_chat_prompt_messages_and_tools(
+                        chat_p, key=key, show_tool_details=True
+                    )
                 )
         else:
             prompt_items.extend(
-                _display_chat_prompt_messages_and_tools(result.prompt, key=None)
+                _display_chat_prompt_messages_and_tools(
+                    result.prompt, key=None, show_tool_details=True
+                )
             )
         prompt_renderable: rich.console.RenderableType = rich.console.Group(
             *prompt_items
@@ -870,11 +964,18 @@ def _summarize_prompt_structure(
     return _summarize_single(prompt)
 
 
-def display_tool_description(description: str, title: str, style: str) -> None:
+def display_tool_description(
+    description: str | rich.text.Text, title: str, style: str
+) -> None:
     """Render a simple tool description panel."""
     console = get_console()
+    rendered = (
+        description
+        if isinstance(description, rich.text.Text)
+        else rich.text.Text(description)
+    )
     panel = rich.panel.Panel(
-        rich.text.Text(description),
+        rendered,
         title=title,
         title_align="left",
         border_style=style,

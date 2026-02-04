@@ -107,8 +107,13 @@ def format_prompt_payload(payload: Any, *, pretty: bool = True) -> str:
             text = format_prompt_messages(payload["messages"], pretty=pretty)
             tools = payload.get("tools")
             if tools:
-                tool_line = ", ".join(map(str, tools))
-                text = f"{text}\n  [TOOLS]: {tool_line}"
+                if isinstance(tools, list) and tools and isinstance(tools[0], dict):
+                    lines = [f"- {format_tool_summary(tool)}" for tool in tools]
+                    tool_line = "\n  ".join(lines)
+                    text = f"{text}\n  [TOOLS]:\n  {tool_line}"
+                else:
+                    tool_line = ", ".join(map(str, tools))
+                    text = f"{text}\n  [TOOLS]: {tool_line}"
             return text
         parts: list[str] = []
         for name, value in payload.items():
@@ -116,6 +121,7 @@ def format_prompt_payload(payload: Any, *, pretty: bool = True) -> str:
             parts.append(f"{name}:\n{formatted}")
         return "\n".join(parts)
     return str(payload)
+
 
 def redact_prompt_payload(prompt_or_payload: Any) -> Any:
     """Summarize prompt payloads for safe display/history."""
