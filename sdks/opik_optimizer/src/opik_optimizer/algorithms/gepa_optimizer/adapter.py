@@ -13,6 +13,9 @@ from ... import helpers
 from ...core.state import prepare_experiment_config
 from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
+from .ops import tool_ops
+from ...utils.toolcalling import components as tool_components
+from ...utils.toolcalling import segment_updates
 from ...core import runtime
 from ...api_objects import chat_prompt
 from ...api_objects.types import MetricFunction
@@ -178,6 +181,16 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             # prompt.copy() preserves tools, function_map, model, model_kwargs
             new_prompt = prompt_obj.copy()
             new_prompt.set_messages(new_messages)
+
+            new_prompt = segment_updates.apply_tool_updates_from_candidate(
+                candidate=candidate,
+                prompt=new_prompt,
+                tool_component_prefix=f"{prompt_name}{tool_components.TOOL_COMPONENT_PREFIX}",
+                tool_param_component_prefix=(
+                    f"{prompt_name}{tool_components.TOOL_PARAM_COMPONENT_PREFIX}"
+                ),
+            )
+            # Final prompt
             rebuilt[prompt_name] = new_prompt
         if dropped_components:
             logger.warning(
@@ -450,13 +463,21 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             components_to_update = ["system_prompt"]
 
         trajectories = eval_batch.trajectories or []
+        tool_metadata_by_component: dict[str, str] = {}
+        if self._context.extra_params.get("optimize_tools"):
+            tool_metadata_by_component = tool_ops.build_tool_metadata_by_component(
+                base_prompts=self._base_prompts
+            )
 
-        def _records() -> Iterable[dict[str, Any]]:
+        def _records(component_key: str) -> Iterable[dict[str, Any]]:
+            tool_metadata = tool_metadata_by_component.get(component_key)
             for traj in trajectories:
                 dataset_item = traj.get("input", {})
                 output_text = traj.get("output", "")
                 score = traj.get("score", 0.0)
                 feedback = f"Observed score={score:.4f}. Expected answer: {dataset_item.get('answer', '')}"
+                if tool_metadata:
+                    feedback += f" Tool metadata: {tool_metadata}"
                 yield {
                     "Inputs": {
                         "text": dataset_item.get("input")
@@ -467,11 +488,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                     "Feedback": feedback,
                 }
 
-        reflective_records = list(_records())
-        if not reflective_records:
+        if not trajectories:
             logger.debug(
                 "No trajectories captured for candidate; returning empty reflective dataset"
             )
-            reflective_records = []
+            return {component: [] for component in components_to_update}
 
-        return {component: reflective_records for component in components_to_update}
+        return {
+            component: list(_records(component)) for component in components_to_update
+        }

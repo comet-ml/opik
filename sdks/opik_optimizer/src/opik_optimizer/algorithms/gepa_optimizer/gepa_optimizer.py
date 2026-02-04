@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 class GepaOptimizer(BaseOptimizer):
+    supports_tool_optimization: bool = True
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
     """
     The GEPA (Genetic-Pareto) Optimizer uses a genetic algorithm with Pareto optimization
     to improve prompts while balancing multiple objectives.
@@ -206,6 +209,8 @@ class GepaOptimizer(BaseOptimizer):
         seed_candidate = candidate_ops.build_seed_candidate(
             optimizable_prompts=optimizable_prompts,
             allowed_roles=optimizable_roles,
+            tool_names=context.extra_params.get("tool_names"),
+            enable_tools=bool(context.extra_params.get("optimize_tools")),
         )
 
         input_key, output_key = helpers.infer_dataset_keys(dataset)
