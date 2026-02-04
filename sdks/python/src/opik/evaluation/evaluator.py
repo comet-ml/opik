@@ -69,8 +69,6 @@ def _compute_experiment_scores(
     return all_scores
 
 
-
-
 def evaluate(
     dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
@@ -178,14 +176,13 @@ def evaluate(
         experiment_name_prefix=experiment_name_prefix,
     )
 
-    version_info = dataset.get_version_info()
     experiment = client.create_experiment(
         name=experiment_name,
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=checked_prompts,
         tags=experiment_tags,
-        dataset_version_id=version_info.id if version_info else None,
+        dataset_version_id=getattr(dataset.get_version_info(), "id", None),
     )
 
     # wrap scoring functions if any
@@ -615,14 +612,13 @@ def evaluate_prompt(
         experiment_name_prefix=experiment_name_prefix,
     )
 
-    version_info = dataset.get_version_info()
     experiment = client.create_experiment(
         name=experiment_name,
         dataset_name=dataset.name,
         experiment_config=experiment_config,
         prompts=prompts,
         tags=experiment_tags,
-        dataset_version_id=version_info.id if version_info else None,
+        dataset_version_id=getattr(dataset.get_version_info(), "id", None),
     )
 
     # wrap scoring functions if any
@@ -819,7 +815,6 @@ def evaluate_optimization_trial(
         experiment_name_prefix=experiment_name_prefix,
     )
 
-    version_info = dataset.get_version_info()
     experiment = client.create_experiment(
         name=experiment_name,
         dataset_name=dataset.name,
@@ -828,7 +823,7 @@ def evaluate_optimization_trial(
         type="trial",
         optimization_id=optimization_id,
         tags=experiment_tags,
-        dataset_version_id=version_info.id if version_info else None,
+        dataset_version_id=getattr(dataset.get_version_info(), "id", None),
     )
 
     return _evaluate_task(

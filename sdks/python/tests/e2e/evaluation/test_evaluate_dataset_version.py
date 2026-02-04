@@ -4,6 +4,8 @@ import opik
 from opik import synchronization
 from opik.evaluation.metrics import score_result
 
+from .. import verifiers
+
 
 def _wait_for_version(dataset, expected_version: str, timeout: float = 10) -> None:
     """Wait for dataset to have the expected version, fail if not reached."""
@@ -60,6 +62,8 @@ def test_evaluate__with_dataset_version__evaluates_version_items_only(
         verbose=0,
     )
 
+    opik.flush_tracker()
+
     # Should have evaluated only 2 items (from v1), not 4 (from v2/current)
     assert len(result.test_results) == 2
 
@@ -69,3 +73,15 @@ def test_evaluate__with_dataset_version__evaluates_version_items_only(
         for tr in result.test_results
     }
     assert evaluated_questions == {"Q1", "Q2"}
+
+    # Verify the experiment is linked to v1's version ID
+    v1_version_info = v1_view.get_version_info()
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=result.experiment_id,
+        experiment_name=result.experiment_name,
+        experiment_metadata=None,
+        traces_amount=2,
+        feedback_scores_amount=1,
+        dataset_version_id=v1_version_info.id,
+    )
