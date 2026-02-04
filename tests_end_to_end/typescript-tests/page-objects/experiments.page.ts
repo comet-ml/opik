@@ -38,9 +38,10 @@ export class ExperimentsPage extends BasePage {
     await this.searchExperiment(name);
     // Wait for the search to filter the table
     await this.page.waitForTimeout(500);
-    // Click on a different cell (e.g., Dataset or Project) to avoid tooltip interference on the name cell
+    // Click on Created cell (index 4) - Dataset and Project cells have their own links
+    // Columns: 0=checkbox, 1=Name, 2=Dataset, 3=Project, 4=Created, 5=Duration, 6=Trace count
     const row = this.page.getByRole('row', { name: new RegExp(name) }).first();
-    await row.getByRole('cell').nth(2).click(); // Click on Dataset cell (index 2)
+    await row.getByRole('cell').nth(4).click();
     // Wait for navigation to experiment details page (UUID pattern)
     await this.page.waitForURL(/\/experiments\/[0-9a-f-]{36}/, { timeout: 30000 });
   }

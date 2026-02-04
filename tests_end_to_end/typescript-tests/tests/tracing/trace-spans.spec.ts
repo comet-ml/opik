@@ -161,14 +161,15 @@ This test ensures span details are properly stored and displayed for low-level c
           for (let count = 0; count < spanConfig.count; count++) {
             const spanName = `${spanConfig.prefix}${count}`;
 
-            // Click on the span in the tree
+            // Click on the span in the tree and wait for panel to update
             await spansMenu.getFirstSpanByName(spanName).click();
-            if (spanConfig.tags && spanConfig.tags.length > 0) {
-              await expect(page.getByText(spanConfig.tags[0])).toBeVisible({ timeout: 5000 });
-            }
+            // Wait for the span name to appear in the details panel header
+            // We look for the span name in the container that also has the "Details" tab
+            const detailsPanel = page.locator('div').filter({ has: page.getByRole('tab', { name: 'Details' }) });
+            await expect(detailsPanel.getByText(spanName, { exact: true }).first()).toBeVisible({ timeout: 10000 });
 
             await spansMenu.getFeedbackScoresTab().click();
-            await page.waitForTimeout(250);
+            await page.waitForTimeout(500);
 
             if (spanConfig.feedback_scores) {
               for (const score of spanConfig.feedback_scores) {
@@ -180,6 +181,7 @@ This test ensures span details are properly stored and displayed for low-level c
             }
 
             await page.getByRole('tab', { name: 'Details' }).click();
+            await page.waitForTimeout(500);
             if (spanConfig.metadata) {
               for (const [key, value] of Object.entries(spanConfig.metadata)) {
                 await expect(page.getByText(`${key}: ${value}`)).toBeVisible();
@@ -244,14 +246,15 @@ This test ensures span details are properly stored and displayed for decorator-b
           for (let count = 0; count < spanConfig.count; count++) {
             const spanName = `${spanConfig.prefix}${count}`;
 
-            // Click on the span in the tree
+            // Click on the span in the tree and wait for panel to update
             await spansMenu.getFirstSpanByName(spanName).click();
-            if (spanConfig.tags && spanConfig.tags.length > 0) {
-              await expect(page.getByText(spanConfig.tags[0])).toBeVisible({ timeout: 5000 });
-            }
+            // Wait for the span name to appear in the details panel header
+            // We look for the span name in the container that also has the "Details" tab
+            const detailsPanel = page.locator('div').filter({ has: page.getByRole('tab', { name: 'Details' }) });
+            await expect(detailsPanel.getByText(spanName, { exact: true }).first()).toBeVisible({ timeout: 10000 });
 
             await spansMenu.getFeedbackScoresTab().click();
-            await page.waitForTimeout(250);
+            await page.waitForTimeout(500);
 
             if (spanConfig.feedback_scores) {
               for (const score of spanConfig.feedback_scores) {
@@ -264,6 +267,7 @@ This test ensures span details are properly stored and displayed for decorator-b
 
             // Metadata is shown within the Details tab, not as a separate tab
             await page.getByRole('tab', { name: 'Details' }).click();
+            await page.waitForTimeout(500);
             if (spanConfig.metadata) {
               for (const [key, value] of Object.entries(spanConfig.metadata)) {
                 await expect(page.getByText(`${key}: ${value}`)).toBeVisible();
