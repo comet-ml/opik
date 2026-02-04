@@ -438,12 +438,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ),
             trace_data AS (
                 SELECT
-                    id,
-                    output,
-                    duration
+                    id
+                    <if(experiment_item_filters)>
+                    , output, duration
+                    <endif>
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ),
             feedback_scores_combined_raw AS (
                 SELECT workspace_id,
@@ -1318,6 +1321,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 SELECT
                     id,
                     duration
+                    <if(experiment_item_filters)>
+                    , output
+                    <endif>
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND id IN (SELECT DISTINCT trace_id FROM experiment_items_trace_scope)
@@ -1420,10 +1426,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ) dibv ON dibv.id = ei.dataset_item_id
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
-                    SELECT id FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id IN (SELECT project_id FROM target_projects)
-                    AND id IN (SELECT trace_id FROM experiment_items_trace_scope)
+                    SELECT id FROM trace_data
+                    WHERE 1 = 1
                     AND <experiment_item_filters>
                 )
                 <endif>
