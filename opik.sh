@@ -1,12 +1,18 @@
 #!/bin/bash
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-INFRA_CONTAINERS=("opik-clickhouse-1" "opik-mysql-1" "opik-redis-1" "opik-minio-1" "opik-zookeeper-1")
-BACKEND_CONTAINERS=("opik-python-backend-1" "opik-backend-1")
-OPIK_CONTAINERS=("opik-frontend-1")
-GUARDRAILS_CONTAINERS=("opik-guardrails-backend-1")
-LOCAL_BE_CONTAINERS=("opik-python-backend-1" "opik-frontend-1")
-LOCAL_BE_FE_CONTAINERS=("opik-python-backend-1")
+# Source shared worktree utilities
+WORKTREE_UTILS_ROOT="$script_dir"
+source "$script_dir/scripts/worktree-utils.sh"
+init_worktree_ports
+
+# Container names are derived from COMPOSE_PROJECT_NAME
+INFRA_CONTAINERS=("${COMPOSE_PROJECT_NAME}-clickhouse-1" "${COMPOSE_PROJECT_NAME}-mysql-1" "${COMPOSE_PROJECT_NAME}-redis-1" "${COMPOSE_PROJECT_NAME}-minio-1" "${COMPOSE_PROJECT_NAME}-zookeeper-1")
+BACKEND_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-backend-1")
+OPIK_CONTAINERS=("${COMPOSE_PROJECT_NAME}-frontend-1")
+GUARDRAILS_CONTAINERS=("${COMPOSE_PROJECT_NAME}-guardrails-backend-1")
+LOCAL_BE_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-frontend-1")
+LOCAL_BE_FE_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1")
 
 # Bash doesn't have straight forward support for returning arrays, so using a global var instead
 CONTAINERS=()
@@ -86,6 +92,18 @@ debugLog() {
   [[ "$DEBUG_MODE" == true ]] && echo "$@"
 }
 
+# Log worktree configuration (called after DEBUG_MODE is set)
+log_worktree_config() {
+  debugLog "[DEBUG] Worktree Configuration:"
+  debugLog "[DEBUG]   Worktree ID: ${WORKTREE_ID}"
+  debugLog "[DEBUG]   Port Offset: ${PORT_OFFSET}"
+  debugLog "[DEBUG]   Project Name: ${COMPOSE_PROJECT_NAME}"
+  debugLog "[DEBUG]   Backend Port: ${OPIK_BACKEND_PORT}"
+  debugLog "[DEBUG]   MySQL Port: ${MYSQL_PORT}"
+  debugLog "[DEBUG]   Redis Port: ${REDIS_PORT}"
+  debugLog "[DEBUG]   ClickHouse HTTP Port: ${CLICKHOUSE_HTTP_PORT}"
+}
+
 setup_buildx_bake() {
   if [[ "${BUILD_MODE}" = "true" ]]; then
     if docker buildx bake --help >/dev/null 2>&1; then
@@ -150,7 +168,8 @@ get_system_info() {
 }
 
 get_docker_compose_cmd() {
-  local cmd="docker compose -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  # Use explicit project name for worktree isolation
+  local cmd="docker compose -p ${COMPOSE_PROJECT_NAME} -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
   fi
@@ -171,18 +190,18 @@ get_docker_compose_cmd() {
     # Full Opik (default) - includes all dependencies
     cmd="$cmd --profile opik"
   fi
-  
+
   # Always add guardrails profile if enabled
   if [[ "$GUARDRAILS_ENABLED" == "true" ]]; then
     cmd="$cmd --profile guardrails"
   fi
-  
+
   echo "$cmd"
 }
 
 get_ui_url() {
-  local frontend_port=$(docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>/dev/null)
-  echo "http://localhost:${frontend_port:-5173}"
+  local frontend_port="${NGINX_PORT:-${OPIK_FRONTEND_PORT:-5173}}"
+  echo "http://localhost:${frontend_port}"
 }
 
 create_opik_config_if_missing() {
@@ -416,7 +435,7 @@ create_demo_data() {
   fi
   
   # Wait for the container to finish and check its exit code
-  if wait_for_container_completion "opik-demo-data-generator-1"; then
+  if wait_for_container_completion "${COMPOSE_PROJECT_NAME}-demo-data-generator-1"; then
     echo "✅ Demo data created successfully!"
     return 0
   else
@@ -611,6 +630,7 @@ fi
 if [[ "$*" == *"--debug"* ]]; then
   DEBUG_MODE=true
   echo "🐞 Debug mode enabled."
+  log_worktree_config
   # Remove the flag from arguments
   set -- ${@/--debug/}
 fi

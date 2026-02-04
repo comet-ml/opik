@@ -215,21 +215,22 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
 
   const truncationEnabled = useTruncationEnabled();
 
-  const { data, isPending } = useCompareExperimentsList(
-    {
-      workspaceName,
-      datasetId,
-      experimentsIds,
-      filters,
-      truncate: truncationEnabled,
-      page: page as number,
-      size: size as number,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useCompareExperimentsList(
+      {
+        workspaceName,
+        datasetId,
+        experimentsIds,
+        filters,
+        truncate: truncationEnabled,
+        page: page as number,
+        size: size as number,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
 
   const { data: experimentsOutputData, isPending: isExperimentsOutputPending } =
     useCompareExperimentsColumns(
@@ -610,6 +611,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

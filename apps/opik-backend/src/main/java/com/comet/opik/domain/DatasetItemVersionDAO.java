@@ -547,24 +547,29 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         id
                     FROM (
                        SELECT
-                            id,
-                            duration,
-                            output,
-                            input,
-                            metadata
-                       FROM traces
-                       WHERE workspace_id = :workspace_id
-                       AND project_id IN (SELECT project_id FROM target_projects)
-                       AND id IN (SELECT trace_id FROM experiment_items_scope)
+                            id
+                       FROM (
+                            SELECT
+                                id,
+                                duration,
+                                output,
+                                input,
+                                metadata
+                           FROM traces
+                           WHERE workspace_id = :workspace_id
+                           AND project_id IN (SELECT project_id FROM target_projects)
+                           AND id IN (SELECT trace_id FROM experiment_items_scope)
+                           ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                           LIMIT 1 BY id
+                       )
                        <if(experiment_item_filters)>
-                       AND <experiment_item_filters>
+                       WHERE <experiment_item_filters>
                        <endif>
-                       ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                       LIMIT 1 BY id
                     ) t
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = t.id
                     <endif>
+                    WHERE 1=1
                     <if(feedback_scores_filters)>
                     AND t.id IN (
                         SELECT
