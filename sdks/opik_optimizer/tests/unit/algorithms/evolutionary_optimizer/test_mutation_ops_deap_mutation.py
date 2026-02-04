@@ -57,6 +57,7 @@ class TestDeapMutation:
 
         result = mutation_ops.deap_mutation(
             individual=individual,
+            optimizer=None,
             current_population=[individual],
             output_style_guidance="Be concise",
             initial_prompts=initial_prompts,

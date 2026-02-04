@@ -8,6 +8,7 @@ def test_deap_mutation_returns_same_when_no_roles_allowed() -> None:
     individual = {"p": [{"role": "user", "content": "{question}"}]}
     mutated = mutation_ops.deap_mutation(
         individual=individual,
+        optimizer=None,
         current_population=None,
         output_style_guidance="",
         initial_prompts={},

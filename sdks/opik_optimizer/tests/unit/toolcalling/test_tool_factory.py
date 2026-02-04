@@ -13,7 +13,7 @@ def test_tool_factory__resolves_mcp_tools(monkeypatch: Any) -> None:
         self: ToolCallingFactory,
         server: dict[str, Any],
         tool_name: str,
-        signature_override: dict[str, Any] | None,
+        _signature_override: dict[str, Any] | None,
     ) -> ToolSignature:
         return ToolSignature(
             name=tool_name,
@@ -23,7 +23,7 @@ def test_tool_factory__resolves_mcp_tools(monkeypatch: Any) -> None:
 
     monkeypatch.setattr(ToolCallingFactory, "_get_signature", _fake_get_signature)
 
-    tools = [
+    tools: list[dict[str, Any]] = [
         {
             "mcp": {
                 "name": "context7.get-library-docs",
@@ -88,7 +88,7 @@ def test_tool_factory__avoids_name_collisions(monkeypatch: Any) -> None:
         self: ToolCallingFactory,
         server: dict[str, Any],
         tool_name: str,
-        signature_override: dict[str, Any] | None,
+        _signature_override: dict[str, Any] | None,
     ) -> ToolSignature:
         return ToolSignature(
             name=tool_name,
@@ -119,6 +119,8 @@ def test_tool_factory__avoids_name_collisions(monkeypatch: Any) -> None:
     names = [tool.get("function", {}).get("name") for tool in resolved_tools]
     assert "search" in names
     assert "context7.search" in names
+
+
 def test_tool_factory__resolves_remote_mcp_tool(monkeypatch: Any) -> None:
     class FakeTool:
         def __init__(self, name: str, description: str, input_schema: dict[str, Any]):
