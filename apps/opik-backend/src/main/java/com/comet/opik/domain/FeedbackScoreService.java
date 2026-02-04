@@ -65,7 +65,7 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 
-    Mono<Void> deleteAllThreadScores(Set<UUID> threadModelId, UUID projectId);
+    Mono<Void> deleteAllThreadScores(Set<UUID> threadModelIds, UUID projectId);
 }
 
 @Slf4j
@@ -281,13 +281,13 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<Void> deleteAllThreadScores(@NotNull Set<UUID> threadModelId, @NotNull UUID projectId) {
-        if (threadModelId.isEmpty()) {
+    public Mono<Void> deleteAllThreadScores(@NotNull Set<UUID> threadModelIds, @NotNull UUID projectId) {
+        if (threadModelIds.isEmpty()) {
             log.info("No thread model IDs provided for deletion of all scores in projectId '{}'", projectId);
             return Mono.empty();
         }
 
-        return dao.deleteAllThreadScores(threadModelId, projectId)
+        return dao.deleteAllThreadScores(threadModelIds, projectId)
                 .doOnNext(count -> {
                     if (count > 0) {
                         log.info("Deleted '{}' scores (all sources) for threads in projectId '{}'", count, projectId);
