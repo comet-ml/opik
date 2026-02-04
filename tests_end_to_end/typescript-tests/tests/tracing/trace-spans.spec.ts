@@ -169,9 +169,8 @@ This test ensures span details are properly stored and displayed for low-level c
             if (spanConfig.feedback_scores) {
               for (const score of spanConfig.feedback_scores) {
                 await expect(page.getByRole('cell', { name: score.name, exact: true })).toBeVisible();
-                // Score values may be displayed as aggregates (e.g., "avg 0.93: 2× 0.9...")
                 await expect(
-                  page.locator('table').getByText(String(score.value), { exact: false })
+                  page.locator('table').getByText(String(score.value), { exact: false }).first()
                 ).toBeVisible();
               }
             }
@@ -248,11 +247,9 @@ This test ensures span details are properly stored and displayed for decorator-b
 
             if (spanConfig.feedback_scores) {
               for (const score of spanConfig.feedback_scores) {
-                await expect(page.getByRole('cell', { name: score.name, exact: true })).toBeVisible();
-                // Score values may be displayed as aggregates (e.g., "avg 0.93: 2× 0.9...")
-                // when multiple spans have the same score, so we use getByText for partial match
+                await expect(page.getByRole('cell', { name: score.name, exact: true })).toBeVisible()
                 await expect(
-                  page.locator('table').getByText(String(score.value), { exact: false })
+                  page.locator('table').getByText(String(score.value), { exact: false }).first()
                 ).toBeVisible();
               }
             }
