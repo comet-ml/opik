@@ -17,7 +17,6 @@ from ....api_objects.types import (
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
-from ....api_objects import chat_prompt
 from ....utils.prompt_library import PromptLibrary
 from . import tool_ops
 
@@ -169,8 +168,10 @@ def deap_crossover(
     merged_metadata = {**metadata_2, **metadata_1}
 
     # Apply tool updates if optimizing tools
-    if optimizer is not None and getattr(optimizer, "_optimize_tools", None):
-        tool_names = getattr(optimizer, "_tool_names", None)
+    optimize_tools = bool(getattr(optimizer, "_optimize_tools", False))
+    tool_names = getattr(optimizer, "_tool_names", None)
+    metric = getattr(optimizer, "_evaluation_metric", None)
+    if optimize_tools and optimizer is not None:
         merged_metadata = tool_ops.apply_tool_updates_to_metadata(
             optimizer=optimizer,
             child_data=child1_data,
@@ -374,8 +375,10 @@ def llm_deap_crossover(
         merged_metadata = {**metadata_2, **metadata_1}
 
         # Apply tool updates if optimizing tools
-        if optimizer is not None and getattr(optimizer, "_optimize_tools", None):
-            tool_names = getattr(optimizer, "_tool_names", None)
+        optimize_tools = bool(getattr(optimizer, "_optimize_tools", False))
+        tool_names = getattr(optimizer, "_tool_names", None)
+        metric = getattr(optimizer, "_evaluation_metric", None)
+        if optimize_tools and optimizer is not None:
             merged_metadata = tool_ops.apply_tool_updates_to_metadata(
                 optimizer=optimizer,
                 child_data=child1_data,

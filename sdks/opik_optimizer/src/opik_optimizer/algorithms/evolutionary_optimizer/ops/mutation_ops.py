@@ -332,7 +332,7 @@ def _semantic_mutation(
     output_style_guidance: str,
     prompts: PromptLibrary,
     rng: RandomLike,
-    optimize_tools: bool,
+    optimize_tools: bool = False,
     allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
     """Enhanced semantic mutation with multiple strategies."""
@@ -445,7 +445,7 @@ def _radical_innovation_mutation(
     model_parameters: dict[str, Any],
     output_style_guidance: str,
     prompts: PromptLibrary,
-    optimize_tools: bool,
+    optimize_tools: bool = False,
     allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
     """Attempts to generate a significantly improved and potentially very different prompt using an LLM."""
@@ -533,7 +533,7 @@ def deap_mutation(
     optimization_id: str | None,
     verbose: int,
     prompts: PromptLibrary,
-    optimize_tools: bool = False,
+    optimize_tools: bool | None = None,
     tool_names: list[str] | None = None,
     metric: Any | None = None,
     allowed_roles: set[str] | None = None,
@@ -544,6 +544,13 @@ def deap_mutation(
     Operates on dict-based individuals (prompt_name -> messages).
     Randomly selects ONE prompt to mutate.
     """
+    if optimize_tools is None:
+        optimize_tools = bool(getattr(optimizer, "_optimize_tools", False))
+    if tool_names is None:
+        tool_names = getattr(optimizer, "_tool_names", None)
+    if metric is None:
+        metric = getattr(optimizer, "_evaluation_metric", None)
+
     if allowed_roles is not None and not allowed_roles:
         return individual
     # Individual is a dict mapping prompt_name -> messages

@@ -131,9 +131,10 @@ def initialize_population(
         num_fresh_starts = max(1, int(num_to_generate_total * 0.2))
         num_variations_on_initial = num_to_generate_total - num_fresh_starts
 
+        optimize_tools = bool(getattr(optimizer, "_optimize_tools", False))
         task_desc_for_llm = helpers.get_task_description_for_llm(
             prompt,
-            optimize_tools=bool(getattr(optimizer, "_optimize_tools", False)),
+            optimize_tools=optimize_tools,
         )
         current_output_style_guidance = output_style_guidance
 
@@ -186,6 +187,10 @@ def _generate_fresh_start_prompts(
     if num_fresh_starts <= 0:
         return []
 
+    optimize_tools = bool(getattr(optimizer, "_optimize_tools", False))
+    tool_names = getattr(optimizer, "_tool_names", None)
+    metric = getattr(optimizer, "_evaluation_metric", None)
+
     init_pop_report.start_fresh_prompts(num_fresh_starts)
     fresh_start_user_prompt = prompts.get(
         "fresh_start_user_prompt_template",
@@ -236,7 +241,14 @@ def _generate_fresh_start_prompts(
                 prompt=compact_debug_text(json.dumps(prompt_messages)),
             )
         init_pop_report.success_fresh_prompts(len(prompts_to_use))
-        return _messages_to_chat_prompts(prompts_to_use, prompt, optimizer=optimizer)
+        return _messages_to_chat_prompts(
+            prompts_to_use,
+            prompt,
+            optimize_tools=optimize_tools,
+            tool_names=tool_names,
+            metric=metric,
+            optimizer=optimizer,
+        )
     except json.JSONDecodeError as exc:
         init_pop_report.failed_fresh_prompts(
             num_fresh_starts,
@@ -265,6 +277,10 @@ def _generate_variation_prompts(
 ) -> list[chat_prompt.ChatPrompt]:
     if num_variations_on_initial <= 0:
         return []
+
+    optimize_tools = bool(getattr(optimizer, "_optimize_tools", False))
+    tool_names = getattr(optimizer, "_tool_names", None)
+    metric = getattr(optimizer, "_evaluation_metric", None)
 
     init_pop_report.start_variations(num_variations_on_initial)
     user_prompt_for_variation = prompts.get(
@@ -316,7 +332,12 @@ def _generate_variation_prompts(
                 prompt=compact_debug_text(json.dumps(prompt_messages)),
             )
         return _messages_to_chat_prompts(
-            generated_prompts_variations, prompt, optimizer=optimizer
+            generated_prompts_variations,
+            prompt,
+            optimize_tools=optimize_tools,
+            tool_names=tool_names,
+            metric=metric,
+            optimizer=optimizer,
         )
     except Exception as exc:
         init_pop_report.failed_variations(
@@ -329,6 +350,9 @@ def _generate_variation_prompts(
 def _messages_to_chat_prompts(
     messages_list: list[list[dict[str, Any]]],
     base_prompt: chat_prompt.ChatPrompt,
+    optimize_tools: bool,
+    tool_names: list[str] | None,
+    metric: Any,
     optimizer: Any | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     prompts: list[chat_prompt.ChatPrompt] = [
@@ -342,8 +366,7 @@ def _messages_to_chat_prompts(
         for messages in messages_list
     ]
     # If optimizing tools apply tools to chat prompt
-    if optimizer is not None and getattr(optimizer, "_optimize_tools", None):
-        tool_names = getattr(optimizer, "_tool_names", None)
+    if optimize_tools:
         updated: list[chat_prompt.ChatPrompt] = []
         for prompt in prompts:
             if not prompt.tools:

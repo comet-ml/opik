@@ -427,6 +427,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         max_trials = context.max_trials
         self._optimize_tools = context.extra_params.get("optimize_tools")
         self._tool_names = context.extra_params.get("tool_names")
+        self._evaluation_metric = context.metric
 
         # Initialize progress tracking for display
         self._current_round = 0
