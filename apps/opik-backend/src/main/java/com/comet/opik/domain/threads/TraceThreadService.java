@@ -251,6 +251,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
                             // Trigger ThreadsReopened for all existing threads that received new traces,
                             // regardless of their status. This ensures consistent behavior for score deletion
                             // and other side effects, independent of the thread status concept.
+                            // Note: The event is named "Reopened" because internally threads still have
+                            // an active/inactive status, even though this is hidden from the UI.
                             if (existingThreads.isEmpty()) {
                                 return Mono.empty();
                             }

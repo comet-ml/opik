@@ -65,8 +65,6 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId);
 
-    Mono<Void> deleteThreadManualScores(Set<UUID> threadModelId, UUID projectId);
-
     Mono<Void> deleteAllThreadScores(Set<UUID> threadModelId, UUID projectId);
 }
 
@@ -280,24 +278,6 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
                         .toList())
                 .map(FeedbackScoreNames::new);
-    }
-
-    @Override
-    public Mono<Void> deleteThreadManualScores(@NotNull Set<UUID> threadModelId, @NotNull UUID projectId) {
-        if (threadModelId.isEmpty()) {
-            log.info("No thread model IDs provided for deletion of manual scores in projectId '{}'", projectId);
-            return Mono.empty();
-        }
-
-        return dao.deleteThreadManualScores(threadModelId, projectId)
-                .doOnNext(count -> {
-                    if (count > 0) {
-                        log.info("Deleted '{}' manual scores for threads in projectId '{}'", count, projectId);
-                    } else {
-                        log.info("No manual scores found to delete for projectId '{}'", projectId);
-                    }
-                })
-                .then();
     }
 
     @Override

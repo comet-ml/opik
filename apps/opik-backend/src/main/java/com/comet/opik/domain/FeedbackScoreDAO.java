@@ -5,7 +5,6 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.FeedbackScoreNames;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
@@ -62,8 +61,6 @@ public interface FeedbackScoreDAO {
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
     Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(List<UUID> projectId);
-
-    Mono<Long> deleteThreadManualScores(Set<UUID> threadModelIds, UUID projectId);
 
     Mono<Long> deleteAllThreadScores(Set<UUID> threadModelIds, UUID projectId);
 }
@@ -580,50 +577,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             return Flux.from(statement.execute())
                     .flatMap(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
                     .collect(Collectors.toList());
-        }));
-    }
-
-    @Override
-    public Mono<Long> deleteThreadManualScores(@NonNull Set<UUID> threadModelIds, @NonNull UUID projectId) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(threadModelIds),
-                "Argument 'threadModelIds' must not be empty");
-
-        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
-
-            List<String> sources = List.of(ScoreSource.UI.getValue(), ScoreSource.SDK.getValue());
-
-            // Delete from feedback_scores table
-            var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS, "delete_thread_manual_scores",
-                    workspaceId, threadModelIds.size());
-            template1.add("project_id", projectId);
-            template1.add("sources", sources);
-            template1.add("table_name", "feedback_scores");
-
-            var statement1 = connection.createStatement(template1.render())
-                    .bind("entity_ids", threadModelIds)
-                    .bind("entity_type", EntityType.THREAD.getType())
-                    .bind("sources", sources)
-                    .bind("project_id", projectId)
-                    .bind("workspace_id", workspaceId);
-
-            // Delete from authored_feedback_scores table
-            var template2 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
-                    "delete_thread_manual_scores_authored", workspaceId, threadModelIds.size());
-            template2.add("project_id", projectId);
-            template2.add("sources", sources);
-            template2.add("table_name", "authored_feedback_scores");
-
-            var statement2 = connection.createStatement(template2.render())
-                    .bind("entity_ids", threadModelIds)
-                    .bind("entity_type", EntityType.THREAD.getType())
-                    .bind("sources", sources)
-                    .bind("project_id", projectId)
-                    .bind("workspace_id", workspaceId);
-
-            return Mono.from(statement1.execute())
-                    .flatMap(result -> Mono.from(result.getRowsUpdated()))
-                    .then(Mono.from(statement2.execute()))
-                    .flatMap(result -> Mono.from(result.getRowsUpdated()));
         }));
     }
 
