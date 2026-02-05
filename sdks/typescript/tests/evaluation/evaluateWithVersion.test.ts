@@ -5,7 +5,7 @@ import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
 import { DatasetVersion } from "@/dataset/DatasetVersion";
 import { EvaluationTask } from "@/evaluation/types";
-import { DatasetVersionPublic } from "@/rest_api/api";
+import type { DatasetVersionPublic } from "opik";
 import {
   createMockHttpResponsePromise,
   mockAPIFunction,

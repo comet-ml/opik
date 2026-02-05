@@ -3,7 +3,7 @@ import { MockInstance } from "vitest";
 import { DatasetVersion } from "@/dataset/DatasetVersion";
 import { Dataset } from "@/dataset/Dataset";
 import { OpikClient } from "@/client/Client";
-import { DatasetVersionPublic } from "@/rest_api/api";
+import type { DatasetVersionPublic } from "opik";
 import { DatasetVersionNotFoundError } from "@/errors";
 import {
   createMockHttpResponsePromise,

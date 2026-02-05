@@ -17,6 +17,7 @@ export * from "./evaluation";
 export { Dataset } from "@/dataset/Dataset";
 export { DatasetVersion } from "@/dataset/DatasetVersion";
 export { DatasetVersionNotFoundError } from "@/errors/dataset/errors";
+export type { DatasetVersionPublic } from "@/rest_api/api/types/DatasetVersionPublic";
 
 export { Prompt, PromptType } from "@/prompt";
 export { OpikQueryLanguage } from "@/query";

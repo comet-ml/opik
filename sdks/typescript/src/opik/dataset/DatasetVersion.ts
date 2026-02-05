@@ -159,13 +159,11 @@ export class DatasetVersion<T extends DatasetItemData = DatasetItemData> {
     const mappedItems: Record<string, unknown>[] = items.map((item) => {
       const itemCopy = { ...item } as Record<string, unknown>;
 
-      if (Object.keys(keysMapping).length > 0) {
-        for (const [key, value] of Object.entries(keysMapping)) {
-          if (key in itemCopy) {
-            const content = itemCopy[key];
-            delete itemCopy[key];
-            itemCopy[value] = content;
-          }
+      for (const [key, value] of Object.entries(keysMapping)) {
+        if (key in itemCopy) {
+          const content = itemCopy[key];
+          delete itemCopy[key];
+          itemCopy[value] = content;
         }
       }
 
