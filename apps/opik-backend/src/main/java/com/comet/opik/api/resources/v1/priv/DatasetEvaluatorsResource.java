@@ -21,7 +21,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -98,8 +97,8 @@ public class DatasetEvaluatorsResource {
         return Response.ok(result).build();
     }
 
-    @DELETE
-    @Path("/batch")
+    @POST
+    @Path("/delete-batch")
     @Operation(operationId = "deleteDatasetEvaluatorsBatch", summary = "Delete dataset evaluators in batch", description = "Delete multiple dataset evaluators by their IDs", responses = {
             @ApiResponse(responseCode = "204", description = "No content")
     })

@@ -98,11 +98,11 @@ public class DatasetEvaluatorResourceClient {
     public Response callDeleteBatch(UUID datasetId, DatasetEvaluatorBatchDeleteRequest request,
             String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI, datasetId))
-                .path("batch")
+                .path("delete-batch")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .method("DELETE", Entity.json(request));
+                .post(Entity.json(request));
     }
 
     public DatasetEvaluatorBatchRequest createBatchRequest(int count) {
