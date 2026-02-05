@@ -104,7 +104,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
 
     const hasValid = input.supported || output.supported;
     const hasInvalid =
-      (!input.supported && !input.empty) || (!output.supported && !output.empty);
+      (!input.supported && !input.empty) ||
+      (!output.supported && !output.empty);
 
     return hasValid && !hasInvalid;
   }, [transformedInput, transformedOutput]);
