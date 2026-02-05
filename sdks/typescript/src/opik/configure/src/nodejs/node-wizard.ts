@@ -16,8 +16,11 @@ import { OPIK_ENV_VARS } from '../lib/env-constants';
 import { debug } from '../utils/debug';
 import type { WizardOptions } from '../utils/types';
 import { getOutroMessage } from '../lib/messages';
-import { addOrUpdateEnvironmentVariablesStep, runPrettierStep } from '../steps';
-import { uploadEnvironmentVariablesStep } from '../steps/upload-environment-variables';
+import {
+  addOrUpdateEnvironmentVariablesStep,
+  runPrettierStep,
+} from '../steps/index';
+import { uploadEnvironmentVariablesStep } from '../steps/upload-environment-variables/index';
 import { buildOpikApiUrl } from '../utils/urls';
 import { analytics } from '../utils/analytics';
 
