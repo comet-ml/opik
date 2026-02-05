@@ -43,6 +43,10 @@ import {
   parseFilterString,
 } from "@/utils/searchHelpers";
 import { SearchTimeoutError } from "@/errors";
+import {
+  AnnotationQueue,
+  AnnotationQueueNotFoundError,
+} from "@/annotation-queue";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -278,6 +282,195 @@ export class OpikClient {
     } catch (error) {
       logger.error(`Failed to delete dataset "${name}"`, { error });
       throw new Error(`Failed to delete dataset "${name}": ${error}`);
+    }
+  };
+
+  // ===== Annotation Queue Methods =====
+
+  /**
+   * Creates a new annotation queue for human annotation workflows.
+   *
+   * @param options - Configuration options for the annotation queue
+   * @param options.name - The name of the annotation queue
+   * @param options.scope - The scope of items in the queue: "trace" or "thread"
+   * @param options.projectName - Optional project name (defaults to client's configured project)
+   * @param options.description - Optional description of the queue
+   * @param options.instructions - Optional instructions for reviewers
+   * @param options.commentsEnabled - Optional flag to enable/disable comments
+   * @param options.feedbackDefinitionNames - Optional list of feedback definition names
+   * @returns The created AnnotationQueue object
+   */
+  public createAnnotationQueue = async (options: {
+    name: string;
+    scope: "trace" | "thread";
+    projectName?: string;
+    description?: string;
+    instructions?: string;
+    commentsEnabled?: boolean;
+    feedbackDefinitionNames?: string[];
+  }): Promise<AnnotationQueue> => {
+    const {
+      name,
+      scope,
+      projectName,
+      description,
+      instructions,
+      commentsEnabled,
+      feedbackDefinitionNames,
+    } = options;
+
+    logger.debug(`Creating annotation queue "${name}" with scope "${scope}"`);
+
+    const targetProjectName = projectName ?? this.config.projectName;
+
+    try {
+      // Get the project by name to obtain its ID
+      const projectsResponse = await this.api.projects.findProjects({
+        name: targetProjectName,
+        size: 1,
+      });
+
+      const projects = projectsResponse.content ?? [];
+      const project = projects.find((p) => p.name === targetProjectName);
+      if (!project?.id) {
+        throw new Error(`Project "${targetProjectName}" not found`);
+      }
+      const projectId = project.id;
+
+      const queueId = generateId();
+
+      await this.api.annotationQueues.createAnnotationQueue({
+        id: queueId,
+        projectId,
+        name,
+        scope,
+        description,
+        instructions,
+        commentsEnabled,
+        feedbackDefinitionNames,
+      });
+
+      logger.debug(`Created annotation queue "${name}" with ID "${queueId}"`);
+
+      return new AnnotationQueue(
+        {
+          id: queueId,
+          name,
+          projectId,
+          scope,
+          description,
+          instructions,
+          commentsEnabled,
+          feedbackDefinitionNames,
+        },
+        this
+      );
+    } catch (error) {
+      logger.error(`Failed to create annotation queue "${name}"`, { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Retrieves an annotation queue by its ID.
+   *
+   * @param id - The unique identifier of the annotation queue
+   * @returns The AnnotationQueue object
+   * @throws AnnotationQueueNotFoundError if the queue doesn't exist
+   */
+  public getAnnotationQueue = async (id: string): Promise<AnnotationQueue> => {
+    logger.debug(`Getting annotation queue with ID "${id}"`);
+
+    try {
+      const response = await this.api.annotationQueues.getAnnotationQueueById(
+        id
+      );
+
+      return new AnnotationQueue(response, this);
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        throw new AnnotationQueueNotFoundError(id);
+      }
+      logger.error(`Failed to get annotation queue with ID "${id}"`, { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Retrieves all annotation queues, optionally filtered by project.
+   *
+   * @param options - Optional configuration
+   * @param options.projectName - Optional project name to filter by
+   * @param options.maxResults - Maximum number of results to return (default: 100)
+   * @returns List of AnnotationQueue objects
+   */
+  public getAnnotationQueues = async (options?: {
+    projectName?: string;
+    maxResults?: number;
+  }): Promise<AnnotationQueue[]> => {
+    const { projectName, maxResults = 100 } = options ?? {};
+
+    logger.debug(
+      `Getting annotation queues (project: ${projectName ?? "all"}, limit: ${maxResults})`
+    );
+
+    try {
+      let filters: string | undefined;
+
+      if (projectName) {
+        // Get project ID to filter by
+        const projectsResponse = await this.api.projects.findProjects({
+          name: projectName,
+          size: 1,
+        });
+
+        const projects = projectsResponse.content ?? [];
+        const project = projects.find((p) => p.name === projectName);
+        if (project?.id) {
+          filters = JSON.stringify([
+            { field: "project_id", operator: "=", value: project.id },
+          ]);
+        }
+      }
+
+      const response = await this.api.annotationQueues.findAnnotationQueues({
+        size: maxResults,
+        filters,
+      });
+
+      const queues: AnnotationQueue[] = [];
+
+      for (const queueData of response.content || []) {
+        queues.push(new AnnotationQueue(queueData, this));
+      }
+
+      logger.info(`Retrieved ${queues.length} annotation queues`);
+      return queues;
+    } catch (error) {
+      logger.error("Failed to retrieve annotation queues", { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Deletes an annotation queue by its ID.
+   *
+   * @param id - The ID of the annotation queue to delete
+   */
+  public deleteAnnotationQueue = async (id: string): Promise<void> => {
+    logger.debug(`Deleting annotation queue with ID "${id}"`);
+
+    try {
+      await this.api.annotationQueues.deleteAnnotationQueueBatch({
+        ids: [id],
+      });
+
+      logger.debug(`Successfully deleted annotation queue with ID "${id}"`);
+    } catch (error) {
+      logger.error(`Failed to delete annotation queue with ID "${id}"`, {
+        error,
+      });
+      throw error;
     }
   };
 
