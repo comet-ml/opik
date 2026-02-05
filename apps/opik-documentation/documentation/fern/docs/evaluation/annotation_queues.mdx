@@ -105,7 +105,7 @@ The SME interface provides:
 
 ## Managing Queues programmatically
 
-You can create and manage annotation queues programmatically using the Python SDK. This is useful for automating the process of adding items to queues based on specific criteria.
+You can create and manage annotation queues programmatically using the Python or TypeScript SDK. This is useful for automating the process of adding items to queues based on specific criteria.
 
 <Tabs>
     <Tab value="Python" title="Python">
@@ -217,6 +217,111 @@ threads_queues = client.get_threads_annotation_queues(project_name="my-project")
 
 for queue in threads_queues:
     print(f"Threads Queue: {queue.name}, Items: {queue.items_count}")
+```
+
+    </Tab>
+    <Tab value="TypeScript" title="TypeScript">
+
+### Creating an Annotation Queue
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
+
+// Create a trace annotation queue
+const queue = await client.createAnnotationQueue({
+  name: "High Priority Traces",
+  scope: "trace",
+  description: "Traces that need review",
+  instructions: "Check for accuracy and completeness",
+  feedbackDefinitionNames: ["relevance", "accuracy"],
+});
+
+console.log(`Created queue: ${queue.name} (ID: ${queue.id})`);
+```
+
+### Adding Traces to a Queue
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
+
+// Get an existing queue
+const queue = await client.getAnnotationQueue("queue-id");
+
+// Search for traces and add them to the queue
+const traces = await client.searchTraces({
+  projectName: "my-project",
+  filterString: 'feedback_scores.user_frustration > 0.5',
+});
+await queue.addTraces(traces);
+```
+
+### Working with Thread Queues
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
+
+// Create a thread annotation queue
+const threadQueue = await client.createAnnotationQueue({
+  name: "Thread Review Queue",
+  scope: "thread",
+  description: "Threads needing review",
+});
+
+// Add threads to the queue using TraceThread objects
+// Note: You'll need to obtain TraceThread objects from your backend
+await threadQueue.addThreads(threads);
+```
+
+### Updating and Deleting Queues
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
+
+// Get an existing queue
+const queue = await client.getAnnotationQueue("queue-id");
+
+// Update queue properties
+await queue.update({
+  description: "Traces that need a thorough review",
+  instructions: "Check the conversation tone",
+});
+
+// Remove traces from the queue
+const shortTraces = await client.searchTraces({
+  projectName: "my-project",
+  filterString: "duration < 10",
+});
+await queue.removeTraces(shortTraces);
+
+// Delete the queue
+await queue.delete();
+```
+
+### Listing Annotation Queues
+
+```typescript
+import { Opik } from "opik";
+
+const client = new Opik();
+
+// Get all annotation queues for a project
+const queues = await client.getAnnotationQueues({
+  projectName: "my-project",
+});
+
+for (const queue of queues) {
+  console.log(
+    `Queue: ${queue.name}, Scope: ${queue.scope}, Items: ${queue.itemsCount}`
+  );
+}
 ```
 
     </Tab>
