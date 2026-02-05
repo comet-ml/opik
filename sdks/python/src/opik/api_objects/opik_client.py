@@ -72,6 +72,7 @@ from ..types import (
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
+QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
 
 
 class Opik:
@@ -1767,13 +1768,13 @@ class Opik:
     def _create_annotation_queue(
         self,
         name: str,
-        scope: Literal["trace", "thread"],
+        queue_class: type[QueueT],
         project_name: Optional[str],
         description: Optional[str],
         instructions: Optional[str],
         comments_enabled: Optional[bool],
         feedback_definition_names: Optional[List[str]],
-    ) -> Union[TracesAnnotationQueue, ThreadsAnnotationQueue]:
+    ) -> QueueT:
         """Helper method to create an annotation queue with the specified scope."""
         if project_name is None:
             project_name = self._project_name
@@ -1787,7 +1788,7 @@ class Opik:
             id=queue_id,
             project_id=project_id,
             name=name,
-            scope=scope,
+            scope=queue_class.SCOPE,
             description=description,
             instructions=instructions,
             comments_enabled=comments_enabled,
@@ -1808,9 +1809,7 @@ class Opik:
             "items_count": 0,
         }
 
-        if scope == "thread":
-            return ThreadsAnnotationQueue(**common_kwargs)
-        return TracesAnnotationQueue(**common_kwargs)
+        return queue_class(**common_kwargs)
 
     def create_traces_annotation_queue(
         self,
@@ -1837,13 +1836,13 @@ class Opik:
         """
         return self._create_annotation_queue(
             name=name,
-            scope="trace",
+            queue_class=TracesAnnotationQueue,
             project_name=project_name,
             description=description,
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
-        )  # type: ignore[return-value]
+        )
 
     def create_threads_annotation_queue(
         self,
@@ -1870,13 +1869,13 @@ class Opik:
         """
         return self._create_annotation_queue(
             name=name,
-            scope="thread",
+            queue_class=ThreadsAnnotationQueue,
             project_name=project_name,
             description=description,
             instructions=instructions,
             comments_enabled=comments_enabled,
             feedback_definition_names=feedback_definition_names,
-        )  # type: ignore[return-value]
+        )
 
     def get_traces_annotation_queue(self, queue_id: str) -> TracesAnnotationQueue:
         """

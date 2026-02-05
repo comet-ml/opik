@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import (
     Optional,
     List,
+    Literal,
     Union,
 )
 
@@ -182,10 +183,12 @@ class TracesAnnotationQueue(BaseAnnotationQueue):
     :meth:`opik.Opik.create_traces_annotation_queue` or :meth:`opik.Opik.get_traces_annotation_queue`.
     """
 
+    SCOPE: Literal["trace"] = "trace"
+
     @property
     def scope(self) -> str:
         """The scope of the annotation queue."""
-        return "trace"
+        return self.SCOPE
 
     def _extract_trace_ids(
         self,
@@ -269,10 +272,12 @@ class ThreadsAnnotationQueue(BaseAnnotationQueue):
     :meth:`opik.Opik.create_threads_annotation_queue` or :meth:`opik.Opik.get_threads_annotation_queue`.
     """
 
+    SCOPE: Literal["thread"] = "thread"
+
     @property
     def scope(self) -> str:
         """The scope of the annotation queue."""
-        return "thread"
+        return self.SCOPE
 
     def _extract_thread_ids(
         self,
