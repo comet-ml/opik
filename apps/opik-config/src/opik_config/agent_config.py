@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings
 from contextlib import contextmanager
 from dataclasses import fields, is_dataclass
-from typing import Any, Callable, Generator, TypeVar, get_type_hints, overload
+from typing import Annotated, Any, Callable, Generator, TypeVar, get_args, get_origin, get_type_hints, overload
 
 from opik import opik_context
 
@@ -27,6 +27,30 @@ from .resolver import _decode_value, resolve_with_dedupe
 T = TypeVar("T")
 
 DEFAULT_BACKEND_URL = "http://localhost:5050"
+
+
+def _extract_annotations(type_hint: type) -> list[str]:
+    """Extract all string annotations from an Annotated type."""
+    if get_origin(type_hint) is Annotated:
+        args = get_args(type_hint)
+        return [arg for arg in args[1:] if isinstance(arg, str)]
+    return []
+
+
+def _unwrap_annotated(type_hint: type) -> type:
+    """Get the base type from an Annotated type, or return as-is."""
+    if get_origin(type_hint) is Annotated:
+        return get_args(type_hint)[0]
+    return type_hint
+
+
+def _normalize_annotations(annotations: str | list[str] | None) -> list[str]:
+    """Normalize annotations to a list."""
+    if annotations is None:
+        return []
+    if isinstance(annotations, str):
+        return [annotations]
+    return list(annotations)
 
 
 @contextmanager
@@ -245,8 +269,6 @@ def _log_config_to_trace(
             tags: list[str] = []
             if mask_id:
                 tags.append(f"experiment:{mask_id}")
-            if assigned_variant:
-                tags.append(f"variant:{assigned_variant}")
 
             config_metadata: dict[str, Any] = {
                 "experiment_id": mask_id,
@@ -270,10 +292,94 @@ def _log_config_to_trace(
         pass  # Don't fail the main flow if logging fails
 
 
+def _resolve_variable(
+    value: T,
+    name: str,
+    backend_url: str,
+    behavior: ConfigBehavior,
+    annotations: list[str] | None = None,
+) -> T:
+    """Resolve a single variable from the config backend."""
+    ctx = get_config_context()
+    cache = get_run_cache()
+    client = ConfigClient(backend_url)
+    set_registration_client(client, "default")
+
+    # Check cache first
+    cached = cache.get(ctx.project_id, ctx.mask_id, name)
+    if cached is not None:
+        return cached.values.get(name, value)
+
+    # Queue registration
+    queue_registration(
+        KeyMetadata(
+            key=name,
+            type_hint=str(type(value)),
+            default_value=_get_default_for_prompt(value),
+            class_name=None,
+            field_name=name,
+            annotations=annotations,
+        )
+    )
+
+    # Build cache key for deduplication
+    cache_key = (ctx.project_id, ctx.env, ctx.mask_id, name)
+
+    def do_resolve() -> ResolvedConfig:
+        try:
+            response = client.resolve(
+                project_id=ctx.project_id,
+                env=ctx.env,
+                keys=[name],
+                mask_id=ctx.mask_id,
+                unit_id=ctx.unit_id,
+            )
+
+            resolved_value = value
+            if name in response.get("resolved_values", {}):
+                raw_value = response["resolved_values"][name]
+                resolved_value = _decode_value(raw_value, type(value), value)
+
+            result = ResolvedConfig(
+                values={name: resolved_value},
+                value_ids=response.get("resolved_value_ids", {}),
+                assigned_variant=response.get("assigned_variant"),
+                experiment_type=response.get("experiment_type"),
+                revision=0,
+            )
+
+        except BackendUnavailableError:
+            if behavior.on_backend_unavailable == "error":
+                raise
+            result = ResolvedConfig(
+                values={name: value},
+                value_ids={},
+                assigned_variant=None,
+                revision=0,
+            )
+
+        cache.set(ctx.project_id, ctx.mask_id, name, result)
+
+        _log_config_to_trace(
+            ctx.mask_id,
+            result.assigned_variant,
+            result.experiment_type,
+            result.values,
+            client=client,
+            project_id=ctx.project_id,
+        )
+
+        return result
+
+    resolved = resolve_with_dedupe(cache_key, do_resolve)
+    return resolved.values.get(name, value)
+
+
 @overload
 def agent_config(
     cls: type[T],
     *,
+    annotations: str | list[str] | None = None,
     backend_url: str = DEFAULT_BACKEND_URL,
     behavior: ConfigBehavior | None = None,
 ) -> type[T]: ...
@@ -283,34 +389,53 @@ def agent_config(
 def agent_config(
     cls: None = None,
     *,
+    annotations: str | list[str] | None = None,
     backend_url: str = DEFAULT_BACKEND_URL,
     behavior: ConfigBehavior | None = None,
 ) -> Callable[[type[T]], type[T]]: ...
 
 
+@overload
 def agent_config(
-    cls: type[T] | None = None,
+    cls: T,
     *,
+    name: str,
+    annotations: str | list[str] | None = None,
     backend_url: str = DEFAULT_BACKEND_URL,
     behavior: ConfigBehavior | None = None,
-) -> type[T] | Callable[[type[T]], type[T]]:
-    """
-    Make a dataclass configuration-aware with resolve-once-per-run caching.
+) -> T: ...
 
-    Usage:
+
+def agent_config(
+    cls: type[T] | T | None = None,
+    *,
+    name: str | None = None,
+    annotations: str | list[str] | None = None,
+    backend_url: str = DEFAULT_BACKEND_URL,
+    behavior: ConfigBehavior | None = None,
+) -> type[T] | T | Callable[[type[T]], type[T]]:
+    """
+    Make a dataclass or variable configuration-aware with resolve-once-per-run caching.
+
+    Usage as decorator:
         @agent_config
         @dataclass
         class Config:
             model: str = "gpt-4"
             temperature: float = 0.7
 
-        # In your agent:
         with config_context(mask_id="experiment-123"):
             config = Config()
             print(config.model)  # Resolved from backend, cached for this run
+
+    Usage on variables:
+        model = "gpt-4"
+        model = agent_config(model, name="model")  # Resolved from backend
     """
     if behavior is None:
         behavior = ConfigBehavior()
+
+    class_annotations = _normalize_annotations(annotations)
 
     def decorator(cls: type[T]) -> type[T]:
         if not is_dataclass(cls):
@@ -339,13 +464,19 @@ def agent_config(
                 key = f"{cls.__qualname__}.{field_name}"
                 type_hint = type_hints.get(field_name, type(value))
 
+                # Extract annotations from Annotated type and combine with class-level
+                field_annots = _extract_annotations(type_hint)
+                combined_annots = class_annotations + field_annots
+                base_type = _unwrap_annotated(type_hint)
+
                 queue_registration(
                     KeyMetadata(
                         key=key,
-                        type_hint=str(type_hint),
+                        type_hint=str(base_type),
                         default_value=_get_default_for_prompt(value),
                         class_name=cls.__qualname__,
                         field_name=field_name,
+                        annotations=combined_annots if combined_annots else None,
                     )
                 )
 
@@ -374,6 +505,14 @@ def agent_config(
 
         cls.__getattribute__ = __getattribute__  # type: ignore[method-assign]
         return cls
+
+    # Variable mode: agent_config(var, name='var')
+    if name is not None:
+        var_annotations = _normalize_annotations(annotations)
+        return _resolve_variable(
+            cls, name, backend_url, behavior,
+            annotations=var_annotations if var_annotations else None,
+        )
 
     if cls is None:
         return decorator

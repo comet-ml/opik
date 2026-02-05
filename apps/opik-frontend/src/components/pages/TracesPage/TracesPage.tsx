@@ -14,7 +14,6 @@ import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/Dashboard
 import ConfigurationTab from "@/components/pages/TracesPage/ConfigurationTab/ConfigurationTab";
 import ExperimentsTab from "@/components/pages/TracesPage/ExperimentsTab/ExperimentsTab";
 import EndpointsTab from "@/components/pages/TracesPage/EndpointsTab/EndpointsTab";
-import EvalSuitesTab from "@/components/pages/TracesPage/EvalSuitesTab/EvalSuitesTab";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Construction } from "lucide-react";
@@ -95,9 +94,6 @@ const TracesPage = () => {
               <TabsTrigger variant="underline" value="endpoints">
                 Endpoints
               </TabsTrigger>
-              <TabsTrigger variant="underline" value="eval-suites">
-                Evaluation Suites
-              </TabsTrigger>
             </TabsList>
           </PageBodyStickyContainer>
           <TabsContent value={TRACE_DATA_TYPE.traces}>
@@ -128,9 +124,6 @@ const TracesPage = () => {
           </TabsContent>
           <TabsContent value="endpoints">
             <EndpointsTab projectId={projectId} />
-          </TabsContent>
-          <TabsContent value="eval-suites">
-            <EvalSuitesTab projectId={projectId} projectName={projectName} />
           </TabsContent>
         </Tabs>
       );

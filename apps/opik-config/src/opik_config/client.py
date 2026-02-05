@@ -73,6 +73,7 @@ class ConfigClient:
                         "class_name": k.class_name,
                         "field_name": k.field_name,
                     },
+                    "annotations": k.annotations,
                 }
                 for k in keys
             ],

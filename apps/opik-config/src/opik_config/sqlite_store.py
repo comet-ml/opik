@@ -106,6 +106,7 @@ class SQLiteConfigStore:
                     type TEXT NULL,
                     default_hash TEXT NULL,
                     source_json TEXT NULL,
+                    annotations_json TEXT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     UNIQUE(project_id, key)
@@ -254,6 +255,39 @@ class SQLiteConfigStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_eval_run_results_run
                     ON eval_run_results(run_id);
+
+                -- Blueprints (project-scoped containers for deployment versions)
+                CREATE TABLE IF NOT EXISTS blueprints (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                -- Deployment versions (append-only history)
+                CREATE TABLE IF NOT EXISTS deployment_versions (
+                    id TEXT PRIMARY KEY,
+                    blueprint_id TEXT NOT NULL REFERENCES blueprints(id),
+                    version_number INTEGER NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    change_summary TEXT,
+                    change_type TEXT,
+                    source_experiment_id TEXT,
+                    created_at TEXT NOT NULL,
+                    created_by TEXT,
+                    UNIQUE(blueprint_id, version_number)
+                );
+                CREATE INDEX IF NOT EXISTS idx_deployment_versions_blueprint
+                    ON deployment_versions(blueprint_id, version_number DESC);
+
+                -- Environment pointers (DEV/PROD)
+                CREATE TABLE IF NOT EXISTS environment_pointers (
+                    blueprint_id TEXT NOT NULL REFERENCES blueprints(id),
+                    env TEXT NOT NULL,
+                    version_number INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(blueprint_id, env)
+                );
             """)
 
             # Migration: add name column to masks if it doesn't exist
@@ -448,6 +482,7 @@ class SQLiteConfigStore:
         """
         Register discovered keys (best-effort).
         Also publishes default values if not already published.
+        Auto-creates blueprint and initial version if prompts are registered.
 
         Each key dict may contain:
         - key: str (required)
@@ -459,6 +494,7 @@ class SQLiteConfigStore:
 
         # Collect keys that need defaults published (do outside transaction to avoid deadlock)
         keys_to_publish: list[tuple[str, Any]] = []
+        has_prompts = False
 
         with self._transaction() as conn:
             for key_data in keys:
@@ -468,15 +504,17 @@ class SQLiteConfigStore:
 
                 type_hint = key_data.get("type")
                 source_json = json.dumps(key_data.get("source")) if key_data.get("source") else None
+                annotations_json = json.dumps(key_data.get("annotations")) if key_data.get("annotations") else None
 
                 conn.execute("""
-                    INSERT INTO config_keys (project_id, key, type, default_hash, source_json, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO config_keys (project_id, key, type, default_hash, source_json, annotations_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(project_id, key) DO UPDATE SET
                         type = COALESCE(excluded.type, config_keys.type),
                         source_json = COALESCE(excluded.source_json, config_keys.source_json),
+                        annotations_json = COALESCE(excluded.annotations_json, config_keys.annotations_json),
                         updated_at = excluded.updated_at
-                """, (project_id, key, type_hint, None, source_json, now, now))
+                """, (project_id, key, type_hint, None, source_json, annotations_json, now, now))
 
                 # Check if we need to publish a default
                 if "default_value" in key_data:
@@ -494,10 +532,29 @@ class SQLiteConfigStore:
 
                         if not published:
                             keys_to_publish.append((key, key_data["default_value"]))
+                            # Track if any prompts are being registered
+                            if isinstance(key_data["default_value"], dict) and "prompt_name" in key_data["default_value"]:
+                                has_prompts = True
 
         # Publish defaults outside the main transaction
         for key, default_value in keys_to_publish:
             self.publish_value(project_id, env, key, default_value, created_by="default")
+
+        # Auto-register prompt mappings for all prompt-shaped values
+        for key_data in keys:
+            key = key_data.get("key")
+            default_value = key_data.get("default_value")
+            if key and isinstance(default_value, dict) and "prompt_name" in default_value:
+                prompt_name = default_value["prompt_name"]
+                self.register_prompt_mapping(
+                    project_id=project_id,
+                    config_key=key,
+                    prompt_name=prompt_name,
+                )
+
+        # Auto-create blueprint with v1 if prompts were registered
+        if has_prompts and keys_to_publish:
+            self._ensure_blueprint_with_initial_version(project_id, env)
 
     def publish_value(
         self,
@@ -619,6 +676,75 @@ class SQLiteConfigStore:
 
             return value_id
 
+    def get_mask(
+        self,
+        project_id: str,
+        env: str,
+        mask_id: str,
+    ) -> dict[str, Any] | None:
+        """
+        Get a mask/experiment by ID.
+
+        Returns the mask info including experiment_type, or None if not found.
+        """
+        with self._transaction() as conn:
+            row = conn.execute("""
+                SELECT id, mask_id, name, is_ab, experiment_type, salt, distribution_json,
+                       created_at, updated_at
+                FROM masks
+                WHERE project_id = ? AND env = ? AND mask_id = ?
+            """, (project_id, env, mask_id)).fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "id": row["id"],
+                "mask_id": row["mask_id"],
+                "name": row["name"],
+                "is_ab": bool(row["is_ab"]),
+                "experiment_type": row["experiment_type"],
+                "salt": row["salt"],
+                "distribution": json.loads(row["distribution_json"]) if row["distribution_json"] else None,
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+
+    def find_mask_by_id(self, mask_id: str) -> dict[str, Any] | None:
+        """
+        Find a mask/experiment by mask_id across all projects.
+
+        This is useful when we have a mask_id (e.g., experiment ID) but don't know
+        the project_id. Since mask_ids are typically UUIDs, they are globally unique.
+
+        Returns the mask info including experiment_type and project_id, or None if not found.
+        """
+        with self._transaction() as conn:
+            row = conn.execute("""
+                SELECT id, project_id, env, mask_id, name, is_ab, experiment_type,
+                       salt, distribution_json, created_at, updated_at
+                FROM masks
+                WHERE mask_id = ?
+                LIMIT 1
+            """, (mask_id,)).fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "id": row["id"],
+                "project_id": row["project_id"],
+                "env": row["env"],
+                "mask_id": row["mask_id"],
+                "name": row["name"],
+                "is_ab": bool(row["is_ab"]),
+                "experiment_type": row["experiment_type"],
+                "salt": row["salt"],
+                "distribution": json.loads(row["distribution_json"]) if row["distribution_json"] else None,
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+
     # =========================================================================
     # Query helpers for UI/debugging
     # =========================================================================
@@ -627,7 +753,7 @@ class SQLiteConfigStore:
         """List all registered keys for a project."""
         with self._transaction() as conn:
             rows = conn.execute("""
-                SELECT key, type, default_hash, source_json, created_at, updated_at
+                SELECT key, type, default_hash, source_json, annotations_json, created_at, updated_at
                 FROM config_keys
                 WHERE project_id = ?
                 ORDER BY key
@@ -639,6 +765,7 @@ class SQLiteConfigStore:
                     "type": row["type"],
                     "default_hash": row["default_hash"],
                     "source": json.loads(row["source_json"]) if row["source_json"] else None,
+                    "annotations": json.loads(row["annotations_json"]) if row["annotations_json"] else None,
                     "created_at": row["created_at"],
                     "updated_at": row["updated_at"],
                 }
@@ -2005,3 +2132,475 @@ class SQLiteConfigStore:
                 }
                 for row in rows
             ]
+
+    # =========================================================================
+    # Blueprints API (Heroku-style deployment versioning)
+    # =========================================================================
+
+    def create_blueprint(
+        self,
+        project_id: str,
+        name: str,
+    ) -> dict[str, Any]:
+        """
+        Create a new blueprint for a project.
+
+        Returns the created blueprint.
+        """
+        now = self._now()
+        blueprint_id = str(uuid.uuid4())
+
+        with self._transaction() as conn:
+            conn.execute("""
+                INSERT INTO blueprints (id, project_id, name, created_at)
+                VALUES (?, ?, ?, ?)
+            """, (blueprint_id, project_id, name, now))
+
+            return {
+                "id": blueprint_id,
+                "project_id": project_id,
+                "name": name,
+                "created_at": now,
+            }
+
+    def get_blueprint(self, blueprint_id: str) -> dict[str, Any] | None:
+        """Get a blueprint by ID."""
+        with self._transaction() as conn:
+            row = conn.execute("""
+                SELECT id, project_id, name, created_at
+                FROM blueprints
+                WHERE id = ?
+            """, (blueprint_id,)).fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "id": row["id"],
+                "project_id": row["project_id"],
+                "name": row["name"],
+                "created_at": row["created_at"],
+            }
+
+    def get_blueprint_for_project(self, project_id: str) -> dict[str, Any] | None:
+        """Get the blueprint for a project."""
+        with self._transaction() as conn:
+            row = conn.execute("""
+                SELECT id, project_id, name, created_at
+                FROM blueprints
+                WHERE project_id = ?
+            """, (project_id,)).fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "id": row["id"],
+                "project_id": row["project_id"],
+                "name": row["name"],
+                "created_at": row["created_at"],
+            }
+
+    def get_or_create_blueprint_for_project(
+        self,
+        project_id: str,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        """Get existing blueprint or create a new one for the project."""
+        existing = self.get_blueprint_for_project(project_id)
+        if existing:
+            return existing
+
+        return self.create_blueprint(
+            project_id=project_id,
+            name=name or f"Blueprint for {project_id}",
+        )
+
+    def _ensure_blueprint_with_initial_version(
+        self,
+        project_id: str,
+        env: str = "prod",
+    ) -> dict[str, Any] | None:
+        """
+        Ensure a blueprint exists with at least one version.
+        Called automatically when prompts are first registered.
+
+        Returns the blueprint if created/exists, None if no prompts to snapshot.
+        """
+        # Check if blueprint already has versions
+        existing = self.get_blueprint_for_project(project_id)
+        if existing:
+            versions = self.list_deployment_versions(existing["id"], limit=1)
+            if versions:
+                return existing
+
+        # Build snapshot from current published values
+        published = self.list_published(project_id, env)
+        if not published:
+            return None
+
+        snapshot: dict[str, Any] = {"prompts": {}, "config": {}}
+        has_prompts = False
+
+        for item in published:
+            key = item["key"]
+            value = item["value"]
+            if isinstance(value, dict) and "prompt_name" in value:
+                snapshot["prompts"][key] = value
+                has_prompts = True
+            else:
+                snapshot["config"][key] = value
+
+        if not has_prompts:
+            return None
+
+        # Create blueprint and initial version
+        blueprint = self.get_or_create_blueprint_for_project(project_id)
+
+        # Check again if versions exist (race condition protection)
+        versions = self.list_deployment_versions(blueprint["id"], limit=1)
+        if versions:
+            return blueprint
+
+        self.create_deployment_version(
+            blueprint_id=blueprint["id"],
+            snapshot=snapshot,
+            change_summary="Initial prompts",
+            change_type="manual",
+            created_by="system",
+        )
+
+        # Set both DEV and PROD to v1
+        self.set_environment_pointer(blueprint["id"], "prod", 1)
+
+        return blueprint
+
+    def create_deployment_version(
+        self,
+        blueprint_id: str,
+        snapshot: dict[str, Any],
+        change_summary: str | None = None,
+        change_type: str = "manual",
+        source_experiment_id: str | None = None,
+        created_by: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Create a new deployment version (append-only).
+
+        Automatically increments version_number and moves DEV pointer.
+
+        Args:
+            blueprint_id: The blueprint to add version to
+            snapshot: Full config state snapshot
+            change_summary: Human-readable summary of changes
+            change_type: "optimizer" | "manual" | "rollback"
+            source_experiment_id: Link to optimizer experiment if applicable
+            created_by: User who created the version
+
+        Returns the created version with version_number.
+        """
+        now = self._now()
+        version_id = str(uuid.uuid4())
+
+        with self._transaction() as conn:
+            # Get next version number
+            row = conn.execute("""
+                SELECT COALESCE(MAX(version_number), 0) + 1 as next_version
+                FROM deployment_versions
+                WHERE blueprint_id = ?
+            """, (blueprint_id,)).fetchone()
+            version_number = row["next_version"]
+
+            # Insert the version
+            conn.execute("""
+                INSERT INTO deployment_versions (
+                    id, blueprint_id, version_number, snapshot_json,
+                    change_summary, change_type, source_experiment_id,
+                    created_at, created_by
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                version_id, blueprint_id, version_number,
+                json.dumps(snapshot), change_summary, change_type,
+                source_experiment_id, now, created_by
+            ))
+
+            # Auto-move LATEST pointer to new version
+            conn.execute("""
+                INSERT INTO environment_pointers (blueprint_id, env, version_number, updated_at)
+                VALUES (?, 'latest', ?, ?)
+                ON CONFLICT(blueprint_id, env) DO UPDATE SET
+                    version_number = excluded.version_number,
+                    updated_at = excluded.updated_at
+            """, (blueprint_id, version_number, now))
+
+            # Initialize PROD pointer if it doesn't exist (set to v1)
+            conn.execute("""
+                INSERT OR IGNORE INTO environment_pointers (blueprint_id, env, version_number, updated_at)
+                VALUES (?, 'prod', 1, ?)
+            """, (blueprint_id, now))
+
+            return {
+                "id": version_id,
+                "blueprint_id": blueprint_id,
+                "version_number": version_number,
+                "snapshot": snapshot,
+                "change_summary": change_summary,
+                "change_type": change_type,
+                "source_experiment_id": source_experiment_id,
+                "created_at": now,
+                "created_by": created_by,
+            }
+
+    def list_deployment_versions(
+        self,
+        blueprint_id: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """List deployment versions for a blueprint (newest first)."""
+        with self._transaction() as conn:
+            rows = conn.execute("""
+                SELECT id, blueprint_id, version_number, snapshot_json,
+                       change_summary, change_type, source_experiment_id,
+                       created_at, created_by
+                FROM deployment_versions
+                WHERE blueprint_id = ?
+                ORDER BY version_number DESC
+                LIMIT ?
+            """, (blueprint_id, limit)).fetchall()
+
+            return [
+                {
+                    "id": row["id"],
+                    "blueprint_id": row["blueprint_id"],
+                    "version_number": row["version_number"],
+                    "snapshot": json.loads(row["snapshot_json"]),
+                    "change_summary": row["change_summary"],
+                    "change_type": row["change_type"],
+                    "source_experiment_id": row["source_experiment_id"],
+                    "created_at": row["created_at"],
+                    "created_by": row["created_by"],
+                }
+                for row in rows
+            ]
+
+    def get_deployment_version(self, version_id: str) -> dict[str, Any] | None:
+        """Get a specific deployment version by ID."""
+        with self._transaction() as conn:
+            row = conn.execute("""
+                SELECT id, blueprint_id, version_number, snapshot_json,
+                       change_summary, change_type, source_experiment_id,
+                       created_at, created_by
+                FROM deployment_versions
+                WHERE id = ?
+            """, (version_id,)).fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "id": row["id"],
+                "blueprint_id": row["blueprint_id"],
+                "version_number": row["version_number"],
+                "snapshot": json.loads(row["snapshot_json"]),
+                "change_summary": row["change_summary"],
+                "change_type": row["change_type"],
+                "source_experiment_id": row["source_experiment_id"],
+                "created_at": row["created_at"],
+                "created_by": row["created_by"],
+            }
+
+    def get_deployment_version_by_number(
+        self,
+        blueprint_id: str,
+        version_number: int,
+    ) -> dict[str, Any] | None:
+        """Get a deployment version by blueprint and version number."""
+        with self._transaction() as conn:
+            row = conn.execute("""
+                SELECT id, blueprint_id, version_number, snapshot_json,
+                       change_summary, change_type, source_experiment_id,
+                       created_at, created_by
+                FROM deployment_versions
+                WHERE blueprint_id = ? AND version_number = ?
+            """, (blueprint_id, version_number)).fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "id": row["id"],
+                "blueprint_id": row["blueprint_id"],
+                "version_number": row["version_number"],
+                "snapshot": json.loads(row["snapshot_json"]),
+                "change_summary": row["change_summary"],
+                "change_type": row["change_type"],
+                "source_experiment_id": row["source_experiment_id"],
+                "created_at": row["created_at"],
+                "created_by": row["created_by"],
+            }
+
+    def get_environment_pointer(
+        self,
+        blueprint_id: str,
+        env: str,
+    ) -> dict[str, Any] | None:
+        """Get the current pointer for an environment."""
+        with self._transaction() as conn:
+            row = conn.execute("""
+                SELECT blueprint_id, env, version_number, updated_at
+                FROM environment_pointers
+                WHERE blueprint_id = ? AND env = ?
+            """, (blueprint_id, env)).fetchone()
+
+            if not row:
+                return None
+
+            return {
+                "blueprint_id": row["blueprint_id"],
+                "env": row["env"],
+                "version_number": row["version_number"],
+                "updated_at": row["updated_at"],
+            }
+
+    def set_environment_pointer(
+        self,
+        blueprint_id: str,
+        env: str,
+        version_number: int,
+    ) -> dict[str, Any]:
+        """
+        Set the pointer for an environment to a specific version.
+
+        Returns the updated pointer.
+        """
+        now = self._now()
+
+        with self._transaction() as conn:
+            # Verify version exists
+            version = conn.execute("""
+                SELECT id FROM deployment_versions
+                WHERE blueprint_id = ? AND version_number = ?
+            """, (blueprint_id, version_number)).fetchone()
+
+            if not version:
+                raise ValueError(f"Version {version_number} not found for blueprint {blueprint_id}")
+
+            conn.execute("""
+                INSERT INTO environment_pointers (blueprint_id, env, version_number, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(blueprint_id, env) DO UPDATE SET
+                    version_number = excluded.version_number,
+                    updated_at = excluded.updated_at
+            """, (blueprint_id, env, version_number, now))
+
+            return {
+                "blueprint_id": blueprint_id,
+                "env": env,
+                "version_number": version_number,
+                "updated_at": now,
+            }
+
+    def get_blueprint_history(
+        self,
+        blueprint_id: str,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """
+        Get deployment history with all environment pointers.
+
+        Returns:
+        {
+            "versions": [...],
+            "latest_version": int,
+            "pointers": {"latest": 5, "prod": 3, "stage": 4, ...}
+        }
+        """
+        versions = self.list_deployment_versions(blueprint_id, limit)
+        pointers = self.list_environment_pointers(blueprint_id)
+
+        # Build pointers dict
+        pointers_dict = {p["env"]: p["version_number"] for p in pointers}
+
+        return {
+            "versions": versions,
+            "latest_version": pointers_dict.get("latest", 0),
+            "pointers": pointers_dict,
+        }
+
+    def list_environment_pointers(self, blueprint_id: str) -> list[dict[str, Any]]:
+        """List all environment pointers for a blueprint."""
+        with self._transaction() as conn:
+            rows = conn.execute("""
+                SELECT blueprint_id, env, version_number, updated_at
+                FROM environment_pointers
+                WHERE blueprint_id = ?
+                ORDER BY env
+            """, (blueprint_id,)).fetchall()
+
+            return [
+                {
+                    "blueprint_id": row["blueprint_id"],
+                    "env": row["env"],
+                    "version_number": row["version_number"],
+                    "updated_at": row["updated_at"],
+                }
+                for row in rows
+            ]
+
+    def migrate_project_to_blueprint(
+        self,
+        project_id: str,
+        env: str = "prod",
+    ) -> dict[str, Any]:
+        """
+        One-time migration: create a blueprint from existing prompts.
+
+        Reads current published prompts and creates initial deployment version.
+
+        Returns the created blueprint with version info.
+        """
+        # Get or create blueprint
+        blueprint = self.get_or_create_blueprint_for_project(project_id)
+
+        # Check if already has versions
+        existing_versions = self.list_deployment_versions(blueprint["id"], limit=1)
+        if existing_versions:
+            return {
+                **blueprint,
+                "version_number": existing_versions[0]["version_number"],
+                "already_migrated": True,
+            }
+
+        # Build snapshot from current published values
+        published = self.list_published(project_id, env)
+        snapshot = {
+            "prompts": {},
+            "config": {},
+        }
+
+        for item in published:
+            key = item["key"]
+            value = item["value"]
+            if isinstance(value, dict) and "prompt_name" in value:
+                snapshot["prompts"][key] = value
+            else:
+                snapshot["config"][key] = value
+
+        # Create initial version (this auto-sets LATEST to v1)
+        version = self.create_deployment_version(
+            blueprint_id=blueprint["id"],
+            snapshot=snapshot,
+            change_summary="Initial migration from existing prompts",
+            change_type="manual",
+            created_by="system",
+        )
+
+        # Set PROD to v1 as well for initial setup
+        self.set_environment_pointer(blueprint["id"], "prod", 1)
+
+        return {
+            **blueprint,
+            "version_number": version["version_number"],
+            "already_migrated": False,
+        }

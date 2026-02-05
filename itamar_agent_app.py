@@ -339,6 +339,8 @@ def writer_agent(state: ResearchState) -> ResearchState:
     print(f"\n[Writer] Creating report on: {state['topic']}")
     
     # Get prompts from config
+    test_marker = "TEST"
+    test_marker = agent_config(test_marker, name="test_marker")
     system_prompt = config.writer_system_prompt
     user_prompt_template = config.writer_user_prompt
     

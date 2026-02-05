@@ -20,6 +20,7 @@ class KeyMetadata:
     default_value: Any
     class_name: str
     field_name: str
+    annotations: list[str] | None = None
 
 
 @dataclass

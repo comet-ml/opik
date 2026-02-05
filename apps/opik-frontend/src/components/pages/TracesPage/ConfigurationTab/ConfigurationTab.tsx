@@ -33,6 +33,17 @@ import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 
 const getRowId = (row: ConfigVariable) => row.id;
 
+const parseKeyParts = (key: string): { group: string; name: string } => {
+  const dotIndex = key.indexOf(".");
+  if (dotIndex === -1) {
+    return { group: "", name: key };
+  }
+  return {
+    group: key.substring(0, dotIndex),
+    name: key.substring(dotIndex + 1),
+  };
+};
+
 const generateFakeCommitId = (key: string, version: number): string => {
   let hash = 0;
   const str = `${key}-${version}`;
@@ -66,6 +77,7 @@ const KeyCell = (context: CellContext<ConfigVariable, string>) => {
   const { column, table, row } = context;
   const value = context.getValue();
   const { version, type } = row.original;
+  const { name } = parseKeyParts(value);
 
   return (
     <CellWrapper
@@ -76,7 +88,7 @@ const KeyCell = (context: CellContext<ConfigVariable, string>) => {
         {type === "prompt" && (
           <FileText className="size-4 shrink-0 text-muted-slate" />
         )}
-        <span className="truncate font-mono text-sm">{value}</span>
+        <span className="truncate text-sm">{name}</span>
         {version > 1 && type !== "prompt" && (
           <Tag variant="gray" size="sm">
             v{version}
@@ -103,7 +115,7 @@ const CurrentValueCell = (
     >
       {type === "prompt" ? (
         <div className="flex flex-col">
-          <span className="truncate font-mono text-sm">
+          <span className="truncate text-sm">
             {promptData?.prompt_name ?? String(value)}
           </span>
           <div className="flex items-center gap-1 text-xs text-muted-slate">
@@ -118,7 +130,7 @@ const CurrentValueCell = (
           {String(value)}
         </Tag>
       ) : (
-        <span className="truncate font-mono">{String(value)}</span>
+        <span className="truncate">{String(value)}</span>
       )}
     </CellWrapper>
   );
@@ -140,7 +152,7 @@ const FallbackCell = (
     >
       {type === "prompt" ? (
         <div className="flex flex-col">
-          <span className="truncate font-mono text-sm text-muted-slate">
+          <span className="truncate text-sm text-muted-slate">
             {promptData?.prompt_name ?? String(value)}
           </span>
           <div className="flex items-center gap-1 text-xs text-muted-slate">
@@ -149,7 +161,7 @@ const FallbackCell = (
           </div>
         </div>
       ) : (
-        <span className="truncate font-mono text-muted-slate">
+        <span className="truncate text-muted-slate">
           {String(value)}
         </span>
       )}
@@ -366,12 +378,33 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
     ];
   }, [ActionsCell]);
 
-  const sortedData = useMemo(() => {
+  const groupedData = useMemo(() => {
     if (!configVariables) return [];
-    return [...configVariables].sort(
-      (a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime(),
-    );
+
+    const groups = new Map<string, ConfigVariable[]>();
+    for (const variable of configVariables) {
+      const { group } = parseKeyParts(variable.key);
+      const groupKey = group || "Other";
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, []);
+      }
+      groups.get(groupKey)!.push(variable);
+    }
+
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([groupName, variables]) => ({
+        groupName,
+        variables: variables.sort(
+          (a, b) =>
+            new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime(),
+        ),
+      }));
   }, [configVariables]);
+
+  const allVariables = useMemo(() => {
+    return groupedData.flatMap((g) => g.variables);
+  }, [groupedData]);
 
   if (isPending) {
     return (
@@ -391,7 +424,7 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
     );
   }
 
-  if (sortedData.length === 0) {
+  if (allVariables.length === 0) {
     return (
       <PageBodyStickyContainer direction="horizontal" limitWidth className="pt-6">
         <DataTableNoData title="No configuration variables">
@@ -436,21 +469,33 @@ const ConfigurationTab: React.FC<ConfigurationTabProps> = ({ projectId }) => {
           </div>
         </div>
       )}
-      <DataTable
-        columns={columns}
-        data={sortedData}
-        getRowId={getRowId}
-        onRowClick={handleUpdate}
-        activeRowId={selectedVariable?.id}
-        noData={<DataTableNoData title="No configuration variables" />}
-        TableWrapper={PageBodyStickyTableWrapper}
-        stickyHeader
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        columnPinning={COLUMN_PINNING}
-      />
+      <div className="flex flex-col gap-6">
+        {groupedData.map(({ groupName, variables }) => (
+          <div key={groupName}>
+            <div className="mb-2 flex items-center gap-2 pl-4">
+              <span className="font-medium text-foreground">{groupName}</span>
+              <span className="text-sm text-muted-slate">
+                {variables.length} variable{variables.length > 1 ? "s" : ""}
+              </span>
+            </div>
+            <DataTable
+              columns={columns}
+              data={variables}
+              getRowId={getRowId}
+              onRowClick={handleUpdate}
+              activeRowId={selectedVariable?.id}
+              noData={<DataTableNoData title="No configuration variables" />}
+              TableWrapper={PageBodyStickyTableWrapper}
+              stickyHeader
+              selectionConfig={{
+                rowSelection,
+                setRowSelection,
+              }}
+              columnPinning={COLUMN_PINNING}
+            />
+          </div>
+        ))}
+      </div>
       <ConfigurationSidePanel
         variable={selectedVariable}
         mode={panelMode}

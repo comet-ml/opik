@@ -45,6 +45,7 @@ type BackendAssertionResult = {
 
 type BackendRegressionItem = {
   item_id: string;
+  trace_id?: string;
   reason: string;
   failed_assertions: BackendAssertionResult[];
 };
@@ -61,10 +62,12 @@ type BackendOptimizeEvent = {
   all_passed?: boolean;
   trace_id?: string;
   // regression_result
+  run_id?: string;
   items_tested?: number;
   items_passed?: number;
   no_regressions?: boolean;
   regressions?: BackendRegressionItem[];
+  items?: BackendRegressionItem[];
   // optimization_complete
   success?: boolean;
   optimization_id?: string;
@@ -126,8 +129,10 @@ async function parseOptimizeSSEStream(
             break;
           }
           case OPTIMIZE_EVENT_TYPE.run_status:
-            if (data.label !== undefined && data.iteration !== undefined && data.status) {
-              callbacks.onRunStatus(data.label, data.iteration, data.status, data.trace_id);
+            console.log('[SSE] run_status:', data.label, 'iteration:', data.iteration, 'status:', data.status);
+            if (data.iteration !== undefined && data.status) {
+              const label = data.label ?? (data.iteration === 0 ? "Original" : `Iteration ${data.iteration}`);
+              callbacks.onRunStatus(label, data.iteration, data.status, data.trace_id);
             }
             break;
           case OPTIMIZE_EVENT_TYPE.run_result: {
@@ -148,21 +153,27 @@ async function parseOptimizeSSEStream(
             break;
           }
           case OPTIMIZE_EVENT_TYPE.regression_result: {
+            console.log('[SSE] regression_result:', 'iteration:', data.iteration, 'items_tested:', data.items_tested, 'no_regressions:', data.no_regressions);
             if (data.iteration !== undefined) {
-              const regressions: RegressionItem[] = (data.regressions || []).map((r) => ({
+              const mapItem = (r: BackendRegressionItem): RegressionItem => ({
                 item_id: r.item_id,
+                trace_id: r.trace_id,
                 reason: r.reason,
                 failed_assertions: (r.failed_assertions || []).map((a) => ({
                   name: a.text || a.name || "",
                   passed: a.passed,
                 })),
-              }));
+              });
+              const regressions = (data.regressions || []).map(mapItem);
+              const items = (data.items || []).map(mapItem);
               callbacks.onRegressionResult(data.iteration, {
+                run_id: data.run_id,
                 iteration: data.iteration,
                 items_tested: data.items_tested ?? 0,
                 items_passed: data.items_passed ?? 0,
                 no_regressions: data.no_regressions ?? true,
                 regressions,
+                items,
               });
             }
             break;
@@ -247,11 +258,15 @@ export type CommitResult = {
     prompt_id?: string;
     commit: string;
     version_id?: string;
+    deployment_version?: number;
+    blueprint_id?: string;
   }>;
   errors: Array<{
     prompt_name: string;
     error: string;
   }>;
+  deployment_version?: number;
+  blueprint_id?: string;
 };
 
 export async function commitOptimization(request: CommitRequest): Promise<CommitResult> {

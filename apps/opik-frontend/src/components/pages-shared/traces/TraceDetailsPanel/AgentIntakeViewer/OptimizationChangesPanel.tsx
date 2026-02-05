@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tag } from "@/components/ui/tag";
-import { PromptChange } from "@/types/agent-intake";
+import { PromptChange, DiffLine, DiffChange } from "@/types/agent-intake";
 import {
   commitOptimization,
   CommitResult,
@@ -24,11 +24,60 @@ type OptimizationChangesPanelProps = {
   onDiscard: () => void;
 };
 
+const DiffLineView: React.FC<{ line: DiffLine }> = ({ line }) => {
+  const prefix = line.type === "deletion" ? "- " : line.type === "addition" ? "+ " : "  ";
+  return (
+    <div
+      className={cn({
+        "text-red-600 line-through opacity-75": line.type === "deletion",
+        "text-green-700": line.type === "addition",
+        "text-muted-slate": line.type === "context",
+      })}
+    >
+      {prefix}
+      {line.content}
+    </div>
+  );
+};
+
+const DiffChangeView: React.FC<{ diffChange: DiffChange; isChat: boolean }> = ({
+  diffChange,
+  isChat,
+}) => {
+  return (
+    <div className="space-y-1">
+      {isChat && diffChange.role && (
+        <div className="comet-body-xs font-medium text-muted-slate">
+          {diffChange.role} message:
+        </div>
+      )}
+      <div className="rounded bg-muted/30 p-2 font-mono text-xs">
+        {diffChange.diff.map((line, idx) => (
+          <DiffLineView key={idx} line={line} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const PromptDiff: React.FC<{
   original: PromptChange["original"];
   modified: PromptChange["modified"];
-}> = ({ original, modified }) => {
-  if (modified.type === "chat" && modified.messages) {
+  diff?: DiffChange[];
+}> = ({ original, modified, diff }) => {
+  const isChat = modified.type === "chat";
+
+  if (diff && diff.length > 0) {
+    return (
+      <div className="space-y-3">
+        {diff.map((diffChange, idx) => (
+          <DiffChangeView key={idx} diffChange={diffChange} isChat={isChat} />
+        ))}
+      </div>
+    );
+  }
+
+  if (isChat && modified.messages) {
     return (
       <div className="space-y-3">
         {modified.messages.map((msg, idx) => {
@@ -67,7 +116,6 @@ const PromptDiff: React.FC<{
     );
   }
 
-  // Text template
   const hasChanges = original.template !== modified.template;
   return (
     <div className="space-y-1">
@@ -143,7 +191,7 @@ const PromptChangeItem: React.FC<{
       </div>
       {isExpanded && (
         <div className="border-t px-3 pb-3 pt-2">
-          <PromptDiff original={change.original} modified={change.modified} />
+          <PromptDiff original={change.original} modified={change.modified} diff={change.diff} />
         </div>
       )}
     </div>

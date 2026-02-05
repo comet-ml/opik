@@ -22,6 +22,7 @@ import EmptyPageLayout from "@/components/layout/EmptyPageLayout/EmptyPageLayout
 import ProjectPage from "@/components/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/components/pages/TracesPage/TracesPage";
+import EvalSuiteRunPage from "@/components/pages/EvalSuiteRunPage/EvalSuiteRunPage";
 import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/components/pages/PromptsPage/PromptsPage";
 import PromptPage from "@/components/pages/PromptPage/PromptPage";
@@ -210,6 +211,15 @@ const tracesRoute = createRoute({
   path: "/traces",
   getParentRoute: () => projectRoute,
   component: TracesPage,
+});
+
+const evalSuiteRunRoute = createRoute({
+  path: "/eval-runs/$runId",
+  getParentRoute: () => projectRoute,
+  component: EvalSuiteRunPage,
+  staticData: {
+    param: "runId",
+  },
 });
 
 // ----------- experiments
@@ -499,7 +509,7 @@ const routeTree = rootRoute.addChildren([
       dashboardsRoute.addChildren([dashboardsPageRoute, dashboardDetailRoute]),
       projectsRoute.addChildren([
         projectsListRoute,
-        projectRoute.addChildren([tracesRoute]),
+        projectRoute.addChildren([tracesRoute, evalSuiteRunRoute]),
       ]),
       experimentsRoute.addChildren([
         experimentsListRoute,

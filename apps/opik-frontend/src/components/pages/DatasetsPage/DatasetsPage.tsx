@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -47,6 +48,9 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import EvalSuitesTab from "@/components/pages/TracesPage/EvalSuitesTab/EvalSuitesTab";
+import useProjectByName from "@/api/projects/useProjectByName";
 
 export const getRowId = (d: Dataset) => d.id;
 
@@ -163,9 +167,19 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
 ];
 
+const EVAL_PROJECT_NAME = "itamar_agent_app";
+
 const DatasetsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+
+  const [tab = "labeled-data", setTab] = useQueryParam("tab", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const { data: evalProject } = useProjectByName({
+    projectName: EVAL_PROJECT_NAME,
+  });
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -318,68 +332,100 @@ const DatasetsPage: React.FunctionComponent = () => {
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_a_dataset]}
       />
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTERS_COLUMNS}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <DatasetsActionsPanel datasets={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewDatasetClick}>
-            Create new dataset
-          </Button>
-        </div>
-      </div>
-      <DataTable
-        columns={columns}
-        data={datasets}
-        onRowClick={handleRowClick}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewDatasetClick}>
+
+      <Tabs
+        value={tab as string}
+        onValueChange={setTab}
+        className="min-w-min"
+      >
+        <PageBodyStickyContainer direction="horizontal">
+          <TabsList variant="underline">
+            <TabsTrigger variant="underline" value="labeled-data">
+              Labeled Data
+            </TabsTrigger>
+            <TabsTrigger variant="underline" value="eval-suites">
+              Evaluation Suites
+            </TabsTrigger>
+          </TabsList>
+        </PageBodyStickyContainer>
+
+        <TabsContent value="labeled-data" className="mt-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search!}
+                setSearchText={setSearch}
+                placeholder="Search by name"
+                className="w-[320px]"
+                dimension="sm"
+              ></SearchInput>
+              <FiltersButton
+                columns={FILTERS_COLUMNS}
+                filters={filters}
+                onChange={setFilters}
+                layout="icon"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <DatasetsActionsPanel datasets={selectedRows} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+              <ColumnsButton
+                columns={DEFAULT_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+              ></ColumnsButton>
+              <Button variant="default" size="sm" onClick={handleNewDatasetClick}>
                 Create new dataset
               </Button>
-            )}
-          </DataTableNoData>
-        }
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page}
-          pageChange={setPage}
-          size={size}
-          sizeChange={setSize}
-          total={total}
-        ></DataTablePagination>
-      </div>
+            </div>
+          </div>
+          <DataTable
+            columns={columns}
+            data={datasets}
+            onRowClick={handleRowClick}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={
+              <DataTableNoData title={noDataText}>
+                {noData && (
+                  <Button variant="link" onClick={handleNewDatasetClick}>
+                    Create new dataset
+                  </Button>
+                )}
+              </DataTableNoData>
+            }
+          />
+          <div className="py-4">
+            <DataTablePagination
+              page={page}
+              pageChange={setPage}
+              size={size}
+              sizeChange={setSize}
+              total={total}
+            ></DataTablePagination>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="eval-suites" className="mt-4">
+          {evalProject ? (
+            <EvalSuitesTab
+              projectId={evalProject.id}
+              projectName={evalProject.name}
+            />
+          ) : (
+            <Loader />
+          )}
+        </TabsContent>
+      </Tabs>
+
       <AddEditDatasetDialog
         key={resetDialogKeyRef.current}
         open={openDialog}

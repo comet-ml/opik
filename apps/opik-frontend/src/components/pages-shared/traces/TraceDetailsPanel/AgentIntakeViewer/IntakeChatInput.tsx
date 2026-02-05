@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import TextareaAutosize from "react-textarea-autosize";
 import { Play, Square } from "lucide-react";
@@ -25,6 +25,14 @@ const IntakeChatInput: React.FC<IntakeChatInputProps> = ({
   onValueChange,
   onSend,
 }) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!isRunning && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isRunning]);
+
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -54,6 +62,7 @@ const IntakeChatInput: React.FC<IntakeChatInputProps> = ({
     <div className="min-w-72 max-w-full">
       <div className="relative">
         <TextareaAutosize
+          ref={textareaRef}
           placeholder={placeholder}
           value={value}
           onChange={(event) => onValueChange(event.target.value)}

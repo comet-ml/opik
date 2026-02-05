@@ -350,6 +350,27 @@ def kv_viewer():
     return jsonify(data)
 
 
+@app.route("/debug/blueprint/<project_id>")
+def debug_blueprint(project_id: str):
+    """Debug endpoint to see blueprint state for a project."""
+    blueprint = store.get_blueprint_for_project(project_id)
+    if not blueprint:
+        return jsonify({"error": "No blueprint", "project_id": project_id})
+
+    history = store.get_blueprint_history(blueprint["id"])
+    masks = store.list_masks(project_id, "prod")
+    published = store.list_published(project_id, "prod")
+
+    return jsonify({
+        "blueprint": blueprint,
+        "deployment_versions": history["versions"],
+        "pointers": history["pointers"],
+        "active_masks": masks,
+        "published_values": published,
+        "mock_prompts_count": len(store.mock_list_prompts()),
+    })
+
+
 # =============================================================================
 # Prompt Versioning API (with Mock Mode for demos)
 # =============================================================================
@@ -375,10 +396,69 @@ def _get_prompt_bridge() -> PromptBridge:
         return PromptBridge(config_store=store, use_mock=True)
 
 
+def _create_deployment_version_for_prompt_change(
+    prompt_name: str,
+    template: str,
+    project_id: str = "default",
+    env: str = "prod",
+    change_description: str | None = None,
+) -> dict[str, Any] | None:
+    """
+    After a prompt is edited, update config and create a deployment version.
+
+    Returns deployment version info or None if no blueprint exists.
+    """
+    # Find the config key for this prompt
+    key = store.find_key_by_prompt_name(project_id, env, prompt_name)
+    if not key:
+        LOGGER.debug(f"No config key found for prompt '{prompt_name}', skipping deployment version")
+        return None
+
+    # Update the published value
+    store.publish_value(
+        project_id=project_id,
+        env=env,
+        key=key,
+        value={"prompt_name": prompt_name, "prompt": template},
+        created_by="manual_edit",
+    )
+
+    # Create deployment version if blueprint exists
+    blueprint = store.get_blueprint_for_project(project_id)
+    if not blueprint:
+        LOGGER.debug(f"No blueprint for project '{project_id}', skipping deployment version")
+        return None
+
+    # Build snapshot from current published values
+    published = store.list_published(project_id, env)
+    snapshot: dict[str, Any] = {"prompts": {}, "config": {}}
+    for item in published:
+        k = item["key"]
+        v = item["value"]
+        if isinstance(v, dict) and "prompt_name" in v:
+            snapshot["prompts"][k] = v
+        else:
+            snapshot["config"][k] = v
+
+    version = store.create_deployment_version(
+        blueprint_id=blueprint["id"],
+        snapshot=snapshot,
+        change_summary=change_description or f"Updated {prompt_name}",
+        change_type="manual",
+        created_by="manual_edit",
+    )
+
+    return {
+        "deployment_version": version["version_number"],
+        "blueprint_id": blueprint["id"],
+    }
+
+
 @app.route("/v1/config/prompts/commit", methods=["POST"])
 def commit_prompt_to_opik():
     """
     Commit experiment variant to Opik as permanent version.
+    Also creates a new deployment version in the project's blueprint.
 
     Input:
     - project_id?: string (default "default")
@@ -393,6 +473,7 @@ def commit_prompt_to_opik():
     - commit: string (8-char hash)
     - opik_prompt_id: string (UUID)
     - opik_version_id: string (UUID)
+    - deployment_version?: int (if blueprint exists)
     """
     data = request.get_json()
     required = ["mask_id", "prompt_name"]
@@ -417,6 +498,32 @@ def commit_prompt_to_opik():
             variant=variant,
             metadata=metadata,
         )
+
+        # Also create a deployment version if blueprint exists
+        blueprint = store.get_blueprint_for_project(project_id)
+        if blueprint:
+            # Build snapshot from current published prompts
+            published = store.list_published(project_id, env)
+            snapshot = {"prompts": {}, "config": {}}
+            for item in published:
+                key = item["key"]
+                value = item["value"]
+                if isinstance(value, dict) and "prompt_name" in value:
+                    snapshot["prompts"][key] = value
+                else:
+                    snapshot["config"][key] = value
+
+            version = store.create_deployment_version(
+                blueprint_id=blueprint["id"],
+                snapshot=snapshot,
+                change_summary=f"Updated {prompt_name}",
+                change_type="optimizer",
+                source_experiment_id=mask_id,
+                created_by=data.get("created_by"),
+            )
+            result["deployment_version"] = version["version_number"]
+            result["blueprint_id"] = blueprint["id"]
+
         return jsonify(result), 201
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
@@ -556,6 +663,9 @@ def create_prompt():
     """
     Create a new prompt (mock Opik Prompt Library).
 
+    If the prompt is part of the config system (has a config key mapping),
+    this also creates a deployment version.
+
     Input:
     - name: string
     - template: string
@@ -589,6 +699,16 @@ def create_prompt():
             template_structure=data.get("template_structure", "text"),
             created_by=data.get("created_by"),
         )
+
+        # Create deployment version if prompt is part of config system
+        deployment_info = _create_deployment_version_for_prompt_change(
+            prompt_name=data["name"],
+            template=data["template"],
+            change_description=data.get("change_description") or f"Updated {data['name']}",
+        )
+        if deployment_info:
+            result["deployment_version"] = deployment_info["deployment_version"]
+            result["blueprint_id"] = deployment_info["blueprint_id"]
 
         response = jsonify(result)
         response.status_code = 201
@@ -670,6 +790,11 @@ def create_prompt_version_by_name():
 
     This is what the Opik SDK calls - it uses name instead of prompt_id.
 
+    If the request includes X-Opik-Experiment-Id header and it corresponds to
+    an optimizer experiment, we skip version creation and return the existing
+    version. This prevents shadow/test versions from appearing in the prompt
+    library during optimization testing.
+
     Input:
     - name: string (prompt name)
     - version: object (contains template, metadata, type)
@@ -680,6 +805,28 @@ def create_prompt_version_by_name():
     try:
         data = request.get_json()
         LOGGER.info(f"Create prompt version by name request: {data}")
+
+        # Check if this is an optimizer experiment - if so, skip version creation
+        experiment_id = request.headers.get("X-Opik-Experiment-Id")
+        if experiment_id:
+            mask = store.find_mask_by_id(experiment_id)
+            if mask and mask.get("experiment_type") == "optimizer":
+                LOGGER.info(f"Skipping version creation for optimizer experiment {experiment_id}")
+                # Return existing version instead of creating new one
+                name = data.get("name", "")
+                existing = store.mock_get_prompt(name=name)
+                if existing:
+                    return jsonify({
+                        "id": existing.get("id"),
+                        "prompt_id": existing.get("prompt_id"),
+                        "commit": existing.get("commit"),
+                        "template": existing.get("template"),
+                        "metadata": existing.get("metadata"),
+                        "type": existing.get("type", "mustache"),
+                        "template_structure": existing.get("template_structure", "text"),
+                        "created_at": existing.get("created_at"),
+                        "created_by": existing.get("created_by"),
+                    }), 200
 
         if not data or "name" not in data or "version" not in data:
             return jsonify({"error": "Missing 'name' or 'version'"}), 400
@@ -731,6 +878,13 @@ def create_prompt_version_by_name():
                 "created_by": latest.get("created_by"),
             }
 
+        # Create deployment version if prompt is part of config system
+        deployment_info = _create_deployment_version_for_prompt_change(
+            prompt_name=name,
+            template=template,
+            change_description=f"Updated {name}",
+        )
+
         # Return PromptVersionDetail shape
         response_data = {
             "id": result.get("id"),
@@ -743,6 +897,10 @@ def create_prompt_version_by_name():
             "created_at": result.get("created_at"),
             "created_by": result.get("created_by"),
         }
+
+        if deployment_info:
+            response_data["deployment_version"] = deployment_info["deployment_version"]
+            response_data["blueprint_id"] = deployment_info["blueprint_id"]
 
         return jsonify(response_data), 200
 
@@ -792,6 +950,9 @@ def create_prompt_version(prompt_id: str):
     """
     Create a new version of a prompt (mock Opik Prompt Library).
 
+    If the prompt is part of the config system (has a config key mapping),
+    this also creates a deployment version.
+
     Input:
     - template: string
     - metadata?: object
@@ -803,6 +964,11 @@ def create_prompt_version(prompt_id: str):
     if not data or "template" not in data:
         return jsonify({"error": "Missing 'template'"}), 400
 
+    # Get prompt info to find the name
+    prompt_info = store.mock_get_prompt_by_id(prompt_id)
+    if not prompt_info:
+        return jsonify({"error": f"Prompt '{prompt_id}' not found"}), 404
+
     result = store.mock_create_prompt_version(
         prompt_id=prompt_id,
         template=data["template"],
@@ -811,7 +977,20 @@ def create_prompt_version(prompt_id: str):
         created_by=data.get("created_by"),
     )
     if not result:
-        return jsonify({"error": f"Prompt '{prompt_id}' not found"}), 404
+        return jsonify({"error": f"Failed to create version for prompt '{prompt_id}'"}), 500
+
+    # Create deployment version if prompt is part of config system
+    prompt_name = prompt_info.get("name", "")
+    if prompt_name:
+        deployment_info = _create_deployment_version_for_prompt_change(
+            prompt_name=prompt_name,
+            template=data["template"],
+            change_description=data.get("change_description") or f"Updated {prompt_name}",
+        )
+        if deployment_info:
+            result["deployment_version"] = deployment_info["deployment_version"]
+            result["blueprint_id"] = deployment_info["blueprint_id"]
+
     return jsonify(result), 201
 
 
@@ -1166,6 +1345,555 @@ def add_eval_run_result(run_id: str):
         return jsonify({"error": f"Run '{run_id}' or item not found"}), 404
 
     return jsonify(result), 201
+
+
+# =============================================================================
+# Blueprints API (Heroku-style deployment versioning)
+# =============================================================================
+
+@app.route("/v1/blueprints", methods=["OPTIONS"])
+@app.route("/v1/blueprints/<blueprint_id>", methods=["OPTIONS"])
+@app.route("/v1/blueprints/<blueprint_id>/history", methods=["OPTIONS"])
+@app.route("/v1/blueprints/<blueprint_id>/versions/<version_id>", methods=["OPTIONS"])
+@app.route("/v1/blueprints/<blueprint_id>/promote", methods=["OPTIONS"])
+@app.route("/v1/blueprints/<blueprint_id>/rollback", methods=["OPTIONS"])
+@app.route("/v1/blueprints/migrate", methods=["OPTIONS"])
+def blueprints_options(blueprint_id: str = "", version_id: str = ""):
+    """Handle CORS preflight for blueprint endpoints."""
+    return "", 204
+
+
+@app.route("/v1/blueprints", methods=["GET"])
+def get_blueprint_for_project():
+    """
+    Get the blueprint for a project.
+
+    Query params:
+    - project_id: string (required)
+
+    Response:
+    {
+        "id": "...",
+        "project_id": "...",
+        "name": "...",
+        "created_at": "..."
+    }
+    """
+    project_id = request.args.get("project_id")
+    if not project_id:
+        return jsonify({"error": "Missing 'project_id'"}), 400
+
+    blueprint = store.get_blueprint_for_project(project_id)
+    if not blueprint:
+        return jsonify({"error": f"No blueprint found for project '{project_id}'"}), 404
+
+    return jsonify(blueprint)
+
+
+@app.route("/v1/blueprints", methods=["POST"])
+def create_blueprint():
+    """
+    Create a new blueprint for a project.
+
+    Input:
+    {
+        "project_id": "...",
+        "name": "..."
+    }
+
+    Response:
+    {
+        "id": "...",
+        "project_id": "...",
+        "name": "...",
+        "created_at": "..."
+    }
+    """
+    data = request.get_json()
+    if not data or "project_id" not in data:
+        return jsonify({"error": "Missing 'project_id'"}), 400
+
+    project_id = data["project_id"]
+    name = data.get("name", f"Blueprint for {project_id}")
+
+    # Check if already exists
+    existing = store.get_blueprint_for_project(project_id)
+    if existing:
+        return jsonify(existing)
+
+    blueprint = store.create_blueprint(project_id=project_id, name=name)
+    return jsonify(blueprint), 201
+
+
+@app.route("/v1/blueprints/migrate", methods=["POST"])
+def migrate_project_to_blueprint():
+    """
+    Migrate existing prompts to a blueprint (one-time operation).
+
+    Input:
+    {
+        "project_id": "...",
+        "env": "prod"  // optional
+    }
+
+    Response:
+    {
+        "id": "...",
+        "project_id": "...",
+        "name": "...",
+        "version_number": 1,
+        "already_migrated": false
+    }
+    """
+    data = request.get_json()
+    if not data or "project_id" not in data:
+        return jsonify({"error": "Missing 'project_id'"}), 400
+
+    project_id = data["project_id"]
+    env = data.get("env", "prod")
+
+    result = store.migrate_project_to_blueprint(project_id=project_id, env=env)
+    return jsonify(result), 201
+
+
+@app.route("/v1/blueprints/<blueprint_id>", methods=["GET"])
+def get_blueprint(blueprint_id: str):
+    """Get a blueprint by ID."""
+    blueprint = store.get_blueprint(blueprint_id)
+    if not blueprint:
+        return jsonify({"error": f"Blueprint '{blueprint_id}' not found"}), 404
+    return jsonify(blueprint)
+
+
+@app.route("/v1/blueprints/<blueprint_id>/history", methods=["GET"])
+def get_blueprint_history(blueprint_id: str):
+    """
+    Get deployment history with DEV/PROD pointers.
+
+    Query params:
+    - limit: int (default 50)
+
+    Response:
+    {
+        "versions": [
+            {
+                "id": "...",
+                "version_number": 5,
+                "change_summary": "...",
+                "change_type": "optimizer",
+                "created_at": "...",
+                ...
+            }
+        ],
+        "dev_version": 5,
+        "prod_version": 3
+    }
+    """
+    blueprint = store.get_blueprint(blueprint_id)
+    if not blueprint:
+        return jsonify({"error": f"Blueprint '{blueprint_id}' not found"}), 404
+
+    limit = int(request.args.get("limit", "50"))
+    history = store.get_blueprint_history(blueprint_id, limit=limit)
+    return jsonify(history)
+
+
+@app.route("/v1/blueprints/<blueprint_id>/versions", methods=["GET"])
+def list_deployment_versions(blueprint_id: str):
+    """
+    List deployment versions for a blueprint.
+
+    Query params:
+    - limit: int (default 50)
+
+    Response:
+    {
+        "versions": [...]
+    }
+    """
+    blueprint = store.get_blueprint(blueprint_id)
+    if not blueprint:
+        return jsonify({"error": f"Blueprint '{blueprint_id}' not found"}), 404
+
+    limit = int(request.args.get("limit", "50"))
+    versions = store.list_deployment_versions(blueprint_id, limit=limit)
+    return jsonify({"versions": versions})
+
+
+@app.route("/v1/blueprints/<blueprint_id>/versions/<version_id>", methods=["GET"])
+def get_deployment_version(blueprint_id: str, version_id: str):
+    """
+    Get a specific deployment version with full snapshot.
+
+    Response:
+    {
+        "id": "...",
+        "version_number": 3,
+        "snapshot": {...},
+        "change_summary": "...",
+        ...
+    }
+    """
+    version = store.get_deployment_version(version_id)
+    if not version or version["blueprint_id"] != blueprint_id:
+        return jsonify({"error": f"Version '{version_id}' not found"}), 404
+    return jsonify(version)
+
+
+@app.route("/v1/blueprints/<blueprint_id>/versions/by-number/<int:version_number>", methods=["GET"])
+def get_deployment_version_by_number(blueprint_id: str, version_number: int):
+    """
+    Get a specific deployment version by version number.
+
+    Response:
+    {
+        "id": "...",
+        "version_number": 3,
+        "snapshot": {...},
+        "change_summary": "...",
+        ...
+    }
+    """
+    version = store.get_deployment_version_by_number(blueprint_id, version_number)
+    if not version:
+        return jsonify({"error": f"Version {version_number} not found"}), 404
+    return jsonify(version)
+
+
+@app.route("/v1/blueprints/<blueprint_id>/versions", methods=["POST"])
+def create_deployment_version(blueprint_id: str):
+    """
+    Create a new deployment version (usually called internally after optimizer commit).
+
+    Input:
+    {
+        "snapshot": {...},
+        "change_summary": "Updated Researcher Prompt",
+        "change_type": "optimizer",  // "optimizer" | "manual" | "rollback"
+        "source_experiment_id": "...",  // optional
+        "created_by": "..."  // optional
+    }
+
+    Response:
+    {
+        "id": "...",
+        "version_number": 5,
+        ...
+    }
+    """
+    blueprint = store.get_blueprint(blueprint_id)
+    if not blueprint:
+        return jsonify({"error": f"Blueprint '{blueprint_id}' not found"}), 404
+
+    data = request.get_json()
+    if not data or "snapshot" not in data:
+        return jsonify({"error": "Missing 'snapshot'"}), 400
+
+    version = store.create_deployment_version(
+        blueprint_id=blueprint_id,
+        snapshot=data["snapshot"],
+        change_summary=data.get("change_summary"),
+        change_type=data.get("change_type", "manual"),
+        source_experiment_id=data.get("source_experiment_id"),
+        created_by=data.get("created_by"),
+    )
+    return jsonify(version), 201
+
+
+@app.route("/v1/blueprints/<blueprint_id>/promote", methods=["POST"])
+def promote_to_env(blueprint_id: str):
+    """
+    Set an environment pointer to a specific version.
+
+    Input:
+    {
+        "env": "prod",        // or "stage", "qa", etc. (not "latest" - that's automatic)
+        "version_number": 5
+    }
+
+    Response:
+    {
+        "blueprint_id": "...",
+        "env": "prod",
+        "version_number": 5,
+        "updated_at": "..."
+    }
+    """
+    blueprint = store.get_blueprint(blueprint_id)
+    if not blueprint:
+        return jsonify({"error": f"Blueprint '{blueprint_id}' not found"}), 404
+
+    data = request.get_json()
+    if not data or "version_number" not in data:
+        return jsonify({"error": "Missing 'version_number'"}), 400
+
+    env = data.get("env", "prod")
+    version_number = data["version_number"]
+
+    # Cannot manually set LATEST - it auto-moves
+    if env == "latest":
+        return jsonify({"error": "Cannot manually set 'latest' pointer - it auto-moves to newest version"}), 400
+
+    # Verify version exists and is <= LATEST
+    latest_pointer = store.get_environment_pointer(blueprint_id, "latest")
+    if not latest_pointer:
+        return jsonify({"error": "No versions exist yet"}), 400
+
+    if version_number > latest_pointer["version_number"]:
+        return jsonify({"error": f"Cannot set {env} to version {version_number} - latest is v{latest_pointer['version_number']}"}), 400
+
+    try:
+        result = store.set_environment_pointer(blueprint_id, env, version_number)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/v1/blueprints/<blueprint_id>/rollback", methods=["POST"])
+def rollback_env(blueprint_id: str):
+    """
+    Rollback an environment to a previous version (alias for promote with different semantics).
+
+    Input:
+    {
+        "env": "prod",        // optional, defaults to "prod"
+        "version_number": 3
+    }
+
+    Response:
+    {
+        "blueprint_id": "...",
+        "env": "prod",
+        "version_number": 3,
+        "updated_at": "..."
+    }
+    """
+    blueprint = store.get_blueprint(blueprint_id)
+    if not blueprint:
+        return jsonify({"error": f"Blueprint '{blueprint_id}' not found"}), 404
+
+    data = request.get_json()
+    if not data or "version_number" not in data:
+        return jsonify({"error": "Missing 'version_number'"}), 400
+
+    env = data.get("env", "prod")
+    version_number = data["version_number"]
+
+    if env == "latest":
+        return jsonify({"error": "Cannot rollback 'latest' pointer"}), 400
+
+    try:
+        result = store.set_environment_pointer(blueprint_id, env, version_number)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/v1/blueprints/<blueprint_id>/pointers/<env>", methods=["GET"])
+def get_environment_pointer(blueprint_id: str, env: str):
+    """
+    Get the current pointer for an environment.
+
+    Response:
+    {
+        "blueprint_id": "...",
+        "env": "prod",
+        "version_number": 3,
+        "updated_at": "..."
+    }
+    """
+    pointer = store.get_environment_pointer(blueprint_id, env)
+    if not pointer:
+        return jsonify({"error": f"No pointer found for env '{env}'"}), 404
+    return jsonify(pointer)
+
+
+@app.route("/v1/blueprints/<blueprint_id>/versions/<int:version_number>/diff", methods=["GET"])
+def get_version_diff(blueprint_id: str, version_number: int):
+    """
+    Get the diff between a version and its previous version.
+
+    Shows what changed (like a PR diff) including:
+    - Added/removed/modified prompts
+    - Line-by-line diff for each modified prompt
+
+    Response:
+    {
+        "version_number": 5,
+        "previous_version": 4,
+        "changes": [
+            {
+                "type": "modified",  // "added" | "removed" | "modified"
+                "prompt_name": "Researcher System Prompt",
+                "diff": [
+                    {"type": "context", "content": "You are a research...", "line": 1},
+                    {"type": "deletion", "content": "- old line", "line": 2},
+                    {"type": "addition", "content": "+ new line", "line": 2},
+                    ...
+                ]
+            }
+        ],
+        "summary": {
+            "added": 0,
+            "removed": 0,
+            "modified": 1
+        }
+    }
+    """
+    import difflib
+
+    blueprint = store.get_blueprint(blueprint_id)
+    if not blueprint:
+        return jsonify({"error": f"Blueprint '{blueprint_id}' not found"}), 404
+
+    current = store.get_deployment_version_by_number(blueprint_id, version_number)
+    if not current:
+        return jsonify({"error": f"Version {version_number} not found"}), 404
+
+    # Get previous version (if exists)
+    previous = None
+    if version_number > 1:
+        previous = store.get_deployment_version_by_number(blueprint_id, version_number - 1)
+
+    current_prompts = current.get("snapshot", {}).get("prompts", {})
+    previous_prompts = previous.get("snapshot", {}).get("prompts", {}) if previous else {}
+
+    changes = []
+    summary = {"added": 0, "removed": 0, "modified": 0}
+
+    # Find added and modified prompts
+    for name, current_value in current_prompts.items():
+        if name not in previous_prompts:
+            # New prompt
+            summary["added"] += 1
+            changes.append({
+                "type": "added",
+                "prompt_name": name,
+                "content": current_value,
+                "diff": None,
+            })
+        else:
+            # Check if modified
+            prev_value = previous_prompts[name]
+            curr_text = _extract_prompt_text(current_value)
+            prev_text = _extract_prompt_text(prev_value)
+
+            if curr_text != prev_text:
+                summary["modified"] += 1
+                diff_lines = _compute_diff_lines(prev_text, curr_text)
+                changes.append({
+                    "type": "modified",
+                    "prompt_name": name,
+                    "diff": diff_lines,
+                })
+
+    # Find removed prompts
+    for name in previous_prompts:
+        if name not in current_prompts:
+            summary["removed"] += 1
+            changes.append({
+                "type": "removed",
+                "prompt_name": name,
+                "content": previous_prompts[name],
+                "diff": None,
+            })
+
+    return jsonify({
+        "version_number": version_number,
+        "previous_version": version_number - 1 if version_number > 1 else None,
+        "changes": changes,
+        "summary": summary,
+    })
+
+
+def _extract_prompt_text(value: dict | str) -> str:
+    """Extract the text content from a prompt value."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        # Check for messages (chat prompt)
+        if "messages" in value:
+            messages = value["messages"]
+            if isinstance(messages, str):
+                # JSON string
+                import json
+                try:
+                    messages = json.loads(messages)
+                except json.JSONDecodeError:
+                    return messages
+            # Format messages for comparison
+            parts = []
+            for msg in messages:
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                parts.append(f"[{role}]\n{content}")
+            return "\n\n".join(parts)
+        # Check for prompt (text prompt)
+        if "prompt" in value:
+            return value["prompt"]
+        # Fallback to JSON
+        import json
+        return json.dumps(value, indent=2)
+    return str(value)
+
+
+def _compute_diff_lines(old_text: str, new_text: str) -> list[dict]:
+    """Compute line-by-line diff between two texts."""
+    import difflib
+
+    old_lines = old_text.splitlines(keepends=True)
+    new_lines = new_text.splitlines(keepends=True)
+
+    diff = list(difflib.unified_diff(old_lines, new_lines, lineterm='', n=3))
+
+    result = []
+    old_line_num = 0
+    new_line_num = 0
+
+    for line in diff:
+        # Skip file headers
+        if line.startswith('---') or line.startswith('+++'):
+            continue
+
+        # Parse hunk headers
+        if line.startswith('@@'):
+            import re
+            match = re.match(r'@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@', line)
+            if match:
+                old_line_num = int(match.group(1))
+                new_line_num = int(match.group(2))
+            continue
+
+        content = line.rstrip('\n')
+
+        if line.startswith('-'):
+            result.append({
+                "type": "deletion",
+                "content": content[1:],  # Remove leading -
+                "old_line": old_line_num,
+                "new_line": None,
+            })
+            old_line_num += 1
+        elif line.startswith('+'):
+            result.append({
+                "type": "addition",
+                "content": content[1:],  # Remove leading +
+                "old_line": None,
+                "new_line": new_line_num,
+            })
+            new_line_num += 1
+        else:
+            # Context line
+            result.append({
+                "type": "context",
+                "content": content[1:] if content.startswith(' ') else content,
+                "old_line": old_line_num,
+                "new_line": new_line_num,
+            })
+            old_line_num += 1
+            new_line_num += 1
+
+    return result
 
 
 def run_service(host: str = "127.0.0.1", port: int = 5050, debug: bool = False) -> None:

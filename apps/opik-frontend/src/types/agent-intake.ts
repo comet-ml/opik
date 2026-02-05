@@ -98,7 +98,7 @@ export type OptimizationStartedEvent = {
   expected_behaviors: string[];
 };
 
-export type RunStatus = "running" | "evaluating";
+export type RunStatus = "running" | "evaluating" | "checking_regressions";
 
 export type RunStatusEvent = {
   type: OPTIMIZE_EVENT_TYPE.run_status;
@@ -128,16 +128,19 @@ export type OptimizationChange = {
 
 export type RegressionItem = {
   item_id: string;
+  trace_id?: string;
   reason: string;
   failed_assertions: AssertionResult[];
 };
 
 export type RegressionResult = {
+  run_id?: string;
   iteration: number;
   items_tested: number;
   items_passed: number;
   no_regressions: boolean;
   regressions: RegressionItem[];
+  items?: RegressionItem[];
 };
 
 export type PromptMessage = {
@@ -152,10 +155,25 @@ export type PromptVersion = {
   template?: string;
 };
 
+export type DiffLine = {
+  type: "context" | "addition" | "deletion";
+  content: string;
+  line_original: number | null;
+  line_modified: number | null;
+};
+
+export type DiffChange = {
+  message_index: number | null;
+  role: string | null;
+  change_type: "modified" | "added" | "removed";
+  diff: DiffLine[];
+};
+
 export type PromptChange = {
   prompt_name: string;
   original: PromptVersion;
   modified: PromptVersion;
+  diff?: DiffChange[];
 };
 
 export type OptimizationCompleteEvent = {
