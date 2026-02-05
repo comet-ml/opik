@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { CommentPublic } from "./CommentPublic.js";
 import { ErrorInfoPublic } from "./ErrorInfoPublic.js";
+import { ExperimentItemReferencePublic } from "./ExperimentItemReferencePublic.js";
 import { FeedbackScorePublic } from "./FeedbackScorePublic.js";
 import { GuardrailsValidationPublic } from "./GuardrailsValidationPublic.js";
 import { JsonListStringPublic } from "./JsonListStringPublic.js";
@@ -48,6 +49,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
         hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
         providers: core.serialization.list(core.serialization.string()).optional(),
+        experiment: ExperimentItemReferencePublic.optional(),
     });
 
 export declare namespace TracePublic {
@@ -79,5 +81,6 @@ export declare namespace TracePublic {
         llm_span_count?: number | null;
         has_tool_spans?: boolean | null;
         providers?: string[] | null;
+        experiment?: ExperimentItemReferencePublic.Raw | null;
     }
 }

@@ -9,6 +9,7 @@ export { DatasetItemStreamRequest } from "./DatasetItemStreamRequest.js";
 export { DatasetItemsDelete } from "./DatasetItemsDelete.js";
 export { DatasetUpdate } from "./DatasetUpdate.js";
 export { DatasetVersionRestorePublic } from "./DatasetVersionRestorePublic.js";
+export { DatasetVersionRetrieveRequestPublic } from "./DatasetVersionRetrieveRequestPublic.js";
 export { DatasetVersionTag } from "./DatasetVersionTag.js";
 export { DatasetVersionUpdatePublic } from "./DatasetVersionUpdatePublic.js";
 export { DatasetWrite } from "./DatasetWrite.js";
