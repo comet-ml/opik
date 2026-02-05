@@ -13,6 +13,7 @@ from . import (
     optimization,
     helpers,
     opik_query_language,
+    rest_helpers,
     search_helpers,
     span,
     trace,
@@ -1788,7 +1789,7 @@ class Opik:
         if project_name is None:
             project_name = self._project_name
 
-        project_id = helpers._resolve_project_id_by_name(
+        project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, project_name
         )
         queue_id = id_helpers.generate_id()
@@ -1837,20 +1838,20 @@ class Opik:
     def get_annotation_queues(
         self,
         project_name: Optional[str] = None,
-        max_results: int = 100,
+        max_results: int = 1000,
     ) -> List[annotation_queue.AnnotationQueue]:
         """
         Get all annotation queues for a project.
 
         Args:
             project_name: The name of the project. If not provided, uses the client's default project.
-            max_results: Maximum number of queues to return. Defaults to 100.
+            max_results: Maximum number of queues to return. Defaults to 1000.
 
         Returns:
             List[annotation_queue.AnnotationQueue]: A list of annotation queue objects.
         """
         project_id: Optional[str] = None
-        project_id = helpers._resolve_project_id_by_name(
+        project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, project_name or self._project_name
         )
 

@@ -14,6 +14,7 @@ from typing import (
     Iterator,
 )
 
+from opik.api_objects import opik_query_language, rest_stream_parser, rest_helpers
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
@@ -25,7 +26,6 @@ import opik.exceptions as exceptions
 import opik.config as config
 from .. import constants
 from . import dataset_item, converters, rest_operations
-from ..helpers import _ensure_rest_api_call_respecting_rate_limit
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -377,7 +377,7 @@ class Dataset(DatasetExportOperations):
                 user operation together. All batches sent as part of one insert/update
                 call share the same batch_group_id.
         """
-        _ensure_rest_api_call_respecting_rate_limit(
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.create_or_update_dataset_items(
                 dataset_name=self._name, items=batch, batch_group_id=batch_group_id
             )
@@ -488,7 +488,7 @@ class Dataset(DatasetExportOperations):
                 user operation together. All batches sent as part of one delete
                 call share the same batch_group_id.
         """
-        _ensure_rest_api_call_respecting_rate_limit(
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.delete_dataset_items(
                 item_ids=batch, batch_group_id=batch_group_id
             )

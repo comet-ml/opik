@@ -14,7 +14,7 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import trace_public, trace_thread
 from opik.message_processing.batching import sequence_splitter
 from opik.api_objects.trace import trace_client
-from opik.api_objects.helpers import _ensure_rest_api_call_respecting_rate_limit
+from opik.api_objects.rest_helpers import ensure_rest_api_call_respecting_rate_limit
 import opik.exceptions as exceptions
 
 LOGGER = logging.getLogger(__name__)
@@ -181,7 +181,7 @@ class AnnotationQueue:
 
     def _add_items_batch_with_retry(self, ids: List[str]) -> None:
         """Add a batch of items with automatic retry on rate limit errors."""
-        _ensure_rest_api_call_respecting_rate_limit(
+        ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.annotation_queues.add_items_to_annotation_queue(
                 id=self._id, ids=ids
             )
@@ -190,7 +190,7 @@ class AnnotationQueue:
 
     def _remove_items_batch_with_retry(self, ids: List[str]) -> None:
         """Remove a batch of items with automatic retry on rate limit errors."""
-        _ensure_rest_api_call_respecting_rate_limit(
+        ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.annotation_queues.remove_items_from_annotation_queue(
                 id=self._id, ids=ids
             )
