@@ -1,4 +1,12 @@
-from .annotation_queue import AnnotationQueue
+from .annotation_queue import (
+    BaseAnnotationQueue,
+    TracesAnnotationQueue,
+    ThreadsAnnotationQueue,
+)
 
 
-__all__ = ["AnnotationQueue"]
+__all__ = [
+    "BaseAnnotationQueue",
+    "TracesAnnotationQueue",
+    "ThreadsAnnotationQueue",
+]

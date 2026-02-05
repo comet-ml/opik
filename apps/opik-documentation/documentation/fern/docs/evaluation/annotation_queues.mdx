@@ -110,17 +110,16 @@ You can create and manage annotation queues programmatically using the Python SD
 <Tabs>
     <Tab value="Python" title="Python">
 
-### Creating an Annotation Queue
+### Creating a Traces Annotation Queue
 
 ```python
 import opik
 
 client = opik.Opik()
 
-# Create a trace annotation queue
-queue = client.create_annotation_queue(
+# Create a traces annotation queue
+queue = client.create_traces_annotation_queue(
     name="High Priority Traces",
-    scope="trace",
     description="Traces that need review",
     instructions="Check for accuracy and completeness",
     feedback_definition_names=["relevance", "accuracy"]
@@ -136,8 +135,8 @@ import opik
 
 client = opik.Opik()
 
-# Get an existing queue
-queue = client.get_annotation_queue("queue-id")
+# Get an existing traces queue
+queue = client.get_traces_annotation_queue("queue-id")
 
 # Search for traces and add them to the queue
 traces = client.search_traces(
@@ -151,17 +150,16 @@ single_trace = client.get_trace_content("trace-id")
 queue.add_traces([single_trace])
 ```
 
-### Working with Thread Queues
+### Creating a Threads Annotation Queue
 
 ```python
 import opik
 
 client = opik.Opik()
 
-# Create a thread annotation queue
-thread_queue = client.create_annotation_queue(
+# Create a threads annotation queue
+thread_queue = client.create_threads_annotation_queue(
     name="Thread Review Queue",
-    scope="thread",
     description="Threads needing review"
 )
 
@@ -181,8 +179,8 @@ import opik
 
 client = opik.Opik()
 
-# Get an existing queue
-queue = client.get_annotation_queue("queue-id")
+# Get an existing traces queue
+queue = client.get_traces_annotation_queue("queue-id")
 
 # Update queue properties
 queue.update(
@@ -208,11 +206,17 @@ import opik
 
 client = opik.Opik()
 
-# Get all annotation queues for a project
-queues = client.get_annotation_queues(project_name="my-project")
+# Get all traces annotation queues for a project
+traces_queues = client.get_traces_annotation_queues(project_name="my-project")
 
-for queue in queues:
-    print(f"Queue: {queue.name}, Scope: {queue.scope}, Items: {queue.items_count}")
+for queue in traces_queues:
+    print(f"Traces Queue: {queue.name}, Items: {queue.items_count}")
+
+# Get all threads annotation queues for a project
+threads_queues = client.get_threads_annotation_queues(project_name="my-project")
+
+for queue in threads_queues:
+    print(f"Threads Queue: {queue.name}, Items: {queue.items_count}")
 ```
 
     </Tab>

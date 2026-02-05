@@ -1,13 +1,9 @@
-import functools
 import logging
+from abc import ABC, abstractmethod
 from typing import (
     Optional,
-    Any,
     List,
-    Callable,
-    Literal,
     Union,
-    TypeVar,
 )
 
 from opik.rest_api import client as rest_api_client
@@ -23,36 +19,16 @@ ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE = 1000
 
 TraceType = Union[trace_client.Trace, trace_public.TracePublic]
 
-F = TypeVar("F", bound=Callable[..., Any])
 
-
-def _require_scope(
-    expected_scope: Literal["trace", "thread"],
-    item_type: str,
-) -> Callable[[F], F]:
-    """Decorator that validates the queue scope matches the expected scope."""
-
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        def wrapper(self: "AnnotationQueue", *args: Any, **kwargs: Any) -> Any:
-            if self._scope != expected_scope:
-                raise exceptions.AnnotationQueueScopeMismatch(
-                    item_type=item_type,
-                    queue_scope=self._scope,
-                )
-            return func(self, *args, **kwargs)
-
-        return wrapper  # type: ignore[return-value]
-
-    return decorator
-
-
-class AnnotationQueue:
+class BaseAnnotationQueue(ABC):
     """
-    An AnnotationQueue object representing a queue for human annotation workflows.
+    Base class for annotation queue objects.
 
-    This object should not be created directly, instead use
-    :meth:`opik.Opik.create_annotation_queue` or :meth:`opik.Opik.get_annotation_queue`.
+    This class provides the common functionality shared between
+    TracesAnnotationQueue and ThreadsAnnotationQueue.
+
+    This object should not be created directly, instead use the appropriate
+    create/get methods on opik.Opik client.
     """
 
     def __init__(
@@ -60,7 +36,6 @@ class AnnotationQueue:
         id: str,
         name: str,
         project_id: str,
-        scope: Literal["trace", "thread"],
         rest_client: rest_api_client.OpikApi,
         description: Optional[str] = None,
         instructions: Optional[str] = None,
@@ -73,7 +48,6 @@ class AnnotationQueue:
         self._description = description
         self._instructions = instructions
         self._project_id = project_id
-        self._scope = scope
         self._comments_enabled = comments_enabled
         self._feedback_definition_names = feedback_definition_names
         self._items_count = items_count
@@ -105,11 +79,6 @@ class AnnotationQueue:
         return self._project_id
 
     @property
-    def scope(self) -> Literal["trace", "thread"]:
-        """The scope of the annotation queue ('trace' or 'thread')."""
-        return self._scope
-
-    @property
     def comments_enabled(self) -> Optional[bool]:
         """Whether comments are enabled for this queue."""
         return self._comments_enabled
@@ -118,6 +87,12 @@ class AnnotationQueue:
     def feedback_definition_names(self) -> Optional[List[str]]:
         """The feedback definition names associated with this queue."""
         return self._feedback_definition_names
+
+    @property
+    @abstractmethod
+    def scope(self) -> str:
+        """The scope of the annotation queue ('trace' or 'thread')."""
+        pass
 
     @property
     def items_count(self) -> Optional[int]:
@@ -197,6 +172,22 @@ class AnnotationQueue:
         )
         LOGGER.debug("Successfully removed %d items from annotation queue", len(ids))
 
+
+class TracesAnnotationQueue(BaseAnnotationQueue):
+    """
+    An annotation queue for traces.
+
+    This queue is used to collect traces for human annotation workflows.
+
+    This object should not be created directly, instead use
+    :meth:`opik.Opik.create_traces_annotation_queue` or :meth:`opik.Opik.get_traces_annotation_queue`.
+    """
+
+    @property
+    def scope(self) -> str:
+        """The scope of the annotation queue."""
+        return "trace"
+
     def _extract_trace_ids(
         self,
         traces: List[TraceType],
@@ -210,22 +201,6 @@ class AnnotationQueue:
 
         return ids
 
-    def _extract_thread_ids(
-        self,
-        threads: List[trace_thread.TraceThread],
-    ) -> List[str]:
-        """Extract thread_model_id from TraceThread objects."""
-        ids: List[str] = []
-        for thread in threads:
-            if thread.thread_model_id is None:
-                raise exceptions.OpikException(
-                    "TraceThread object has no thread_model_id"
-                )
-            ids.append(thread.thread_model_id)
-
-        return ids
-
-    @_require_scope(expected_scope="trace", item_type="traces")
     def add_traces(
         self,
         traces: List[TraceType],
@@ -239,7 +214,6 @@ class AnnotationQueue:
                 (from search_traces()).
 
         Raises:
-            AnnotationQueueScopeMismatch: If the queue scope is not 'trace'.
             OpikException: If any trace object has no id.
         """
         ids = self._extract_trace_ids(traces)
@@ -256,37 +230,6 @@ class AnnotationQueue:
 
         self._items_count = None
 
-    @_require_scope(expected_scope="thread", item_type="threads")
-    def add_threads(
-        self,
-        threads: List[trace_thread.TraceThread],
-    ) -> None:
-        """
-        Add thread objects to the annotation queue.
-
-        Args:
-            threads: A list of TraceThread objects to add (from search_threads()).
-                For a single thread, wrap it in a list: [thread].
-
-        Raises:
-            AnnotationQueueScopeMismatch: If the queue scope is not 'thread'.
-            OpikException: If any thread object has no thread_model_id.
-        """
-        ids = self._extract_thread_ids(threads)
-        if not ids:
-            return
-
-        batches = sequence_splitter.split_into_batches(
-            ids, max_length=ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
-        )
-
-        for batch in batches:
-            LOGGER.debug("Adding %d threads to annotation queue", len(batch))
-            self._add_items_batch_with_retry(batch)
-
-        self._items_count = None
-
-    @_require_scope(expected_scope="trace", item_type="traces")
     def remove_traces(
         self,
         traces: List[TraceType],
@@ -300,7 +243,6 @@ class AnnotationQueue:
                 (from search_traces()).
 
         Raises:
-            AnnotationQueueScopeMismatch: If the queue scope is not 'trace'.
             OpikException: If any trace object has no id.
         """
         ids = self._extract_trace_ids(traces)
@@ -317,7 +259,65 @@ class AnnotationQueue:
 
         self._items_count = None
 
-    @_require_scope(expected_scope="thread", item_type="threads")
+
+class ThreadsAnnotationQueue(BaseAnnotationQueue):
+    """
+    An annotation queue for threads.
+
+    This queue is used to collect threads for human annotation workflows.
+
+    This object should not be created directly, instead use
+    :meth:`opik.Opik.create_threads_annotation_queue` or :meth:`opik.Opik.get_threads_annotation_queue`.
+    """
+
+    @property
+    def scope(self) -> str:
+        """The scope of the annotation queue."""
+        return "thread"
+
+    def _extract_thread_ids(
+        self,
+        threads: List[trace_thread.TraceThread],
+    ) -> List[str]:
+        """Extract thread_model_id from TraceThread objects."""
+        ids: List[str] = []
+        for thread in threads:
+            if thread.thread_model_id is None:
+                raise exceptions.OpikException(
+                    "TraceThread object has no thread_model_id"
+                )
+            ids.append(thread.thread_model_id)
+
+        return ids
+
+    def add_threads(
+        self,
+        threads: List[trace_thread.TraceThread],
+    ) -> None:
+        """
+        Add thread objects to the annotation queue.
+
+        Args:
+            threads: A list of TraceThread objects to add (from search_threads()).
+                For a single thread, wrap it in a list: [thread].
+
+        Raises:
+            OpikException: If any thread object has no thread_model_id.
+        """
+        ids = self._extract_thread_ids(threads)
+        if not ids:
+            return
+
+        batches = sequence_splitter.split_into_batches(
+            ids, max_length=ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
+        )
+
+        for batch in batches:
+            LOGGER.debug("Adding %d threads to annotation queue", len(batch))
+            self._add_items_batch_with_retry(batch)
+
+        self._items_count = None
+
     def remove_threads(
         self,
         threads: List[trace_thread.TraceThread],
@@ -330,7 +330,6 @@ class AnnotationQueue:
                 For a single thread, wrap it in a list: [thread].
 
         Raises:
-            AnnotationQueueScopeMismatch: If the queue scope is not 'thread'.
             OpikException: If any thread object has no thread_model_id.
         """
         ids = self._extract_thread_ids(threads)

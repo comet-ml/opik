@@ -18,7 +18,10 @@ from . import (
     span,
     trace,
 )
-from .annotation_queue import annotation_queue
+from .annotation_queue import (
+    TracesAnnotationQueue,
+    ThreadsAnnotationQueue,
+)
 from .annotation_queue import rest_operations as annotation_queue_rest_operations
 from .attachment import Attachment
 from .attachment import client as attachment_client
@@ -1761,31 +1764,17 @@ class Opik:
         """
         return experiments_client.ExperimentsClient(self._rest_client)
 
-    def create_annotation_queue(
+    def _create_annotation_queue(
         self,
         name: str,
         scope: Literal["trace", "thread"],
-        project_name: Optional[str] = None,
-        description: Optional[str] = None,
-        instructions: Optional[str] = None,
-        comments_enabled: Optional[bool] = None,
-        feedback_definition_names: Optional[List[str]] = None,
-    ) -> annotation_queue.AnnotationQueue:
-        """
-        Create a new annotation queue.
-
-        Args:
-            name: The name of the annotation queue.
-            scope: The scope of the queue, either 'trace' or 'thread'.
-            project_name: The name of the project. If not provided, uses the client's default project.
-            description: An optional description of the queue.
-            instructions: Optional instructions for reviewers.
-            comments_enabled: Whether to enable comments on items.
-            feedback_definition_names: Optional list of feedback definition names.
-
-        Returns:
-            annotation_queue.AnnotationQueue: The created annotation queue object.
-        """
+        project_name: Optional[str],
+        description: Optional[str],
+        instructions: Optional[str],
+        comments_enabled: Optional[bool],
+        feedback_definition_names: Optional[List[str]],
+    ) -> Union[TracesAnnotationQueue, ThreadsAnnotationQueue]:
+        """Helper method to create an annotation queue with the specified scope."""
         if project_name is None:
             project_name = self._project_name
 
@@ -1805,57 +1794,171 @@ class Opik:
             feedback_definition_names=feedback_definition_names,
         )
 
-        return annotation_queue.AnnotationQueue(
-            id=queue_id,
+        common_kwargs = {
+            "id": queue_id,
+            "name": name,
+            "project_id": project_id,
+            "rest_client": self._rest_client,
+            "description": description,
+            "instructions": instructions,
+            "comments_enabled": comments_enabled,
+            "feedback_definition_names": list(feedback_definition_names)
+            if feedback_definition_names
+            else None,
+            "items_count": 0,
+        }
+
+        if scope == "thread":
+            return ThreadsAnnotationQueue(**common_kwargs)
+        return TracesAnnotationQueue(**common_kwargs)
+
+    def create_traces_annotation_queue(
+        self,
+        name: str,
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+        instructions: Optional[str] = None,
+        comments_enabled: Optional[bool] = None,
+        feedback_definition_names: Optional[List[str]] = None,
+    ) -> TracesAnnotationQueue:
+        """
+        Create a new annotation queue for traces.
+
+        Args:
+            name: The name of the annotation queue.
+            project_name: The name of the project. If not provided, uses the client's default project.
+            description: An optional description of the queue.
+            instructions: Optional instructions for reviewers.
+            comments_enabled: Whether to enable comments on items.
+            feedback_definition_names: Optional list of feedback definition names.
+
+        Returns:
+            TracesAnnotationQueue: The created traces annotation queue object.
+        """
+        return self._create_annotation_queue(
             name=name,
-            project_id=project_id,
-            scope=scope,
-            rest_client=self._rest_client,
+            scope="trace",
+            project_name=project_name,
             description=description,
             instructions=instructions,
             comments_enabled=comments_enabled,
-            feedback_definition_names=list(feedback_definition_names)
-            if feedback_definition_names
-            else None,
-            items_count=0,
-        )
+            feedback_definition_names=feedback_definition_names,
+        )  # type: ignore[return-value]
 
-    def get_annotation_queue(self, queue_id: str) -> annotation_queue.AnnotationQueue:
+    def create_threads_annotation_queue(
+        self,
+        name: str,
+        project_name: Optional[str] = None,
+        description: Optional[str] = None,
+        instructions: Optional[str] = None,
+        comments_enabled: Optional[bool] = None,
+        feedback_definition_names: Optional[List[str]] = None,
+    ) -> ThreadsAnnotationQueue:
         """
-        Get an annotation queue by its ID.
+        Create a new annotation queue for threads.
+
+        Args:
+            name: The name of the annotation queue.
+            project_name: The name of the project. If not provided, uses the client's default project.
+            description: An optional description of the queue.
+            instructions: Optional instructions for reviewers.
+            comments_enabled: Whether to enable comments on items.
+            feedback_definition_names: Optional list of feedback definition names.
+
+        Returns:
+            ThreadsAnnotationQueue: The created threads annotation queue object.
+        """
+        return self._create_annotation_queue(
+            name=name,
+            scope="thread",
+            project_name=project_name,
+            description=description,
+            instructions=instructions,
+            comments_enabled=comments_enabled,
+            feedback_definition_names=feedback_definition_names,
+        )  # type: ignore[return-value]
+
+    def get_traces_annotation_queue(self, queue_id: str) -> TracesAnnotationQueue:
+        """
+        Get a traces annotation queue by its ID.
 
         Args:
             queue_id: The ID of the annotation queue.
 
         Returns:
-            annotation_queue.AnnotationQueue: The annotation queue object.
+            TracesAnnotationQueue: The traces annotation queue object.
+
+        Raises:
+            OpikException: If the queue is not found or is not a traces queue.
         """
-        return annotation_queue_rest_operations.get_annotation_queue_by_id(
+        return annotation_queue_rest_operations.get_traces_annotation_queue_by_id(
             rest_client=self._rest_client,
             queue_id=queue_id,
         )
 
-    def get_annotation_queues(
+    def get_threads_annotation_queue(self, queue_id: str) -> ThreadsAnnotationQueue:
+        """
+        Get a threads annotation queue by its ID.
+
+        Args:
+            queue_id: The ID of the annotation queue.
+
+        Returns:
+            ThreadsAnnotationQueue: The threads annotation queue object.
+
+        Raises:
+            OpikException: If the queue is not found or is not a threads queue.
+        """
+        return annotation_queue_rest_operations.get_threads_annotation_queue_by_id(
+            rest_client=self._rest_client,
+            queue_id=queue_id,
+        )
+
+    def get_traces_annotation_queues(
         self,
         project_name: Optional[str] = None,
         max_results: int = 1000,
-    ) -> List[annotation_queue.AnnotationQueue]:
+    ) -> List[TracesAnnotationQueue]:
         """
-        Get all annotation queues for a project.
+        Get all traces annotation queues for a project.
 
         Args:
             project_name: The name of the project. If not provided, uses the client's default project.
             max_results: Maximum number of queues to return. Defaults to 1000.
 
         Returns:
-            List[annotation_queue.AnnotationQueue]: A list of annotation queue objects.
+            List[TracesAnnotationQueue]: A list of traces annotation queue objects.
         """
-        project_id: Optional[str] = None
         project_id = rest_helpers.resolve_project_id_by_name(
             self._rest_client, project_name or self._project_name
         )
 
-        return annotation_queue_rest_operations.get_annotation_queues(
+        return annotation_queue_rest_operations.get_traces_annotation_queues(
+            rest_client=self._rest_client,
+            project_id=project_id,
+            max_results=max_results,
+        )
+
+    def get_threads_annotation_queues(
+        self,
+        project_name: Optional[str] = None,
+        max_results: int = 1000,
+    ) -> List[ThreadsAnnotationQueue]:
+        """
+        Get all threads annotation queues for a project.
+
+        Args:
+            project_name: The name of the project. If not provided, uses the client's default project.
+            max_results: Maximum number of queues to return. Defaults to 1000.
+
+        Returns:
+            List[ThreadsAnnotationQueue]: A list of threads annotation queue objects.
+        """
+        project_id = rest_helpers.resolve_project_id_by_name(
+            self._rest_client, project_name or self._project_name
+        )
+
+        return annotation_queue_rest_operations.get_threads_annotation_queues(
             rest_client=self._rest_client,
             project_id=project_id,
             max_results=max_results,
