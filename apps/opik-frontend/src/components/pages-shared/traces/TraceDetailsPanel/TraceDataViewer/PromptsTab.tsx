@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
+import { PromptLibraryMetadata } from "@/types/playground";
 import {
   Accordion,
   AccordionContent,
@@ -16,17 +17,6 @@ import useAppStore from "@/store/AppStore";
 import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-
-type RawPromptData = {
-  id: string;
-  name: string;
-  version: {
-    commit: string;
-    id: string;
-    template: unknown; // Can be string (legacy) or parsed JSON object (new format)
-    metadata?: object;
-  };
-};
 
 // Helper to ensure template is always a string for PromptVersion
 // The template from trace metadata can be either a string (legacy) or parsed JSON object (new format)
@@ -46,7 +36,7 @@ type PromptsTabProps = {
 };
 
 const convertRawPromptToPromptWithLatestVersion = (
-  rawPrompt: RawPromptData,
+  rawPrompt: PromptLibraryMetadata,
 ): PromptWithLatestVersion => {
   const date = new Date().toISOString();
 
@@ -61,7 +51,7 @@ const convertRawPromptToPromptWithLatestVersion = (
     id: rawPrompt.version.id,
     template: normalizeTemplate(rawPrompt.version.template),
     metadata,
-    commit: rawPrompt.version.commit,
+    commit: rawPrompt.version.commit ?? "",
     prompt_id: rawPrompt.id,
     created_at: date, // We don't have this in raw data, using current time
   };
@@ -111,7 +101,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
     data.metadata as Record<string, unknown>,
     "opik_prompts",
     null,
-  ) as RawPromptData[] | null;
+  ) as PromptLibraryMetadata[] | null;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const showOptimizerPrompts = useIsFeatureEnabled(
     FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
@@ -120,7 +110,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   const prompts = useMemo(() => {
     if (!showOptimizerPrompts) return [];
     if (Array.isArray(rawPrompts) && rawPrompts.length > 0) {
-      return (rawPrompts as RawPromptData[]).map(
+      return (rawPrompts as PromptLibraryMetadata[]).map(
         convertRawPromptToPromptWithLatestVersion,
       );
     }

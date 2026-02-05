@@ -1,13 +1,14 @@
 import { useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import isEqual from "fast-deep-equal";
 
 import {
   PlaygroundPromptType,
   PromptLibraryMetadata,
 } from "@/types/playground";
-import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
+import { PromptVersion } from "@/types/prompts";
 import { parsePromptVersionContent } from "@/lib/llm";
+import { useFetchPrompt } from "@/api/prompts/usePromptById";
+import { useFetchPromptVersion } from "@/api/prompts/usePromptVersionById";
 
 type NormalizedMessage = { role: string; content: unknown };
 
@@ -47,7 +48,8 @@ const buildMetadata = (
 });
 
 export function useHydratePromptMetadata() {
-  const queryClient = useQueryClient();
+  const fetchPrompt = useFetchPrompt();
+  const fetchPromptVersion = useFetchPromptVersion();
 
   return useCallback(
     async (
@@ -57,22 +59,20 @@ export function useHydratePromptMetadata() {
       const chatPromptId = prompt.loadedChatPromptId;
       if (chatPromptId) {
         try {
-          // Use getQueryData to check if data is already cached
-          // This avoids network requests during execution
-          const promptData = queryClient.getQueryData<PromptWithLatestVersion>([
-            "prompt",
-            { promptId: chatPromptId },
-          ]);
+          const promptData = await fetchPrompt({ promptId: chatPromptId });
 
           if (!promptData?.latest_version?.id) return undefined;
 
-          // Try to get the version data from cache
-          const versionData = queryClient.getQueryData<PromptVersion>([
-            "prompt-version",
-            { versionId: promptData.latest_version.id },
-          ]);
+          // Fetch the version data for more accurate comparison
+          let versionData: PromptVersion | undefined;
+          try {
+            versionData = await fetchPromptVersion({
+              versionId: promptData.latest_version.id,
+            });
+          } catch {
+            // Fall back to latest_version from prompt data
+          }
 
-          // If we have version data, use it for comparison (more accurate)
           const templateToCompare =
             versionData?.template ?? promptData.latest_version.template;
 
@@ -114,10 +114,7 @@ export function useHydratePromptMetadata() {
         if (!message.promptId) continue;
 
         try {
-          const promptData = queryClient.getQueryData<PromptWithLatestVersion>([
-            "prompt",
-            { promptId: message.promptId },
-          ]);
+          const promptData = await fetchPrompt({ promptId: message.promptId });
 
           if (!promptData?.latest_version) continue;
 
@@ -140,6 +137,6 @@ export function useHydratePromptMetadata() {
 
       return undefined;
     },
-    [queryClient],
+    [fetchPrompt, fetchPromptVersion],
   );
 }
