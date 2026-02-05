@@ -135,31 +135,15 @@ def find_version_by_name(
 
     Returns:
         The DatasetVersionPublic if found, None otherwise.
-
-    Note:
-        TODO(OPIK-4149): Replace with a dedicated BE endpoint for fetching
-        a single version by name. The current pagination approach can be slow
-        for datasets with many versions.
     """
-    page = 1
-    page_size = 100
-
-    while True:
-        versions_page = rest_client.datasets.list_dataset_versions(
-            id=dataset_id, page=page, size=page_size
+    try:
+        return rest_client.datasets.retrieve_dataset_version(
+            id=dataset_id, version_name=version_name
         )
-
-        if versions_page.content is None or len(versions_page.content) == 0:
+    except ApiError as e:
+        if e.status_code == 404:
             return None
-
-        for version_info in versions_page.content:
-            if version_info.version_name == version_name:
-                return version_info
-
-        if len(versions_page.content) < page_size:
-            return None
-
-        page += 1
+        raise
 
 
 def get_datasets(
