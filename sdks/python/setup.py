@@ -65,6 +65,9 @@ setup(
             "fastapi>=0.100.0",
             "uvicorn>=0.23.0",
         ],
+        "narwhals": [
+            "narwhals>=1.0.0",
+        ],
     },
     entry_points={
         "pytest11": [

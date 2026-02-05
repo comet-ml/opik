@@ -37,6 +37,7 @@ else:
 
 if TYPE_CHECKING:
     import pandas as pd
+    from narwhals.typing import IntoDataFrame, IntoFrameT
 
 LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +83,26 @@ class DatasetExportOperations(abc.ABC):
         """
         dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
         return converters.to_pandas(dataset_items, keys_mapping={})
+
+    def to_dataframe(
+        self, native_namespace: Optional[str] = None
+    ) -> "IntoFrameT":
+        """
+        Convert the dataset items to a Narwhals-compatible dataframe.
+
+        Requires the `narwhals` library to be installed.
+
+        Args:
+            native_namespace: Target dataframe library ('pandas', 'polars', 'pyarrow', etc.).
+                             If None, returns a Narwhals DataFrame.
+
+        Returns:
+            A dataframe in the specified native format, or a Narwhals DataFrame if native_namespace is None.
+        """
+        dataset_items = list(self.__internal_api__stream_items_as_dataclasses__())
+        return converters.to_dataframe(
+            dataset_items, keys_mapping={}, native_namespace=native_namespace
+        )
 
     def to_json(self) -> str:
         """
@@ -685,6 +706,31 @@ class Dataset(DatasetExportOperations):
         ignore_keys = [] if ignore_keys is None else ignore_keys
 
         new_items = converters.from_pandas(dataframe, keys_mapping, ignore_keys)
+
+        self.insert(new_items)
+
+    def insert_from_dataframe(
+        self,
+        dataframe: "IntoDataFrame",
+        keys_mapping: Optional[Dict[str, str]] = None,
+        ignore_keys: Optional[List[str]] = None,
+    ) -> None:
+        """
+        Insert items from a Narwhals-compatible dataframe.
+
+        Requires: `narwhals` library to be installed.
+
+        Args:
+            dataframe: Any dataframe compatible with Narwhals (pandas, Polars, DuckDB, PyArrow, etc.)
+            keys_mapping: Dictionary that maps dataframe column names to dataset item field names.
+                Example: {'Expected output': 'expected_output'}
+            ignore_keys: if your dataframe contains columns that are not needed for DatasetItem
+                construction - pass them as ignore_keys argument
+        """
+        keys_mapping = {} if keys_mapping is None else keys_mapping
+        ignore_keys = [] if ignore_keys is None else ignore_keys
+
+        new_items = converters.from_dataframe(dataframe, keys_mapping, ignore_keys)
 
         self.insert(new_items)
 
