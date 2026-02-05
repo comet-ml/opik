@@ -71,7 +71,7 @@
     "@uiw/react-codemirror": "^4.23.10",
     "ansi-to-html": "^0.7.2",
     "async": "^3.2.6",
-    "axios": "^1.8.2",
+    "axios": "^1.13.4",
     "class-variance-authority": "^0.7.0",
     "clipboard-copy": "^4.0.1",
     "clsx": "^2.1.1",
