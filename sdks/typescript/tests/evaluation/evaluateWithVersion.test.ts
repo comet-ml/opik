@@ -129,7 +129,7 @@ describe("evaluate with DatasetVersion", () => {
     expect(streamDatasetItemsSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         datasetName: "test-dataset",
-        datasetVersion: "v2",
+        datasetVersion: "hash-abc",
       })
     );
   });

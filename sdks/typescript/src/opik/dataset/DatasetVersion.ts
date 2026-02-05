@@ -183,7 +183,7 @@ export class DatasetVersion<T extends DatasetItemData = DatasetItemData> {
       datasetName: this.datasetName,
       lastRetrievedId,
       steamLimit: streamLimit,
-      datasetVersion: this.versionInfo.versionName,
+      datasetVersion: this.versionInfo.versionHash,
     });
 
     const rawItems = await parseNdjsonStreamToArray<DatasetItemPublic>(

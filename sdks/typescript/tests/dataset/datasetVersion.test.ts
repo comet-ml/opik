@@ -131,7 +131,7 @@ describe("DatasetVersion", () => {
         datasetName: "test-dataset",
         lastRetrievedId: undefined,
         steamLimit: 2000,
-        datasetVersion: "v1",
+        datasetVersion: "hash-abc123",
       });
     });
 
@@ -173,7 +173,7 @@ describe("DatasetVersion", () => {
         datasetName: "test-dataset",
         lastRetrievedId: undefined,
         steamLimit: 50,
-        datasetVersion: "v1",
+        datasetVersion: "hash-abc123",
       });
     });
 
@@ -194,7 +194,7 @@ describe("DatasetVersion", () => {
         datasetName: "test-dataset",
         lastRetrievedId: undefined,
         steamLimit: 2000, // Should be capped at 2000
-        datasetVersion: "v1",
+        datasetVersion: "hash-abc123",
       });
     });
 
