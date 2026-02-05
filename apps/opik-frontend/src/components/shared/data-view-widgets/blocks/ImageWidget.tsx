@@ -1,11 +1,8 @@
-import React, { useState } from "react";
+import React from "react";
 import { z } from "zod";
-import { Download, Expand, ImageIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ImageIcon } from "lucide-react";
 import { DynamicString, NullableDynamicString } from "@/lib/data-view";
-import { Button } from "@/components/ui/button";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import AttachmentPreviewDialog from "@/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
+import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { ATTACHMENT_TYPE } from "@/types/attachments";
 
 // ============================================================================
@@ -44,16 +41,17 @@ export const imageWidgetConfig = {
  * ImageWidget - Image display block
  *
  * Figma reference: Node 239-15694
+ * Uses the shared ImagesListWrapper component for consistent image rendering.
+ *
  * Features:
- * - Preview image with border and rounded corners
- * - Label at top with expand/download icons
+ * - Preview image with hover-based expand/download actions
+ * - Uses AttachmentThumbnail via ImagesListWrapper
  * - Optional tag at bottom
  *
  * Styles:
+ * - Thumbnail: 200px height (AttachmentThumbnail standard)
  * - Border: #E2E8F0 (border-border), rounded-md
- * - Background: rgba(248,250,252,0.25)
- * - Label: 12px Inter, #45575F (comet-body-xs)
- * - Tag: 14px Inter Medium, #45575F with #EBF2F5 background
+ * - Background: bg-primary-foreground
  */
 export const ImageWidget: React.FC<ImageWidgetProps> = ({
   src,
@@ -61,66 +59,20 @@ export const ImageWidget: React.FC<ImageWidgetProps> = ({
   label,
   tag,
 }) => {
-  const [dialogOpen, setDialogOpen] = useState(false);
-
   if (!src) return null;
 
-  const handleExpand = () => {
-    setDialogOpen(true);
-  };
-
-  const handleDownload = () => {
-    const link = document.createElement("a");
-    link.href = src;
-    link.download = alt || "image";
-    link.click();
-  };
+  const mediaData = [
+    {
+      url: src,
+      name: label || alt || "Image",
+      type: ATTACHMENT_TYPE.IMAGE as const,
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-1 py-0.5">
-      {/* Preview container */}
-      <div
-        className={cn(
-          "flex flex-col gap-2 overflow-hidden rounded-md border border-border bg-slate-50/25 p-2",
-        )}
-      >
-        {/* Header with label and actions */}
-        <div className="flex h-4 items-center gap-2.5">
-          <span className="comet-body-xs flex-1 truncate text-muted-slate">
-            {label || "Image"}
-          </span>
-          <TooltipWrapper content="Expand">
-            <Button
-              variant="ghost"
-              size="icon-2xs"
-              onClick={handleExpand}
-              aria-label="Expand image"
-            >
-              <Expand className="size-4" />
-            </Button>
-          </TooltipWrapper>
-          <TooltipWrapper content="Download">
-            <Button
-              variant="ghost"
-              size="icon-2xs"
-              onClick={handleDownload}
-              aria-label="Download image"
-            >
-              <Download className="size-4" />
-            </Button>
-          </TooltipWrapper>
-        </div>
-
-        {/* Image preview */}
-        <div className="overflow-hidden rounded">
-          <img
-            src={src}
-            alt={alt || "Image preview"}
-            loading="lazy"
-            className="h-40 w-full object-contain"
-          />
-        </div>
-      </div>
+      {/* Image preview using shared component */}
+      <ImagesListWrapper media={mediaData} />
 
       {/* Tag - clickable link to the image source */}
       {tag && (
@@ -138,15 +90,6 @@ export const ImageWidget: React.FC<ImageWidgetProps> = ({
           </a>
         </div>
       )}
-
-      {/* Fullscreen preview dialog */}
-      <AttachmentPreviewDialog
-        open={dialogOpen}
-        setOpen={setDialogOpen}
-        type={ATTACHMENT_TYPE.IMAGE}
-        name={label || alt || "Image"}
-        url={src}
-      />
     </div>
   );
 };

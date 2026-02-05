@@ -135,7 +135,10 @@ export const traceWithToolCallsExample = {
       tc2Content: {
         id: "tc2Content",
         type: "Text",
-        props: { value: { path: "/toolCalls/1/description" }, variant: "body-small" },
+        props: {
+          value: { path: "/toolCalls/1/description" },
+          variant: "body-small",
+        },
         children: undefined,
         parentKey: "toolCall2",
       },
@@ -156,7 +159,10 @@ export const traceWithToolCallsExample = {
       tc3Content: {
         id: "tc3Content",
         type: "Text",
-        props: { value: { path: "/toolCalls/2/description" }, variant: "body-small" },
+        props: {
+          value: { path: "/toolCalls/2/description" },
+          variant: "body-small",
+        },
         children: undefined,
         parentKey: "toolCall3",
       },

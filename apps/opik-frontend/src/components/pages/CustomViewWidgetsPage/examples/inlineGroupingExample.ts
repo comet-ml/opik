@@ -106,7 +106,8 @@ export const inlineGroupingExample = {
     },
     meta: {
       name: "Container Layouts",
-      description: "L2 accordion sections demonstrating container layout patterns",
+      description:
+        "L2 accordion sections demonstrating container layout patterns",
     },
   } satisfies ViewTree,
   sourceData: {

@@ -1,15 +1,12 @@
-import React, { useRef, useState } from "react";
+import React from "react";
 import { z } from "zod";
-import { CirclePlay, Download, Expand, Play } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { CirclePlay } from "lucide-react";
 import {
   DynamicString,
   NullableDynamicString,
   NullableDynamicBoolean,
 } from "@/lib/data-view";
-import { Button } from "@/components/ui/button";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import AttachmentPreviewDialog from "@/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog";
+import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { ATTACHMENT_TYPE } from "@/types/attachments";
 
 // ============================================================================
@@ -50,120 +47,37 @@ export const videoWidgetConfig = {
  * VideoWidget - Video player block
  *
  * Figma reference: Node 239-15694 (Video section)
+ * Uses the shared ImagesListWrapper component for consistent video rendering.
+ *
  * Features:
- * - Preview thumbnail with play button overlay
- * - Label at top with expand/download icons
+ * - Preview thumbnail with hover-based expand/download actions
+ * - Uses AttachmentThumbnail via ImagesListWrapper
  * - Optional tag at bottom
- * - Native video controls on play
  *
  * Styles:
+ * - Thumbnail: 200px height (AttachmentThumbnail standard)
  * - Border: #E2E8F0 (border-border), rounded-md
- * - Background: rgba(248,250,252,0.25)
- * - Play button: white bg, border, centered
+ * - Background: bg-primary-foreground
  */
 export const VideoWidget: React.FC<VideoWidgetProps> = ({
   src,
   label,
   tag,
-  controls = true,
 }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
   if (!src) return null;
 
-  const handleExpand = () => {
-    setDialogOpen(true);
-  };
-
-  const handleDownload = () => {
-    const link = document.createElement("a");
-    link.href = src;
-    link.download = label || "video";
-    link.click();
-  };
-
-  const handlePlay = () => {
-    setIsPlaying(true);
-    setTimeout(() => {
-      videoRef.current?.play();
-    }, 100);
-  };
+  const mediaData = [
+    {
+      url: src,
+      name: label || "Video",
+      type: ATTACHMENT_TYPE.VIDEO as const,
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-1 py-0.5">
-      {/* Preview container */}
-      <div
-        className={cn(
-          "flex flex-col gap-2 overflow-hidden rounded-md border border-border bg-slate-50/25 p-2",
-        )}
-      >
-        {/* Header with label and actions */}
-        <div className="flex h-4 items-center gap-2.5">
-          <span className="comet-body-xs flex-1 truncate text-muted-slate">
-            {label || "Video"}
-          </span>
-          <TooltipWrapper content="Expand">
-            <Button
-              variant="ghost"
-              size="icon-2xs"
-              onClick={handleExpand}
-              aria-label="Expand video"
-            >
-              <Expand className="size-4" />
-            </Button>
-          </TooltipWrapper>
-          <TooltipWrapper content="Download">
-            <Button
-              variant="ghost"
-              size="icon-2xs"
-              onClick={handleDownload}
-              aria-label="Download video"
-            >
-              <Download className="size-4" />
-            </Button>
-          </TooltipWrapper>
-        </div>
-
-        {/* Video preview / player */}
-        <div className="relative overflow-hidden rounded">
-          {isPlaying ? (
-            <video
-              ref={videoRef}
-              src={src}
-              controls={controls}
-              className="h-40 w-full object-contain"
-            >
-              Your browser does not support video playback.
-            </video>
-          ) : (
-            <div
-              className="relative h-40 w-full cursor-pointer bg-slate-100"
-              onClick={handlePlay}
-            >
-              {/* Thumbnail - use video poster or first frame */}
-              <video
-                src={src}
-                preload="metadata"
-                className="size-full object-contain"
-                muted
-              />
-              {/* Play button overlay */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="size-8 rounded-md bg-white"
-                  aria-label="Play video"
-                >
-                  <Play className="size-3.5" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* Video preview using shared component */}
+      <ImagesListWrapper media={mediaData} />
 
       {/* Tag - clickable link to the video source */}
       {tag && (
@@ -181,15 +95,6 @@ export const VideoWidget: React.FC<VideoWidgetProps> = ({
           </a>
         </div>
       )}
-
-      {/* Fullscreen preview dialog */}
-      <AttachmentPreviewDialog
-        open={dialogOpen}
-        setOpen={setDialogOpen}
-        type={ATTACHMENT_TYPE.VIDEO}
-        name={label || "Video"}
-        url={src}
-      />
     </div>
   );
 };

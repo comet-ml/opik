@@ -66,9 +66,7 @@ export const LinkWidget: React.FC<LinkWidgetProps> = ({ url, text }) => {
 
   // Security: Reject potentially malicious URLs (javascript:, data:, vbscript:, etc.)
   if (!isValidUrl(url)) {
-    return (
-      <span className="comet-body-s text-muted-slate">[Invalid URL]</span>
-    );
+    return <span className="comet-body-s text-muted-slate">[Invalid URL]</span>;
   }
 
   const displayText = text ?? url;

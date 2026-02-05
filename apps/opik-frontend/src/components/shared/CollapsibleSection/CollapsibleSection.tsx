@@ -89,6 +89,7 @@ const CollapsibleSectionHeader: React.FC<CollapsibleSectionHeaderProps> = ({
       )}
     >
       <div className="flex items-center gap-1">
+        {/* eslint-disable-next-line tailwindcss/no-custom-classname */}
         <ChevronRight className="collapsible-chevron size-3.5 text-light-slate transition-transform duration-200" />
         {leftContent}
       </div>
