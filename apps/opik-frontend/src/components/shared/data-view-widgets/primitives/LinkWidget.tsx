@@ -2,6 +2,7 @@ import React from "react";
 import { z } from "zod";
 import { SquareArrowOutUpRight } from "lucide-react";
 import { DynamicString, NullableDynamicString } from "@/lib/data-view";
+import { Button } from "@/components/ui/button";
 
 // ============================================================================
 // SECURITY
@@ -30,7 +31,6 @@ function isValidUrl(url: string): boolean {
 export interface LinkWidgetProps {
   url: string;
   text?: string | null;
-  label?: string | null;
 }
 
 // ============================================================================
@@ -43,7 +43,6 @@ export const linkWidgetConfig = {
   schema: z.object({
     url: DynamicString.describe("Target URL"),
     text: NullableDynamicString.describe("Display text (defaults to URL)"),
-    label: NullableDynamicString.describe("Optional label prefix"),
   }),
   description: "External URL hyperlink with icon.",
 };
@@ -62,36 +61,25 @@ export const linkWidgetConfig = {
  * - gap: 4px between text and icon
  * - icon: square-arrow-out-up-right (14x14)
  */
-export const LinkWidget: React.FC<LinkWidgetProps> = ({ url, text, label }) => {
+export const LinkWidget: React.FC<LinkWidgetProps> = ({ url, text }) => {
   if (!url) return null;
 
   // Security: Reject potentially malicious URLs (javascript:, data:, vbscript:, etc.)
   if (!isValidUrl(url)) {
     return (
-      <span className="inline-flex items-center gap-2">
-        {label && (
-          <span className="comet-body-s text-muted-slate">{label}</span>
-        )}
-        <span className="comet-body-s text-muted-slate">[Invalid URL]</span>
-      </span>
+      <span className="comet-body-s text-muted-slate">[Invalid URL]</span>
     );
   }
 
   const displayText = text ?? url;
 
   return (
-    <span className="inline-flex items-center gap-2">
-      {label && <span className="comet-body-s text-muted-slate">{label}</span>}
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex h-6 items-center gap-1 text-primary hover:text-primary/80"
-      >
-        <span className="comet-body-s">{displayText}</span>
-        <SquareArrowOutUpRight className="size-3.5" />
+    <Button variant="link" size="2xs" asChild className="w-fit">
+      <a href={url} target="_blank" rel="noopener noreferrer">
+        {displayText}
+        <SquareArrowOutUpRight className="ml-1 size-3.5 shrink-0" />
       </a>
-    </span>
+    </Button>
   );
 };
 

@@ -166,7 +166,6 @@ function CodeRenderer({ element }: ComponentRenderProps) {
     language: language as string | null | undefined,
     label: props.label as string | null | undefined,
     wrap: Boolean(props.wrap),
-    showLineNumbers: props.showLineNumbers !== false,
     showCopy: props.showCopy !== false,
   });
 }

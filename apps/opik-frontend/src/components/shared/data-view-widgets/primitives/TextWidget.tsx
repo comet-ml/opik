@@ -9,7 +9,7 @@ import { DynamicString, NullableDynamicBoolean } from "@/lib/data-view";
 
 export interface TextWidgetProps {
   value: string;
-  variant?: "body" | "bold" | "caption";
+  variant?: "body" | "body-small" | "caption";
   truncate?: boolean;
   monospace?: boolean;
 }
@@ -24,10 +24,12 @@ export const textWidgetConfig = {
   schema: z.object({
     value: DynamicString,
     variant: z
-      .enum(["body", "bold", "caption"])
+      .enum(["body", "body-small", "caption"])
       .nullable()
       .optional()
-      .describe("Text style variant"),
+      .describe(
+        "Text style variant: body-small (default, 14px), body (16px), or caption (smaller, muted)",
+      ),
     truncate: NullableDynamicBoolean.describe("Truncate with ellipsis"),
     monospace: NullableDynamicBoolean.describe("Use monospace font"),
   }),
@@ -44,12 +46,12 @@ export const textWidgetConfig = {
  * Figma reference: Node 239-14918
  * Styles:
  * - body: 16px Regular Inter, #373D4D, line-height 24px
- * - bold: 16px Medium Inter, #373D4D, line-height 24px
+ * - body-small: 14px Regular Inter, #373D4D (default for L2 containers)
  * - caption: 12px Regular Inter, #64748B (muted-slate), line-height 16px
  */
 export const TextWidget: React.FC<TextWidgetProps> = ({
   value,
-  variant = "body",
+  variant = "body-small",
   truncate = false,
   monospace = false,
 }) => {
@@ -57,14 +59,14 @@ export const TextWidget: React.FC<TextWidgetProps> = ({
 
   const variantClasses: Record<string, string> = {
     body: "comet-body text-foreground",
-    bold: "comet-body-accented text-foreground",
+    "body-small": "comet-body-s text-foreground",
     caption: "comet-body-xs text-muted-slate",
   };
 
   return (
     <span
       className={cn(
-        variantClasses[variant] ?? variantClasses.body,
+        variantClasses[variant] ?? variantClasses["body-small"],
         truncate && "truncate block",
         monospace && "font-mono",
       )}

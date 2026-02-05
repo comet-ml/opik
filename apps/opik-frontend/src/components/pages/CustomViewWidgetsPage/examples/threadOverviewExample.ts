@@ -3,12 +3,12 @@ import type { ViewTree, SourceData } from "@/lib/data-view/core/types";
 /**
  * THREAD VIEW: Thread Overview with Chat
  *
- * Based on Figma node 245-19693
+ * Based on Figma node 364:18296
  * Shows a thread overview with:
- * - Thread info header (turns, date, duration, status, cost)
- * - Chat turn with user/assistant messages (ChatMessage widgets)
- * - Tags (Agent, Category)
- * - Trace details section
+ * - Single meta line with all info combined (turns • date • duration • status • cost)
+ * - Chat messages as direct children (user/assistant ChatMessage widgets)
+ * - Tags (Agent, Category) with labels inside chips
+ * - Trace details section (L1 container with Code block)
  *
  * Note: Uses Container at root level. Thread views use ChatMessage widgets
  * instead of Input/Output TextBlocks for displaying conversation turns.
@@ -24,108 +24,26 @@ export const threadOverviewExample = {
         type: "Container",
         props: { layout: "stack", gap: "md", padding: "none" },
         children: [
-          "threadHeader",
-          "threadMeta",
-          "divider1",
-          "chatSection",
+          "metaLine",
+          "userMessage",
+          "assistantMessage",
           "tagsSection",
           "traceDetails",
         ],
         parentKey: null,
       },
-      // Thread Header
-      threadHeader: {
-        id: "threadHeader",
-        type: "Header",
+      // Meta line: single text with all info combined
+      metaLine: {
+        id: "metaLine",
+        type: "Text",
         props: {
-          text: { path: "/threadInfo/title" },
-          level: 2,
+          value: { path: "/threadInfo/metaLine" },
+          variant: "caption",
         },
         children: undefined,
         parentKey: "root",
       },
-      threadMeta: {
-        id: "threadMeta",
-        type: "InlineRow",
-        props: {},
-        children: [
-          "turnsLabel",
-          "turnsValue",
-          "dateValue",
-          "durationValue",
-          "statusTag",
-          "costLabel",
-          "costValue",
-        ],
-        parentKey: "root",
-      },
-      turnsLabel: {
-        id: "turnsLabel",
-        type: "Label",
-        props: { text: "Turns:" },
-        children: undefined,
-        parentKey: "threadMeta",
-      },
-      turnsValue: {
-        id: "turnsValue",
-        type: "Number",
-        props: { value: { path: "/threadInfo/turns" }, size: "sm" },
-        children: undefined,
-        parentKey: "threadMeta",
-      },
-      dateValue: {
-        id: "dateValue",
-        type: "Text",
-        props: { value: { path: "/threadInfo/date" }, variant: "caption" },
-        children: undefined,
-        parentKey: "threadMeta",
-      },
-      durationValue: {
-        id: "durationValue",
-        type: "Text",
-        props: { value: { path: "/threadInfo/duration" }, variant: "caption" },
-        children: undefined,
-        parentKey: "threadMeta",
-      },
-      statusTag: {
-        id: "statusTag",
-        type: "Tag",
-        props: {
-          label: { path: "/threadInfo/status" },
-          variant: "default",
-        },
-        children: undefined,
-        parentKey: "threadMeta",
-      },
-      costLabel: {
-        id: "costLabel",
-        type: "Label",
-        props: { text: "Total cost:" },
-        children: undefined,
-        parentKey: "threadMeta",
-      },
-      costValue: {
-        id: "costValue",
-        type: "Text",
-        props: { value: { path: "/threadInfo/totalCost" }, variant: "body" },
-        children: undefined,
-        parentKey: "threadMeta",
-      },
-      divider1: {
-        id: "divider1",
-        type: "Divider",
-        props: {},
-        children: undefined,
-        parentKey: "root",
-      },
-      // Chat Section
-      chatSection: {
-        id: "chatSection",
-        type: "Level1Container",
-        props: { title: "Conversation" },
-        children: ["userMessage", "assistantMessage"],
-        parentKey: "root",
-      },
+      // Chat messages as direct children (no wrapper container)
       userMessage: {
         id: "userMessage",
         type: "ChatMessage",
@@ -134,7 +52,7 @@ export const threadOverviewExample = {
           role: "user",
         },
         children: undefined,
-        parentKey: "chatSection",
+        parentKey: "root",
       },
       assistantMessage: {
         id: "assistantMessage",
@@ -144,37 +62,23 @@ export const threadOverviewExample = {
           role: "assistant",
         },
         children: undefined,
-        parentKey: "chatSection",
+        parentKey: "root",
       },
-      // Tags Section
+      // Tags Section - labels included inside chips, all grey (default variant)
       tagsSection: {
         id: "tagsSection",
         type: "InlineRow",
         props: {},
-        children: ["agentLabel", "agentTag", "categoryLabel", "categoryTag"],
+        children: ["agentTag", "categoryTag"],
         parentKey: "root",
-      },
-      agentLabel: {
-        id: "agentLabel",
-        type: "Label",
-        props: { text: "Agent:" },
-        children: undefined,
-        parentKey: "tagsSection",
       },
       agentTag: {
         id: "agentTag",
         type: "Tag",
         props: {
-          label: { path: "/turn/agent" },
-          variant: "info",
+          label: { path: "/turn/agentTagLabel" },
+          variant: "default",
         },
-        children: undefined,
-        parentKey: "tagsSection",
-      },
-      categoryLabel: {
-        id: "categoryLabel",
-        type: "Label",
-        props: { text: "Category:" },
         children: undefined,
         parentKey: "tagsSection",
       },
@@ -182,91 +86,33 @@ export const threadOverviewExample = {
         id: "categoryTag",
         type: "Tag",
         props: {
-          label: { path: "/turn/category" },
+          label: { path: "/turn/categoryTagLabel" },
           variant: "default",
         },
         children: undefined,
         parentKey: "tagsSection",
       },
-      // Trace Details
+      // Trace Details - L1 container with single Code block
       traceDetails: {
         id: "traceDetails",
-        type: "Level2Container",
+        type: "Level1Container",
         props: {
-          summary: "Trace details",
+          title: "Trace details",
+          collapsible: true,
           defaultOpen: false,
         },
-        children: ["traceMetaRow", "pipelineSection"],
+        children: ["traceCode"],
         parentKey: "root",
       },
-      traceMetaRow: {
-        id: "traceMetaRow",
-        type: "InlineRow",
-        props: {},
-        children: [
-          "traceIdLabel",
-          "traceIdValue",
-          "traceDurLabel",
-          "traceDurValue",
-        ],
-        parentKey: "traceDetails",
-      },
-      traceIdLabel: {
-        id: "traceIdLabel",
-        type: "Label",
-        props: { text: "Trace ID:" },
-        children: undefined,
-        parentKey: "traceMetaRow",
-      },
-      traceIdValue: {
-        id: "traceIdValue",
-        type: "Text",
+      traceCode: {
+        id: "traceCode",
+        type: "Code",
         props: {
-          value: { path: "/turn/traceId" },
-          variant: "body",
-          monospace: true,
+          code: { path: "/turn/traceDetailsCode" },
+          language: "text",
         },
         children: undefined,
-        parentKey: "traceMetaRow",
-      },
-      traceDurLabel: {
-        id: "traceDurLabel",
-        type: "Label",
-        props: { text: "Duration:" },
-        children: undefined,
-        parentKey: "traceMetaRow",
-      },
-      traceDurValue: {
-        id: "traceDurValue",
-        type: "Text",
-        props: { value: { path: "/turn/duration" }, variant: "body" },
-        children: undefined,
-        parentKey: "traceMetaRow",
-      },
-      pipelineSection: {
-        id: "pipelineSection",
-        type: "InlineRow",
-        props: {},
-        children: ["pipelineLabel", "pipelineValue"],
         parentKey: "traceDetails",
-      },
-      pipelineLabel: {
-        id: "pipelineLabel",
-        type: "Label",
-        props: { text: "Pipeline:" },
-        children: undefined,
-        parentKey: "pipelineSection",
-      },
-      pipelineValue: {
-        id: "pipelineValue",
-        type: "Text",
-        props: {
-          value: { path: "/turn/pipeline" },
-          variant: "caption",
-          monospace: true,
-        },
-        children: undefined,
-        parentKey: "pipelineSection",
       },
     },
     meta: {
@@ -276,23 +122,17 @@ export const threadOverviewExample = {
   } satisfies ViewTree,
   sourceData: {
     threadInfo: {
-      title: "Thread · 26 turns",
-      turns: 26,
-      date: "Nov 25, 2025",
-      duration: "14.5s",
-      status: "inactive",
-      totalCost: "$0.00249",
+      metaLine:
+        "Turns:26 • Nov 25, 2025 • 14.5s • Inactive • Total cost: $0.0024",
     },
     turn: {
       userMessage: "Can you recommend a good restaurant for my client dinner?",
       assistantMessage:
-        "Thank you for your inquiry! While I'm unable to recommend specific restaurants, I can suggest some approaches:\n\n1. Check local review sites for highly-rated business dining options\n2. Consider the dietary preferences of your clients\n3. Look for restaurants with private dining rooms for confidential discussions\n4. Ask colleagues for personal recommendations in the area",
-      agent: "fallback",
-      category: "other",
-      traceId: "019abbdc-1e96-7f8a-b2c3-d4e5f6a7b8c9",
-      pipeline: "classify → fallback_tool → format_response",
-      tool: "fallback",
-      duration: "14.5s",
+        "Yes, you can monitor failed API calls using Opik's built-in monitoring features. Here's how to set it up:\n\n1. Navigate to your project's Monitoring tab\n2. Create a new alert rule with type \"API Error Rate\"\n3. Set your threshold (e.g., alert when error rate > 5%)\n4. Configure notification channels (email, Slack, or webhook)",
+      agentTagLabel: "Agent: fallback",
+      categoryTagLabel: "Category: other",
+      traceDetailsCode:
+        "Trace ID: 019abbdc-1e96-7f8a-b2c3-d4e5f6a7b8c9\nDuration: 14.5s\nPipeline: classify → fallback_tool → format_response",
     },
   } satisfies SourceData,
 };

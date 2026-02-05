@@ -65,7 +65,7 @@ export const ChatMessageWidget: React.FC<ChatMessageWidgetProps> = ({
     "max-w-[85%] px-4 py-3",
     isUser
       ? "rounded-tl-xl rounded-tr-xl rounded-bl-xl bg-[#E8DEF8]" // User: rounded except bottom-right
-      : "rounded-tl-xl rounded-tr-xl rounded-br-xl border border-border bg-white", // Assistant: rounded except bottom-left
+      : "rounded-tl-xl rounded-tr-xl rounded-br-xl bg-slate-50", // Assistant: rounded except bottom-left, bg + no border
   );
 
   return (

@@ -34,6 +34,16 @@ export const tagWidgetConfig = {
 };
 
 // ============================================================================
+// HELPERS
+// ============================================================================
+
+/**
+ * Capitalizes the first letter of a string.
+ */
+const capitalize = (str: string): string =>
+  str.charAt(0).toUpperCase() + str.slice(1);
+
+// ============================================================================
 // COMPONENT
 // ============================================================================
 
@@ -49,6 +59,7 @@ export const tagWidgetConfig = {
  * - info → blue (bg #E2EFFD, text #19426B)
  *
  * Style: 14px Medium, px-[6px] py-[2px], rounded-[4px]
+ * Note: Labels are automatically capitalized (first letter uppercase).
  */
 export const TagWidget: React.FC<TagWidgetProps> = ({
   label,
@@ -70,7 +81,7 @@ export const TagWidget: React.FC<TagWidgetProps> = ({
 
   return (
     <Tag variant={variantMap[variant]} size="md">
-      {label}
+      {capitalize(label)}
     </Tag>
   );
 };

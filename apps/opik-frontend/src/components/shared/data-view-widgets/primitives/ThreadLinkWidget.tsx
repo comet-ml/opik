@@ -14,7 +14,6 @@ import useAppStore from "@/store/AppStore";
 export interface ThreadLinkWidgetProps {
   threadId: string;
   text?: string | null;
-  label?: string | null;
 }
 
 // ============================================================================
@@ -29,7 +28,6 @@ export const threadLinkWidgetConfig = {
     text: NullableDynamicString.describe(
       "Display text (defaults to 'View Thread')",
     ),
-    label: NullableDynamicString.describe("Optional label prefix"),
   }),
   description:
     "Opens a thread in a new window. AI provides only the thread ID.",
@@ -53,7 +51,6 @@ export const threadLinkWidgetConfig = {
 export const ThreadLinkWidget: React.FC<ThreadLinkWidgetProps> = ({
   threadId,
   text,
-  label,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { projectId } = useParams({ strict: false }) as { projectId?: string };
@@ -64,15 +61,17 @@ export const ThreadLinkWidget: React.FC<ThreadLinkWidgetProps> = ({
   const displayText = text || "View Thread";
 
   return (
-    <span className="inline-flex items-center gap-2">
-      {label && <span className="comet-body-s text-muted-slate">{label}</span>}
-      <Button variant="tableLink" size="sm" asChild className="px-0">
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {displayText}
-          <SquareArrowOutUpRight className="ml-1.5 size-3.5 shrink-0" />
-        </a>
-      </Button>
-    </span>
+    <Button
+      variant="tableLink"
+      size="2xs"
+      asChild
+      className="w-fit no-underline"
+    >
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {displayText}
+        <SquareArrowOutUpRight className="ml-1 size-3.5 shrink-0" />
+      </a>
+    </Button>
   );
 };
 

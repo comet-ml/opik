@@ -82,6 +82,9 @@ export type { TraceLinkWidgetProps } from "./TraceLinkWidget";
 export { ThreadLinkWidget, threadLinkWidgetConfig } from "./ThreadLinkWidget";
 export type { ThreadLinkWidgetProps } from "./ThreadLinkWidget";
 
+export { StatsRowWidget, statsRowWidgetConfig } from "./StatsRowWidget";
+export type { StatsRowWidgetProps, StatItem } from "./StatsRowWidget";
+
 // ============================================================================
 // AGGREGATED CONFIGS (for catalog building)
 // ============================================================================
@@ -96,6 +99,7 @@ import { linkButtonWidgetConfig } from "./LinkButtonWidget";
 import { linkWidgetConfig } from "./LinkWidget";
 import { traceLinkWidgetConfig } from "./TraceLinkWidget";
 import { threadLinkWidgetConfig } from "./ThreadLinkWidget";
+import { statsRowWidgetConfig } from "./StatsRowWidget";
 
 export const inlineWidgetConfigs = {
   Text: textWidgetConfig,
@@ -108,6 +112,7 @@ export const inlineWidgetConfigs = {
   Link: linkWidgetConfig,
   TraceLink: traceLinkWidgetConfig,
   ThreadLink: threadLinkWidgetConfig,
+  StatsRow: statsRowWidgetConfig,
 } as const;
 
 // ============================================================================
@@ -124,6 +129,8 @@ import { LinkButtonWidget } from "./LinkButtonWidget";
 import { LinkWidget } from "./LinkWidget";
 import { TraceLinkWidget } from "./TraceLinkWidget";
 import { ThreadLinkWidget } from "./ThreadLinkWidget";
+import { StatsRowWidget } from "./StatsRowWidget";
+import type { StatItem } from "./StatsRowWidget";
 
 function TextRenderer({ element }: ComponentRenderProps) {
   const props = useResolvedProps(element);
@@ -139,7 +146,7 @@ function TextRenderer({ element }: ComponentRenderProps) {
 
   return TextWidget({
     value: toDisplayString(value),
-    variant: props.variant as "body" | "bold" | "caption" | undefined,
+    variant: props.variant as "body" | "caption" | undefined,
     truncate: Boolean(props.truncate),
     monospace: isJsonValue(value) ? true : Boolean(props.monospace),
   });
@@ -214,7 +221,6 @@ function LinkRenderer({ element }: ComponentRenderProps) {
   return LinkWidget({
     url: String(props.url ?? ""),
     text: props.text as string | null | undefined,
-    label: props.label as string | null | undefined,
   });
 }
 
@@ -223,7 +229,6 @@ function TraceLinkRenderer({ element }: ComponentRenderProps) {
   return TraceLinkWidget({
     traceId: String(props.traceId ?? ""),
     text: props.text as string | null | undefined,
-    label: props.label as string | null | undefined,
   });
 }
 
@@ -232,7 +237,14 @@ function ThreadLinkRenderer({ element }: ComponentRenderProps) {
   return ThreadLinkWidget({
     threadId: String(props.threadId ?? ""),
     text: props.text as string | null | undefined,
-    label: props.label as string | null | undefined,
+  });
+}
+
+function StatsRowRenderer({ element }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
+  const items = props.items as StatItem[] | undefined;
+  return StatsRowWidget({
+    items: items ?? [],
   });
 }
 
@@ -247,4 +259,5 @@ export const inlineWidgetRegistry: ComponentRegistry = {
   Link: LinkRenderer,
   TraceLink: TraceLinkRenderer,
   ThreadLink: ThreadLinkRenderer,
+  StatsRow: StatsRowRenderer,
 };

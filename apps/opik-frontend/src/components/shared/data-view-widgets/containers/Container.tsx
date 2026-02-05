@@ -6,13 +6,7 @@ import { cn } from "@/lib/utils";
 // TYPES
 // ============================================================================
 
-export type ContainerLayout =
-  | "stack"
-  | "row"
-  | "grid-2"
-  | "grid-3"
-  | "grid-auto"
-  | null;
+export type ContainerLayout = "stack" | "row" | null;
 export type ContainerGap = "none" | "sm" | "md" | "lg" | null;
 export type ContainerPadding = "none" | "sm" | "md" | "lg" | null;
 
@@ -32,12 +26,10 @@ export const containerWidgetConfig = {
   category: "container" as const,
   schema: z.object({
     layout: z
-      .enum(["stack", "row", "grid-2", "grid-3", "grid-auto"])
+      .enum(["stack", "row"])
       .nullable()
       .optional()
-      .describe(
-        "Layout mode: stack (vertical), row (horizontal wrap), grid-2/3/auto (grid layouts)",
-      ),
+      .describe("Layout mode: stack (vertical), row (horizontal wrap)"),
     gap: z
       .enum(["none", "sm", "md", "lg"])
       .nullable()
@@ -50,7 +42,7 @@ export const containerWidgetConfig = {
       .describe("Inner padding: none, sm (8px), md (16px), lg (24px)"),
   }),
   description:
-    "Generic layout container with flexible layout presets. Use as root widget or for grid layouts.",
+    "Generic layout container with flexible layout presets. Use as root widget for single-column layouts.",
 };
 
 // ============================================================================
@@ -60,9 +52,6 @@ export const containerWidgetConfig = {
 const layoutClasses: Record<NonNullable<ContainerLayout>, string> = {
   stack: "flex flex-col",
   row: "flex flex-row flex-wrap items-start",
-  "grid-2": "grid grid-cols-2",
-  "grid-3": "grid grid-cols-3",
-  "grid-auto": "grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))]",
 };
 
 const gapClasses: Record<NonNullable<ContainerGap>, string> = {
@@ -89,12 +78,11 @@ const paddingClasses: Record<NonNullable<ContainerPadding>, string> = {
  * Key differences from Level1Container:
  * - Transparent background (no border/shadow)
  * - No title
- * - Layout presets (stack, row, grid-2, grid-3, grid-auto)
+ * - Layout presets (stack, row)
  * - Generic wrapper vs semantic section
  *
  * Use cases:
- * - Root widget for complex layouts
- * - Grid layouts for multiple items (e.g., fund widgets)
+ * - Root widget for single-column layouts
  * - Flexible row/column arrangements
  */
 export const ContainerWidget: React.FC<ContainerWidgetProps> = ({

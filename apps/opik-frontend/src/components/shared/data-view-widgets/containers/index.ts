@@ -34,7 +34,7 @@ export type {
 } from "./Level2Container";
 
 export { InlineRowWidget, inlineRowWidgetConfig } from "./InlineRow";
-export type { InlineRowWidgetProps } from "./InlineRow";
+export type { InlineRowWidgetProps, InlineRowBackground } from "./InlineRow";
 
 // ============================================================================
 // AGGREGATED CONFIGS (for catalog building)
@@ -65,6 +65,7 @@ import type {
 import { Level1ContainerWidget } from "./Level1Container";
 import { Level2ContainerWidget } from "./Level2Container";
 import { InlineRowWidget } from "./InlineRow";
+import type { InlineRowBackground } from "./InlineRow";
 
 function ContainerRenderer({ element, children }: ComponentRenderProps) {
   const props = useResolvedProps(element);
@@ -80,7 +81,8 @@ function Level1ContainerRenderer({ element, children }: ComponentRenderProps) {
   const props = useResolvedProps(element);
   return Level1ContainerWidget({
     title: props.title as string | null | undefined,
-    defaultOpen: props.defaultOpen !== false,
+    defaultOpen: Boolean(props.defaultOpen),
+    collapsible: props.collapsible !== false,
     children,
   });
 }
@@ -97,8 +99,10 @@ function Level2ContainerRenderer({ element, children }: ComponentRenderProps) {
   });
 }
 
-function InlineRowRenderer({ children }: ComponentRenderProps) {
+function InlineRowRenderer({ element, children }: ComponentRenderProps) {
+  const props = useResolvedProps(element);
   return InlineRowWidget({
+    background: props.background as InlineRowBackground | undefined,
     children,
   });
 }

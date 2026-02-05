@@ -1,15 +1,16 @@
 import type { ViewTree, SourceData } from "@/lib/data-view/core/types";
 
 /**
- * PATTERN DEMO: Metadata Container
+ * PATTERN DEMO: Metadata Container with Multi-Path Bindings
  *
- * Demonstrates Level1Container with various metadata fields:
- * - Model information
- * - Performance metrics
- * - Tags for status/classification
- * - Links to related resources
+ * Demonstrates Level1Container with separate widgets bound to individual data paths
+ * (Figma node 364:19811, 364:19891):
+ * - InlineRow with muted background for stats (individual Text widgets bound to paths)
+ * - InlineRow for tags (horizontal layout)
+ * - InlineRow for navigation links (horizontal layout)
  *
- * Note: This is a pattern demo showing widget composition, not a complete trace view.
+ * L1 containers use 16px gap between children.
+ * This example shows realistic view generation with individual data bindings.
  */
 export const metadataContainerExample = {
   title: "Metadata Container",
@@ -20,109 +21,132 @@ export const metadataContainerExample = {
       root: {
         id: "root",
         type: "Level1Container",
-        props: { title: "Run Metadata" },
-        children: ["modelRow", "performanceRow", "tagsRow", "linksRow"],
+        props: { title: "Metadata", collapsible: true },
+        children: ["statsRow", "tagsRow", "linksRow"],
         parentKey: null,
       },
-      // Model Information Row
-      modelRow: {
-        id: "modelRow",
+      // Stats in horizontal row with muted background (matches Figma 364:19891)
+      statsRow: {
+        id: "statsRow",
         type: "InlineRow",
-        props: {},
+        props: { background: "muted" },
         children: [
           "modelLabel",
           "modelValue",
+          "sep1",
           "providerLabel",
           "providerValue",
-        ],
-        parentKey: "root",
-      },
-      modelLabel: {
-        id: "modelLabel",
-        type: "Label",
-        props: { text: "Model:" },
-        children: undefined,
-        parentKey: "modelRow",
-      },
-      modelValue: {
-        id: "modelValue",
-        type: "Text",
-        props: { value: { path: "/model" }, variant: "bold" },
-        children: undefined,
-        parentKey: "modelRow",
-      },
-      providerLabel: {
-        id: "providerLabel",
-        type: "Label",
-        props: { text: "Provider:" },
-        children: undefined,
-        parentKey: "modelRow",
-      },
-      providerValue: {
-        id: "providerValue",
-        type: "Text",
-        props: { value: { path: "/provider" }, variant: "body" },
-        children: undefined,
-        parentKey: "modelRow",
-      },
-      // Performance Row
-      performanceRow: {
-        id: "performanceRow",
-        type: "InlineRow",
-        props: {},
-        children: [
+          "sep2",
           "latencyLabel",
           "latencyValue",
+          "sep3",
           "tokensLabel",
           "tokensValue",
+          "sep4",
           "costLabel",
           "costValue",
         ],
         parentKey: "root",
       },
+      modelLabel: {
+        id: "modelLabel",
+        type: "Text",
+        props: { value: "Model:" },
+        children: undefined,
+        parentKey: "statsRow",
+      },
+      modelValue: {
+        id: "modelValue",
+        type: "Text",
+        props: { value: { path: "/model" } },
+        children: undefined,
+        parentKey: "statsRow",
+      },
+      sep1: {
+        id: "sep1",
+        type: "Text",
+        props: { value: "•" },
+        children: undefined,
+        parentKey: "statsRow",
+      },
+      providerLabel: {
+        id: "providerLabel",
+        type: "Text",
+        props: { value: "Provider:" },
+        children: undefined,
+        parentKey: "statsRow",
+      },
+      providerValue: {
+        id: "providerValue",
+        type: "Text",
+        props: { value: { path: "/provider" } },
+        children: undefined,
+        parentKey: "statsRow",
+      },
+      sep2: {
+        id: "sep2",
+        type: "Text",
+        props: { value: "•" },
+        children: undefined,
+        parentKey: "statsRow",
+      },
       latencyLabel: {
         id: "latencyLabel",
-        type: "Label",
-        props: { text: "Latency:" },
+        type: "Text",
+        props: { value: "Latency:" },
         children: undefined,
-        parentKey: "performanceRow",
+        parentKey: "statsRow",
       },
       latencyValue: {
         id: "latencyValue",
         type: "Text",
-        props: { value: { path: "/latency" }, variant: "body" },
+        props: { value: { path: "/latency" } },
         children: undefined,
-        parentKey: "performanceRow",
+        parentKey: "statsRow",
+      },
+      sep3: {
+        id: "sep3",
+        type: "Text",
+        props: { value: "•" },
+        children: undefined,
+        parentKey: "statsRow",
       },
       tokensLabel: {
         id: "tokensLabel",
-        type: "Label",
-        props: { text: "Tokens:" },
+        type: "Text",
+        props: { value: "Tokens:" },
         children: undefined,
-        parentKey: "performanceRow",
+        parentKey: "statsRow",
       },
       tokensValue: {
         id: "tokensValue",
-        type: "Number",
-        props: { value: { path: "/totalTokens" }, size: "sm" },
+        type: "Text",
+        props: { value: { path: "/tokens" } },
         children: undefined,
-        parentKey: "performanceRow",
+        parentKey: "statsRow",
+      },
+      sep4: {
+        id: "sep4",
+        type: "Text",
+        props: { value: "•" },
+        children: undefined,
+        parentKey: "statsRow",
       },
       costLabel: {
         id: "costLabel",
-        type: "Label",
-        props: { text: "Cost:" },
+        type: "Text",
+        props: { value: "Cost:" },
         children: undefined,
-        parentKey: "performanceRow",
+        parentKey: "statsRow",
       },
       costValue: {
         id: "costValue",
         type: "Text",
-        props: { value: { path: "/cost" }, variant: "body" },
+        props: { value: { path: "/cost" } },
         children: undefined,
-        parentKey: "performanceRow",
+        parentKey: "statsRow",
       },
-      // Tags Row
+      // Tags in horizontal row
       tagsRow: {
         id: "tagsRow",
         type: "InlineRow",
@@ -144,8 +168,8 @@ export const metadataContainerExample = {
         id: "cacheTag",
         type: "Tag",
         props: {
-          label: "cached",
-          variant: "info",
+          label: "Cached",
+          variant: "default",
         },
         children: undefined,
         parentKey: "tagsRow",
@@ -154,13 +178,13 @@ export const metadataContainerExample = {
         id: "streamTag",
         type: "Tag",
         props: {
-          label: "streamed",
+          label: "Streamed",
           variant: "default",
         },
         children: undefined,
         parentKey: "tagsRow",
       },
-      // Links Row
+      // Links in horizontal row
       linksRow: {
         id: "linksRow",
         type: "InlineRow",
@@ -174,7 +198,7 @@ export const metadataContainerExample = {
         props: {
           type: "trace",
           id: { path: "/traceId" },
-          label: "View Trace",
+          label: "Trace",
         },
         children: undefined,
         parentKey: "linksRow",
@@ -185,7 +209,7 @@ export const metadataContainerExample = {
         props: {
           type: "span",
           id: { path: "/spanId" },
-          label: "View Span",
+          label: "Span",
         },
         children: undefined,
         parentKey: "linksRow",
@@ -200,9 +224,9 @@ export const metadataContainerExample = {
     model: "gpt-4-turbo",
     provider: "OpenAI",
     latency: "1.23s",
-    totalTokens: 1847,
+    tokens: "1847",
     cost: "$0.0124",
-    status: "completed",
+    status: "Completed",
     traceId: "trace-meta-001",
     spanId: "span-meta-001",
   } satisfies SourceData,

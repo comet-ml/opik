@@ -14,7 +14,6 @@ import useAppStore from "@/store/AppStore";
 export interface TraceLinkWidgetProps {
   traceId: string;
   text?: string | null;
-  label?: string | null;
 }
 
 // ============================================================================
@@ -29,7 +28,6 @@ export const traceLinkWidgetConfig = {
     text: NullableDynamicString.describe(
       "Display text (defaults to 'View Trace')",
     ),
-    label: NullableDynamicString.describe("Optional label prefix"),
   }),
   description: "Opens a trace in a new window. AI provides only the trace ID.",
 };
@@ -52,7 +50,6 @@ export const traceLinkWidgetConfig = {
 export const TraceLinkWidget: React.FC<TraceLinkWidgetProps> = ({
   traceId,
   text,
-  label,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { projectId } = useParams({ strict: false }) as { projectId?: string };
@@ -63,15 +60,17 @@ export const TraceLinkWidget: React.FC<TraceLinkWidgetProps> = ({
   const displayText = text || "View Trace";
 
   return (
-    <span className="inline-flex items-center gap-2">
-      {label && <span className="comet-body-s text-muted-slate">{label}</span>}
-      <Button variant="tableLink" size="sm" asChild className="px-0">
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {displayText}
-          <SquareArrowOutUpRight className="ml-1.5 size-3.5 shrink-0" />
-        </a>
-      </Button>
-    </span>
+    <Button
+      variant="tableLink"
+      size="2xs"
+      asChild
+      className="w-fit no-underline"
+    >
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {displayText}
+        <SquareArrowOutUpRight className="ml-1 size-3.5 shrink-0" />
+      </a>
+    </Button>
   );
 };
 

@@ -6,12 +6,12 @@ import type { ViewTree, SourceData } from "@/lib/data-view/core/types";
  * Based on Figma node 245-15436
  * Shows a retrieval span with:
  * - Level2Container with summary
- * - Indexes queried count
- * - Documents retrieved count
- * - List of index names
+ * - Stats line with bullet-separated format: "Indexes Queried: 2 • Documents Retrieved: 0"
+ * - Code block with integrated label showing index names
  *
  * Note: This is a span-level view (Level2Container at root), designed to be
  * embedded within a trace view. Level2 at root is valid for span detail views.
+ * L2 containers can only contain leaf widgets (no InlineRow, no Container).
  */
 export const retrievalSpanExample = {
   title: "Retrieval Span",
@@ -24,64 +24,21 @@ export const retrievalSpanExample = {
         type: "Level2Container",
         props: {
           summary: { path: "/summary" },
-          defaultOpen: true,
+          defaultOpen: false,
           icon: "retrieval",
           status: "success",
           duration: { path: "/duration" },
         },
-        children: ["statsRow", "indexesLabel", "indexesList"],
+        children: ["statsLine", "indexesList"],
         parentKey: null,
       },
-      statsRow: {
-        id: "statsRow",
-        type: "InlineRow",
-        props: {},
-        children: [
-          "indexesQueriedLabel",
-          "indexesQueriedValue",
-          "docsRetrievedLabel",
-          "docsRetrievedValue",
-        ],
-        parentKey: "root",
-      },
-      indexesQueriedLabel: {
-        id: "indexesQueriedLabel",
-        type: "Label",
-        props: { text: "Indexes queried:" },
-        children: undefined,
-        parentKey: "statsRow",
-      },
-      indexesQueriedValue: {
-        id: "indexesQueriedValue",
-        type: "Number",
+      statsLine: {
+        id: "statsLine",
+        type: "Text",
         props: {
-          value: { path: "/indexesQueried" },
-          size: "sm",
+          value: { path: "/statsLine" },
+          variant: "body-small",
         },
-        children: undefined,
-        parentKey: "statsRow",
-      },
-      docsRetrievedLabel: {
-        id: "docsRetrievedLabel",
-        type: "Label",
-        props: { text: "Documents retrieved:" },
-        children: undefined,
-        parentKey: "statsRow",
-      },
-      docsRetrievedValue: {
-        id: "docsRetrievedValue",
-        type: "Number",
-        props: {
-          value: { path: "/documentsRetrieved" },
-          size: "sm",
-        },
-        children: undefined,
-        parentKey: "statsRow",
-      },
-      indexesLabel: {
-        id: "indexesLabel",
-        type: "Label",
-        props: { text: "Indexes:" },
         children: undefined,
         parentKey: "root",
       },
@@ -91,8 +48,7 @@ export const retrievalSpanExample = {
         props: {
           content: { path: "/indexesList" },
           language: null,
-          label: null,
-          showLineNumbers: false,
+          label: "Indexes:",
           showCopy: false,
         },
         children: undefined,
@@ -107,8 +63,7 @@ export const retrievalSpanExample = {
   sourceData: {
     summary: "Retrieve",
     duration: "0.01s",
-    indexesQueried: 2,
-    documentsRetrieved: 0,
+    statsLine: "Indexes Queried: 2 • Documents Retrieved: 0",
     indexesList:
       "Support_Localization_extQwen3_V1\nBroadQA_Localization_extQwen3_V2",
   } satisfies SourceData,

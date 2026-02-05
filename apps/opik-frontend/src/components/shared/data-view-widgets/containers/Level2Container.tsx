@@ -1,18 +1,13 @@
 import React from "react";
 import { z } from "zod";
-import { ChevronDown, Braces, Check, Database, Sparkles } from "lucide-react";
-import {
-  Accordion,
-  AccordionItem,
-  AccordionContent,
-  CustomAccordionTrigger,
-} from "@/components/ui/accordion";
+import { Braces, Check, Database, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DynamicString,
   DynamicBoolean,
   NullableDynamicString,
 } from "@/lib/data-view";
+import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 
 // ============================================================================
 // TYPES
@@ -60,23 +55,24 @@ export const level2ContainerWidgetConfig = {
     ),
   }),
   description:
-    "Collapsible detail disclosure for spans, tools, system internals.",
+    "Collapsible detail disclosure for spans, tools, system internals. " +
+    "Text widgets inside must use default styling (no variant prop).",
 };
 
 // ============================================================================
-// ICON STYLES
+// ICON STYLES (using CSS variables for consistency with PrettyLLMMessage)
 // ============================================================================
 
 const iconBackgrounds: Record<NonNullable<Level2IconType>, string> = {
-  tool: "bg-[#dafbf0]", // Teal background from Figma
-  retrieval: "bg-[#e2effd]", // Blue background
-  generation: "bg-[#fef3c7]", // Amber background
+  tool: "bg-[var(--tag-turquoise-bg)]",
+  retrieval: "bg-[var(--tag-blue-bg)]",
+  generation: "bg-[var(--tag-yellow-bg)]",
 };
 
 const iconColors: Record<NonNullable<Level2IconType>, string> = {
-  tool: "text-[#295747]", // Dark teal
-  retrieval: "text-[#1e40af]", // Dark blue
-  generation: "text-[#92400e]", // Dark amber
+  tool: "text-[var(--tag-turquoise-text)]",
+  retrieval: "text-[var(--tag-blue-text)]",
+  generation: "text-[var(--tag-yellow-text)]",
 };
 
 const IconComponents: Record<
@@ -85,7 +81,7 @@ const IconComponents: Record<
 > = {
   tool: Braces,
   retrieval: Database,
-  generation: Sparkles,
+  generation: Bot,
 };
 
 // ============================================================================
@@ -95,88 +91,82 @@ const IconComponents: Record<
 /**
  * Level2Container - Collapsible detail disclosure
  *
- * Figma reference: Node 239-15701, 245-15436
+ * Uses CollapsibleSection for consistent styling with PrettyLLMMessage.
+ *
  * Styles:
- * - Header: flex row, gap-1, items-center, py-1, px-0.5
- * - Chevron: 14px, rotates on open
- * - Icon: 20px container, 12px icon (teal bg #DAFBF0 for tool type)
- * - Summary text: comet-body-s-accented (14px Medium), text-muted-slate (#94A3B8)
+ * - Header: flex row, gap-1, items-center, p-1, px-0
+ * - Chevron: ChevronRight, 14px, rotates 90° on open
+ * - Icon: 20px container, 12px icon, rounded-sm
+ * - Summary text: comet-body-s-accented, text-light-slate
  * - Status: checkmark for success (green), X for error (red)
- * - Duration: right-aligned, muted text
- * - Content: padding for children
- * - Border radius: 6px
+ * - Duration: right-aligned, comet-body-xs, text-light-slate
+ * - Content: ml-[6px] border-l pl-[12px] space-y-3
  */
 export const Level2ContainerWidget: React.FC<Level2ContainerWidgetProps> = ({
   summary,
-  defaultOpen = true,
+  defaultOpen = false,
   icon,
   status,
   duration,
   children,
 }) => {
   const itemValue = "level2-item";
-
   const IconComponent = icon ? IconComponents[icon] : null;
 
   return (
-    <Accordion
+    <CollapsibleSection.Container
       type="single"
       collapsible
       defaultValue={defaultOpen ? itemValue : undefined}
       className="w-full"
     >
-      <AccordionItem
-        value={itemValue}
-        className="border-none [&[data-state=open]]:border-t [&[data-state=open]]:border-border"
-      >
-        <CustomAccordionTrigger
-          className={cn(
-            "flex w-full items-center gap-1.5 rounded-md px-0.5 py-1 text-left",
-            "transition-colors hover:bg-muted/50",
-            "[&[data-state=open]>svg:first-child]:rotate-180",
-          )}
-        >
-          <ChevronDown className="size-3.5 shrink-0 text-muted-slate transition-transform duration-200" />
-
-          {/* Icon indicator */}
-          {icon && IconComponent && (
-            <div
-              className={cn(
-                "flex size-5 shrink-0 items-center justify-center rounded",
-                iconBackgrounds[icon],
+      <CollapsibleSection.Root value={itemValue}>
+        <CollapsibleSection.Header
+          leftContent={
+            <>
+              {/* Icon indicator */}
+              {icon && IconComponent && (
+                <div
+                  className={cn(
+                    "flex size-5 shrink-0 items-center justify-center rounded-sm",
+                    iconBackgrounds[icon],
+                  )}
+                >
+                  <IconComponent className={cn("size-3", iconColors[icon])} />
+                </div>
               )}
-            >
-              <IconComponent className={cn("size-3", iconColors[icon])} />
-            </div>
-          )}
 
-          {/* Summary text */}
-          <span className="comet-body-s-accented flex-1 text-muted-slate">
-            {summary}
-          </span>
-
-          {/* Status indicator */}
-          {status === "success" && (
-            <Check className="size-3.5 shrink-0 text-green-500" />
-          )}
-          {status === "error" && (
-            <span className="size-3.5 shrink-0 text-red-500">✕</span>
-          )}
-
-          {/* Duration */}
-          {duration && (
-            <span className="comet-body-xs shrink-0 text-light-slate">
-              {duration}
-            </span>
-          )}
-        </CustomAccordionTrigger>
-        <AccordionContent className="pb-3 pl-2">
-          <div className="flex flex-col gap-1 border-l border-border pl-3">
-            {children}
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+              {/* Summary text */}
+              <span className="comet-body-s-accented flex-1 text-light-slate">
+                {summary}
+              </span>
+            </>
+          }
+          rightContent={
+            (status || duration) && (
+              <div className="flex items-center gap-1">
+                {/* Status indicator */}
+                {status === "success" && (
+                  <Check className="size-3.5 shrink-0 text-green-500" />
+                )}
+                {status === "error" && (
+                  <span className="size-3.5 shrink-0 text-red-500">
+                    &#10005;
+                  </span>
+                )}
+                {/* Duration */}
+                {duration && (
+                  <span className="comet-body-xs shrink-0 text-light-slate">
+                    {duration}
+                  </span>
+                )}
+              </div>
+            )
+          }
+        />
+        <CollapsibleSection.Content>{children}</CollapsibleSection.Content>
+      </CollapsibleSection.Root>
+    </CollapsibleSection.Container>
   );
 };
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Link, useParams } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import { DynamicString, NullableDynamicString } from "@/lib/data-view";
+import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 
 // ============================================================================
@@ -72,29 +73,40 @@ export const LinkButtonWidget: React.FC<LinkButtonWidgetProps> = ({
   const searchParams: Record<string, string> =
     type === "trace" ? { trace: id } : { span: id };
 
-  // If we don't have project context, fall back to a simple link
+  // If we don't have project context, fall back to a disabled button
   if (!projectId) {
     return (
-      <span className="inline-flex h-6 items-center gap-1 text-muted-slate">
-        <span className="comet-body-s">{displayLabel}</span>
-        <ExternalLink className="size-3.5" />
-      </span>
+      <Button
+        variant="tableLink"
+        size="2xs"
+        disabled
+        className="w-fit no-underline"
+      >
+        {displayLabel}
+        <ExternalLink className="ml-1 size-3.5 shrink-0" />
+      </Button>
     );
   }
 
   return (
-    <Link
-      to="/$workspaceName/projects/$projectId/traces"
-      params={{
-        workspaceName,
-        projectId,
-      }}
-      search={searchParams}
-      className="inline-flex h-6 items-center gap-1 text-foreground hover:text-foreground/80"
+    <Button
+      variant="tableLink"
+      size="2xs"
+      asChild
+      className="w-fit no-underline"
     >
-      <span className="comet-body-s">{displayLabel}</span>
-      <ExternalLink className="size-3.5" />
-    </Link>
+      <Link
+        to="/$workspaceName/projects/$projectId/traces"
+        params={{
+          workspaceName,
+          projectId,
+        }}
+        search={searchParams}
+      >
+        {displayLabel}
+        <ExternalLink className="ml-1 size-3.5 shrink-0" />
+      </Link>
+    </Button>
   );
 };
 

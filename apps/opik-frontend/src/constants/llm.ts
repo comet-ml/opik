@@ -146,6 +146,7 @@ export const STRUCTURED_OUTPUT_SUPPORTED_MODELS: Record<
   [PROVIDER_TYPE.CUSTOM]: [],
   [PROVIDER_TYPE.BEDROCK]: [],
   [PROVIDER_TYPE.OPIK_FREE]: [],
+  [PROVIDER_TYPE.OLLAMA]: [],
 };
 
 // Thinking level options for Gemini 3 Pro models (low, high)

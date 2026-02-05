@@ -6,14 +6,15 @@ import type { ViewTree, SourceData } from "@/lib/data-view/core/types";
  * Based on Figma node 245-15436
  * Shows a single tool call span with:
  * - Level2Container with summary (tool name + duration)
- * - Link to span
- * - Model info
- * - Duration
+ * - Link to span (LinkButton)
+ * - Stats line: "Model: Gpt-5-mini • Duration: 0.01s"
  * - Input JSON code block
  * - Output JSON code block
  *
  * Note: This is a span-level view (Level2Container at root), designed to be
  * embedded within a trace view. Level2 at root is valid for span detail views.
+ * L2 containers can only contain leaf widgets (no InlineRow, no Container).
+ * LinkButton and stats text are stacked vertically as separate leaf widgets.
  */
 export const toolCallSpanExample = {
   title: "Tool Call Span (Level2Container)",
@@ -26,26 +27,13 @@ export const toolCallSpanExample = {
         type: "Level2Container",
         props: {
           summary: { path: "/summary" },
-          defaultOpen: true,
+          defaultOpen: false,
           icon: "tool",
           status: "success",
           duration: { path: "/duration" },
         },
-        children: ["metaRow", "inputCode", "outputCode"],
+        children: ["spanLink", "statsLine", "inputCode", "outputCode"],
         parentKey: null,
-      },
-      metaRow: {
-        id: "metaRow",
-        type: "InlineRow",
-        props: {},
-        children: [
-          "spanLink",
-          "modelLabel",
-          "modelValue",
-          "durationLabel",
-          "durationValue",
-        ],
-        parentKey: "root",
       },
       spanLink: {
         id: "spanLink",
@@ -56,35 +44,17 @@ export const toolCallSpanExample = {
           label: "Span",
         },
         children: undefined,
-        parentKey: "metaRow",
+        parentKey: "root",
       },
-      modelLabel: {
-        id: "modelLabel",
-        type: "Label",
-        props: { text: "Model:" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      modelValue: {
-        id: "modelValue",
+      statsLine: {
+        id: "statsLine",
         type: "Text",
-        props: { value: { path: "/model" }, variant: "body" },
+        props: {
+          value: { path: "/statsLine" },
+          variant: "body-small",
+        },
         children: undefined,
-        parentKey: "metaRow",
-      },
-      durationLabel: {
-        id: "durationLabel",
-        type: "Label",
-        props: { text: "Duration:" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      durationValue: {
-        id: "durationValue",
-        type: "Text",
-        props: { value: { path: "/duration" }, variant: "body" },
-        children: undefined,
-        parentKey: "metaRow",
+        parentKey: "root",
       },
       inputCode: {
         id: "inputCode",
@@ -93,7 +63,6 @@ export const toolCallSpanExample = {
           content: { path: "/inputJson" },
           language: "json",
           label: "Input",
-          showLineNumbers: false,
           showCopy: true,
         },
         children: undefined,
@@ -106,7 +75,6 @@ export const toolCallSpanExample = {
           content: { path: "/outputJson" },
           language: "json",
           label: "Output",
-          showLineNumbers: false,
           showCopy: true,
         },
         children: undefined,
@@ -119,13 +87,13 @@ export const toolCallSpanExample = {
     },
   } satisfies ViewTree,
   sourceData: {
-    summary: "generate_standalone_question",
+    summary: "check_query_type",
     spanId: "span-001-abc",
-    model: "gpt-5-mini",
+    statsLine: "Model: Gpt-5-mini • Duration: 0.01s",
     duration: "0.01s",
     inputJson: JSON.stringify(
       {
-        question: "can you give me a link to educational support contact",
+        query: "can you give me a link to educational support contact",
         locale: "en_US",
         context: {
           session_id: "sess_12345",
@@ -137,9 +105,8 @@ export const toolCallSpanExample = {
     ),
     outputJson: JSON.stringify(
       {
-        question_first_language:
-          "Can you provide a link to educational support contact?",
-        detected_intent: "support_request",
+        query_type: "support_request",
+        detected_intent: "contact_info",
         confidence: 0.95,
       },
       null,

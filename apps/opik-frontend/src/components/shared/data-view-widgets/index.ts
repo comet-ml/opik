@@ -88,6 +88,11 @@ export const customViewCatalog = createCatalog({
       hasChildren: false,
       description: inlineWidgetConfigs.ThreadLink.description,
     },
+    StatsRow: {
+      props: inlineWidgetConfigs.StatsRow.schema,
+      hasChildren: false,
+      description: inlineWidgetConfigs.StatsRow.description,
+    },
     // Block primitives
     Header: {
       props: blockWidgetConfigs.Header.schema,

@@ -71,7 +71,7 @@ export const simpleTraceExample = {
     },
   } satisfies ViewTree,
   sourceData: {
-    timestamp: "Jan 12, 2026 · 14:37:21 UTC",
+    timestamp: "Jan 12, 2026 • 02:37:21 UTC",
     input: "Can you give me a link to educational support contact",
     output:
       "Good catch — you can fix this by updating the name on your Autodesk account and then resetting the verification. Here are the steps you can follow to resolve this issue:\n\n1. Go to your Autodesk Account settings\n2. Update your profile information\n3. Reset the verification process\n4. Contact support if you need additional help",

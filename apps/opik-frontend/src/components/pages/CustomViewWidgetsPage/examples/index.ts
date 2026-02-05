@@ -18,7 +18,6 @@ export { traceWithToolCallsExample } from "./traceWithToolCallsExample";
 export { threadOverviewExample } from "./threadOverviewExample";
 export { metadataContainerExample } from "./metadataContainerExample";
 export { inlineGroupingExample } from "./inlineGroupingExample";
-export { containerLayoutExample } from "./containerLayoutExample";
 export { imageAttachmentExample } from "./imageAttachmentExample";
 export { videoAttachmentExample } from "./videoAttachmentExample";
 export { audioAttachmentExample } from "./audioAttachmentExample";
@@ -31,7 +30,6 @@ import { traceWithToolCallsExample } from "./traceWithToolCallsExample";
 import { threadOverviewExample } from "./threadOverviewExample";
 import { metadataContainerExample } from "./metadataContainerExample";
 import { inlineGroupingExample } from "./inlineGroupingExample";
-import { containerLayoutExample } from "./containerLayoutExample";
 import { imageAttachmentExample } from "./imageAttachmentExample";
 import { videoAttachmentExample } from "./videoAttachmentExample";
 import { audioAttachmentExample } from "./audioAttachmentExample";
@@ -44,7 +42,6 @@ export const allExamples = [
   retrievalSpanExample,
   metadataContainerExample,
   inlineGroupingExample,
-  containerLayoutExample,
   imageAttachmentExample,
   videoAttachmentExample,
   audioAttachmentExample,
