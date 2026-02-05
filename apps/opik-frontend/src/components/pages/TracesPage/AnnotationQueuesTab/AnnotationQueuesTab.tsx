@@ -24,12 +24,11 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
-import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import TagCell from "@/components/shared/DataTableCells/TagCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -38,17 +37,11 @@ import AnnotationQueueProgressCell from "@/components/pages-shared/annotation-qu
 import AnnotationQueueRowActionsCell from "@/components/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
 import AnnotationQueuesActionsPanel from "@/components/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/components/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/NoAnnotationQueuesPage";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import {
   generateActionsColumDef,
@@ -114,6 +107,13 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
 ];
 
 const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    cell: TextCell as never,
+    sortable: true,
+  },
   ...SHARED_COLUMNS,
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
@@ -157,11 +157,12 @@ const FILTER_COLUMNS: ColumnData<AnnotationQueue>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "instructions",
   COLUMN_FEEDBACK_SCORES_ID,
   "progress",
@@ -179,6 +180,7 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "annotation-queues-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "annotation-queues-columns-width";
 const COLUMNS_ORDER_KEY = "annotation-queues-columns-order";
 const COLUMNS_SORT_KEY = "annotation-queues-columns-sort";
@@ -232,9 +234,13 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
     defaultValue: ROW_HEIGHT.small,
   });
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
@@ -262,7 +268,12 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending: isLoading } = useAnnotationQueuesList(
+  const {
+    data,
+    isPending: isLoading,
+    isPlaceholderData,
+    isFetching,
+  } = useAnnotationQueuesList(
     {
       search: search as string,
       page: page as number,
@@ -307,18 +318,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<AnnotationQueue>(),
-      mapColumnDataFields<AnnotationQueue, AnnotationQueue>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.annotationQueue,
-        },
-      }),
       ...convertColumnDataToColumn<AnnotationQueue, AnnotationQueue>(
         DEFAULT_COLUMNS,
         {
@@ -367,39 +366,12 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
     return "No annotation queues";
   }, [search]);
 
-  const noData = !search && !filters.length;
-
-  if (isLoading) {
-    return <Loader />;
-  }
-
-  if (noData && rows.length === 0 && page === 1) {
-    return (
-      <>
-        <NoAnnotationQueuesPage
-          openModal={handleNewQueue}
-          Wrapper={NoDataPage}
-          height={188}
-          className="px-6"
-        />
-        <AddEditAnnotationQueueDialog
-          key={resetDialogKeyRef.current}
-          open={openDialog}
-          setOpen={setOpenDialog}
-          projectId={projectId}
-        />
-      </>
-    );
-  }
+  const noData = !search && filters.length === 0;
+  const showEmptyState =
+    !isLoading && noData && rows.length === 0 && page === 1;
 
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_annotation_queues]}
-        />
-      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
@@ -440,36 +412,45 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
           </Button>
         </div>
       </PageBodyStickyContainer>
-      <DataTable
-        columns={columns}
-        data={rows}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        onRowClick={handleRowClick}
-        TableWrapper={PageBodyStickyTableWrapper}
-        stickyHeader
-      />
-      <PageBodyStickyContainer
-        className="py-4"
-        direction="horizontal"
-        limitWidth
+      <DataTableStateHandler
+        isLoading={isLoading}
+        isEmpty={showEmptyState}
+        emptyState={
+          <NoAnnotationQueuesPage Wrapper={NoDataPage} className="px-6" />
+        }
       >
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
+        <DataTable
+          columns={columns}
+          data={rows}
+          sortConfig={sortConfig}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          onRowClick={handleRowClick}
+          TableWrapper={PageBodyStickyTableWrapper}
+          stickyHeader
+          showLoadingOverlay={isPlaceholderData && isFetching}
         />
-      </PageBodyStickyContainer>
+        <PageBodyStickyContainer
+          className="py-4"
+          direction="horizontal"
+          limitWidth
+        >
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+          />
+        </PageBodyStickyContainer>
+      </DataTableStateHandler>
 
       <AddEditAnnotationQueueDialog
         key={resetDialogKeyRef.current}
