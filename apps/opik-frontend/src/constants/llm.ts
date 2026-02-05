@@ -771,7 +771,7 @@ export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
     '    def __init__(self, name: str = "my_custom_metric"):\n' +
     "        self.name = name\n" +
     "\n" +
-    "    def score(self, input: str, output: str, **ignored_kwargs: Any):\n" +
+    "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
     "        # Add you logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
@@ -782,6 +782,7 @@ export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {
   arguments: {
     input: "input",
     output: "output",
+    metadata: "metadata",
   },
 };
 
@@ -824,7 +825,7 @@ export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
     '    def __init__(self, name: str = "my_custom_metric"):\n' +
     "        self.name = name\n" +
     "\n" +
-    "    def score(self, input: str, output: str, **ignored_kwargs: Any):\n" +
+    "    def score(self, input: str, output: str, metadata: dict, **ignored_kwargs: Any):\n" +
     "        # Add you logic here\n" +
     "\n" +
     "        return score_result.ScoreResult(\n" +
@@ -835,5 +836,6 @@ export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
   arguments: {
     input: "input",
     output: "output",
+    metadata: "metadata",
   },
 };
