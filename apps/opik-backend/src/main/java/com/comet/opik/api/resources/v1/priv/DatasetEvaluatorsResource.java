@@ -10,6 +10,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.parameters.RequestBody;
@@ -52,7 +53,7 @@ public class DatasetEvaluatorsResource {
     @POST
     @Path("/batch")
     @Operation(operationId = "createDatasetEvaluatorsBatch", summary = "Create dataset evaluators in batch", description = "Create multiple dataset evaluators for a dataset", responses = {
-            @ApiResponse(responseCode = "200", description = "Created evaluators", content = @Content(schema = @Schema(implementation = DatasetEvaluator[].class)))
+            @ApiResponse(responseCode = "200", description = "Created evaluators", content = @Content(array = @ArraySchema(schema = @Schema(implementation = DatasetEvaluator.class))))
     })
     @RateLimited
     @JsonView(DatasetEvaluator.View.Public.class)
