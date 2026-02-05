@@ -27,19 +27,34 @@ import { Opik } from "opik";
 
 const client = new Opik();
 
-// Create a new trace
+// Create a new trace with a span
 const trace = client.trace({
-name: "my_trace",
-input: { "input": "Hi!" },
-output: { "output": "Hello!" },
+  name: "my_trace",
+  input: { input: "Hi!" },
+  output: { output: "Hello!" },
 });
 
-// Log feedback scores to an existing trace
-await client.logTracesFeedbackScores([
-{ id: trace.id, name: "overall_quality", value: 0.9, reason: "Good answer" },
-{ id: trace.id, name: "coherence", value: 0.8 }
+const span = trace.span({
+  name: "processing",
+  input: { step: 1 },
+});
+span.update({ output: { result: "processed" } });
+span.end();
+trace.end();
+
+// Log feedback scores to existing traces
+client.logTracesFeedbackScores([
+  { id: trace.data.id, name: "overall_quality", value: 0.9, reason: "Good answer" },
+  { id: trace.data.id, name: "coherence", value: 0.8 }
 ]);
 
+// Log feedback scores to existing spans
+client.logSpansFeedbackScores([
+  { id: span.data.id, name: "accuracy", value: 0.95 }
+]);
+
+// Flush to ensure all data is sent
+await client.flush();
 ```
 
 ```python title="Python Function Decorator" language="python"

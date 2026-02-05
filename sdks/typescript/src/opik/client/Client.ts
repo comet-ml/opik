@@ -2,7 +2,9 @@ import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
 import { OpikApiError, serialization } from "@/rest_api";
 import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
 import * as OpikApi from "@/rest_api/api";
+import { FeedbackScoreBatchItemSource } from "@/rest_api/api/types/FeedbackScoreBatchItemSource";
 import { Trace } from "@/tracer/Trace";
+import type { FeedbackScoreData } from "@/tracer/types";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
 import { getProjectUrlByTraceId } from "@/utils/url";
@@ -1093,6 +1095,55 @@ export class OpikClient {
 
     return result;
   };
+
+  private logFeedbackScores(
+    scores: FeedbackScoreData[],
+    batchQueue: TraceFeedbackScoresBatchQueue | SpanFeedbackScoresBatchQueue
+  ): void {
+    for (const score of scores) {
+      batchQueue.create({
+        ...score,
+        projectName: score.projectName ?? this.config.projectName,
+        source: FeedbackScoreBatchItemSource.Sdk,
+      });
+    }
+  }
+
+  /**
+   * Log feedback scores to existing traces in batch.
+   *
+   * @param scores - Array of feedback score data with trace IDs
+   *
+   * @example
+   * ```typescript
+   * client.logTracesFeedbackScores([
+   *   { id: "trace-id-1", name: "quality", value: 0.9, reason: "Good response" },
+   *   { id: "trace-id-2", name: "relevance", value: 0.8 }
+   * ]);
+   * await client.flush();
+   * ```
+   */
+  public logTracesFeedbackScores(scores: FeedbackScoreData[]): void {
+    this.logFeedbackScores(scores, this.traceFeedbackScoresBatchQueue);
+  }
+
+  /**
+   * Log feedback scores to existing spans in batch.
+   *
+   * @param scores - Array of feedback score data with span IDs
+   *
+   * @example
+   * ```typescript
+   * client.logSpansFeedbackScores([
+   *   { id: "span-id-1", name: "accuracy", value: 0.95 },
+   *   { id: "span-id-2", name: "completeness", value: 0.85, reason: "Missing details" }
+   * ]);
+   * await client.flush();
+   * ```
+   */
+  public logSpansFeedbackScores(scores: FeedbackScoreData[]): void {
+    this.logFeedbackScores(scores, this.spanFeedbackScoresBatchQueue);
+  }
 
   public flush = async () => {
     logger.debug("Starting flush operation");
