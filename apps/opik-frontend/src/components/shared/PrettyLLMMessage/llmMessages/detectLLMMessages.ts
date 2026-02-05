@@ -18,6 +18,14 @@ export const detectLLMMessages = (
   prettifyConfig?: { fieldType?: "input" | "output" },
   providerHint?: string,
 ): LLMProviderDetectionResult => {
+  const isEmpty =
+    data == null ||
+    (typeof data === "object" && Object.keys(data as object).length === 0);
+
+  if (isEmpty) {
+    return { supported: false, empty: true };
+  }
+
   // If provider hint provided, try that first
   if (providerHint) {
     const provider = getProvider(providerHint as LLMProvider);
