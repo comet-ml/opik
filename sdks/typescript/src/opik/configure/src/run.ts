@@ -117,7 +117,7 @@ async function detectIntegration(): Promise<Integration | undefined> {
     ([a], [b]) =>
       INTEGRATION_ORDER.indexOf(a as Integration) -
       INTEGRATION_ORDER.indexOf(b as Integration),
-  );
+  ) as Array<[Integration, (typeof INTEGRATION_CONFIG)[Integration]]>;
 
   for (const [integration, config] of integrationConfigs) {
     const detected = await config.detect();
