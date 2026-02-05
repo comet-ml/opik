@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import tempfile
 import threading
+import time
 from enum import unique, IntEnum
 from typing import List, NamedTuple, Callable, Optional, Dict, Iterator
 
@@ -11,7 +12,7 @@ from opik.message_processing import messages
 from opik.message_processing.replay import message_serialization
 
 DEFAULT_DB_FILE = "opik_messages.db"
-DEFAULT_BATCH_SIZE = 1000
+DEFAULT_BATCH_SIZE = 100
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ class ReplayManager:
     def __init__(
         self,
         batch_size: int = DEFAULT_BATCH_SIZE,
+        batch_replay_delay: float = 0.5,
         db_file: Optional[str] = None,
         conn: Optional[sqlite3.Connection] = None,
     ) -> None:
@@ -101,12 +103,14 @@ class ReplayManager:
         Args:
             batch_size: The size of batches for processing. Defaults to
                 DEFAULT_BATCH_SIZE.
+            batch_replay_delay: The delay (in seconds) between replaying batches of messages.
             db_file: Path to the database file. If not provided, a
                 temporary file will be created in a temporary directory.
             conn: A pre-existing database connection.
                 If not provided, a new connection is created.
         """
         self.batch_size = batch_size
+        self.batch_replay_delay = batch_replay_delay
         self.status = ManagerStatus.undefined
         self.tmp_dir = tempfile.mkdtemp()
         if db_file is None:
@@ -128,7 +132,7 @@ class ReplayManager:
             with self.__lock__:
                 with self.conn:
                     self.conn.execute(
-                        """CREATE TABLE messages IF NOT EXISTS
+                        """CREATE TABLE IF NOT EXISTS messages
                                             (message_id INTEGER NOT NULL PRIMARY KEY,
                                             status INTEGER NOT NULL,
                                             message_type TEXT NOT NULL,
@@ -239,13 +243,15 @@ class ReplayManager:
 
     def _clean_message_leftovers(self, message_id: int) -> None:
         # Cleanup message file
-        if message_id in self.message_files:
+        file = self.message_files.pop(message_id, None)
+        if file is not None:
             try:
-                os.remove(self.message_files[message_id])
+                if os.path.isfile(file):
+                    os.unlink(file)
             except Exception as e:
                 LOGGER.debug(
                     "Failed to remove temporary file: %r of the message: %d, reason: %s",
-                    self.message_files[message_id],
+                    file,
                     message_id,
                     e,
                     exc_info=True,
@@ -255,7 +261,10 @@ class ReplayManager:
         if message.message_id is None:
             raise ValueError("Message ID expected")
 
-        if isinstance(message, messages.CreateAttachmentMessage):
+        if (
+            isinstance(message, messages.CreateAttachmentMessage)
+            and message.delete_after_upload
+        ):
             self.message_files[message.message_id] = message.file_path
 
         return message_serialization.serialize_message(message)
@@ -364,7 +373,7 @@ class ReplayManager:
                 return 0
 
             total_replayed = 0
-            for db_messages in self._fetch_failed_messages_batched(self.batch_size):
+            for db_messages in self.fetch_failed_messages_batched(self.batch_size):
                 if self.closed:
                     break
 
@@ -390,9 +399,14 @@ class ReplayManager:
                     LOGGER.debug(msg, exc_info=True)
                     return total_replayed
 
-                total_replayed += self._replay_messages(
+                replayed = self._replay_messages(
                     db_messages=db_messages, replay_callback=replay_callback
                 )
+                total_replayed += replayed
+                # sleep to allow consumption of the messages batch and to avoid OOM (when subsequent batches loaded)
+                # applied only if full batch_size was replied to avoid delays after last batch or for smaller batches
+                if replayed >= self.batch_size:
+                    time.sleep(self.batch_replay_delay)
 
             return total_replayed
 
@@ -450,7 +464,7 @@ class ReplayManager:
     def failed(self) -> bool:
         return self.status == ManagerStatus.error
 
-    def _fetch_failed_messages_batched(
+    def fetch_failed_messages_batched(
         self, batch_size: int
     ) -> Iterator[List[DBMessage]]:
         """Fetch failed messages from DB in bounded batches to avoid OOM.
