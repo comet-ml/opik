@@ -476,7 +476,7 @@ result = evaluate(
 ```
 
 ```typescript title="TypeScript" language="typescript"
-import { Opik } from "opik";
+import { Opik, evaluate } from "opik";
 
 const client = new Opik();
 const dataset = await client.getDataset("My dataset");
@@ -485,6 +485,15 @@ const dataset = await client.getDataset("My dataset");
 const result = await evaluate({
   experimentName: "baseline-experiment",
   dataset: dataset,
+  task: myTaskFunction,
+  scoringMetrics: [myMetric],
+});
+
+// Run experiment on a specific version
+const v2 = await dataset.getVersionView("v2");
+const pinnedResult = await evaluate({
+  experimentName: "pinned-experiment",
+  dataset: v2,
   task: myTaskFunction,
   scoringMetrics: [myMetric],
 });
