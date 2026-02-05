@@ -295,7 +295,6 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   const showEmptyState =
     !isPending && noData && rows.length === 0 && page === 1;
-  const canInteractWithTable = !isPending && !showEmptyState;
 
   return (
     <>
@@ -311,7 +310,6 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
             placeholder="Search by ID"
             className="w-[320px]"
             dimension="sm"
-            disabled={!canInteractWithTable}
           ></SearchInput>
         </div>
         <div className="flex items-center gap-2">
@@ -323,7 +321,6 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-            disabled={!canInteractWithTable}
           ></ColumnsButton>
           <Button variant="default" size="sm" onClick={handleNewRuleClick}>
             Create new rule

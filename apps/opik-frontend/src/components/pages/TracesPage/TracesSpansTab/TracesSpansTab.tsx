@@ -591,7 +591,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const showEmptyState =
     !isTableLoading && noData && rows.length === 0 && page === 1;
-  const canInteractWithTable = !isTableLoading && !showEmptyState;
 
   // Extract metadata paths directly from loaded traces/spans data
   const metadataPaths = useMemo(() => {
@@ -1214,7 +1213,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             placeholder="Search by ID"
             className="w-[320px]"
             dimension="sm"
-            disabled={!canInteractWithTable}
           ></SearchInput>
           <FiltersButton
             columns={filtersColumnData}
@@ -1222,7 +1220,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             filters={filters}
             onChange={setFilters}
             layout="icon"
-            disabled={!canInteractWithTable}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -1261,7 +1258,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
-            disabled={!canInteractWithTable}
           />
           <ColumnsButton
             columns={columnData}
@@ -1275,7 +1271,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 ? metadataColumnsData.map((col) => col.id)
                 : []
             }
-            disabled={!canInteractWithTable}
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>

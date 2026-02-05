@@ -632,7 +632,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const isTableLoading = isPending || isFeedbackScoresNamesPending;
   const showEmptyState =
     !isTableLoading && noData && rows.length === 0 && page === 1;
-  const canInteractWithTable = !isTableLoading && !showEmptyState;
 
   return (
     <>
@@ -654,7 +653,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             placeholder="Search by ID"
             className="w-[320px]"
             dimension="sm"
-            disabled={!canInteractWithTable}
           ></SearchInput>
           <FiltersButton
             columns={FILTER_COLUMNS}
@@ -662,7 +660,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             onChange={setFilters}
             config={filtersConfig as never}
             layout="icon"
-            disabled={!canInteractWithTable}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -695,7 +692,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
-            disabled={!canInteractWithTable}
           />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
@@ -704,7 +700,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
-            disabled={!canInteractWithTable}
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>

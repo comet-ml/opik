@@ -369,7 +369,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
   const noData = !search && filters.length === 0;
   const showEmptyState =
     !isLoading && noData && rows.length === 0 && page === 1;
-  const canInteractWithTable = !isLoading && !showEmptyState;
 
   return (
     <>
@@ -385,7 +384,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
             placeholder="Search by name"
             className="w-[320px]"
             dimension="sm"
-            disabled={!canInteractWithTable}
           />
           <FiltersButton
             columns={FILTER_COLUMNS}
@@ -393,7 +391,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
             filters={filters}
             onChange={setFilters}
             layout="icon"
-            disabled={!canInteractWithTable}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -402,7 +399,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
           <DataTableRowHeightSelector
             type={height as ROW_HEIGHT}
             setType={setHeight}
-            disabled={!canInteractWithTable}
           />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
@@ -410,7 +406,6 @@ const AnnotationQueuesTab: React.FC<AnnotationQueuesTabProps> = ({
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-            disabled={!canInteractWithTable}
           />
           <Button size="sm" onClick={handleNewQueue}>
             Create new queue
