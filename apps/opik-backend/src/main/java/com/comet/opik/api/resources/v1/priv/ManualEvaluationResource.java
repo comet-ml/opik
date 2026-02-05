@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.ManualEvaluationEntityType;
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
+import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.evaluators.ManualEvaluationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -42,6 +44,7 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 public class ManualEvaluationResource {
 
     private final @NonNull ManualEvaluationService manualEvaluationService;
+    private final @NonNull ExperimentItemService experimentItemService;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
@@ -125,6 +128,50 @@ public class ManualEvaluationResource {
 
         log.info("Manual evaluation request accepted for '{}' spans in project '{}', workspace '{}'",
                 request.entityIds().size(), request.projectId(), workspaceId);
+
+        return Response.status(Response.Status.ACCEPTED)
+                .entity(response)
+                .build();
+    }
+
+    @POST
+    @Path("/experiments")
+    @Operation(operationId = "evaluateExperiments", summary = "Manually evaluate experiments", description = "Manually trigger evaluation rules on traces associated with experiment items. Bypasses sampling and enqueues all traces from the specified experiments for evaluation.", responses = {
+            @ApiResponse(responseCode = "202", description = "Accepted - Evaluation request queued successfully", content = @Content(schema = @Schema(implementation = ManualEvaluationResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request or missing automation rules", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found - Project or experiment not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response evaluateExperiments(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ManualEvaluationRequest.class))) @Valid @NonNull ManualEvaluationRequest request) {
+
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+
+        log.info(
+                "Manual evaluation request for '{}' experiments with '{}' rules in project '{}', workspace '{}' by user '{}'",
+                request.entityIds().size(), request.ruleIds().size(), request.projectId(), workspaceId, userName);
+
+        var traceIds = request.entityIds().stream()
+                .flatMap(experimentId -> experimentItemService.getTraceIdsByExperimentId(experimentId)
+                        .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                        .toStream())
+                .toList();
+
+        log.info("Found '{}' traces for '{}' experiments", traceIds.size(), request.entityIds().size());
+
+        var traceRequest = ManualEvaluationRequest.builder()
+                .projectId(request.projectId())
+                .entityIds(traceIds)
+                .ruleIds(request.ruleIds())
+                .entityType(ManualEvaluationEntityType.TRACE)
+                .build();
+
+        var response = manualEvaluationService.evaluate(traceRequest, request.projectId(), workspaceId, userName)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Manual evaluation request accepted for '{}' experiments ({} traces) in project '{}', workspace '{}'",
+                request.entityIds().size(), traceIds.size(), request.projectId(), workspaceId);
 
         return Response.status(Response.Status.ACCEPTED)
                 .entity(response)

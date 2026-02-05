@@ -154,4 +154,10 @@ public class ExperimentItemService {
         log.info("Deleting experiment items, count '{}'", ids.size());
         return experimentItemDAO.delete(ids).then();
     }
+
+    public Flux<UUID> getTraceIdsByExperimentId(@NonNull UUID experimentId) {
+        log.info("Getting trace IDs for experiment '{}'", experimentId);
+        return experimentItemDAO.getItems(Set.of(experimentId), ExperimentItemSearchCriteria.builder().build())
+                .map(ExperimentItem::traceId);
+    }
 }
