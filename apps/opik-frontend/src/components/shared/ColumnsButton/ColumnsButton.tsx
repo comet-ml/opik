@@ -47,7 +47,6 @@ export type ColumnsButtonProps<TColumnData> = {
   onSelectionChange: (selectedColumns: string[]) => void;
   sections?: ColumnsButtonExtraSection<TColumnData>[];
   excludeFromSelectAll?: string[]; // Column IDs to exclude when selecting all (but include when deselecting all)
-  disabled?: boolean;
 } & ColumnsButtonShared<TColumnData>;
 
 const ColumnsButton = <TColumnData,>({
@@ -58,7 +57,6 @@ const ColumnsButton = <TColumnData,>({
   onOrderChange,
   sections,
   excludeFromSelectAll = [],
-  disabled,
 }: ColumnsButtonProps<TColumnData>) => {
   const [search, setSearch] = useState("");
 
@@ -191,12 +189,7 @@ const ColumnsButton = <TColumnData,>({
     <DropdownMenu onOpenChange={openStateChangeHandler}>
       <TooltipWrapper content="Columns">
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            data-testid="columns-button"
-            disabled={disabled}
-          >
+          <Button variant="outline" size="icon-sm" data-testid="columns-button">
             <Columns3 className="size-3.5" />
           </Button>
         </DropdownMenuTrigger>
