@@ -326,7 +326,7 @@ export class OpikClient {
     const experiment = new Experiment({ id, name, datasetName, prompts }, this);
 
     try {
-      this.api.experiments.createExperiment({
+      await this.api.experiments.createExperiment({
         id,
         datasetName,
         name,
@@ -337,7 +337,7 @@ export class OpikClient {
         datasetVersionId,
       });
 
-      logger.debug("Experiment added to the queue with id:", id);
+      logger.debug("Experiment created with id:", id);
       return experiment;
     } catch (error) {
       logger.error(`Failed to create experiment for dataset "${datasetName}"`, {
