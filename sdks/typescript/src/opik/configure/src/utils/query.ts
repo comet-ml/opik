@@ -29,7 +29,7 @@ export const query = async <S>({
   apiKey,
   workspaceName,
 }: QueryOptions<S>): Promise<S> => {
-  const fullSchema = zodToJsonSchema(schema as any, 'schema');
+  const fullSchema = zodToJsonSchema(schema, 'schema');
   const jsonSchema = fullSchema.definitions?.schema || fullSchema;
 
   const backendModel = MODEL_MAP[model] || model;
