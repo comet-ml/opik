@@ -11,11 +11,10 @@ from opik.rest_api.types import trace_public, trace_thread
 from opik.message_processing.batching import sequence_splitter
 from opik.api_objects.trace import trace_client
 from opik.api_objects.rest_helpers import ensure_rest_api_call_respecting_rate_limit
+from opik.api_objects import constants
 import opik.exceptions as exceptions
 
 LOGGER = logging.getLogger(__name__)
-
-ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE = 1000
 
 TraceType = Union[trace_client.Trace, trace_public.TracePublic]
 
@@ -221,7 +220,7 @@ class TracesAnnotationQueue(BaseAnnotationQueue):
             return
 
         batches = sequence_splitter.split_into_batches(
-            ids, max_length=ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
+            ids, max_length=constants.ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
         )
 
         for batch in batches:
@@ -250,7 +249,7 @@ class TracesAnnotationQueue(BaseAnnotationQueue):
             return
 
         batches = sequence_splitter.split_into_batches(
-            ids, max_length=ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
+            ids, max_length=constants.ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
         )
 
         for batch in batches:
@@ -309,7 +308,7 @@ class ThreadsAnnotationQueue(BaseAnnotationQueue):
             return
 
         batches = sequence_splitter.split_into_batches(
-            ids, max_length=ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
+            ids, max_length=constants.ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
         )
 
         for batch in batches:
@@ -337,7 +336,7 @@ class ThreadsAnnotationQueue(BaseAnnotationQueue):
             return
 
         batches = sequence_splitter.split_into_batches(
-            ids, max_length=ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
+            ids, max_length=constants.ANNOTATION_QUEUE_ITEMS_MAX_BATCH_SIZE
         )
 
         for batch in batches:
