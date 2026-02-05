@@ -13,6 +13,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 type DataTableRowHeightSelectorProps = {
   type: string;
   setType: (type: ROW_HEIGHT) => void;
+  disabled?: boolean;
 };
 
 const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
@@ -23,7 +24,7 @@ const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
 
 const DataTableRowHeightSelector: React.FunctionComponent<
   DataTableRowHeightSelectorProps
-> = ({ type, setType }) => {
+> = ({ type, setType, disabled }) => {
   const handleSelect = useCallback(
     (value: ROW_HEIGHT) => {
       setType(value);
@@ -35,7 +36,7 @@ const DataTableRowHeightSelector: React.FunctionComponent<
     <DropdownMenu>
       <TooltipWrapper content="Rows">
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon-sm">
+          <Button variant="outline" size="icon-sm" disabled={disabled}>
             <Rows3 className="size-3.5" />
           </Button>
         </DropdownMenuTrigger>
