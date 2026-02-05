@@ -14,7 +14,7 @@ from typing import (
     Iterator,
 )
 
-from opik.api_objects import opik_query_language, rest_stream_parser, rest_helpers
+from opik.api_objects import rest_helpers
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,

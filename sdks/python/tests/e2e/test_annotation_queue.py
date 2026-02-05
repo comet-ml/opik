@@ -5,6 +5,7 @@ import pytest
 
 import opik
 from opik import synchronization
+from . import verifiers
 
 
 @pytest.fixture
@@ -52,11 +53,14 @@ def test_annotation_queue__add_traces__happyflow(
         instructions="Please review these traces",
     )
 
-    assert queue.id is not None
-    assert queue.name == annotation_queue_name
-    assert queue.scope == "trace"
-    assert queue.description == "Test queue for traces"
-    assert queue.instructions == "Please review these traces"
+    verifiers.verify_traces_annotation_queue(
+        opik_client=opik_client,
+        queue_id=queue.id,
+        name=annotation_queue_name,
+        scope="trace",
+        description="Test queue for traces",
+        instructions="Please review these traces",
+    )
 
     # Add traces directly using the Trace objects returned by opik_client.trace()
     queue.add_traces([trace1, trace2])
@@ -146,9 +150,14 @@ def test_annotation_queue__add_threads__happyflow(
         instructions="Please review these threads",
     )
 
-    assert queue.id is not None
-    assert queue.name == annotation_queue_name
-    assert queue.scope == "thread"
+    verifiers.verify_threads_annotation_queue(
+        opik_client=opik_client,
+        queue_id=queue.id,
+        name=annotation_queue_name,
+        scope="thread",
+        description="Test queue for threads",
+        instructions="Please review these threads",
+    )
 
     # Get threads from API and filter by our thread IDs
     threads = threads_client.search_threads(
