@@ -10,7 +10,7 @@ import {
   PythonCodeDetailsTraceForm,
   PythonCodeDetailsSpanForm,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";
@@ -105,6 +105,49 @@ export const REASONING_MODELS = [
   PROVIDER_MODEL_TYPE.GPT_O3_MINI,
   PROVIDER_MODEL_TYPE.GPT_O4_MINI,
 ] as const;
+
+// Based on OpenAI documentation: https://platform.openai.com/docs/guides/structured-outputs
+// Only gpt-4o-mini, gpt-4o-mini-2024-07-18, and gpt-4o-2024-08-06 snapshots and later support structured outputs
+// This matches the backend's OpenaiModelName.java structuredOutputSupported field
+export const STRUCTURED_OUTPUT_SUPPORTED_MODELS: Record<
+  PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE[]
+> = {
+  [PROVIDER_TYPE.OPEN_AI]: [
+    // gpt-4o series (only specific snapshots)
+    PROVIDER_MODEL_TYPE.GPT_4O, // Latest, supports structured output
+    PROVIDER_MODEL_TYPE.GPT_4O_2024_08_06, // Explicitly supported
+    PROVIDER_MODEL_TYPE.GPT_4O_2024_11_20, // Newer snapshot
+    PROVIDER_MODEL_TYPE.GPT_4O_MINI, // Supports structured output
+    PROVIDER_MODEL_TYPE.GPT_4O_MINI_2024_07_18, // Explicitly supported
+
+    // gpt-4.1 series
+    PROVIDER_MODEL_TYPE.GPT_4_1,
+    PROVIDER_MODEL_TYPE.GPT_4_1_MINI,
+    PROVIDER_MODEL_TYPE.GPT_4_1_NANO,
+
+    // gpt-5 series
+    PROVIDER_MODEL_TYPE.GPT_5,
+    PROVIDER_MODEL_TYPE.GPT_5_MINI,
+    PROVIDER_MODEL_TYPE.GPT_5_NANO,
+    PROVIDER_MODEL_TYPE.GPT_5_1,
+    PROVIDER_MODEL_TYPE.GPT_5_2,
+
+    // o-series
+    PROVIDER_MODEL_TYPE.GPT_O3,
+    PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+  ],
+  // Anthropic does NOT support response_format parameter - uses tool calling instead
+  [PROVIDER_TYPE.ANTHROPIC]: [],
+  // TODO: Verify which Gemini/Vertex AI/OpenRouter models support structured output
+  [PROVIDER_TYPE.GEMINI]: [],
+  [PROVIDER_TYPE.VERTEX_AI]: [],
+  [PROVIDER_TYPE.OPEN_ROUTER]: [],
+  [PROVIDER_TYPE.CUSTOM]: [],
+  [PROVIDER_TYPE.BEDROCK]: [],
+  [PROVIDER_TYPE.OPIK_FREE]: [],
+  [PROVIDER_TYPE.OLLAMA]: [],
+};
 
 // Thinking level options for Gemini 3 Pro models (low, high)
 export const THINKING_LEVEL_OPTIONS_PRO: Array<{
