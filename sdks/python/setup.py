@@ -40,6 +40,7 @@ setup(
         "boto3-stubs[bedrock-runtime]>=1.34.110",
         "click",
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
+        "huggingface-hub>=0.32.0",  # versions <0.31.2 require hf-xet which breaks ARM64 builds
         "rapidfuzz>=3.0.0,<4.0.0",
         # LiteLLM dependency comments:
         # - Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
