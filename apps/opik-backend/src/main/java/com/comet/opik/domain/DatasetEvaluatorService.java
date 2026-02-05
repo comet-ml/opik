@@ -47,7 +47,7 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        log.info("Creating {} dataset evaluators for dataset '{}' in workspace '{}'",
+        log.info("Creating '{}' dataset evaluators for dataset '{}' in workspace '{}'",
                 request.evaluators().size(), datasetId, workspaceId);
 
         List<DatasetEvaluator> evaluators = request.evaluators().stream()
@@ -73,7 +73,7 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
             Set<UUID> ids = evaluators.stream().map(DatasetEvaluator::id).collect(java.util.stream.Collectors.toSet());
             List<DatasetEvaluator> created = dao.findByIds(workspaceId, ids);
 
-            log.info("Created {} dataset evaluators for dataset '{}' in workspace '{}'",
+            log.info("Created '{}' dataset evaluators for dataset '{}' in workspace '{}'",
                     created.size(), datasetId, workspaceId);
             return created;
         });
@@ -83,7 +83,7 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
     public DatasetEvaluatorPage getByDatasetId(@NonNull UUID datasetId, int page, int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting dataset evaluators for dataset '{}' in workspace '{}', page={}, size={}",
+        log.info("Getting dataset evaluators for dataset '{}' in workspace '{}', page='{}', size='{}'",
                 datasetId, workspaceId, page, size);
 
         return template.inTransaction(READ_ONLY, handle -> {
@@ -106,7 +106,7 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
     public void deleteBatch(@NonNull UUID datasetId, @NonNull Set<UUID> ids) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Deleting {} dataset evaluators for dataset '{}' in workspace '{}'",
+        log.info("Deleting '{}' dataset evaluators for dataset '{}' in workspace '{}'",
                 ids.size(), datasetId, workspaceId);
 
         template.inTransaction(WRITE, handle -> {
@@ -120,7 +120,7 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
             }
 
             int deleted = dao.deleteByIdsAndDatasetId(workspaceId, datasetId, ids);
-            log.info("Deleted {} dataset evaluators for dataset '{}' in workspace '{}'",
+            log.info("Deleted '{}' dataset evaluators for dataset '{}' in workspace '{}'",
                     deleted, datasetId, workspaceId);
             return null;
         });
@@ -135,7 +135,7 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetEvaluatorDAO.class);
             int deleted = dao.deleteByDatasetId(workspaceId, datasetId);
-            log.info("Deleted {} dataset evaluators for dataset '{}' in workspace '{}'", deleted, datasetId,
+            log.info("Deleted '{}' dataset evaluators for dataset '{}' in workspace '{}'", deleted, datasetId,
                     workspaceId);
             return null;
         });

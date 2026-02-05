@@ -63,12 +63,12 @@ public class DatasetEvaluatorsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Creating {} dataset evaluators for dataset '{}' on workspaceId '{}'",
+        log.info("Creating '{}' dataset evaluators for dataset '{}' on workspaceId '{}'",
                 request.evaluators().size(), datasetId, workspaceId);
 
         List<DatasetEvaluator> created = service.createBatch(datasetId, request);
 
-        log.info("Created {} dataset evaluators for dataset '{}' on workspaceId '{}'",
+        log.info("Created '{}' dataset evaluators for dataset '{}' on workspaceId '{}'",
                 created.size(), datasetId, workspaceId);
 
         return Response.ok(created).build();
@@ -86,12 +86,12 @@ public class DatasetEvaluatorsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Getting dataset evaluators for dataset '{}' on workspaceId '{}', page={}, size={}",
+        log.info("Getting dataset evaluators for dataset '{}' on workspaceId '{}', page='{}', size='{}'",
                 datasetId, workspaceId, page, size);
 
         DatasetEvaluatorPage result = service.getByDatasetId(datasetId, page - 1, size);
 
-        log.info("Found {} dataset evaluators for dataset '{}' on workspaceId '{}'",
+        log.info("Found '{}' dataset evaluators for dataset '{}' on workspaceId '{}'",
                 result.total(), datasetId, workspaceId);
 
         return Response.ok(result).build();
@@ -108,7 +108,7 @@ public class DatasetEvaluatorsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Deleting {} dataset evaluators for dataset '{}' on workspaceId '{}'",
+        log.info("Deleting '{}' dataset evaluators for dataset '{}' on workspaceId '{}'",
                 request.ids().size(), datasetId, workspaceId);
 
         service.deleteBatch(datasetId, request.ids());
