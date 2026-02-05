@@ -190,14 +190,9 @@ export abstract class BatchQueue<EntityData = object, EntityId = string> {
       return;
     }
 
-    // Check if there's already a pending update for this entity
+    // Merge with any existing pending update, then add to queue
     const existingUpdate = this.updateQueue.queue.get(id);
-    if (existingUpdate) {
-      // Merge with existing pending update instead of replacing
-      this.updateQueue.update(id, updates);
-    } else {
-      this.updateQueue.add(id, updates);
-    }
+    this.updateQueue.add(id, { ...existingUpdate, ...updates });
   };
 
   public delete = (id: EntityId) => {
