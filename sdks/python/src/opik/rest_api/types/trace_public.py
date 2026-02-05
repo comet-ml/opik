@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment_public import CommentPublic
 from .error_info_public import ErrorInfoPublic
+from .experiment_item_reference_public import ExperimentItemReferencePublic
 from .feedback_score_public import FeedbackScorePublic
 from .guardrails_validation_public import GuardrailsValidationPublic
 from .json_list_string_public import JsonListStringPublic
@@ -52,6 +53,8 @@ class TracePublic(UniversalBaseModel):
     """
     List of unique provider names from all spans in this trace, sorted alphabetically
     """
+
+    experiment: typing.Optional[ExperimentItemReferencePublic] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

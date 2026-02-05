@@ -122,7 +122,7 @@ const LLMPromptMessage = forwardRef<
 
     const editorViewRef = useRef<EditorView | null>(null);
     const style = {
-      transform: CSS.Transform.toString(transform),
+      transform: CSS.Translate.toString(transform),
       transition,
     };
 

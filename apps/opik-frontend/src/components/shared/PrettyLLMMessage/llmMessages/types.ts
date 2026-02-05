@@ -15,6 +15,7 @@ export type LLMProvider = "openai" | "anthropic" | "google";
 // Detection result
 export interface LLMProviderDetectionResult {
   supported: boolean;
+  empty?: boolean;
   provider?: LLMProvider;
   confidence?: "high" | "medium" | "low";
 }
