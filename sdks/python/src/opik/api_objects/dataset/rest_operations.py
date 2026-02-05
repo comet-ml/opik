@@ -40,7 +40,7 @@ def stream_dataset_items(
         batch_size: Maximum number of items to fetch per batch from the backend.
         dataset_item_ids: Optional list of specific item IDs to retrieve.
         filter_string: Optional OQL filter string to filter dataset items.
-        dataset_version: Optional version name to filter items by specific version.
+        dataset_version: Optional dataset version hash to filter items by a specific version.
 
     Yields:
         DatasetItem objects one at a time.
