@@ -591,8 +591,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const showEmptyState =
     !isTableLoading && noData && rows.length === 0 && page === 1;
-  const canInteractWithTable =
-    !isTableLoading && !showEmptyState && rows.length > 0;
+  const canInteractWithTable = !isTableLoading && !showEmptyState;
 
   // Extract metadata paths directly from loaded traces/spans data
   const metadataPaths = useMemo(() => {

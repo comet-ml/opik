@@ -295,7 +295,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   const showEmptyState =
     !isPending && noData && rows.length === 0 && page === 1;
-  const canInteractWithTable = !isPending && !showEmptyState && rows.length > 0;
+  const canInteractWithTable = !isPending && !showEmptyState;
 
   return (
     <>

@@ -649,8 +649,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const isTableLoading = isPending || isFeedbackScoresNamesPending;
   const showEmptyState =
     !isTableLoading && noData && rows.length === 0 && page === 1;
-  const canInteractWithTable =
-    !isTableLoading && !showEmptyState && rows.length > 0;
+  const canInteractWithTable = !isTableLoading && !showEmptyState;
 
   return (
     <>
