@@ -70,7 +70,7 @@ def _compute_experiment_scores(
 
 
 def evaluate(
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
@@ -97,7 +97,7 @@ def evaluate(
     to receive inputs and outputs from the task.
 
     Args:
-        dataset: An Opik dataset instance
+        dataset: An Opik Dataset or DatasetVersion instance
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
@@ -198,6 +198,7 @@ def evaluate(
         experiment_config=experiment_config,
         prompts=checked_prompts,
         tags=experiment_tags,
+        dataset_version_id=getattr(dataset.get_version_info(), "id", None),
     )
 
     # wrap scoring functions if any
@@ -230,7 +231,7 @@ def _evaluate_task(
     *,
     client: opik_client.Opik,
     experiment: experiment.Experiment,
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
     project_name: Optional[str],
@@ -512,7 +513,7 @@ def _build_prompt_evaluation_task(
 
 
 def evaluate_prompt(
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     messages: List[Dict[str, Any]],
     model: Optional[Union[str, base_model.OpikBaseModel]] = None,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
@@ -536,7 +537,7 @@ def evaluate_prompt(
     Performs prompt evaluation on a given dataset.
 
     Args:
-        dataset: An Opik dataset instance
+        dataset: An Opik Dataset or DatasetVersion instance
 
         messages: A list of prompt messages to evaluate.
 
@@ -636,6 +637,7 @@ def evaluate_prompt(
         experiment_config=experiment_config,
         prompts=prompts,
         tags=experiment_tags,
+        dataset_version_id=getattr(dataset.get_version_info(), "id", None),
     )
 
     # wrap scoring functions if any
@@ -717,7 +719,7 @@ def evaluate_prompt(
 
 def evaluate_optimization_trial(
     optimization_id: str,
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
@@ -744,7 +746,7 @@ def evaluate_optimization_trial(
     Args:
         optimization_id: The ID of the optimization associated with the experiment.
 
-        dataset: An Opik dataset instance
+        dataset: An Opik Dataset or DatasetVersion instance
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
@@ -856,6 +858,7 @@ def evaluate_optimization_trial(
         type="trial",
         optimization_id=optimization_id,
         tags=experiment_tags,
+        dataset_version_id=getattr(dataset.get_version_info(), "id", None),
     )
 
     return _evaluate_task(

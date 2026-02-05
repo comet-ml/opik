@@ -944,6 +944,7 @@ class Opik:
         type: Literal["regular", "trial", "mini-batch"] = "regular",
         optimization_id: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        dataset_version_id: Optional[str] = None,
     ) -> experiment.Experiment:
         """
         Creates a new experiment using the given dataset name and optional parameters.
@@ -958,6 +959,7 @@ class Opik:
                 Defaults to "regular". "trial" and "mini-batch" are only relevant for prompt optimization experiments.
             optimization_id: Optional ID of the optimization associated with the experiment.
             tags: Optional list of tags to associate with the experiment.
+            dataset_version_id: Optional ID of the dataset version to associate with the experiment.
 
         Returns:
             experiment.Experiment: The newly created experiment object.
@@ -983,6 +985,7 @@ class Opik:
             type=type,
             optimization_id=optimization_id,
             tags=tags,
+            dataset_version_id=dataset_version_id,
         )
 
         experiment_ = experiment.Experiment(

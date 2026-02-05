@@ -233,6 +233,7 @@ def verify_experiment(
     prompts: Optional[List[Prompt]] = None,
     experiment_scores: Optional[Dict[str, float]] = None,
     experiment_tags: Optional[List[str]] = None,
+    dataset_version_id: Optional[str] = mock.ANY,  # type: ignore
 ):
     rest_client = (
         opik_client._rest_client
@@ -275,6 +276,12 @@ def verify_experiment(
     _verify_experiment_scores(experiment_content, experiment_scores)
 
     testlib.assert_equal(expected=experiment_tags, actual=experiment_content.tags)
+
+    if dataset_version_id is not mock.ANY:
+        assert experiment_content.dataset_version_id == dataset_version_id, (
+            f"Expected dataset_version_id {dataset_version_id}, "
+            f"got {experiment_content.dataset_version_id}"
+        )
 
 
 def verify_attachments(
