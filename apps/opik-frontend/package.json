@@ -128,7 +128,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.45.3",
+    "@playwright/test": "^1.58.1",
     "dependency-cruiser": "^17.3.6",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/react-query-devtools": "^5.45.0",
