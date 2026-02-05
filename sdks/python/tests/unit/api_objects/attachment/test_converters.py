@@ -41,11 +41,11 @@ def test_guess_attachment_type(attachment_data: attachment.Attachment, expected:
     assert mimetype == expected
 
 
-def test_attachment_to_message__no_temp_copy():
+def test_attachment_to_message__no_temp_copy(original_file: str):
     url_override = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
-    attachment_data = attachment.Attachment(data="test.png", create_temp_copy=False)
+    attachment_data = attachment.Attachment(data=original_file, create_temp_copy=False)
 
     message = converters.attachment_to_message(
         attachment_data=attachment_data,
@@ -56,9 +56,9 @@ def test_attachment_to_message__no_temp_copy():
     )
 
     assert message == messages.CreateAttachmentMessage(
-        file_path="test.png",
-        file_name="test.png",
-        mime_type="image/png",
+        file_path=original_file,
+        file_name=os.path.basename(original_file),
+        mime_type="text/plain",
         entity_type="trace",
         entity_id=entity_id,
         project_name=project_name,
@@ -66,12 +66,12 @@ def test_attachment_to_message__no_temp_copy():
     )
 
 
-def test_attachment_to_message__file_name():
+def test_attachment_to_message__file_name(original_file: str):
     url_override = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
     attachment_data = attachment.Attachment(
-        data="test.pdf", file_name="test.jpg", create_temp_copy=False
+        data=original_file, file_name="test.jpg", create_temp_copy=False
     )
 
     message = converters.attachment_to_message(
@@ -83,7 +83,7 @@ def test_attachment_to_message__file_name():
     )
 
     assert message == messages.CreateAttachmentMessage(
-        file_path="test.pdf",
+        file_path=original_file,
         file_name="test.jpg",
         mime_type="image/jpeg",
         entity_type="trace",
@@ -93,12 +93,12 @@ def test_attachment_to_message__file_name():
     )
 
 
-def test_attachment_to_message__content_type():
+def test_attachment_to_message__content_type(original_file: str):
     url_override = "https://example.com"
     entity_id = "123"
     project_name = "test-project"
     attachment_data = attachment.Attachment(
-        data="test.pdf", content_type="image/jpeg", create_temp_copy=False
+        data=original_file, content_type="image/jpeg", create_temp_copy=False
     )
 
     message = converters.attachment_to_message(
@@ -110,8 +110,8 @@ def test_attachment_to_message__content_type():
     )
 
     assert message == messages.CreateAttachmentMessage(
-        file_path="test.pdf",
-        file_name="test.pdf",
+        file_path=original_file,
+        file_name=os.path.basename(original_file),
         mime_type="image/jpeg",
         entity_type="trace",
         entity_id=entity_id,
@@ -453,3 +453,29 @@ def test_attachment_to_message__base64_string(request):
     assert message.entity_type == "trace"
     assert message.entity_id == entity_id
     assert message.project_name == project_name
+
+
+def test_attachment_to_message__invalid_data_raises_error():
+    """Test that invalid attachment data (not bytes, file, or base64) raises ValueError."""
+    url_override = "https://example.com"
+    entity_id = "123"
+    project_name = "test-project"
+
+    invalid_data = "not-a-file-and-not-base64!@#$%"
+
+    attachment_data = attachment.Attachment(
+        data=invalid_data,
+        file_name="test.txt",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Attachment data must be bytes, an existing file path, or a valid base64-encoded string",
+    ):
+        converters.attachment_to_message(
+            attachment_data=attachment_data,
+            entity_type="trace",
+            entity_id=entity_id,
+            project_name=project_name,
+            url_override=url_override,
+        )

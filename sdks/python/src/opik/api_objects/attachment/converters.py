@@ -40,8 +40,10 @@ def attachment_to_message(
             file_path = _write_file_like_to_temp_file(decoded_bytes)
             attachment_data.create_temp_copy = False
             delete_after_upload = True
-        except binascii.Error:
-            file_path = attachment_data.data
+        except binascii.Error as e:
+            raise ValueError(
+                "Attachment data must be bytes, an existing file path, or a valid base64-encoded string."
+            ) from e
 
     file_name = attachment_data.file_name
     should_delete_after_upload = delete_after_upload
