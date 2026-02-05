@@ -110,7 +110,7 @@ public class DatasetEvaluatorsResource {
         log.info("Deleting {} dataset evaluators for dataset '{}' on workspaceId '{}'",
                 request.ids().size(), datasetId, workspaceId);
 
-        service.deleteBatch(request.ids());
+        service.deleteBatch(datasetId, request.ids());
 
         log.info("Deleted dataset evaluators for dataset '{}' on workspaceId '{}'",
                 datasetId, workspaceId);

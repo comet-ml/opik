@@ -8,6 +8,7 @@ import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +28,7 @@ public interface DatasetEvaluatorService {
 
     DatasetEvaluatorPage getByDatasetId(UUID datasetId, int page, int size);
 
-    void deleteBatch(Set<UUID> ids);
+    void deleteBatch(UUID datasetId, Set<UUID> ids);
 
     void deleteByDatasetId(UUID datasetId);
 }
@@ -102,15 +103,25 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
     }
 
     @Override
-    public void deleteBatch(@NonNull Set<UUID> ids) {
+    public void deleteBatch(@NonNull UUID datasetId, @NonNull Set<UUID> ids) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Deleting {} dataset evaluators in workspace '{}'", ids.size(), workspaceId);
+        log.info("Deleting {} dataset evaluators for dataset '{}' in workspace '{}'",
+                ids.size(), datasetId, workspaceId);
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetEvaluatorDAO.class);
-            int deleted = dao.deleteByIds(workspaceId, ids);
-            log.info("Deleted {} dataset evaluators in workspace '{}'", deleted, workspaceId);
+
+            long matchingCount = dao.countByIdsAndDatasetId(workspaceId, datasetId, ids);
+            if (matchingCount != ids.size()) {
+                throw new BadRequestException(
+                        "Some evaluator IDs do not belong to dataset '%s'. Requested: %d, found: %d"
+                                .formatted(datasetId, ids.size(), matchingCount));
+            }
+
+            int deleted = dao.deleteByIdsAndDatasetId(workspaceId, datasetId, ids);
+            log.info("Deleted {} dataset evaluators for dataset '{}' in workspace '{}'",
+                    deleted, datasetId, workspaceId);
             return null;
         });
     }

@@ -19,6 +19,7 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -33,7 +34,9 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -242,6 +245,57 @@ class DatasetEvaluatorsResourceTest {
             var remaining = datasetEvaluatorClient.get(datasetId, API_KEY, TEST_WORKSPACE_NAME, 1, 10);
             assertThat(remaining.content()).isEmpty();
             assertThat(remaining.total()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("Delete with non-existent IDs returns 400")
+        void deleteWithNonExistentIdsReturns400() {
+            var datasetId = createDataset();
+
+            Set<UUID> nonExistentIds = Set.of(UUID.randomUUID(), UUID.randomUUID());
+
+            datasetEvaluatorClient.deleteBatch(datasetId, nonExistentIds, API_KEY, TEST_WORKSPACE_NAME,
+                    HttpStatus.SC_BAD_REQUEST);
+        }
+
+        @Test
+        @DisplayName("Delete with IDs from another dataset returns 400")
+        void deleteWithIdsFromAnotherDatasetReturns400() {
+            var datasetId1 = createDataset();
+            var datasetId2 = createDataset();
+
+            var request = datasetEvaluatorClient.createBatchRequest(2);
+            var createdInDataset1 = datasetEvaluatorClient.createBatch(datasetId1, request, API_KEY,
+                    TEST_WORKSPACE_NAME);
+
+            var idsFromDataset1 = createdInDataset1.stream()
+                    .map(DatasetEvaluator::id)
+                    .collect(Collectors.toSet());
+
+            datasetEvaluatorClient.deleteBatch(datasetId2, idsFromDataset1, API_KEY, TEST_WORKSPACE_NAME,
+                    HttpStatus.SC_BAD_REQUEST);
+
+            var remainingInDataset1 = datasetEvaluatorClient.get(datasetId1, API_KEY, TEST_WORKSPACE_NAME, 1, 10);
+            assertThat(remainingInDataset1.content()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("Delete with mixed valid and invalid IDs returns 400 and does not delete any")
+        void deleteWithMixedValidAndInvalidIdsReturns400() {
+            var datasetId = createDataset();
+
+            var request = datasetEvaluatorClient.createBatchRequest(2);
+            var created = datasetEvaluatorClient.createBatch(datasetId, request, API_KEY, TEST_WORKSPACE_NAME);
+
+            Set<UUID> mixedIds = new HashSet<>();
+            mixedIds.add(created.get(0).id());
+            mixedIds.add(UUID.randomUUID());
+
+            datasetEvaluatorClient.deleteBatch(datasetId, mixedIds, API_KEY, TEST_WORKSPACE_NAME,
+                    HttpStatus.SC_BAD_REQUEST);
+
+            var remaining = datasetEvaluatorClient.get(datasetId, API_KEY, TEST_WORKSPACE_NAME, 1, 10);
+            assertThat(remaining.content()).hasSize(2);
         }
     }
 

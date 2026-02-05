@@ -41,8 +41,15 @@ public interface DatasetEvaluatorDAO {
     List<DatasetEvaluator> findByIds(@Bind("workspaceId") String workspaceId,
             @BindList("ids") Set<UUID> ids);
 
-    @SqlUpdate("DELETE FROM dataset_evaluators WHERE workspace_id = :workspaceId AND id IN (<ids>)")
-    int deleteByIds(@Bind("workspaceId") String workspaceId, @BindList("ids") Set<UUID> ids);
+    @SqlUpdate("DELETE FROM dataset_evaluators WHERE workspace_id = :workspaceId AND dataset_id = :datasetId AND id IN (<ids>)")
+    int deleteByIdsAndDatasetId(@Bind("workspaceId") String workspaceId,
+            @Bind("datasetId") UUID datasetId,
+            @BindList("ids") Set<UUID> ids);
+
+    @SqlQuery("SELECT COUNT(*) FROM dataset_evaluators WHERE workspace_id = :workspaceId AND dataset_id = :datasetId AND id IN (<ids>)")
+    long countByIdsAndDatasetId(@Bind("workspaceId") String workspaceId,
+            @Bind("datasetId") UUID datasetId,
+            @BindList("ids") Set<UUID> ids);
 
     @SqlUpdate("DELETE FROM dataset_evaluators WHERE workspace_id = :workspaceId AND dataset_id = :datasetId")
     int deleteByDatasetId(@Bind("workspaceId") String workspaceId, @Bind("datasetId") UUID datasetId);
