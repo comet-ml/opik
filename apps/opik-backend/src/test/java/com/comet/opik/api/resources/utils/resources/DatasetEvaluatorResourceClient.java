@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.DatasetEvaluator;
-import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchDeleteRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorCreate;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorPage;
@@ -87,15 +87,15 @@ public class DatasetEvaluatorResourceClient {
     }
 
     public void deleteBatch(UUID datasetId, Set<UUID> ids, String apiKey, String workspaceName, int expectedStatus) {
-        var request = DatasetEvaluatorBatchDeleteRequest.builder()
-                .ids(List.copyOf(ids))
+        var request = BatchDelete.builder()
+                .ids(ids)
                 .build();
         try (var response = callDeleteBatch(datasetId, request, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 
-    public Response callDeleteBatch(UUID datasetId, DatasetEvaluatorBatchDeleteRequest request,
+    public Response callDeleteBatch(UUID datasetId, BatchDelete request,
             String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI, datasetId))
                 .path("delete-batch")

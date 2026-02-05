@@ -1,8 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.DatasetEvaluator;
-import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchDeleteRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorPage;
 import com.comet.opik.domain.DatasetEvaluatorService;
@@ -34,7 +34,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -104,14 +103,14 @@ public class DatasetEvaluatorsResource {
     })
     public Response deleteBatch(
             @PathParam("datasetId") UUID datasetId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetEvaluatorBatchDeleteRequest.class))) @NotNull @Valid DatasetEvaluatorBatchDeleteRequest request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @NotNull @Valid BatchDelete request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Deleting {} dataset evaluators for dataset '{}' on workspaceId '{}'",
                 request.ids().size(), datasetId, workspaceId);
 
-        service.deleteBatch(new HashSet<>(request.ids()));
+        service.deleteBatch(request.ids());
 
         log.info("Deleted dataset evaluators for dataset '{}' on workspaceId '{}'",
                 datasetId, workspaceId);

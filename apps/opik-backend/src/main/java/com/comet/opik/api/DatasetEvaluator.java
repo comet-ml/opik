@@ -68,11 +68,4 @@ public record DatasetEvaluator(
             @NotBlank @Size(max = 100) String metricType,
             @NotNull JsonNode metricConfig) {
     }
-
-    @Builder
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record DatasetEvaluatorBatchDeleteRequest(
-            @NotNull @Size(min = 1, max = 1000) List<UUID> ids) {
-    }
 }
