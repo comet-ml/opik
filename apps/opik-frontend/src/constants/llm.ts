@@ -84,6 +84,12 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
+// Anthropic models that support adaptive thinking with effort parameter
+// Claude Opus 4.6 uses adaptive thinking with effort levels: low, medium (default), high, max
+export const ANTHROPIC_THINKING_MODELS = [
+  PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+] as const;
+
 // Reasoning models that require temperature = 1.0
 // These models do not support temperature = 0 and will fail if used
 // Note: GPT-5.2 Pro uses Responses API (/v1/responses) not Chat Completions, so it's excluded
@@ -131,6 +137,19 @@ export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
 // Prefer using model-specific constants instead: THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH.
 /** @deprecated Use THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH instead. */
 export const THINKING_LEVEL_OPTIONS = THINKING_LEVEL_OPTIONS_PRO;
+
+// Thinking effort options for Anthropic Opus 4.6 with adaptive thinking
+// Effort levels: adaptive, low, medium, high, max (default is high)
+export const ANTHROPIC_THINKING_EFFORT_OPTIONS: Array<{
+  label: string;
+  value: "adaptive" | "low" | "medium" | "high" | "max";
+}> = [
+  { label: "Adaptive", value: "adaptive" },
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High (Default)", value: "high" },
+  { label: "Max", value: "max" },
+];
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
