@@ -180,6 +180,11 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     nbSamples?: number,
     lastRetrievedId?: string
   ): Promise<DatasetItem<T>[]> {
+    // Handle edge case: nbSamples = 0 means no items requested
+    if (nbSamples === 0) {
+      return [];
+    }
+
     const MAX_STREAM_LIMIT = 2000;
     const allItems: DatasetItem<T>[] = [];
     let remaining = nbSamples;
