@@ -44,6 +44,9 @@ result = optimizer.optimize_prompt(
 )
 ```
 
+Tool optimization is supported by all optimizers **except** `FewShotBayesianOptimizer`
+and `ParameterOptimizer`.
+
 ## Tool calling + MCP formats
 
 You can define tools in one of the supported formats. Tool optimization will normalize them to
@@ -151,6 +154,12 @@ result = optimizer.optimize_prompt(
 )
 ```
 
+## Tool optimization limits
+
+To keep runs manageable, `optimize_tools=True` is limited by
+`DEFAULT_TOOL_CALL_MAX_TOOLS_TO_OPTIMIZE` (default: 3). If you need more, pass a dict
+to select a smaller subset of tools.
+
 ## Disable tool use while optimizing tools
 
 If you want to optimize tool descriptions without executing tools during evaluation, set
@@ -188,7 +197,7 @@ result = optimizer.optimize_prompt(
 ## Limitations
 
 - Tool optimization only supports **single prompts**.
-- Currently available in **MetaPromptOptimizer**.
+- Not supported in `FewShotBayesianOptimizer` or `ParameterOptimizer`.
 
 ## Troubleshooting
 
