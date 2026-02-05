@@ -121,6 +121,7 @@ export const generateAnnotationQueueIdFilter = (annotationQueueId?: string) => {
 
   return [
     createFilter({
+      id: `annotation-queue-filter-${annotationQueueId}`,
       field: "annotation_queue_ids",
       type: COLUMN_TYPE.list,
       operator: "contains",
