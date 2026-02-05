@@ -138,10 +138,17 @@ export class DatasetVersion<T extends DatasetItemData = DatasetItemData> {
    * Retrieve a fixed number of dataset items from this version.
    *
    * @param nbSamples The number of samples to retrieve. If not set - all items are returned
+   * @param lastRetrievedId Optional ID of the last retrieved item for pagination
    * @returns A list of objects representing the dataset items
    */
-  public async getItems(nbSamples?: number): Promise<(T & { id: string })[]> {
-    const datasetItems = await this.getItemsAsDataclasses(nbSamples);
+  public async getItems(
+    nbSamples?: number,
+    lastRetrievedId?: string
+  ): Promise<(T & { id: string })[]> {
+    const datasetItems = await this.getItemsAsDataclasses(
+      nbSamples,
+      lastRetrievedId
+    );
     return datasetItems.map((item) => item.getContent(true));
   }
 
