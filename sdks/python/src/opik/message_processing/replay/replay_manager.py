@@ -5,12 +5,13 @@ import sqlite3
 import tempfile
 import threading
 from enum import unique, IntEnum
-from typing import List, NamedTuple, Callable, Optional, Dict
+from typing import List, NamedTuple, Callable, Optional, Dict, Iterator
 
 from opik.message_processing import messages
 from opik.message_processing.replay import message_serialization
 
 DEFAULT_DB_FILE = "opik_messages.db"
+DEFAULT_BATCH_SIZE = 1000
 
 LOGGER = logging.getLogger(__name__)
 
@@ -77,9 +78,35 @@ ReplayCallback = Callable[[messages.BaseMessage], None]
 
 
 class ReplayManager:
+    """
+    Manages message storage, batch processing, and database operations within a replay
+    system.
+
+    This class provides functionalities to handle message registrations, batch updates,
+    and database schema management. It ensures thread-safe operations, cleans up
+    temporary files, and handles database connections as part of its lifecycle.
+
+    """
+
     def __init__(
-        self, db_file: Optional[str] = None, conn: Optional[sqlite3.Connection] = None
+        self,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        db_file: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> None:
+        """
+        Initializes the Manager class, setting up the database connection, temporary
+        directory, and other necessary properties for managing batch operations.
+
+        Args:
+            batch_size: The size of batches for processing. Defaults to
+                DEFAULT_BATCH_SIZE.
+            db_file: Path to the database file. If not provided, a
+                temporary file will be created in a temporary directory.
+            conn: A pre-existing database connection.
+                If not provided, a new connection is created.
+        """
+        self.batch_size = batch_size
         self.status = ManagerStatus.undefined
         self.tmp_dir = tempfile.mkdtemp()
         if db_file is None:
@@ -101,7 +128,7 @@ class ReplayManager:
             with self.__lock__:
                 with self.conn:
                     self.conn.execute(
-                        """CREATE TABLE messages
+                        """CREATE TABLE messages IF NOT EXISTS
                                             (message_id INTEGER NOT NULL PRIMARY KEY,
                                             status INTEGER NOT NULL,
                                             message_type TEXT NOT NULL,
@@ -109,7 +136,7 @@ class ReplayManager:
                     )
                     self.status = ManagerStatus.initialized
         except Exception as ex:
-            msg = "Database schema creation failed, reason: %r" % ex
+            msg = f"Database schema creation failed, reason: {ex}"
             self._mark_as_db_failed(msg)
             LOGGER.debug(msg, exc_info=True)
 
@@ -123,18 +150,21 @@ class ReplayManager:
             try:
                 LOGGER.debug("Closing messages DB connection")
                 self.conn.close()
-            except Exception:
-                LOGGER.debug("Failed to close messages DB connection", exc_info=True)
+            except Exception as e:
+                LOGGER.debug(
+                    "Failed to close messages DB connection: %s", e, exc_info=True
+                )
 
             # delete temporary data
             if self.tmp_dir is not None:
                 try:
                     LOGGER.debug("Cleaning temporary data dir: %r", self.tmp_dir)
                     shutil.rmtree(self.tmp_dir)
-                except Exception:
+                except Exception as e:
                     LOGGER.debug(
-                        "Failed to clean temporary data dir: %r",
+                        "Failed to clean temporary data dir: %r, reason: %s",
                         self.tmp_dir,
+                        e,
                         exc_info=True,
                     )
 
@@ -173,7 +203,7 @@ class ReplayManager:
 
     def register_messages(
         self,
-        messages: List[messages.BaseMessage],
+        messages_batch: List[messages.BaseMessage],
         status: MessageStatus = MessageStatus.registered,
     ) -> None:
         if not self.initialized:
@@ -186,7 +216,7 @@ class ReplayManager:
                 return
 
             values = []
-            for message in messages:
+            for message in messages_batch:
                 message_json = self._preprocess_registered_message(message)
                 values.append(
                     (
@@ -203,10 +233,7 @@ class ReplayManager:
                         "INSERT INTO messages VALUES (?,?,?,?)", values
                     )
             except Exception as ex:
-                msg = (
-                    "register_messages: failed to insert messages into DB, reason: %r"
-                    % ex
-                )
+                msg = f"register_messages: failed to insert messages into DB, reason: {ex}"
                 self._mark_as_db_failed(msg)
                 LOGGER.debug(msg, exc_info=True)
 
@@ -215,11 +242,12 @@ class ReplayManager:
         if message_id in self.message_files:
             try:
                 os.remove(self.message_files[message_id])
-            except Exception:
+            except Exception as e:
                 LOGGER.debug(
-                    "Failed to remove temporary file: %r of the message: %d",
+                    "Failed to remove temporary file: %r of the message: %d, reason: %s",
                     self.message_files[message_id],
                     message_id,
+                    e,
                     exc_info=True,
                 )
 
@@ -283,10 +311,7 @@ class ReplayManager:
                             status,
                         )
             except Exception as ex:
-                msg = (
-                    "update_messages_batch: failed to update messages batch in the DB, reason: %r"
-                    % ex
-                )
+                msg = f"update_messages_batch: failed to update messages batch in the DB, reason: {ex}"
                 self._mark_as_db_failed(msg)
                 LOGGER.debug(msg, exc_info=True)
 
@@ -323,8 +348,7 @@ class ReplayManager:
                         )
             except Exception as ex:
                 msg = (
-                    "update_message: failed to update message in the DB, reason: %r"
-                    % ex
+                    f"update_message: failed to update message in the DB, reason: {ex}"
                 )
                 self._mark_as_db_failed(msg)
                 LOGGER.debug(msg, exc_info=True)
@@ -339,44 +363,38 @@ class ReplayManager:
                 LOGGER.warning("Already closed - messages replay ignored")
                 return 0
 
-            try:
-                db_messages = self._fetch_failed_messages()
-                if len(db_messages) == 0:
-                    return 0
-            except Exception as ex:
-                msg = (
-                    "replay_failed_messages: failed to fetch failed messages from DB, reason: %r"
-                    % ex
-                )
-                self._mark_as_db_failed(msg)
-                LOGGER.debug(msg, exc_info=True)
-                return 0
+            total_replayed = 0
+            for db_messages in self._fetch_failed_messages_batched(self.batch_size):
+                if self.closed:
+                    break
 
-            params = [
-                (int(MessageStatus.registered), message.id) for message in db_messages
-            ]
-            # update DB records to mark failed messages as in progress
-            try:
-                with self.conn:
-                    c = self.conn.executemany(
-                        "UPDATE messages SET status = ? WHERE message_id = ?",
-                        params,
-                    )
-                    LOGGER.debug(
-                        "Updated %d DB message records for %d failed messages",
-                        c.rowcount,
-                        len(db_messages),
-                    )
-            except Exception as ex:
-                msg = (
-                    "replay_failed_messages: failed to update messages in the DB, reason: %r"
-                    % ex
+                params = [
+                    (int(MessageStatus.registered), message.id)
+                    for message in db_messages
+                ]
+                # update DB records to mark failed messages as in progress
+                try:
+                    with self.conn:
+                        c = self.conn.executemany(
+                            "UPDATE messages SET status = ? WHERE message_id = ?",
+                            params,
+                        )
+                        LOGGER.debug(
+                            "Updated %d DB message records for %d failed messages",
+                            c.rowcount,
+                            len(db_messages),
+                        )
+                except Exception as ex:
+                    msg = f"replay_failed_messages: failed to update messages in the DB, reason: {ex}"
+                    self._mark_as_db_failed(msg)
+                    LOGGER.debug(msg, exc_info=True)
+                    return total_replayed
+
+                total_replayed += self._replay_messages(
+                    db_messages=db_messages, replay_callback=replay_callback
                 )
-                self._mark_as_db_failed(msg)
-                LOGGER.debug(msg, exc_info=True)
-        return self._replay_messages(
-            db_messages=db_messages, replay_callback=replay_callback
-        )
+
+            return total_replayed
 
     def _replay_messages(
         self, db_messages: List[DBMessage], replay_callback: ReplayCallback
@@ -389,12 +407,13 @@ class ReplayManager:
             try:
                 base_message = db_message_to_message(message)
                 replay_callback(base_message)
-            except Exception:
+            except Exception as e:
                 LOGGER.error(
-                    "Failed to replay message with id=%r, type=%r, status=%r",
+                    "Failed to replay message with id=%r, type=%r, status=%r, reason: %s",
                     message.id,
                     message.type,
                     message.status,
+                    e,
                     exc_info=True,
                 )
 
@@ -431,19 +450,37 @@ class ReplayManager:
     def failed(self) -> bool:
         return self.status == ManagerStatus.error
 
-    def _fetch_failed_messages(self) -> List[DBMessage]:
-        messages_db = []
-        for row in self.conn.execute(
-            "SELECT message_id, message_type, message_json FROM messages WHERE status = ?",
-            (MessageStatus.failed,),
-        ):
-            messages_db.append(
-                DBMessage(
-                    id=row[0], type=row[1], json=row[2], status=MessageStatus.failed
-                )
-            )
+    def _fetch_failed_messages_batched(
+        self, batch_size: int
+    ) -> Iterator[List[DBMessage]]:
+        """Fetch failed messages from DB in bounded batches to avoid OOM.
 
-        return messages_db
+        Uses cursor-based pagination with message_id for efficient iteration.
+        Yields batches of DBMessage objects until no more failed messages remain.
+        """
+        last_seen_id = -1
+        while True:
+            batch: List[DBMessage] = []
+            rows = self.conn.execute(
+                "SELECT message_id, message_type, message_json FROM messages "
+                "WHERE status = ? AND message_id > ? ORDER BY message_id LIMIT ?",
+                (MessageStatus.failed, last_seen_id, batch_size),
+            )
+            for row in rows:
+                if self.closed:
+                    # early exit if the manager is closed
+                    return
+                batch.append(
+                    DBMessage(
+                        id=row[0], type=row[1], json=row[2], status=MessageStatus.failed
+                    )
+                )
+
+            if not batch:
+                break
+
+            last_seen_id = batch[-1].id
+            yield batch
 
     def _mark_as_db_failed(self, message: str) -> None:
         self.status = ManagerStatus.error
