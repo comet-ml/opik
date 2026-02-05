@@ -1,23 +1,53 @@
 #!/bin/bash
 
-# Determine the project name using the same logic as opik.sh
-# This ensures we look for containers started by the opik.sh script
+# Determine the project name by checking what's actually running
+# This handles both opik.sh (uses worktree-based naming) and direct docker compose (uses "opik")
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 
-# Source worktree utilities to get COMPOSE_PROJECT_NAME
-if [[ -f "$repo_root/scripts/worktree-utils.sh" ]]; then
-    WORKTREE_UTILS_ROOT="$repo_root"
-    source "$repo_root/scripts/worktree-utils.sh"
-    init_worktree_ports
-    PROJECT_NAME="$COMPOSE_PROJECT_NAME"
-else
-    # Fallback: use "opik" as default project name
-    PROJECT_NAME="opik"
-fi
+# Try to find a running opik project by checking known project name patterns
+find_opik_project() {
+    # Get list of running compose projects
+    local projects
+    projects=$(docker compose ls --format json 2>/dev/null | grep -o '"Name":"[^"]*"' | cut -d'"' -f4)
+    
+    # First, try worktree-based name (opik.sh style)
+    if [[ -f "$repo_root/scripts/worktree-utils.sh" ]]; then
+        WORKTREE_UTILS_ROOT="$repo_root"
+        source "$repo_root/scripts/worktree-utils.sh"
+        init_worktree_ports
+        local worktree_name="$COMPOSE_PROJECT_NAME"
+        if echo "$projects" | grep -q "^${worktree_name}$"; then
+            echo "$worktree_name"
+            return
+        fi
+    fi
+    
+    # Then try "opik" (direct docker compose style)
+    if echo "$projects" | grep -q "^opik$"; then
+        echo "opik"
+        return
+    fi
+    
+    # Finally, try any project starting with "opik-"
+    local opik_project
+    opik_project=$(echo "$projects" | grep "^opik" | head -1)
+    if [[ -n "$opik_project" ]]; then
+        echo "$opik_project"
+        return
+    fi
+    
+    # Default fallback
+    if [[ -f "$repo_root/scripts/worktree-utils.sh" ]]; then
+        echo "$COMPOSE_PROJECT_NAME"
+    else
+        echo "opik"
+    fi
+}
+
+PROJECT_NAME=$(find_opik_project)
 
 echo "Using Docker Compose project name: $PROJECT_NAME"
-echo "Repo root: $repo_root"
 echo "Available Docker Compose projects:"
 docker compose ls 2>/dev/null || echo "  (none or docker compose ls failed)"
 
