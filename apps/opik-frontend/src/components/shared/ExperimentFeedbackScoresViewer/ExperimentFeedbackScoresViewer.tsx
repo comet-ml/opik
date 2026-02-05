@@ -49,7 +49,7 @@ const ExperimentFeedbackScoresViewer: React.FunctionComponent<
       queryParamName="expandedFeedbackScoresSections"
       sectionIdx={sectionIdx}
       count={feedbackScores.length}
-      expanded
+      defaultExpanded
     >
       <div className="px-2 pb-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
