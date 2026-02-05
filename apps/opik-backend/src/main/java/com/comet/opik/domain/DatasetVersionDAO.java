@@ -266,6 +266,47 @@ public interface DatasetVersionDAO {
     Optional<DatasetVersion> findByTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
             @Bind("workspace_id") String workspaceId);
 
+    @SqlQuery("""
+            WITH version_sequences AS (
+                SELECT
+                    id,
+                    ROW_NUMBER() OVER (PARTITION BY dataset_id ORDER BY id) AS seq_num
+                FROM dataset_versions
+                WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
+            )
+            SELECT
+                dv.id,
+                dv.dataset_id,
+                dv.version_hash,
+                CONCAT('v', vs.seq_num) AS version_name,
+                dv.items_total,
+                dv.items_added,
+                dv.items_modified,
+                dv.items_deleted,
+                dv.change_description,
+                dv.metadata,
+                dv.created_at,
+                dv.created_by,
+                dv.last_updated_at,
+                dv.last_updated_by,
+                COALESCE(t.tags, JSON_ARRAY()) AS tags,
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
+            FROM dataset_versions AS dv
+            INNER JOIN version_sequences vs ON dv.id = vs.id
+            LEFT JOIN (
+                SELECT version_id, JSON_ARRAYAGG(tag) AS tags
+                FROM dataset_version_tags
+                WHERE version_id in (select id from version_sequences)
+                GROUP BY version_id
+            ) AS t ON t.version_id = dv.id
+            WHERE dv.dataset_id = :dataset_id
+                AND dv.workspace_id = :workspace_id
+                AND CONCAT('v', vs.seq_num) = :version_name
+            """)
+    Optional<DatasetVersion> findByVersionName(@Bind("dataset_id") UUID datasetId,
+            @Bind("version_name") String versionName,
+            @Bind("workspace_id") String workspaceId);
+
     @SqlUpdate("""
             UPDATE dataset_versions
             SET change_description = :change_description,
