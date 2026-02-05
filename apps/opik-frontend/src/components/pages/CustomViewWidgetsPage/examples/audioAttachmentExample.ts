@@ -4,11 +4,12 @@ import type { ViewTree, SourceData } from "@/lib/data-view/core/types";
  * PATTERN DEMO: Audio Attachment
  *
  * Demonstrates Audio widget usage for displaying audio attachments:
- * - Native audio controls with play/pause/seek
- * - Expand/download actions
- * - Label and optional tag
+ * - L1 container with collapsible header
+ * - Muted metadata row with bullet-separated values
+ * - Custom styled audio controls with play/pause/seek
+ * - Clickable tag linking to the audio URL
  *
- * Note: This is a pattern demo showing Audio widget composition.
+ * Figma reference: Node 364:20708
  */
 export const audioAttachmentExample = {
   title: "Audio Attachment",
@@ -18,62 +19,22 @@ export const audioAttachmentExample = {
     nodes: {
       root: {
         id: "root",
-        type: "Container",
-        props: { layout: "stack", gap: "md", padding: "none" },
-        children: ["header", "audioSection"],
-        parentKey: null,
-      },
-      header: {
-        id: "header",
-        type: "Header",
-        props: { text: "Audio Attachment Example", level: 2 },
-        children: undefined,
-        parentKey: "root",
-      },
-      audioSection: {
-        id: "audioSection",
         type: "Level1Container",
-        props: { title: "Generated Audio" },
+        props: { title: "Generated audio", collapsible: true },
         children: ["metaRow", "audio"],
-        parentKey: "root",
+        parentKey: null,
       },
       metaRow: {
         id: "metaRow",
         type: "InlineRow",
-        props: {},
-        children: [
-          "modelLabel",
-          "modelValue",
-          "durationLabel",
-          "durationValue",
-        ],
-        parentKey: "audioSection",
+        props: { background: "muted" },
+        children: ["metaText"],
+        parentKey: "root",
       },
-      modelLabel: {
-        id: "modelLabel",
-        type: "Label",
-        props: { text: "Model:" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      modelValue: {
-        id: "modelValue",
+      metaText: {
+        id: "metaText",
         type: "Text",
-        props: { value: { path: "/model" }, variant: "body" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      durationLabel: {
-        id: "durationLabel",
-        type: "Label",
-        props: { text: "Duration:" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      durationValue: {
-        id: "durationValue",
-        type: "Text",
-        props: { value: { path: "/duration" }, variant: "body" },
+        props: { value: { path: "/metaLine" } },
         children: undefined,
         parentKey: "metaRow",
       },
@@ -82,24 +43,21 @@ export const audioAttachmentExample = {
         type: "Audio",
         props: {
           src: { path: "/audioUrl" },
-          label: { path: "/audioLabel" },
+          label: "Generated speech",
           tag: { path: "/audioTag" },
-          controls: true,
         },
         children: undefined,
-        parentKey: "audioSection",
+        parentKey: "root",
       },
     },
     meta: {
       name: "Audio Attachment",
-      description: "Audio widget with native playback controls",
+      description: "Audio widget with custom playback controls",
     },
   } satisfies ViewTree,
   sourceData: {
-    model: "TTS-1-HD",
-    duration: "12s",
+    metaLine: "Model: TTS-1-HD • Size: 12s",
     audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-    audioLabel: "Generated speech",
-    audioTag: "MP3",
+    audioTag: "voice_note_01.mp3",
   } satisfies SourceData,
 };

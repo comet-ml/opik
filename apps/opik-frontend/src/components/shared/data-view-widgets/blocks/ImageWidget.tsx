@@ -122,15 +122,20 @@ export const ImageWidget: React.FC<ImageWidgetProps> = ({
         </div>
       </div>
 
-      {/* Tag */}
+      {/* Tag - clickable link to the image source */}
       {tag && (
         <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1 rounded bg-[#ebf2f5] px-1.5 py-0.5">
-            <ImageIcon className="size-3 text-muted-slate" />
-            <span className="comet-body-s-accented text-muted-slate">
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex max-w-full items-center gap-1 rounded bg-[#ebf2f5] px-1.5 py-0.5 transition-colors hover:bg-[#dde8ed]"
+          >
+            <ImageIcon className="size-3 shrink-0 text-muted-slate" />
+            <span className="comet-body-s-accented truncate text-muted-slate">
               {tag}
             </span>
-          </div>
+          </a>
         </div>
       )}
 

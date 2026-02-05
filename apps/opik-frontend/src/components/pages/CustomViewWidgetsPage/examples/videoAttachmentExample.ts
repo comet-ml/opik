@@ -4,12 +4,12 @@ import type { ViewTree, SourceData } from "@/lib/data-view/core/types";
  * PATTERN DEMO: Video Attachment
  *
  * Demonstrates Video widget usage for displaying video attachments:
+ * - L1 container with collapsible header
+ * - Muted metadata row with bullet-separated values
  * - Preview thumbnail with play button overlay
- * - Expand/download actions
- * - Native video controls on playback
- * - Label and optional tag
+ * - Clickable tag linking to the video URL
  *
- * Note: This is a pattern demo showing Video widget composition.
+ * Figma reference: Node 364:20764
  */
 export const videoAttachmentExample = {
   title: "Video Attachment",
@@ -19,62 +19,22 @@ export const videoAttachmentExample = {
     nodes: {
       root: {
         id: "root",
-        type: "Container",
-        props: { layout: "stack", gap: "md", padding: "none" },
-        children: ["header", "videoSection"],
-        parentKey: null,
-      },
-      header: {
-        id: "header",
-        type: "Header",
-        props: { text: "Video Attachment Example", level: 2 },
-        children: undefined,
-        parentKey: "root",
-      },
-      videoSection: {
-        id: "videoSection",
         type: "Level1Container",
-        props: { title: "Generated Video" },
+        props: { title: "Generated video", collapsible: true },
         children: ["metaRow", "video"],
-        parentKey: "root",
+        parentKey: null,
       },
       metaRow: {
         id: "metaRow",
         type: "InlineRow",
-        props: {},
-        children: [
-          "modelLabel",
-          "modelValue",
-          "durationLabel",
-          "durationValue",
-        ],
-        parentKey: "videoSection",
+        props: { background: "muted" },
+        children: ["metaText"],
+        parentKey: "root",
       },
-      modelLabel: {
-        id: "modelLabel",
-        type: "Label",
-        props: { text: "Model:" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      modelValue: {
-        id: "modelValue",
+      metaText: {
+        id: "metaText",
         type: "Text",
-        props: { value: { path: "/model" }, variant: "body" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      durationLabel: {
-        id: "durationLabel",
-        type: "Label",
-        props: { text: "Duration:" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      durationValue: {
-        id: "durationValue",
-        type: "Text",
-        props: { value: { path: "/duration" }, variant: "body" },
+        props: { value: { path: "/metaLine" } },
         children: undefined,
         parentKey: "metaRow",
       },
@@ -83,12 +43,11 @@ export const videoAttachmentExample = {
         type: "Video",
         props: {
           src: { path: "/videoUrl" },
-          label: { path: "/videoLabel" },
+          label: "Video",
           tag: { path: "/videoTag" },
-          controls: true,
         },
         children: undefined,
-        parentKey: "videoSection",
+        parentKey: "root",
       },
     },
     meta: {
@@ -97,11 +56,10 @@ export const videoAttachmentExample = {
     },
   } satisfies ViewTree,
   sourceData: {
-    model: "Sora",
-    duration: "15s",
+    metaLine: "Model: Sora • Duration: 15s",
     videoUrl:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-    videoLabel: "Generated animation",
-    videoTag: "720p",
+    videoTag:
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
   } satisfies SourceData,
 };

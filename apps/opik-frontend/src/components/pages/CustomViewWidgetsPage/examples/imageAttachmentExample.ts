@@ -4,11 +4,12 @@ import type { ViewTree, SourceData } from "@/lib/data-view/core/types";
  * PATTERN DEMO: Image Attachment
  *
  * Demonstrates Image widget usage for displaying image attachments:
+ * - L1 container with collapsible header
+ * - Muted metadata row with bullet-separated values
  * - Preview thumbnail with expand/download actions
- * - Label and optional tag
- * - Support for URLs and data URIs
+ * - Clickable tag linking to the image URL
  *
- * Note: This is a pattern demo showing Image widget composition.
+ * Figma reference: Node 364:20576
  */
 export const imageAttachmentExample = {
   title: "Image Attachment",
@@ -18,57 +19,22 @@ export const imageAttachmentExample = {
     nodes: {
       root: {
         id: "root",
-        type: "Container",
-        props: { layout: "stack", gap: "md", padding: "none" },
-        children: ["header", "imageSection"],
-        parentKey: null,
-      },
-      header: {
-        id: "header",
-        type: "Header",
-        props: { text: "Image Attachment Example", level: 2 },
-        children: undefined,
-        parentKey: "root",
-      },
-      imageSection: {
-        id: "imageSection",
         type: "Level1Container",
-        props: { title: "Generated Image" },
+        props: { title: "Generated image", collapsible: true },
         children: ["metaRow", "image"],
-        parentKey: "root",
+        parentKey: null,
       },
       metaRow: {
         id: "metaRow",
         type: "InlineRow",
-        props: {},
-        children: ["modelLabel", "modelValue", "sizeLabel", "sizeValue"],
-        parentKey: "imageSection",
+        props: { background: "muted" },
+        children: ["metaText"],
+        parentKey: "root",
       },
-      modelLabel: {
-        id: "modelLabel",
-        type: "Label",
-        props: { text: "Model:" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      modelValue: {
-        id: "modelValue",
+      metaText: {
+        id: "metaText",
         type: "Text",
-        props: { value: { path: "/model" }, variant: "body" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      sizeLabel: {
-        id: "sizeLabel",
-        type: "Label",
-        props: { text: "Size:" },
-        children: undefined,
-        parentKey: "metaRow",
-      },
-      sizeValue: {
-        id: "sizeValue",
-        type: "Text",
-        props: { value: { path: "/size" }, variant: "body" },
+        props: { value: { path: "/metaLine" } },
         children: undefined,
         parentKey: "metaRow",
       },
@@ -78,11 +44,11 @@ export const imageAttachmentExample = {
         props: {
           src: { path: "/imageUrl" },
           alt: { path: "/altText" },
-          label: { path: "/imageLabel" },
+          label: "Image",
           tag: { path: "/imageTag" },
         },
         children: undefined,
-        parentKey: "imageSection",
+        parentKey: "root",
       },
     },
     meta: {
@@ -91,12 +57,10 @@ export const imageAttachmentExample = {
     },
   } satisfies ViewTree,
   sourceData: {
-    model: "DALL-E 3",
-    size: "1024x1024",
+    metaLine: "Model: DALL-E 3 • Size: 1024×1024",
     imageUrl:
       "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop",
     altText: "Mountain landscape at sunset",
-    imageLabel: "Generated landscape",
-    imageTag: "1024x1024",
+    imageTag: "https://example.com/plaza_mayor.png",
   } satisfies SourceData,
 };

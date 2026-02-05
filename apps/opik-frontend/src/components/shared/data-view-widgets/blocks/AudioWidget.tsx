@@ -81,7 +81,7 @@ export const AudioWidget: React.FC<AudioWidgetProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-1 py-0.5">
+    <div className="flex w-full flex-col gap-1 py-0.5">
       {/* Preview container */}
       <div
         className={cn(
@@ -123,15 +123,20 @@ export const AudioWidget: React.FC<AudioWidgetProps> = ({
         </div>
       </div>
 
-      {/* Tag */}
+      {/* Tag - clickable link to the audio source */}
       {tag && (
         <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1 rounded bg-[#ebf2f5] px-1.5 py-0.5">
-            <Music className="size-3 text-muted-slate" />
-            <span className="comet-body-s-accented text-muted-slate">
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex max-w-full items-center gap-1 rounded bg-[#ebf2f5] px-1.5 py-0.5 transition-colors hover:bg-[#dde8ed]"
+          >
+            <Music className="size-3 shrink-0 text-muted-slate" />
+            <span className="comet-body-s-accented truncate text-muted-slate">
               {tag}
             </span>
-          </div>
+          </a>
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { z } from "zod";
-import { Download, Expand, Play, Video as VideoIcon } from "lucide-react";
+import { CirclePlay, Download, Expand, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DynamicString,
@@ -165,15 +165,20 @@ export const VideoWidget: React.FC<VideoWidgetProps> = ({
         </div>
       </div>
 
-      {/* Tag */}
+      {/* Tag - clickable link to the video source */}
       {tag && (
         <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1 rounded bg-[#ebf2f5] px-1.5 py-0.5">
-            <VideoIcon className="size-3 text-muted-slate" />
-            <span className="comet-body-s-accented text-muted-slate">
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex max-w-full items-center gap-1 rounded bg-[#ebf2f5] px-1.5 py-0.5 transition-colors hover:bg-[#dde8ed]"
+          >
+            <CirclePlay className="size-3 shrink-0 text-muted-slate" />
+            <span className="comet-body-s-accented truncate text-muted-slate">
               {tag}
             </span>
-          </div>
+          </a>
         </div>
       )}
 
