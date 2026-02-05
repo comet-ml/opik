@@ -254,6 +254,8 @@ from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_compare_trace_visibility_mode import ExperimentItemCompareTraceVisibilityMode
 from .experiment_item_public import ExperimentItemPublic
 from .experiment_item_public_trace_visibility_mode import ExperimentItemPublicTraceVisibilityMode
+from .experiment_item_reference import ExperimentItemReference
+from .experiment_item_reference_public import ExperimentItemReferencePublic
 from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
@@ -377,6 +379,9 @@ from .numerical_feedback_detail import NumericalFeedbackDetail
 from .numerical_feedback_detail_create import NumericalFeedbackDetailCreate
 from .numerical_feedback_detail_public import NumericalFeedbackDetailPublic
 from .numerical_feedback_detail_update import NumericalFeedbackDetailUpdate
+from .ollama_connection_test_response import OllamaConnectionTestResponse
+from .ollama_instance_base_url_request import OllamaInstanceBaseUrlRequest
+from .ollama_model import OllamaModel
 from .optimization import Optimization
 from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
@@ -779,6 +784,8 @@ __all__ = [
     "ExperimentItemCompareTraceVisibilityMode",
     "ExperimentItemPublic",
     "ExperimentItemPublicTraceVisibilityMode",
+    "ExperimentItemReference",
+    "ExperimentItemReferencePublic",
     "ExperimentItemTraceVisibilityMode",
     "ExperimentPagePublic",
     "ExperimentPublic",
@@ -897,6 +904,9 @@ __all__ = [
     "NumericalFeedbackDetailCreate",
     "NumericalFeedbackDetailPublic",
     "NumericalFeedbackDetailUpdate",
+    "OllamaConnectionTestResponse",
+    "OllamaInstanceBaseUrlRequest",
+    "OllamaModel",
     "Optimization",
     "OptimizationPagePublic",
     "OptimizationPublic",

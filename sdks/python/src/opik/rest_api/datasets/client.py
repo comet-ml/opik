@@ -1104,6 +1104,7 @@ class DatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[bytes]:
         """
@@ -1119,6 +1120,8 @@ class DatasetsClient:
 
         dataset_version : typing.Optional[str]
 
+        filters : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -1132,6 +1135,7 @@ class DatasetsClient:
             last_retrieved_id=last_retrieved_id,
             steam_limit=steam_limit,
             dataset_version=dataset_version,
+            filters=filters,
             request_options=request_options,
         ) as r:
             yield from r.data
@@ -1288,6 +1292,38 @@ class DatasetsClient:
         """
         _response = self._raw_client.restore_dataset_version(
             id, version_ref=version_ref, request_options=request_options
+        )
+        return _response.data
+
+    def retrieve_dataset_version(
+        self, id: str, *, version_name: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionPublic:
+        """
+        Get a specific version by its version name (e.g., 'v1', 'v373'). This is more efficient than paginating through all versions for large datasets.
+
+        Parameters
+        ----------
+        id : str
+
+        version_name : str
+            Version name in format 'vN' (e.g., 'v1', 'v373')
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Dataset version
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.retrieve_dataset_version(id='id', version_name='v1', )
+        """
+        _response = self._raw_client.retrieve_dataset_version(
+            id, version_name=version_name, request_options=request_options
         )
         return _response.data
 
@@ -2497,6 +2533,7 @@ class AsyncDatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[bytes]:
         """
@@ -2512,6 +2549,8 @@ class AsyncDatasetsClient:
 
         dataset_version : typing.Optional[str]
 
+        filters : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
 
@@ -2525,6 +2564,7 @@ class AsyncDatasetsClient:
             last_retrieved_id=last_retrieved_id,
             steam_limit=steam_limit,
             dataset_version=dataset_version,
+            filters=filters,
             request_options=request_options,
         ) as r:
             async for data in r.data:
@@ -2701,6 +2741,41 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.restore_dataset_version(
             id, version_ref=version_ref, request_options=request_options
+        )
+        return _response.data
+
+    async def retrieve_dataset_version(
+        self, id: str, *, version_name: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionPublic:
+        """
+        Get a specific version by its version name (e.g., 'v1', 'v373'). This is more efficient than paginating through all versions for large datasets.
+
+        Parameters
+        ----------
+        id : str
+
+        version_name : str
+            Version name in format 'vN' (e.g., 'v1', 'v373')
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Dataset version
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.retrieve_dataset_version(id='id', version_name='v1', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.retrieve_dataset_version(
+            id, version_name=version_name, request_options=request_options
         )
         return _response.data
 

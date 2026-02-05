@@ -6,6 +6,7 @@ export enum PROVIDER_TYPE {
   OPEN_ROUTER = "openrouter",
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
+  OLLAMA = "ollama",
   CUSTOM = "custom-llm",
   BEDROCK = "bedrock",
   OPIK_FREE = "opik-free",
@@ -466,7 +467,7 @@ export interface BaseProviderKey {
 }
 
 export interface StandardProviderObject extends BaseProviderKey {
-  provider: Exclude<PROVIDER_TYPE, PROVIDER_TYPE.CUSTOM>;
+  provider: Exclude<PROVIDER_TYPE, PROVIDER_TYPE.CUSTOM | PROVIDER_TYPE.OLLAMA>;
   base_url?: never;
   provider_name?: never;
 }
@@ -477,7 +478,16 @@ export interface CustomProviderObject extends BaseProviderKey {
   base_url: string;
 }
 
-export type ProviderObject = StandardProviderObject | CustomProviderObject;
+export interface OllamaProviderObject extends BaseProviderKey {
+  provider: PROVIDER_TYPE.OLLAMA;
+  provider_name: string;
+  base_url: string;
+}
+
+export type ProviderObject =
+  | StandardProviderObject
+  | CustomProviderObject
+  | OllamaProviderObject;
 
 export type PartialProviderKeyUpdate = Partial<
   Omit<BaseProviderKey, "provider">

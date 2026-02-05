@@ -49,5 +49,7 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean customllmProviderEnabled;
     @JsonProperty
+    @NotNull boolean ollamaProviderEnabled;
+    @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;
 }

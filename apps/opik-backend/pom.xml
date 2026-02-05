@@ -19,7 +19,7 @@
         <dropwizard.version>5.0.0</dropwizard.version>
         <swagger.version>2.2.33</swagger.version>
         <lombok.version>1.18.38</lombok.version>
-        <mysql.version>9.5.0</mysql.version>
+        <mysql.version>9.6.0</mysql.version>
         <dropwizard-guicey.version>8.0.0</dropwizard-guicey.version>
         <stringtemplate.version>3.51.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
@@ -83,6 +83,11 @@
                 <groupId>net.minidev</groupId>
                 <artifactId>json-smart</artifactId>
                 <version>2.6.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>3.27.7</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

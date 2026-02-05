@@ -1531,6 +1531,7 @@ class RawDatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.Iterator[HttpResponse[typing.Iterator[bytes]]]:
         """
@@ -1545,6 +1546,8 @@ class RawDatasetsClient:
         steam_limit : typing.Optional[int]
 
         dataset_version : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1562,6 +1565,7 @@ class RawDatasetsClient:
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
                 "dataset_version": dataset_version,
+                "filters": filters,
             },
             headers={
                 "content-type": "application/json",
@@ -1849,6 +1853,76 @@ class RawDatasetsClient:
                     ),
                 )
                 return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def retrieve_dataset_version(
+        self, id: str, *, version_name: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[DatasetVersionPublic]:
+        """
+        Get a specific version by its version name (e.g., 'v1', 'v373'). This is more efficient than paginating through all versions for large datasets.
+
+        Parameters
+        ----------
+        id : str
+
+        version_name : str
+            Version name in format 'vN' (e.g., 'v1', 'v373')
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DatasetVersionPublic]
+            Dataset version
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/versions/retrieve",
+            method="POST",
+            json={
+                "version_name": version_name,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetVersionPublic,
+                    parse_obj_as(
+                        type_=DatasetVersionPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),
@@ -3452,6 +3526,7 @@ class AsyncRawDatasetsClient:
         last_retrieved_id: typing.Optional[str] = OMIT,
         steam_limit: typing.Optional[int] = OMIT,
         dataset_version: typing.Optional[str] = OMIT,
+        filters: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> typing.AsyncIterator[AsyncHttpResponse[typing.AsyncIterator[bytes]]]:
         """
@@ -3466,6 +3541,8 @@ class AsyncRawDatasetsClient:
         steam_limit : typing.Optional[int]
 
         dataset_version : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -3483,6 +3560,7 @@ class AsyncRawDatasetsClient:
                 "last_retrieved_id": last_retrieved_id,
                 "steam_limit": steam_limit,
                 "dataset_version": dataset_version,
+                "filters": filters,
             },
             headers={
                 "content-type": "application/json",
@@ -3771,6 +3849,76 @@ class AsyncRawDatasetsClient:
                     ),
                 )
                 return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def retrieve_dataset_version(
+        self, id: str, *, version_name: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[DatasetVersionPublic]:
+        """
+        Get a specific version by its version name (e.g., 'v1', 'v373'). This is more efficient than paginating through all versions for large datasets.
+
+        Parameters
+        ----------
+        id : str
+
+        version_name : str
+            Version name in format 'vN' (e.g., 'v1', 'v373')
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DatasetVersionPublic]
+            Dataset version
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/versions/retrieve",
+            method="POST",
+            json={
+                "version_name": version_name,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetVersionPublic,
+                    parse_obj_as(
+                        type_=DatasetVersionPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             if _response.status_code == 404:
                 raise NotFoundError(
                     headers=dict(_response.headers),

@@ -63,7 +63,7 @@ yargs(hideBin(process.argv))
         },
       });
     },
-    (argv) => {
+    async (argv) => {
       // Check for interactive terminal for configure command
       if (isNonInteractiveEnvironment()) {
         clack.intro(chalk.inverse(`Opik TS`));
@@ -77,15 +77,25 @@ yargs(hideBin(process.argv))
       }
 
       const options = { ...argv };
-      void runWizard(options as unknown as WizardOptions);
+      try {
+        await runWizard(options as unknown as WizardOptions);
+      } catch (error) {
+        clack.log.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        process.exit(1);
+      }
     },
   )
   .command(
     'doctor',
     'Run health checks for Opik SDK installation',
     () => {},
-    () => {
-      void runDoctor();
+    async () => {
+      try {
+        await runDoctor();
+      } catch (error) {
+        clack.log.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        process.exit(1);
+      }
     },
   )
   .demandCommand(1, 'Error: command required')
@@ -94,5 +104,9 @@ yargs(hideBin(process.argv))
   .alias('help', 'h')
   .version()
   .alias('version', 'v')
-  .wrap(process.stdout.isTTY ? yargs.terminalWidth() : 80)
-  .parse();
+  .wrap(process.stdout.isTTY ? (process.stdout.columns || 80) : 80)
+  .parseAsync()
+  .catch((error) => {
+    console.error(`Fatal error: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });

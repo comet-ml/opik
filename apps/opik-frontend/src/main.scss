@@ -29,6 +29,7 @@
 
     --background: 0 0% 100%;
     --foreground: 224 17% 26%;
+    --loading-overlay: 0 0% 100%;
 
     --soft-background: 240 20% 99%;
 
@@ -81,6 +82,8 @@
     --template-icon-experiments: #10b981;
 
     /* DataTable colors */
+    --table-best-row-bg: #e6f7ed;
+    --table-best-row-hover-bg: #d0f0dc;
 
     /* Trace thread colors */
     --thread-active: #ebf2f5;
@@ -216,6 +219,7 @@
 
     --background: 0, 0%, 7%;
     --foreground: 214, 32%, 91%;
+    --loading-overlay: 0 0% 5%;
 
     --soft-background: 0, 0%, 7%;
     --accent-background: 0, 0%, 9%;
@@ -301,6 +305,10 @@
     --diff-removed-text: #fef2f2;
     --diff-added-bg: #14532d;
     --diff-added-text: #bbf7d0;
+
+    /* DataTable colors - Dark Mode */
+    --table-best-row-bg: #29322f;
+    --table-best-row-hover-bg: #314136;
 
     /* Upload field colors - Dark Mode */
     --upload-icon-bg: 215 19.3% 34.5%;
@@ -464,6 +472,14 @@
     left: var(--sidebar-width);
   }
 
+  .comet-table-row-best td {
+    background-color: var(--table-best-row-bg) !important;
+  }
+
+  .comet-table-row-best:hover td {
+    background-color: var(--table-best-row-hover-bg) !important;
+  }
+
   .comet-table-row-active[data-row-active="true"] td {
     background: hsl(var(--primary-foreground));
   }
@@ -589,12 +605,35 @@
 
   td:first-child [data-cell-wrapper="true"],
   th:first-child [data-header-wrapper="true"] {
-    padding-left: 24px !important;
+    padding-left: 24px;
   }
 
   td:last-child [data-cell-wrapper="true"],
   th:last-child [data-header-wrapper="true"] {
-    padding-right: 24px !important;
+    padding-right: 24px;
+  }
+}
+
+.comet-table-body-loading-overlay {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background-color: hsl(var(--loading-overlay) / 0.7);
+    animation: pulse 5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
 

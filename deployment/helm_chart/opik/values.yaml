@@ -208,6 +208,8 @@ component:
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
       PYTHON_CODE_EXECUTOR_ALLOW_NETWORK: "false"
+      PYTHON_CODE_EXECUTOR_CPU_SHARES: "512"
+      PYTHON_CODE_EXECUTOR_MEM_LIMIT: "256m"
       OPIK_REVERSE_PROXY_URL: "http://opik-frontend:5173/api"
       OTEL_SERVICE_NAME: "opik-python-backend"
       OTEL_METRIC_EXPORT_INTERVAL: "60000"
@@ -346,51 +348,111 @@ component:
     # use internal aws resolvr on vpc
     awsResolver: false
     # Enable HSTS header (only enable when running behind HTTPS termination)
+    # DEPRECATED: Use extraServerHeaders instead for more flexibility
     hstsEnabled: false
+    # Cache control configuration for static assets
+    # Defines max-age values for different file types based on deployment frequency
+    # List of pattern/value pairs - order matters! First match wins in nginx map.
+    # Patterns are evaluated in the order defined here.
+    cacheControl:
+      # JavaScript and CSS - 7 days cache (frequent deployments with versioned/hashed filenames)
+      - pattern: "~assets/.*\\.(js|css)$"
+        value: "public, max-age=604800, immutable"
+      # Images - 30 days cache (static assets, but may update)
+      - pattern: "~(images/.*|assets/.*)\\.(jpg|jpeg|png|gif|svg|webp|ico)$"
+        value: "public, max-age=2592000"
+      # Fonts - 30 days cache (rarely change, but shorter for frequent updates)
+      - pattern: "~assets/.*\\.(woff|woff2|ttf|eot)$"
+        value: "public, max-age=2592000"
+      # JSON/data files - 1 day cache (may update frequently)
+      - pattern: "~assets/.*\\.json$"
+        value: "public, max-age=86400"
+      # HTML files and everything else - always revalidate to get fresh content
+      - pattern: "default"
+        value: "no-cache, must-revalidate"
+    # Extra server-level headers to add to all responses
+    # Use this to add custom security headers or override defaults
+    # Key is the header name, value can be a string or list of strings
+    # If list, multiple add_header directives will be generated
+    extraServerHeaders:
+      # OWASP recommended security headers (defaults)
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "DENY"
+      X-XSS-Protection: "0"
+      # Add custom headers or override defaults:
+      # X-Custom-Header: "custom-value"
+      # Strict-Transport-Security: "max-age=31536000; includeSubDomains; preload"
+      # Multiple values example (list):
+      # Link:
+      #   - "</style.css>; rel=preload; as=style"
+      #   - "</script.js>; rel=preload; as=script"
     # Content Security Policy (CSP) configuration
     # Customize these lists to allow additional external services (analytics, CDNs, etc.)
-    csp:
-      enabled: true
+    # Note: The legacy 'csp.enabled' flag is still honored for backward compatibility.
+    # If you previously set 'csp.enabled: false', CSP headers will not be added.
+    contentSecurityPolicy:
+      # Default source for all directives
+      default-src:
+        - "'self'"
       # Scripts allowed to execute
-      scriptSrc:
+      script-src:
         - "'self'"
         - "'unsafe-inline'"
         - "'unsafe-eval'"
         # Add external services here, e.g.:
         # - "https://cdn.example.com"
       # Styles allowed to load
-      styleSrc:
+      style-src:
         - "'self'"
         - "'unsafe-inline'"
         - "https://fonts.googleapis.com"
       # Images allowed to load
-      imgSrc:
+      img-src:
         - "'self'"
         - "data:"
         - "blob:"
         - "https:"
         - "http:"
       # Media (audio/video) allowed to load
-      mediaSrc:
+      media-src:
         - "'self'"
         - "https:"
         - "http:"
       # Fonts allowed to load
-      fontSrc:
+      font-src:
         - "'self'"
         - "data:"
         - "https://fonts.gstatic.com"
       # XHR/Fetch/WebSocket connections allowed
-      connectSrc:
+      connect-src:
         - "'self'"
         - "ws:"
         - "wss:"
         - "https:"
         # Add external API endpoints here, e.g.:
         # - "https://api.example.com"
-      # Frame ancestors (who can embed this site)
-      frameAncestors:
+      # Objects/plugins (Flash, Java, etc.)
+      object-src:
         - "'none'"
+      # Base URI for relative URLs
+      base-uri:
+        - "'self'"
+      # Frame ancestors (who can embed this site)
+      frame-ancestors:
+        - "'none'"
+      # Child frames/workers
+      child-src:
+        - "'self'"
+      # Form submission targets
+      form-action:
+        - "'self'"
+      # Manifest files
+      manifest-src:
+        - "'self'"
+      # Worker, shared worker, service worker sources
+      worker-src:
+        - "'self'"
+        - "blob:"
     upstreamConfig: {}
       # proxy_read_timeout: 60
       # proxy_connect_timeout: 60
@@ -701,6 +763,9 @@ zookeeper:
       value: "512M"
     - name: ZOO_DATA_DIR
       value: "/bitnami/zookeeper/data"
+  selectorLabels:
+    name: zookeeper-opik
+    instance: opik
 
     # resources:
     #   requests:
