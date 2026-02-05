@@ -1,0 +1,72 @@
+import datetime
+import json
+import re
+from typing import Any, Dict, Type
+
+from .. import messages
+
+# ISO 8601 datetime pattern (matches formats like 2024-01-15T10:30:00, 2024-01-15T10:30:00.123456, with optional timezone)
+_ISO_DATETIME_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$"
+)
+
+
+class MessageJSONEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles datetime objects in BaseMessage subclasses."""
+
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, datetime.datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+def _datetime_object_hook(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Object hook for json.loads that converts ISO format strings to datetime objects."""
+    for key, value in obj.items():
+        if isinstance(value, str) and _ISO_DATETIME_PATTERN.match(value):
+            try:
+                obj[key] = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                pass  # Not a valid datetime, keep as string
+    return obj
+
+
+def serialize_message(message: messages.BaseMessage) -> str:
+    """
+    Serializes a message object into a JSON string.
+
+    This function converts a given message object, which must be a subclass
+    of `messages.BaseMessage`, into a dictionary format suitable for database
+    storage. The resulting dictionary is then serialized into a JSON string
+    using the `MessageJSONEncoder` for custom encoding.
+
+    Args:
+        message: The message object to be serialized.
+
+    Returns:
+        str: A JSON string representation of the message object.
+    """
+    data = message.as_db_message_dict()
+    return json.dumps(data, cls=MessageJSONEncoder)
+
+
+def deserialize_message(message_class: Type[messages.T], json_str: str) -> messages.T:
+    """
+    Deserializes a JSON string into an instance of a specified message class.
+
+    This function takes a JSON string and transforms it into an instance of the
+    provided message class. The conversion process includes mapping JSON structures
+    into their equivalent class representations, with custom handling of date and
+    time fields.
+
+    Args:
+        message_class: The class type into which the JSON string
+            will be deserialized. This must be a subclass of `messages.T`.
+        json_str: The JSON string to be deserialized.
+
+    Returns:
+        An instance of the provided message class populated with data
+        from the JSON string.
+    """
+    data = json.loads(json_str, object_hook=_datetime_object_hook)
+    return messages.from_db_message_dict(data=data, message_class=message_class)

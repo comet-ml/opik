@@ -405,14 +405,6 @@ class AttachmentSupportingMessage(BaseMessage):
 
     message_type = "AttachmentSupportingMessage"
 
-    def __post_init__(self) -> None:
-        if isinstance(self.original_message, dict):
-            self.original_message = CreateAttachmentMessage(**self.original_message)
-
-    def as_db_message_dict(self) -> Dict[str, Any]:
-        original_message_dict = self.original_message.as_db_message_dict()
-        return {**self.__dict__, "original_message": original_message_dict}
-
 
 def _deserialize_base_message_batch(
     batch: List[Any],

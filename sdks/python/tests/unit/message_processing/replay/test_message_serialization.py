@@ -1,6 +1,7 @@
 import datetime
 
 from opik.message_processing import messages
+from opik.message_processing.replay import message_serialization
 from opik.rest_api.types import span_write, trace_write
 from opik.types import ErrorInfoDict
 
@@ -8,13 +9,15 @@ from opik.types import ErrorInfoDict
 Tests for message serialization/deserialization to/from dict.
 
 These tests verify that messages with nested objects (batch items, original_message)
-can be serialized to dict and deserialized back correctly.
+can be serialized to dict, then to JSON string, and deserialized back correctly.
 """
 
 
 class TestAddFeedbackScoresBatchMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_add_feedback_scores_batch_message__round_trip_serialization__preserves_data(
+        self,
+    ):
+        """Test round-trip serialization/deserialization through JSON."""
         feedback_scores = [
             messages.FeedbackScoreMessage(
                 id="score-1",
@@ -38,17 +41,13 @@ class TestAddFeedbackScoresBatchMessageSerialization:
 
         original = messages.AddFeedbackScoresBatchMessage(batch=feedback_scores)
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Verify serialized structure
-        assert isinstance(serialized["batch"], list)
-        assert len(serialized["batch"]) == 2
-        assert serialized["supports_batching"] is True
-
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.AddFeedbackScoresBatchMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.AddFeedbackScoresBatchMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message
@@ -80,8 +79,10 @@ class TestAddFeedbackScoresBatchMessageSerialization:
 
 
 class TestAddThreadsFeedbackScoresBatchMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_add_threads_feedback_scores_batch_message__round_trip_serialization__preserves_data(
+        self,
+    ):
+        """Test round-trip serialization/deserialization through JSON."""
         feedback_scores = [
             messages.ThreadsFeedbackScoreMessage(
                 id="thread-score-1",
@@ -96,17 +97,13 @@ class TestAddThreadsFeedbackScoresBatchMessageSerialization:
 
         original = messages.AddThreadsFeedbackScoresBatchMessage(batch=feedback_scores)
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Verify serialized structure
-        assert isinstance(serialized["batch"], list)
-        assert len(serialized["batch"]) == 1
-        assert serialized["supports_batching"] is True
-
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.AddThreadsFeedbackScoresBatchMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.AddThreadsFeedbackScoresBatchMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message
@@ -127,8 +124,8 @@ class TestAddThreadsFeedbackScoresBatchMessageSerialization:
 
 
 class TestCreateSpansBatchMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_create_spans_batch_message__round_trip_serialization__preserves_data(self):
+        """Test round-trip serialization/deserialization through JSON."""
         start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
         end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
 
@@ -155,16 +152,13 @@ class TestCreateSpansBatchMessageSerialization:
 
         original = messages.CreateSpansBatchMessage(batch=spans)
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Verify serialized structure
-        assert isinstance(serialized["batch"], list)
-        assert len(serialized["batch"]) == 1
-
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.CreateSpansBatchMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateSpansBatchMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message
@@ -193,8 +187,8 @@ class TestCreateSpansBatchMessageSerialization:
 
 
 class TestCreateTraceBatchMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_create_trace_batch_message__round_trip_serialization__preserves_data(self):
+        """Test round-trip serialization/deserialization through JSON."""
         start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
         end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
 
@@ -214,16 +208,13 @@ class TestCreateTraceBatchMessageSerialization:
 
         original = messages.CreateTraceBatchMessage(batch=traces)
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Verify serialized structure
-        assert isinstance(serialized["batch"], list)
-        assert len(serialized["batch"]) == 1
-
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.CreateTraceBatchMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateTraceBatchMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message
@@ -245,8 +236,8 @@ class TestCreateTraceBatchMessageSerialization:
 
 
 class TestGuardrailBatchMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_guardrail_batch_message__round_trip_serialization__preserves_data(self):
+        """Test round-trip serialization/deserialization through JSON."""
         guardrail_items = [
             messages.GuardrailBatchItemMessage(
                 project_name="test-project",
@@ -261,17 +252,13 @@ class TestGuardrailBatchMessageSerialization:
 
         original = messages.GuardrailBatchMessage(batch=guardrail_items)
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Verify serialized structure
-        assert isinstance(serialized["batch"], list)
-        assert len(serialized["batch"]) == 1
-        assert serialized["supports_batching"] is True
-
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.GuardrailBatchMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.GuardrailBatchMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message
@@ -292,8 +279,10 @@ class TestGuardrailBatchMessageSerialization:
 
 
 class TestCreateExperimentItemsBatchMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_create_experiment_items_batch_message__round_trip_serialization__preserves_data(
+        self,
+    ):
+        """Test round-trip serialization/deserialization through JSON."""
         experiment_items = [
             messages.ExperimentItemMessage(
                 id="item-1",
@@ -311,17 +300,13 @@ class TestCreateExperimentItemsBatchMessageSerialization:
 
         original = messages.CreateExperimentItemsBatchMessage(batch=experiment_items)
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Verify serialized structure
-        assert isinstance(serialized["batch"], list)
-        assert len(serialized["batch"]) == 2
-        assert serialized["supports_batching"] is True
-
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.CreateExperimentItemsBatchMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateExperimentItemsBatchMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message
@@ -346,54 +331,47 @@ class TestCreateExperimentItemsBatchMessageSerialization:
         assert item1.dataset_item_id == "dataset-item-2"
 
 
-class TestAttachmentSupportingMessageSerialization:
-    def test_serialize_and_deserialize_with_attachment_message(self):
-        """Test round-trip with CreateAttachmentMessage as original."""
-        original_attachment = messages.CreateAttachmentMessage(
-            file_path="/path/to/file.txt",
-            file_name="file.txt",
-            mime_type="text/plain",
-            entity_type="trace",
-            entity_id="trace-1",
+class TestCreateAttachmentMessageSerialization:
+    def test_create_attachment_message__round_trip_serialization__preserves_data(self):
+        """Test round-trip serialization/deserialization through JSON."""
+        original = messages.CreateAttachmentMessage(
+            file_path="/path/to/document.pdf",
+            file_name="document.pdf",
+            mime_type="application/pdf",
+            entity_type="span",
+            entity_id="span-123",
             project_name="test-project",
-            encoded_url_override="https://example.com/file",
+            encoded_url_override="https://storage.example.com/uploads/document.pdf",
             delete_after_upload=True,
         )
 
-        original = messages.AttachmentSupportingMessage(
-            original_message=original_attachment
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
+
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateAttachmentMessage,
+            json_str=json_str,
         )
 
-        # Serialize
-        serialized = original.as_db_message_dict()
-
-        # Verify serialized structure
-        assert isinstance(serialized["original_message"], dict)
-
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.AttachmentSupportingMessage, serialized
+        # Verify deserialized message - all fields
+        assert isinstance(deserialized, messages.CreateAttachmentMessage)
+        assert deserialized.file_path == "/path/to/document.pdf"
+        assert deserialized.file_name == "document.pdf"
+        assert deserialized.mime_type == "application/pdf"
+        assert deserialized.entity_type == "span"
+        assert deserialized.entity_id == "span-123"
+        assert deserialized.project_name == "test-project"
+        assert (
+            deserialized.encoded_url_override
+            == "https://storage.example.com/uploads/document.pdf"
         )
-
-        # Verify deserialized message
-        assert isinstance(deserialized, messages.AttachmentSupportingMessage)
-
-        # Verify original_message - all fields
-        orig_msg = deserialized.original_message
-        assert isinstance(orig_msg, messages.CreateAttachmentMessage)
-        assert orig_msg.file_path == "/path/to/file.txt"
-        assert orig_msg.file_name == "file.txt"
-        assert orig_msg.mime_type == "text/plain"
-        assert orig_msg.entity_type == "trace"
-        assert orig_msg.entity_id == "trace-1"
-        assert orig_msg.project_name == "test-project"
-        assert orig_msg.encoded_url_override == "https://example.com/file"
-        assert orig_msg.delete_after_upload is True
+        assert deserialized.delete_after_upload is True
 
 
 class TestCreateTraceMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_create_trace_message__round_trip_serialization__preserves_data(self):
+        """Test round-trip serialization/deserialization through JSON."""
         start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
         end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
         last_updated_at = datetime.datetime(2024, 1, 1, 12, 0, 2)
@@ -418,12 +396,13 @@ class TestCreateTraceMessageSerialization:
             last_updated_at=last_updated_at,
         )
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.CreateTraceMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateTraceMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message - all fields
@@ -431,20 +410,21 @@ class TestCreateTraceMessageSerialization:
         assert deserialized.trace_id == "trace-1"
         assert deserialized.project_name == "test-project"
         assert deserialized.name == "test-trace"
-        assert deserialized.start_time == start_time
-        assert deserialized.end_time == end_time
+        # Datetime fields become strings after JSON roundtrip
+        assert str(deserialized.start_time) == str(start_time)
+        assert str(deserialized.end_time) == str(end_time)
         assert deserialized.input == {"query": "test input"}
         assert deserialized.output == {"answer": "test output"}
         assert deserialized.metadata == {"meta_key": "meta_value"}
         assert deserialized.tags == ["tag1", "tag2"]
         assert deserialized.error_info == error_info
         assert deserialized.thread_id == "thread-1"
-        assert deserialized.last_updated_at == last_updated_at
+        assert str(deserialized.last_updated_at) == str(last_updated_at)
 
 
 class TestUpdateTraceMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_update_trace_message__round_trip_serialization__preserves_data(self):
+        """Test round-trip serialization/deserialization through JSON."""
         end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
 
         original = messages.UpdateTraceMessage(
@@ -459,19 +439,21 @@ class TestUpdateTraceMessageSerialization:
             thread_id="thread-2",
         )
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.UpdateTraceMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.UpdateTraceMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message - all fields
         assert isinstance(deserialized, messages.UpdateTraceMessage)
         assert deserialized.trace_id == "trace-1"
         assert deserialized.project_name == "test-project"
-        assert deserialized.end_time == end_time
+        # Datetime fields become strings after JSON roundtrip
+        assert str(deserialized.end_time) == str(end_time)
         assert deserialized.input == {"query": "updated input"}
         assert deserialized.output == {"answer": "updated output"}
         assert deserialized.metadata == {"updated_key": "updated_value"}
@@ -481,8 +463,8 @@ class TestUpdateTraceMessageSerialization:
 
 
 class TestCreateSpanMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_create_span_message__round_trip_serialization__preserves_data(self):
+        """Test round-trip serialization/deserialization through JSON."""
         start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
         end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
         last_updated_at = datetime.datetime(2024, 1, 1, 12, 0, 2)
@@ -513,12 +495,13 @@ class TestCreateSpanMessageSerialization:
             last_updated_at=last_updated_at,
         )
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.CreateSpanMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateSpanMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message - all fields
@@ -528,8 +511,9 @@ class TestCreateSpanMessageSerialization:
         assert deserialized.project_name == "test-project"
         assert deserialized.parent_span_id == "parent-span-1"
         assert deserialized.name == "test-span"
-        assert deserialized.start_time == start_time
-        assert deserialized.end_time == end_time
+        # Datetime fields become strings after JSON roundtrip
+        assert str(deserialized.start_time) == str(start_time)
+        assert str(deserialized.end_time) == str(end_time)
         assert deserialized.input == {"prompt": "test prompt"}
         assert deserialized.output == {"response": "test response"}
         assert deserialized.metadata == {"span_meta": "value"}
@@ -540,12 +524,12 @@ class TestCreateSpanMessageSerialization:
         assert deserialized.provider == "openai"
         assert deserialized.error_info == error_info
         assert deserialized.total_cost == 0.05
-        assert deserialized.last_updated_at == last_updated_at
+        assert str(deserialized.last_updated_at) == str(last_updated_at)
 
 
 class TestUpdateSpanMessageSerialization:
-    def test_serialize_and_deserialize(self):
-        """Test round-trip serialization/deserialization."""
+    def test_update_span_message__round_trip_serialization__preserves_data(self):
+        """Test round-trip serialization/deserialization through JSON."""
         end_time = datetime.datetime(2024, 1, 1, 12, 0, 1)
 
         original = messages.UpdateSpanMessage(
@@ -565,12 +549,13 @@ class TestUpdateSpanMessageSerialization:
             total_cost=0.08,
         )
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.UpdateSpanMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.UpdateSpanMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message - all fields
@@ -579,7 +564,8 @@ class TestUpdateSpanMessageSerialization:
         assert deserialized.parent_span_id == "parent-span-2"
         assert deserialized.trace_id == "trace-1"
         assert deserialized.project_name == "test-project"
-        assert deserialized.end_time == end_time
+        # Datetime fields become strings after JSON roundtrip
+        assert str(deserialized.end_time) == str(end_time)
         assert deserialized.input == {"prompt": "updated prompt"}
         assert deserialized.output == {"response": "updated response"}
         assert deserialized.metadata == {"updated_meta": "new_value"}
@@ -594,8 +580,8 @@ class TestUpdateSpanMessageSerialization:
 class TestSubclassInheritance:
     """Test that subclasses properly inherit serialization behavior."""
 
-    def test_add_trace_feedback_scores_batch_message(self):
-        """Test AddTraceFeedbackScoresBatchMessage inherits serialization."""
+    def test_add_trace_feedback_scores_batch_message__inherits_serialization(self):
+        """Test AddTraceFeedbackScoresBatchMessage inherits serialization through JSON."""
         feedback_scores = [
             messages.FeedbackScoreMessage(
                 id="score-1",
@@ -610,12 +596,13 @@ class TestSubclassInheritance:
 
         original = messages.AddTraceFeedbackScoresBatchMessage(batch=feedback_scores)
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.AddTraceFeedbackScoresBatchMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.AddTraceFeedbackScoresBatchMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message
@@ -634,8 +621,8 @@ class TestSubclassInheritance:
         assert item.reason == "Good accuracy"
         assert item.category_name == "metrics"
 
-    def test_add_span_feedback_scores_batch_message(self):
-        """Test AddSpanFeedbackScoresBatchMessage inherits serialization."""
+    def test_add_span_feedback_scores_batch_message__inherits_serialization(self):
+        """Test AddSpanFeedbackScoresBatchMessage inherits serialization through JSON."""
         feedback_scores = [
             messages.FeedbackScoreMessage(
                 id="score-1",
@@ -650,12 +637,13 @@ class TestSubclassInheritance:
 
         original = messages.AddSpanFeedbackScoresBatchMessage(batch=feedback_scores)
 
-        # Serialize
-        serialized = original.as_db_message_dict()
+        # Serialize to JSON string
+        json_str = message_serialization.serialize_message(original)
 
-        # Deserialize
-        deserialized = messages.from_db_message_dict(
-            messages.AddSpanFeedbackScoresBatchMessage, serialized
+        # Deserialize to message
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.AddSpanFeedbackScoresBatchMessage,
+            json_str=json_str,
         )
 
         # Verify deserialized message

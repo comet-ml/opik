@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import shutil
@@ -9,6 +8,7 @@ from enum import unique, IntEnum
 from typing import List, NamedTuple, Callable, Optional, Dict
 
 from opik.message_processing import messages
+from opik.message_processing.replay import message_serialization
 
 DEFAULT_DB_FILE = "opik_messages.db"
 
@@ -230,10 +230,7 @@ class ReplayManager:
         if isinstance(message, messages.CreateAttachmentMessage):
             self.message_files[message.message_id] = message.file_path
 
-        return json.dumps(
-            message.as_db_message_dict(),
-            sort_keys=True,
-        )
+        return message_serialization.serialize_message(message)
 
     def update_messages_batch(
         self, message_ids: List[int], status: MessageStatus
@@ -355,14 +352,15 @@ class ReplayManager:
                 LOGGER.debug(msg, exc_info=True)
                 return 0
 
-            messages_ids = [(message.id,) for message in db_messages]
+            params = [
+                (int(MessageStatus.registered), message.id) for message in db_messages
+            ]
             # update DB records to mark failed messages as in progress
             try:
                 with self.conn:
                     c = self.conn.executemany(
-                        "UPDATE messages SET status = %d WHERE message_id = ?"
-                        % MessageStatus.registered,
-                        messages_ids,
+                        "UPDATE messages SET status = ? WHERE message_id = ?",
+                        params,
                     )
                     LOGGER.debug(
                         "Updated %d DB message records for %d failed messages",
@@ -392,7 +390,13 @@ class ReplayManager:
                 base_message = db_message_to_message(message)
                 replay_callback(base_message)
             except Exception:
-                LOGGER.error("Failed to replay message: %r", message)
+                LOGGER.error(
+                    "Failed to replay message with id=%r, type=%r, status=%r",
+                    message.id,
+                    message.type,
+                    message.status,
+                    exc_info=True,
+                )
 
         return len(db_messages)
 
@@ -462,15 +466,15 @@ SUPPORTED_MESSAGE_TYPES = {
     messages.CreateTraceBatchMessage.message_type: messages.CreateTraceBatchMessage,
     messages.GuardrailBatchMessage.message_type: messages.GuardrailBatchMessage,
     messages.CreateExperimentItemsBatchMessage.message_type: messages.CreateExperimentItemsBatchMessage,
-    messages.AttachmentSupportingMessage.message_type: messages.AttachmentSupportingMessage,
+    messages.CreateAttachmentMessage.message_type: messages.CreateAttachmentMessage,
 }
 
 
 def db_message_to_message(db_message: DBMessage) -> messages.BaseMessage:
-    message_dict = json.loads(db_message.json)
-
     message_class = SUPPORTED_MESSAGE_TYPES.get(db_message.type)
     if message_class is None:
         raise ValueError(f"Unsupported message type: {db_message.type}")
 
-    return messages.from_db_message_dict(message_class, message_dict)
+    return message_serialization.deserialize_message(
+        message_class, json_str=db_message.json
+    )
