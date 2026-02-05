@@ -164,6 +164,7 @@ describe("Opik client batching", () => {
     const updateCall = updateTracesSpy.mock.calls[0];
     expect(updateCall[1].body).toHaveProperty("output", "result");
     expect(updateCall[1].body).toHaveProperty("endTime");
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
   });
 
   it("should merge multiple span updates after flush", async () => {
@@ -179,6 +180,7 @@ describe("Opik client batching", () => {
     const updateCall = updateSpansSpy.mock.calls[0];
     expect(updateCall[1].body).toHaveProperty("output", "span-result");
     expect(updateCall[1].body).toHaveProperty("endTime");
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
   });
 
   it("should preserve all data in rapid successive updates", async () => {
@@ -197,5 +199,6 @@ describe("Opik client batching", () => {
     expect(updateCall[1].body).toHaveProperty("output", "output-data");
     expect(updateCall[1].body.metadata).toEqual({ key: "value" });
     expect(updateCall[1].body).toHaveProperty("endTime");
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(0);
   });
 });
