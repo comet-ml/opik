@@ -195,10 +195,7 @@ export class DatasetVersion<T extends DatasetItemData = DatasetItemData> {
     let currentLastId = lastRetrievedId;
 
     while (true) {
-      const streamLimit =
-        remaining !== undefined
-          ? Math.min(remaining, MAX_STREAM_LIMIT)
-          : MAX_STREAM_LIMIT;
+      const streamLimit = Math.min(remaining ?? MAX_STREAM_LIMIT, MAX_STREAM_LIMIT);
 
       const streamResponse = await this.opik.api.datasets.streamDatasetItems({
         datasetName: this.datasetName,
