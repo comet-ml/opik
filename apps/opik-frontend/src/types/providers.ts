@@ -515,7 +515,12 @@ export interface LLMOpenAIConfigsType {
   maxConcurrentRequests?: number;
 }
 
-export type AnthropicThinkingEffort = "adaptive" | "low" | "medium" | "high" | "max";
+export type AnthropicThinkingEffort =
+  | "adaptive"
+  | "low"
+  | "medium"
+  | "high"
+  | "max";
 
 export interface LLMAnthropicConfigsType {
   temperature: number;
