@@ -165,6 +165,7 @@ describe.skipIf(!shouldRunApiTests)("Dataset Versions Integration", () => {
       task,
       experimentName: `test-eval-${Date.now()}`,
       scoringMetrics: [new ExactMatch("exact-match")],
+      scoringKeyMapping: { expected: "expected_output" },
       client,
     });
 
