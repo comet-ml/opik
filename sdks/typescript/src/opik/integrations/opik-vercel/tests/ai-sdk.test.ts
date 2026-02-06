@@ -1,4 +1,4 @@
-import { trace, SpanStatusCode } from "@opentelemetry/api";
+import { trace } from "@opentelemetry/api";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { generateText, tool } from "ai";
@@ -417,7 +417,6 @@ describe("Opik - Vercel AI SDK integration", () => {
     const input = "Hello, test!";
     const traceName = "trace-with-error";
     const errorMessage = "Schema validation failed";
-    const errorType = "AI_NoObjectGeneratedError";
 
     sdk.start();
 
@@ -433,7 +432,7 @@ describe("Opik - Vercel AI SDK integration", () => {
           name: traceName,
         }),
       });
-    } catch (error) {
+    } catch {
       // Expected to throw
     }
 
