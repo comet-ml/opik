@@ -1,7 +1,8 @@
 import type { AttributeValue, Tracer } from "@opentelemetry/api";
+import { SpanStatusCode } from "@opentelemetry/api";
 import type { ExportResultCode } from "@opentelemetry/core";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
-import type { Span, Trace } from "opik";
+import type { ErrorInfo, Span, Trace } from "opik";
 import { Opik, logger } from "opik";
 
 type SpanExporter = NodeSDKConfiguration["traceExporter"];
@@ -173,6 +174,35 @@ export class OpikExporter implements SpanExporter {
     return this.threadId;
   };
 
+  private getErrorInfo = (otelSpan: ReadableSpan): ErrorInfo | undefined => {
+    if (otelSpan.status.code !== SpanStatusCode.ERROR) {
+      return undefined;
+    }
+
+    const exceptionEvent = otelSpan.events.find(
+      (event) => event.name === "exception"
+    );
+
+    if (!exceptionEvent) {
+      return {
+        exceptionType: "Error",
+        message: otelSpan.status.message || "An error occurred",
+        traceback: "",
+      };
+    }
+
+    const { attributes } = exceptionEvent;
+    const exceptionType = attributes?.["exception.type"]?.toString() || "Error";
+    const message = attributes?.["exception.message"]?.toString();
+    const traceback = attributes?.["exception.stacktrace"]?.toString() || "";
+
+    return {
+      exceptionType,
+      message,
+      traceback,
+    };
+  };
+
   processSpan = ({
     otelSpan,
     parentSpan,
@@ -182,6 +212,8 @@ export class OpikExporter implements SpanExporter {
     parentSpan?: Span;
     trace: Trace;
   }): Span => {
+    const errorInfo = this.getErrorInfo(otelSpan);
+
     return trace.span({
       name: otelSpan.name,
       startTime: new Date(hrTimeToMilliseconds(otelSpan.startTime)),
@@ -192,6 +224,7 @@ export class OpikExporter implements SpanExporter {
       metadata: this.getSpanMetadata(otelSpan),
       usage: this.getSpanUsage(otelSpan),
       type: "llm",
+      ...(errorInfo && { errorInfo }),
     });
   };
 
@@ -229,6 +262,8 @@ export class OpikExporter implements SpanExporter {
     Object.entries(spanGroups).forEach(([otelTraceId, otelSpans]) => {
       const [rootOtelSpan, ...otherOtelSpans] = otelSpans;
 
+      const errorInfo = this.getErrorInfo(rootOtelSpan);
+
       const trace = this.client.trace({
         startTime: new Date(hrTimeToMilliseconds(rootOtelSpan.startTime)),
         endTime: new Date(hrTimeToMilliseconds(rootOtelSpan.endTime)),
@@ -242,6 +277,7 @@ export class OpikExporter implements SpanExporter {
         tags: this.tags,
         usage: this.getSpanUsage(rootOtelSpan),
         threadId: this.getThreadId(rootOtelSpan),
+        ...(errorInfo && { errorInfo }),
       });
 
       this.traces.set(otelTraceId, trace);

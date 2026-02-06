@@ -412,4 +412,45 @@ describe("Opik - Vercel AI SDK integration", () => {
     createTracesSpyWithThreadId.mockRestore();
     createSpansSpyWithThreadId.mockRestore();
   });
+
+  it("generateText with error captures errorInfo", async () => {
+    const input = "Hello, test!";
+    const traceName = "trace-with-error";
+    const errorMessage = "Schema validation failed";
+
+    sdk.start();
+
+    try {
+      await generateText({
+        model: new MockLanguageModelV3({
+          doGenerate: async () => {
+            throw new Error(errorMessage);
+          },
+        }),
+        prompt: input,
+        experimental_telemetry: OpikExporter.getSettings({
+          name: traceName,
+        }),
+      });
+    } catch {
+      // Expected to throw
+    }
+
+    await sdk.shutdown();
+
+    expect(createTracesSpy).toHaveBeenCalled();
+    const traceCall = createTracesSpy.mock.calls[0][0];
+
+    expect(traceCall.traces[0]).toMatchObject({
+      input: {
+        prompt: input,
+      },
+      name: traceName,
+      projectName: "opik-sdk-typescript",
+    });
+
+    expect(traceCall.traces[0].errorInfo).toBeDefined();
+    expect(traceCall.traces[0].errorInfo.exceptionType).toBe("Error");
+    expect(traceCall.traces[0].errorInfo.message).toBe(errorMessage);
+  });
 });
