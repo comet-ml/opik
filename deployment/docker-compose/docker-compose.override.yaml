@@ -34,3 +34,7 @@ services:
       OPIK_URL_OVERRIDE: ${OPIK_URL_OVERRIDE:-http://host.docker.internal:${OPIK_BACKEND_PORT:-8080}}
     ports:
       - "${PYTHON_BACKEND_PORT:-8000}:${PYTHON_BACKEND_PORT:-8000}"
+
+  opik-ai-backend:
+    ports:
+      - "${OPIK_AI_BACKEND_PORT:-8081}:8081"

@@ -89,6 +89,7 @@ readonly BASE_PYTHON_BACKEND_PORT=8000
 readonly BASE_ZOOKEEPER_PORT=2181
 readonly BASE_MINIO_API_PORT=9001
 readonly BASE_MINIO_CONSOLE_PORT=9090
+readonly BASE_OPIK_AI_BACKEND_PORT=8081
 
 # Initialize worktree variables
 # Call this function after sourcing to set up all port variables
@@ -110,6 +111,7 @@ init_worktree_ports() {
     ZOOKEEPER_PORT=$((BASE_ZOOKEEPER_PORT + PORT_OFFSET))
     MINIO_API_PORT=$((BASE_MINIO_API_PORT + PORT_OFFSET))
     MINIO_CONSOLE_PORT=$((BASE_MINIO_CONSOLE_PORT + PORT_OFFSET))
+    OPIK_AI_BACKEND_PORT=$((BASE_OPIK_AI_BACKEND_PORT + PORT_OFFSET))
 
     # Export for child processes (docker-compose, etc.)
     export OPIK_BACKEND_PORT="$BACKEND_PORT"
@@ -124,5 +126,6 @@ init_worktree_ports() {
     export ZOOKEEPER_PORT
     export MINIO_API_PORT
     export MINIO_CONSOLE_PORT
+    export OPIK_AI_BACKEND_PORT
     export COMPOSE_PROJECT_NAME="$RESOURCE_PREFIX"
 }
