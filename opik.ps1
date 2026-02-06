@@ -1,4 +1,4 @@
-﻿# opik.ps1
+# opik.ps1
 
 [CmdletBinding()]
 param (
@@ -33,6 +33,10 @@ $GUARDRAILS_CONTAINERS = @(
     "opik-guardrails-backend-1"
 )
 
+$OPIK_AI_BACKEND_CONTAINERS = @(
+    "opik-opik-ai-backend-1"
+)
+
 $LOCAL_BE_CONTAINERS = @(
     "opik-python-backend-1",
     "opik-frontend-1"
@@ -61,6 +65,10 @@ function Get-Containers {
     # Add guardrails containers if enabled
     if ($GUARDRAILS_ENABLED) {
         $containers += $GUARDRAILS_CONTAINERS
+    }
+    
+    if ($OPIK_AI_BACKEND_ENABLED) {
+        $containers += $OPIK_AI_BACKEND_CONTAINERS
     }
     
     return $containers
@@ -117,6 +125,10 @@ function Get-DockerComposeCommand {
     # Always add guardrails profile if enabled
     if ($GUARDRAILS_ENABLED) {
         $dockerArgs += "--profile", "guardrails"
+    }
+    
+    if ($OPIK_AI_BACKEND_ENABLED) {
+        $dockerArgs += "--profile", "opik-ai-backend"
     }
     
     return $dockerArgs
@@ -204,6 +216,7 @@ function Show-Usage {
     Write-Host '  --local-be        Start all services EXCEPT backend (for local backend development)'
     Write-Host '  --local-be-fe     Start only infrastructure + Python backend (for local backend + frontend development)'
     Write-Host '  --guardrails      Enable guardrails profile (can be combined with other flags)'
+    Write-Host '  --opik-ai         Enable Opik AI backend trace analyzer (can be combined with other flags)'
     Write-Host '  --help            Show this help message'
     Write-Host ''
     Write-Host 'If no option is passed, the script will start missing containers and then show the system status.'
@@ -591,6 +604,9 @@ function Show-Banner {
     if ($GUARDRAILS_ENABLED) {
         Write-Host '║  ✅ Guardrails services started successfully!                   ║'
     }
+    if ($OPIK_AI_BACKEND_ENABLED) {
+        Write-Host '║  ✅ Opik AI backend trace analyzer started successfully!        ║'
+    }
     if ($INFRA) {
         Write-Host '║  ✅ Infrastructure services started successfully!               ║'
         Write-Host '║                                                                 ║'
@@ -662,7 +678,10 @@ function Get-StartCommand {
     if ($GUARDRAILS_ENABLED) {
         $cmd += " --guardrails"
     }
-    
+    if ($OPIK_AI_BACKEND_ENABLED) {
+        $cmd += " --opik-ai"
+    }
+
     return $cmd
 }
 
@@ -681,6 +700,9 @@ function Get-VerifyCommand {
     if ($GUARDRAILS_ENABLED) {
         $cmd += " --guardrails"
     }
+    if ($OPIK_AI_BACKEND_ENABLED) {
+        $cmd += " --opik-ai"
+    }
     
     return "$cmd --verify"
 }
@@ -689,10 +711,12 @@ $BUILD_MODE = $false
 $DEBUG_MODE = $false
 $PORT_MAPPING = $false
 $GUARDRAILS_ENABLED = $false
+$OPIK_AI_BACKEND_ENABLED = $false
 # PowerShell persists environment variables across script runs, so we need to reset them
 $env:OPIK_REVERSE_PROXY_URL = ""
 $env:OPIK_FRONTEND_FLAVOR = "default"
 $env:TOGGLE_GUARDRAILS_ENABLED = "false"
+$env:TOGGLE_OPIK_AI_ENABLED = "false"
 # Default: full opik (all profiles)
 $INFRA = $false
 $BACKEND = $false
@@ -751,6 +775,23 @@ if ($options -contains '--guardrails') {
     }
     $env:TOGGLE_GUARDRAILS_ENABLED = "true"
     $options = $options | Where-Object { $_ -ne '--guardrails' }
+}
+
+if ($options -contains '--opik-ai') {
+    $OPIK_AI_BACKEND_ENABLED = $true
+    # Set frontend flavor to opik-ai-backend if not already set
+    if ($env:OPIK_FRONTEND_FLAVOR -eq "default") {
+        $env:OPIK_FRONTEND_FLAVOR = "opik-ai-backend"
+    }
+    $env:TOGGLE_OPIK_AI_ENABLED = "true"
+    $options = $options | Where-Object { $_ -ne '--opik-ai' }
+}
+
+# Validate mutually exclusive optional services
+if ($GUARDRAILS_ENABLED -and $OPIK_AI_BACKEND_ENABLED) {
+    Write-Host "❌ Error: --guardrails and --opik-ai cannot be used together."
+    Write-Host "   Each requires a different nginx configuration. Please use only one at a time."
+    exit 1
 }
 
 # Count active partial profiles
