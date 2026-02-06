@@ -26,6 +26,7 @@ import set from "lodash/set";
 import isObject from "lodash/isObject";
 import { parseCompletionOutput } from "@/lib/playground";
 import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
+import { useHydratePromptMetadata } from "@/components/pages/PlaygroundPage/useHydratePromptMetadata";
 import { getTextFromMessageContent } from "@/lib/llm";
 
 export interface DatasetItemPromptCombination {
@@ -162,6 +163,7 @@ const usePromptDatasetItemCombination = ({
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
+  const hydratePromptMetadata = useHydratePromptMetadata();
 
   const runStreaming = useCompletionProxyStreaming({
     workspaceName,
@@ -220,6 +222,10 @@ const usePromptDatasetItemCombination = ({
           id,
         }));
 
+        // Calculate prompt library metadata at execution time
+        // This checks React Query cache to determine if prompt is unchanged from library
+        const promptLibraryMetadata = await hydratePromptMetadata(prompt);
+
         const run = await runStreaming({
           model: prompt.model,
           messages: providerMessages,
@@ -240,6 +246,7 @@ const usePromptDatasetItemCombination = ({
           ...run,
           providerMessages,
           promptLibraryVersions,
+          promptLibraryMetadata,
           configs: prompt.configs,
           model: prompt.model,
           provider: prompt.provider,
@@ -281,6 +288,7 @@ const usePromptDatasetItemCombination = ({
     [
       isToStopRef,
       hydrateDatasetItemData,
+      hydratePromptMetadata,
       addAbortController,
       updateOutput,
       runStreaming,

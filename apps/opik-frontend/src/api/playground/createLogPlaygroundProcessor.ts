@@ -8,6 +8,7 @@ import {
   LogExperimentPromptVersion,
   LogSpan,
   LogTrace,
+  PromptLibraryMetadata,
 } from "@/types/playground";
 
 import { SPAN_TYPE } from "@/types/traces";
@@ -38,6 +39,7 @@ export interface LogQueueParams extends RunStreamingReturn {
   provider: COMPOSED_PROVIDER_TYPE | "";
   providerMessages: ProviderMessageType[];
   promptLibraryVersions?: LogExperimentPromptVersion[];
+  promptLibraryMetadata?: PromptLibraryMetadata;
   configs: LLMPromptConfigsType;
   selectedRuleIds: string[] | null;
   datasetItemData?: object;
@@ -131,6 +133,15 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
     trace.metadata = {
       ...trace.metadata,
       dataset_item_data: run.datasetItemData,
+    };
+  }
+
+  // Add opik_prompts to trace metadata if prompt is from library and unchanged
+  // This follows the Python SDK format for associating prompts with traces
+  if (run.promptLibraryMetadata) {
+    trace.metadata = {
+      ...trace.metadata,
+      opik_prompts: [run.promptLibraryMetadata],
     };
   }
 
