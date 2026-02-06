@@ -43,6 +43,11 @@ import {
   parseFilterString,
 } from "@/utils/searchHelpers";
 import { SearchTimeoutError } from "@/errors";
+import {
+  AnnotationQueueNotFoundError,
+  TracesAnnotationQueue,
+  ThreadsAnnotationQueue,
+} from "@/annotation-queue";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
@@ -278,6 +283,304 @@ export class OpikClient {
     } catch (error) {
       logger.error(`Failed to delete dataset "${name}"`, { error });
       throw new Error(`Failed to delete dataset "${name}": ${error}`);
+    }
+  };
+
+
+
+  private async getProjectIdByName(projectName: string): Promise<string> {
+    const projectsResponse = await this.api.projects.findProjects({
+      name: projectName,
+      size: 1,
+    });
+
+    const projects = projectsResponse.content ?? [];
+    const project = projects.find((p) => p.name === projectName);
+    if (!project?.id) {
+      throw new Error(`Project "${projectName}" not found`);
+    }
+    return project.id;
+  }
+
+  private async createAnnotationQueueInternal<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
+    options: {
+      name: string;
+      projectName?: string;
+      description?: string;
+      instructions?: string;
+      commentsEnabled?: boolean;
+      feedbackDefinitionNames?: string[];
+    },
+    QueueClass: (new (data: OpikApi.AnnotationQueuePublic, opik: OpikClient) => T) & {
+      readonly SCOPE: "trace" | "thread";
+    }
+  ): Promise<T> {
+    const {
+      name,
+      projectName,
+      description,
+      instructions,
+      commentsEnabled,
+      feedbackDefinitionNames,
+    } = options;
+
+    const scope = QueueClass.SCOPE;
+
+    logger.debug(`Creating ${scope} annotation queue "${name}"`);
+
+    const targetProjectName = projectName ?? this.config.projectName;
+
+    try {
+      const projectId = await this.getProjectIdByName(targetProjectName);
+      const queueId = generateId();
+
+      await this.api.annotationQueues.createAnnotationQueue({
+        id: queueId,
+        projectId,
+        name,
+        scope,
+        description,
+        instructions,
+        commentsEnabled,
+        feedbackDefinitionNames,
+      });
+
+      logger.debug(`Created ${scope} annotation queue "${name}" with ID "${queueId}"`);
+
+      return new QueueClass(
+        {
+          id: queueId,
+          name,
+          projectId,
+          scope,
+          description,
+          instructions,
+          commentsEnabled,
+          feedbackDefinitionNames,
+        },
+        this
+      );
+    } catch (error) {
+      logger.error(`Failed to create ${scope} annotation queue "${name}"`, { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Creates a new traces annotation queue for human annotation workflows.
+   *
+   * @param options - Configuration options for the annotation queue
+   * @param options.name - The name of the annotation queue
+   * @param options.projectName - Optional project name (defaults to client's configured project)
+   * @param options.description - Optional description of the queue
+   * @param options.instructions - Optional instructions for reviewers
+   * @param options.commentsEnabled - Optional flag to enable/disable comments
+   * @param options.feedbackDefinitionNames - Optional list of feedback definition names
+   * @returns The created TracesAnnotationQueue object
+   */
+  public createTracesAnnotationQueue = async (options: {
+    name: string;
+    projectName?: string;
+    description?: string;
+    instructions?: string;
+    commentsEnabled?: boolean;
+    feedbackDefinitionNames?: string[];
+  }): Promise<TracesAnnotationQueue> => {
+    return this.createAnnotationQueueInternal(options, TracesAnnotationQueue);
+  };
+
+  /**
+   * Creates a new threads annotation queue for human annotation workflows.
+   *
+   * @param options - Configuration options for the annotation queue
+   * @param options.name - The name of the annotation queue
+   * @param options.projectName - Optional project name (defaults to client's configured project)
+   * @param options.description - Optional description of the queue
+   * @param options.instructions - Optional instructions for reviewers
+   * @param options.commentsEnabled - Optional flag to enable/disable comments
+   * @param options.feedbackDefinitionNames - Optional list of feedback definition names
+   * @returns The created ThreadsAnnotationQueue object
+   */
+  public createThreadsAnnotationQueue = async (options: {
+    name: string;
+    projectName?: string;
+    description?: string;
+    instructions?: string;
+    commentsEnabled?: boolean;
+    feedbackDefinitionNames?: string[];
+  }): Promise<ThreadsAnnotationQueue> => {
+    return this.createAnnotationQueueInternal(options, ThreadsAnnotationQueue);
+  };
+
+  /**
+   * Retrieves a traces annotation queue by its ID.
+   *
+   * @param id - The unique identifier of the annotation queue
+   * @returns The TracesAnnotationQueue object
+   * @throws AnnotationQueueNotFoundError if the queue doesn't exist or is not a traces queue
+   */
+  public getTracesAnnotationQueue = async (id: string): Promise<TracesAnnotationQueue> => {
+    logger.debug(`Getting traces annotation queue with ID "${id}"`);
+
+    try {
+      const response = await this.api.annotationQueues.getAnnotationQueueById(id);
+
+      if (response.scope !== "trace") {
+        throw new Error(`Annotation queue "${id}" is not a traces queue (scope: ${response.scope})`);
+      }
+
+      return new TracesAnnotationQueue(response, this);
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        throw new AnnotationQueueNotFoundError(id);
+      }
+      logger.error(`Failed to get traces annotation queue with ID "${id}"`, { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Retrieves a threads annotation queue by its ID.
+   *
+   * @param id - The unique identifier of the annotation queue
+   * @returns The ThreadsAnnotationQueue object
+   * @throws AnnotationQueueNotFoundError if the queue doesn't exist or is not a threads queue
+   */
+  public getThreadsAnnotationQueue = async (id: string): Promise<ThreadsAnnotationQueue> => {
+    logger.debug(`Getting threads annotation queue with ID "${id}"`);
+
+    try {
+      const response = await this.api.annotationQueues.getAnnotationQueueById(id);
+
+      if (response.scope !== "thread") {
+        throw new Error(`Annotation queue "${id}" is not a threads queue (scope: ${response.scope})`);
+      }
+
+      return new ThreadsAnnotationQueue(response, this);
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        throw new AnnotationQueueNotFoundError(id);
+      }
+      logger.error(`Failed to get threads annotation queue with ID "${id}"`, { error });
+      throw error;
+    }
+  };
+
+  /**
+   * Retrieves all traces annotation queues, optionally filtered by project.
+   *
+   * @param options - Optional configuration
+   * @param options.projectName - Optional project name to filter by
+   * @param options.maxResults - Maximum number of results to return (default: 1000)
+   * @returns List of TracesAnnotationQueue objects
+   */
+  public getTracesAnnotationQueues = async (options?: {
+    projectName?: string;
+    maxResults?: number;
+  }): Promise<TracesAnnotationQueue[]> => {
+    const queues = await this.getAnnotationQueuesByScope("trace", options);
+    return queues.map(queueData => new TracesAnnotationQueue(queueData, this));
+  };
+
+  /**
+   * Retrieves all threads annotation queues, optionally filtered by project.
+   *
+   * @param options - Optional configuration
+   * @param options.projectName - Optional project name to filter by
+   * @param options.maxResults - Maximum number of results to return (default: 1000)
+   * @returns List of ThreadsAnnotationQueue objects
+   */
+  public getThreadsAnnotationQueues = async (options?: {
+    projectName?: string;
+    maxResults?: number;
+  }): Promise<ThreadsAnnotationQueue[]> => {
+    const queues = await this.getAnnotationQueuesByScope("thread", options);
+    return queues.map(queueData => new ThreadsAnnotationQueue(queueData, this));
+  };
+
+  private async getAnnotationQueuesByScope(
+    scope: "trace" | "thread",
+    options?: {
+      projectName?: string;
+      maxResults?: number;
+    }
+  ): Promise<OpikApi.AnnotationQueuePublic[]> {
+    const { projectName, maxResults = 1000 } = options ?? {};
+
+    logger.debug(
+      `Getting ${scope} annotation queues (project: ${projectName ?? "all"}, limit: ${maxResults})`
+    );
+
+    try {
+      let filters: string | undefined;
+
+      if (projectName) {
+        const projectId = await this.getProjectIdByName(projectName);
+        filters = JSON.stringify([
+          { field: "project_id", operator: "=", value: projectId },
+          { field: "scope", operator: "=", value: scope },
+        ]);
+      } else {
+        filters = JSON.stringify([
+          { field: "scope", operator: "=", value: scope },
+        ]);
+      }
+
+      const response = await this.api.annotationQueues.findAnnotationQueues({
+        size: maxResults,
+        filters,
+      });
+
+      const queues = response.content || [];
+      logger.info(`Retrieved ${queues.length} ${scope} annotation queues`);
+      return queues;
+    } catch (error) {
+      logger.error(`Failed to retrieve ${scope} annotation queues`, { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Deletes a traces annotation queue by its ID.
+   *
+   * @param id - The ID of the traces annotation queue to delete
+   */
+  public deleteTracesAnnotationQueue = async (id: string): Promise<void> => {
+    logger.debug(`Deleting traces annotation queue with ID "${id}"`);
+
+    try {
+      await this.api.annotationQueues.deleteAnnotationQueueBatch({
+        ids: [id],
+      });
+
+      logger.debug(`Successfully deleted traces annotation queue with ID "${id}"`);
+    } catch (error) {
+      logger.error(`Failed to delete traces annotation queue with ID "${id}"`, {
+        error,
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * Deletes a threads annotation queue by its ID.
+   *
+   * @param id - The ID of the threads annotation queue to delete
+   */
+  public deleteThreadsAnnotationQueue = async (id: string): Promise<void> => {
+    logger.debug(`Deleting threads annotation queue with ID "${id}"`);
+
+    try {
+      await this.api.annotationQueues.deleteAnnotationQueueBatch({
+        ids: [id],
+      });
+
+      logger.debug(`Successfully deleted threads annotation queue with ID "${id}"`);
+    } catch (error) {
+      logger.error(`Failed to delete threads annotation queue with ID "${id}"`, {
+        error,
+      });
+      throw error;
     }
   };
 
