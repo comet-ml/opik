@@ -191,4 +191,8 @@ interface PromptDAO {
 
     @SqlUpdate("DELETE FROM prompts WHERE id IN (<ids>) AND workspace_id = :workspaceId")
     void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
+
+    @SqlUpdate("UPDATE prompts SET last_updated_by = :lastUpdatedBy WHERE id = :id AND workspace_id = :workspaceId")
+    void updateLastUpdatedAt(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId,
+            @Bind("lastUpdatedBy") String lastUpdatedBy);
 }
