@@ -116,7 +116,7 @@ class ExperimentDAO {
                     criteria.types(),
                     criteria.experimentIds(),
                     criteria.filters(),
-                    null);
+                    criteria.projectDeleted());
         }
 
         /**
