@@ -1,9 +1,13 @@
-import React, { useState } from "react";
-import { Code2, Type } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Code2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
-import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
-import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
+import ChatPromptMessageReadonly from "./ChatPromptMessageReadonly";
+
+interface ChatMessage {
+  role: string;
+  content: string | Array<{ type: string; [key: string]: unknown }>;
+}
 
 interface TextPromptViewProps {
   template: string;
@@ -14,17 +18,35 @@ interface TextPromptViewProps {
 
 const TextPromptView: React.FC<TextPromptViewProps> = ({
   template,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   extractedImages,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   extractedVideos,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   extractedAudios,
 }) => {
   const [showRawView, setShowRawView] = useState(false);
+
+  const messages = useMemo<ChatMessage[]>(() => {
+    try {
+      const parsed = JSON.parse(template);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [template]);
+
+  const isJsonMessages = messages.length > 0;
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          {showRawView ? "Raw text" : "Text prompt"}
+          {showRawView
+            ? "Raw text"
+            : isJsonMessages
+              ? `${messages.length} message${messages.length !== 1 ? "s" : ""}`
+              : "Text prompt"}
         </div>
         <Button
           variant="ghost"
@@ -33,8 +55,8 @@ const TextPromptView: React.FC<TextPromptViewProps> = ({
         >
           {showRawView ? (
             <>
-              <Type className="mr-1.5 size-3.5" />
-              Pretty view
+              <MessageSquare className="mr-1.5 size-3.5" />
+              Message view
             </>
           ) : (
             <>
@@ -48,54 +70,19 @@ const TextPromptView: React.FC<TextPromptViewProps> = ({
         <div className="max-h-[600px] overflow-y-auto">
           <CodeHighlighter data={template} />
         </div>
+      ) : isJsonMessages ? (
+        <div className="flex flex-col gap-2" data-testid="prompt-text-content">
+          {messages.map((message, index) => (
+            <ChatPromptMessageReadonly key={index} message={message} />
+          ))}
+        </div>
       ) : (
-        <>
-          <div
-            className="rounded-md bg-primary-foreground p-3"
-            data-testid="prompt-text-content"
-          >
-            <MarkdownPreview>{template}</MarkdownPreview>
-          </div>
-          {extractedImages.length > 0 && (
-            <>
-              <p className="comet-body-s-accented mt-4 text-foreground">
-                Images
-              </p>
-              <MediaTagsList
-                type="image"
-                items={extractedImages}
-                editable={false}
-                preview={true}
-              />
-            </>
-          )}
-          {extractedVideos.length > 0 && (
-            <>
-              <p className="comet-body-s-accented mt-4 text-foreground">
-                Videos
-              </p>
-              <MediaTagsList
-                type="video"
-                items={extractedVideos}
-                editable={false}
-                preview={true}
-              />
-            </>
-          )}
-          {extractedAudios.length > 0 && (
-            <>
-              <p className="comet-body-s-accented mt-4 text-foreground">
-                Audios
-              </p>
-              <MediaTagsList
-                type="audio"
-                items={extractedAudios}
-                editable={false}
-                preview={true}
-              />
-            </>
-          )}
-        </>
+        <div
+          className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground"
+          data-testid="prompt-text-content"
+        >
+          {template}
+        </div>
       )}
     </div>
   );
