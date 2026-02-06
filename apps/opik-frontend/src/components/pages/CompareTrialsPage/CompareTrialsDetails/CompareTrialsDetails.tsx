@@ -10,6 +10,7 @@ import { formatNumericData } from "@/lib/utils";
 import { generateDistinctColorMap } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import NavigationTag from "@/components/shared/NavigationTag";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 
 type CompareTrialsDetailsProps = {
   optimization?: Optimization;
@@ -23,6 +24,7 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
   experimentsIds,
 }) => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
+  const { getColor } = useWorkspaceColorMap();
 
   const isCompare = experimentsIds.length > 1;
 
@@ -111,7 +113,7 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
             key={score.name + score.value}
             label={score.name}
             value={formatNumericData(score.value)}
-            color={colorMap[score.name]}
+            color={getColor(score.name, colorMap)}
           />
         ))}
       </div>
