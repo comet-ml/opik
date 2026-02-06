@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Opik } from "@/index";
-import { AnnotationQueue } from "@/annotation-queue";
+import { TracesAnnotationQueue, ThreadsAnnotationQueue } from "@/annotation-queue";
 import { searchAndWaitForDone } from "@/utils/searchHelpers";
 import {
   shouldRunIntegrationTests,
@@ -36,12 +36,16 @@ describe.skipIf(!shouldRunApiTests)(
         return;
       }
 
-      // Cleanup all created queues
       for (const queueId of createdQueueIds) {
         try {
-          await client.deleteAnnotationQueue(queueId);
+          await client.deleteTracesAnnotationQueue(queueId);
         } catch (error) {
-          console.warn(`Failed to cleanup queue "${queueId}":`, error);
+          console.warn(`Failed to cleanup traces queue "${queueId}":`, error);
+        }
+        try {
+            await client.deleteThreadsAnnotationQueue(queueId);
+        } catch (error) {
+            console.warn(`Failed to cleanup threads queue "${queueId}":`, error);
         }
       }
     });
@@ -51,16 +55,14 @@ describe.skipIf(!shouldRunApiTests)(
       const testProjectName = `test-project-${Date.now()}`;
       createdProjectNames.push(testProjectName);
 
-      // CREATE: Create a new trace-scoped annotation queue
-      const queue = await client.createAnnotationQueue({
+      const queue = await client.createTracesAnnotationQueue({
         name: testQueueName,
-        scope: "trace",
         description: "Test queue for trace operations",
         instructions: "Review traces for accuracy",
       });
       createdQueueIds.push(queue.id);
 
-      expect(queue).toBeInstanceOf(AnnotationQueue);
+      expect(queue).toBeInstanceOf(TracesAnnotationQueue);
       expect(queue.name).toBe(testQueueName);
       expect(queue.scope).toBe("trace");
       expect(queue.description).toBe("Test queue for trace operations");
@@ -102,14 +104,14 @@ describe.skipIf(!shouldRunApiTests)(
       await queue.addTraces(traces);
 
       // Verify items count increased
-      const updatedCount = await queue.refreshItemsCount();
+      const updatedCount = await queue.getItemsCount();
       expect(updatedCount).toBeGreaterThanOrEqual(2);
 
       // REMOVE TRACES: Remove one trace from the queue
       await queue.removeTraces([traces[0]]);
 
       // Verify items count decreased
-      const countAfterRemove = await queue.refreshItemsCount();
+      const countAfterRemove = await queue.getItemsCount();
       expect(countAfterRemove).toBeLessThan(updatedCount!);
 
       // UPDATE: Update queue properties
@@ -118,22 +120,18 @@ describe.skipIf(!shouldRunApiTests)(
         instructions: "Updated instructions",
       });
 
-      // Verify update by fetching the queue again
-      const fetchedQueue = await client.getAnnotationQueue(queue.id);
+      const fetchedQueue = await client.getTracesAnnotationQueue(queue.id);
       expect(fetchedQueue.description).toBe("Updated description");
       expect(fetchedQueue.instructions).toBe("Updated instructions");
 
-      // DELETE: Delete the queue
       await queue.delete();
 
-      // Remove from cleanup list since we already deleted it
       const index = createdQueueIds.indexOf(queue.id);
       if (index > -1) {
         createdQueueIds.splice(index, 1);
       }
 
-      // Verify deletion by attempting to fetch (should throw)
-      await expect(client.getAnnotationQueue(queue.id)).rejects.toThrow();
+      await expect(client.getTracesAnnotationQueue(queue.id)).rejects.toThrow();
     });
 
     it("should perform complete thread queue flow: create, add threads, remove threads, delete", async () => {
@@ -142,15 +140,13 @@ describe.skipIf(!shouldRunApiTests)(
       const threadId = `thread-${Date.now()}`;
       createdProjectNames.push(testProjectName);
 
-      // CREATE: Create a new thread-scoped annotation queue
-      const queue = await client.createAnnotationQueue({
+      const queue = await client.createThreadsAnnotationQueue({
         name: testQueueName,
-        scope: "thread",
         description: "Test queue for thread operations",
       });
       createdQueueIds.push(queue.id);
 
-      expect(queue).toBeInstanceOf(AnnotationQueue);
+      expect(queue).toBeInstanceOf(ThreadsAnnotationQueue);
       expect(queue.name).toBe(testQueueName);
       expect(queue.scope).toBe("thread");
 
@@ -205,27 +201,24 @@ describe.skipIf(!shouldRunApiTests)(
       await queue.addThreads([ourThread!]);
 
       // Verify items count increased
-      const updatedCount = await queue.refreshItemsCount();
+      const updatedCount = await queue.getItemsCount();
       expect(updatedCount).toBeGreaterThanOrEqual(1);
 
       // REMOVE THREADS: Remove the thread from the queue
       await queue.removeThreads([ourThread!]);
 
       // Verify items count decreased
-      const countAfterRemove = await queue.refreshItemsCount();
+      const countAfterRemove = await queue.getItemsCount();
       expect(countAfterRemove).toBe(0);
 
-      // DELETE: Delete the queue
       await queue.delete();
 
-      // Remove from cleanup list since we already deleted it
-      const index = createdQueueIds.indexOf(queue.id);
-      if (index > -1) {
-        createdQueueIds.splice(index, 1);
+      const index2 = createdQueueIds.indexOf(queue.id);
+      if (index2 > -1) {
+        createdQueueIds.splice(index2, 1);
       }
 
-      // Verify deletion
-      await expect(client.getAnnotationQueue(queue.id)).rejects.toThrow();
+      await expect(client.getThreadsAnnotationQueue(queue.id)).rejects.toThrow();
     });
   }
 );
