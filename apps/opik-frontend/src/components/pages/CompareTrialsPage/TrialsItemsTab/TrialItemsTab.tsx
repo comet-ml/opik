@@ -60,7 +60,6 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { generateDistinctColorMap } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
-
 const getRowId = (d: ExperimentsCompare) => d.id;
 
 const calculateVerticalAlignment = (count: number) =>
@@ -125,7 +124,6 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
   experiments,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",
   });
@@ -342,14 +340,13 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
       return a.localeCompare(b, undefined, { sensitivity: "base" });
     });
 
-    // Generate color map for consistent colors
     const colorMap =
       objectiveName && sortedScoreNames.length > 0
         ? generateDistinctColorMap(
             objectiveName,
             sortedScoreNames.filter((name) => name !== objectiveName),
           )
-        : {};
+        : undefined;
 
     // Get score value from the first experiment (same as CompareTrialsDetails)
     const firstExperiment = experiments?.[0];

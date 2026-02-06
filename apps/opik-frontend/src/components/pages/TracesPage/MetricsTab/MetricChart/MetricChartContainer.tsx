@@ -11,7 +11,7 @@ import isNumber from "lodash/isNumber";
 import { formatNumericData } from "@/lib/utils";
 
 import { TransformedData } from "@/types/projects";
-import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
+import useChartConfig from "@/hooks/useChartConfig";
 import useProjectMetric, {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
@@ -19,7 +19,7 @@ import useProjectMetric, {
 import { ChartTooltipRenderValueArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import NoData from "@/components/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
+import { COLOR_VARIANTS_MAP } from "@/constants/colorVariants";
 import { Filter } from "@/types/filters";
 import { CHART_TYPE } from "@/constants/chart";
 import MetricLineChart from "./MetricLineChart";
@@ -58,15 +58,15 @@ interface MetricContainerChartProps {
 }
 
 const predefinedColorMap = {
-  traces: TAG_VARIANTS_COLOR_MAP.purple,
-  cost: TAG_VARIANTS_COLOR_MAP.purple,
-  "duration.p50": TAG_VARIANTS_COLOR_MAP.turquoise,
-  "duration.p90": TAG_VARIANTS_COLOR_MAP.burgundy,
-  "duration.p99": TAG_VARIANTS_COLOR_MAP.purple,
-  completion_tokens: TAG_VARIANTS_COLOR_MAP.turquoise,
-  prompt_tokens: TAG_VARIANTS_COLOR_MAP.burgundy,
-  total_tokens: TAG_VARIANTS_COLOR_MAP.purple,
-  failed: TAG_VARIANTS_COLOR_MAP.pink,
+  traces: COLOR_VARIANTS_MAP.purple,
+  cost: COLOR_VARIANTS_MAP.purple,
+  "duration.p50": COLOR_VARIANTS_MAP.turquoise,
+  "duration.p90": COLOR_VARIANTS_MAP.burgundy,
+  "duration.p99": COLOR_VARIANTS_MAP.purple,
+  completion_tokens: COLOR_VARIANTS_MAP.turquoise,
+  prompt_tokens: COLOR_VARIANTS_MAP.burgundy,
+  total_tokens: COLOR_VARIANTS_MAP.purple,
+  failed: COLOR_VARIANTS_MAP.pink,
 };
 
 const METRIC_CHART_TYPE = {
@@ -166,14 +166,7 @@ const MetricContainerChart = ({
     return data.every((record) => lines.every((line) => isNil(record[line])));
   }, [data, lines, isPending]);
 
-  const config = useMemo(() => {
-    // Use predefined colors for non-breakdown charts (legacy behavior)
-    return getDefaultHashedColorsChartConfig(
-      lines,
-      labelsMap,
-      predefinedColorMap,
-    );
-  }, [lines, labelsMap]);
+  const config = useChartConfig(lines, labelsMap, predefinedColorMap);
 
   const CHART = METRIC_CHART_TYPE[chartType];
 

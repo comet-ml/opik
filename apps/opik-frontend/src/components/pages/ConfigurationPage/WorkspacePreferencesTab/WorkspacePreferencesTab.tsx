@@ -25,6 +25,7 @@ import WorkspacePreferencesActionsCell from "./WorkspacePreferencesActionsCell";
 import EditThreadTimeoutDialog from "./EditThreadTimeoutDialog";
 import { EditThreadTimeoutFormValues } from "./EditThreadTimeoutForm";
 import EditTruncationToggleDialog from "./EditTruncationToggleDialog";
+import EditColorMapDialog from "./EditColorMapDialog";
 import useAppStore from "@/store/AppStore";
 
 const WorkspacePreferencesTab: React.FC = () => {
@@ -50,6 +51,10 @@ const WorkspacePreferencesTab: React.FC = () => {
     workspaceConfig?.truncation_on_tables ??
     WORKSPACE_PREFERENCES_DEFAULT_TRUNCATION_TOGGLE;
 
+  const colorMapCount = workspaceConfig?.color_map
+    ? Object.keys(workspaceConfig.color_map).length
+    : 0;
+
   const data = useMemo(
     () => [
       {
@@ -62,8 +67,16 @@ const WorkspacePreferencesTab: React.FC = () => {
         value: truncationToggleValue ? "Enabled" : "Disabled",
         type: WORKSPACE_PREFERENCE_TYPE.TRUNCATION_TOGGLE,
       },
+      {
+        name: "Color mappings",
+        value:
+          colorMapCount > 0
+            ? `${colorMapCount} mapping${colorMapCount !== 1 ? "s" : ""}`
+            : "Not configured",
+        type: WORKSPACE_PREFERENCE_TYPE.COLOR_MAP,
+      },
     ],
-    [threadTimeoutValue, truncationToggleValue],
+    [threadTimeoutValue, truncationToggleValue, colorMapCount],
   );
 
   const getPreferencesDialogConfig = useCallback(
@@ -91,6 +104,7 @@ const WorkspacePreferencesTab: React.FC = () => {
       updates: Partial<{
         timeout_to_mark_thread_as_inactive: string | null;
         truncation_on_tables: boolean;
+        color_map: Record<string, string>;
       }>,
     ) => {
       updateWorkspaceConfig({
@@ -103,6 +117,10 @@ const WorkspacePreferencesTab: React.FC = () => {
             updates.truncation_on_tables !== undefined
               ? updates.truncation_on_tables
               : workspaceConfig?.truncation_on_tables ?? null,
+          color_map:
+            updates.color_map !== undefined
+              ? updates.color_map
+              : workspaceConfig?.color_map ?? null,
         },
       });
     },
@@ -110,6 +128,7 @@ const WorkspacePreferencesTab: React.FC = () => {
       updateWorkspaceConfig,
       workspaceConfig?.timeout_to_mark_thread_as_inactive,
       workspaceConfig?.truncation_on_tables,
+      workspaceConfig?.color_map,
     ],
   );
 
@@ -128,6 +147,13 @@ const WorkspacePreferencesTab: React.FC = () => {
       mergeConfigUpdate({
         truncation_on_tables: enabled,
       });
+    },
+    [mergeConfigUpdate],
+  );
+
+  const handleColorMapUpdate = useCallback(
+    (colorMap: Record<string, string>) => {
+      mergeConfigUpdate({ color_map: colorMap });
     },
     [mergeConfigUpdate],
   );
@@ -173,6 +199,12 @@ const WorkspacePreferencesTab: React.FC = () => {
         )}
         currentValue={truncationToggleValue}
         onConfirm={handleTruncationToggleSubmit}
+      />
+
+      <EditColorMapDialog
+        {...getPreferencesDialogConfig(WORKSPACE_PREFERENCE_TYPE.COLOR_MAP)}
+        colorMap={workspaceConfig?.color_map ?? null}
+        onUpdate={handleColorMapUpdate}
       />
     </>
   );
