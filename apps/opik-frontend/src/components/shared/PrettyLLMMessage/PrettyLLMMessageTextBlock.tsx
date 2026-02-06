@@ -7,7 +7,7 @@ import { MarkdownPreview } from "@/components/shared/MarkdownPreview/MarkdownPre
 
 const MAX_LINES = 3;
 
-const PrettyLLMMessageTextBlock: React.FC<PrettyLLMMessageTextBlockProps> = ({
+const PrettyLLMMessageTextBlock: React.FC<PrettyLLMMessageTextBlockProps> = React.memo(({
   children,
   role,
   showMoreButton = true,
@@ -48,6 +48,8 @@ const PrettyLLMMessageTextBlock: React.FC<PrettyLLMMessageTextBlockProps> = ({
       )}
     </div>
   );
-};
+});
+
+PrettyLLMMessageTextBlock.displayName = "PrettyLLMMessageTextBlock";
 
 export default PrettyLLMMessageTextBlock;

@@ -5,7 +5,7 @@ import { PrettyLLMMessageHeaderProps } from "./types";
 import { CustomAccordionTrigger } from "@/components/ui/accordion";
 import { ROLE_CONFIG } from "./constants";
 
-const PrettyLLMMessageHeader: React.FC<PrettyLLMMessageHeaderProps> = ({
+const PrettyLLMMessageHeader: React.FC<PrettyLLMMessageHeaderProps> = React.memo(({
   role,
   label,
   className,
@@ -16,7 +16,7 @@ const PrettyLLMMessageHeader: React.FC<PrettyLLMMessageHeaderProps> = ({
   return (
     <CustomAccordionTrigger
       className={cn(
-        "flex items-center justify-between gap-1 rounded-sm p-1 px-0 transition-colors hover:bg-primary-foreground [&[data-state=open]>div>svg:first-child]:rotate-90",
+        "flex select-none items-center justify-between gap-1 rounded-sm p-1 px-0 transition-colors hover:bg-primary-foreground [&[data-state=open]>div>svg:first-child]:rotate-90",
         className,
       )}
     >
@@ -39,6 +39,8 @@ const PrettyLLMMessageHeader: React.FC<PrettyLLMMessageHeaderProps> = ({
       <div className="comet-body-xs text-light-slate">{label}</div>
     </CustomAccordionTrigger>
   );
-};
+});
+
+PrettyLLMMessageHeader.displayName = "PrettyLLMMessageHeader";
 
 export default PrettyLLMMessageHeader;

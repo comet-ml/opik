@@ -1,4 +1,5 @@
-import React, { useMemo } from "react";
+import React, { useRef, useMemo, useCallback, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
 import {
@@ -19,20 +20,49 @@ import PrettyLLMMessage from "@/components/shared/PrettyLLMMessage";
 import { useLLMMessagesExpandAll } from "@/components/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 import Loader from "@/components/shared/Loader/Loader";
 
+const ESTIMATED_COLLAPSED_HEIGHT = 36;
+const VIRTUALIZATION_THRESHOLD = 30;
+const VIRTUAL_OVERSCAN = 5;
+
 type MessagesTabProps = {
   transformedInput: object;
   transformedOutput: object;
   media: UnifiedMediaItem[];
   isLoading: boolean;
+  scrollContainerRef?: React.RefObject<HTMLDivElement>;
 };
+
+function mapProviderMessages(
+  data: object,
+  detection: ReturnType<typeof detectLLMMessages>,
+  fieldType: "input" | "output",
+) {
+  if (!detection.supported || !detection.provider) return null;
+  const provider = getProvider(detection.provider);
+  if (!provider) return null;
+  return provider.mapper(data, { fieldType });
+}
+
+function renderBlock(descriptor: LLMBlockDescriptor, key: string) {
+  const Component = descriptor.component as React.ComponentType<
+    typeof descriptor.props
+  >;
+  return <Component key={key} {...descriptor.props} />;
+}
+
+function renderContentBlocks(message: LLMMessageDescriptor) {
+  return message.blocks.map((block, idx) =>
+    renderBlock(block, `${message.id}-block-${idx}`),
+  );
+}
 
 const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   transformedInput,
   transformedOutput,
   media,
   isLoading,
+  scrollContainerRef,
 }) => {
-  // Detect LLM format and get providers for input and output
   const inputDetection = useMemo(
     () => detectLLMMessages(transformedInput, { fieldType: "input" }),
     [transformedInput],
@@ -43,33 +73,22 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     [transformedOutput],
   );
 
-  // Cache the output mapper result to avoid duplicate calls
-  const outputMappedResult = useMemo(() => {
-    if (outputDetection.supported && outputDetection.provider) {
-      const provider = getProvider(outputDetection.provider);
-      if (provider) {
-        return provider.mapper(transformedOutput, { fieldType: "output" });
-      }
-    }
-    return null;
-  }, [outputDetection, transformedOutput]);
+  const outputMappedResult = useMemo(
+    () => mapProviderMessages(transformedOutput, outputDetection, "output"),
+    [outputDetection, transformedOutput],
+  );
 
-  // Map messages from both input and output
   const combinedMessages = useMemo(() => {
+    const inputResult = mapProviderMessages(
+      transformedInput,
+      inputDetection,
+      "input",
+    );
     const messages: LLMMessageDescriptor[] = [];
 
-    // Map input messages
-    if (inputDetection.supported && inputDetection.provider) {
-      const provider = getProvider(inputDetection.provider);
-      if (provider) {
-        const inputResult = provider.mapper(transformedInput, {
-          fieldType: "input",
-        });
-        messages.push(...inputResult.messages);
-      }
+    if (inputResult) {
+      messages.push(...inputResult.messages);
     }
-
-    // Map output messages using cached result
     if (outputMappedResult) {
       messages.push(...outputMappedResult.messages);
     }
@@ -77,15 +96,13 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     return messages;
   }, [inputDetection, transformedInput, outputMappedResult]);
 
-  // Get usage info from cached output result
   const usage = outputMappedResult?.usage;
 
-  // Get all message IDs for expand/collapse all functionality
-  const allMessageIds = useMemo(() => {
-    return combinedMessages.map((msg) => msg.id);
-  }, [combinedMessages]);
+  const allMessageIds = useMemo(
+    () => combinedMessages.map((msg) => msg.id),
+    [combinedMessages],
+  );
 
-  // Use the hook for expand/collapse logic
   const {
     isAllExpanded,
     expandedMessages,
@@ -93,34 +110,56 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     handleValueChange,
   } = useLLMMessagesExpandAll(allMessageIds, "messages-tab-combined");
 
-  // Generate copy text from all messages
-  const copyText = useMemo(() => {
-    return JSON.stringify(
-      {
-        input: transformedInput,
-        output: transformedOutput,
-      },
-      null,
-      2,
-    );
-  }, [transformedInput, transformedOutput]);
+  const copyText = useMemo(
+    () =>
+      JSON.stringify(
+        { input: transformedInput, output: transformedOutput },
+        null,
+        2,
+      ),
+    [transformedInput, transformedOutput],
+  );
 
-  // Render block from descriptor
-  const renderBlock = (descriptor: LLMBlockDescriptor, key: string) => {
-    const Component = descriptor.component as React.ComponentType<
-      typeof descriptor.props
-    >;
-    return <Component key={key} {...descriptor.props} />;
-  };
+  const shouldVirtualize = combinedMessages.length > VIRTUALIZATION_THRESHOLD;
 
-  // Render content blocks for a message
-  const renderContentBlocks = (message: LLMMessageDescriptor) => {
-    return message.blocks.map((block, idx) =>
-      renderBlock(block, `${message.id}-block-${idx}`),
-    );
-  };
+  const internalScrollRef = useRef<HTMLDivElement>(null);
+  const effectiveScrollRef = scrollContainerRef ?? internalScrollRef;
 
-  // Expand/collapse button for header
+  const [scrollMargin, setScrollMargin] = useState(0);
+
+  const listRef = useCallback((node: HTMLDivElement | null) => {
+    if (node) {
+      setScrollMargin(node.offsetTop);
+    }
+  }, []);
+
+  const virtualizer = useVirtualizer({
+    count: combinedMessages.length,
+    getScrollElement: () => effectiveScrollRef.current,
+    estimateSize: () => ESTIMATED_COLLAPSED_HEIGHT,
+    overscan: VIRTUAL_OVERSCAN,
+    getItemKey: (index) => combinedMessages[index].id,
+    enabled: shouldVirtualize,
+    scrollMargin,
+  });
+
+  const renderMessage = useCallback(
+    (message: LLMMessageDescriptor) => (
+      <PrettyLLMMessage.Root key={message.id} value={message.id}>
+        <PrettyLLMMessage.Header role={message.role} label={message.label} />
+        <PrettyLLMMessage.Content>
+          {renderContentBlocks(message)}
+          {message.finishReason && (
+            <PrettyLLMMessage.FinishReason
+              finishReason={message.finishReason}
+            />
+          )}
+        </PrettyLLMMessage.Content>
+      </PrettyLLMMessage.Root>
+    ),
+    [combinedMessages],
+  );
+
   const expandCollapseButton = (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -148,6 +187,52 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     return <Loader />;
   }
 
+  function renderVirtualizedMessages() {
+    return (
+      <PrettyLLMMessage.Container
+        type="multiple"
+        value={expandedMessages}
+        onValueChange={handleValueChange}
+      >
+        <div
+          ref={listRef}
+          className="relative"
+          style={{ height: virtualizer.getTotalSize() }}
+        >
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const message = combinedMessages[virtualRow.index];
+            return (
+              <div
+                key={message.id}
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
+                className="absolute left-0 w-full pb-1"
+                style={{
+                  transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
+                }}
+              >
+                {renderMessage(message)}
+              </div>
+            );
+          })}
+        </div>
+      </PrettyLLMMessage.Container>
+    );
+  }
+
+  function renderStaticMessages() {
+    return (
+      <PrettyLLMMessage.Container
+        type="multiple"
+        value={expandedMessages}
+        onValueChange={handleValueChange}
+        className="space-y-1"
+      >
+        {combinedMessages.map((message) => renderMessage(message))}
+      </PrettyLLMMessage.Container>
+    );
+  }
+
   return (
     <MediaProvider media={media}>
       <div className="overflow-hidden">
@@ -163,29 +248,9 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
         <div className="pt-3">
           {combinedMessages.length > 0 ? (
             <>
-              <PrettyLLMMessage.Container
-                type="multiple"
-                value={expandedMessages}
-                onValueChange={handleValueChange}
-                className="space-y-1"
-              >
-                {combinedMessages.map((message) => (
-                  <PrettyLLMMessage.Root key={message.id} value={message.id}>
-                    <PrettyLLMMessage.Header
-                      role={message.role}
-                      label={message.label}
-                    />
-                    <PrettyLLMMessage.Content>
-                      {renderContentBlocks(message)}
-                      {message.finishReason && (
-                        <PrettyLLMMessage.FinishReason
-                          finishReason={message.finishReason}
-                        />
-                      )}
-                    </PrettyLLMMessage.Content>
-                  </PrettyLLMMessage.Root>
-                ))}
-              </PrettyLLMMessage.Container>
+              {shouldVirtualize
+                ? renderVirtualizedMessages()
+                : renderStaticMessages()}
               {usage && (
                 <div className="mt-3">
                   <PrettyLLMMessage.Usage usage={usage} />
