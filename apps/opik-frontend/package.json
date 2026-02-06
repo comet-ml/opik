@@ -82,6 +82,7 @@
     "diff": "^7.0.0",
     "file-saver": "^2.0.5",
     "flattie": "^1.1.1",
+    "framer-motion": "^12.29.2",
     "js-yaml": "^4.1.0",
     "json-2-csv": "^5.5.6",
     "jsonpath-plus": "^10.3.0",
@@ -125,6 +126,7 @@
     "use-query-params": "^2.2.1",
     "uuid": "^10.0.0",
     "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.25.1",
     "zustand": "^4.5.2"
   },
   "devDependencies": {

@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { PrettyLLMMessageContainerProps } from "./types";
-import { Accordion } from "@/components/ui/accordion";
+import { CollapsibleSectionContainer } from "@/components/shared/CollapsibleSection";
 
 const PrettyLLMMessageContainer: React.FC<PrettyLLMMessageContainerProps> = ({
   children,
@@ -9,9 +9,12 @@ const PrettyLLMMessageContainer: React.FC<PrettyLLMMessageContainerProps> = ({
   ...props
 }) => {
   return (
-    <Accordion className={cn("group/llm-message", className)} {...props}>
+    <CollapsibleSectionContainer
+      className={cn("group/llm-message", className)}
+      {...props}
+    >
       {children}
-    </Accordion>
+    </CollapsibleSectionContainer>
   );
 };
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { PrettyLLMMessageRootProps } from "./types";
-import { AccordionItem } from "@/components/ui/accordion";
+import { CollapsibleSectionRoot } from "@/components/shared/CollapsibleSection";
 
 const PrettyLLMMessageRoot: React.FC<PrettyLLMMessageRootProps> = ({
   value,
@@ -9,9 +9,9 @@ const PrettyLLMMessageRoot: React.FC<PrettyLLMMessageRootProps> = ({
   className,
 }) => {
   return (
-    <AccordionItem value={value} className={cn("border-none", className)}>
+    <CollapsibleSectionRoot value={value} className={cn(className)}>
       {children}
-    </AccordionItem>
+    </CollapsibleSectionRoot>
   );
 };
 
