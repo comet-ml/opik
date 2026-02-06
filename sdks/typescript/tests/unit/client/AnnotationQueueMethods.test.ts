@@ -24,6 +24,7 @@ describe("OpikClient Annotation Queue Methods", () => {
   });
 
   afterEach(() => {
+    expect(loggerErrorSpy).not.toHaveBeenCalled();
     loggerDebugSpy.mockRestore();
     loggerErrorSpy.mockRestore();
   });

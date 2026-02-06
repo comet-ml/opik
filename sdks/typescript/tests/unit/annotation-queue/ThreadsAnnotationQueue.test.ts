@@ -14,6 +14,7 @@ import * as OpikApi from "@/rest_api/api";
 describe("ThreadsAnnotationQueue", () => {
   let client: Opik;
   let loggerDebugSpy: MockInstance<typeof logger.debug>;
+  let loggerErrorSpy: MockInstance<typeof logger.error>;
 
   beforeEach(() => {
     client = new Opik({
@@ -21,10 +22,13 @@ describe("ThreadsAnnotationQueue", () => {
     });
 
     loggerDebugSpy = vi.spyOn(logger, "debug");
+    loggerErrorSpy = vi.spyOn(logger, "error");
   });
 
   afterEach(() => {
+    expect(loggerErrorSpy).not.toHaveBeenCalled();
     loggerDebugSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
   });
 
   describe("ThreadsAnnotationQueue class", () => {

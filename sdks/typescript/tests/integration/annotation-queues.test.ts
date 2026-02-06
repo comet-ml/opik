@@ -11,6 +11,8 @@ import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
 } from "./api/shouldRunIntegrationTests";
+import { logger } from "@/utils/logger";
+import { MockInstance } from "vitest";
 
 const shouldRunApiTests = shouldRunIntegrationTests();
 
@@ -18,6 +20,7 @@ describe.skipIf(!shouldRunApiTests)(
   "AnnotationQueue Integration Tests",
   () => {
     let client: Opik;
+    let loggerErrorSpy: MockInstance<typeof logger.error>;
     const createdQueueIds: string[] = [];
     const createdProjectNames: string[] = [];
 
@@ -29,12 +32,16 @@ describe.skipIf(!shouldRunApiTests)(
       }
 
       client = new Opik();
+      loggerErrorSpy = vi.spyOn(logger, "error");
     });
 
     afterAll(async () => {
       if (!client) {
         return;
       }
+
+      expect(loggerErrorSpy).not.toHaveBeenCalled();
+      loggerErrorSpy.mockRestore();
 
       for (const queueId of createdQueueIds) {
         try {
