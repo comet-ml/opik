@@ -4099,6 +4099,8 @@ class PromptResourceTest {
             Prompt createdPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
             Instant initialLastUpdatedAt = createdPrompt.lastUpdatedAt();
 
+            Thread.sleep(10);
+
             var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
                     .promptId(promptId)
                     .createdBy(USER)
