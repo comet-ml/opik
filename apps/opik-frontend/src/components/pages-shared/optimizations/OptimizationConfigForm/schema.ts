@@ -14,6 +14,7 @@ import {
 } from "@/lib/optimizations";
 import { getProviderFromModel } from "@/lib/provider";
 import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
+import { isReasoningModel } from "@/lib/modelUtils";
 
 export const GepaOptimizerParamsSchema = z.object({
   model: z.string().optional(),
@@ -228,6 +229,13 @@ export const convertFormDataToStudioConfig = (
       typeof m.content === "string" ? m.content : JSON.stringify(m.content),
   }));
 
+  const normalizedModelConfig = isReasoningModel(formData.modelName)
+    ? {
+        ...formData.modelConfig,
+        temperature: Math.max(1, formData.modelConfig.temperature ?? 1),
+      }
+    : formData.modelConfig;
+
   return {
     dataset_name: datasetName,
     prompt: {
@@ -235,7 +243,7 @@ export const convertFormDataToStudioConfig = (
     },
     llm_model: {
       model: formData.modelName,
-      parameters: formData.modelConfig,
+      parameters: normalizedModelConfig,
     },
     evaluation: {
       metrics: [
