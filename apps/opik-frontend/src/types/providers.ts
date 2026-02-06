@@ -499,7 +499,13 @@ export type PartialProviderKeyUpdate = Partial<
   headers?: Record<string, string>;
 };
 
-export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ReasoningEffort =
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
 
 export interface LLMOpenAIConfigsType {
   temperature: number;
@@ -518,6 +524,10 @@ export interface LLMAnthropicConfigsType {
   maxCompletionTokens: number;
   topP?: number;
   seed?: number | null;
+  thinkingMode?: "disabled" | "adaptive" | "manual";
+  thinkingEffort?: "low" | "medium" | "high" | "max";
+  thinkingBudgetTokens?: number;
+  custom_parameters?: Record<string, unknown> | null;
   throttling?: number;
   maxConcurrentRequests?: number;
 }
@@ -532,12 +542,19 @@ export interface LLMOpenRouterConfigsType {
   repetitionPenalty: number;
   minP: number;
   topA: number;
+  reasoningEffort?: ReasoningEffort;
+  custom_parameters?: Record<string, unknown> | null;
   seed?: number | null;
   throttling?: number;
   maxConcurrentRequests?: number;
 }
 
-export type GeminiThinkingLevel = "minimal" | "low" | "medium" | "high";
+export type GeminiThinkingLevel =
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
 
 export interface LLMGeminiConfigsType {
   temperature: number;
