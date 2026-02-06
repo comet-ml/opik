@@ -1,11 +1,8 @@
-import React, { useCallback, useRef, useMemo } from "react";
+import React, { useCallback, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Info } from "lucide-react";
 import find from "lodash/find";
 import get from "lodash/get";
-import isObject from "lodash/isObject";
-import isArray from "lodash/isArray";
-import { useQueries, QueryFunctionContext } from "@tanstack/react-query";
 
 import { Label } from "@/components/ui/label";
 import {
@@ -19,6 +16,7 @@ import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSetting
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
+import LLMPromptMessagesVariables from "@/components/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariables";
 import LLMJudgeScores from "@/components/pages-shared/llm/LLMJudgeScores/LLMJudgeScores";
 import {
   LLM_MESSAGE_ROLE_NAME_MAP,
@@ -43,15 +41,6 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import api, { TRACES_REST_ENDPOINT, SPANS_REST_ENDPOINT } from "@/api/api";
-import { JsonObject, JsonValue } from "@/components/shared/JsonTreePopover";
-import {
-  generateSearchByIDFilters,
-  generateVisibilityFilters,
-  processFilters,
-} from "@/lib/filters";
-import { processSorting } from "@/lib/sorting";
-import { Trace, Span } from "@/types/traces";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -82,6 +71,7 @@ type LLMJudgeRuleDetailsProps = {
 const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   workspaceName,
   form,
+  projectName,
   datasetColumnNames,
 }) => {
   const cache = useRef<Record<string | LLM_JUDGE, LLMPromptTemplate>>({});
@@ -98,150 +88,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const autocompleteType = isSpanScope
     ? TRACE_DATA_TYPE.spans
     : TRACE_DATA_TYPE.traces;
-
-  // Get all project IDs for fetching trace/span data from multiple projects
-  const projectIds = form.watch("projectIds") || [];
-
-  // Create API call functions for traces/spans
-  const fetchTracesOrSpans = async (
-    { signal }: QueryFunctionContext,
-    projectId: string,
-  ) => {
-    const isTraces = autocompleteType === TRACE_DATA_TYPE.traces;
-    const endpoint = isTraces ? TRACES_REST_ENDPOINT : SPANS_REST_ENDPOINT;
-    const searchByIDFilters = generateSearchByIDFilters(undefined);
-
-    const { data } = await api.get<{
-      content: (Trace | Span)[];
-      total: number;
-      sortable_by: string[];
-    }>(endpoint, {
-      signal,
-      params: {
-        project_id: projectId,
-        ...(isTraces
-          ? processFilters(undefined, [
-              ...(searchByIDFilters ? searchByIDFilters : []),
-              ...generateVisibilityFilters(),
-            ])
-          : processFilters(undefined, searchByIDFilters)),
-        ...processSorting(undefined),
-        size: 10,
-        page: 1,
-        truncate: false,
-      },
-    });
-
-    return data;
-  };
-
-  // Fetch trace/span data from all selected projects using useQueries
-  const traceDataQueries = useQueries({
-    queries: projectIds.map((projectId) => ({
-      queryKey: [
-        autocompleteType === TRACE_DATA_TYPE.traces ? "traces" : "spans",
-        { projectId, type: autocompleteType },
-      ],
-      queryFn: (context: QueryFunctionContext) =>
-        fetchTracesOrSpans(context, projectId),
-      enabled: Boolean(projectId),
-    })),
-  });
-
-  // Combine all traces from all projects
-  const allTraces = useMemo(() => {
-    return traceDataQueries.reduce<Array<Trace | Span>>((acc, query) => {
-      if (query.data?.content) {
-        return [...acc, ...query.data.content];
-      }
-      return acc;
-    }, []);
-  }, [traceDataQueries]);
-
-  // Helper function to deep merge two JSON objects
-  const deepMerge = useCallback(
-    (target: JsonObject, source: JsonObject): JsonObject => {
-      const result = { ...target };
-
-      for (const key in source) {
-        const sourceValue = source[key];
-        const targetValue = result[key];
-
-        if (
-          isObject(sourceValue) &&
-          !isArray(sourceValue) &&
-          targetValue &&
-          isObject(targetValue) &&
-          !isArray(targetValue)
-        ) {
-          // Both are objects, merge recursively
-          result[key] = deepMerge(
-            targetValue as JsonObject,
-            sourceValue as JsonObject,
-          );
-        } else if (sourceValue !== undefined && sourceValue !== null) {
-          // Use source value (or merge arrays by combining unique values)
-          if (isArray(sourceValue) && isArray(targetValue)) {
-            // For arrays, we'll keep the first one as representative structure
-            result[key] = targetValue;
-          } else {
-            result[key] = sourceValue;
-          }
-        }
-      }
-
-      return result;
-    },
-    [],
-  );
-
-  // Build JSON tree data by combining traces from all projects
-  const jsonTreeData = useMemo<JsonObject | null>(() => {
-    if (allTraces.length === 0) {
-      return null;
-    }
-
-    const rootKeys: Array<"input" | "output" | "metadata"> = [
-      "input",
-      "output",
-      "metadata",
-    ];
-
-    // Start with an empty tree
-    let mergedTreeData: JsonObject = {};
-
-    // Merge data from all traces
-    allTraces.forEach((trace) => {
-      const traceData: JsonObject = {};
-
-      rootKeys.forEach((key) => {
-        const itemValue = trace[key];
-        if (itemValue !== undefined && itemValue !== null) {
-          traceData[key] = itemValue as JsonValue;
-        }
-      });
-
-      // Merge this trace's data into the merged tree
-      mergedTreeData = deepMerge(mergedTreeData, traceData);
-    });
-
-    // Add dataset column names if provided
-    if (datasetColumnNames && datasetColumnNames.length > 0) {
-      if (!mergedTreeData.metadata) {
-        mergedTreeData.metadata = {};
-      }
-      const metadata = mergedTreeData.metadata as JsonObject;
-      if (!metadata.dataset_item_data) {
-        metadata.dataset_item_data = {};
-      }
-      const datasetItemData = metadata.dataset_item_data as JsonObject;
-      datasetColumnNames.forEach((columnName) => {
-        datasetItemData[columnName] = `<${columnName}>`;
-      });
-    }
-
-    return Object.keys(mergedTreeData).length > 0 ? mergedTreeData : null;
-  }, [allTraces, datasetColumnNames, deepMerge]);
 
   const handleAddProvider = useCallback(
     (provider: COMPOSED_PROVIDER_TYPE) => {
@@ -456,7 +302,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                   possibleTypes={MESSAGE_TYPE_OPTIONS}
                   disableMedia={isThreadScope}
                   promptVariables={datasetColumnNames}
-                  jsonTreeData={jsonTreeData}
                   onChange={(messages: LLMMessage[]) =>
                     handleMessagesChange(messages, field.onChange, form)
                   }
@@ -469,17 +314,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     ])
                   }
                 />
-                {projectIds.length === 0 && (
-                  <p className="comet-body-xs text-red-500">
-                    Select projects above to enable variable picker in the
-                    message editor
-                  </p>
-                )}
               </>
             );
           }}
         />
-        {/* {!isThreadScope && (
+        {!isThreadScope && (
           <FormField
             control={form.control}
             name="llmJudgeDetails.variables"
@@ -492,28 +331,24 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                 "variables",
               ]);
 
-              // return null;
-
-              // ALEX
-
-              // return (
-              //   <>
-              //     <LLMPromptMessagesVariables
-              //       parsingError={parsingVariablesError}
-              //       validationErrors={validationErrors}
-              //       projectId={form.watch("projectIds")[0] || ""}
-              //       variables={field.value}
-              //       onChange={field.onChange}
-              //       projectName={projectName}
-              //       datasetColumnNames={datasetColumnNames}
-              //       type={autocompleteType}
-              //       includeIntermediateNodes
-              //     />
-              //   </>
-              // );
+              return (
+                <>
+                  <LLMPromptMessagesVariables
+                    parsingError={parsingVariablesError}
+                    validationErrors={validationErrors}
+                    projectId={form.watch("projectIds")[0] || ""}
+                    variables={field.value}
+                    onChange={field.onChange}
+                    projectName={projectName}
+                    datasetColumnNames={datasetColumnNames}
+                    type={autocompleteType}
+                    includeIntermediateNodes
+                  />
+                </>
+              );
             }}
           />
-        )} */}
+        )}
       </div>
       <div className="flex flex-col gap-2">
         <div className="flex items-center">

@@ -735,11 +735,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 </span>
               </TooltipWrapper>
             ) : (
-              <Button
-                type="submit"
-                onClick={form.handleSubmit(onSubmit)}
-                disabled
-              >
+              <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
                 {submitText}
               </Button>
             )}
