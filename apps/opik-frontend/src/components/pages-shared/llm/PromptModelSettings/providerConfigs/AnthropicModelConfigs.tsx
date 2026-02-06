@@ -4,11 +4,19 @@ import SliderInputControl from "@/components/shared/SliderInputControl/SliderInp
 import {
   LLMAnthropicConfigsType,
   PROVIDER_MODEL_TYPE,
+  AnthropicThinkingEffort,
 } from "@/types/providers";
-import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
+import {
+  DEFAULT_ANTHROPIC_CONFIGS,
+  ANTHROPIC_THINKING_EFFORT_OPTIONS,
+} from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { supportsAnthropicThinkingEffort } from "@/lib/modelUtils";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import { Label } from "@/components/ui/label";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 interface AnthropicModelConfigsProps {
   configs: LLMAnthropicConfigsType;
@@ -23,11 +31,16 @@ const AnthropicModelConfigs = ({
 }: AnthropicModelConfigsProps) => {
   const isExclusiveParamModel = useMemo(() => {
     return (
+      model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5
     );
+  }, [model]);
+
+  const supportsThinkingEffort = useMemo(() => {
+    return supportsAnthropicThinkingEffort(model);
   }, [model]);
 
   const hasTemperatureValue = useMemo(() => {
@@ -229,6 +242,26 @@ const AnthropicModelConfigs = ({
           <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
         }
       />
+
+      {supportsThinkingEffort && (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="thinkingEffort" className="text-sm font-medium">
+              Thinking effort
+            </Label>
+            <ExplainerIcon description="Controls how much effort Claude puts into thinking before responding. Higher effort produces more thorough analysis but takes longer. Uses adaptive thinking mode." />
+          </div>
+          <SelectBox
+            id="thinkingEffort"
+            value={configs.thinkingEffort || "high"}
+            onChange={(value: AnthropicThinkingEffort) =>
+              onChange({ thinkingEffort: value })
+            }
+            options={ANTHROPIC_THINKING_EFFORT_OPTIONS}
+            placeholder="Select thinking effort"
+          />
+        </div>
+      )}
     </div>
   );
 };
