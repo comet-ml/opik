@@ -17,7 +17,7 @@ export { Prompt, PromptType } from "@/prompt";
 export { OpikQueryLanguage } from "@/query";
 export type { FilterExpression } from "@/query";
 
-export { AnnotationQueue } from "@/annotation-queue";
+export { TracesAnnotationQueue, ThreadsAnnotationQueue } from "@/annotation-queue";
 export type { AnnotationQueuePublicScope as AnnotationQueueScope } from "@/rest_api/api/types/AnnotationQueuePublicScope";
 
 // Re-export Zod to ensure consumers use the same version as the SDK
