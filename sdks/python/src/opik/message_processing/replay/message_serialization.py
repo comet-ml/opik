@@ -1,7 +1,7 @@
 import datetime
 import json
 import re
-from typing import Any, Dict, Type
+from typing import Any, Dict, Set, Type
 
 from .. import messages
 
@@ -9,6 +9,12 @@ from .. import messages
 _ISO_DATETIME_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$"
 )
+
+# Field names that are known to contain datetime values in message classes.
+# Only these fields will be converted from ISO strings back to datetime objects
+# during deserialization, to avoid false conversions of ISO-like strings in
+# arbitrary dictionary fields (e.g., input, output, metadata).
+DATETIME_FIELD_NAMES: Set[str] = {"start_time", "end_time", "last_updated_at"}
 
 
 class MessageJSONEncoder(json.JSONEncoder):
@@ -20,9 +26,14 @@ class MessageJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def _datetime_object_hook(obj: Dict[str, Any]) -> Dict[str, Any]:
-    """Object hook for json.loads that converts ISO format strings to datetime objects."""
-    for key, value in obj.items():
+def datetime_object_hook(obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Object hook for json.loads that converts ISO format strings to datetime objects.
+
+    Only converts values for keys listed in DATETIME_FIELD_NAMES to avoid
+    false conversions of ISO-like strings in arbitrary data fields.
+    """
+    for key in DATETIME_FIELD_NAMES:
+        value = obj.get(key)
         if isinstance(value, str) and _ISO_DATETIME_PATTERN.match(value):
             try:
                 obj[key] = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -68,5 +79,5 @@ def deserialize_message(message_class: Type[messages.T], json_str: str) -> messa
         An instance of the provided message class populated with data
         from the JSON string.
     """
-    data = json.loads(json_str, object_hook=_datetime_object_hook)
+    data = json.loads(json_str, object_hook=datetime_object_hook)
     return messages.from_db_message_dict(data=data, message_class=message_class)

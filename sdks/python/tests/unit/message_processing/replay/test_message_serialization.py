@@ -577,6 +577,224 @@ class TestUpdateSpanMessageSerialization:
         assert deserialized.total_cost == 0.08
 
 
+class TestDatetimeObjectHook:
+    """Tests for datetime_object_hook: only known datetime fields are converted."""
+
+    def test_datetime_object_hook__known_fields__converts_to_datetime(self):
+        """Known datetime fields with valid ISO strings are converted to datetime."""
+        obj = {
+            "start_time": "2024-01-15T10:30:00",
+            "end_time": "2024-01-15T11:00:00.123456",
+            "last_updated_at": "2024-01-15T12:00:00Z",
+        }
+        result = message_serialization.datetime_object_hook(obj)
+
+        assert isinstance(result["start_time"], datetime.datetime)
+        assert result["start_time"] == datetime.datetime(2024, 1, 15, 10, 30, 0)
+        assert isinstance(result["end_time"], datetime.datetime)
+        assert result["end_time"] == datetime.datetime(2024, 1, 15, 11, 0, 0, 123456)
+        assert isinstance(result["last_updated_at"], datetime.datetime)
+
+    def test_datetime_object_hook__unknown_fields_with_iso_strings__not_converted(self):
+        """ISO-like strings in non-datetime fields must remain as strings."""
+        obj = {
+            "name": "test",
+            "timestamp": "2024-01-15T10:30:00",
+            "created_at": "2024-06-01T08:00:00Z",
+            "some_date": "2024-01-15T10:30:00.123456+02:00",
+        }
+        result = message_serialization.datetime_object_hook(obj)
+
+        assert result["timestamp"] == "2024-01-15T10:30:00"
+        assert isinstance(result["timestamp"], str)
+        assert result["created_at"] == "2024-06-01T08:00:00Z"
+        assert isinstance(result["created_at"], str)
+        assert result["some_date"] == "2024-01-15T10:30:00.123456+02:00"
+        assert isinstance(result["some_date"], str)
+
+    def test_datetime_object_hook__mixed_fields__only_known_fields_converted(self):
+        """Only known datetime fields are converted; others stay as strings."""
+        obj = {
+            "start_time": "2024-01-15T10:30:00",
+            "event_time": "2024-01-15T10:30:00",
+            "name": "test",
+        }
+        result = message_serialization.datetime_object_hook(obj)
+
+        assert isinstance(result["start_time"], datetime.datetime)
+        assert isinstance(result["event_time"], str)
+        assert result["event_time"] == "2024-01-15T10:30:00"
+
+    def test_datetime_object_hook__known_field_non_iso_string__not_converted(self):
+        """Known datetime fields with non-ISO strings are left as-is."""
+        obj = {
+            "start_time": "not-a-date",
+            "end_time": "2024/01/15 10:30:00",
+        }
+        result = message_serialization.datetime_object_hook(obj)
+
+        assert result["start_time"] == "not-a-date"
+        assert isinstance(result["start_time"], str)
+        assert result["end_time"] == "2024/01/15 10:30:00"
+        assert isinstance(result["end_time"], str)
+
+    def test_datetime_object_hook__known_field_non_string_value__not_converted(self):
+        """Known datetime fields with non-string values are left as-is."""
+        obj = {
+            "start_time": 12345,
+            "end_time": None,
+            "last_updated_at": True,
+        }
+        result = message_serialization.datetime_object_hook(obj)
+
+        assert result["start_time"] == 12345
+        assert result["end_time"] is None
+        assert result["last_updated_at"] is True
+
+    def test_datetime_object_hook__empty_dict__returns_empty(self):
+        """Empty dicts pass through without error."""
+        result = message_serialization.datetime_object_hook({})
+        assert result == {}
+
+    def test_datetime_object_hook__no_known_fields__unchanged(self):
+        """Dicts without known datetime fields are returned unchanged."""
+        obj = {"id": "123", "value": 0.95, "data": "2024-01-15T10:30:00"}
+        result = message_serialization.datetime_object_hook(obj)
+
+        assert result == {"id": "123", "value": 0.95, "data": "2024-01-15T10:30:00"}
+        assert isinstance(result["data"], str)
+
+
+class TestIsoStringsInDataFieldsPreserved:
+    """Tests that ISO datetime strings inside input/output/metadata are NOT converted."""
+
+    def test_create_trace__iso_strings_in_input_output_metadata__preserved_as_strings(
+        self,
+    ):
+        """ISO strings in input/output/metadata dicts survive a round-trip as strings."""
+        start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
+
+        original = messages.CreateTraceMessage(
+            trace_id="trace-1",
+            project_name="test-project",
+            name="test-trace",
+            start_time=start_time,
+            end_time=None,
+            input={"query": "test", "requested_at": "2024-06-15T09:00:00Z"},
+            output={"answer": "result", "completed_at": "2024-06-15T09:01:00"},
+            metadata={"event_time": "2024-06-15T09:00:30.123456+02:00"},
+            tags=[],
+            error_info=None,
+            thread_id=None,
+            last_updated_at=None,
+        )
+
+        json_str = message_serialization.serialize_message(original)
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateTraceMessage,
+            json_str=json_str,
+        )
+
+        # Datetime fields are properly converted
+        assert isinstance(deserialized.start_time, datetime.datetime)
+
+        # ISO strings inside input/output/metadata must remain as strings
+        assert deserialized.input["requested_at"] == "2024-06-15T09:00:00Z"
+        assert isinstance(deserialized.input["requested_at"], str)
+
+        assert deserialized.output["completed_at"] == "2024-06-15T09:01:00"
+        assert isinstance(deserialized.output["completed_at"], str)
+
+        assert deserialized.metadata["event_time"] == "2024-06-15T09:00:30.123456+02:00"
+        assert isinstance(deserialized.metadata["event_time"], str)
+
+    def test_create_span__iso_strings_in_input_output_metadata__preserved_as_strings(
+        self,
+    ):
+        """ISO strings in span input/output/metadata dicts survive a round-trip as strings."""
+        start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
+
+        original = messages.CreateSpanMessage(
+            span_id="span-1",
+            trace_id="trace-1",
+            project_name="test-project",
+            parent_span_id=None,
+            name="test-span",
+            start_time=start_time,
+            end_time=None,
+            input={"timestamp": "2024-06-15T09:00:00"},
+            output={"created": "2024-06-15T09:01:00Z"},
+            metadata={"logged_at": "2024-06-15T09:00:30"},
+            tags=[],
+            type="general",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=None,
+        )
+
+        json_str = message_serialization.serialize_message(original)
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateSpanMessage,
+            json_str=json_str,
+        )
+
+        assert isinstance(deserialized.start_time, datetime.datetime)
+
+        assert deserialized.input["timestamp"] == "2024-06-15T09:00:00"
+        assert isinstance(deserialized.input["timestamp"], str)
+
+        assert deserialized.output["created"] == "2024-06-15T09:01:00Z"
+        assert isinstance(deserialized.output["created"], str)
+
+        assert deserialized.metadata["logged_at"] == "2024-06-15T09:00:30"
+        assert isinstance(deserialized.metadata["logged_at"], str)
+
+    def test_create_spans_batch__iso_strings_in_span_data_fields__preserved_as_strings(
+        self,
+    ):
+        """ISO strings in batch span input/output/metadata survive a round-trip as strings."""
+        start_time = datetime.datetime(2024, 1, 1, 12, 0, 0)
+
+        from opik.rest_api.types import span_write
+
+        spans = [
+            span_write.SpanWrite(
+                id="span-1",
+                trace_id="trace-1",
+                project_name="test-project",
+                name="test-span",
+                type="llm",
+                start_time=start_time,
+                input={"user_ts": "2024-03-10T14:30:00Z"},
+                output={"llm_ts": "2024-03-10T14:30:05"},
+                metadata={"logged": "2024-03-10T14:30:01+05:00"},
+            ),
+        ]
+
+        original = messages.CreateSpansBatchMessage(batch=spans)
+
+        json_str = message_serialization.serialize_message(original)
+        deserialized = message_serialization.deserialize_message(
+            message_class=messages.CreateSpansBatchMessage,
+            json_str=json_str,
+        )
+
+        item = deserialized.batch[0]
+        assert isinstance(item.start_time, datetime.datetime)
+
+        assert item.input["user_ts"] == "2024-03-10T14:30:00Z"
+        assert isinstance(item.input["user_ts"], str)
+
+        assert item.output["llm_ts"] == "2024-03-10T14:30:05"
+        assert isinstance(item.output["llm_ts"], str)
+
+        assert item.metadata["logged"] == "2024-03-10T14:30:01+05:00"
+        assert isinstance(item.metadata["logged"], str)
+
+
 class TestSubclassInheritance:
     """Test that subclasses properly inherit serialization behavior."""
 
