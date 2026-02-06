@@ -2,19 +2,47 @@ import React from "react";
 import isUndefined from "lodash/isUndefined";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import { LLMOpenRouterConfigsType } from "@/types/providers";
+import {
+  LLMOpenRouterConfigsType,
+  PROVIDER_MODEL_TYPE,
+  ReasoningEffort,
+} from "@/types/providers";
 import { DEFAULT_OPEN_ROUTER_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
+import {
+  getSupportedReasoningEfforts,
+  isReasoningModel,
+  normalizeReasoningEffortForModel,
+} from "@/lib/modelUtils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 interface OpenRouterModelConfigsProps {
   configs: LLMOpenRouterConfigsType;
+  model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMOpenRouterConfigsType>) => void;
 }
 
 const OpenRouterModelConfigs = ({
   configs,
+  model,
   onChange,
 }: OpenRouterModelConfigsProps) => {
+  const isReasoning = isReasoningModel(model);
+  const supportedReasoningEfforts = getSupportedReasoningEfforts(model);
+  const selectedReasoningEffort =
+    normalizeReasoningEffortForModel(configs.reasoningEffort, model) ||
+    (supportedReasoningEfforts.includes("medium")
+      ? "medium"
+      : supportedReasoningEfforts[0] || "medium");
+
   return (
     <div className="flex w-72 flex-col gap-4">
       {!isUndefined(configs.temperature) && (
@@ -22,13 +50,21 @@ const OpenRouterModelConfigs = ({
           value={configs.temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
-          min={-1}
+          min={isReasoning ? 1 : -1}
           max={1}
           step={0.01}
-          defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE}
+          defaultValue={
+            isReasoning ? 1 : DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE
+          }
           label="Temperature"
           tooltip={
-            <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+            <PromptModelConfigsTooltipContent
+              text={
+                isReasoning
+                  ? "Reasoning models require temperature = 1.0. This setting controls randomness in completions."
+                  : "Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive."
+              }
+            />
           }
         />
       )}
@@ -155,6 +191,54 @@ const OpenRouterModelConfigs = ({
             />
           }
         />
+      )}
+      {!!supportedReasoningEfforts.length && (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="reasoningEffort" className="text-sm font-medium">
+              Reasoning effort
+            </Label>
+            <ExplainerIcon description="Controls reasoning depth when supported by this OpenRouter model. Unsupported levels are gracefully downgraded." />
+          </div>
+          <Select
+            value={selectedReasoningEffort}
+            onValueChange={(value: ReasoningEffort) =>
+              onChange({
+                reasoningEffort: value,
+                custom_parameters: {
+                  ...(configs.custom_parameters || {}),
+                  reasoning: {
+                    effort: value,
+                  },
+                },
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select reasoning effort" />
+            </SelectTrigger>
+            <SelectContent>
+              {supportedReasoningEfforts.includes("none") && (
+                <SelectItem value="none">None</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("minimal") && (
+                <SelectItem value="minimal">Minimal</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("low") && (
+                <SelectItem value="low">Low</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("medium") && (
+                <SelectItem value="medium">Medium</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("high") && (
+                <SelectItem value="high">High</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("xhigh") && (
+                <SelectItem value="xhigh">Extra High</SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
       )}
       <SliderInputControl
         value={configs.throttling ?? DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
