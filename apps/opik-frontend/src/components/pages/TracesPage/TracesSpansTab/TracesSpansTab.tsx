@@ -55,7 +55,6 @@ import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -114,6 +113,8 @@ import {
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import LogsTypeToggle from "@/components/pages/TracesPage/LogsTab/LogsTypeToggle";
+import { LOGS_TYPE } from "@/constants/traces";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -254,10 +255,14 @@ type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
   projectName: string;
+  logsType: LOGS_TYPE;
+  onLogsTypeChange: (type: LOGS_TYPE) => void;
 };
 
 export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   type,
+  logsType,
+  onLogsTypeChange,
   projectId,
   projectName,
 }) => {
@@ -1193,20 +1198,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...(type === TRACE_DATA_TYPE.traces
-            ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
-            : EXPLAINERS_MAP[EXPLAINER_ID.what_are_spans])}
-        />
-      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
       >
         <div className="flex items-center gap-2">
+          <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
