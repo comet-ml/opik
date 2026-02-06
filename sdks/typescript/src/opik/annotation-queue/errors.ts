@@ -16,7 +16,7 @@ export class AnnotationQueueScopeMismatchError extends AnnotationQueueError {
   constructor(itemType: string, queueScope: string) {
     super(
       `Cannot add/remove ${itemType} to/from annotation queue with scope '${queueScope}'. ` +
-        `Use a queue with scope '${itemType === "traces" ? "trace" : "thread"}' instead.`
+        `Use a queue with scope '${itemType}' instead.`
     );
     this.name = "AnnotationQueueScopeMismatchError";
   }

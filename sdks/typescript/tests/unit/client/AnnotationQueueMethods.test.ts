@@ -194,7 +194,7 @@ describe("OpikClient Annotation Queue Methods", () => {
 
       await expect(
         client.getTracesAnnotationQueue("queue-id")
-      ).rejects.toThrow("is not a traces queue");
+      ).rejects.toThrow("is not a trace queue");
     });
   });
 
@@ -257,7 +257,7 @@ describe("OpikClient Annotation Queue Methods", () => {
 
       await expect(
         client.getThreadsAnnotationQueue("queue-id")
-      ).rejects.toThrow("is not a threads queue");
+      ).rejects.toThrow("is not a thread queue");
     });
   });
 
