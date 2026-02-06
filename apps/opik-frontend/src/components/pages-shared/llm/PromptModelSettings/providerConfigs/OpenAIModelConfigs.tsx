@@ -8,7 +8,11 @@ import {
   ReasoningEffort,
 } from "@/types/providers";
 import { DEFAULT_OPEN_AI_CONFIGS } from "@/constants/llm";
-import { isReasoningModel } from "@/lib/modelUtils";
+import {
+  getSupportedReasoningEfforts,
+  isReasoningModel,
+  normalizeReasoningEffortForModel,
+} from "@/lib/modelUtils";
 import isUndefined from "lodash/isUndefined";
 import {
   Select,
@@ -33,6 +37,10 @@ const OpenAIModelConfigs = ({
 }: OpenAIModelSettingsProps) => {
   // Reasoning models (GPT-5.2, GPT-5.1, GPT-5, O1, O3, O4-mini) require temperature = 1.0
   const isReasoning = isReasoningModel(model);
+  const supportedReasoningEfforts = getSupportedReasoningEfforts(model);
+  const selectedReasoningEffort =
+    normalizeReasoningEffortForModel(configs.reasoningEffort, model) ||
+    "medium";
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -131,7 +139,7 @@ const OpenAIModelConfigs = ({
             <ExplainerIcon description="Controls how much effort the model puts into reasoning before responding. Higher effort may result in more thoughtful but slower responses." />
           </div>
           <Select
-            value={configs.reasoningEffort || "medium"}
+            value={selectedReasoningEffort}
             onValueChange={(value: ReasoningEffort) =>
               onChange({ reasoningEffort: value })
             }
@@ -140,11 +148,24 @@ const OpenAIModelConfigs = ({
               <SelectValue placeholder="Select reasoning effort" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="minimal">Minimal</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="xhigh">XHigh</SelectItem>
+              {supportedReasoningEfforts.includes("none") && (
+                <SelectItem value="none">None</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("minimal") && (
+                <SelectItem value="minimal">Minimal</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("low") && (
+                <SelectItem value="low">Low</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("medium") && (
+                <SelectItem value="medium">Medium</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("high") && (
+                <SelectItem value="high">High</SelectItem>
+              )}
+              {supportedReasoningEfforts.includes("xhigh") && (
+                <SelectItem value="xhigh">Extra High</SelectItem>
+              )}
             </SelectContent>
           </Select>
         </div>
