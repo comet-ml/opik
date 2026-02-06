@@ -3368,37 +3368,38 @@ class ExperimentsResourceTest {
             // Verify response
             assertThat(response).isNotNull();
             assertThat(response.content()).isNotNull();
+            assertThat(response.content())
+                    .as("Response should contain experiment1 whose traces reference the deleted project")
+                    .isNotEmpty();
 
-            // Should contain experiment1 whose traces reference the deleted project
-            if (!response.content().isEmpty()) {
-                // Verify dataset1 group exists (with deleted project)
-                var dataset1Group = response.content().get(dataset1.id().toString());
-                if (dataset1Group != null) {
-                    assertThat(dataset1Group.label()).isNotNull();
+            // Verify dataset1 group exists (with deleted project)
+            var dataset1Group = response.content().get(dataset1.id().toString());
+            assertThat(dataset1Group)
+                    .as("Dataset1 group should exist for experiment with deleted project")
+                    .isNotNull();
+            assertThat(dataset1Group.label()).isNotNull();
 
-                    // Verify aggregations for deleted project experiment
-                    var aggregations = dataset1Group.aggregations();
-                    assertThat(aggregations.experimentCount()).isGreaterThan(0L);
-                    assertThat(aggregations.traceCount()).isGreaterThan(0L);
+            // Verify aggregations for deleted project experiment
+            var aggregations = dataset1Group.aggregations();
+            assertThat(aggregations.experimentCount()).isGreaterThan(0L);
+            assertThat(aggregations.traceCount()).isGreaterThan(0L);
 
-                    // When traces are deleted, aggregations based on trace data will be null or zero
-                    // This is expected because the LEFT JOIN fails to find the deleted traces
-                    assertThat(aggregations.totalEstimatedCost())
-                            .as("Total cost should be null when traces are deleted")
-                            .isNull();
+            // When traces are deleted, aggregations based on trace data will be null or zero
+            // This is expected because the LEFT JOIN fails to find the deleted traces
+            assertThat(aggregations.totalEstimatedCost())
+                    .as("Total cost should be null when traces are deleted")
+                    .isNull();
 
-                    assertThat(aggregations.feedbackScores())
-                            .as("Feedback scores should be null when traces are deleted")
-                            .isNull();
+            assertThat(aggregations.feedbackScores())
+                    .as("Feedback scores should be null when traces are deleted")
+                    .isNull();
 
-                    // Duration should exist but may have zero values
-                    assertThat(aggregations.duration()).isNotNull();
+            // Duration should exist but may have zero values
+            assertThat(aggregations.duration()).isNotNull();
 
-                    // Verify expected values
-                    assertThat(aggregations.experimentCount()).isEqualTo(1L);
-                    assertThat(aggregations.traceCount()).isEqualTo(2L);
-                }
-            }
+            // Verify expected values
+            assertThat(aggregations.experimentCount()).isEqualTo(1L);
+            assertThat(aggregations.traceCount()).isEqualTo(2L);
 
             // Verify dataset2 (with valid project) is NOT in the response when filtering by projectDeleted
             var dataset2Group = response.content().get(dataset2.id().toString());
