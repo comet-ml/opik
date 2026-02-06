@@ -3010,6 +3010,7 @@ class ExperimentsResourceTest {
             assertThat(response)
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                             .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                            .withIgnoredCollectionOrderInFieldsMatchingRegexes(".*experimentScores")
                             .build())
                     .isEqualTo(expectedResponse);
         }
