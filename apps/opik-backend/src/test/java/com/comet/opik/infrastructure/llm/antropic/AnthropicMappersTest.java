@@ -14,6 +14,7 @@ import org.junit.jupiter.api.TestInstance;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -46,7 +47,12 @@ public class AnthropicMappersTest {
 
         @Test
         void toCreateMessage() {
-            var request = podamFactory.manufacturePojo(ChatCompletionRequest.class);
+            var request = ChatCompletionRequest.builder()
+                    .from(podamFactory.manufacturePojo(ChatCompletionRequest.class))
+                    .customParameters(Map.of(
+                            "thinking", Map.of("type", "adaptive"),
+                            "output_config", Map.of("effort", "high")))
+                    .build();
 
             AnthropicCreateMessageRequest actual = LlmProviderAnthropicMapper.INSTANCE
                     .toCreateMessageRequest(request);
@@ -57,6 +63,7 @@ public class AnthropicMappersTest {
             assertThat(actual.temperature).isEqualTo(request.temperature());
             assertThat(actual.topP).isEqualTo(request.topP());
             assertThat(actual.stopSequences).isEqualTo(request.stop());
+            assertThat(actual.customParameters).isEqualTo(request.customParameters());
             assertThat(actual.messages).usingRecursiveComparison().ignoringCollectionOrder().isEqualTo(
                     request.messages().stream()
                             .filter(message -> List.of(Role.USER, Role.ASSISTANT).contains(message.role()))

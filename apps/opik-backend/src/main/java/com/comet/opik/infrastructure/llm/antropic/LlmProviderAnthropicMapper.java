@@ -53,6 +53,7 @@ interface LlmProviderAnthropicMapper {
     @Mapping(expression = "java(request.topP())", target = "topP")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")
     @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxTokens")
+    @Mapping(expression = "java(request.customParameters())", target = "customParameters")
     @Mapping(source = "request", target = "messages", qualifiedByName = "mapToMessages")
     @Mapping(source = "request", target = "system", qualifiedByName = "mapToSystemMessages")
     AnthropicCreateMessageRequest toCreateMessageRequest(@NonNull ChatCompletionRequest request);

@@ -5,7 +5,7 @@ import { jsonLanguage } from "@codemirror/lang-json";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import PromptModelSettingsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
-import { LLMCustomConfigsType } from "@/types/providers";
+import { LLMCustomConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { DEFAULT_CUSTOM_CONFIGS } from "@/constants/llm";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import useJsonInput from "@/hooks/useJsonInput";
@@ -14,14 +14,21 @@ import { FormErrorSkeleton } from "@/components/ui/form";
 import isUndefined from "lodash/isUndefined";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Info } from "lucide-react";
+import { isReasoningModel } from "@/lib/modelUtils";
 
 interface CustomModelConfigProps {
   configs: Partial<LLMCustomConfigsType>;
+  model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMCustomConfigsType>) => void;
 }
 
-const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
+const CustomModelConfig = ({
+  configs,
+  model,
+  onChange,
+}: CustomModelConfigProps) => {
   const theme = useCodemirrorTheme({ editable: true });
+  const isReasoning = isReasoningModel(model);
 
   const handleExtraBodyParametersChange = useCallback(
     (value: Record<string, unknown> | null) => {
@@ -43,13 +50,19 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
           value={configs.temperature}
           onChange={(v) => onChange({ temperature: v })}
           id="temperature"
-          min={0}
+          min={isReasoning ? 1 : 0}
           max={1}
           step={0.01}
-          defaultValue={DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
+          defaultValue={isReasoning ? 1 : DEFAULT_CUSTOM_CONFIGS.TEMPERATURE}
           label="Temperature"
           tooltip={
-            <PromptModelSettingsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive." />
+            <PromptModelSettingsTooltipContent
+              text={
+                isReasoning
+                  ? "Reasoning models require temperature = 1.0. This setting controls randomness in completions."
+                  : "Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive."
+              }
+            />
           }
         />
       )}

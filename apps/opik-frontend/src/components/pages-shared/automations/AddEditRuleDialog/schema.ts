@@ -15,6 +15,7 @@ import {
   ProviderMessageType,
 } from "@/types/llm";
 import { generateRandomString } from "@/lib/utils";
+import { isReasoningModel } from "@/lib/modelUtils";
 import { COLUMN_TYPE } from "@/types/shared";
 import {
   supportsImageInput,
@@ -507,9 +508,14 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsSpanFormType,
 ) => {
   const { temperature, seed, custom_parameters } = data.config;
+  const normalizedTemperature = isReasoningModel(
+    data.model as PROVIDER_MODEL_TYPE | "",
+  )
+    ? Math.max(1, temperature)
+    : temperature;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
-    temperature,
+    temperature: normalizedTemperature,
   };
 
   if (seed != null) {

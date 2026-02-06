@@ -1,10 +1,14 @@
 import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import { LLMVertexAIConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  GeminiThinkingLevel,
+  LLMVertexAIConfigsType,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
 import {
   DEFAULT_VERTEX_AI_CONFIGS,
-  THINKING_LEVEL_OPTIONS,
+  THINKING_LEVEL_OPTIONS_PRO,
 } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
@@ -86,11 +90,11 @@ const VertexAIModelConfigs = ({
           </div>
           <SelectBox
             id="thinkingLevel"
-            value={configs.thinkingLevel || "low"}
-            onChange={(value: "low" | "high") =>
+            value={configs.thinkingLevel || "high"}
+            onChange={(value: GeminiThinkingLevel) =>
               onChange({ thinkingLevel: value })
             }
-            options={THINKING_LEVEL_OPTIONS}
+            options={THINKING_LEVEL_OPTIONS_PRO}
             placeholder="Select thinking level"
           />
         </div>

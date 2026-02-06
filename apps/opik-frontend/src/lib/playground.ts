@@ -9,8 +9,12 @@ import {
   DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
 import {
+  getSupportedAnthropicEfforts,
   getDefaultTemperatureForModel,
+  getSupportedReasoningEfforts,
   isReasoningModel,
+  supportsAnthropicAdaptiveThinking,
+  supportsAnthropicExtendedThinking,
   supportsGeminiThinkingLevel,
   supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
@@ -67,17 +71,41 @@ export const getDefaultConfigByProvider = (
       model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5;
 
-    return {
+    const config: LLMAnthropicConfigsType = {
       temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: isExclusive ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
       throttling: DEFAULT_ANTHROPIC_CONFIGS.THROTTLING,
       maxConcurrentRequests: DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS,
     } as LLMAnthropicConfigsType;
+
+    const supportedAnthropicEfforts = getSupportedAnthropicEfforts(model);
+
+    if (supportedAnthropicEfforts.length) {
+      config.thinkingEffort = supportedAnthropicEfforts.includes("high")
+        ? "high"
+        : supportedAnthropicEfforts[supportedAnthropicEfforts.length - 1];
+      config.custom_parameters = {
+        output_config: { effort: config.thinkingEffort },
+      };
+    }
+
+    if (supportsAnthropicAdaptiveThinking(model)) {
+      config.thinkingMode = "adaptive";
+      config.custom_parameters = {
+        ...(config.custom_parameters || {}),
+        thinking: { type: "adaptive" },
+      };
+    } else if (supportsAnthropicExtendedThinking(model)) {
+      config.thinkingMode = "disabled";
+      config.thinkingBudgetTokens = 1024;
+    }
+
+    return config;
   }
 
   if (providerType === PROVIDER_TYPE.OPEN_ROUTER) {
-    return {
+    const config: LLMOpenRouterConfigsType = {
       maxTokens: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_TOKENS,
       temperature: DEFAULT_OPEN_ROUTER_CONFIGS.TEMPERATURE,
       topP: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_P,
@@ -87,10 +115,25 @@ export const getDefaultConfigByProvider = (
       repetitionPenalty: DEFAULT_OPEN_ROUTER_CONFIGS.REPETITION_PENALTY,
       minP: DEFAULT_OPEN_ROUTER_CONFIGS.MIN_P,
       topA: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_A,
+      custom_parameters: DEFAULT_OPEN_ROUTER_CONFIGS.CUSTOM_PARAMETERS,
       throttling: DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING,
       maxConcurrentRequests:
         DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS,
-    } as LLMOpenRouterConfigsType;
+    };
+
+    const supportedReasoningEfforts = getSupportedReasoningEfforts(model);
+    if (supportedReasoningEfforts.length) {
+      config.reasoningEffort = supportedReasoningEfforts.includes("medium")
+        ? "medium"
+        : supportedReasoningEfforts[supportedReasoningEfforts.length - 1];
+      config.custom_parameters = {
+        reasoning: {
+          effort: config.reasoningEffort,
+        },
+      };
+    }
+
+    return config;
   }
 
   if (providerType === PROVIDER_TYPE.GEMINI) {
@@ -121,7 +164,7 @@ export const getDefaultConfigByProvider = (
 
     // Add thinkingLevel default for Vertex AI Gemini 3 Pro model
     if (supportsVertexAIThinkingLevel(model)) {
-      config.thinkingLevel = "low";
+      config.thinkingLevel = "high";
     }
 
     return config;
@@ -129,7 +172,7 @@ export const getDefaultConfigByProvider = (
 
   if (providerType === PROVIDER_TYPE.CUSTOM) {
     return {
-      temperature: DEFAULT_CUSTOM_CONFIGS.TEMPERATURE,
+      temperature: getDefaultTemperatureForModel(model),
       maxCompletionTokens: DEFAULT_CUSTOM_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_CUSTOM_CONFIGS.TOP_P,
       frequencyPenalty: DEFAULT_CUSTOM_CONFIGS.FREQUENCY_PENALTY,

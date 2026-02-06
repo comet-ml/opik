@@ -5,10 +5,23 @@ import {
   LLMAnthropicConfigsType,
   PROVIDER_MODEL_TYPE,
 } from "@/types/providers";
-import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
+import {
+  ANTHROPIC_THINKING_EFFORT_OPTIONS,
+  DEFAULT_ANTHROPIC_CONFIGS,
+} from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import { DropdownOption } from "@/types/shared";
+import {
+  getSupportedAnthropicEfforts,
+  normalizeAnthropicEffortForModel,
+  supportsAnthropicAdaptiveThinking,
+  supportsAnthropicExtendedThinking,
+} from "@/lib/modelUtils";
 
 interface AnthropicModelConfigsProps {
   configs: LLMAnthropicConfigsType;
@@ -21,6 +34,133 @@ const AnthropicModelConfigs = ({
   onChange,
   model,
 }: AnthropicModelConfigsProps) => {
+  const hasExtendedThinking = supportsAnthropicExtendedThinking(model);
+  const hasAdaptiveThinking = supportsAnthropicAdaptiveThinking(model);
+  const supportedEfforts = getSupportedAnthropicEfforts(model);
+
+  const thinkingMode = hasExtendedThinking
+    ? configs.thinkingMode || (hasAdaptiveThinking ? "adaptive" : "disabled")
+    : "disabled";
+  const thinkingModeOptions: DropdownOption<
+    "disabled" | "adaptive" | "manual"
+  >[] = [
+    ...(hasAdaptiveThinking
+      ? [{ label: "Adaptive (Recommended)", value: "adaptive" as const }]
+      : []),
+    { label: "Disabled", value: "disabled" },
+    { label: "Manual (budget tokens)", value: "manual" },
+  ];
+
+  const thinkingEffort =
+    normalizeAnthropicEffortForModel(configs.thinkingEffort, model) || "high";
+  const thinkingBudgetTokens = configs.thinkingBudgetTokens || 1024;
+  const anthropicEffortOptions = ANTHROPIC_THINKING_EFFORT_OPTIONS.filter(
+    (option) => supportedEfforts.includes(option.value),
+  );
+
+  const buildThinkingCustomParameters = useCallback(
+    (
+      mode: "disabled" | "adaptive" | "manual",
+      overrides?: {
+        effort?: "low" | "medium" | "high" | "max";
+        budgetTokens?: number;
+      },
+    ) => {
+      const existing = (configs.custom_parameters || {}) as Record<
+        string,
+        unknown
+      >;
+      const effort = overrides?.effort ?? thinkingEffort;
+      const budgetTokens = overrides?.budgetTokens ?? thinkingBudgetTokens;
+      const normalizedEffort =
+        normalizeAnthropicEffortForModel(effort, model) || effort;
+
+      if (!hasExtendedThinking || mode === "disabled") {
+        const next = { ...existing };
+        delete next.thinking;
+        if (supportedEfforts.length) {
+          next.output_config = {
+            effort: normalizedEffort,
+          };
+        } else {
+          delete next.output_config;
+        }
+        return Object.keys(next).length ? next : null;
+      }
+
+      if (mode === "adaptive") {
+        return {
+          ...existing,
+          thinking: {
+            type: "adaptive",
+          },
+          output_config: {
+            effort: normalizedEffort,
+          },
+        };
+      }
+
+      return {
+        ...existing,
+        ...(supportedEfforts.length
+          ? {
+              output_config: {
+                effort: normalizedEffort,
+              },
+            }
+          : {}),
+        thinking: {
+          type: "enabled",
+          budget_tokens: budgetTokens,
+        },
+      };
+    },
+    [
+      configs.custom_parameters,
+      hasExtendedThinking,
+      model,
+      supportedEfforts.length,
+      thinkingBudgetTokens,
+      thinkingEffort,
+    ],
+  );
+
+  const updateThinkingMode = useCallback(
+    (mode: "disabled" | "adaptive" | "manual") => {
+      onChange({
+        thinkingMode: mode,
+        custom_parameters: buildThinkingCustomParameters(mode),
+      });
+    },
+    [buildThinkingCustomParameters, onChange],
+  );
+
+  const updateThinkingEffort = useCallback(
+    (effort: "low" | "medium" | "high" | "max") => {
+      onChange({
+        thinkingEffort: effort,
+        custom_parameters: buildThinkingCustomParameters(
+          thinkingMode as "adaptive" | "manual" | "disabled",
+          { effort },
+        ),
+      });
+    },
+    [buildThinkingCustomParameters, onChange, thinkingMode],
+  );
+
+  const updateThinkingBudget = useCallback(
+    (budget: number) => {
+      onChange({
+        thinkingBudgetTokens: budget,
+        custom_parameters: buildThinkingCustomParameters(
+          thinkingMode as "adaptive" | "manual" | "disabled",
+          { budgetTokens: budget },
+        ),
+      });
+    },
+    [buildThinkingCustomParameters, onChange, thinkingMode],
+  );
+
   const isExclusiveParamModel = useMemo(() => {
     return (
       model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5 ||
@@ -198,6 +338,65 @@ const AnthropicModelConfigs = ({
           </div>
         )}
       </div>
+
+      {(hasExtendedThinking || supportedEfforts.length > 0) && (
+        <div className="space-y-4 rounded-md border p-3">
+          {hasExtendedThinking && (
+            <>
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="thinkingMode" className="text-sm font-medium">
+                  Thinking mode
+                </Label>
+                <ExplainerIcon description="Configure Anthropic extended thinking. Opus 4.6 supports adaptive thinking; older models support manual thinking with budget tokens." />
+              </div>
+              <SelectBox
+                id="thinkingMode"
+                value={thinkingMode}
+                onChange={(value: "disabled" | "adaptive" | "manual") =>
+                  updateThinkingMode(value)
+                }
+                options={thinkingModeOptions}
+              />
+            </>
+          )}
+
+          {supportedEfforts.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Label htmlFor="thinkingEffort" className="text-sm font-medium">
+                  Effort
+                </Label>
+                <ExplainerIcon description="Controls response token spend behavior. For Opus 4.6, this is the recommended thinking-depth control with adaptive thinking." />
+              </div>
+              <SelectBox
+                id="thinkingEffort"
+                value={thinkingEffort}
+                onChange={(value: "low" | "medium" | "high" | "max") =>
+                  updateThinkingEffort(value)
+                }
+                options={anthropicEffortOptions}
+                placeholder="Select effort"
+              />
+            </div>
+          )}
+
+          {hasExtendedThinking && thinkingMode === "manual" && (
+            <SliderInputControl
+              value={thinkingBudgetTokens}
+              onChange={updateThinkingBudget}
+              id="thinkingBudgetTokens"
+              min={1024}
+              max={32768}
+              step={1}
+              defaultValue={1024}
+              label="Thinking budget tokens"
+              tooltip={
+                <PromptModelConfigsTooltipContent text="Maximum tokens allowed for manual extended thinking (`thinking.type=enabled`)." />
+              }
+            />
+          )}
+        </div>
+      )}
 
       <SliderInputControl
         value={configs.throttling ?? DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}

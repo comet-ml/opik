@@ -10,7 +10,11 @@ import {
   PythonCodeDetailsTraceForm,
   PythonCodeDetailsSpanForm,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  GeminiThinkingLevel,
+  PROVIDER_MODEL_TYPE,
+  ReasoningEffort,
+} from "@/types/providers";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_KEY = "playground-selected-dataset";
@@ -61,6 +65,7 @@ export const DEFAULT_OPEN_ROUTER_CONFIGS = {
   REPETITION_PENALTY: 1,
   MIN_P: 0,
   TOP_A: 0,
+  CUSTOM_PARAMETERS: null,
   THROTTLING: 0,
   MAX_CONCURRENT_REQUESTS: 5,
 };
@@ -91,20 +96,188 @@ export const REASONING_MODELS = [
   // GPT-5.2 family (chat models only - GPT-5.2 Pro uses Responses API)
   PROVIDER_MODEL_TYPE.GPT_5_2,
   PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2_CHAT_LATEST,
   // GPT-5.1 family
   PROVIDER_MODEL_TYPE.GPT_5_1,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CHAT,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CODEX,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CODEX_MINI,
   // GPT-5 family
   PROVIDER_MODEL_TYPE.GPT_5,
   PROVIDER_MODEL_TYPE.GPT_5_MINI,
   PROVIDER_MODEL_TYPE.GPT_5_NANO,
   PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CHAT,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CODEX,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_MINI,
+  PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
   // O* reasoning models
   PROVIDER_MODEL_TYPE.GPT_O1,
   PROVIDER_MODEL_TYPE.GPT_O1_MINI,
   PROVIDER_MODEL_TYPE.GPT_O3,
   PROVIDER_MODEL_TYPE.GPT_O3_MINI,
   PROVIDER_MODEL_TYPE.GPT_O4_MINI,
+  PROVIDER_MODEL_TYPE.OPENAI_O1,
+  PROVIDER_MODEL_TYPE.OPENAI_O3,
+  PROVIDER_MODEL_TYPE.OPENAI_O3_MINI,
+  PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH,
+  PROVIDER_MODEL_TYPE.OPENAI_O4_MINI,
+  PROVIDER_MODEL_TYPE.OPENAI_O4_MINI_HIGH,
 ] as const;
+
+export const REASONING_EFFORT_ORDER: readonly ReasoningEffort[] = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+];
+
+export const THINKING_LEVEL_ORDER: readonly GeminiThinkingLevel[] = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+];
+
+export const DEFAULT_REASONING_EFFORTS: readonly ReasoningEffort[] = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+];
+
+export const OPENAI_REASONING_EFFORT_STANDARD: readonly ReasoningEffort[] = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+];
+
+export const OPENAI_REASONING_EFFORT_WITH_NONE: readonly ReasoningEffort[] = [
+  "none",
+  ...OPENAI_REASONING_EFFORT_STANDARD,
+];
+
+export const OPENAI_REASONING_EFFORT_BY_MODEL: Partial<
+  Record<PROVIDER_MODEL_TYPE, readonly ReasoningEffort[]>
+> = {
+  // GPT-5 family
+  [PROVIDER_MODEL_TYPE.GPT_5]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.GPT_5_MINI]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.GPT_5_NANO]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.GPT_5_1]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.GPT_5_2]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST]: OPENAI_REASONING_EFFORT_WITH_NONE,
+
+  // OpenRouter OpenAI aliases for GPT-5 family
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_CHAT]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_MINI]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CHAT]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CODEX]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CODEX_MINI]:
+    OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2]: OPENAI_REASONING_EFFORT_WITH_NONE,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2_CHAT_LATEST]:
+    OPENAI_REASONING_EFFORT_WITH_NONE,
+
+  // GPT-5.3 Codex supports the widest effort range
+  [PROVIDER_MODEL_TYPE.GPT_5_3_CODEX]: REASONING_EFFORT_ORDER,
+  [PROVIDER_MODEL_TYPE.OPENAI_GPT_5_3_CODEX]: REASONING_EFFORT_ORDER,
+
+  // O-series reasoning models
+  [PROVIDER_MODEL_TYPE.GPT_O1]: OPENAI_REASONING_EFFORT_STANDARD,
+  [PROVIDER_MODEL_TYPE.GPT_O1_MINI]: OPENAI_REASONING_EFFORT_STANDARD,
+  [PROVIDER_MODEL_TYPE.GPT_O3]: OPENAI_REASONING_EFFORT_STANDARD,
+  [PROVIDER_MODEL_TYPE.GPT_O3_MINI]: OPENAI_REASONING_EFFORT_STANDARD,
+  [PROVIDER_MODEL_TYPE.GPT_O4_MINI]: OPENAI_REASONING_EFFORT_STANDARD,
+  [PROVIDER_MODEL_TYPE.OPENAI_O1]: OPENAI_REASONING_EFFORT_STANDARD,
+  [PROVIDER_MODEL_TYPE.OPENAI_O3]: OPENAI_REASONING_EFFORT_STANDARD,
+  [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI]: OPENAI_REASONING_EFFORT_STANDARD,
+  [PROVIDER_MODEL_TYPE.OPENAI_O3_MINI_HIGH]: ["high"],
+  [PROVIDER_MODEL_TYPE.OPENAI_O4_MINI]: OPENAI_REASONING_EFFORT_STANDARD,
+  [PROVIDER_MODEL_TYPE.OPENAI_O4_MINI_HIGH]: ["high"],
+};
+
+export const OPENROUTER_REASONING_EFFORT_OPENAI_XAI_PREFIXES = [
+  "openai/",
+  "x-ai/",
+] as const;
+
+// OpenRouter maps effort directly to Gemini 3 thinking levels.
+export const OPENROUTER_REASONING_EFFORT_GEMINI3_PREFIXES = [
+  "google/gemini-3-pro",
+  "google/gemini-3-flash",
+] as const;
+
+// Families where OpenRouter maps effort -> reasoning.max_tokens style behavior.
+export const OPENROUTER_REASONING_EFFORT_MAXTOKENS_PREFIXES = [
+  "anthropic/",
+  "alibaba/",
+  "qwen/",
+  "moonshotai/",
+  "z-ai/",
+  "baidu/",
+  "thudm/",
+] as const;
+
+export const OPENROUTER_REASONING_EFFORTS_OPENAI_XAI: readonly ReasoningEffort[] =
+  ["none", "minimal", "low", "medium", "high", "xhigh"];
+
+export const OPENROUTER_REASONING_EFFORTS_GEMINI3: readonly ReasoningEffort[] =
+  ["minimal", "low", "medium", "high"];
+
+export const OPENROUTER_REASONING_EFFORTS_MAXTOKENS: readonly ReasoningEffort[] =
+  ["minimal", "low", "medium", "high", "xhigh"];
+
+export const GEMINI_THINKING_LEVEL_BY_MODEL: Partial<
+  Record<PROVIDER_MODEL_TYPE, readonly GeminiThinkingLevel[]>
+> = {
+  [PROVIDER_MODEL_TYPE.GEMINI_3_FLASH]: ["minimal", "low", "medium", "high"],
+  [PROVIDER_MODEL_TYPE.GEMINI_3_PRO]: ["low", "high"],
+  [PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO]: ["low", "high"],
+};
+
+export const ANTHROPIC_ADAPTIVE_THINKING_MODELS = ["claude-opus-4-6"] as const;
+
+export const ANTHROPIC_EXTENDED_THINKING_MODELS = [
+  "claude-opus-4-6",
+  PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
+  PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
+  PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4,
+  PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5,
+  PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
+  PROVIDER_MODEL_TYPE.CLAUDE_SONNET_3_7,
+  PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+] as const;
+
+export const ANTHROPIC_EFFORT_BY_MODEL: Record<
+  string,
+  readonly ("low" | "medium" | "high" | "max")[]
+> = {
+  "claude-opus-4-6": ["low", "medium", "high", "max"],
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5]: ["low", "medium", "high"],
+};
+
+export const ANTHROPIC_THINKING_EFFORT_OPTIONS: Array<{
+  label: string;
+  value: "low" | "medium" | "high" | "max";
+}> = [
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High (Default)", value: "high" },
+  { label: "Max", value: "max" },
+];
 
 // Thinking level options for Gemini 3 Pro models (low, high)
 export const THINKING_LEVEL_OPTIONS_PRO: Array<{
@@ -115,7 +288,7 @@ export const THINKING_LEVEL_OPTIONS_PRO: Array<{
   { label: "High (Default)", value: "high" },
 ];
 
-// Thinking level options for Gemini 3 Flash models (all 4 levels)
+// Thinking level options for Gemini 3 Flash models
 // Flash supports: minimal, low, medium, high
 export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
   label: string;

@@ -30,8 +30,8 @@ const GeminiModelConfigs = ({
   const isGemini3Flash = model === PROVIDER_MODEL_TYPE.GEMINI_3_FLASH;
 
   // Get appropriate options based on model
-  // Flash supports all 4 levels (minimal, low, medium, high)
-  // Pro supports only 2 levels (low, high)
+  // Flash supports minimal, low, medium, high
+  // Pro supports low, high
   // Both default to "high" (dynamic reasoning)
   const thinkingLevelOptions = isGemini3Flash
     ? THINKING_LEVEL_OPTIONS_FLASH
