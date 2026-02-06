@@ -1,7 +1,5 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { ExternalLink } from "lucide-react";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
@@ -10,6 +8,7 @@ import { FeedbackDefinition } from "@/types/feedback-definitions";
 import useAppStore from "@/store/AppStore";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
 
 const DEFAULT_LOADED_FEEDBACK_DEFINITION_ITEMS = 1000;
 
@@ -44,6 +43,14 @@ const FeedbackDefinitionsSelectBox: React.FC<
   const { className, disabled, valueField = "id" } = props;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
+  const [feedbackDefinitionDialogOpen, setFeedbackDefinitionDialogOpen] =
+    useState(false);
+  const dialogKeyRef = useRef(0);
+
+  const handleAddNewClick = useCallback(() => {
+    dialogKeyRef.current = dialogKeyRef.current + 1;
+    setFeedbackDefinitionDialogOpen(true);
+  }, []);
 
   const { data, isLoading } = useFeedbackDefinitionsList(
     {
@@ -91,40 +98,37 @@ const FeedbackDefinitionsSelectBox: React.FC<
         <Separator className="my-1" />
         <Button
           variant="link"
-          className="w-full justify-start gap-1 px-2"
-          asChild
+          className="w-full justify-start px-2"
+          onClick={handleAddNewClick}
         >
-          <Link
-            to="/$workspaceName/configuration"
-            params={{ workspaceName }}
-            search={{ tab: "feedback-definitions" }}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1"
-          >
-            <span>Add new feedback definition</span>
-            <ExternalLink className="size-3" />
-          </Link>
+          Add new feedback definition
         </Button>
       </div>
     ),
-    [workspaceName],
+    [handleAddNewClick],
   );
 
   return (
-    <LoadableSelectBox
-      {...loadableSelectBoxProps}
-      actionPanel={actionPanel}
-      onLoadMore={
-        total > DEFAULT_LOADED_FEEDBACK_DEFINITION_ITEMS && !isLoadedMore
-          ? loadMoreHandler
-          : undefined
-      }
-      buttonClassName={className}
-      disabled={disabled}
-      isLoading={isLoading}
-      optionsCount={DEFAULT_LOADED_FEEDBACK_DEFINITION_ITEMS}
-    />
+    <>
+      <LoadableSelectBox
+        {...loadableSelectBoxProps}
+        actionPanel={actionPanel}
+        onLoadMore={
+          total > DEFAULT_LOADED_FEEDBACK_DEFINITION_ITEMS && !isLoadedMore
+            ? loadMoreHandler
+            : undefined
+        }
+        buttonClassName={className}
+        disabled={disabled}
+        isLoading={isLoading}
+        optionsCount={DEFAULT_LOADED_FEEDBACK_DEFINITION_ITEMS}
+      />
+      <AddEditFeedbackDefinitionDialog
+        key={dialogKeyRef.current}
+        open={feedbackDefinitionDialogOpen}
+        setOpen={setFeedbackDefinitionDialogOpen}
+      />
+    </>
   );
 };
 
