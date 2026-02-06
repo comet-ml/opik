@@ -66,8 +66,7 @@ export const useLLMMessagesExpandAll = (
   preserveKey?: string,
 ) => {
   const [initialCount] = useState(allMessageIds.length);
-  const defaultExpanded =
-    initialCount <= LLM_MESSAGES_COLLAPSE_THRESHOLD;
+  const defaultExpanded = initialCount <= LLM_MESSAGES_COLLAPSE_THRESHOLD;
 
   const [localIsAllExpanded, setLocalIsAllExpanded] =
     useState<boolean>(defaultExpanded);

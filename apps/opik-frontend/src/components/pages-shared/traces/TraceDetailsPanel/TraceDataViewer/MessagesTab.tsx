@@ -157,7 +157,7 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
         </PrettyLLMMessage.Content>
       </PrettyLLMMessage.Root>
     ),
-    [combinedMessages],
+    [],
   );
 
   const expandCollapseButton = (
@@ -208,7 +208,9 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
                 ref={virtualizer.measureElement}
                 className="absolute left-0 w-full pb-1"
                 style={{
-                  transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
+                  transform: `translateY(${
+                    virtualRow.start - virtualizer.options.scrollMargin
+                  }px)`,
                 }}
               >
                 {renderMessage(message)}
