@@ -412,6 +412,32 @@ export class OpikClient {
     return this.createAnnotationQueueInternal(options, ThreadsAnnotationQueue);
   };
 
+  private async fetchAnnotationQueueById<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
+    id: string,
+    expectedScope: "trace" | "thread",
+    QueueClass: new (data: OpikApi.AnnotationQueuePublic, opik: OpikClient) => T
+  ): Promise<T> {
+    logger.debug(`Getting ${expectedScope} annotation queue with ID "${id}"`);
+
+    try {
+      const response = await this.api.annotationQueues.getAnnotationQueueById(id);
+
+      if (response.scope !== expectedScope) {
+        throw new Error(`Annotation queue "${id}" is not a ${expectedScope} queue (scope: ${response.scope})`);
+      }
+
+      return new QueueClass(response, this);
+    } catch (error) {
+      if (error instanceof OpikApiError) {
+        if (error.statusCode === 404) {
+          throw new AnnotationQueueNotFoundError(id);
+        }
+        logger.error(`Failed to get ${expectedScope} annotation queue with ID "${id}"`, { error });
+      }
+      throw error;
+    }
+  }
+
   /**
    * Retrieves a traces annotation queue by its ID.
    *
@@ -420,23 +446,7 @@ export class OpikClient {
    * @throws AnnotationQueueNotFoundError if the queue doesn't exist or is not a traces queue
    */
   public getTracesAnnotationQueue = async (id: string): Promise<TracesAnnotationQueue> => {
-    logger.debug(`Getting traces annotation queue with ID "${id}"`);
-
-    try {
-      const response = await this.api.annotationQueues.getAnnotationQueueById(id);
-
-      if (response.scope !== "trace") {
-        throw new Error(`Annotation queue "${id}" is not a traces queue (scope: ${response.scope})`);
-      }
-
-      return new TracesAnnotationQueue(response, this);
-    } catch (error) {
-      if (error instanceof OpikApiError && error.statusCode === 404) {
-        throw new AnnotationQueueNotFoundError(id);
-      }
-      logger.error(`Failed to get traces annotation queue with ID "${id}"`, { error });
-      throw error;
-    }
+    return this.fetchAnnotationQueueById(id, "trace", TracesAnnotationQueue);
   };
 
   /**
@@ -447,23 +457,7 @@ export class OpikClient {
    * @throws AnnotationQueueNotFoundError if the queue doesn't exist or is not a threads queue
    */
   public getThreadsAnnotationQueue = async (id: string): Promise<ThreadsAnnotationQueue> => {
-    logger.debug(`Getting threads annotation queue with ID "${id}"`);
-
-    try {
-      const response = await this.api.annotationQueues.getAnnotationQueueById(id);
-
-      if (response.scope !== "thread") {
-        throw new Error(`Annotation queue "${id}" is not a threads queue (scope: ${response.scope})`);
-      }
-
-      return new ThreadsAnnotationQueue(response, this);
-    } catch (error) {
-      if (error instanceof OpikApiError && error.statusCode === 404) {
-        throw new AnnotationQueueNotFoundError(id);
-      }
-      logger.error(`Failed to get threads annotation queue with ID "${id}"`, { error });
-      throw error;
-    }
+    return this.fetchAnnotationQueueById(id, "thread", ThreadsAnnotationQueue);
   };
 
   /**
