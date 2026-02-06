@@ -221,7 +221,7 @@ class ExperimentDAO {
                 <if(ids_list)> AND id IN :ids_list <endif>
                 <if(experiment_ids)> AND id IN :experiment_ids <endif>
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
-                <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
+                <if(prompt_ids)>AND hasAny(prompt_ids, :prompt_ids)<endif>
                 <if(filters)> AND <filters> <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 <if(limit &&
@@ -236,9 +236,9 @@ class ExperimentDAO {
                 LIMIT :limit <if(offset)> OFFSET :offset <endif>
                 <endif>
             ), experiment_items_final AS (
-                SELECT
+                SELECT DISTINCT
                     id, experiment_id, trace_id
-                FROM experiment_items final
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN (SELECT id FROM experiments_final)
             ), experiment_durations AS (
@@ -372,7 +372,7 @@ class ExperimentDAO {
                         avg(fs.value) AS avg_value
                     FROM experiment_items_final as et
                     INNER JOIN (
-                        SELECT id FROM traces final
+                        SELECT DISTINCT id FROM traces
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>AND project_id IN :target_project_ids
                         <else>
@@ -557,7 +557,7 @@ class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(experiment_ids)> AND id IN :experiment_ids <endif>
-                <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
+                <if(prompt_ids)>AND hasAny(prompt_ids, :prompt_ids)<endif>
                 <if(filters)> AND <filters> <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -818,7 +818,7 @@ class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(experiment_ids)> AND id IN :experiment_ids <endif>
-                <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
+                <if(prompt_ids)>AND hasAny(prompt_ids, :prompt_ids)<endif>
                 <if(filters)> AND <filters> <endif>
             ), experiment_items_trace_scope AS (
                 SELECT DISTINCT ei.trace_id
@@ -844,9 +844,9 @@ class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(filters)> AND <filters> <endif>
             ), experiment_items_final AS (
-                SELECT
+                SELECT DISTINCT
                     id, experiment_id, trace_id
-                FROM experiment_items final
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN (SELECT id FROM experiments_final)
             ), experiment_durations AS (
@@ -973,7 +973,7 @@ class ExperimentDAO {
                         avg(fs.value) AS avg_value
                     FROM experiment_items_final as et
                     INNER JOIN (
-                        SELECT id FROM traces final
+                        SELECT DISTINCT id FROM traces
                         WHERE workspace_id = :workspace_id
                         <if(has_target_projects)>AND project_id IN :target_project_ids
                         <else>
@@ -1438,7 +1438,7 @@ class ExperimentDAO {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             // First, get the target project IDs to reduce traces, spans, and feedback_scores table scans
-            return getTargetProjectIdsForExperiments(workspaceId, TargetProjectsCriteria.from(experimentSearchCriteria))
+            return getTargetProjectIdsForExperiments(TargetProjectsCriteria.from(experimentSearchCriteria))
                     .flatMap(targetProjectIds -> countTotal(experimentSearchCriteria, targetProjectIds)
                             .flatMap(total -> find(page, size, experimentSearchCriteria, total, targetProjectIds)));
         });
@@ -1767,7 +1767,7 @@ class ExperimentDAO {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             // First, get the target project IDs to reduce traces table scans
-            return getTargetProjectIdsForExperiments(workspaceId, TargetProjectsCriteria.from(criteria))
+            return getTargetProjectIdsForExperiments(TargetProjectsCriteria.from(criteria))
                     .flatMapMany(targetProjectIds -> Mono.from(connectionFactory.create())
                             .flatMapMany(connection -> makeFluxContextAware((userName, wsId) -> {
                                 var template = newGroupTemplate(FIND_GROUPS, criteria,
@@ -1800,7 +1800,7 @@ class ExperimentDAO {
         return Flux.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return getTargetProjectIdsForExperiments(workspaceId, TargetProjectsCriteria.from(criteria))
+            return getTargetProjectIdsForExperiments(TargetProjectsCriteria.from(criteria))
                     .flatMapMany(targetProjectIds -> {
                         boolean hasTargetProjects = CollectionUtils.isNotEmpty(targetProjectIds);
                         log.info("findGroupsAggregations: hasTargetProjects='{}', targetProjectIds='{}', criteria='{}'",
@@ -1871,8 +1871,7 @@ class ExperimentDAO {
      * Get target project IDs from traces for the given experiments.
      * This is executed as a separate query to reduce traces, spans, and feedback_scores table scans in the main query.
      */
-    private Mono<Set<UUID>> getTargetProjectIdsForExperiments(String workspaceId,
-            TargetProjectsCriteria criteria) {
+    private Mono<Set<UUID>> getTargetProjectIdsForExperiments(TargetProjectsCriteria criteria) {
         // Skip optimization when shouldSkipOptimization() returns true (e.g., projectDeleted=true)
         if (criteria.shouldSkipOptimization()) {
             log.info("Skipping target project IDs optimization due to projectDeleted='{}', criteria='{}'",
@@ -1906,13 +1905,11 @@ class ExperimentDAO {
                                     FilterStrategy.EXPERIMENT))
                             .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
 
-                    template.add("log_comment",
-                            "get_target_project_ids_for_experiments:workspace_id:" + workspaceId);
+                    template.add("log_comment", "get_target_project_ids_for_experiments");
 
                     String query = template.render();
 
-                    var statement = connection.createStatement(query)
-                            .bind("workspace_id", workspaceId);
+                    var statement = connection.createStatement(query);
 
                     // Bind the same criteria as the main query
                     Optional.ofNullable(criteria.datasetId())
@@ -1939,7 +1936,7 @@ class ExperimentDAO {
                                 filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
                             });
 
-                    return Flux.from(statement.execute())
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                             .flatMap(result -> result.map((row, metadata) -> {
                                 var projectId = row.get("project_id", String.class);
                                 return projectId != null && !projectId.isEmpty() ? UUID.fromString(projectId) : null;
