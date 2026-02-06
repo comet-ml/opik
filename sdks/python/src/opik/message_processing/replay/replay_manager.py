@@ -145,6 +145,14 @@ class ReplayManager:
             LOGGER.debug(msg, exc_info=True)
 
     def close(self) -> None:
+        """
+        Closes the current manager, releasing all associated resources.
+
+        This method ensures the proper cleanup of resources such as database connections
+        and temporary directories. It performs the operations within a thread-safe context
+        by acquiring an internal lock. If the manager is already closed, the method will
+        return immediately without performing any actions.
+        """
         if self.closed:
             return
 
@@ -177,6 +185,20 @@ class ReplayManager:
         message: messages.BaseMessage,
         status: MessageStatus = MessageStatus.registered,
     ) -> None:
+        """
+        Registers a message into the database if the system is initialized and not closed.
+
+        This method processes the given message, converts it into a JSON format, and
+        inserts it into the database with the provided or default status. If the system
+        is either not initialized or already closed, the message registration will be
+        ignored.
+
+        Args:
+            message: The message object to be registered. This
+                object must have attributes such as `message_id` and `message_type`.
+            status: The status of the message to be registered.
+                Defaults to `MessageStatus.registered`.
+        """
         if not self.initialized:
             LOGGER.debug("Not initialized - register message ignored")
             return
@@ -210,6 +232,16 @@ class ReplayManager:
         messages_batch: List[messages.BaseMessage],
         status: MessageStatus = MessageStatus.registered,
     ) -> None:
+        """
+        Registers a batch of messages in the database. If the system is not initialized or
+        already closed, the operation is ignored.
+
+        Args:
+            messages_batch: A list of message objects to be
+                registered in the database.
+            status: The status to be associated with the registered messages.
+                Defaults to MessageStatus.registered.
+        """
         if not self.initialized:
             LOGGER.debug("Not initialized - register messages list ignored")
             return
@@ -272,6 +304,17 @@ class ReplayManager:
     def update_messages_batch(
         self, message_ids: List[int], status: MessageStatus
     ) -> None:
+        """
+        Updates the status of a batch of messages in the messages database table or deletes
+        the messages if their status is 'delivered'. The function ensures thread safety
+        and performs operations only if the instance is initialized and not closed.
+
+        Args:
+            message_ids: A list of message IDs to be updated or deleted.
+            status: The new status to be assigned to the messages or to
+                determine if messages should be deleted when the status is 'delivered'.
+
+        """
         if not self.initialized:
             LOGGER.debug(
                 "Not initialized - messages batch update ignored, size: %d, status: %r",
@@ -325,6 +368,18 @@ class ReplayManager:
                 LOGGER.debug(msg, exc_info=True)
 
     def update_message(self, message_id: int, status: MessageStatus) -> None:
+        """
+        Updates the status of a message in the database or removes it if delivered.
+
+        This method is responsible for updating the status of a message in the database
+        or removing delivered messages along with their associated data. The operation
+        is ignored if the instance is not initialized or already closed.
+
+        Args:
+            message_id: The unique identifier of the message to be updated.
+            status: The new status to set for the message. If the status
+                is `MessageStatus.delivered`, the message will be removed.
+        """
         if not self.initialized:
             LOGGER.debug(
                 "Not initialized - message update ignored, id: %d, status: %r",
@@ -363,6 +418,23 @@ class ReplayManager:
                 LOGGER.debug(msg, exc_info=True)
 
     def replay_failed_messages(self, replay_callback: ReplayCallback) -> int:
+        """
+        Replays previously failed messages by fetching them in batches, marking them as
+        "in progress," and invoking the provided callback for processing.
+
+        This method processes messages marked as failed in the database by updating
+        their status and invoking the replay callback. It ensures thread safety and supports
+        batch processing to limit memory usage. If the system is not initialized or already
+        closed, the replay process is skipped. Errors encountered during the replay or while
+        updating the database are logged, and the replay process halts.
+
+        Args:
+            replay_callback: A callback function that processes the
+                replayed messages.
+
+        Returns:
+            int: The total count of successfully replayed messages.
+        """
         if not self.initialized:
             LOGGER.debug("Not initialized - messages replay ignored")
             return 0
@@ -434,6 +506,19 @@ class ReplayManager:
         return len(db_messages)
 
     def get_message(self, message_id: int) -> Optional[messages.BaseMessage]:
+        """
+        Fetches a message by its unique identifier.
+
+        This method retrieves a message from the database using the provided message ID. If a corresponding
+        database message is found, it converts the database message to a message object and returns it.
+        If no message is found for the given ID, the method returns None.
+
+        Args:
+            message_id: The unique identifier of the message to retrieve.
+
+        Returns:
+            The converted message object if found, otherwise None.
+        """
         db_message = self.get_db_message(message_id)
         if db_message is not None:
             return db_message_to_message(db_message)
@@ -441,6 +526,21 @@ class ReplayManager:
             return None
 
     def get_db_message(self, message_id: int) -> Optional[DBMessage]:
+        """
+        Retrieves a database message based on the provided message ID.
+
+        This method queries the database for a message record that corresponds to the
+        given message ID. If a matching message record is found, it constructs and
+        returns a `DBMessage` object containing the message's details. If no record is
+        found, it returns `None`.
+
+        Args:
+            message_id: The ID of the message to retrieve.
+
+        Returns:
+            A `DBMessage` object containing the details of the
+            retrieved message if found, otherwise `None`.
+        """
         with self.conn:
             c = self.conn.execute(
                 "SELECT message_id, message_type, message_json, status FROM messages WHERE message_id = ?",
@@ -454,14 +554,43 @@ class ReplayManager:
 
     @property
     def closed(self) -> bool:
+        """
+        Determines if the manager is currently closed.
+
+        This property evaluates whether the manager's `status` is equivalent to
+        `ManagerStatus.closed`. If so, it indicates that the manager is not
+        active or operational.
+
+        Returns:
+            bool: True if the manager's status is `ManagerStatus.closed`, False otherwise.
+        """
         return self.status == ManagerStatus.closed
 
     @property
     def initialized(self) -> bool:
+        """
+        Indicates whether the manager's status is currently set to 'initialized'.
+
+        This property provides a lookup to determine if the manager is currently in the
+        initialized state, based on its status attribute.
+
+        Returns:
+            bool: True if the manager's status is 'initialized', False otherwise.
+        """
         return self.status == ManagerStatus.initialized
 
     @property
     def failed(self) -> bool:
+        """
+        Checks if the current status indicates a failure.
+
+        The `failed` property evaluates whether the `status` attribute of the
+        manager is equal to `ManagerStatus.error`. This serves as an indicator
+        of whether an error state has been encountered.
+
+        Returns:
+            bool: True if the status is `ManagerStatus.error`, otherwise False.
+        """
         return self.status == ManagerStatus.error
 
     def fetch_failed_messages_batched(
@@ -522,6 +651,26 @@ SUPPORTED_MESSAGE_TYPES = {
 
 
 def db_message_to_message(db_message: DBMessage) -> messages.BaseMessage:
+    """
+    Converts a database message object to a corresponding application message object.
+
+    This function maps a database message type to its associated application message
+    class using a predefined dictionary of supported message types. If the type is not
+    supported, an exception is raised. The message is then deserialized from its JSON
+    representation into the appropriate application message class.
+
+    Args:
+        db_message: The database message object containing the type and serialized JSON
+            data to be deserialized.
+
+    Returns:
+        The deserialized application message object corresponding to the provided
+        database message type.
+
+    Raises:
+        ValueError: If the database message contains an unsupported or unrecognized
+        message type.
+    """
     message_class = SUPPORTED_MESSAGE_TYPES.get(db_message.type)
     if message_class is None:
         raise ValueError(f"Unsupported message type: {db_message.type}")
