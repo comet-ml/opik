@@ -96,6 +96,7 @@ module.exports = {
           "^src/components/ui/use-toast\\.ts$",
           "^src/components/theme-provider\\.tsx$",
           "^src/components/feature-toggles-provider\\.tsx$",
+          "^src/components/server-sync-provider\\.tsx$",
           "^src/components/shared/ConfirmDialog/",
         ],
       },
