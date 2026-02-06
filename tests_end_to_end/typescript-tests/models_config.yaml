@@ -8,6 +8,11 @@ providers:
     display_name: "OpenAI"
     api_key_env_var: "OPENAI_API_KEY"
     models:
+      - name: "GPT 5.3 Codex"
+        ui_selector: "GPT 5.3 Codex"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
       - name: "GPT 5.2"
         ui_selector: "GPT 5.2"
         enabled: true
