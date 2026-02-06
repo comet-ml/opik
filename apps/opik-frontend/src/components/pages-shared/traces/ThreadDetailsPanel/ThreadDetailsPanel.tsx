@@ -78,11 +78,11 @@ import { Separator } from "@/components/ui/separator";
 import ThreadDetailsTags from "./ThreadDetailsTags";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
-import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useThreadMedia } from "@/hooks/useThreadMedia";
 import AttachmentsList from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 import { MediaProvider } from "@/components/shared/PrettyLLMMessage/llmMessages";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { useThreadMedia } from "@/hooks/useThreadMedia";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type ThreadDetailsPanelProps = {
   projectId: string;

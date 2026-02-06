@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import uniqBy from "lodash/uniqBy";
 import { Trace } from "@/types/traces";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
 import { processInputDataInternal } from "@/lib/images";
@@ -7,7 +6,7 @@ import { ATTACHMENT_TYPE } from "@/types/attachments";
 
 /**
  * Hook that aggregates media from all traces in a thread.
- * Extracts media from input/output of each trace and deduplicates by URL.
+ * Extracts media from input/output of each trace.
  *
  * @param traces - Array of traces in the thread
  * @returns Object containing aggregated media items
@@ -71,8 +70,8 @@ export const useThreadMedia = (
       });
     });
 
-    // Deduplicate by URL
-    return uniqBy(allMedia, "url");
+    // Return all media items without deduplication to preserve placeholder mappings
+    return allMedia;
   }, [traces]);
 
   return { media };
