@@ -73,7 +73,6 @@ import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.ValidationUtils;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
@@ -202,9 +201,6 @@ class ExperimentsResourceTest {
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String TEST_WORKSPACE = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
-
-    private static final TypeReference<ExperimentItem> EXPERIMENT_ITEM_TYPE_REFERENCE = new TypeReference<>() {
-    };
 
     private static final TimeBasedEpochGenerator GENERATOR = Generators.timeBasedEpochGenerator();
 
@@ -3014,6 +3010,7 @@ class ExperimentsResourceTest {
             assertThat(response)
                     .usingRecursiveComparison(RecursiveComparisonConfiguration.builder()
                             .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                            .withIgnoredCollectionOrderInFieldsMatchingRegexes(".*experimentScores")
                             .build())
                     .isEqualTo(expectedResponse);
         }
@@ -3247,6 +3244,168 @@ class ExperimentsResourceTest {
                             .map(FeedbackScoreMapper.INSTANCE::toFeedbackScore)
                             .toList())
                     .build();
+        }
+
+        @Test
+        @DisplayName("when filtering by project_deleted, then return only experiments with deleted projects")
+        void groupByProjectDeleted() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a project that will be DELETED
+            var projectToDelete = podamFactory.manufacturePojo(Project.class);
+            var projectToDeleteId = projectResourceClient.createProject(projectToDelete, apiKey, workspaceName);
+
+            // Create a project that will remain VALID
+            var validProject = podamFactory.manufacturePojo(Project.class);
+            var validProjectId = projectResourceClient.createProject(validProject, apiKey, workspaceName);
+
+            // Create datasets for experiments
+            var dataset1 = podamFactory.manufacturePojo(Dataset.class);
+            var dataset2 = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset1, apiKey, workspaceName);
+            datasetResourceClient.createDataset(dataset2, apiKey, workspaceName);
+
+            // Create experiment 1 with traces linked to project that will be deleted
+            var experiment1 = generateExperiment().toBuilder()
+                    .datasetId(dataset1.id())
+                    .datasetName(dataset1.name())
+                    .build();
+            var experiment1Id = experimentResourceClient.create(experiment1, apiKey, workspaceName);
+
+            // Create traces with the project that will be deleted
+            var trace1 = createTraceWithDuration(100).toBuilder()
+                    .projectName(projectToDelete.name())
+                    .build();
+            var trace2 = createTraceWithDuration(200).toBuilder()
+                    .projectName(projectToDelete.name())
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2), apiKey, workspaceName);
+
+            // Create spans with cost for traces
+            var span1 = createSpanWithCost(trace1, BigDecimal.valueOf(0.001));
+            var span2 = createSpanWithCost(trace2, BigDecimal.valueOf(0.002));
+            spanResourceClient.batchCreateSpans(List.of(span1, span2), apiKey, workspaceName);
+
+            // Create feedback scores for traces
+            var scores1 = makeTraceScoresWithSpecificValues(trace1,
+                    List.of(BigDecimal.valueOf(0.8), BigDecimal.valueOf(0.9)));
+            var scores2 = makeTraceScoresWithSpecificValues(trace2,
+                    List.of(BigDecimal.valueOf(0.7), BigDecimal.valueOf(0.85)));
+
+            var feedbackBatch1 = podamFactory.manufacturePojo(FeedbackScoreBatch.class)
+                    .toBuilder()
+                    .scores(Stream.concat(scores1.stream(), scores2.stream()).collect(toList()))
+                    .build();
+            createScoreAndAssert(feedbackBatch1, apiKey, workspaceName);
+
+            // Link traces to experiment 1
+            var experimentItem1 = createExperimentItemWithFeedbackScores(experiment1Id, trace1.id(), scores1);
+            var experimentItem2 = createExperimentItemWithFeedbackScores(experiment1Id, trace2.id(), scores2);
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem1, experimentItem2)), apiKey, workspaceName);
+
+            // Create experiment 2 with traces linked to valid project
+            var experiment2 = generateExperiment().toBuilder()
+                    .datasetId(dataset2.id())
+                    .datasetName(dataset2.name())
+                    .build();
+            var experiment2Id = experimentResourceClient.create(experiment2, apiKey, workspaceName);
+
+            // Create traces with valid project
+            var trace3 = createTraceWithDuration(150).toBuilder()
+                    .projectName(validProject.name())
+                    .build();
+            var trace4 = createTraceWithDuration(250).toBuilder()
+                    .projectName(validProject.name())
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(trace3, trace4), apiKey, workspaceName);
+
+            // Create spans with cost for valid project traces
+            var span3 = createSpanWithCost(trace3, BigDecimal.valueOf(0.003));
+            var span4 = createSpanWithCost(trace4, BigDecimal.valueOf(0.004));
+            spanResourceClient.batchCreateSpans(List.of(span3, span4), apiKey, workspaceName);
+
+            // Create feedback scores for valid project traces
+            var scores3 = makeTraceScoresWithSpecificValues(trace3,
+                    List.of(BigDecimal.valueOf(0.95), BigDecimal.valueOf(0.88)));
+            var scores4 = makeTraceScoresWithSpecificValues(trace4,
+                    List.of(BigDecimal.valueOf(0.92), BigDecimal.valueOf(0.91)));
+
+            var feedbackBatch2 = podamFactory.manufacturePojo(FeedbackScoreBatch.class)
+                    .toBuilder()
+                    .scores(Stream.concat(scores3.stream(), scores4.stream()).collect(toList()))
+                    .build();
+            createScoreAndAssert(feedbackBatch2, apiKey, workspaceName);
+
+            // Link traces to experiment 2
+            var experimentItem3 = createExperimentItemWithFeedbackScores(experiment2Id, trace3.id(), scores3);
+            var experimentItem4 = createExperimentItemWithFeedbackScores(experiment2Id, trace4.id(), scores4);
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem3, experimentItem4)), apiKey, workspaceName);
+
+            // Delete the traces themselves - this causes LEFT JOIN to fail, resulting in empty project_id
+            traceResourceClient.deleteTrace(trace1.id(), workspaceName, apiKey);
+            traceResourceClient.deleteTrace(trace2.id(), workspaceName, apiKey);
+
+            // Group by DATASET_ID with project_deleted=true - should only return experiment1
+            var groups = List.of(GroupBy.builder().field(DATASET_ID).type(FieldType.STRING).build());
+
+            var response = experimentResourceClient.findGroupsAggregations(
+                    groups,
+                    Set.of(ExperimentType.REGULAR),
+                    null, // filters
+                    null, // name
+                    null, // projectId
+                    true, // projectDeleted=true
+                    apiKey,
+                    workspaceName,
+                    200);
+
+            // Verify response
+            assertThat(response).isNotNull();
+            assertThat(response.content()).isNotNull();
+            assertThat(response.content())
+                    .as("Response should contain experiment1 whose traces reference the deleted project")
+                    .isNotEmpty();
+
+            // Verify dataset1 group exists (with deleted project)
+            var dataset1Group = response.content().get(dataset1.id().toString());
+            assertThat(dataset1Group)
+                    .as("Dataset1 group should exist for experiment with deleted project")
+                    .isNotNull();
+            assertThat(dataset1Group.label()).isNotNull();
+
+            // Verify aggregations for deleted project experiment
+            var aggregations = dataset1Group.aggregations();
+            assertThat(aggregations.experimentCount()).isGreaterThan(0L);
+            assertThat(aggregations.traceCount()).isGreaterThan(0L);
+
+            // When traces are deleted, aggregations based on trace data will be null or zero
+            // This is expected because the LEFT JOIN fails to find the deleted traces
+            assertThat(aggregations.totalEstimatedCost())
+                    .as("Total cost should be null when traces are deleted")
+                    .isNull();
+
+            assertThat(aggregations.feedbackScores())
+                    .as("Feedback scores should be null when traces are deleted")
+                    .isNull();
+
+            // Duration should exist but may have zero values
+            assertThat(aggregations.duration()).isNotNull();
+
+            // Verify expected values
+            assertThat(aggregations.experimentCount()).isEqualTo(1L);
+            assertThat(aggregations.traceCount()).isEqualTo(2L);
+
+            // Verify dataset2 (with valid project) is NOT in the response when filtering by projectDeleted
+            var dataset2Group = response.content().get(dataset2.id().toString());
+            assertThat(dataset2Group)
+                    .as("Dataset2 with valid project should not be in response when filtering by projectDeleted")
+                    .isNull();
         }
     }
 

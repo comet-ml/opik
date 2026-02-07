@@ -189,6 +189,7 @@ public class ExperimentsResource {
             @QueryParam("types") String typesQueryParam,
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
             @QueryParam("project_id") UUID projectId,
+            @QueryParam("project_deleted") Boolean projectDeleted,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
@@ -207,6 +208,7 @@ public class ExperimentsResource {
                 .types(types)
                 .filters(experimentFilters)
                 .projectId(projectId)
+                .projectDeleted(projectDeleted)
                 .build();
 
         log.info("Finding experiment groups by criteria '{}'", experimentGroupCriteria);
@@ -229,6 +231,7 @@ public class ExperimentsResource {
             @QueryParam("types") String typesQueryParam,
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
             @QueryParam("project_id") UUID projectId,
+            @QueryParam("project_deleted") @Schema(description = "Filter experiments by deleted projects") Boolean projectDeleted,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
@@ -247,6 +250,7 @@ public class ExperimentsResource {
                 .types(types)
                 .filters(experimentFilters)
                 .projectId(projectId)
+                .projectDeleted(projectDeleted)
                 .build();
 
         log.info("Finding experiment groups aggregations by criteria '{}'", experimentGroupCriteria);
