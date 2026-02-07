@@ -16,6 +16,7 @@ import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
@@ -57,6 +58,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -90,7 +92,7 @@ class ExperimentDAO {
             UUID optimizationId,
             Set<ExperimentType> types,
             Set<UUID> experimentIds,
-            List<? extends com.comet.opik.api.filter.Filter> filters,
+            List<? extends Filter> filters,
             Boolean projectDeleted) {
 
         static TargetProjectsCriteria from(ExperimentGroupCriteria criteria) {
@@ -1763,39 +1765,43 @@ class ExperimentDAO {
     public Flux<ExperimentGroupItem> findGroups(@NonNull ExperimentGroupCriteria criteria) {
         log.info("Finding experiment groups by criteria '{}'", criteria);
 
-        return Flux.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-
-            // First, get the target project IDs to reduce traces table scans
-            return getTargetProjectIdsForExperiments(TargetProjectsCriteria.from(criteria))
-                    .flatMapMany(targetProjectIds -> Mono.from(connectionFactory.create())
-                            .flatMapMany(connection -> makeFluxContextAware((userName, wsId) -> {
-                                var template = newGroupTemplate(FIND_GROUPS, criteria,
-                                        "find_experiment_groups", wsId);
-
-                                // Add target project IDs flag to template (from separate query to reduce table scans)
-                                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                                    template.add("has_target_projects", true);
-                                }
-
-                                var statement = connection.createStatement(template.render())
-                                        .bind("workspace_id", wsId);
-                                bindGroupCriteria(statement, criteria);
-
-                                // Bind target project IDs (from separate query to reduce table scans)
-                                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                                    statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
-                                }
-
-                                return Flux.from(statement.execute());
-                            }))
-                            .flatMap(result -> mapExperimentGroupItem(result, criteria.groups().size())));
-        });
+        return executeQueryWithTargetProjects(
+                FIND_GROUPS,
+                "find_experiment_groups",
+                criteria,
+                this::mapExperimentGroupItem);
     }
 
     @WithSpan
     public Flux<ExperimentGroupAggregationItem> findGroupsAggregations(@NonNull ExperimentGroupCriteria criteria) {
         log.info("Finding experiment groups aggregations by criteria '{}'", criteria);
+
+        return executeQueryWithTargetProjects(
+                FIND_GROUPS_AGGREGATIONS,
+                "find_experiment_groups_aggregations",
+                criteria,
+                this::mapExperimentGroupAggregationItem);
+    }
+
+    /**
+     * Helper method to execute group queries with target project optimization.
+     * Handles the common pattern of:
+     * 1. Fetching target project IDs to reduce table scans
+     * 2. Building the query template with has_target_projects flag
+     * 3. Binding criteria and target project IDs
+     * 4. Executing the query with context-aware workspace binding
+     *
+     * @param queryTemplate The SQL query template (FIND_GROUPS or FIND_GROUPS_AGGREGATIONS)
+     * @param queryName The query name for logging
+     * @param criteria The experiment group criteria
+     * @param resultMapper Function to map Result to the desired type
+     * @return Flux of mapped results
+     */
+    private <T> Flux<T> executeQueryWithTargetProjects(
+            String queryTemplate,
+            String queryName,
+            ExperimentGroupCriteria criteria,
+            BiFunction<Result, Integer, Publisher<T>> resultMapper) {
 
         return Flux.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -1803,21 +1809,20 @@ class ExperimentDAO {
             return getTargetProjectIdsForExperiments(TargetProjectsCriteria.from(criteria))
                     .flatMapMany(targetProjectIds -> {
                         boolean hasTargetProjects = CollectionUtils.isNotEmpty(targetProjectIds);
-                        log.info("findGroupsAggregations: hasTargetProjects='{}', targetProjectIds='{}', criteria='{}'",
-                                hasTargetProjects, targetProjectIds, criteria);
+                        log.debug("{}: hasTargetProjects='{}', targetProjectIds='{}', criteria='{}'",
+                                queryName, hasTargetProjects, targetProjectIds, criteria);
 
                         return Mono.from(connectionFactory.create())
-                                .flatMapMany(connection -> makeFluxContextAware((userName, wsId) -> {
-                                    var template = newGroupTemplate(FIND_GROUPS_AGGREGATIONS, criteria,
-                                            "find_experiment_groups_aggregations", wsId);
+                                .flatMapMany(connection -> {
+                                    var template = newGroupTemplate(queryTemplate, criteria, queryName, workspaceId);
 
                                     // Add target project IDs flag to template (from separate query to reduce table scans)
                                     if (hasTargetProjects) {
                                         template.add("has_target_projects", true);
                                     }
 
-                                    var statement = connection.createStatement(template.render())
-                                            .bind("workspace_id", wsId);
+                                    var statement = connection.createStatement(template.render());
+
                                     bindGroupCriteria(statement, criteria);
 
                                     // Bind target project IDs (from separate query to reduce table scans)
@@ -1825,9 +1830,9 @@ class ExperimentDAO {
                                         statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
                                     }
 
-                                    return Flux.from(statement.execute());
-                                }))
-                                .flatMap(result -> mapExperimentGroupAggregationItem(result, criteria.groups().size()));
+                                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                                })
+                                .flatMap(result -> resultMapper.apply(result, criteria.groups().size()));
                     });
         });
     }
