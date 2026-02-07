@@ -1,10 +1,5 @@
 export { detectLLMMessages } from "./detectLLMMessages";
 
-export {
-  default as LLMMessagesHighlighter,
-  type LLMMessagesHighlighterProps,
-} from "./LLMMessagesHighlighter";
-
 export type {
   LLMProvider,
   LLMProviderDetectionResult,
