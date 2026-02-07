@@ -38,7 +38,7 @@ public final class AutomationRuleEvaluatorSpanLlmAsJudge
             @JsonView( {
                     View.Public.class, View.Write.class}) @NotNull LlmAsJudgeModelParameters model,
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeMessage> messages,
-            @JsonView({View.Public.class, View.Write.class}) @NotNull Map<String, String> variables,
+            @JsonView({View.Public.class, View.Write.class}) Map<String, String> variables,
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema){
     }
 
