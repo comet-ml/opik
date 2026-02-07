@@ -37,7 +37,7 @@ This workflow will:
 
 ### Configuration
 - **No Slack MCP required**: This command does not send messages, so Slack MCP configuration is not needed
-- **GitHub MCP**: Required for extracting PR information
+- **`gh` CLI**: Required for extracting PR information
 
 ---
 
@@ -45,8 +45,9 @@ This workflow will:
 
 ### 1. Preflight & Environment Check
 
-- **Check GitHub MCP**: Test GitHub MCP availability by attempting to fetch repository info using `get_file_contents` for `comet-ml/opik`
-  > If unavailable, respond with: "This command needs the GitHub MCP server. Please enable it, then run: `npm run install-mcp`."  
+- **Check `gh` CLI**: Test availability by running `gh auth status`
+  > If unavailable or not authenticated, respond with: "This command needs the GitHub CLI (`gh`). Please install it (`brew install gh` on macOS) and authenticate with `gh auth login`."
+  > If installed via Homebrew but not found, add `/opt/homebrew/bin` to PATH in `~/.zshenv`: `echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshenv` and restart Claude Code/Cursor.
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Get current branch name
@@ -55,14 +56,17 @@ This workflow will:
 
 ### 2. Find GitHub PR for Current Branch
 
-- **Search for PR**: Use GitHub MCP to find an open PR for the current branch in `comet-ml/opik`
-- **If PR found**: 
+- **Search for PR**: Use `gh pr list --head <branch-name> --state open --json number,url,title,body` to find an open PR for the current branch
+- **If PR found**:
   - Extract PR number, URL, title, and description
   - Store PR information for extraction steps
-- **If no PR found**: 
+- **If no PR found**:
   > "No open PR found for this branch. Please provide the PR link manually:"
   - Prompt for PR link and validate URL format
-  - If provided, fetch PR details using GitHub MCP
+  - **Extract and validate PR number from URL**: Parse the numeric PR ID from the URL (extract trailing numeric segment, e.g., `5034` from `https://github.com/comet-ml/opik/pull/5034`)
+    - Verify the extracted value contains only digits
+    - If parsing fails or value is not numeric, abort with error: "Invalid PR URL format. Expected: https://github.com/comet-ml/opik/pull/<number>"
+  - If valid, fetch PR details using `gh pr view <PR_NUMBER> --json number,url,title,body` with the sanitized numeric ID
   - If PR cannot be fetched, stop with error message
   - **After successfully fetching PR by manual link**: Extract PR number, URL, title, and description and store PR information for extraction steps (same as "PR found" branch)
 
@@ -79,13 +83,14 @@ This workflow will:
   - **Build Jira URL**: Construct Jira link as `https://comet-ml.atlassian.net/browse/{TICKET}` (e.g., `https://comet-ml.atlassian.net/browse/OPIK-1234`)
 
 - **Extract Baz approved status (optional)**:
-  - Try to fetch PR status checks using GitHub MCP
+  - Try to fetch PR status checks using `gh pr checks <PR_NUMBER>`
   - Look for status checks or CI checks that might indicate "Baz approved" or similar approval status
   - If found, store the status (e.g., "Baz approved: ✅" or "Baz status: pending")
   - If not found or unavailable, skip this field (it's optional)
 
 - **Extract test environment link from PR description and comments**:
-  - First, search PR comments for test environment deployment messages (look for "Test environment is now available!" or similar)
+  - First, search PR issue comments using `gh pr view <PR_NUMBER> --json comments` for test environment deployment messages (look for "Test environment is now available!" or similar)
+  - Also fetch review comments using `gh api repos/comet-ml/opik/pulls/<PR_NUMBER>/comments` to check for test env links in code review threads
   - Extract URL from comment body (typically in format `https://pr-XXXX.dev.comet.com` or `https://test.opik.com`)
   - If not found in comments, search PR description for URLs in "## Testing" section
   - Look for common test environment patterns: `https://pr-*.dev.comet.com`, `https://test.opik.com`, `https://*.opik.com`, or any `https://` URL
@@ -95,17 +100,17 @@ This workflow will:
   - Validate URL format and store
 
 - **Extract component summaries from PR description**:
-  - **FE summary**: 
+  - **FE summary**:
     - Look for mentions of "frontend", "FE", "React", "UI", or `[FE]` tag in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Frontend summary not found in PR. Enter frontend summary (one line, optional - press Enter to skip):"
-  
-  - **BE summary**: 
+
+  - **BE summary**:
     - Look for mentions of "backend", "BE", "Java", "API", or `[BE]` tag in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Backend summary not found in PR. Enter backend summary (one line, optional - press Enter to skip):"
-  
-  - **Python summary**: 
+
+  - **Python summary**:
     - Look for mentions of "Python", "Python SDK", "SDK", or Python-related changes in PR description
     - Extract relevant one-line summary from "## Details" section or component-specific mentions
     - If not found, prompt: "Python summary not found in PR. Enter Python summary (one line, optional - press Enter to skip):"
@@ -133,9 +138,9 @@ This workflow will:
   Hi team,
 
   Please review the following PR:
-  
+
   {{user_customization_text_if_provided}}
-  
+
   :jira_epic: jira link: {{Jira_URL}}
   :github: pr link: {{PR_link}}
   :test_tube: test env link: {{test_env}}
@@ -159,7 +164,7 @@ This workflow will:
   Hi team,
 
   Please review the following PR:
-  
+
   :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
   :github: pr link: https://github.com/comet-ml/opik/pull/1234
   :test_tube: test env link: https://test.opik.com
@@ -193,9 +198,9 @@ This workflow will:
 
 ## Error Handling
 
-### **GitHub MCP Errors**
+### **CLI Errors**
 
-- **GitHub MCP unavailable**: Stop immediately after testing and provide setup instructions
+- **`gh` CLI unavailable**: Stop immediately after testing and provide setup instructions (`gh auth login`)
 - **PR not found**: Prompt for manual PR link or stop if user cancels
 - **PR fetch failure**: Show error details and suggest manual input
 
@@ -217,7 +222,7 @@ This workflow will:
 
 The command is successful when:
 
-1. ✅ GitHub MCP is available and accessible
+1. ✅ `gh` CLI is available and authenticated
 2. ✅ PR is found for current branch (or manually provided)
 3. ✅ Jira ticket is extracted from PR or provided manually
 4. ✅ Test environment link is extracted from PR or provided manually
@@ -230,7 +235,7 @@ The command is successful when:
 
 ## Notes
 
-- **GitHub MCP Required**: Uses GitHub MCP to fetch PR information automatically
+- **`gh` CLI Required**: Uses `gh` CLI to fetch PR information automatically
 - **No Slack MCP Required**: This command does not send messages, so Slack MCP configuration is not needed
 - **Message format**: Follows the exact template provided with emoji prefixes, includes greeting and Jira link
 - **Automatic extraction**: Extracts information from PR title and description to minimize manual input
@@ -254,7 +259,8 @@ The command is successful when:
 ### Setup and Usage
 
 ```bash
-# 1. Ensure GitHub MCP is configured (no Slack MCP needed)
+# 1. Ensure gh CLI is installed and authenticated
+gh auth status
 
 # 2. Run command (on a branch with an open PR)
 cursor generate-code-review-slack-command
@@ -274,27 +280,27 @@ cursor generate-code-review-slack-command
 
 # Output:
 # 📋 **Copiable Slack Command Generated**
-# 
+#
 # Copy the command below and paste it into the #code-review channel in Slack.
-# 
+#
 # You can edit it before sending to:
 # - Add @ mentions for specific reviewers
 # - Add media links or video links
 # - Make final proof edits
 # - Add any additional context
-# 
+#
 # ```
 # Hi team,
-# 
+#
 # Please review the following PR:
-# 
+#
 # :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
 # :github: pr link: https://github.com/comet-ml/opik/pull/1234
 # :test_tube: test env link: https://test.opik.com
 # :react: fe summary (optional): Added new metrics dashboard UI
 # :java: be summary (optional): Implemented metrics aggregation endpoint
 # ```
-# 
+#
 # **To send in Slack:**
 # 1. Open Slack and navigate to #code-review channel
 # 2. Paste the command above
@@ -324,14 +330,14 @@ cursor generate-code-review-slack-command
 
 # ... extraction steps ...
 # Would you like to customize the message? (Enter any additional text to prepend/append, or press Enter to use default message): This PR includes important security updates, please review carefully.
-# 
+#
 # Generated command includes the customization:
 # Hi team,
-# 
+#
 # Please review the following PR:
-# 
+#
 # This PR includes important security updates, please review carefully.
-# 
+#
 # :jira_epic: jira link: https://comet-ml.atlassian.net/browse/OPIK-1234
 # ...
 ```

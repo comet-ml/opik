@@ -6,7 +6,7 @@
 
 Create a GitHub Pull Request for the current working branch with automatic Jira integration, quality checks, and template pre-filling. This command ensures code quality and proper workflow integration before creating PRs.
 
-- **Execution model**: Always runs from scratch. Each invocation re-checks MCP availability, re-validates the branch, re-evaluates git status, re-runs quality checks, and re-generates summary/template content regardless of prior runs.
+- **Execution model**: Always runs from scratch. Each invocation re-validates the branch, re-evaluates git status, re-runs quality checks, and re-generates summary/template content regardless of prior runs.
 
 This workflow will:
 
@@ -15,7 +15,7 @@ This workflow will:
 - Check for pending changes and remote branch status
 - Run quality checks to ensure code quality
 - Pre-fill PR template with extracted information
-- Create GitHub PR using MCP
+- Create GitHub PR using `gh` CLI
 - Update Jira ticket status to "In Review"
 - Document progress directly in Jira using the same analysis logic as `share-progress-in-jira`
 
@@ -32,14 +32,15 @@ This workflow will:
 ### 1. Preflight & Environment Check
 
 - **Check Jira MCP**: Test Jira MCP availability by attempting to fetch user info using `atlassianUserInfo`
-  > If unavailable, respond with: "This command needs the Jira MCP server. Please enable it, then run: `npm run install-mcp`."  
+  > If unavailable, respond with: "This command needs the Jira MCP server. Please enable it, then run: `npm run install-mcp`."
   > Stop here.
-- **Check GitHub MCP**: Test GitHub MCP availability by attempting to fetch repository info using `get_file_contents` for `comet-ml/opik`
-  > If unavailable, respond with: "This command needs the GitHub MCP server. Please enable it, then run: `npm run install-mcp`."  
+- **Check `gh` CLI**: Test availability by running `gh auth status`
+  > If unavailable or not authenticated, respond with: "This command needs the GitHub CLI (`gh`). Please install it (`brew install gh` on macOS) and authenticate with `gh auth login`."
+  > If installed via Homebrew but not found, add `/opt/homebrew/bin` to PATH in `~/.zshenv`: `echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshenv` and restart Claude Code/Cursor.
   > Stop here.
 - **Check Git repository**: Verify we're in a Git repository
 - **Check current branch**: Ensure we're not on `main`
-- **MCP Validation**: Both MCPs must be successfully tested and accessible before proceeding
+- **Validation**: Both Jira MCP and `gh` CLI must be accessible before proceeding
 
 ---
 
@@ -48,8 +49,8 @@ This workflow will:
 - **Parse branch name**: Extract `OPIK-<number>` from current branch following Opik naming convention
 - **Validate format**: Ensure ticket number can be extracted from format `{USERNAME}/{TICKET-NUMBER}-{TICKET-SUMMARY}`
 - **If invalid format**: Show error and stop:
-  > "Branch name doesn't follow Opik naming convention. Expected format: `{USERNAME}/{TICKET-NUMBER}-{TICKET-SUMMARY}`"  
-  > Examples: `andrescrz/OPIK-2180-add-cursor-git-workflow-rule`, `someuser/issue-1234-some-task`, `someotheruser/NA-some-other-task`  
+  > "Branch name doesn't follow Opik naming convention. Expected format: `{USERNAME}/{TICKET-NUMBER}-{TICKET-SUMMARY}`"
+  > Examples: `andrescrz/OPIK-2180-add-cursor-git-workflow-rule`, `someuser/issue-1234-some-task`, `someotheruser/NA-some-other-task`
   > Current branch: `<actual-branch-name>`
 
 ---
@@ -100,10 +101,10 @@ This workflow will:
 
 ### 4. Check for Existing PRs
 
-- **Search existing PRs**: Use GitHub MCP to check if there's already an open PR for this branch in `comet-ml/opik`
+- **Search existing PRs**: Use `gh pr list --head <branch-name> --state open --json number,url,title` to check if there's already an open PR for this branch
 - **If PR exists**: Show existing PR and ask:
   > "PR already exists for this branch: <PR_URL>. Do you want to update the PR description and continue with the flow (quality checks, Jira status, progress comment)? (y/n)"
-  - **If yes**: Update PR description using the pre-filled template (Step 7 output), then continue with Steps 5–10 as usual
+  - **If yes**: Update PR description using `gh pr edit <PR_NUMBER> --body "<template>"`, then continue with Steps 5–10 as usual
   - **If no**: Stop the flow
 - **If no PR exists**: Continue to PR creation
 
@@ -117,7 +118,7 @@ This workflow will:
   mvn compile -DskipTests
   mvn test
   mvn spotless:check
-  
+
   # For frontend projects
   npm run eslint:cache
   npm run type-check
@@ -129,7 +130,7 @@ This workflow will:
   mvn spotless:apply
   mvn compile -DskipTests
   mvn test
-  
+
   # For frontend projects
   npm run eslint:fix
   npm run eslint:cache
@@ -159,20 +160,20 @@ This workflow will:
   ```markdown
   ## Details
   {implementation_summary_from_git_analysis}
-  
+
   ## Change checklist
   <!-- Please check the type of changes made -->
   - [ ] User facing
   - [ ] Documentation update
-  
+
   ## Issues
   - Resolves # <!-- the GitHub issue this PR resolves (e.g. `#1234`) -->
   - OPIK-{ticket_number} <!-- The Jira ticket (e.g. `OPIK-1234`) -->
   - NA <!-- If no ticket, such as hotfixes etc. -->
-  
+
   ## Testing
   {testing_scenarios_covered_by_tests_and_steps_to_reproduce}
-  
+
   ## Documentation
   {list_of_docs_updated_or_summary_of_new_configuration_introduced_or_links_to_web_documentation_reference_relevant_to_this_PR}
   ```
@@ -187,8 +188,8 @@ This workflow will:
 
 ### 8. Create GitHub PR
 
-- **Use GitHub MCP**: Create PR in `comet-ml/opik` repository with pre-filled template
-- **Verify creation**: Confirm PR was created successfully
+- **Use `gh` CLI**: Create PR using `gh pr create --title "<title>" --body "<body>" --base main`
+- **Verify creation**: Confirm PR was created successfully by capturing the output URL
 - **If creation fails**: Show error details and stop
 
 ---
@@ -223,12 +224,11 @@ This workflow will:
 
 ## Error Handling
 
-### **MCP Availability Errors**
+### **CLI/MCP Availability Errors**
 
 - **Jira MCP unavailable**: Stop immediately after testing and provide setup instructions
-- **GitHub MCP unavailable**: Stop immediately after testing and provide setup instructions
-- **MCP connection failures**: Stop immediately after testing and verify MCP server status
-- **MCP test failures**: Stop immediately if MCP tests fail and provide troubleshooting steps
+- **`gh` CLI unavailable**: Stop immediately after testing and provide setup instructions (`gh auth login`)
+- **Authentication failures**: Stop immediately after testing and verify credentials
 
 ### **Branch Validation Errors**
 
@@ -250,7 +250,7 @@ This workflow will:
 
 ### **PR Creation Failures**
 
-- GitHub MCP issues: Check authentication and permissions for `comet-ml/opik` repository
+- `gh` CLI issues: Check authentication with `gh auth status`
 - Template errors: Validate template format and content
 - Network issues: Verify connectivity to GitHub
 
@@ -272,7 +272,7 @@ This workflow will:
 The command is successful when:
 
 1. ✅ Jira MCP is available and accessible
-2. ✅ GitHub MCP is available and accessible
+2. ✅ `gh` CLI is available and authenticated
 3. ✅ Feature branch is validated with OPIK ticket number
 4. ✅ Git status is clean (no pending changes)
 5. ✅ Remote branch exists and is up to date
@@ -288,7 +288,7 @@ The command is successful when:
 
 ## Notes
 
-- **MCP Requirements**: Both Jira and GitHub MCPs must be successfully tested and accessible before any operations begin
+- **Requirements**: Jira MCP must be accessible and `gh` CLI must be authenticated before any operations begin
 - **Repository**: Always uses `comet-ml/opik` for GitHub operations
 - **Template pre-filling**: Automatically extracts information from git changes and commit history
 - **Quality assurance**: Ensures code meets standards before PR creation
@@ -297,7 +297,6 @@ The command is successful when:
 - **User control**: Asks for confirmation on critical decisions (commits, pushes)
 - **Error handling**: Graceful degradation when non-critical operations fail
 - **Git operations**: Handles both missing remote branches and branches that are behind local commits
-- **MCP testing**: Actively tests MCP availability using real API calls before proceeding
 - **Opik conventions**: Follows Opik branch naming, commit message, and PR title conventions
 - **Logic reuse**: Implements the same git diff analysis and summary generation logic as `share-progress-in-jira` command:
   - Uses three-dot syntax (`git diff origin/main...HEAD`) for accurate change detection against latest remote main
