@@ -290,6 +290,7 @@ export class OpikClient {
    * @param prompts Optional array of Prompt objects to link with the experiment
    * @param type Optional experiment type (defaults to "regular")
    * @param optimizationId Optional ID of an optimization associated with the experiment
+   * @param datasetVersionId Optional ID of the dataset version to link the experiment to
    * @returns The created Experiment object
    */
   public createExperiment = async ({
@@ -299,6 +300,7 @@ export class OpikClient {
     prompts,
     type = ExperimentType.Regular,
     optimizationId,
+    datasetVersionId,
   }: {
     datasetName: string;
     name?: string;
@@ -306,6 +308,7 @@ export class OpikClient {
     prompts?: Prompt[];
     type?: ExperimentType;
     optimizationId?: string;
+    datasetVersionId?: string;
   }): Promise<Experiment> => {
     logger.debug(`Creating experiment for dataset "${datasetName}"`);
 
@@ -323,7 +326,7 @@ export class OpikClient {
     const experiment = new Experiment({ id, name, datasetName, prompts }, this);
 
     try {
-      this.api.experiments.createExperiment({
+      await this.api.experiments.createExperiment({
         id,
         datasetName,
         name,
@@ -331,9 +334,10 @@ export class OpikClient {
         promptVersions,
         type,
         optimizationId,
+        datasetVersionId,
       });
 
-      logger.debug("Experiment added to the queue with id:", id);
+      logger.debug("Experiment created with id:", id);
       return experiment;
     } catch (error) {
       logger.error(`Failed to create experiment for dataset "${datasetName}"`, {

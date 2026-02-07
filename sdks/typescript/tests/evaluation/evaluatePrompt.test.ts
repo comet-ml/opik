@@ -125,6 +125,7 @@ describe("evaluatePrompt", () => {
       insert: vi.fn(),
       name: "test-dataset",
       id: "dataset-123",
+      getVersionInfo: vi.fn().mockResolvedValue({ id: "version-123", versionName: "v1" }),
     } as unknown as Dataset<Record<string, unknown>>;
 
     // Setup mock Experiment

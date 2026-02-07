@@ -82,6 +82,17 @@ describe("evaluate function", () => {
         )
       );
 
+    // Mock listDatasetVersions for getVersionInfo() calls
+    vi.spyOn(opikClient.api.datasets, "listDatasetVersions").mockImplementation(
+      () =>
+        createMockHttpResponsePromise({
+          content: [{ id: "version-1", versionName: "v1" }],
+          page: 1,
+          size: 1,
+          total: 1,
+        })
+    );
+
     vi.useFakeTimers();
   });
 
