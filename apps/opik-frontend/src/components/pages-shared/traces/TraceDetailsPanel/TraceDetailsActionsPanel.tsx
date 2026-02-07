@@ -8,6 +8,7 @@ import {
   MessagesSquare,
   MoreHorizontal,
   Network,
+  Play,
   Share,
   Sparkles,
   Trash,
@@ -72,6 +73,9 @@ import {
   TRACE_EXPORT_COLUMNS,
 } from "@/lib/traces/exportUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
+import useOpenInPlayground from "@/hooks/useOpenInPlayground";
+import { canOpenInPlayground } from "@/lib/playground/extractPlaygroundData";
+import OpenInPlaygroundDialog from "@/components/pages-shared/traces/OpenInPlaygroundDialog";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -115,6 +119,8 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   setActiveSection,
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
+  const [playgroundConfirmOpen, setPlaygroundConfirmOpen] =
+    useState<boolean>(false);
   const [isSmall, setIsSmall] = useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
@@ -126,10 +132,35 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const { toast } = useToast();
 
   const { mutate } = useTraceDeleteMutation();
+  const { openInPlayground, isPlaygroundEmpty } = useOpenInPlayground();
 
   const hasThread = Boolean(setThreadId && threadId);
   const experiment: ExperimentItemReference | undefined = (treeData[0] as Trace)
     ?.experiment;
+
+  // Get the currently selected item (span or trace)
+  const selectedItem = useMemo(() => {
+    const targetId = spanId || traceId;
+    return treeData.find((item) => item.id === targetId);
+  }, [spanId, traceId, treeData]);
+
+  // Check if the selected item can be opened in playground
+  const canOpenSelectedInPlayground = useMemo(() => {
+    return selectedItem ? canOpenInPlayground(selectedItem) : false;
+  }, [selectedItem]);
+
+  const handleOpenInPlayground = useCallback(() => {
+    if (selectedItem) {
+      // Always show preview dialog for better UX
+      setPlaygroundConfirmOpen(true);
+    }
+  }, [selectedItem]);
+
+  const handleConfirmOpenInPlayground = useCallback(() => {
+    if (selectedItem) {
+      openInPlayground(selectedItem, treeData);
+    }
+  }, [selectedItem, treeData, openInPlayground]);
 
   const minPanelWidth = useMemo(() => {
     const elements = [
@@ -537,6 +568,15 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               <Share className="mr-2 size-4" />
               Share
             </DropdownMenuItem>
+            {canOpenSelectedInPlayground && (
+              <>
+                <DropdownMenuItem onClick={handleOpenInPlayground}>
+                  <Play className="mr-2 size-4" />
+                  Open in Playground
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             <TooltipWrapper content={traceId} side="left">
               <DropdownMenuItem
                 onClick={() => {
@@ -620,9 +660,17 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           setOpen={setPopupOpen}
           onConfirm={handleTraceDelete}
           title="Delete trace"
-          description="Deleting a trace will also remove the trace data from related experiment samples. This action can’t be undone. Are you sure you want to continue?"
+          description="Deleting a trace will also remove the trace data from related experiment samples. This action can't be undone. Are you sure you want to continue?"
           confirmText="Delete trace"
           confirmButtonVariant="destructive"
+        />
+        <OpenInPlaygroundDialog
+          open={playgroundConfirmOpen}
+          setOpen={setPlaygroundConfirmOpen}
+          onConfirm={handleConfirmOpenInPlayground}
+          selectedItem={selectedItem}
+          treeData={treeData}
+          isPlaygroundEmpty={isPlaygroundEmpty}
         />
       </div>
     </div>
