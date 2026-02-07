@@ -1,4 +1,5 @@
 import base64
+import binascii
 import logging
 import os
 import shutil
@@ -31,8 +32,18 @@ def attachment_to_message(
         # make sure the temporary file is deleted after upload
         attachment_data.create_temp_copy = False
         delete_after_upload = True
-    else:
+    elif os.path.exists(attachment_data.data):
         file_path = attachment_data.data
+    else:
+        try:
+            decoded_bytes = base64.b64decode(attachment_data.data, validate=True)
+            file_path = _write_file_like_to_temp_file(decoded_bytes)
+            attachment_data.create_temp_copy = False
+            delete_after_upload = True
+        except binascii.Error as e:
+            raise ValueError(
+                "Attachment data must be bytes, an existing file path, or a valid base64-encoded string."
+            ) from e
 
     file_name = attachment_data.file_name
     should_delete_after_upload = delete_after_upload
