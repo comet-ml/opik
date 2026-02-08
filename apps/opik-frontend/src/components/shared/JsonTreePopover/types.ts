@@ -23,31 +23,11 @@ export interface JsonTreeNodeProps {
   onFocusPath?: (path: string) => void;
 }
 
-export interface JsonTreeViewProps {
-  data: JsonObject | JsonValue[];
-  onSelect: (path: string, value: JsonValue) => void;
-  showValues?: boolean;
-  className?: string;
-  defaultExpandedPaths?: string[];
-  maxHeight?: number | string;
-  focusedPath?: string | null;
-  onFocusPath?: (path: string) => void;
-}
-
 export interface JsonTreePopoverProps {
   data: JsonObject | JsonValue[];
   onSelect: (path: string, value: JsonValue) => void;
   trigger: React.ReactNode;
-  defaultExpandedPaths?: string[];
-  maxHeight?: number | string;
-  align?: "start" | "center" | "end";
-  side?: "top" | "right" | "bottom" | "left";
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  contentClassName?: string;
-  /** Search query to filter and auto-expand matching paths */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   searchQuery?: string;
-  /** Whether to capture keyboard events globally (default: true).
-   * Set to false when used inside an input/editor to avoid conflicts. */
-  captureKeyboard?: boolean;
 }

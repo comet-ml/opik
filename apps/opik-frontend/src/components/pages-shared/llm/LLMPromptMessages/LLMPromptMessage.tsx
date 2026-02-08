@@ -11,7 +11,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView, keymap, ViewUpdate } from "@codemirror/view";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-
+import isEmpty from "lodash/isEmpty";
 import { Button } from "@/components/ui/button";
 import { FormErrorSkeleton } from "@/components/ui/form";
 import { Card, CardContent } from "@/components/ui/card";
@@ -92,9 +92,7 @@ interface LLMPromptMessageProps {
   promptVariables?: string[];
   improvePromptConfig?: ImprovePromptConfig;
   disabled?: boolean;
-  /** JSON data for the variable picker popover */
   jsonTreeData?: JsonObject | null;
-  /** Callback when a path is selected from the JSON tree */
   onJsonPathSelect?: (path: string, value: JsonValue) => void;
 }
 
@@ -202,12 +200,8 @@ const LLMPromptMessage = forwardRef<
       [braceStartPos, insertTextAtCursor, onJsonPathSelect],
     );
 
-    // Check if JSON tree data is available
-    const hasJsonData = useMemo(() => {
-      return jsonTreeData && Object.keys(jsonTreeData).length > 0;
-    }, [jsonTreeData]);
+    const hasJsonData = !isEmpty(jsonTreeData);
 
-    // Handle popover close - reset state
     const handlePopoverOpenChange = useCallback((open: boolean) => {
       setIsJsonPopoverOpen(open);
       if (!open) {
@@ -516,10 +510,7 @@ const LLMPromptMessage = forwardRef<
                       onSelect={handleJsonPathSelect}
                       open={isJsonPopoverOpen}
                       onOpenChange={handlePopoverOpenChange}
-                      align="start"
-                      side="bottom"
                       searchQuery={jsonSearchQuery}
-                      captureKeyboard={false}
                       trigger={
                         <span
                           ref={popoverTriggerRef}

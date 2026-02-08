@@ -10,113 +10,68 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import { JsonTreePopoverProps, JsonValue } from "./types";
-import { getVisiblePaths } from "./jsonTreeUtils";
+import {
+  getVisiblePaths,
+  parseSearchQuery,
+  isArrayAccessMode,
+  computePathsToExpand,
+  filterVisiblePaths,
+  findFirstChildPath,
+} from "./jsonTreeUtils";
 import JsonTreeNode from "./JsonTreeNode";
-import KeyboardBadge from "./KeyboardBadge";
+import PopoverHeader from "./PopoverHeader";
+import PopoverFooter from "./PopoverFooter";
+
+const MAX_HEIGHT = 320;
+
+const KEY_CYCLE_FOCUS = "Tab";
+const KEY_FOCUS_NEXT = "ArrowDown";
+const KEY_FOCUS_PREV = "ArrowUp";
+const KEY_EXPAND = "ArrowRight";
+const KEY_COLLAPSE = "ArrowLeft";
+const KEY_SELECT = "Enter";
+const KEY_CLOSE = "Escape";
+
+const NAVIGATION_KEYS = [
+  KEY_CYCLE_FOCUS,
+  KEY_FOCUS_NEXT,
+  KEY_FOCUS_PREV,
+  KEY_EXPAND,
+  KEY_COLLAPSE,
+  KEY_SELECT,
+  KEY_CLOSE,
+];
 
 const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
   data,
   onSelect,
   trigger,
-  defaultExpandedPaths = [],
-  maxHeight = 320,
-  align = "start",
-  side,
   open,
   onOpenChange,
-  contentClassName,
   searchQuery = "",
-  captureKeyboard = true,
 }) => {
-  const [internalOpen, setInternalOpen] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(
-    () => new Set(defaultExpandedPaths),
+    () => new Set(),
   );
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const isControlled = open !== undefined;
-  const isOpen = isControlled ? open : internalOpen;
-  const setIsOpen = isControlled ? onOpenChange : setInternalOpen;
-
-  // Parse the search query to determine what to expand
-  // e.g., "user." means expand "user" and show its children
-  // e.g., "user.profile." means expand "user" and "user.profile"
-  // e.g., "tags[" means expand "tags" (array access)
-  // e.g., "user.tags[0]." means expand "user", "user.tags", "user.tags[0]"
-  const { pathToExpand, searchTerm } = useMemo(() => {
-    if (!searchQuery) {
-      return { pathToExpand: null, searchTerm: "" };
+  useEffect(() => {
+    if (open) {
+      setExpandedPaths(new Set());
     }
+  }, [open]);
 
-    // Check if query ends with "[" - means user wants to access array elements
-    if (searchQuery.endsWith("[")) {
-      const pathWithoutBracket = searchQuery.slice(0, -1);
-      return { pathToExpand: pathWithoutBracket, searchTerm: "" };
-    }
-
-    // Check if query ends with "." - means user wants to see children
-    if (searchQuery.endsWith(".")) {
-      const pathWithoutDot = searchQuery.slice(0, -1);
-      return { pathToExpand: pathWithoutDot, searchTerm: "" };
-    }
-
-    // Find the last separator (either "." or "[" that starts array access)
-    const lastDotIndex = searchQuery.lastIndexOf(".");
-    const lastBracketIndex = searchQuery.lastIndexOf("[");
-
-    // Determine which separator is more recent
-    const lastSeparatorIndex = Math.max(lastDotIndex, lastBracketIndex);
-
-    if (lastSeparatorIndex > 0) {
-      // For bracket, we need to include everything up to (but not including) the bracket
-      // For dot, we include everything up to (but not including) the dot
-      const parentPath = searchQuery.slice(0, lastSeparatorIndex);
-      const currentSearch = searchQuery.slice(lastSeparatorIndex + 1);
-      return { pathToExpand: parentPath, searchTerm: currentSearch };
-    }
-
-    // No separator - just searching at root level
-    return { pathToExpand: null, searchTerm: searchQuery };
-  }, [searchQuery]);
+  const { pathToExpand, searchTerm } = useMemo(
+    () => parseSearchQuery(searchQuery),
+    [searchQuery],
+  );
 
   // Auto-expand paths based on the typed path
   useEffect(() => {
     if (pathToExpand) {
-      // Expand all parent paths leading to the target
-      // Handle both dot notation (user.profile) and array notation (tags[0])
-      const pathsToExpand = new Set<string>();
-
-      // Split by "." but preserve array indices
-      // e.g., "user.tags[0].name" -> ["user", "tags[0]", "name"]
-      const parts = pathToExpand.split(".");
-      let currentPath = "";
-
-      parts.forEach((part) => {
-        // Check if this part contains array access like "tags[0]"
-        const bracketMatch = part.match(/^([^[]+)(\[.+\])$/);
-
-        if (bracketMatch) {
-          // First expand the base (e.g., "tags")
-          const basePart = bracketMatch[1];
-          currentPath = currentPath ? `${currentPath}.${basePart}` : basePart;
-          pathsToExpand.add(currentPath);
-
-          // Then expand with the full array access (e.g., "tags[0]")
-          currentPath = currentPath.slice(0, -basePart.length) + part;
-          if (currentPath.startsWith(".")) {
-            currentPath = currentPath.slice(1);
-          }
-          pathsToExpand.add(currentPath);
-        } else {
-          currentPath = currentPath ? `${currentPath}.${part}` : part;
-          pathsToExpand.add(currentPath);
-        }
-      });
-
-      setExpandedPaths(pathsToExpand);
+      setExpandedPaths(computePathsToExpand(pathToExpand));
     }
   }, [pathToExpand]);
 
@@ -132,148 +87,83 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
   }, [data, expandedPaths]);
 
   // Determine if we're in array access mode (user typed "[" after a path)
-  const isArrayAccess = useMemo(() => {
-    if (!searchQuery) return false;
-    const lastBracketIndex = searchQuery.lastIndexOf("[");
-    const lastDotIndex = searchQuery.lastIndexOf(".");
-    // Array access if "[" is the last separator and query doesn't end with "]"
-    return lastBracketIndex > lastDotIndex && !searchQuery.endsWith("]");
-  }, [searchQuery]);
+  const isArrayAccess = useMemo(
+    () => isArrayAccessMode(searchQuery),
+    [searchQuery],
+  );
 
-  // Filter visible paths based on search term and focus on the right level
-  const filteredVisiblePaths = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return visiblePaths;
-    }
+  const filteredVisiblePaths = useMemo(
+    () =>
+      filterVisiblePaths(
+        visiblePaths,
+        searchQuery,
+        pathToExpand,
+        searchTerm,
+        isArrayAccess,
+      ),
+    [visiblePaths, searchQuery, pathToExpand, searchTerm, isArrayAccess],
+  );
 
-    // If we have a path to expand (user typed "field1." or "field1[")
-    if (pathToExpand) {
-      // For array access (e.g., "tags[0"), look for array children like "tags[0]", "tags[1]"
-      if (isArrayAccess) {
-        const arrayChildPrefix = pathToExpand + "[";
-        let filtered = visiblePaths.filter((item) => {
-          if (item.path.startsWith(arrayChildPrefix)) {
-            // If there's a search term (the index), filter by it
-            if (searchTerm) {
-              // Extract the index part, e.g., from "tags[0]" get "0]" then "0"
-              const afterBracket = item.path.slice(arrayChildPrefix.length);
-              const indexMatch = afterBracket.match(/^(\d+)\]/);
-              if (indexMatch) {
-                return indexMatch[1].startsWith(searchTerm);
-              }
-            }
-            return true;
-          }
-          return false;
-        });
 
-        if (filtered.length === 0) {
-          filtered = visiblePaths.filter((item) =>
-            item.path.toLowerCase().includes(searchQuery.toLowerCase()),
-          );
-        }
-        return filtered;
-      }
+  const entries = useMemo(
+    () =>
+      Array.isArray(data)
+        ? data.map((item, index) => [`[${index}]`, item] as const)
+        : Object.entries(data),
+    [data],
+  );
 
-      // For dot access (e.g., "user.name"), look for children with dot prefix
-      const childPrefix = pathToExpand + ".";
-      let filtered = visiblePaths.filter((item) => {
-        // Show items that are direct children of the expanded path
-        if (item.path.startsWith(childPrefix)) {
-          // If there's a search term, filter by it
-          if (searchTerm) {
-            const childPart = item.path.slice(childPrefix.length);
-            // Only match the immediate child name (before any further dots or brackets)
-            const immediateChild = childPart.split(/[.[]/)[0];
-            return immediateChild
-              .toLowerCase()
-              .includes(searchTerm.toLowerCase());
-          }
-          return true;
-        }
-        return false;
-      });
-
-      // If no children found, maybe the path doesn't exist - show all matching
-      if (filtered.length === 0) {
-        filtered = visiblePaths.filter((item) =>
-          item.path.toLowerCase().includes(searchQuery.toLowerCase()),
-        );
-      }
-      return filtered;
-    }
-
-    // No path to expand - filter at root level
-    return visiblePaths.filter((item) => {
-      const rootKey = item.path.split(/[.[]/)[0];
-      return rootKey.toLowerCase().includes(searchTerm.toLowerCase());
-    });
-  }, [visiblePaths, searchQuery, pathToExpand, searchTerm, isArrayAccess]);
-
-  // Use filtered paths for display
-  const displayPaths = filteredVisiblePaths;
-
-  // Track previous open state to detect when popover opens
-  const wasOpenRef = useRef(false);
   // Track previous pathToExpand to detect when user navigates deeper
   const prevPathToExpandRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Only set initial focus when popover opens (transition from closed to open)
-    if (isOpen && !wasOpenRef.current && displayPaths.length > 0) {
-      setFocusedPath(displayPaths[0].path);
-    } else if (!isOpen) {
+    if (!open) {
       setFocusedPath(null);
     }
-    wasOpenRef.current = isOpen;
-  }, [isOpen, displayPaths]);
+  }, [open]);
 
   // Focus first child when user types "." or "[" to expand into a path
   useEffect(() => {
     if (
-      isOpen &&
+      open &&
       pathToExpand &&
       pathToExpand !== prevPathToExpandRef.current &&
-      displayPaths.length > 0
+      filteredVisiblePaths.length > 0
     ) {
-      // Find the first child of the expanded path
-      const childPrefix = pathToExpand + ".";
-      const arrayChildPrefix = pathToExpand + "[";
-      const firstChild = displayPaths.find(
-        (item) =>
-          item.path.startsWith(childPrefix) ||
-          item.path.startsWith(arrayChildPrefix),
+      const firstChildPath = findFirstChildPath(
+        filteredVisiblePaths,
+        pathToExpand,
       );
-      if (firstChild) {
-        setFocusedPath(firstChild.path);
+      if (firstChildPath) {
+        setFocusedPath(firstChildPath);
       }
     }
     prevPathToExpandRef.current = pathToExpand;
-  }, [isOpen, pathToExpand, displayPaths]);
+  }, [open, pathToExpand, filteredVisiblePaths]);
 
   // Update focus when search term changes and current focus is not in filtered results
   useEffect(() => {
-    if (isOpen && displayPaths.length > 0 && focusedPath) {
+    if (open && filteredVisiblePaths.length > 0 && focusedPath) {
       // Check if current focused path is still in the filtered results
-      const isFocusedPathVisible = displayPaths.some(
+      const isFocusedPathVisible = filteredVisiblePaths.some(
         (item) => item.path === focusedPath,
       );
       if (!isFocusedPathVisible) {
         // Focus the first item in the filtered results
-        setFocusedPath(displayPaths[0].path);
+        setFocusedPath(filteredVisiblePaths[0].path);
       }
-    } else if (isOpen && displayPaths.length > 0 && !focusedPath) {
+    } else if (open && filteredVisiblePaths.length > 0 && !focusedPath) {
       // No focus set, set it to the first item
-      setFocusedPath(displayPaths[0].path);
+      setFocusedPath(filteredVisiblePaths[0].path);
     }
-  }, [isOpen, displayPaths, focusedPath]);
+  }, [open, filteredVisiblePaths, focusedPath]);
 
   const handleSelect = useCallback(
     (path: string, value: JsonValue) => {
       onSelect(path, value);
-      setIsOpen?.(false);
+      onOpenChange(false);
     },
-    [onSelect, setIsOpen],
+    [onSelect, onOpenChange],
   );
 
   const handleToggleExpand = useCallback((path: string) => {
@@ -288,69 +178,55 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     });
   }, []);
 
-  // Keyboard navigation handler
-  // When captureKeyboard is false, we use stopPropagation to prevent events from reaching other handlers
-  // but still handle navigation within the popover
   useEffect(() => {
-    if (!isOpen) return;
+    if (!open) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const currentIndex = displayPaths.findIndex(
+      const currentIndex = filteredVisiblePaths.findIndex(
         (p) => p.path === focusedPath,
       );
 
-      // Keys that should be captured by the popover and stopped from propagating
-      const navigationKeys = [
-        "Tab",
-        "ArrowDown",
-        "ArrowUp",
-        "ArrowRight",
-        "ArrowLeft",
-        "Enter",
-        "Escape",
-      ];
-
       // Only handle navigation keys
-      if (!navigationKeys.includes(e.key)) {
+      if (!NAVIGATION_KEYS.includes(e.key)) {
         return;
       }
 
-      // Stop propagation to prevent CodeMirror or other handlers from receiving these events
-      // ALEX update it later
-      if (!captureKeyboard) {
-        e.stopPropagation();
-      }
+      e.stopPropagation();
 
       switch (e.key) {
-        case "Tab": {
+        case KEY_CYCLE_FOCUS: {
           e.preventDefault();
-          if (displayPaths.length === 0) return;
+          if (filteredVisiblePaths.length === 0) return;
 
           const nextIndex = e.shiftKey
-            ? (currentIndex - 1 + displayPaths.length) % displayPaths.length
-            : (currentIndex + 1) % displayPaths.length;
-          setFocusedPath(displayPaths[nextIndex].path);
+            ? (currentIndex - 1 + filteredVisiblePaths.length) %
+              filteredVisiblePaths.length
+            : (currentIndex + 1) % filteredVisiblePaths.length;
+          setFocusedPath(filteredVisiblePaths[nextIndex].path);
           break;
         }
-        case "ArrowDown": {
+        case KEY_FOCUS_NEXT: {
           e.preventDefault();
-          if (displayPaths.length === 0) return;
-          const nextIndex = (currentIndex + 1) % displayPaths.length;
-          setFocusedPath(displayPaths[nextIndex].path);
+          if (filteredVisiblePaths.length === 0) return;
+          const nextIndex = (currentIndex + 1) % filteredVisiblePaths.length;
+          setFocusedPath(filteredVisiblePaths[nextIndex].path);
           break;
         }
-        case "ArrowUp": {
+        case KEY_FOCUS_PREV: {
           e.preventDefault();
-          if (displayPaths.length === 0) return;
+          if (filteredVisiblePaths.length === 0) return;
           const prevIndex =
-            (currentIndex - 1 + displayPaths.length) % displayPaths.length;
-          setFocusedPath(displayPaths[prevIndex].path);
+            (currentIndex - 1 + filteredVisiblePaths.length) %
+            filteredVisiblePaths.length;
+          setFocusedPath(filteredVisiblePaths[prevIndex].path);
           break;
         }
-        case "ArrowRight": {
+        case KEY_EXPAND: {
           e.preventDefault();
           if (focusedPath) {
-            const item = displayPaths.find((p) => p.path === focusedPath);
+            const item = filteredVisiblePaths.find(
+              (p) => p.path === focusedPath,
+            );
             if (item && typeof item.value === "object" && item.value !== null) {
               if (!expandedPaths.has(focusedPath)) {
                 handleToggleExpand(focusedPath);
@@ -359,26 +235,28 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
           }
           break;
         }
-        case "ArrowLeft": {
+        case KEY_COLLAPSE: {
           e.preventDefault();
           if (focusedPath && expandedPaths.has(focusedPath)) {
             handleToggleExpand(focusedPath);
           }
           break;
         }
-        case "Enter": {
+        case KEY_SELECT: {
           if (focusedPath) {
             e.preventDefault();
-            const item = displayPaths.find((p) => p.path === focusedPath);
+            const item = filteredVisiblePaths.find(
+              (p) => p.path === focusedPath,
+            );
             if (item) {
               handleSelect(item.path, item.value);
             }
           }
           break;
         }
-        case "Escape": {
+        case KEY_CLOSE: {
           e.preventDefault();
-          setIsOpen?.(false);
+          onOpenChange(false);
           break;
         }
       }
@@ -388,25 +266,23 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [
-    isOpen,
-    captureKeyboard,
+    open,
     focusedPath,
-    displayPaths,
+    filteredVisiblePaths,
     expandedPaths,
     handleSelect,
     handleToggleExpand,
-    setIsOpen,
+    onOpenChange,
   ]);
 
   const renderTree = () => {
-    const entries = Array.isArray(data)
-      ? data.map((item, index) => [`[${index}]`, item] as const)
-      : Object.entries(data);
-
-    // Check if we have any visible paths after filtering
-    if (searchQuery.trim() && displayPaths.length === 0) {
+    if (searchQuery.trim() && filteredVisiblePaths.length === 0) {
       return (
-        <div ref={contentRef} className="overflow-auto" style={{ maxHeight }}>
+        <div
+          ref={contentRef}
+          className="max-h-[var(--tree-max-height)] overflow-auto"
+          style={{ "--tree-max-height": MAX_HEIGHT } as React.CSSProperties}
+        >
           <div className="px-3 py-4 text-center text-sm text-muted-foreground">
             No matching keys found
           </div>
@@ -415,7 +291,11 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     }
 
     return (
-      <div ref={contentRef} className="overflow-auto" style={{ maxHeight }}>
+      <div
+        ref={contentRef}
+        className="max-h-[var(--tree-max-height)] overflow-auto"
+        style={{ "--tree-max-height": MAX_HEIGHT } as React.CSSProperties}
+      >
         {entries.map(([key, value]) => {
           const path = Array.isArray(data) ? `[${key.slice(1, -1)}]` : key;
           return (
@@ -439,80 +319,26 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
   };
 
   return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
-        className={cn(
-          "min-w-[470px] w-2/3 max-w-[600px] p-0",
-          contentClassName,
-        )}
-        align={align}
-        side={side}
+        className="min-w-[470px] w-2/3 max-w-[600px] p-0"
+        align="start"
+        side="bottom"
         onOpenAutoFocus={(e) => e.preventDefault()}
         collisionPadding={16}
         sideOffset={4}
       >
-        <div className="border-b px-4 py-3">
-          {searchQuery.trim() ? (
-            <>
-              <h4 className="comet-body-xs-accented">
-                {pathToExpand ? (
-                  <>
-                    {isArrayAccess ? "Array" : "Path"}:{" "}
-                    <span className="font-mono">{pathToExpand}</span>
-                    {isArrayAccess && !searchTerm && (
-                      <span className="text-light-slate">
-                        {" "}
-                        → select an index
-                      </span>
-                    )}
-                    {searchTerm && (
-                      <span className="text-light-slate">
-                        {" "}
-                        → {isArrayAccess ? "index" : "filtering by"} &quot;
-                        {searchTerm}&quot;
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    Filtering: <span className="font-mono">{searchQuery}</span>
-                  </>
-                )}
-              </h4>
-              <p className="comet-body-xs mt-1 text-light-slate">
-                {isArrayAccess ? (
-                  <>Type an index number to filter array elements</>
-                ) : (
-                  <>
-                    Type <span className="font-mono">.</span> to expand into
-                    nested fields, <span className="font-mono">[</span> for
-                    arrays
-                  </>
-                )}
-              </p>
-            </>
-          ) : (
-            <>
-              <h4 className="comet-body-xs-accented">Select a variable</h4>
-              <p className="comet-body-xs mt-1 text-light-slate">
-                Start typing to filter, use <span className="font-mono">.</span>{" "}
-                for objects, <span className="font-mono">[</span> for arrays
-              </p>
-            </>
-          )}
-        </div>
+        <PopoverHeader
+          searchQuery={searchQuery}
+          pathToExpand={pathToExpand}
+          searchTerm={searchTerm}
+          isArrayAccess={isArrayAccess}
+        />
 
         <div className="p-2">{renderTree()}</div>
 
-        <div className="border-t px-4 py-3">
-          <p className="comet-body-xs text-light-slate">
-            Press <KeyboardBadge>Tab</KeyboardBadge> or{" "}
-            <KeyboardBadge>←↑→↓</KeyboardBadge> to navigate,{" "}
-            <KeyboardBadge>Enter</KeyboardBadge> to select, and{" "}
-            <KeyboardBadge>Esc</KeyboardBadge> to close.
-          </p>
-        </div>
+        <PopoverFooter />
       </PopoverContent>
     </Popover>
   );
