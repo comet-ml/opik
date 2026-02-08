@@ -445,12 +445,7 @@ eval_results = evaluate(
         </Accordion>
       ) : (
         <>
-          <div className="comet-title-s">
-            Select evaluators{" "}
-            {models.length > 0 && (
-              <span className="text-muted-slate">({models.length})</span>
-            )}
-          </div>
+          <div className="comet-title-s">Select evaluators</div>
           {renderEvaluatorsContent()}
           {renderCustomMetricsLink()}
         </>
