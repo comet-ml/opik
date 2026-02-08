@@ -207,18 +207,60 @@ class OptimizationHistoryState:
     def _normalize_candidate_payload(candidate: Any) -> Any:
         if candidate is None:
             return None
+
+        def _capture_tools(prompt_obj: Any) -> list[dict[str, Any]] | None:
+            tools = getattr(prompt_obj, "tools", None)
+            if not tools:
+                return None
+            return [
+                dict(tool) if isinstance(tool, dict) else {"value": tool}
+                for tool in tools
+            ]
+
+        def _capture_original_tools(prompt_obj: Any) -> list[dict[str, Any]] | None:
+            tools = getattr(prompt_obj, "tools_original", None)
+            if not tools:
+                return None
+            return [
+                dict(tool) if isinstance(tool, dict) else {"value": tool}
+                for tool in tools
+            ]
+
         # Normalize prompts to messages format to match baseline evaluation format
         # Always use dict format: {prompt_name: messages}
         if isinstance(candidate, chat_prompt.ChatPrompt):
             # Single prompt: normalize to dict format with prompt name as key
             prompt_name = getattr(candidate, "name", "prompt")
-            return {prompt_name: candidate.get_messages()}
+            payload: dict[str, Any] = {"messages": candidate.get_messages()}
+            tool_payload = _capture_tools(candidate)
+            if tool_payload:
+                payload["tools"] = tool_payload
+            original_tools = _capture_original_tools(candidate)
+            if original_tools:
+                payload["tools_original"] = original_tools
+            model_kwargs = getattr(candidate, "model_kwargs", None)
+            if model_kwargs:
+                payload["model_kwargs"] = model_kwargs
+            return {prompt_name: payload}
         if isinstance(candidate, dict):
             # Check if it's a dict of ChatPrompts
             first_value = next(iter(candidate.values())) if candidate else None
             if isinstance(first_value, chat_prompt.ChatPrompt):
                 # Multi-prompt: normalize to dict[str, list[dict]]
-                return {k: p.get_messages() for k, p in candidate.items()}
+                normalized: dict[str, Any] = {}
+                for key, prompt_obj in candidate.items():
+                    payload = {"messages": prompt_obj.get_messages()}
+                    tool_payload = _capture_tools(prompt_obj)
+                    if tool_payload:
+                        payload["tools"] = tool_payload
+                    original_tools = _capture_original_tools(prompt_obj)
+                    if original_tools:
+                        payload["tools_original"] = original_tools
+                    model_kwargs = getattr(prompt_obj, "model_kwargs", None)
+                    if model_kwargs:
+                        payload["model_kwargs"] = model_kwargs
+                    normalized[key] = payload
+                return normalized
             # Otherwise, keep as-is (already a dict, not ChatPrompts)
             return candidate
         return {"value": candidate}

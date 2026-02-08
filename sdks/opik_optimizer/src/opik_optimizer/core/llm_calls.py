@@ -251,7 +251,7 @@ def _prepare_model_params(
         ]
 
     # Add structured output support (LiteLLM will populate message.parsed for us)
-    if response_model is not None:
+    if response_model is not None and "response_format" not in final_params:
         final_params["response_format"] = response_model
 
     return final_params
@@ -561,6 +561,16 @@ def call_model(
         frequency_penalty=frequency_penalty,
         metadata=metadata,
     )
+    if response_model is not None and "response_format" not in call_time_params:
+        if model.startswith("openai/") or model.startswith("gpt-"):
+            call_time_params["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "schema": response_model.model_json_schema(),
+                    "strict": True,
+                },
+            }
 
     if model_parameters is None:
         model_parameters = {}

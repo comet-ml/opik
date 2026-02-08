@@ -3,14 +3,21 @@ from typing import Any
 import copy
 import rapidfuzz
 from ...utils.helpers import json_to_dict
+from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
 from ...utils.text import normalize_llm_text
 
 
 # FIXME: Refactor and move to prompts.py and prompt library.
-def get_task_description_for_llm(prompt: chat_prompt.ChatPrompt) -> str:
+def get_task_description_for_llm(
+    prompt: chat_prompt.ChatPrompt, *, optimize_tools: bool = False
+) -> str:
     """Generates a concise task description for LLM prompts that need context."""
     description = "Task: Given a list of AI messages with placeholder values, generate an effective prompt. "
     description += f"The original high-level instruction being optimized is: '{prompt.get_messages()}'. "
+    if optimize_tools:
+        tool_blocks = toolcalling_utils.build_tool_blocks_from_prompt(prompt)
+        if tool_blocks:
+            description += f" Tooling context:\n{tool_blocks}\n"
     description += "The goal is to create an effective prompt that guides a language model to perform this task well."
     return description
 

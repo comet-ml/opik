@@ -21,6 +21,7 @@ from .. import helpers
 from opik_optimizer.utils.display import display_error, display_success
 from ....utils.prompt_roles import apply_role_constraints, count_disallowed_role_updates
 from ....utils.prompt_library import PromptLibrary
+from . import tool_ops
 from ..types import MutationResponse
 
 
@@ -331,6 +332,7 @@ def _semantic_mutation(
     output_style_guidance: str,
     prompts: PromptLibrary,
     rng: RandomLike,
+    optimize_tools: bool = False,
     allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
     """Enhanced semantic mutation with multiple strategies."""
@@ -344,6 +346,7 @@ def _semantic_mutation(
             model_parameters=model_parameters,
             output_style_guidance=output_style_guidance,
             prompts=prompts,
+            optimize_tools=optimize_tools,
             allowed_roles=allowed_roles,
         )
 
@@ -376,7 +379,10 @@ def _semantic_mutation(
         user_prompt_for_semantic_mutation = prompts.get(
             "semantic_mutation_user_prompt_template",
             prompt_messages=prompt.get_messages(),
-            task_description=helpers.get_task_description_for_llm(initial_prompt),
+            task_description=helpers.get_task_description_for_llm(
+                initial_prompt,
+                optimize_tools=optimize_tools,
+            ),
             style=current_output_style_guidance,
             strategy_instruction=strategy_prompts[strategy],
         )
@@ -429,7 +435,7 @@ def _semantic_mutation(
             f"      Error in semantic mutation, this is usually a parsing error: {e}",
             verbose=verbose,
         )
-        return prompt
+        return prompt.copy()
 
 
 def _radical_innovation_mutation(
@@ -439,13 +445,17 @@ def _radical_innovation_mutation(
     model_parameters: dict[str, Any],
     output_style_guidance: str,
     prompts: PromptLibrary,
+    optimize_tools: bool = False,
     allowed_roles: set[str] | None = None,
 ) -> chat_prompt.ChatPrompt:
     """Attempts to generate a significantly improved and potentially very different prompt using an LLM."""
     logger.debug(
         f"Attempting radical innovation for prompt: {json.dumps(prompt.get_messages())[:70]}..."
     )
-    task_desc_for_llm = helpers.get_task_description_for_llm(initial_prompt)
+    task_desc_for_llm = helpers.get_task_description_for_llm(
+        initial_prompt,
+        optimize_tools=optimize_tools,
+    )
     current_output_style_guidance = output_style_guidance
 
     user_prompt_for_radical_innovation = prompts.get(
@@ -485,7 +495,7 @@ def _radical_innovation_mutation(
             logger.warning(
                 f"Failed to parse LLM output in radical innovation mutation for prompt '{json.dumps(prompt.get_messages())[:50]}...'. Output: {response_item[:200]}. Error: {parse_exc}. Returning original."
             )
-            return prompt
+            return prompt.copy()
         constrained_messages = apply_role_constraints(
             prompt.get_messages(), new_messages, allowed_roles
         )
@@ -508,11 +518,12 @@ def _radical_innovation_mutation(
         logger.warning(
             f"Radical innovation mutation failed for prompt '{json.dumps(prompt.get_messages())[:50]}...': {e}. Returning original."
         )
-        return prompt
+        return prompt.copy()
 
 
 def deap_mutation(
     individual: Any,
+    optimizer: Any | None,
     current_population: list[Any] | None,
     output_style_guidance: str,
     initial_prompts: dict[str, chat_prompt.ChatPrompt],
@@ -522,6 +533,9 @@ def deap_mutation(
     optimization_id: str | None,
     verbose: int,
     prompts: PromptLibrary,
+    optimize_tools: bool | None = None,
+    tool_names: list[str] | None = None,
+    metric: Any | None = None,
     allowed_roles: set[str] | None = None,
     rng: random.Random | None = None,
 ) -> Any:
@@ -530,6 +544,13 @@ def deap_mutation(
     Operates on dict-based individuals (prompt_name -> messages).
     Randomly selects ONE prompt to mutate.
     """
+    if optimize_tools is None:
+        optimize_tools = bool(getattr(optimizer, "_optimize_tools", False))
+    if tool_names is None:
+        tool_names = getattr(optimizer, "_tool_names", None)
+    if metric is None:
+        metric = getattr(optimizer, "_evaluation_metric", None)
+
     if allowed_roles is not None and not allowed_roles:
         return individual
     # Individual is a dict mapping prompt_name -> messages
@@ -617,6 +638,7 @@ def deap_mutation(
                     output_style_guidance=output_style_guidance,
                     prompts=prompts,
                     rng=rng,
+                    optimize_tools=optimize_tools,
                     allowed_roles=allowed_roles,
                 )
                 reporting.display_success(
@@ -624,7 +646,24 @@ def deap_mutation(
                     verbose=verbose,
                 )
 
+            # Apply tools to mutated prompt if optimizing tools
+            if optimize_tools and optimizer is not None:
+                mutated_prompt = tool_ops.apply_tool_description_update(
+                    optimizer=optimizer,
+                    prompt=mutated_prompt,
+                    tool_names=tool_names,
+                    round_num=0,
+                    metric=metric,
+                )
+
+            # Final prompt and metadata
             mutated_data[prompt_name] = mutated_prompt.get_messages()
+            metadata = dict(metadata)
+            metadata["tools"] = mutated_prompt.tools
+            metadata["function_map"] = mutated_prompt.function_map
+            metadata["model"] = mutated_prompt.model
+            metadata["model_kwargs"] = copy.deepcopy(mutated_prompt.model_kwargs)
+            prompts_metadata[prompt_name] = metadata
         else:
             # Keep other prompts unchanged
             mutated_data[prompt_name] = copy.deepcopy(messages)

@@ -1,6 +1,7 @@
 import copy
 import json
 import logging
+import warnings
 from collections.abc import Callable
 from typing import Any
 from pydantic import BaseModel, ConfigDict
@@ -189,6 +190,18 @@ class ChatPrompt:
             raise ValueError("`tools` must be a list")
         else:
             for tool in tools:
+                if isinstance(tool, dict) and tool.get("type") == "mcp":
+                    _validate_openai_mcp_tool(tool)
+                    continue
+                if isinstance(tool, dict) and "mcp" in tool:
+                    _validate_legacy_mcp_tool(tool)
+                    if "function" in tool:
+                        types.FunctionTool.model_validate(tool["function"])
+                        if "type" in tool and tool["type"] != "function":
+                            raise ValueError(
+                                "MCP tool type must be 'function' when provided"
+                            )
+                    continue
                 types.Tool.model_validate(tool)
 
     @staticmethod
@@ -333,7 +346,7 @@ class ChatPrompt:
         model_parameters = (
             copy.deepcopy(self.model_kwargs) if self.model_kwargs else None
         )
-        return ChatPrompt(
+        cloned = ChatPrompt(
             name=self.name,
             system=self.system,
             user=self.user,
@@ -343,6 +356,9 @@ class ChatPrompt:
             model=self.model,
             model_parameters=model_parameters,
         )
+        if hasattr(self, "tools_original"):
+            setattr(cloned, "tools_original", copy.deepcopy(self.tools_original))
+        return cloned
 
     def set_messages(self, messages: list[dict[str, Any]]) -> None:
         self.system = None
@@ -366,3 +382,44 @@ class ChatPrompt:
             user=obj.get("user", None),
             messages=obj.get("messages", None),
         )
+
+
+def _validate_openai_mcp_tool(tool: dict[str, Any]) -> None:
+    server_label = tool.get("server_label")
+    if not server_label and tool.get("name"):
+        server_label = tool.get("name")
+        warnings.warn(
+            "MCP tool entry used 'name' instead of 'server_label'; converting.",
+            UserWarning,
+            stacklevel=2,
+        )
+    if not server_label:
+        raise ValueError("MCP tool must include 'server_label'")
+
+    server_url = tool.get("server_url") or tool.get("url")
+    command = tool.get("command")
+    if server_url and command:
+        raise ValueError("MCP tool cannot include both server_url and command")
+    if not server_url and not command:
+        raise ValueError("MCP tool must include server_url or command")
+
+    allowed_tools = tool.get("allowed_tools")
+    if allowed_tools is not None and not isinstance(allowed_tools, list):
+        raise ValueError("MCP tool allowed_tools must be a list when provided")
+
+
+def _validate_legacy_mcp_tool(tool: dict[str, Any]) -> None:
+    mcp_block = tool.get("mcp")
+    if not isinstance(mcp_block, dict):
+        raise ValueError("MCP tool must include an 'mcp' object")
+
+    server = mcp_block.get("server")
+    if not isinstance(server, dict):
+        raise ValueError("MCP tool must include 'mcp.server' config")
+    server_type = server.get("type")
+    if server_type not in {"stdio", "remote"}:
+        raise ValueError("MCP server type must be 'stdio' or 'remote'")
+    if server_type == "stdio" and not server.get("command"):
+        raise ValueError("MCP stdio server must include 'command'")
+    if server_type == "remote" and not server.get("url"):
+        raise ValueError("MCP remote server must include 'url'")
