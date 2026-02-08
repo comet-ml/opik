@@ -19,12 +19,6 @@ import { SquareArrowOutUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { useIsPhone } from "@/hooks/useIsPhone";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 
 export enum EVALUATOR_MODEL {
   equals = "equals",
@@ -167,6 +161,14 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
 ];
 
 import { INSTALL_SDK_SECTION_TITLE } from "@/constants/shared";
+
+const ALL_EVALUATOR_OPTIONS: MetricOption[] = [
+  ...HEURISTICS_MODELS_OPTIONS.map((m) => ({
+    ...m,
+    group: "Heuristics metrics",
+  })),
+  ...LLM_JUDGES_MODELS_OPTIONS.map((m) => ({ ...m, group: "LLM Judges" })),
+];
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
 const DEMO_DATASET_NAME = "Opik Demo Questions";
@@ -428,21 +430,22 @@ eval_results = evaluate(
   const renderEvaluatorsSection = () => (
     <div className="flex flex-col gap-2 md:sticky md:top-0 md:w-[250px] md:shrink-0 md:self-start">
       {isPhonePortrait ? (
-        <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value="evaluators" className="border-b-0">
-            <AccordionTrigger className="h-auto px-0 py-2 hover:no-underline">
-              <span className="comet-title-s">
-                Select evaluators{" "}
-                {models.length > 0 && (
-                  <span className="text-muted-slate">({models.length})</span>
-                )}
-              </span>
-            </AccordionTrigger>
-            <AccordionContent className="pb-0">
-              {renderEvaluatorsContent()}
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        <>
+          <div className="comet-body-s-accented">
+            Select evaluators
+            {models.length > 0 && <span> ({models.length})</span>}
+          </div>
+          <LoadableSelectBox
+            options={ALL_EVALUATOR_OPTIONS}
+            value={models}
+            placeholder="Select evaluators"
+            onChange={(values: string[]) =>
+              setModels(values as EVALUATOR_MODEL[])
+            }
+            multiselect
+            hideSearch
+          />
+        </>
       ) : (
         <>
           <div className="comet-title-s">Select evaluators</div>
