@@ -5,7 +5,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Pencil, Trash } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash, Sparkles } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -14,6 +14,7 @@ import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { UpdateExperimentDialog } from "@/components/shared/UpdateExperimentDialog/UpdateExperimentDialog";
 import useExperimentUpdateMutation from "@/api/datasets/useExperimentUpdate";
+import RunExperimentEvaluationDialog from "@/components/pages/ExperimentsPage/RunExperimentEvaluationDialog";
 
 const ExperimentRowActionsCell: React.FunctionComponent<
   CellContext<GroupedExperiment, unknown>
@@ -52,6 +53,13 @@ const ExperimentRowActionsCell: React.FunctionComponent<
       className="justify-end p-0"
       stopClickPropagation
     >
+      <RunExperimentEvaluationDialog
+        key={`evaluate-${resetKeyRef.current}`}
+        open={open === 3}
+        setOpen={setOpen}
+        projectId={experiment.project_id || ""}
+        experimentIds={[experiment.id]}
+      />
       <UpdateExperimentDialog
         key={`edit-${resetKeyRef.current}`}
         open={open === 2}
@@ -78,6 +86,15 @@ const ExperimentRowActionsCell: React.FunctionComponent<
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem
+            onClick={() => {
+              setOpen(3);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+          >
+            <Sparkles className="mr-2 size-4" />
+            Evaluate
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => {
               setOpen(2);
