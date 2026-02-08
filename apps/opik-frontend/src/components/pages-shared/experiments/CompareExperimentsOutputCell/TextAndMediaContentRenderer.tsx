@@ -1,7 +1,7 @@
 import React from "react";
 import isString from "lodash/isString";
 import { useMediaTypeDetection } from "@/hooks/useMediaTypeDetection";
-import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import ImagesListWrapper from "@/components/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 
 interface TextAndMediaContentRendererProps {

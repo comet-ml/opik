@@ -120,7 +120,7 @@ distributedLock:
   # Description: This value has to be considerably higher than the lockTimeoutMS value, as it has to guarantee that the
   # last thread to join the queue to acquire the lock will have enough time to execute the action. Then, the lock will
   # be deleted from redis after the specified period of time.
-  # This is needed as redisson by default doesn't delete the lock from redis after the lease time expires, it just
+  # This is needed as Redisson by default doesn't delete the lock from redis after the lease time expires, it just
   # releases the lock. The expiration time will be reset every time the lock is acquired.
   ttlInSeconds: ${DISTRIBUTED_LOCK_TTL_IN_SEC:-5}
 
@@ -419,6 +419,59 @@ onlineScoring:
       pendingMessageDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
 
+# Configuration for Dataset Export
+datasetExport:
+  # Default: false
+  # Description: Whether dataset export feature is enabled
+  enabled: ${DATASET_EXPORT_ENABLED:-false}
+  # Default: dataset-export
+  # Description: Redis stream name for dataset export jobs
+  streamName: ${DATASET_EXPORT_STREAM_NAME:-'dataset-export'}
+  # Default: dataset-export-consumers
+  # Description: Consumer group name for dataset export job processing
+  consumerGroupName: ${DATASET_EXPORT_CONSUMER_GROUP_NAME:-'dataset-export-consumers'}
+  # Default: 10
+  # Description: Maximum number of export jobs to process in a single batch
+  consumerBatchSize: ${DATASET_EXPORT_CONSUMER_BATCH_SIZE:-10}
+  # Default: 1s
+  # Description: How often to poll Redis for new export jobs
+  poolingInterval: ${DATASET_EXPORT_POOLING_INTERVAL:-1s}
+  # Default: 5s
+  # Description: Timeout for blocking read operations on Redis streams (long polling)
+  longPollingDuration: ${DATASET_EXPORT_LONG_POLLING_DURATION:-5s}
+  # Default: 3
+  # Description: Maximum number of retry attempts for failed export jobs (1-10)
+  maxRetries: ${DATASET_EXPORT_MAX_RETRIES:-3}
+  # Default: 2
+  # Description: Claim pending messages every N polling intervals
+  claimIntervalRatio: ${DATASET_EXPORT_CLAIM_INTERVAL_RATIO:-2}
+  # Default: 5m
+  # Description: Time before export job message considered orphaned and eligible for claiming
+  pendingMessageDuration: ${DATASET_EXPORT_PENDING_MESSAGE_DURATION:-5m}
+  # Default: 24h
+  # Description: Default time-to-live for exported CSV files before automatic cleanup
+  defaultTtl: ${DATASET_EXPORT_DEFAULT_TTL:-24h}
+  # Default: 5MB (5242880 bytes - S3 minimum for non-final parts)
+  # Description: Minimum part size for S3 multipart upload (in bytes). Must be >= 5242880 bytes.
+  #              Values below 5242880 will be clamped to 5242880 at runtime.
+  minPartSize: ${DATASET_EXPORT_MIN_PART_SIZE:-5242880}
+  # Default: 10MB (10 * 1024 * 1024 = 10485760 bytes)
+  # Description: Maximum part size for S3 multipart upload (in bytes). Must be >= minPartSize.
+  #              Values below minPartSize will be clamped to minPartSize at runtime.
+  maxPartSize: ${DATASET_EXPORT_MAX_PART_SIZE:-10485760}
+  # Default: 100
+  # Description: Number of items to fetch per batch when streaming dataset items
+  itemBatchSize: ${DATASET_EXPORT_ITEM_BATCH_SIZE:-100}
+  # Default: 5m
+  # Description: Timeout for cleanup job execution (how long the cleanup can run)
+  cleanupTimeout: ${DATASET_EXPORT_CLEANUP_TIMEOUT:-5m}
+  # Default: 1s
+  # Description: How long to wait for acquiring the distributed lock for cleanup
+  cleanupLockWaitTime: ${DATASET_EXPORT_CLEANUP_LOCK_WAIT_TIME:-1s}
+  # Default: 100
+  # Description: Batch size for cleanup job operations (number of jobs to process per batch). Must be between 10 and 1000.
+  cleanupBatchSize: ${DATASET_EXPORT_CLEANUP_BATCH_SIZE:-100}
+
 # Configuration for Optimization Studio logs synchronization
 optimizationLogs:
   # Default: true
@@ -501,6 +554,7 @@ cacheManager:
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
     workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
+    experiment_metadata: ${CACHE_MANAGER_EXPERIMENT_METADATA_DURATION:-PT1H}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -523,6 +577,12 @@ workspaceSettings:
   # Set to -1 to disable the limit (allow sorting for all project sizes).
   # This value is calculated via estimated size based on spans table.
   maxProjectSizeToAllowSorting: ${WORKSPACE_SETTINGS_MAX_PROJECT_SIZE_IN_GB_TO_ALLOW_SORTING:-100}
+  # Default: 1000000
+  # Description: Maximum number of experiment items in a workspace to allow dynamic sorting.
+  # Set to -1 to disable the limit (allow sorting for all experiment item counts).
+  # This count-based limit is used because experiment_items has fixed-size columns (UUIDs only)
+  # and query performance scales with row count, not data size.
+  maxExperimentItemsToAllowSorting: ${WORKSPACE_SETTINGS_MAX_EXPERIMENT_ITEMS_TO_ALLOW_SORTING:-1000000}
 
 # Configuration AWS S3
 s3Config:
@@ -590,7 +650,10 @@ serviceToggles:
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not dataset versioning feature is enabled
-  datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"false"}
+  datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not dataset export to CSV feature is enabled
+  datasetExportEnabled: ${DATASET_EXPORT_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
@@ -615,6 +678,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Ollama provider is enabled
+  ollamaProviderEnabled: ${TOGGLE_OLLAMA_PROVIDER_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
@@ -769,7 +835,7 @@ webhook:
 # Note: The model name "opik-free-model" is hardcoded and cannot be changed.
 # This ensures backward compatibility with automation rules that store the model name.
 freeModel:
-  # Description: Whether or not to enable the free model provider
+  # Description: Whether to enable the free model provider
   # Default: false
   enabled: ${OPIK_FREE_MODEL_ENABLED:-false}
   # Description: Actual model name sent to the AI server (the underlying LLM)
@@ -784,3 +850,32 @@ freeModel:
   # Description: API key for the endpoint (optional for auth-less endpoints)
   # Default: empty
   apiKey: ${OPIK_FREE_MODEL_API_KEY:-}
+
+# Dataset Versioning Migration configuration
+# Includes both lazy migration (on-demand) and items_total migration (startup)
+datasetVersioningMigration:
+  # Default: false
+  # Description: Whether to enable lazy migration (migrate datasets on first access)
+  lazyEnabled: ${DATASET_VERSIONING_MIGRATION_LAZY_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether to run the items_total migration on startup
+  # Set to true to enable the migration, false to disable after completion
+  # This migration calculates and updates the items_total field for dataset versions
+  # that were created by the Liquibase migration (where dataset_id = dataset_version_id)
+  itemsTotalEnabled: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_ENABLED:-"true"}
+  # Default: 100
+  # Description: Number of dataset versions to process in each batch for items_total migration
+  # Smaller batches reduce memory usage but increase total migration time
+  itemsTotalDatasetsBatchSize: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_BATCH_SIZE:-100}
+  # Default: 3600 (1 hour)
+  # Description: Lock timeout in seconds for the items_total migration process
+  # Should be long enough to complete the migration
+  itemsTotalLockTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_LOCK_TIMEOUT_SECONDS:-3600}
+  # Default: 30 seconds
+  # Description: Delay in seconds before starting the items_total migration job after application startup
+  # This allows the service to stabilize before running the migration
+  itemsTotalStartupDelaySeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_STARTUP_DELAY_SECONDS:-30}
+  # Default: 3600s (1 hour)
+  # Description: Job execution timeout in seconds for the items_total migration
+  # Should be long enough to complete the entire migration process
+  itemsTotalJobTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS:-3600}

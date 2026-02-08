@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
+import com.comet.opik.domain.CsvDatasetExportService;
 import com.comet.opik.domain.CsvDatasetItemProcessor;
 import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemService;
@@ -14,7 +15,6 @@ import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
-import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.IdGeneratorImpl;
@@ -51,6 +51,8 @@ import java.util.concurrent.TimeoutException;
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -62,21 +64,25 @@ class DatasetsResourceIntegrationTest {
     private static final DatasetExpansionService expansionService = mock(DatasetExpansionService.class);
     private static final DatasetVersionService versionService = mock(DatasetVersionService.class);
     private static final RequestContext requestContext = mock(RequestContext.class);
-    private static final WorkspaceMetadataService workspaceMetadataService = mock(WorkspaceMetadataService.class);
     private static final CsvDatasetItemProcessor csvProcessor = mock(CsvDatasetItemProcessor.class);
     private static final FeatureFlags featureFlags = mock(FeatureFlags.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
+    private static final CsvDatasetExportService csvExportService = mock(CsvDatasetExportService.class);
+    private static final ResourceExtension EXT;
 
-    private static final ResourceExtension EXT = ResourceExtension.builder()
-            .addResource(new DatasetsResource(
-                    service, itemService, expansionService, versionService, () -> requestContext,
-                    new FiltersFactory(new FilterQueryBuilder()),
-                    new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService, csvProcessor,
-                    featureFlags))
-            .addProvider(JsonNodeMessageBodyWriter.class)
-            .addProvider(MultiPartFeature.class)
-            .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
-            .build();
+    static {
+
+        EXT = ResourceExtension.builder()
+                .addResource(new DatasetsResource(
+                        service, itemService, expansionService, versionService, () -> requestContext,
+                        new FiltersFactory(new FilterQueryBuilder()),
+                        new IdGeneratorImpl(), new Streamer(), sortingFactory, csvProcessor,
+                        featureFlags, csvExportService))
+                .addProvider(JsonNodeMessageBodyWriter.class)
+                .addProvider(MultiPartFeature.class)
+                .setTestContainerFactory(new GrizzlyWebTestContainerFactory())
+                .build();
+    }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
@@ -104,7 +110,7 @@ class DatasetsResourceIntegrationTest {
 
         var request = DatasetItemStreamRequest.builder().datasetName(datasetName).steamLimit(500).build();
 
-        when(itemService.getItems(workspaceId, request, Visibility.PRIVATE))
+        when(itemService.getItems(eq(workspaceId), eq(request), any(), eq(Visibility.PRIVATE)))
                 .thenReturn(Flux.defer(() -> itemFlux));
 
         try (var response = EXT.target("/v1/private/datasets/items/stream")

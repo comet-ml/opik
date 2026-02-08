@@ -1,5 +1,4 @@
 import logging
-from typing import Any, Optional
 
 from rq import Worker
 from rq.job import Job
@@ -7,8 +6,14 @@ from rq.queue import Queue
 from opentelemetry.metrics import get_meter
 
 from .death_penalty import NoOpDeathPenalty
+from opik_backend.utils.env_utils import get_env_int
 
 logger = logging.getLogger(__name__)
+
+# Failure TTL: how long failed jobs are kept in Redis (default: 1 day = 86400 seconds)
+# Configurable via RQ_WORKER_TTL_FAILURE environment variable
+DEFAULT_FAILURE_TTL = 86400
+RQ_FAILURE_TTL = get_env_int("RQ_WORKER_TTL_FAILURE", DEFAULT_FAILURE_TTL)
 
 meter = get_meter(__name__)
 
@@ -60,9 +65,29 @@ concurrent_jobs_counter = meter.create_up_down_counter(
 class MetricsWorker(Worker):
     """
     Custom RQ Worker that emits OpenTelemetry metrics.
+
+    Configuration:
+        RQ_FAILURE_TTL: TTL for failed jobs in seconds (default: 86400 = 1 day)
     """
 
     death_penalty_class = NoOpDeathPenalty
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._failure_ttl = RQ_FAILURE_TTL
+        logger.info(f"MetricsWorker initialized with failure_ttl={self._failure_ttl}s")
+
+    def handle_job_failure(self, job: Job, queue: Queue, started_job_registry=None, exc_string=''):
+        """Handle job failure with custom failure TTL.
+
+        Override the default failure_ttl (1 year) with a configurable value.
+        Signature matches RQ 2.6.0: handle_job_failure(job, queue, started_job_registry, exc_string)
+        """
+        if job.failure_ttl is None:
+            job.failure_ttl = self._failure_ttl
+            logger.debug(f"Set failure_ttl={self._failure_ttl}s for job {job.id}")
+
+        return super().handle_job_failure(job, queue, started_job_registry, exc_string)
 
     def execute_job(self, job: Job, queue: Queue) -> bool:
         """Execute a job and return success status."""
@@ -72,13 +97,18 @@ class MetricsWorker(Worker):
             logger.debug(f"execute_job completed for job {job.id}")
             return result
         except Exception as e:
-            logger.error(f"execute_job FAILED for job {job.id}: {type(e).__name__}: {e}", exc_info=True)
+            logger.error(
+                f"execute_job FAILED for job {job.id}: {type(e).__name__}: {e}",
+                exc_info=True,
+            )
             raise
 
     def perform_job(self, job: Job, queue: Queue) -> bool:
-        logger.debug(f"Starting perform_job for job {job.id}, func: {getattr(job, 'func_name', 'unknown')}")
+        logger.debug(
+            f"Starting perform_job for job {job.id}, func: {getattr(job, 'func_name', 'unknown')}"
+        )
 
-        func_name = job.func_name if hasattr(job, 'func_name') else 'unknown'
+        func_name = job.func_name if hasattr(job, "func_name") else "unknown"
         queue_name = queue.name
 
         queue_wait_ms = None
@@ -90,17 +120,21 @@ class MetricsWorker(Worker):
             )
 
         metric_attributes = {"queue": queue_name, "function": func_name}
-        
+
         # Track concurrent jobs (UpDownCounter is thread-safe)
         concurrent_jobs_counter.add(1, metric_attributes)
 
         try:
-            logger.info(f"Processing job {job.id} (func={func_name}, queue={queue_name})")
+            logger.info(
+                f"Processing job {job.id} (func={func_name}, queue={queue_name})"
+            )
             result = super().perform_job(job, queue)
 
             processing_time_ms = None
             if job.started_at and job.ended_at:
-                processing_time_seconds = (job.ended_at - job.started_at).total_seconds()
+                processing_time_seconds = (
+                    job.ended_at - job.started_at
+                ).total_seconds()
                 processing_time_ms = processing_time_seconds * 1000
 
             total_time_ms = None
@@ -128,10 +162,10 @@ class MetricsWorker(Worker):
             error_attributes = {**metric_attributes, "error_type": type(e).__name__}
             jobs_failed_counter.add(1, error_attributes)
 
-            logger.error(f"Job '{job.id}' failed: {type(e).__name__}: {e}", exc_info=True)
+            logger.error(
+                f"Job '{job.id}' failed: {type(e).__name__}: {e}", exc_info=True
+            )
             raise
         finally:
             # Decrement concurrent jobs counter (UpDownCounter is thread-safe)
             concurrent_jobs_counter.add(-1, metric_attributes)
-
-

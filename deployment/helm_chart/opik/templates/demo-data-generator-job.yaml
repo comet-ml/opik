@@ -49,7 +49,7 @@ spec:
         args: ['while [ $(curl -ksw "%{http_code}" "http://opik-frontend:5173" -o /dev/null) -ne 200 ]; do sleep 5; echo "Opik Frontend is not available. Waiting for the Opik Frontend..."; done']
       containers:
       - name: demo-data-generator
-        image: "{{ .Values.registry }}/opik-python-backend:{{ (index .Values.component "python-backend" "image" "tag") }}"
+        image: "{{ .Values.registry }}/opik-python-backend:{{ default .Chart.AppVersion (index .Values.component "python-backend" "image" "tag") }}"
         command: [ "sh", "-c", "./demo_data_entrypoint.sh" ]
         env:
         - name: CREATE_DEMO_DATA

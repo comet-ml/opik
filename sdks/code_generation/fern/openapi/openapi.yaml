@@ -62,6 +62,9 @@ tags:
   description: LLM Provider Key
 - name: Manual Evaluation
   description: "Manual evaluation resources for traces, threads, and spans"
+- name: Ollama
+  description: Ollama provider configuration endpoints with OpenAI-compatible API
+    support.
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
@@ -1649,6 +1652,33 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/export-jobs/{jobId}/download:
+    get:
+      tags:
+      - Datasets
+      summary: Download dataset export file
+      description: Downloads the exported CSV file for a completed export job. This
+        endpoint proxies the file download to avoid exposing internal storage URLs.
+      operationId: downloadDatasetExport
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: CSV file content
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Export job is not ready for download
+        "404":
+          description: Export job not found
   /v1/private/datasets/{id}/expansions:
     post:
       tags:
@@ -1782,6 +1812,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectStats_Public"
+  /v1/private/datasets/export-jobs/{jobId}:
+    get:
+      tags:
+      - Datasets
+      summary: Get dataset export job status
+      description: Retrieves the current status of a dataset export job
+      operationId: getDatasetExportJob
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Export job details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetExportJob_Public"
+        "404":
+          description: Export job not found
+  /v1/private/datasets/export-jobs:
+    get:
+      tags:
+      - Datasets
+      summary: Get all dataset export jobs
+      description: Retrieves all export jobs for the workspace. This is used to restore
+        the export panel state after page refresh.
+      operationId: getDatasetExportJobs
+      responses:
+        "200":
+          description: List of export jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DatasetExportJob_Public"
   /v1/private/datasets/items/{itemId}:
     get:
       tags:
@@ -1901,6 +1971,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PageColumns"
+  /v1/private/datasets/export-jobs/{jobId}/mark-viewed:
+    put:
+      tags:
+      - Datasets
+      summary: Mark dataset export job as viewed
+      description: Marks a dataset export job as viewed by setting the viewed_at timestamp.
+        This is used to track that a user has seen a failed job's error message. This
+        operation is idempotent.
+      operationId: markDatasetExportJobViewed
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Job marked as viewed
+        "404":
+          description: Export job not found
+  /v1/private/datasets/{id}/export:
+    post:
+      tags:
+      - Datasets
+      summary: Start dataset CSV export
+      description: Initiates an asynchronous CSV export job for the dataset. Returns
+        immediately with job details for polling.
+      operationId: startDatasetExport
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "202":
+          description: Export job created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetExportJob_Public"
+        "200":
+          description: Existing export job in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetExportJob_Public"
   /v1/private/datasets/items/stream:
     post:
       tags:
@@ -2103,6 +2222,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/datasets/{id}/versions/retrieve:
+    post:
+      tags:
+      - Datasets
+      summary: Retrieve dataset version by name
+      description: "Get a specific version by its version name (e.g., 'v1', 'v373').\
+        \ This is more efficient than paginating through all versions for large datasets."
+      operationId: retrieveDatasetVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionRetrieveRequest_Public"
+      responses:
+        "200":
+          description: Dataset version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions/hash/{versionHash}:
     patch:
       tags:
@@ -2152,6 +2310,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/experiments/batch:
+    patch:
+      tags:
+      - Experiments
+      summary: Batch update experiments
+      description: Update multiple experiments
+      operationId: batchUpdateExperiments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments:
     get:
       tags:
@@ -2202,6 +2381,15 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
       - name: sorting
         in: query
         schema:
@@ -2210,6 +2398,18 @@ paths:
         in: query
         schema:
           type: string
+      - name: experiment_ids
+        in: query
+        schema:
+          type: string
+          description: Filter experiments by a list of experiment IDs
+      - name: force_sorting
+        in: query
+        schema:
+          type: boolean
+          description: Force sorting even when exceeding the endpoint result set limit.
+            May result in slower queries
+          default: false
       responses:
         "200":
           description: Experiments resource
@@ -2365,6 +2565,11 @@ paths:
         schema:
           type: string
           description: "Filter experiments by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: filters
         in: query
         schema:
@@ -2403,6 +2608,11 @@ paths:
         schema:
           type: string
           description: "Filter experiments by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
       - name: filters
         in: query
         schema:
@@ -2965,6 +3175,87 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ollama/models:
+    post:
+      tags:
+      - Ollama
+      summary: List available Ollama models
+      description: "Fetches the list of models available from the Ollama instance.\
+        \ URL may be provided with or without /v1 suffix (e.g., http://localhost:11434\
+        \ or http://localhost:11434/v1). The /v1 suffix will be automatically removed\
+        \ for model discovery. For actual LLM inference, use the URL with /v1 suffix\
+        \ for OpenAI-compatible endpoints."
+      operationId: listModels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OllamaInstanceBaseUrlRequest"
+        required: true
+      responses:
+        "200":
+          description: Models retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OllamaModel"
+        "422":
+          description: Unprocessable Content - Invalid URL format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "500":
+          description: Failed to fetch models
+        "503":
+          description: Ollama provider is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ollama/test-connection:
+    post:
+      tags:
+      - Ollama
+      summary: Test connection to Ollama instance
+      description: "Validates that the provided Ollama URL is reachable. URL may be\
+        \ provided with or without /v1 suffix (e.g., http://localhost:11434 or http://localhost:11434/v1).\
+        \ The /v1 suffix will be automatically removed for connection testing. For\
+        \ inference, use the URL with /v1 suffix."
+      operationId: testConnection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OllamaInstanceBaseUrlRequest"
+        required: true
+      responses:
+        "200":
+          description: Connection test successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OllamaConnectionTestResponse"
+        "422":
+          description: Unprocessable Content - Invalid URL format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "502":
+          description: Connection test failed - Ollama instance unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OllamaConnectionTestResponse"
+        "503":
+          description: Ollama provider is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/otel/v1/traces:
     post:
       tags:
@@ -3363,6 +3654,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeedbackScoreNames"
+  /v1/private/projects/{id}/token-usage/names:
+    get:
+      tags:
+      - Projects
+      summary: Find Token Usage names
+      description: Find Token Usage names
+      operationId: findTokenUsageNames
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Token Usage names resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenUsageNames"
   /v1/private/projects/{id}/metrics:
     post:
       tags:
@@ -8967,6 +9279,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DatasetItem"
+        batch_group_id:
+          type: string
+          description: "Optional batch group ID to group multiple batches into a single\
+            \ dataset version. If null, mutates the latest version instead of creating\
+            \ a new one."
+          format: uuid
     ExperimentItem:
       required:
       - dataset_item_id
@@ -9129,6 +9447,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DatasetItem_Write"
+        batch_group_id:
+          type: string
+          description: "Optional batch group ID to group multiple batches into a single\
+            \ dataset version. If null, mutates the latest version instead of creating\
+            \ a new one."
+          format: uuid
     DatasetItem_Write:
       required:
       - data
@@ -9259,6 +9583,12 @@ components:
             Empty array means 'delete all items in the dataset'.
           items:
             $ref: "#/components/schemas/DatasetItemFilter"
+        batch_group_id:
+          type: string
+          description: "Optional batch group ID to group multiple delete operations\
+            \ into a single dataset version. If null, mutates the latest version instead\
+            \ of creating a new one."
+          format: uuid
       description: Request to delete multiple dataset items
     DatasetExpansionResponse:
       type: object
@@ -9819,6 +10149,56 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProjectStatItemObject_Public"
+    DatasetExportJob_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        dataset_name:
+          type: string
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - PENDING
+          - PROCESSING
+          - COMPLETED
+          - FAILED
+        file_path:
+          type: string
+          readOnly: true
+        error_message:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        viewed_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
     DatasetItem_Public:
       required:
       - data
@@ -10020,6 +10400,8 @@ components:
           format: int32
         dataset_version:
           type: string
+        filters:
+          type: string
     DatasetUpdate:
       required:
       - name
@@ -10101,6 +10483,17 @@ components:
           minLength: 1
           type: string
           description: Version hash or tag to restore from
+    DatasetVersionRetrieveRequest_Public:
+      required:
+      - version_name
+      type: object
+      properties:
+        version_name:
+          minLength: 1
+          pattern: ^v\d+$
+          type: string
+          description: "Version name in format 'vN' (e.g., 'v1', 'v373')"
+          example: v1
     DatasetVersionUpdate_Public:
       type: object
       properties:
@@ -10122,6 +10515,74 @@ components:
             type: string
             description: Optional list of tags to add to this version
             example: "[\"production\",\"reviewed\"]"
+    ExperimentBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of experiment IDs to update (max 1000)
+          items:
+            type: string
+            description: List of experiment IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/ExperimentUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple experiments
+    ExperimentScore:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
+    ExperimentUpdate:
+      type: object
+      properties:
+        name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        tags:
+          maxItems: 50
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+        type:
+          type: string
+          enum:
+          - regular
+          - trial
+          - mini-batch
+        status:
+          type: string
+          description: The status of the experiment
+          enum:
+          - running
+          - completed
+          - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore"
     Experiment:
       required:
       - dataset_name
@@ -10140,6 +10601,9 @@ components:
         project_id:
           type: string
           format: uuid
+          readOnly: true
+        project_name:
+          type: string
           readOnly: true
         name:
           type: string
@@ -10230,17 +10694,6 @@ components:
           format: uuid
         dataset_version_summary:
           $ref: "#/components/schemas/DatasetVersionSummary"
-    ExperimentScore:
-      required:
-      - name
-      - value
-      type: object
-      properties:
-        name:
-          minLength: 1
-          type: string
-        value:
-          type: number
     PercentageValues:
       type: object
       properties:
@@ -10460,11 +10913,37 @@ components:
             \ with the given experimentName"
           format: uuid
         items:
-          maxItems: 250
+          maxItems: 1000
           minItems: 1
           type: array
           items:
             $ref: "#/components/schemas/ExperimentItemBulkRecord"
+    ExperimentItemReference:
+      required:
+      - dataset_id
+      - dataset_item_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+        dataset_item_id:
+          type: string
+          description: Dataset Item ID
+          format: uuid
+      description: "Experiment reference with ID, name, dataset ID, and dataset item\
+        \ ID"
+      readOnly: true
     GuardrailsValidation:
       type: object
       properties:
@@ -10687,6 +11166,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentItemReference"
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -10746,7 +11227,7 @@ components:
             \ with the given experimentName"
           format: uuid
         items:
-          maxItems: 250
+          maxItems: 1000
           minItems: 1
           type: array
           items:
@@ -11001,6 +11482,9 @@ components:
           type: string
           format: uuid
           readOnly: true
+        project_name:
+          type: string
+          readOnly: true
         name:
           type: string
         metadata:
@@ -11240,40 +11724,6 @@ components:
         last_retrieved_id:
           type: string
           format: uuid
-    ExperimentUpdate:
-      type: object
-      properties:
-        name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-        metadata:
-          $ref: "#/components/schemas/JsonNode"
-        tags:
-          maxItems: 50
-          minItems: 0
-          uniqueItems: true
-          type: array
-          items:
-            maxLength: 100
-            minLength: 0
-            type: string
-        type:
-          type: string
-          enum:
-          - regular
-          - trial
-          - mini-batch
-        status:
-          type: string
-          description: The status of the experiment
-          enum:
-          - running
-          - completed
-          - cancelled
-        experiment_scores:
-          type: array
-          items:
-            $ref: "#/components/schemas/ExperimentScore"
     BooleanFeedbackDefinition:
       required:
       - details
@@ -11994,6 +12444,7 @@ components:
           - openrouter
           - vertex-ai
           - bedrock
+          - ollama
           - custom-llm
           - opik-free
         api_key:
@@ -12060,6 +12511,7 @@ components:
           - openrouter
           - vertex-ai
           - bedrock
+          - ollama
           - custom-llm
           - opik-free
         api_key:
@@ -12122,6 +12574,7 @@ components:
           - openrouter
           - vertex-ai
           - bedrock
+          - ollama
           - custom-llm
           - opik-free
         api_key:
@@ -12233,6 +12686,60 @@ components:
           - trace
           - thread
           - span
+    OllamaModel:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+          description: Model name
+          example: llama2
+        size:
+          type: integer
+          description: Model size in bytes
+          format: int64
+        digest:
+          type: string
+          description: Model digest/hash
+        modified_at:
+          type: string
+          description: Model modification date
+          format: date-time
+      description: Ollama model information
+    OllamaInstanceBaseUrlRequest:
+      required:
+      - base_url
+      type: object
+      properties:
+        base_url:
+          minLength: 1
+          type: string
+          description: "Base URL of the Ollama instance. May include /v1 suffix which\
+            \ will be automatically removed for connection testing. For inference,\
+            \ use the URL with /v1 suffix for OpenAI-compatible endpoints."
+          example: http://localhost:11434/v1
+        api_key:
+          type: string
+          description: "Optional API key for authenticated Ollama instances. If provided,\
+            \ will be sent as Bearer token in Authorization header."
+      description: Request with Ollama instance base URL for connection testing or
+        model discovery.
+    OllamaConnectionTestResponse:
+      type: object
+      properties:
+        connected:
+          type: boolean
+          description: Whether the connection was successful
+        version:
+          type: string
+          description: Server version (returned even if connection failed or version
+            is incompatible)
+        error_message:
+          type: string
+          description: Error message if connection failed
+      description: Response from Ollama connection test.
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
     Optimization:
@@ -12847,6 +13354,13 @@ components:
           type: string
         type:
           type: string
+    TokenUsageNames:
+      type: object
+      properties:
+        names:
+          type: array
+          items:
+            type: string
     DataPointNumber_Public:
       required:
       - time
@@ -12875,6 +13389,10 @@ components:
           - THREAD_COUNT
           - THREAD_DURATION
           - THREAD_FEEDBACK_SCORES
+          - SPAN_FEEDBACK_SCORES
+          - SPAN_COUNT
+          - SPAN_DURATION
+          - SPAN_TOKEN_USAGE
         interval:
           type: string
           enum:
@@ -12894,6 +13412,24 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DataPointNumber_Public"
+    BreakdownConfig_Public:
+      type: object
+      properties:
+        field:
+          type: string
+          enum:
+          - none
+          - tags
+          - metadata
+          - name
+          - error_info
+          - model
+          - provider
+          - type
+        metadata_key:
+          type: string
+        sub_metric:
+          type: string
     ProjectMetricRequest_Public:
       type: object
       properties:
@@ -12909,6 +13445,10 @@ components:
           - THREAD_COUNT
           - THREAD_DURATION
           - THREAD_FEEDBACK_SCORES
+          - SPAN_FEEDBACK_SCORES
+          - SPAN_COUNT
+          - SPAN_DURATION
+          - SPAN_TOKEN_USAGE
         interval:
           type: string
           enum:
@@ -12921,6 +13461,10 @@ components:
         interval_end:
           type: string
           format: date-time
+        span_filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpanFilter_Public"
         trace_filters:
           type: array
           items:
@@ -12929,6 +13473,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceThreadFilter_Public"
+        breakdown:
+          $ref: "#/components/schemas/BreakdownConfig_Public"
     ProjectStatsSummary:
       type: object
       properties:
@@ -13634,10 +14180,12 @@ components:
       - collaboratorsTabEnabled
       - csvUploadEnabled
       - customllmProviderEnabled
+      - datasetExportEnabled
       - datasetVersioningEnabled
       - exportEnabled
       - geminiProviderEnabled
       - guardrailsEnabled
+      - ollamaProviderEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -13674,6 +14222,8 @@ components:
           type: boolean
         datasetVersioningEnabled:
           type: boolean
+        datasetExportEnabled:
+          type: boolean
         openaiProviderEnabled:
           type: boolean
         anthropicProviderEnabled:
@@ -13687,6 +14237,8 @@ components:
         bedrockProviderEnabled:
           type: boolean
         customllmProviderEnabled:
+          type: boolean
+        ollamaProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean
@@ -14411,6 +14963,32 @@ components:
           enum:
           - passed
           - failed
+    ExperimentItemReference_Public:
+      required:
+      - dataset_id
+      - dataset_item_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+        dataset_item_id:
+          type: string
+          description: Dataset Item ID
+          format: uuid
+      description: "Experiment reference with ID, name, dataset ID, and dataset item\
+        \ ID"
+      readOnly: true
     GuardrailsValidation_Public:
       type: object
       properties:
@@ -14535,6 +15113,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentItemReference_Public"
     TraceThread:
       type: object
       properties:

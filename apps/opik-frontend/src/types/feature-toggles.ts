@@ -9,6 +9,7 @@ export enum FeatureToggleKeys {
   CSV_UPLOAD_ENABLED = "csv_upload_enabled",
   EXPORT_ENABLED = "export_enabled",
   DATASET_VERSIONING_ENABLED = "dataset_versioning_enabled",
+  DATASET_EXPORT_ENABLED = "dataset_export_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED = "span_user_defined_metric_python_enabled",
   OPTIMIZATION_STUDIO_ENABLED = "optimization_studio_enabled",
@@ -20,5 +21,6 @@ export enum FeatureToggleKeys {
   VERTEXAI_PROVIDER_ENABLED = "vertexai_provider_enabled",
   BEDROCK_PROVIDER_ENABLED = "bedrock_provider_enabled",
   CUSTOMLLM_PROVIDER_ENABLED = "customllm_provider_enabled",
+  OLLAMA_PROVIDER_ENABLED = "ollama_provider_enabled",
   COLLABORATORS_TAB_ENABLED = "collaborators_tab_enabled",
 }

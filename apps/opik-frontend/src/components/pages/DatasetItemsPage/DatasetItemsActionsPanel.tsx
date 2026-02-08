@@ -12,7 +12,7 @@ import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 import AddTagDialog from "./AddTagDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
-import { stripColumnPrefix } from "@/lib/utils";
+import { stripColumnPrefix, generateBatchGroupId } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Filters } from "@/types/filters";
@@ -80,6 +80,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         isAllItemsSelected,
         filters,
         search,
+        batchGroupId: isAllItemsSelected ? generateBatchGroupId() : undefined,
       });
     }
   }, [
@@ -195,15 +196,14 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       <TooltipWrapper content="Add tags">
         <Button
           variant="outline"
-          size="sm"
+          size="icon-sm"
           onClick={() => {
             setAddTagDialogOpen(true);
             resetKeyRef.current = resetKeyRef.current + 1;
           }}
           disabled={disabled}
         >
-          <Tag className="mr-2 size-4" />
-          Add tags
+          <Tag />
         </Button>
       </TooltipWrapper>
 

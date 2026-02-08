@@ -38,51 +38,51 @@ class TestTrackHarborPatching:
     def test_track_harbor_patches_trial_run(self):
         """Verify Trial.run method is patched with opik_tracked attribute."""
         track_harbor()
-        assert hasattr(
-            Trial.run, "opik_tracked"
-        ), "Trial.run should have opik_tracked attribute after track_harbor()"
+        assert hasattr(Trial.run, "opik_tracked"), (
+            "Trial.run should have opik_tracked attribute after track_harbor()"
+        )
 
     def test_track_harbor_patches_trial_setup_environment(self):
         """Verify Trial._setup_environment method is patched with opik_tracked attribute."""
         track_harbor()
-        assert hasattr(
-            Trial._setup_environment, "opik_tracked"
-        ), "Trial._setup_environment should have opik_tracked attribute after track_harbor()"
+        assert hasattr(Trial._setup_environment, "opik_tracked"), (
+            "Trial._setup_environment should have opik_tracked attribute after track_harbor()"
+        )
 
     def test_track_harbor_patches_trial_setup_agent(self):
         """Verify Trial._setup_agent method is patched with opik_tracked attribute."""
         track_harbor()
-        assert hasattr(
-            Trial._setup_agent, "opik_tracked"
-        ), "Trial._setup_agent should have opik_tracked attribute after track_harbor()"
+        assert hasattr(Trial._setup_agent, "opik_tracked"), (
+            "Trial._setup_agent should have opik_tracked attribute after track_harbor()"
+        )
 
     def test_track_harbor_patches_trial_execute_agent(self):
         """Verify Trial._execute_agent method is patched with opik_tracked attribute."""
         track_harbor()
-        assert hasattr(
-            Trial._execute_agent, "opik_tracked"
-        ), "Trial._execute_agent should have opik_tracked attribute after track_harbor()"
+        assert hasattr(Trial._execute_agent, "opik_tracked"), (
+            "Trial._execute_agent should have opik_tracked attribute after track_harbor()"
+        )
 
     def test_track_harbor_patches_trial_run_verification(self):
         """Verify Trial._run_verification method is patched with opik_tracked attribute."""
         track_harbor()
-        assert hasattr(
-            Trial._run_verification, "opik_tracked"
-        ), "Trial._run_verification should have opik_tracked attribute after track_harbor()"
+        assert hasattr(Trial._run_verification, "opik_tracked"), (
+            "Trial._run_verification should have opik_tracked attribute after track_harbor()"
+        )
 
     def test_track_harbor_patches_verifier_verify(self):
         """Verify Verifier.verify method is patched with opik_tracked attribute."""
         track_harbor()
-        assert hasattr(
-            Verifier.verify, "opik_tracked"
-        ), "Verifier.verify should have opik_tracked attribute after track_harbor()"
+        assert hasattr(Verifier.verify, "opik_tracked"), (
+            "Verifier.verify should have opik_tracked attribute after track_harbor()"
+        )
 
     def test_track_harbor_patches_step_init(self):
         """Verify Step.__init__ is patched via _patch_step_class."""
         track_harbor()
-        assert hasattr(
-            _patch_step_class, "_patched"
-        ), "Step.__init__ should be patched (indicated by _patch_step_class._patched)"
+        assert hasattr(_patch_step_class, "_patched"), (
+            "Step.__init__ should be patched (indicated by _patch_step_class._patched)"
+        )
 
     def test_track_harbor_returns_job_when_provided(self):
         """Verify track_harbor returns the job instance when one is provided."""
@@ -120,9 +120,9 @@ class TestHarborClassesExist:
             "_run_verification",
         ]
         for method_name in expected_methods:
-            assert hasattr(
-                Trial, method_name
-            ), f"Trial class should have {method_name} method"
+            assert hasattr(Trial, method_name), (
+                f"Trial class should have {method_name} method"
+            )
 
     def test_verifier_class_has_verify_method(self):
         """Verify Verifier class has verify method."""
@@ -201,9 +201,9 @@ class TestHarborTraceName:
 
             # Check trace name DURING execution (before completion)
             # The trace should exist and have the correct name immediately
-            assert (
-                len(fake_backend.trace_trees) >= 1
-            ), "Expected trace to be created during execution"
+            assert len(fake_backend.trace_trees) >= 1, (
+                "Expected trace to be created during execution"
+            )
             trace_during_execution = fake_backend.trace_trees[0]
             assert trace_during_execution.name == expected_trace_name, (
                 f"Expected trace name '{expected_trace_name}' during execution, "
@@ -225,9 +225,9 @@ class TestHarborTraceName:
         trace = fake_backend.trace_trees[0]
 
         # Verify trace name is still correct after completion
-        assert (
-            trace.name == expected_trace_name
-        ), f"Expected trace name '{expected_trace_name}' after completion, got '{trace.name}'"
+        assert trace.name == expected_trace_name, (
+            f"Expected trace name '{expected_trace_name}' after completion, got '{trace.name}'"
+        )
 
         # Verify other properties are set correctly
         assert trace.project_name == "test-project"

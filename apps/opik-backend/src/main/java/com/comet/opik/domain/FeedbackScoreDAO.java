@@ -5,7 +5,6 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.FeedbackScoreNames;
-import com.comet.opik.api.ScoreSource;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
@@ -32,9 +31,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.DatabaseUtils.getLogComment;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
@@ -65,7 +62,7 @@ public interface FeedbackScoreDAO {
 
     Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(List<UUID> projectId);
 
-    Mono<Long> deleteThreadManualScores(Set<UUID> threadModelIds, UUID projectId);
+    Mono<Long> deleteAllThreadScores(Set<UUID> threadModelIds, UUID projectId);
 }
 
 @Singleton
@@ -153,85 +150,42 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private static final String SELECT_FEEDBACK_SCORE_NAMES = """
-            SELECT
-                distinct name, 'feedback_scores' AS type
-            FROM (
+            <if(experiment_ids)>
+            WITH experiment_trace_ids AS (
                 SELECT
-                    name
-                FROM feedback_scores
+                    DISTINCT trace_id
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
-                <if(project_ids)>
-                AND project_id IN :project_ids
-                <endif>
-                <if(with_experiments_only)>
-                AND entity_id IN (
-                    SELECT
-                        trace_id
-                    FROM (
-                        SELECT
-                            id
-                        FROM experiments
-                        WHERE workspace_id = :workspace_id
-                        ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) AS e
-                    INNER JOIN (
-                        SELECT
-                            experiment_id,
-                            trace_id
-                        FROM experiment_items
-                        WHERE workspace_id = :workspace_id
-                        <if(experiment_ids)>
-                        AND experiment_id IN :experiment_ids
-                        <endif>
-                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) ei ON e.id = ei.experiment_id
-                )
-                <endif>
-                AND entity_type = :entity_type
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, name
-                UNION ALL
-                SELECT
-                    name
-                FROM authored_feedback_scores
-                WHERE workspace_id = :workspace_id
-                <if(project_ids)>
-                AND project_id IN :project_ids
-                <endif>
-                <if(with_experiments_only)>
-                AND entity_id IN (
-                    SELECT
-                        trace_id
-                    FROM (
-                        SELECT
-                            id
-                        FROM experiments
-                        WHERE workspace_id = :workspace_id
-                        ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) AS e
-                    INNER JOIN (
-                        SELECT
-                            experiment_id,
-                            trace_id
-                        FROM experiment_items
-                        WHERE workspace_id = :workspace_id
-                        <if(experiment_ids)>
-                        AND experiment_id IN :experiment_ids
-                        <endif>
-                        ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                    ) ei ON e.id = ei.experiment_id
-                )
-                <endif>
-                AND entity_type = :entity_type
-                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) DESC, last_updated_at DESC
-                LIMIT 1 BY entity_id, author, name
-            ) AS names
-            <if(with_experiment_scores)>
-            UNION ALL
+                AND experiment_id IN :experiment_ids
+            )
+            <endif>
+            SELECT DISTINCT
+                name,
+                'feedback_scores' AS type
+            FROM feedback_scores
+            WHERE workspace_id = :workspace_id
+            <if(project_ids)>
+            AND project_id IN :project_ids
+            <endif>
+            AND entity_type = :entity_type
+            <if(experiment_ids)>
+            AND entity_id IN (SELECT trace_id FROM experiment_trace_ids)
+            <endif>
+            UNION DISTINCT
+            SELECT DISTINCT
+                name,
+                'feedback_scores' AS type
+            FROM authored_feedback_scores
+            WHERE workspace_id = :workspace_id
+            <if(project_ids)>
+            AND project_id IN :project_ids
+            <endif>
+            AND entity_type = :entity_type
+            <if(experiment_ids)>
+            AND entity_id IN (SELECT trace_id FROM experiment_trace_ids)
+            <endif>
+            <if(experiment_ids)>
+            UNION DISTINCT
             SELECT DISTINCT
                 JSON_VALUE(score, '$.name') AS name,
                 'experiment_scores' AS type
@@ -239,15 +193,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 SELECT id, experiment_scores
                 FROM experiments
                 WHERE workspace_id = :workspace_id
-                <if(experiment_ids)>
                 AND id IN :experiment_ids
-                <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
             ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
             WHERE length(e.experiment_scores) > 2
-                AND length(JSON_VALUE(score, '$.name')) > 0
+            AND length(JSON_VALUE(score, '$.name')) > 0
             <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -548,7 +500,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
             List<UUID> projectIds = projectId == null ? List.of() : List.of(projectId);
 
-            bindTemplateParam(projectIds, false, null, false, template);
+            bindTemplateParam(projectIds, null, template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
@@ -567,7 +519,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES, "get_experiments_feedback_score_names",
                     workspaceId, experimentIds.size());
-            bindTemplateParam(null, true, experimentIds, true, template);
+            bindTemplateParam(null, experimentIds, template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
@@ -615,7 +567,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             var template = getSTWithLogComment(SELECT_FEEDBACK_SCORE_NAMES,
                     "get_projects_trace_threads_feedback_score_names", workspaceId, projectIds.size());
 
-            bindTemplateParam(projectIds, false, null, false, template);
+            bindTemplateParam(projectIds, null, template);
 
             var statement = connection.createStatement(template.render())
                     .bind("workspace_id", workspaceId);
@@ -629,39 +581,34 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     }
 
     @Override
-    public Mono<Long> deleteThreadManualScores(@NonNull Set<UUID> threadModelIds, @NonNull UUID projectId) {
+    @WithSpan
+    public Mono<Long> deleteAllThreadScores(@NonNull Set<UUID> threadModelIds, @NonNull UUID projectId) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(threadModelIds),
                 "Argument 'threadModelIds' must not be empty");
 
         return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
 
-            List<String> sources = List.of(ScoreSource.UI.getValue(), ScoreSource.SDK.getValue());
-
-            // Delete from feedback_scores table
-            var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS, "delete_thread_manual_scores",
+            // Delete from feedback_scores table - no source filter, deletes all scores
+            var template1 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS, "delete_all_thread_scores",
                     workspaceId, threadModelIds.size());
             template1.add("project_id", projectId);
-            template1.add("sources", sources);
             template1.add("table_name", "feedback_scores");
 
             var statement1 = connection.createStatement(template1.render())
                     .bind("entity_ids", threadModelIds)
                     .bind("entity_type", EntityType.THREAD.getType())
-                    .bind("sources", sources)
                     .bind("project_id", projectId)
                     .bind("workspace_id", workspaceId);
 
-            // Delete from authored_feedback_scores table
+            // Delete from authored_feedback_scores table - no source filter, deletes all scores
             var template2 = getSTWithLogComment(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS,
-                    "delete_thread_manual_scores_authored", workspaceId, threadModelIds.size());
+                    "delete_all_thread_scores_authored", workspaceId, threadModelIds.size());
             template2.add("project_id", projectId);
-            template2.add("sources", sources);
             template2.add("table_name", "authored_feedback_scores");
 
             var statement2 = connection.createStatement(template2.render())
                     .bind("entity_ids", threadModelIds)
                     .bind("entity_type", EntityType.THREAD.getType())
-                    .bind("sources", sources)
                     .bind("project_id", projectId)
                     .bind("workspace_id", workspaceId);
 
@@ -699,13 +646,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }));
     }
 
-    private Mono<List<String>> getNames(Statement statement) {
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("name", String.class)))
-                .distinct()
-                .collect(Collectors.toList());
-    }
-
     private void bindStatementParam(List<UUID> projectIds, Set<UUID> experimentIds, Statement statement,
             EntityType entityType) {
         if (CollectionUtils.isNotEmpty(projectIds)) {
@@ -719,19 +659,13 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         statement.bind("entity_type", entityType.getType());
     }
 
-    private void bindTemplateParam(List<UUID> projectIds, boolean withExperimentsOnly, Set<UUID> experimentIds,
-            boolean withExperimentScores, ST template) {
+    private void bindTemplateParam(List<UUID> projectIds, Set<UUID> experimentIds, ST template) {
         if (CollectionUtils.isNotEmpty(projectIds)) {
             template.add("project_ids", projectIds);
         }
-
-        template.add("with_experiments_only", withExperimentsOnly);
-
         if (CollectionUtils.isNotEmpty(experimentIds)) {
             template.add("experiment_ids", experimentIds);
         }
-
-        template.add("with_experiment_scores", withExperimentScores);
     }
 
     private Mono<? extends Result> cascadeSpanDelete(Set<UUID> traceIds, UUID projectId, Connection connection) {

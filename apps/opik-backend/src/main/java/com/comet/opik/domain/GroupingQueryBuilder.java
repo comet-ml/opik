@@ -44,6 +44,7 @@ public class GroupingQueryBuilder {
                 .map(group -> switch (group.type()) {
                     case DICTIONARY -> JSON_FIELD.formatted(group.field(), getKeyAndValidate(group));
                     case STRING -> group.field();
+                    case LIST -> "arrayJoin(if(empty(%s), [''], %s))".formatted(group.field(), group.field());
                     default -> throw new BadRequestException("Unsupported grouping field type: " + group.type());
                 })
                 .toList();

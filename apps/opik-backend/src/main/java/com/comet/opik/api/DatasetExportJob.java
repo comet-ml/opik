@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.annotation.Nullable;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -18,6 +19,8 @@ public record DatasetExportJob(
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
+        @Nullable @JsonView({
+                DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String datasetName,
         @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) DatasetExportStatus status,
         @JsonView({
@@ -30,6 +33,8 @@ public record DatasetExportJob(
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant expiresAt,
+        @JsonView({
+                DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant viewedAt,
         @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnSort } from "@tanstack/react-table";
@@ -6,37 +6,39 @@ import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import isArray from "lodash/isArray";
 
-import { COLUMN_FEEDBACK_SCORES_ID, ROW_HEIGHT } from "@/types/shared";
-import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
-import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import {
-  IN_PROGRESS_OPTIMIZATION_STATUSES,
-  OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
-} from "@/lib/optimizations";
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_ID_ID,
+  COLUMN_NAME_ID,
+  ROW_HEIGHT,
+} from "@/types/shared";
+import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
+import { OPTIMIZATION_ACTIVE_REFETCH_INTERVAL } from "@/lib/optimizations";
+import { migrateSelectedColumns } from "@/lib/table";
 import useAppStore from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import { useOptimizationScores } from "@/components/pages-shared/experiments/useOptimizationScores";
 
-const REFETCH_INTERVAL = 30000;
 const MAX_EXPERIMENTS_LOADED = 1000;
-const POST_CANCELLATION_REFETCH_COUNT = 2;
-
-const isInProgressStatus = (status?: OPTIMIZATION_STATUS) =>
-  status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
 const SELECTED_COLUMNS_KEY = "optimization-experiments-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "optimization-experiments-columns-width";
 const COLUMNS_ORDER_KEY = "optimization-experiments-columns-order";
-const COLUMNS_SORT_KEY = "optimization-experiments-columns-sort";
+const COLUMNS_SORT_KEY = "optimization-experiments-columns-sort-v2";
 const ROW_HEIGHT_KEY = "optimization-experiments-row-height";
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
+  COLUMN_ID_ID,
   "prompt",
   "objective_name",
   "created_at",
 ];
+
+const DEFAULT_SORTING: ColumnSort[] = [{ id: COLUMN_ID_ID, desc: false }];
 
 export const useCompareOptimizationsData = () => {
   const navigate = useNavigate();
@@ -54,14 +56,18 @@ export const useCompareOptimizationsData = () => {
   const [sortedColumns, setSortedColumns] = useLocalStorageState<ColumnSort[]>(
     COLUMNS_SORT_KEY,
     {
-      defaultValue: [],
+      defaultValue: DEFAULT_SORTING,
     },
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID, COLUMN_ID_ID],
+      ),
     },
   );
 
@@ -84,18 +90,6 @@ export const useCompareOptimizationsData = () => {
 
   const optimizationId = optimizationsIds?.[0];
 
-  const pollingStateRef = useRef({
-    previousStatus: undefined as OPTIMIZATION_STATUS | undefined,
-    postCancellationCount: 0,
-  });
-
-  useEffect(() => {
-    pollingStateRef.current = {
-      previousStatus: undefined,
-      postCancellationCount: 0,
-    };
-  }, [optimizationId]);
-
   const {
     data: optimization,
     isPending: isOptimizationPending,
@@ -105,35 +99,15 @@ export const useCompareOptimizationsData = () => {
     {
       placeholderData: keepPreviousData,
       enabled: !!optimizationId,
-      refetchInterval: (query) => {
-        if (!optimizationId) return false;
-
-        const status = query.state.data?.status;
-        const polling = pollingStateRef.current;
-
-        if (
-          status === OPTIMIZATION_STATUS.CANCELLED &&
-          isInProgressStatus(polling.previousStatus)
-        ) {
-          polling.postCancellationCount = POST_CANCELLATION_REFETCH_COUNT;
-        }
-        polling.previousStatus = status;
-
-        const needsFastPolling =
-          isInProgressStatus(status) || polling.postCancellationCount-- > 0;
-
-        return needsFastPolling
-          ? OPTIMIZATION_ACTIVE_REFETCH_INTERVAL
-          : REFETCH_INTERVAL;
-      },
+      refetchInterval: OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
     },
   );
-
-  const isActiveOptimization = isInProgressStatus(optimization?.status);
 
   const {
     data,
     isPending: isExperimentsPending,
+    isPlaceholderData: isExperimentsPlaceholderData,
+    isFetching: isExperimentsFetching,
     refetch: refetchExperiments,
   } = useExperimentsList(
     {
@@ -154,9 +128,7 @@ export const useCompareOptimizationsData = () => {
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: isActiveOptimization
-        ? OPTIMIZATION_ACTIVE_REFETCH_INTERVAL
-        : REFETCH_INTERVAL,
+      refetchInterval: OPTIMIZATION_ACTIVE_REFETCH_INTERVAL,
     },
   );
 
@@ -237,6 +209,8 @@ export const useCompareOptimizationsData = () => {
     // Loading states
     isOptimizationPending,
     isExperimentsPending,
+    isExperimentsPlaceholderData,
+    isExperimentsFetching,
     // Search
     search,
     setSearch,

@@ -32,7 +32,9 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 - **`validation_dataset`** (Dataset, optional): Validation dataset for evaluating and ranking candidate prompts. When provided, the optimizer uses `dataset` for understanding failure modes and generating improvements, then evaluates candidates on `validation_dataset` to select the best one. This helps prevent overfitting. If not provided, the same dataset is used for both training and validation.
 - **`metric`** (Callable): Metric function to optimize
 - **`experiment_config`** (dict, optional): Optional configuration metadata
-- **`n_samples`** (int, optional): Number of dataset samples to use per evaluation
+- **`n_samples`** (int, float, percent string, or "all"/"full"/`None`, optional): Number of dataset items to use per evaluation (uses the validation dataset when provided). Use counts (e.g., `50`), fractions (e.g., `0.1`), percentages (e.g., `"10%"`), or `"all"`/`"full"`/`None` for the full dataset.
+- **`n_samples_minibatch`** (int, optional): Optional number of samples for inner-loop minibatches (defaults to `n_samples`).
+- **`n_samples_strategy`** (str, optional): Sampling strategy for subsampling (default: `"random_sorted"`).
 - **`project_name`** (str, default: "Optimization"): Opik project name for logging
 - **`optimization_id`** (str, optional): Optional UUIDv7 string for the optimization run
 
@@ -130,28 +132,6 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 - **Batch Size**: Larger batches (30-50) for diverse datasets, smaller (15-25) for focused analysis
 - **Max Parallel Batches**: Increase (8-10) for faster analysis with good API rate limits, decrease (2-3) for limited quotas
 - **N-Trials**: More trials (5-7) for thorough optimization, fewer (2-3) for quick improvement
-
-### MiproOptimizer
-
-**Purpose**: Implements MIPRO algorithm for complex agent and tool-using prompt optimization.
-
-**Specific Parameters:**
-- **`auto`** (Literal["light", "medium", "heavy"], default: "light"): Optimization intensity level
-  - `"light"`: Fast optimization with minimal exploration
-  - `"medium"`: Balanced optimization with moderate exploration
-  - `"heavy"`: Thorough optimization with extensive exploration
-- **`n_threads`** (int, default: 6): Number of parallel threads for evaluation
-- **`verbose`** (int, default: 1): Verbosity level (0=off, 1=on, 2=debug)
-
-**Use Cases:**
-- Complex multi-step reasoning tasks
-- Agent workflows requiring tool usage
-- Tasks benefiting from programmatic prompt optimization
-- Multi-agent or interactive optimization scenarios
-
-**Parameter Tuning:**
-- **Auto Level**: Start with "light" for quick results, use "heavy" for maximum optimization
-- **Model Selection**: Use more capable models (gpt-4, claude-3) for complex reasoning tasks
 
 ### GepaOptimizer
 
@@ -273,6 +253,6 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 
 ## Next Steps
 
-1. Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+1. Explore specific [Optimizers](/agent_optimization/algorithms/overview) for algorithm details.
 2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
-3. Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.
+3. Refer to the [API Reference](/agent_optimization/advanced/api_reference) for detailed configuration options.

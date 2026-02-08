@@ -30,6 +30,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -59,6 +60,9 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
+    Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId,
+            @NonNull List<DatasetItemFilter> filters);
+
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
     Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
@@ -70,24 +74,20 @@ public interface DatasetItemDAO {
 
     Mono<Void> bulkUpdate(Set<UUID> ids, UUID datasetId, List<DatasetItemFilter> filters, DatasetItemUpdate update,
             boolean mergeTags);
+
+    /**
+     * Retrieves the column definitions (column names and their types) for the dataset items' data field.
+     *
+     * @param datasetId The ID of the dataset
+     * @return A Mono containing a map of column names to their types
+     */
+    Mono<Map<String, List<String>>> getColumns(UUID datasetId);
 }
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class DatasetItemDAOImpl implements DatasetItemDAO {
-
-    /**
-     * Maximum decimal value bound for duration statistics in ClickHouse Decimal64(9).
-     * This ensures values stay within the precision limits while handling extreme values.
-     */
-    private static final String MAX_DECIMAL_BOUND = "999999999.999999999";
-
-    /**
-     * Minimum decimal value bound for duration statistics in ClickHouse Decimal64(9).
-     * This ensures values stay within the precision limits while handling extreme values.
-     */
-    private static final String MIN_DECIMAL_BOUND = "-999999999.999999999";
 
     private static final String INSERT_DATASET_ITEM = """
             INSERT INTO dataset_items (
@@ -133,7 +133,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM dataset_items
             WHERE id = :id
             AND workspace_id = :workspace_id
-            ORDER BY last_updated_at DESC
+            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -147,6 +147,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit
@@ -178,74 +179,66 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 created_by,
                 last_updated_by,
                 null AS experiment_items_array
-            FROM dataset_items
+            FROM dataset_items FINAL
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
+            ORDER BY (workspace_id, dataset_id, id) DESC
             LIMIT :limit OFFSET :offset
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
     private static final String SELECT_DATASET_ITEMS_COUNT = """
-            SELECT
-                count(id) AS count,
-                arrayFold(
-                    (acc, x) -> mapFromArrays(
-                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
-                    ),
-                    arrayDistinct(
-                        arrayFlatten(
-                            groupArray(
-                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
-                            )
-                        )
-                    ),
-                    CAST(map(), 'Map(String, Array(String))')
-                ) AS columns
-            FROM (
+            WITH items AS (
                 SELECT
                     id,
-                    data
-                FROM dataset_items
+                    column_types
+                FROM dataset_items FINAL
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
                 <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ) AS lastRows
+            )
+            SELECT
+                (SELECT count(id) FROM items) AS count,
+                mapFromArrays(
+                    groupArray(key),
+                    groupArray(types)
+                ) AS columns
+            FROM (
+                SELECT
+                    key,
+                    arrayDistinct(groupArray(type)) AS types
+                FROM items
+                ARRAY JOIN mapKeys(column_types) AS key
+                ARRAY JOIN column_types[key] AS type
+                GROUP BY key
+            )
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
     private static final String SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID = """
             SELECT
-                arrayFold(
-                    (acc, x) -> mapFromArrays(
-                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
-                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
-                    ),
-                    arrayDistinct(
-                        arrayFlatten(
-                            groupArray(
-                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
-                            )
-                        )
-                    ),
-                    CAST(map(), 'Map(String, Array(String))')
+                mapFromArrays(
+                    groupArray(key),
+                    groupArray(types)
                 ) AS columns
             FROM (
                 SELECT
-                    id,
-                    data
-                FROM dataset_items
-                WHERE dataset_id = :datasetId
-                AND workspace_id = :workspace_id
-                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                    key,
+                    arrayDistinct(groupArray(type)) AS types
+                FROM (
+                    SELECT
+                        id,
+                        column_types
+                    FROM dataset_items FINAL
+                    WHERE dataset_id = :datasetId
+                    AND workspace_id = :workspace_id
+                )
+                ARRAY JOIN mapKeys(column_types) AS key
+                ARRAY JOIN column_types[key] AS type
+                GROUP BY key
             )
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -254,19 +247,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String FIND_DATASET_ITEMS_SUMMARY_BY_DATASET_IDS = """
             SELECT
                 dataset_id,
-                count(id) AS count
-            FROM (
-                     SELECT
-                         id,
-                         dataset_id
-                     FROM dataset_items
-                     WHERE dataset_id IN :dataset_ids
-                       AND workspace_id = :workspace_id
-                     ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                     LIMIT 1 BY id
-                     ) AS lastRows
+                count(DISTINCT id) AS count
+            FROM dataset_items
+            WHERE dataset_id IN :dataset_ids
+            AND workspace_id = :workspace_id
             GROUP BY dataset_id
-            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -714,8 +699,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
-                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
-                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                         metadata,
                         visibility_mode
                     FROM traces
@@ -783,12 +768,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID = """
             WITH dataset_item_final AS (
                 SELECT
-                    id
+                    DISTINCT id
                 FROM dataset_items
                 WHERE workspace_id = :workspace_id
                 AND dataset_id = :dataset_id
-                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ), experiment_items_final AS (
                 SELECT DISTINCT
                     ei.trace_id,
@@ -880,7 +863,32 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             """;
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = """
-            WITH feedback_scores_combined_raw AS (
+            WITH experiment_items_filtered AS (
+                SELECT
+                    ei.id,
+                    ei.experiment_id,
+                    ei.dataset_item_id,
+                    ei.trace_id
+                FROM experiment_items ei
+                WHERE ei.workspace_id = :workspace_id
+                AND ei.dataset_item_id IN (
+                    SELECT id
+                    FROM dataset_items
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id = :dataset_id
+                    <if(dataset_item_filters)>
+                    AND <dataset_item_filters>
+                    <endif>
+                )
+                <if(experiment_ids)>
+                AND ei.experiment_id IN :experiment_ids
+                <endif>
+                <if(experiment_item_filters)>
+                AND ei.trace_id IN (
+                    SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
+                )
+                <endif>
+            ), feedback_scores_combined AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -891,6 +899,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
                   AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -903,30 +912,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'trace'
                    AND workspace_id = :workspace_id
-            ), feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
-            ), feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
-            ),                     feedback_scores_final AS (
+                   AND entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+            ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
                     project_id,
@@ -939,35 +926,20 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             )<if(feedback_scores_empty_filters)>,
             fsc AS (
                 SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                FROM (
-                    SELECT *
-                    FROM feedback_scores_final
-                 )
-                 GROUP BY entity_id
-                 HAVING <feedback_scores_empty_filters>
-            )
-            <endif>,
-            experiment_items_filtered AS (
+                FROM feedback_scores_final
+                GROUP BY entity_id
+                HAVING <feedback_scores_empty_filters>
+            )<endif><if(feedback_scores_empty_filters || feedback_scores_filters)>,
+            experiment_items_filtered_with_feedback_filter AS (
                 SELECT
-                    ei.id,
-                    ei.experiment_id,
-                    ei.dataset_item_id,
-                    ei.trace_id
-                FROM experiment_items ei
-                WHERE ei.workspace_id = :workspace_id
-                AND ei.dataset_item_id IN (
-                    SELECT id FROM dataset_items WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
-                )
-                <if(experiment_ids)>
-                AND ei.experiment_id IN :experiment_ids
-                <endif>
-                <if(experiment_item_filters)>
-                AND ei.trace_id IN (
-                    SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
-                )
-                <endif>
+                    eif.id,
+                    eif.experiment_id,
+                    eif.dataset_item_id,
+                    eif.trace_id
+                FROM experiment_items_filtered eif
+                WHERE 1=1
                 <if(feedback_scores_empty_filters)>
-                AND ei.trace_id IN (
+                AND eif.trace_id IN (
                     SELECT id
                     FROM traces
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
@@ -976,25 +948,29 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 )
                 <endif>
                 <if(feedback_scores_filters)>
-                AND ei.trace_id IN (
+                AND eif.trace_id IN (
                     SELECT entity_id
                     FROM feedback_scores_final
                     GROUP BY entity_id, name
                     HAVING <feedback_scores_filters>
                 )
                 <endif>
-                <if(dataset_item_filters)>
-                AND ei.dataset_item_id IN (
-                    SELECT id FROM dataset_items WHERE workspace_id = :workspace_id AND <dataset_item_filters>
-                )
-                <endif>
+            )
+            <endif>,
+            experiment_items_final AS (
+                SELECT * FROM
+                    <if(feedback_scores_empty_filters || feedback_scores_filters)>
+                        experiment_items_filtered_with_feedback_filter
+                    <else>
+                        experiment_items_filtered
+                    <endif>
             ), traces_with_cost_and_duration AS (
                 SELECT DISTINCT
                     eif.trace_id as trace_id,
                     t.duration as duration,
                     s.total_estimated_cost as total_estimated_cost,
                     s.usage as usage
-                FROM experiment_items_filtered eif
+                FROM experiment_items_final eif
                 LEFT JOIN (
                     SELECT
                         id,
@@ -1004,7 +980,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             NULL) as duration
                     FROM traces final
                     WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_items_filtered)
+                    AND id IN (SELECT trace_id FROM experiment_items_final)
                 ) AS t ON eif.trace_id = t.id
                 LEFT JOIN (
                     SELECT
@@ -1013,7 +989,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         sumMap(usage) as usage
                     FROM spans final
                     WHERE workspace_id = :workspace_id
-                    AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
+                    AND trace_id IN (SELECT trace_id FROM experiment_items_final)
                     GROUP BY workspace_id, project_id, trace_id
                 ) AS s ON eif.trace_id = s.trace_id
             ), feedback_scores_agg AS (
@@ -1024,14 +1000,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         groupArray(value)
                     ) AS feedback_scores
                 FROM feedback_scores_final
-                WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
                 GROUP BY workspace_id, project_id, entity_id
             ), feedback_scores_percentiles AS (
                 SELECT
                     name,
                     quantiles(0.5, 0.9, 0.99)(toFloat64(value)) AS percentiles
                 FROM feedback_scores_final
-                WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
                 GROUP BY name
             ), usage_total_tokens_data AS (
                 SELECT
@@ -1088,7 +1062,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                       (SELECT quantiles(0.5, 0.9, 0.99)(total_tokens) FROM usage_total_tokens_data)
                     )
                 ) AS usage_total_tokens_percentiles
-            FROM experiment_items_filtered ei
+            FROM experiment_items_final ei
             LEFT JOIN traces_with_cost_and_duration AS tc ON ei.trace_id = tc.trace_id
             LEFT JOIN feedback_scores_agg AS f ON ei.trace_id = f.entity_id
             SETTINGS log_comment = '<log_comment>'
@@ -1172,8 +1146,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @Override
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId) {
-        log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}'",
-                datasetId, limit, lastRetrievedId);
+        return getItems(datasetId, limit, lastRetrievedId, List.of());
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId,
+            @NonNull List<DatasetItemFilter> filters) {
 
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_STREAM, "select_dataset_items_stream", workspaceId,
@@ -1183,6 +1162,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 template.add("lastRetrievedId", lastRetrievedId);
             }
 
+            // Add filter support
+            if (CollectionUtils.isNotEmpty(filters)) {
+                FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                        .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+            }
+
             var statement = connection.createStatement(template.render())
                     .bind("datasetId", datasetId)
                     .bind("limit", limit)
@@ -1190,6 +1175,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             if (lastRetrievedId != null) {
                 statement.bind("lastRetrievedId", lastRetrievedId);
+            }
+
+            // Bind filter parameters
+            if (CollectionUtils.isNotEmpty(filters)) {
+                FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
             }
 
             Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_stream");
@@ -1700,5 +1690,31 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
         Optional.ofNullable(update.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Map<String, List<String>>> getColumns(@NonNull UUID datasetId) {
+        log.debug("Getting columns for dataset '{}'", datasetId);
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_columns");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Statement statement = connection.createStatement(SELECT_DATASET_ITEMS_COLUMNS_BY_DATASET_ID)
+                    .bind("datasetId", datasetId);
+
+            Flux<Map<String, List<String>>> resultFlux = makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, rowMetadata) -> {
+                        @SuppressWarnings("unchecked")
+                        Map<String, List<String>> columns = (Map<String, List<String>>) row.get("columns", Map.class);
+                        // Use LinkedHashMap to preserve insertion order
+                        return columns != null
+                                ? new LinkedHashMap<>(columns)
+                                : new LinkedHashMap<String, List<String>>();
+                    }));
+
+            return resultFlux.defaultIfEmpty(new LinkedHashMap<String, List<String>>()).next();
+        })
+                .doFinally(signalType -> endSegment(segment));
     }
 }

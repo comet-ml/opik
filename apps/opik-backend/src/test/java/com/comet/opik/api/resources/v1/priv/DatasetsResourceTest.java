@@ -146,6 +146,7 @@ import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -708,7 +709,7 @@ class DatasetsResourceTest {
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
             mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
 
-            var request = new DatasetItemStreamRequest(name, null, null, null);
+            var request = new DatasetItemStreamRequest(name, null, null, null, null);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -1198,7 +1199,7 @@ class DatasetsResourceTest {
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, WORKSPACE_ID);
             mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
-            var request = new DatasetItemStreamRequest(name, null, null, null);
+            var request = new DatasetItemStreamRequest(name, null, null, null, null);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -1577,7 +1578,7 @@ class DatasetsResourceTest {
 
             var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
-            DatasetItemBatch batch = new DatasetItemBatch(dataset.name(), null, datasetItems);
+            DatasetItemBatch batch = DatasetItemBatch.builder().datasetName(dataset.name()).items(datasetItems).build();
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
@@ -1669,6 +1670,18 @@ class DatasetsResourceTest {
 
     private void createAndAssert(Experiment experiment, String apiKey, String workspaceName) {
         experimentResourceClient.create(experiment, apiKey, workspaceName);
+    }
+
+    /**
+     * Creates an Experiment record with the correct datasetName linkage.
+     * Note: ExperimentService.create() resolves the dataset from datasetName via getOrCreateDataset(),
+     * so we must use datasetName (not datasetId) to properly link experiments to datasets.
+     */
+    private UUID createExperimentForDataset(Dataset dataset, String apiKey, String workspaceName) {
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .build();
+        return experimentResourceClient.create(experiment, apiKey, workspaceName);
     }
 
     @Nested
@@ -2482,7 +2495,10 @@ class DatasetsResourceTest {
             var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
             datasetItems.forEach(datasetItem -> putAndAssert(
-                    new DatasetItemBatch(null, datasets.get(index.getAndIncrement()).id(), List.of(datasetItem)),
+                    DatasetItemBatch.builder()
+                            .datasetId(datasets.get(index.getAndIncrement()).id())
+                            .items(List.of(datasetItem))
+                            .build(),
                     workspaceName, apiKey));
 
             // Creating two traces with input, output and scores
@@ -3766,26 +3782,15 @@ class DatasetsResourceTest {
                     .datasetName(batch.datasetName())
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                assertPage(items.reversed(), actualItems);
-            }
+            assertPage(items.reversed(), actualItems);
         }
 
         @Test
-        @DisplayName("when streaming dataset items with filters, then return items sorted by created date")
-        void streamDataItems__whenStreamingDatasetItemsWithFilters__thenReturnItemsSortedByCreatedDate() {
+        @DisplayName("when streaming dataset items with lastRetrievedId, then return items sorted by created date")
+        void streamDataItems__whenStreamingDatasetItemsWithLastRetrievedId__thenReturnItemsSortedByCreatedDate() {
 
             var items = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
@@ -3803,33 +3808,294 @@ class DatasetsResourceTest {
                     .lastRetrievedId(items.reversed().get(1).id())
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
+            assertPage(items.reversed().subList(2, 5), actualItems);
+        }
 
-                List<DatasetItem> actualItems = getStreamedItems(response);
+        private Stream<Arguments> singleFilterTestCases() {
+            return Stream.of(
+                    // Tag filter
+                    Arguments.of(
+                            "tag filter",
+                            DatasetItemField.TAGS,
+                            (BiFunction<String, String, List<DatasetItem>>) (searchKey, extraTag) -> List.of(
+                                    createItemWithTags(Set.of(extraTag, searchKey)),
+                                    createItemWithTags(Set.of(RandomStringUtils.insecure().nextAlphanumeric(5),
+                                            searchKey))),
+                            (Function<String, List<DatasetItem>>) searchKey -> List.of(
+                                    createItemWithTags(
+                                            Set.of(RandomStringUtils.insecure().nextAlphanumeric(5),
+                                                    RandomStringUtils.insecure().nextAlphanumeric(5)))),
+                            (Function<String, DatasetItemFilter>) searchKey -> new DatasetItemFilter(
+                                    DatasetItemField.TAGS, Operator.CONTAINS, null, searchKey)),
+                    // Data field filter
+                    Arguments.of(
+                            "data field filter",
+                            DatasetItemField.DATA,
+                            (BiFunction<String, String, List<DatasetItem>>) (searchKey, extraTag) -> List.of(
+                                    createItemWithData(Map.of("query", new TextNode("search for " + searchKey))),
+                                    createItemWithData(
+                                            Map.of("query", new TextNode("another " + searchKey + " query")))),
+                            (Function<String, List<DatasetItem>>) searchKey -> List.of(
+                                    createItemWithData(Map.of("query", new TextNode("completely different")))),
+                            (Function<String, DatasetItemFilter>) searchKey -> new DatasetItemFilter(
+                                    DatasetItemField.DATA, Operator.CONTAINS, "query", searchKey)),
+                    // Full data filter
+                    Arguments.of(
+                            "full data filter",
+                            DatasetItemField.FULL_DATA,
+                            (BiFunction<String, String, List<DatasetItem>>) (searchKey, extraTag) -> List.of(
+                                    createItemWithData(Map.of(
+                                            "query", new TextNode("search for " + searchKey),
+                                            "type", new TextNode("question")))),
+                            (Function<String, List<DatasetItem>>) searchKey -> List.of(
+                                    createItemWithData(Map.of(
+                                            "query", new TextNode("completely different"),
+                                            "type", new TextNode("answer")))),
+                            (Function<String, DatasetItemFilter>) searchKey -> new DatasetItemFilter(
+                                    DatasetItemField.FULL_DATA, Operator.CONTAINS, null, searchKey)));
+        }
 
-                assertPage(items.reversed().subList(2, 5), actualItems);
-            }
+        @ParameterizedTest(name = "when streaming dataset items with {0}, then return only matching items")
+        @MethodSource("singleFilterTestCases")
+        @DisplayName("Stream with single filter returns only matching items")
+        void streamDataItemsWithSingleFilter(
+                String filterDescription,
+                DatasetItemField field,
+                BiFunction<String, String, List<DatasetItem>> matchingItemsCreator,
+                Function<String, List<DatasetItem>> nonMatchingItemsCreator,
+                Function<String, DatasetItemFilter> filterCreator) {
+
+            var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
+            var extraTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+
+            var matchingItems = matchingItemsCreator.apply(searchKey, extraTag);
+            var nonMatchingItems = nonMatchingItemsCreator.apply(searchKey);
+
+            var batch = createFilterTestBatch(matchingItems, nonMatchingItems);
+
+            var filter = filterCreator.apply(searchKey);
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualItems).hasSize(matchingItems.size());
+            assertThat(actualItems).extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrderElementsOf(
+                            matchingItems.stream().map(DatasetItem::id).toList());
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with filter and lastRetrievedId, then return filtered items after cursor")
+        void streamDataItems__whenStreamingWithFilterAndLastRetrievedId__thenReturnFilteredItemsAfterCursor() {
+            // Create 5 items with includeTag
+            var includeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var excludeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+
+            var items = IntStream.range(0, 5)
+                    .mapToObj(i -> createItemWithTags(
+                            Set.of(includeTag, RandomStringUtils.insecure().nextAlphanumeric(5))))
+                    .toList();
+
+            // Create 3 items without includeTag
+            var excludedItems = IntStream.range(0, 3)
+                    .mapToObj(i -> createItemWithTags(
+                            Set.of(excludeTag, RandomStringUtils.insecure().nextAlphanumeric(5))))
+                    .toList();
+
+            var batch = createFilterTestBatch(items, excludedItems);
+
+            // Filter by includeTag and use lastRetrievedId from second item (reversed order)
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, includeTag);
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .lastRetrievedId(items.reversed().get(1).id())
+                    .build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
+
+            // Should return only filtered items after the cursor (3 items)
+            assertThat(actualItems).hasSize(3);
+            assertThat(actualItems).extracting(DatasetItem::id)
+                    .containsExactly(
+                            items.reversed().get(2).id(),
+                            items.reversed().get(3).id(),
+                            items.reversed().get(4).id());
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with filter matching no items, then return empty list")
+        void streamDataItems__whenStreamingWithFilterMatchingNoItems__thenReturnEmptyList() {
+            var tag1 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var tag2 = RandomStringUtils.insecure().nextAlphanumeric(5);
+
+            var items = IntStream.range(0, 3)
+                    .mapToObj(i -> createItemWithTags(Set.of(tag1, tag2)))
+                    .toList();
+
+            var batch = createFilterTestBatch(List.of(), items);
+
+            // Filter by non-existent tag
+            var nonexistentTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, nonexistentTag);
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertThat(actualItems).isEmpty();
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with multiple filters (AND logic), then return only items matching all filters")
+        void streamDataItems__whenStreamingWithMultipleFilters__thenReturnItemsMatchingAllFilters() {
+            // Create items with different tag combinations
+            var tag1 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var tag2 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var tag3 = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var otherTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+
+            // Item 1: has both tag1 and tag2 - should be returned
+            var item1 = createItemWithTagsAndNulls(Set.of(tag1, tag2));
+
+            // Item 2: has both tag1 and tag2 - should be returned
+            var item2 = createItemWithTagsAndNulls(Set.of(tag1, tag2, tag3));
+
+            // Item 3: has only tag1 - should NOT be returned (missing tag2)
+            var item3 = createItemWithTagsAndNulls(Set.of(tag1));
+
+            // Item 4: has only tag2 - should NOT be returned (missing tag1)
+            var item4 = createItemWithTagsAndNulls(Set.of(tag2));
+
+            // Item 5: has neither tag - should NOT be returned
+            var item5 = createItemWithTagsAndNulls(Set.of(otherTag));
+
+            var batch = createFilterTestBatch(
+                    List.of(item1, item2),
+                    List.of(item3, item4, item5));
+
+            // Create two filters - both must match (AND logic)
+            var filter1 = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, tag1);
+            var filter2 = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, tag2);
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter1, filter2)))
+                    .build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
+
+            // Should return only 2 items that have BOTH tag1 AND tag2
+            assertThat(actualItems).hasSize(2);
+            assertThat(actualItems).extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrder(item1.id(), item2.id());
+            // Verify all returned items have both tags
+            assertThat(actualItems).allSatisfy(item -> {
+                assertThat(item.tags()).contains(tag1);
+                assertThat(item.tags()).contains(tag2);
+            });
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with filter and steamLimit, then respect limit on filtered results")
+        void streamDataItems__whenStreamingWithFilterAndSteamLimit__thenRespectLimitOnFilteredResults() {
+            // Create 10 items with includeTag
+            var includeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+            var excludeTag = RandomStringUtils.insecure().nextAlphanumeric(5);
+
+            var includedItems = IntStream.range(0, 10)
+                    .mapToObj(i -> createItemWithTagsAndNulls(Set.of(includeTag)))
+                    .toList();
+
+            // Create 5 items without includeTag
+            var excludedItems = IntStream.range(0, 5)
+                    .mapToObj(i -> createItemWithTagsAndNulls(Set.of(excludeTag)))
+                    .toList();
+
+            var batch = createFilterTestBatch(includedItems, excludedItems);
+
+            // Filter by includeTag with limit of 5
+            var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, includeTag);
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .filters(JsonUtils.writeValueAsString(List.of(filter)))
+                    .steamLimit(5)
+                    .build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
+
+            // Should return only 5 items (respecting steamLimit)
+            assertThat(actualItems).hasSize(5);
+            // All returned items should have includeTag
+            assertThat(actualItems).allMatch(item -> item.tags().contains(includeTag));
         }
 
         @Test
         @DisplayName("when streaming has max steamLimit, then return items sorted by created date")
         void streamDataItems__whenStreamingHasMaxSize__thenReturnItemsSortedByCreatedDate() {
 
-            var items = IntStream.range(0, 1000)
+            // Create 3000 items total, but insert in batches of 1000 (max batch size)
+            var allItems = IntStream.range(0, 3000)
                     .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
                             .experimentItems(null)
                             .createdAt(null)
                             .lastUpdatedAt(null)
                             .build())
+                    .toList();
+
+            String datasetName = UUID.randomUUID().toString();
+
+            // Insert items in 3 batches of 1000 each
+            for (int i = 0; i < 3; i++) {
+                var batchItems = allItems.subList(i * 1000, (i + 1) * 1000);
+                var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                        .datasetName(datasetName)
+                        .items(batchItems)
+                        .datasetId(null)
+                        .batchGroupId(null)
+                        .build();
+
+                putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+            }
+
+            List<DatasetItem> expectedFirstPage = allItems.reversed().subList(0, 2000);
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(datasetName).build();
+
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
+
+            assertPage(expectedFirstPage, actualItems);
+
+            streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(datasetName)
+                    .lastRetrievedId(expectedFirstPage.get(1999).id())
+                    .build();
+
+            actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY, TEST_WORKSPACE);
+
+            assertPage(allItems.reversed().subList(2000, 3000), actualItems);
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items without filters, then return all items")
+        void streamDataItems__whenStreamingWithoutFilters__thenReturnAllItems() {
+            var items = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
                     .toList();
 
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
@@ -3839,47 +4105,16 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            List<DatasetItem> expectedFirstPage = items.reversed().subList(0, 500);
-
+            // Request without filters (filters is null)
             var streamRequest = DatasetItemStreamRequest.builder()
-                    .datasetName(batch.datasetName()).build();
-
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
-
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                assertPage(expectedFirstPage, actualItems);
-            }
-
-            streamRequest = DatasetItemStreamRequest.builder()
                     .datasetName(batch.datasetName())
-                    .lastRetrievedId(expectedFirstPage.get(499).id())
                     .build();
 
-            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path("stream")
-                    .request()
-                    .accept(MediaType.APPLICATION_OCTET_STREAM)
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .post(Entity.json(streamRequest))) {
+            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(response.getStatus()).isEqualTo(200);
-
-                List<DatasetItem> actualItems = getStreamedItems(response);
-
-                assertPage(items.reversed().subList(500, 1000), actualItems);
-            }
+            assertThat(actualItems).hasSize(items.size());
+            assertPage(items.reversed(), actualItems);
         }
     }
 
@@ -3904,6 +4139,20 @@ class DatasetsResourceTest {
         assertThat(actualEntity.lastUpdatedAt()).isInThePast();
 
         return actualEntity;
+    }
+
+    /**
+     * Fetches a dataset item by its stable dataset_item_id from the latest version.
+     * This is necessary when dataset versioning is enabled, as the version-specific id
+     * may return items from previous versions.
+     */
+    private DatasetItem getItemByStableId(UUID datasetId, UUID datasetItemId, String workspaceName, String apiKey) {
+        var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1000), apiKey, workspaceName);
+        return allItems.content().stream()
+                .filter(item -> item.datasetItemId().equals(datasetItemId))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "Dataset item not found with dataset_item_id: '%s'".formatted(datasetItemId)));
     }
 
     @Nested
@@ -4179,10 +4428,11 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Verify initial state
+            // Verify initial state - fetch by stable ID
             var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
             var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
             var retrieved3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            var datasetId = retrieved1.datasetId();
             assertThat(retrieved1.tags()).containsExactlyInAnyOrder("existing1");
             assertThat(retrieved2.tags()).containsExactlyInAnyOrder("existing2");
             assertThat(retrieved3.tags()).isEmpty();
@@ -4198,10 +4448,10 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify tags were merged
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
-            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            // Verify tags were merged - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated3 = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("existing1", "newtag");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("existing2", "newtag");
             assertThat(updated3.tags()).containsExactlyInAnyOrder("newtag");
@@ -4228,6 +4478,7 @@ class DatasetsResourceTest {
             // Verify initial state
             var retrieved1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
             var retrieved2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            var datasetId = retrieved1.datasetId();
             assertThat(retrieved1.tags()).containsExactlyInAnyOrder("old1", "old2");
             assertThat(retrieved2.tags()).containsExactlyInAnyOrder("old3", "old4");
 
@@ -4242,9 +4493,9 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify tags were replaced
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
+            // Verify tags were replaced - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("new1", "new2");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("new1", "new2");
         }
@@ -4336,10 +4587,10 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify only items matching filters were updated
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
-            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            // Verify only items matching filters were updated - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated3 = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("include", "tag1", "newtag");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("include", "tag2", "newtag");
             assertThat(updated3.tags()).containsExactlyInAnyOrder("exclude", "tag3"); // unchanged
@@ -4392,10 +4643,10 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify tags were merged (not replaced) for items matching filters
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
-            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            // Verify tags were merged (not replaced) for items matching filters - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated3 = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("include", "tag1", "newtag");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("include", "tag2", "newtag");
             assertThat(updated3.tags()).containsExactlyInAnyOrder("other"); // Unchanged
@@ -4481,10 +4732,10 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify ALL items were updated (empty filters = select all)
-            var updated1 = datasetResourceClient.getDatasetItem(item1.id(), API_KEY, TEST_WORKSPACE);
-            var updated2 = datasetResourceClient.getDatasetItem(item2.id(), API_KEY, TEST_WORKSPACE);
-            var updated3 = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            // Verify ALL items were updated (empty filters = select all) - fetch by stable dataset_item_id
+            var updated1 = getItemByStableId(datasetId, retrieved1.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated2 = getItemByStableId(datasetId, retrieved2.datasetItemId(), TEST_WORKSPACE, API_KEY);
+            var updated3 = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(updated1.tags()).containsExactlyInAnyOrder("tag1", "newtag");
             assertThat(updated2.tags()).containsExactlyInAnyOrder("tag2", "newtag");
             assertThat(updated3.tags()).containsExactlyInAnyOrder("tag3", "newtag");
@@ -4543,6 +4794,7 @@ class DatasetsResourceTest {
                     TEST_WORKSPACE);
             var retrievedDataset2Item2 = datasetResourceClient.getDatasetItem(dataset2Item2.id(), API_KEY,
                     TEST_WORKSPACE);
+            UUID dataset2Id = retrievedDataset2Item1.datasetId();
 
             assertThat(retrievedDataset1Item1.tags()).containsExactlyInAnyOrder("target-tag");
             assertThat(retrievedDataset1Item2.tags()).containsExactlyInAnyOrder("other-tag");
@@ -4568,15 +4820,15 @@ class DatasetsResourceTest {
 
             datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify: Only dataset1 items were updated, dataset2 items remain unchanged
-            var updatedDataset1Item1 = datasetResourceClient.getDatasetItem(dataset1Item1.id(), API_KEY,
-                    TEST_WORKSPACE);
-            var updatedDataset1Item2 = datasetResourceClient.getDatasetItem(dataset1Item2.id(), API_KEY,
-                    TEST_WORKSPACE);
-            var updatedDataset2Item1 = datasetResourceClient.getDatasetItem(dataset2Item1.id(), API_KEY,
-                    TEST_WORKSPACE);
-            var updatedDataset2Item2 = datasetResourceClient.getDatasetItem(dataset2Item2.id(), API_KEY,
-                    TEST_WORKSPACE);
+            // Verify: Only dataset1 items were updated, dataset2 items remain unchanged - fetch by stable dataset_item_id
+            var updatedDataset1Item1 = getItemByStableId(dataset1Id, retrievedDataset1Item1.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
+            var updatedDataset1Item2 = getItemByStableId(dataset1Id, retrievedDataset1Item2.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
+            var updatedDataset2Item1 = getItemByStableId(dataset2Id, retrievedDataset2Item1.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
+            var updatedDataset2Item2 = getItemByStableId(dataset2Id, retrievedDataset2Item2.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
 
             // Dataset1 items with target-tag should be updated
             assertThat(updatedDataset1Item1.tags()).containsExactlyInAnyOrder("target-tag", "updated-tag");
@@ -4645,6 +4897,10 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
+            // Get the dataset ID from one of the created items
+            var firstItem = datasetResourceClient.getDatasetItem(items.get(0).id(), API_KEY, TEST_WORKSPACE);
+            var datasetId = firstItem.datasetId();
+
             var deleteRequest = DatasetItemsDelete.builder()
                     .itemIds(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
                     .build();
@@ -4660,19 +4916,15 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            for (var item : items) {
-                var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                        .path("items")
-                        .path(item.id().toString())
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                        .get();
+            // Fetch all items from the dataset and verify deleted items are not present
+            var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1000), API_KEY,
+                    TEST_WORKSPACE);
 
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
-                assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("Dataset item not found");
-            }
+            // Verify that none of the deleted item IDs are in the current dataset version
+            var deletedItemIds = items.stream().map(DatasetItem::id).collect(Collectors.toSet());
+            var currentItemIds = allItems.content().stream().map(DatasetItem::id).collect(Collectors.toSet());
+
+            assertThat(currentItemIds).doesNotContainSequence(deletedItemIds);
         }
 
         @Test
@@ -4813,29 +5065,19 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            // Verify items matching filters were deleted
-            try (var response1 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(item1.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response1.getStatusInfo().getStatusCode()).isEqualTo(404);
-            }
+            // Verify items matching filters were deleted - check by fetching all items and looking for stable IDs
+            var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1000), API_KEY,
+                    TEST_WORKSPACE);
+            var item1StillExists = allItems.content().stream()
+                    .anyMatch(item -> item.datasetItemId().equals(retrieved1.datasetItemId()));
+            var item2StillExists = allItems.content().stream()
+                    .anyMatch(item -> item.datasetItemId().equals(retrieved2.datasetItemId()));
 
-            try (var response2 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(item2.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response2.getStatusInfo().getStatusCode()).isEqualTo(404);
-            }
+            assertThat(item1StillExists).isFalse();
+            assertThat(item2StillExists).isFalse();
 
             // Verify item not matching filter was NOT deleted
-            var stillExists = datasetResourceClient.getDatasetItem(item3.id(), API_KEY, TEST_WORKSPACE);
+            var stillExists = getItemByStableId(datasetId, retrieved3.datasetItemId(), TEST_WORKSPACE, API_KEY);
             assertThat(stillExists.tags()).containsExactlyInAnyOrder("keep-me", "tag3");
         }
 
@@ -4884,12 +5126,12 @@ class DatasetsResourceTest {
                     .build();
             putAndAssert(batch2, TEST_WORKSPACE, API_KEY);
 
-            // Verify initial state
-            assertThat(datasetResourceClient.getDatasetItem(item1Dataset1.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
-            assertThat(datasetResourceClient.getDatasetItem(item2Dataset1.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
-            assertThat(datasetResourceClient.getDatasetItem(item3Dataset1.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
-            assertThat(datasetResourceClient.getDatasetItem(item1Dataset2.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
-            assertThat(datasetResourceClient.getDatasetItem(item2Dataset2.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
+            // Verify initial state and get stable IDs
+            var retrieved1Dataset1 = datasetResourceClient.getDatasetItem(item1Dataset1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2Dataset1 = datasetResourceClient.getDatasetItem(item2Dataset1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved3Dataset1 = datasetResourceClient.getDatasetItem(item3Dataset1.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved1Dataset2 = datasetResourceClient.getDatasetItem(item1Dataset2.id(), API_KEY, TEST_WORKSPACE);
+            var retrieved2Dataset2 = datasetResourceClient.getDatasetItem(item2Dataset2.id(), API_KEY, TEST_WORKSPACE);
 
             // Create filter to delete items with "delete-me" tag
             var tagFilter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "delete-me");
@@ -4911,38 +5153,29 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            // Verify items from dataset1 with "delete-me" tag were deleted
-            try (var response1 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(item1Dataset1.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response1.getStatusInfo().getStatusCode()).isEqualTo(404);
-            }
+            // Verify items from dataset1 with "delete-me" tag were deleted - check by fetching all items
+            var dataset1Items = datasetResourceClient.getDatasetItems(dataset1Id, Map.of("size", 1000), API_KEY,
+                    TEST_WORKSPACE);
+            var item1Dataset1StillExists = dataset1Items.content().stream()
+                    .anyMatch(item -> item.datasetItemId().equals(retrieved1Dataset1.datasetItemId()));
+            var item2Dataset1StillExists = dataset1Items.content().stream()
+                    .anyMatch(item -> item.datasetItemId().equals(retrieved2Dataset1.datasetItemId()));
 
-            try (var response2 = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path("items")
-                    .path(item2Dataset1.id().toString())
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-                assertThat(response2.getStatusInfo().getStatusCode()).isEqualTo(404);
-            }
+            assertThat(item1Dataset1StillExists).isFalse();
+            assertThat(item2Dataset1StillExists).isFalse();
 
             // Verify item from dataset1 without "delete-me" tag was NOT deleted
-            var stillExistsDataset1 = datasetResourceClient.getDatasetItem(item3Dataset1.id(), API_KEY, TEST_WORKSPACE);
+            var stillExistsDataset1 = getItemByStableId(dataset1Id, retrieved3Dataset1.datasetItemId(), TEST_WORKSPACE,
+                    API_KEY);
             assertThat(stillExistsDataset1.tags()).containsExactlyInAnyOrder("keep-me", "dataset1");
 
             // CRITICAL: Verify ALL items from dataset2 remain untouched (proves dataset_id filter works)
-            var stillExistsDataset2Item1 = datasetResourceClient.getDatasetItem(item1Dataset2.id(), API_KEY,
-                    TEST_WORKSPACE);
+            var stillExistsDataset2Item1 = getItemByStableId(dataset2Id, retrieved1Dataset2.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
             assertThat(stillExistsDataset2Item1.tags()).containsExactlyInAnyOrder("delete-me", "dataset2");
 
-            var stillExistsDataset2Item2 = datasetResourceClient.getDatasetItem(item2Dataset2.id(), API_KEY,
-                    TEST_WORKSPACE);
+            var stillExistsDataset2Item2 = getItemByStableId(dataset2Id, retrieved2Dataset2.datasetItemId(),
+                    TEST_WORKSPACE, API_KEY);
             assertThat(stillExistsDataset2Item2.tags()).containsExactlyInAnyOrder("delete-me", "dataset2");
         }
 
@@ -4994,18 +5227,10 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
             }
 
-            // Verify ALL items were deleted
-            for (var item : List.of(item1, item2, item3)) {
-                try (var response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                        .path("items")
-                        .path(item.id().toString())
-                        .request()
-                        .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                        .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                        .get()) {
-                    assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(404);
-                }
-            }
+            // Verify ALL items were deleted - check by fetching all items
+            var allItems = datasetResourceClient.getDatasetItems(datasetId, Map.of("size", 1000), API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(allItems.content()).isEmpty();
         }
     }
 
@@ -5657,10 +5882,12 @@ class DatasetsResourceTest {
             var expectedDatasetItems = datasetItemBatch.items().subList(0, 4).reversed();
 
             // Create actual Experiment records for versioning support and collect their IDs
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experimentIds = IntStream.range(0, 5)
                     .mapToObj(__ -> {
                         var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                                .datasetId(datasetId)
+                                .datasetName(dataset.name())
                                 .datasetVersionId(null)
                                 .datasetVersionSummary(null)
                                 .promptVersion(null)
@@ -6068,10 +6295,12 @@ class DatasetsResourceTest {
             putAndAssert(datasetItemBatchWithImage, workspaceName, apiKey);
 
             // Create actual Experiment records for versioning support and collect their IDs
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experimentIds = IntStream.range(0, 5)
                     .mapToObj(__ -> {
                         var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                                .datasetId(datasetId)
+                                .datasetName(dataset.name())
                                 .datasetVersionId(null)
                                 .datasetVersionSummary(null)
                                 .promptVersion(null)
@@ -6285,15 +6514,7 @@ class DatasetsResourceTest {
             List<Trace> traces = new ArrayList<>();
             createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
 
-            // Create actual Experiment record for versioning support
-            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
-                    .datasetId(datasetId)
-                    .datasetVersionId(null)
-                    .datasetVersionSummary(null)
-                    .promptVersion(null)
-                    .promptVersions(null)
-                    .build();
-            UUID experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+            UUID experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces, projectName, scores);
@@ -6388,8 +6609,8 @@ class DatasetsResourceTest {
 
             putAndAssert(datasetItemBatch, workspaceName, apiKey);
 
-            // Creating experiment and experiment item
-            var experimentId = GENERATOR.generate();
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
             var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentId)
                     .datasetItemId(datasetItem.id())
@@ -6600,7 +6821,7 @@ class DatasetsResourceTest {
             List<Trace> traces = new ArrayList<>();
             createTraces(datasetItems, projectName, workspaceName, apiKey, traces);
 
-            UUID experimentId = GENERATOR.generate();
+            UUID experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
 
             List<FeedbackScoreBatchItem> scores = new ArrayList<>();
             createScores(traces.subList(0, traces.size() - 1), projectName, scores);
@@ -6806,6 +7027,120 @@ class DatasetsResourceTest {
                             FieldType.DATE_TIME.getQueryParamType(),
                             Operator.EQUAL.getQueryParamOperator(),
                             Instant.now().toString())));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when search parameter matches field, then return filtered items")
+        void find__whenSearchParameterMatches__thenReturnFilteredItems(String searchField) {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create unique search term
+            var uniqueSearchTerm = "SEARCH_" + searchField.toUpperCase() + "_" + UUID.randomUUID();
+
+            // Create traces with conditional search term placement
+            var trace1Builder = factory.manufacturePojo(Trace.class).toBuilder();
+            var trace2Builder = factory.manufacturePojo(Trace.class).toBuilder();
+
+            if ("trace_input".equals(searchField)) {
+                trace1Builder
+                        .input(JsonUtils.getJsonNodeFromString("{\"content\": \"%s\"}".formatted(uniqueSearchTerm)));
+                trace2Builder.input(JsonUtils.getJsonNodeFromString("{\"content\": \"no_match\"}"));
+            } else if ("trace_output".equals(searchField)) {
+                trace1Builder
+                        .output(JsonUtils.getJsonNodeFromString("{\"result\": \"%s\"}".formatted(uniqueSearchTerm)));
+                trace2Builder.output(JsonUtils.getJsonNodeFromString("{\"result\": \"no_match\"}"));
+            }
+
+            var trace1 = trace1Builder.build();
+            var trace2 = trace2Builder.build();
+
+            createAndAssert(trace1, workspaceName, apiKey);
+            createAndAssert(trace2, workspaceName, apiKey);
+
+            // Create the dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create dataset items with conditional search term placement
+            var datasetItem1Builder = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId);
+            var datasetItem2Builder = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId);
+
+            if ("dataset_item_data".equals(searchField)) {
+                datasetItem1Builder.data(Map.of("field1",
+                        JsonUtils.getJsonNodeFromString("\"%s\"".formatted(uniqueSearchTerm))));
+                datasetItem2Builder.data(Map.of("field1", JsonUtils.getJsonNodeFromString("\"no_match\"")));
+            }
+
+            var datasetItem1 = datasetItem1Builder.build();
+            var datasetItem2 = datasetItem2Builder.build();
+
+            var datasetItemBatch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem1, datasetItem2))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create experiment
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .datasetVersionId(null)
+                    .datasetVersionSummary(null)
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .build();
+
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Create experiment items linking dataset items to traces
+            var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem1.id())
+                    .traceId(trace1.id())
+                    .build();
+            var experimentItem2 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem2.id())
+                    .traceId(trace2.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem1, experimentItem2)), apiKey, workspaceName);
+
+            // Test: Search should return only the item with matching content
+            var searchResult = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), uniqueSearchTerm, apiKey, workspaceName);
+
+            assertThat(searchResult.content()).hasSize(1);
+            assertThat(searchResult.content().getFirst().id()).isEqualTo(datasetItem1.id());
+            assertThat(searchResult.total()).isEqualTo(1);
+
+            // Test: Search with no matching term should return empty
+            var noMatchResult = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), "NON_EXISTENT_TERM_12345", apiKey, workspaceName);
+
+            assertThat(noMatchResult.content()).isEmpty();
+            assertThat(noMatchResult.total()).isEqualTo(0);
+
+            // Test: Without search parameter should return all items
+            var allResult = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentId), apiKey, workspaceName);
+
+            assertThat(allResult.content()).hasSize(2);
+            assertThat(allResult.total()).isEqualTo(2);
+        }
+
+        static Stream<Arguments> find__whenSearchParameterMatches__thenReturnFilteredItems() {
+            return Stream.of(
+                    Arguments.of("trace_input"),
+                    Arguments.of("trace_output"),
+                    Arguments.of("dataset_item_data"));
         }
     }
 
@@ -7260,38 +7595,8 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when workspace size exceeds limit, then dynamic sorting is disabled and sortableBy is empty")
-        void findDatasetItemsWithExperimentItems__whenWorkspaceExceedsSize__thenDynamicSortingDisabled() {
-            /*
-             * Note: This test verifies the workspace size protection mechanism.
-             *
-             * The protection works as follows:
-             * 1. WorkspaceMetadataService calculates workspace size based on spans data
-             * 2. If workspace size exceeds maxSizeToAllowSorting, dynamic sorting is disabled
-             * 3. The API strips sortableBy fields and ignores sorting parameters
-             *
-             * Test configuration (config-test.yml):
-             *   workspaceSettings.maxSizeToAllowSorting: -1 (unlimited for tests)
-             *
-             * In production:
-             *   - maxSizeToAllowSorting is set to a reasonable limit (e.g., 100 GB)
-             *   - Large workspaces automatically disable dynamic sorting
-             *   - This prevents expensive ClickHouse queries on large datasets
-             *
-             * The workspace metadata check is implemented in:
-             *   - ScopeMetadata.canUseDynamicSorting()
-             *   - DatasetsResource.findDatasetItemsWithExperimentItems() (lines 440-446, 464-470)
-             *
-             * To test this scenario in a real environment:
-             *   1. Set maxSizeToAllowSorting to a low value (e.g., 0.1 GB)
-             *   2. Insert enough spans data to exceed the threshold
-             *   3. Verify sortableBy is empty in API response
-             *   4. Verify sorting parameters are ignored
-             *
-             * This test documents the protection mechanism. The actual workspace size
-             * calculation and threshold logic is tested in WorkspaceMetadataService tests.
-             */
-
+        @DisplayName("dynamic sorting is always enabled for dataset items with experiment items")
+        void findDatasetItemsWithExperimentItems__dynamicSortingEnabled() {
             String workspaceName = UUID.randomUUID().toString();
             String apiKey = UUID.randomUUID().toString();
             String workspaceId = UUID.randomUUID().toString();
@@ -7303,8 +7608,7 @@ class DatasetsResourceTest {
 
             String projectName = GENERATOR.generate().toString();
 
-            // Create multiple traces and spans to generate workspace data
-            // This simulates a workspace with meaningful data for size calculation
+            // Create multiple traces
             List<Trace> traces = IntStream.range(0, 10)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
                             .projectName(projectName)
@@ -7382,23 +7686,9 @@ class DatasetsResourceTest {
                 var actualPage = actualResponse.readEntity(DatasetItemPage.class);
                 assertThat(actualPage.content()).isNotEmpty();
 
-                // With current test configuration (maxSizeToAllowSorting: -1),
-                // dynamic sorting is always enabled, so sortableBy should be present
+                // Dynamic sorting is always enabled, sortableBy should be present
                 assertThat(actualPage.sortableBy()).isNotNull();
                 assertThat(actualPage.sortableBy()).isNotEmpty();
-
-                /*
-                 * If this test were run with maxSizeToAllowSorting set to 0:
-                 *   assertThat(actualPage.sortableBy()).isEmpty();
-                 *
-                 * And the data would NOT be sorted by the requested field.
-                 *
-                 * The protection mechanism is:
-                 *   1. Resource fetches ScopeMetadata
-                 *   2. Checks canUseDynamicSorting()
-                 *   3. If false: clears sorting fields and strips sortableBy from response
-                 *   4. Frontend receives empty sortableBy and knows sorting is unavailable
-                 */
             }
         }
     }
@@ -7621,6 +7911,42 @@ class DatasetsResourceTest {
             assertColumns(datasetId, apiKey, workspaceName, Set.copyOf(experimentIds), expectedOutput);
         }
 
+        @Test
+        void getExperimentItemsOutputColumns__whenNoMatchingExperimentItems__thenReturnEmptyColumns() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset without any experiment items
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create experiments but no experiment items (no traces linked)
+            List<UUID> experimentIds = IntStream.range(0, 2)
+                    .mapToObj(i -> {
+                        var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                                .datasetName(dataset.name())
+                                .promptVersion(null)
+                                .promptVersions(null)
+                                .datasetVersionId(null)
+                                .datasetVersionSummary(null)
+                                .build();
+                        return experimentResourceClient.create(experiment, apiKey, workspaceName);
+                    })
+                    .toList();
+
+            // Verify empty columns are returned (not null)
+            assertColumns(datasetId, apiKey, workspaceName, Set.copyOf(experimentIds), Set.of());
+        }
+
         private void assertColumns(UUID datasetId, String apiKey, String workspaceName, Set<UUID> experimentIds,
                 Set<Column> expectedOutput) {
 
@@ -7787,6 +8113,69 @@ class DatasetsResourceTest {
         return items;
     }
 
+    /**
+     * Creates a dataset batch with matching and non-matching items for filter tests.
+     *
+     * @param matchingItems List of items that should match the filter
+     * @param nonMatchingItems List of items that should not match the filter
+     * @return The created DatasetItemBatch
+     */
+    private DatasetItemBatch createFilterTestBatch(List<DatasetItem> matchingItems,
+            List<DatasetItem> nonMatchingItems) {
+        var allItems = new ArrayList<DatasetItem>();
+        allItems.addAll(matchingItems);
+        allItems.addAll(nonMatchingItems);
+
+        var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                .items(allItems)
+                .datasetId(null)
+                .build();
+
+        putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+        return batch;
+    }
+
+    /**
+     * Creates a DatasetItem with specified tags, using PODAM for other fields.
+     *
+     * @param tags Set of tags to assign to the item
+     * @return DatasetItem with specified tags
+     */
+    private DatasetItem createItemWithTags(Set<String> tags) {
+        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .tags(tags)
+                .build();
+    }
+
+    /**
+     * Creates a DatasetItem with specified data, using PODAM for other fields.
+     *
+     * @param data Map of data fields to assign to the item
+     * @return DatasetItem with specified data
+     */
+    private DatasetItem createItemWithData(Map<String, JsonNode> data) {
+        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .data(data)
+                .build();
+    }
+
+    /**
+     * Creates a DatasetItem with specified tags and nullified fields.
+     * Useful for tests that need specific null values.
+     *
+     * @param tags Set of tags to assign to the item
+     * @return DatasetItem with specified tags and null experimentItems, createdAt, lastUpdatedAt
+     */
+    private DatasetItem createItemWithTagsAndNulls(Set<String> tags) {
+        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .tags(tags)
+                .experimentItems(null)
+                .createdAt(null)
+                .lastUpdatedAt(null)
+                .build();
+    }
+
     private void mockGetWorkspaceIdByName(String workspaceName, String workspaceId) {
         AuthTestUtils.mockGetWorkspaceIdByName(wireMock.server(), workspaceName, workspaceId);
     }
@@ -7819,13 +8208,15 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment1 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment1, apiKey, workspaceName);
 
             var experiment2 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment2, apiKey, workspaceName);
 
@@ -7891,8 +8282,10 @@ class DatasetsResourceTest {
             spanResourceClient.createSpan(span2, apiKey, workspaceName);
 
             // Generate fixed feedback scores for predictable percentile testing
+            // NOTE: projectName must match the trace's project for the feedback score to be associated correctly
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
+                    .projectName(experiment1.name())
                     .name("accuracy")
                     .value(new BigDecimal("0.75"))
                     .source(ScoreSource.SDK)
@@ -7900,6 +8293,7 @@ class DatasetsResourceTest {
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
+                    .projectName(experiment2.name())
                     .name("accuracy")
                     .value(new BigDecimal("0.95"))
                     .source(ScoreSource.SDK)
@@ -7999,8 +8393,10 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment1 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment1, apiKey, workspaceName);
 
@@ -8046,12 +8442,14 @@ class DatasetsResourceTest {
             // Generate random feedback scores using PODAM
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
+                    .projectName(trace1.projectName())
                     .name("accuracy")
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
+                    .projectName(trace2.projectName())
                     .name("accuracy")
                     .source(ScoreSource.SDK)
                     .build();
@@ -8147,18 +8545,20 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment1 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment1, apiKey, workspaceName);
 
             var experiment2 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment2, apiKey, workspaceName);
 
             var experiment3 = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment3, apiKey, workspaceName);
 
@@ -8225,18 +8625,21 @@ class DatasetsResourceTest {
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
                     .name("quality")
+                    .projectName(trace1.projectName())
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
                     .name("quality")
+                    .projectName(trace2.projectName())
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore3 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace3.id())
                     .name("quality")
+                    .projectName(trace3.projectName())
                     .source(ScoreSource.SDK)
                     .build();
 
@@ -8327,8 +8730,10 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
 
@@ -8467,8 +8872,10 @@ class DatasetsResourceTest {
             var dataset = factory.manufacturePojo(Dataset.class);
             var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
 
+            // Note: Use datasetName instead of datasetId because ExperimentService.create
+            // resolves the dataset from datasetName via getOrCreateDataset()
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .datasetId(datasetId)
+                    .datasetName(dataset.name())
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
 
@@ -8676,7 +9083,8 @@ class DatasetsResourceTest {
             createAndAssert(trace2, workspaceName, apiKey);
 
             // Create experiment items for both traces
-            var experimentId = GENERATOR.generate();
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
             var experimentItem1 = factory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experimentId)
                     .datasetItemId(datasetItem.id())
@@ -8802,8 +9210,7 @@ class DatasetsResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            // Create experiment
-            var experimentId = GENERATOR.generate();
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
 
             // Create experiment items linked to traces
             var experimentItems = IntStream.range(0, 3)
@@ -8904,8 +9311,7 @@ class DatasetsResourceTest {
 
             spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
-            // Create experiment
-            var experimentId = GENERATOR.generate();
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
 
             // Create experiment items linked to traces
             var experimentItems = IntStream.range(0, 3)
@@ -8947,6 +9353,83 @@ class DatasetsResourceTest {
                         .toList();
 
                 assertThat(tokens).containsExactly(50L, 100L, 150L);
+            }
+        }
+
+        @Test
+        @DisplayName("should filter experiment items by dataset item ID - regression test for AMBIGUOUS_IDENTIFIER fix")
+        void filterById__whenFilteringByDatasetItemId__thenReturnMatchingItem() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create project name for traces
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create 3 dataset items
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(IntStream.range(0, 3)
+                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .toList())
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+            var datasetItems = datasetItemBatch.items();
+
+            // Create traces
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+                    .toList();
+
+            var traceIds = traces.stream()
+                    .map(trace -> createTrace(trace, apiKey, workspaceName))
+                    .toList();
+
+            var experimentId = createExperimentForDataset(dataset, apiKey, workspaceName);
+
+            // Create experiment items linked to traces
+            var experimentItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i))
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(experimentItems))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Filter by the ID of the second dataset item
+            var targetItemId = datasetItems.get(1).id();
+            var filters = List.of(new ExperimentsComparisonFilter("id",
+                    FieldType.STRING, Operator.EQUAL, null, targetItemId.toString()));
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("filters", toURLEncodedQueryParam(filters))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                // Should return only 1 item matching the ID filter
+                assertThat(actualPage.content()).hasSize(1);
+                assertThat(actualPage.content().getFirst().id()).isEqualTo(targetItemId);
             }
         }
     }

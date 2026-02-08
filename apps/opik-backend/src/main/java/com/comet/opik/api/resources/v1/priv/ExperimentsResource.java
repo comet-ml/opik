@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentBatchUpdate;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupResponse;
@@ -120,18 +121,19 @@ public class ExperimentsResource {
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
+            @QueryParam("project_id") UUID projectId,
+            @QueryParam("project_deleted") boolean projectDeleted,
             @QueryParam("sorting") String sorting,
-            @QueryParam("filters") String filters) {
+            @QueryParam("filters") String filters,
+            @QueryParam("experiment_ids") @Schema(description = "Filter experiments by a list of experiment IDs") String experimentIds,
+            @QueryParam("force_sorting") @DefaultValue("false") @Schema(description = "Force sorting even when exceeding the endpoint result set limit. May result in slower queries") boolean forceSorting) {
 
         List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
-        var metadata = workspaceMetadataService
-                .getWorkspaceMetadata(requestContext.get().getWorkspaceId())
-                // Context not used for workspace metadata but added for consistency with project metadata endpoints.
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+        var metadata = workspaceMetadataService.getExperimentMetadata(
+                requestContext.get().getWorkspaceId(), datasetId)
                 .block();
-
-        if (!sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
+        if (!forceSorting && !sortingFields.isEmpty() && metadata.cannotUseDynamicSorting()) {
             sortingFields = List.of();
         }
 
@@ -141,22 +143,30 @@ public class ExperimentsResource {
                 .map(queryParam -> ParamsValidator.get(queryParam, ExperimentType.class, "types"))
                 .orElse(null);
 
+        var experimentIdsParsed = Optional.ofNullable(experimentIds)
+                .filter(param -> !param.isBlank())
+                .map(ParamsValidator::getIds)
+                .orElse(null);
+
         var experimentSearchCriteria = ExperimentSearchCriteria.builder()
                 .datasetId(datasetId)
                 .name(name)
                 .entityType(EntityType.TRACE)
                 .datasetDeleted(datasetDeleted)
                 .promptId(promptId)
+                .projectId(projectId)
+                .projectDeleted(projectDeleted)
                 .sortingFields(sortingFields)
                 .optimizationId(optimizationId)
                 .types(types)
                 .filters(experimentFilters)
+                .experimentIds(experimentIdsParsed)
                 .build();
 
         log.info("Finding experiments by '{}', page '{}', size '{}'", experimentSearchCriteria, page, size);
         var experiments = experimentService.find(page, size, experimentSearchCriteria)
                 .map(experimentPage -> {
-                    if (metadata.cannotUseDynamicSorting()) {
+                    if (!forceSorting && metadata.cannotUseDynamicSorting()) {
                         return experimentPage.toBuilder().sortableBy(List.of()).build();
                     }
                     return experimentPage;
@@ -178,6 +188,7 @@ public class ExperimentsResource {
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
@@ -195,6 +206,7 @@ public class ExperimentsResource {
                 .name(name)
                 .types(types)
                 .filters(experimentFilters)
+                .projectId(projectId)
                 .build();
 
         log.info("Finding experiment groups by criteria '{}'", experimentGroupCriteria);
@@ -216,6 +228,7 @@ public class ExperimentsResource {
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
             @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
+            @QueryParam("project_id") UUID projectId,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
@@ -233,6 +246,7 @@ public class ExperimentsResource {
                 .name(name)
                 .types(types)
                 .filters(experimentFilters)
+                .projectId(projectId)
                 .build();
 
         log.info("Finding experiment groups aggregations by criteria '{}'", experimentGroupCriteria);
@@ -297,6 +311,28 @@ public class ExperimentsResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         log.info("Updated experiment with id '{}', workspaceId '{}'", id, workspaceId);
+        return Response.noContent().build();
+    }
+
+    @PATCH
+    @Path("/batch")
+    @Operation(operationId = "batchUpdateExperiments", summary = "Batch update experiments", description = "Update multiple experiments", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response batchUpdate(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ExperimentBatchUpdate.class))) @Valid @NotNull ExperimentBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Batch updating '{}' experiments on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        experimentService.batchUpdate(batchUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Batch updated '{}' experiments on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
         return Response.noContent().build();
     }
 

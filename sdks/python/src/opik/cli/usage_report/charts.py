@@ -223,7 +223,7 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     fig, axes = plt.subplots(6, 1, figsize=(14, 20))
     unit_label = unit.capitalize()
     fig.suptitle(
-        f'Opik Usage Metrics - {data["workspace"]} (by {unit_label})',
+        f"Opik Usage Metrics - {data['workspace']} (by {unit_label})",
         fontsize=16,
         fontweight="bold",
     )
@@ -315,9 +315,9 @@ def create_charts(data: Dict[str, Any], output_dir: str = ".") -> None:
     ax2.yaxis.set_major_formatter(
         FuncFormatter(
             lambda x, p: (
-                f"{x/1e6:.2f}M"
+                f"{x / 1e6:.2f}M"
                 if x >= 1e6
-                else f"{x/1e3:.0f}K"
+                else f"{x / 1e3:.0f}K"
                 if x >= 1e3
                 else f"{x:.0f}"
             )
@@ -590,9 +590,9 @@ def create_individual_chart(
         ax.yaxis.set_major_formatter(
             FuncFormatter(
                 lambda x, p: (
-                    f"{x/1e6:.2f}M"
+                    f"{x / 1e6:.2f}M"
                     if x >= 1e6
-                    else f"{x/1e3:.0f}K"
+                    else f"{x / 1e3:.0f}K"
                     if x >= 1e3
                     else f"{x:.0f}"
                 )

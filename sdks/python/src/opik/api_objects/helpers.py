@@ -4,9 +4,7 @@ from typing import Optional, Dict, Any, List, TypeVar, Type, Union
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
-
-from .. import config, datetime_helpers, logging_messages
-from ..id_helpers import generate_id  # noqa: F401 , keep it here for backward compatibility with external dependants
+from .. import config, datetime_helpers, logging_messages, id_helpers
 from ..message_processing import messages
 from ..rest_api.types import (
     span_filter_public,
@@ -15,7 +13,11 @@ from ..rest_api.types import (
 )
 from ..types import BatchFeedbackScoreDict
 
+# Re-export for backward compatibility
+generate_id = id_helpers.generate_id
+
 LOGGER = logging.getLogger(__name__)
+
 
 FilterParsedItemT = TypeVar(
     "FilterParsedItemT",
@@ -88,6 +90,11 @@ def add_usage_to_metadata(
 
     metadata = {} if metadata is None else {**metadata}
 
+    # Don't overwrite existing metadata.usage - it may contain original provider data
+    # that should be preserved (e.g., during import from exported data)
+    if "usage" in metadata:
+        return metadata
+
     if isinstance(usage, llm_usage.OpikUsage):
         metadata["usage"] = usage.provider_usage.model_dump(exclude_none=True)
         return metadata
@@ -119,7 +126,7 @@ def parse_filter_expressions(
     if filter_string is None:
         return None
 
-    filter_expressions = opik_query_language.OpikQueryLanguage(
+    filter_expressions = opik_query_language.OpikQueryLanguage.for_traces(
         filter_string
     ).get_filter_expressions()
 

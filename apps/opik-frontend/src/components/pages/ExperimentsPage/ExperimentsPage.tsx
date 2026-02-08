@@ -23,6 +23,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
@@ -34,10 +35,12 @@ import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_METADATA_ID,
+  COLUMN_PROJECT_ID,
+  COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { DELETED_DATASET_LABEL } from "@/constants/groups";
+import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/components/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
@@ -61,7 +64,6 @@ import { useExperimentsAutoExpandingLogic } from "@/components/pages-shared/expe
 import { useExpandingConfig } from "@/components/pages-shared/experiments/useExpandingConfig";
 import {
   getIsGroupRow,
-  getRowId,
   renderCustomRow,
 } from "@/components/shared/DataTable/utils";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
@@ -87,7 +89,9 @@ const PAGINATION_SIZE_KEY = "experiments-pagination-size";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
+  COLUMN_PROJECT_ID,
   "created_at",
   "duration.p50",
   "trace_count",
@@ -152,6 +156,14 @@ const ExperimentsPage: React.FC = () => {
   const columnsDef: ColumnData<GroupedExperiment>[] = useMemo(() => {
     return [
       {
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        cell: TextCell as never,
+        sortable: true,
+        size: 200,
+      },
+      {
         id: COLUMN_ID_ID,
         label: "ID",
         type: COLUMN_TYPE.string,
@@ -181,6 +193,18 @@ const ExperimentsPage: React.FC = () => {
             },
           ]
         : []),
+      {
+        id: COLUMN_PROJECT_ID,
+        label: "Project",
+        type: COLUMN_TYPE.string,
+        cell: ResourceCell as never,
+        accessorFn: (row) => row.project_id,
+        customMeta: {
+          nameKey: "project_name",
+          idKey: "project_id",
+          resource: RESOURCE_TYPE.project,
+        },
+      },
       {
         id: "created_at",
         label: "Created",
@@ -293,6 +317,13 @@ const ExperimentsPage: React.FC = () => {
         cell: CommentsCell as never,
       },
       {
+        id: "tags",
+        label: "Tags",
+        type: COLUMN_TYPE.list,
+        iconType: "tags" as const,
+        cell: ListCell as never,
+      },
+      {
         id: COLUMN_METADATA_ID,
         label: "Configuration",
         type: COLUMN_TYPE.dictionary,
@@ -320,7 +351,7 @@ const ExperimentsPage: React.FC = () => {
     maxExpandedDeepestGroups: MAX_EXPANDED_DEEPEST_GROUPS,
   });
 
-  const { data, isPending, isPlaceholderData, refetch } =
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
     useGroupedExperimentsList({
       workspaceName,
       groupLimit,
@@ -378,6 +409,7 @@ const ExperimentsPage: React.FC = () => {
     columnsOrder,
     setColumnsOrder,
     groupFieldNames,
+    getExperimentRowId,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: columnsDef,
@@ -422,15 +454,21 @@ const ExperimentsPage: React.FC = () => {
     [setGroupLimit],
   );
 
-  // Filter out dataset column when grouping by dataset
+  // Filter out name and dataset/project columns when grouping by dataset/project
   const availableColumns = useMemo(() => {
     const isGroupingByDataset = groups.some(
       (g) => g.field === COLUMN_DATASET_ID,
     );
-    if (isGroupingByDataset) {
-      return columnsDef.filter((col) => col.id !== COLUMN_DATASET_ID);
-    }
-    return columnsDef;
+    const isGroupingByProject = groups.some(
+      (g) => g.field === COLUMN_PROJECT_ID,
+    );
+
+    return columnsDef.filter((col) => {
+      if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
+      if (isGroupingByProject && col.id === COLUMN_PROJECT_ID) return false;
+      if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
+      return true;
+    });
   }, [groups, columnsDef]);
 
   const chartsData = useMemo(() => {
@@ -494,7 +532,7 @@ const ExperimentsPage: React.FC = () => {
                 return {
                   label: calculateGroupLabel(groups[index]),
                   value:
-                    label === DELETED_DATASET_LABEL
+                    label === DELETED_ENTITY_LABEL
                       ? "Deleted dataset"
                       : label || value || "Undefined",
                 };
@@ -639,16 +677,23 @@ const ExperimentsPage: React.FC = () => {
             config={filtersAndGroupsConfig as never}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
           <GroupsButton
             columns={FILTER_AND_GROUP_COLUMNS}
             config={filtersAndGroupsConfig as never}
             groups={groups}
             onChange={setGroups}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">
-          <ExperimentsActionsPanel experiments={selectedRows} />
+          <ExperimentsActionsPanel
+            experiments={selectedRows}
+            onTagsAdded={() => {
+              setRowSelection({});
+            }}
+          />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <TooltipWrapper content="Refresh experiments list">
             <Button
@@ -679,6 +724,7 @@ const ExperimentsPage: React.FC = () => {
         </div>
       </PageBodyStickyContainer>
       <DataTable
+        key={hasGroups ? "grouped" : "ungrouped"}
         columns={columns}
         aggregationMap={aggregationMap}
         data={experiments}
@@ -693,7 +739,7 @@ const ExperimentsPage: React.FC = () => {
         }}
         expandingConfig={expandingConfig}
         groupingConfig={groupingConfig}
-        getRowId={getRowId}
+        getRowId={getExperimentRowId}
         columnPinning={columnPinningConfig}
         noData={
           <DataTableNoData title={noDataText}>
@@ -707,6 +753,7 @@ const ExperimentsPage: React.FC = () => {
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

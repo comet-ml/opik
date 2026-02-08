@@ -1,14 +1,20 @@
 import React from "react";
+import { Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { OptimizationStudioConfig } from "@/types/optimizations";
+import { Experiment } from "@/types/datasets";
 import { MessagesList } from "@/components/pages-shared/prompts/PromptMessageDisplay";
 import { OPTIMIZATION_METRIC_OPTIONS } from "@/constants/optimizations";
 import { getOptimizerLabel } from "@/lib/optimizations";
 import { extractDisplayMessages } from "@/lib/llm";
+import useAppStore from "@/store/AppStore";
 
 interface CompareOptimizationsConfigurationProps {
   studioConfig: OptimizationStudioConfig;
+  datasetId: string;
+  optimizationId: string;
+  bestExperiment?: Experiment;
 }
 
 const getMetricLabel = (type: string): string => {
@@ -33,7 +39,8 @@ const ConfigItem: React.FC<{ label: string; value: React.ReactNode }> = ({
 
 const CompareOptimizationsConfiguration: React.FC<
   CompareOptimizationsConfigurationProps
-> = ({ studioConfig }) => {
+> = ({ studioConfig, datasetId, optimizationId, bestExperiment }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { prompt, optimizer, evaluation, dataset_name, llm_model } =
     studioConfig;
   const metric = evaluation?.metrics?.[0];
@@ -46,7 +53,20 @@ const CompareOptimizationsConfiguration: React.FC<
         <CardTitle className="text-sm">Configuration</CardTitle>
       </CardHeader>
       <CardContent className="flex shrink-0 flex-col gap-1">
-        <ConfigItem label="Dataset" value={dataset_name} />
+        <ConfigItem
+          label="Dataset"
+          value={
+            <Link
+              to="/$workspaceName/datasets/$datasetId"
+              params={{ workspaceName, datasetId }}
+              className="text-primary hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {dataset_name}
+            </Link>
+          }
+        />
         <ConfigItem label="Model" value={llm_model?.model || "-"} />
         <ConfigItem
           label="Algorithm"
@@ -67,11 +87,32 @@ const CompareOptimizationsConfiguration: React.FC<
             ))}
           </div>
         )}
+        {bestExperiment && (
+          <ConfigItem
+            label="Best trial configuration"
+            value={
+              <Link
+                to="/$workspaceName/optimizations/$datasetId/$optimizationId/compare"
+                params={{
+                  workspaceName,
+                  datasetId,
+                  optimizationId,
+                }}
+                target="_blank"
+                rel="noopener noreferrer"
+                search={{ trials: [bestExperiment.id], tab: "config" }}
+                className="text-primary hover:underline"
+              >
+                {bestExperiment.name}
+              </Link>
+            }
+          />
+        )}
       </CardContent>
 
       <Separator className="my-2 shrink-0" />
 
-      <CardHeader className="shrink-0 p-2">
+      <CardHeader className="shrink-0 px-6 py-1.5">
         <CardTitle className="text-sm">Initial prompt</CardTitle>
       </CardHeader>
       <CardContent className="min-h-0 flex-1 overflow-auto">

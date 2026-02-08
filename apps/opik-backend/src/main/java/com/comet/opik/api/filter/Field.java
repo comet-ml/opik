@@ -24,9 +24,11 @@ public interface Field {
     String USAGE_TOTAL_TOKEN_QUERY_PARAMS = "usage.total_tokens";
     String FEEDBACK_SCORES_QUERY_PARAM = "feedback_scores";
     String SPAN_FEEDBACK_SCORES_QUERY_PARAM = "span_feedback_scores";
+    String EXPERIMENT_SCORES_QUERY_PARAM = "experiment_scores";
     String DURATION_QUERY_PARAM = "duration";
     String THREAD_ID_QUERY_PARAM = "thread_id";
     String DATASET_ID_QUERY_PARAM = "dataset_id";
+    String PROJECT_ID_QUERY_PARAM = "project_id";
     String PROMPT_IDS_QUERY_PARAM = "prompt_ids";
     String NUMBER_OF_MESSAGES_QUERY_PARAM = "number_of_messages";
     String FIRST_MESSAGE_QUERY_PARAM = "first_message";

@@ -8,7 +8,13 @@ import {
   DEFAULT_VERTEX_AI_CONFIGS,
   DEFAULT_CUSTOM_CONFIGS,
 } from "@/constants/llm";
-import { getDefaultTemperatureForModel } from "@/lib/modelUtils";
+import {
+  getDefaultTemperatureForModel,
+  isReasoningModel,
+  supportsGeminiThinkingLevel,
+  supportsVertexAIThinkingLevel,
+  supportsAnthropicThinkingEffort,
+} from "@/lib/modelUtils";
 import {
   LLMAnthropicConfigsType,
   LLMGeminiConfigsType,
@@ -36,7 +42,7 @@ export const getDefaultConfigByProvider = (
   const providerType = parseComposedProviderType(provider);
 
   if (providerType === PROVIDER_TYPE.OPEN_AI) {
-    return {
+    const config: LLMOpenAIConfigsType = {
       temperature: getDefaultTemperatureForModel(model),
       maxCompletionTokens: DEFAULT_OPEN_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
@@ -44,24 +50,39 @@ export const getDefaultConfigByProvider = (
       presencePenalty: DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY,
       throttling: DEFAULT_OPEN_AI_CONFIGS.THROTTLING,
       maxConcurrentRequests: DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
-    } as LLMOpenAIConfigsType;
+    };
+
+    // Add reasoningEffort default for reasoning models
+    if (isReasoningModel(model)) {
+      config.reasoningEffort = "medium";
+    }
+
+    return config;
   }
 
   if (providerType === PROVIDER_TYPE.ANTHROPIC) {
     // For models requiring exclusive params, clear topP to use temperature by default
     const isExclusive =
+      model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5;
 
-    return {
+    const config: LLMAnthropicConfigsType = {
       temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: isExclusive ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
       throttling: DEFAULT_ANTHROPIC_CONFIGS.THROTTLING,
       maxConcurrentRequests: DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS,
-    } as LLMAnthropicConfigsType;
+    };
+
+    // Add thinkingEffort default for Anthropic thinking models (Opus 4.6)
+    if (supportsAnthropicThinkingEffort(model)) {
+      config.thinkingEffort = "high";
+    }
+
+    return config;
   }
 
   if (providerType === PROVIDER_TYPE.OPEN_ROUTER) {
@@ -82,23 +103,37 @@ export const getDefaultConfigByProvider = (
   }
 
   if (providerType === PROVIDER_TYPE.GEMINI) {
-    return {
+    const config: LLMGeminiConfigsType = {
       temperature: DEFAULT_GEMINI_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_GEMINI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_GEMINI_CONFIGS.TOP_P,
       throttling: DEFAULT_GEMINI_CONFIGS.THROTTLING,
       maxConcurrentRequests: DEFAULT_GEMINI_CONFIGS.MAX_CONCURRENT_REQUESTS,
-    } as LLMGeminiConfigsType;
+    };
+
+    // Add thinkingLevel default for Gemini 3 models
+    if (supportsGeminiThinkingLevel(model)) {
+      config.thinkingLevel = "high";
+    }
+
+    return config;
   }
 
   if (providerType === PROVIDER_TYPE.VERTEX_AI) {
-    return {
+    const config: LLMVertexAIConfigsType = {
       temperature: DEFAULT_VERTEX_AI_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_VERTEX_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_VERTEX_AI_CONFIGS.TOP_P,
       throttling: DEFAULT_VERTEX_AI_CONFIGS.THROTTLING,
       maxConcurrentRequests: DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
-    } as LLMVertexAIConfigsType;
+    };
+
+    // Add thinkingLevel default for Vertex AI Gemini 3 Pro model
+    if (supportsVertexAIThinkingLevel(model)) {
+      config.thinkingLevel = "low";
+    }
+
+    return config;
   }
 
   if (providerType === PROVIDER_TYPE.CUSTOM) {

@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.BiInformationResponse.BiInformation;
+import com.comet.opik.api.ExperimentItemReference;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.GuardrailType;
 import com.comet.opik.api.GuardrailsValidation;
@@ -51,7 +52,6 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -71,6 +71,7 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 import static java.util.function.Predicate.not;
 
@@ -147,7 +148,9 @@ class TraceDAOImpl implements TraceDAO {
                 last_updated_by,
                 thread_id,
                 visibility_mode,
-                truncation_threshold
+                truncation_threshold,
+                input_slim,
+                output_slim
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -169,7 +172,9 @@ class TraceDAOImpl implements TraceDAO {
                         :user_name,
                         :thread_id<item.index>,
                         if(:visibility_mode<item.index> IS NULL, 'default', :visibility_mode<item.index>),
-                        :truncation_threshold<item.index>
+                        :truncation_threshold<item.index>,
+                        :input_slim<item.index>,
+                        :output_slim<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -200,7 +205,9 @@ class TraceDAOImpl implements TraceDAO {
                 last_updated_by,
                 thread_id,
                 visibility_mode,
-                truncation_threshold
+                truncation_threshold,
+                input_slim,
+                output_slim
             )
             SELECT
                 new_trace.id as id,
@@ -259,7 +266,15 @@ class TraceDAOImpl implements TraceDAO {
                     notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
                     new_trace.visibility_mode
                 ) as visibility_mode,
-                new_trace.truncation_threshold as truncation_threshold
+                new_trace.truncation_threshold as truncation_threshold,
+                multiIf(
+                    notEmpty(old_trace.input) AND notEmpty(old_trace.input_slim), old_trace.input_slim,
+                    new_trace.input_slim
+                ) as input_slim,
+                multiIf(
+                    notEmpty(old_trace.output) AND notEmpty(old_trace.output_slim), old_trace.output_slim,
+                    new_trace.output_slim
+                ) as output_slim
             FROM (
                 SELECT
                     :id as id,
@@ -278,11 +293,13 @@ class TraceDAOImpl implements TraceDAO {
                     :user_name as last_updated_by,
                     :thread_id as thread_id,
                     if(:visibility_mode IS NULL, 'default', :visibility_mode) as visibility_mode,
-                    :truncation_threshold as truncation_threshold
+                    :truncation_threshold as truncation_threshold,
+                    :input_slim as input_slim,
+                    :output_slim as output_slim
             ) as new_trace
             LEFT JOIN (
                 SELECT
-                    *
+                    *, truncated_input, truncated_output
                 FROM traces
                 WHERE id = :id
                 AND workspace_id = :workspace_id
@@ -299,7 +316,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim
             )
             SELECT
             	id,
@@ -318,7 +335,9 @@ class TraceDAOImpl implements TraceDAO {
                 :user_name as last_updated_by,
                 <if(thread_id)> :thread_id <else> thread_id <endif> as thread_id,
                 visibility_mode,
-                :truncation_threshold as truncation_threshold
+                :truncation_threshold as truncation_threshold,
+                <if(input)> :input_slim <else> input_slim <endif> as input_slim,
+                <if(output)> :output_slim <else> output_slim <endif> as output_slim
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -333,7 +352,19 @@ class TraceDAOImpl implements TraceDAO {
     // Format: if span_id exists, use 'author_spanId', otherwise use 'author'.
     // The tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
     private static final String SELECT_BY_IDS = """
-            WITH feedback_scores_combined_raw AS (
+            WITH target_projects AS (
+                SELECT DISTINCT project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND id IN :ids
+            ), target_spans AS (
+                SELECT id, trace_id, type
+                FROM spans FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id IN (SELECT project_id FROM target_projects)
+                AND trace_id IN :ids
+            ),
+            feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -349,8 +380,8 @@ class TraceDAOImpl implements TraceDAO {
                    feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'trace'
-                   AND workspace_id = :workspace_id
-                   AND entity_id IN :ids
+                AND workspace_id = :workspace_id
+                AND entity_id IN :ids
                 UNION ALL
                 SELECT
                     workspace_id,
@@ -452,8 +483,8 @@ class TraceDAOImpl implements TraceDAO {
                        feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'span'
-                   AND workspace_id = :workspace_id
-                   AND entity_id IN (SELECT id FROM spans WHERE workspace_id = :workspace_id AND trace_id IN :ids)
+                AND workspace_id = :workspace_id
+                AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -471,7 +502,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT id FROM spans WHERE workspace_id = :workspace_id AND trace_id IN :ids)
+                  AND entity_id IN (SELECT id FROM target_spans)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -524,14 +555,7 @@ class TraceDAOImpl implements TraceDAO {
                        author,
                        s.type AS span_type
                 FROM span_feedback_scores_combined sfs
-                INNER JOIN (
-                    SELECT id, trace_id, type
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                      AND trace_id IN :ids
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS s ON sfs.entity_id = s.id
+                INNER JOIN target_spans s ON sfs.entity_id = s.id
             ), span_feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
@@ -579,6 +603,26 @@ class TraceDAOImpl implements TraceDAO {
                     arrayMin(created_ats) AS created_at,
                     arrayMax(last_updated_ats) AS last_updated_at
                 FROM span_feedback_scores_combined_grouped
+            ), experiments_agg AS (
+                SELECT DISTINCT
+                    ei.trace_id,
+                    ei.dataset_item_id AS experiment_dataset_item_id,
+                    e.id AS experiment_id,
+                    e.name AS experiment_name,
+                    e.dataset_id AS experiment_dataset_id
+                FROM (
+                    SELECT DISTINCT experiment_id, trace_id, dataset_item_id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN :ids
+                ) ei
+                INNER JOIN (
+                    SELECT id, name, dataset_id
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) e ON ei.experiment_id = e.id
             )
             SELECT
                 t.*,
@@ -593,7 +637,11 @@ class TraceDAOImpl implements TraceDAO {
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores_list) as feedback_scores_list,
                 any(sfs.span_feedback_scores_list) as span_feedback_scores_list,
-                any(gr.guardrails) as guardrails_validations
+                any(gr.guardrails) as guardrails_validations,
+                any(eaag.experiment_id) as experiment_id,
+                any(eaag.experiment_name) as experiment_name,
+                any(eaag.experiment_dataset_id) as experiment_dataset_id,
+                any(eaag.experiment_dataset_item_id) as experiment_dataset_item_id
             FROM (
                 SELECT
                     *,
@@ -603,6 +651,7 @@ class TraceDAOImpl implements TraceDAO {
                             NULL) AS duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
+                AND project_id IN (SELECT project_id FROM target_projects)
                 AND id IN :ids
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -617,10 +666,12 @@ class TraceDAOImpl implements TraceDAO {
                     provider
                 FROM spans
                 WHERE workspace_id = :workspace_id
-                  AND trace_id IN :ids
+                AND project_id IN (SELECT project_id FROM target_projects)
+                AND trace_id IN :ids
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s ON t.id = s.trace_id
+            LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
             LEFT JOIN (
                 SELECT
                     entity_id,
@@ -636,6 +687,7 @@ class TraceDAOImpl implements TraceDAO {
                         entity_id
                     FROM comments
                     WHERE workspace_id = :workspace_id
+                    AND project_id IN (SELECT project_id FROM target_projects)
                     AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -875,7 +927,15 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
-            ), span_feedback_scores_combined_raw AS (
+            ), target_spans AS (
+                SELECT id, trace_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+            ),
+            span_feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -893,8 +953,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -913,8 +972,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (SELECT id FROM target_spans)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -965,16 +1023,7 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_at,
                        author
                 FROM span_feedback_scores_combined sfs
-                INNER JOIN (
-                    SELECT id, trace_id
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
-                      <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS s ON sfs.entity_id = s.id
+                INNER JOIN target_spans s ON sfs.entity_id = s.id
             ), span_feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
@@ -1040,7 +1089,7 @@ class TraceDAOImpl implements TraceDAO {
                     toInt64(countIf(type = 'llm')) as llm_span_count,
                     countIf(type = 'tool') > 0 as has_tool_spans,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans final
+                FROM spans FINAL
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
@@ -1085,6 +1134,30 @@ class TraceDAOImpl implements TraceDAO {
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
             )
+            <if(sort_has_experiment || !exclude_experiment)>
+            , experiments_agg AS (
+                SELECT DISTINCT
+                    ei.trace_id,
+                    ei.dataset_item_id AS experiment_dataset_item_id,
+                    e.id AS experiment_id,
+                    e.name AS experiment_name,
+                    e.dataset_id AS experiment_dataset_id
+                FROM (
+                    SELECT DISTINCT experiment_id, trace_id, dataset_item_id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                ) ei
+                INNER JOIN (
+                    SELECT id, name, dataset_id
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) e ON ei.experiment_id = e.id
+            )
+            <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -1121,12 +1194,17 @@ class TraceDAOImpl implements TraceDAO {
                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                          NULL) AS duration
                 FROM traces t
+                <if(guardrails_filters)>
                     LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
+                <endif>
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
                 <endif>
                 <if(sort_has_span_statistics)>
                 LEFT JOIN spans_agg s ON t.id = s.trace_id
+                <endif>
+                <if(sort_has_experiment)>
+                LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id
                 <endif>
                 <if(feedback_scores_empty_filters)>
                 LEFT JOIN fsc ON fsc.entity_id = t.id
@@ -1224,12 +1302,14 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
+                  <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id, eaag.experiment_dataset_item_id<endif>
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
              LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
+             <if(sort_has_experiment || !exclude_experiment)>LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id<endif>
              ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1357,7 +1437,15 @@ class TraceDAOImpl implements TraceDAO {
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
-            ), span_feedback_scores_combined_raw AS (
+            ), target_spans AS (
+                SELECT id, trace_id
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
+            ),
+            span_feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1375,8 +1463,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -1395,8 +1482,7 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                  AND entity_id IN (SELECT id FROM target_spans)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -1447,16 +1533,7 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_at,
                        author
                 FROM span_feedback_scores_combined sfs
-                INNER JOIN (
-                    SELECT id, trace_id
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
-                      <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS s ON sfs.entity_id = s.id
+                INNER JOIN target_spans s ON sfs.entity_id = s.id
             ), span_feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
@@ -1629,6 +1706,7 @@ class TraceDAOImpl implements TraceDAO {
                     FROM spans
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
+                    AND trace_id IN (SELECT trace_id FROM target_spans)
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS s ON t.id = s.trace_id
@@ -1671,7 +1749,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim
             )
             SELECT
                 new_trace.id as id,
@@ -1737,7 +1815,17 @@ class TraceDAOImpl implements TraceDAO {
                     notEquals(old_trace.visibility_mode, 'unknown'), old_trace.visibility_mode,
                     new_trace.visibility_mode
                 ) as visibility_mode,
-                new_trace.truncation_threshold as truncation_threshold
+                new_trace.truncation_threshold as truncation_threshold,
+                multiIf(
+                    notEmpty(new_trace.input_slim), new_trace.input_slim,
+                    notEmpty(old_trace.input) AND notEmpty(old_trace.input_slim), old_trace.input_slim,
+                    new_trace.input_slim
+                ) as input_slim,
+                multiIf(
+                    notEmpty(new_trace.output_slim), new_trace.output_slim,
+                    notEmpty(old_trace.output) AND notEmpty(old_trace.output_slim), old_trace.output_slim,
+                    new_trace.output_slim
+                ) as output_slim
             FROM (
                 SELECT
                     :id as id,
@@ -1756,11 +1844,13 @@ class TraceDAOImpl implements TraceDAO {
                     :user_name as last_updated_by,
                     <if(thread_id)> :thread_id <else> '' <endif> as thread_id,
                     <if(visibility_mode)> :visibility_mode <else> 'unknown' <endif> as visibility_mode,
-                    :truncation_threshold as truncation_threshold
+                    :truncation_threshold as truncation_threshold,
+                    <if(input)> :input_slim <else> '' <endif> as input_slim,
+                    <if(output)> :output_slim <else> '' <endif> as output_slim
             ) as new_trace
             LEFT JOIN (
                 SELECT
-                    *
+                    *, truncated_input, truncated_output
                 FROM traces
                 WHERE id = :id
                 AND workspace_id = :workspace_id
@@ -1808,16 +1898,28 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_TRACES_STATS = """
-             WITH spans_agg AS (
+             WITH spans_data AS (
+                SELECT
+                    id,
+                    trace_id,
+                    usage,
+                    total_estimated_cost,
+                    type,
+                    workspace_id,
+                    project_id
+                FROM spans FINAL
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+             ), spans_agg AS (
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
-                    COUNT(DISTINCT id) as span_count,
+                    COUNT(id) as span_count,
                     toInt64(countIf(type = 'llm')) as llm_span_count
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                AND project_id IN :project_ids
+                FROM spans_data
                 GROUP BY workspace_id, project_id, trace_id
             ), feedback_scores_combined_raw AS (
                 SELECT
@@ -1968,7 +2070,8 @@ class TraceDAOImpl implements TraceDAO {
                       <if(uuid_to_time)> AND aqi.item_id \\<= :uuid_to_time <endif>
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
-            ), span_feedback_scores_combined_raw AS (
+            ),
+            span_feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1986,8 +2089,6 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -2006,8 +2107,6 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id IN :project_ids
-                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -2058,30 +2157,7 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_at,
                        author
                 FROM span_feedback_scores_combined sfs
-                INNER JOIN (
-                    SELECT id, trace_id
-                    FROM spans FINAL
-                    WHERE workspace_id = :workspace_id
-                      AND project_id IN :project_ids
-                      AND trace_id IN (
-                          SELECT id
-                          FROM traces final
-                          <if(guardrails_filters)>
-                          LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
-                          <endif>
-                          <if(annotation_queue_filters)>
-                          LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
-                          <endif>
-                          WHERE workspace_id = :workspace_id
-                          AND project_id IN :project_ids
-                          <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                          <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
-                          <if(filters)> AND <filters> <endif>
-                          <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
-                      )
-                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ) AS s ON sfs.entity_id = s.id
+                INNER JOIN spans_data s ON sfs.entity_id = s.id
             ), span_feedback_scores_combined_grouped AS (
                 SELECT
                     workspace_id,
@@ -2155,30 +2231,6 @@ class TraceDAOImpl implements TraceDAO {
                  HAVING <span_feedback_scores_empty_filters>
             )
             <endif>
-            <if(project_stats)>
-            ,    error_count_current AS (
-                    SELECT
-                        project_id,
-                        count(error_info) AS recent_error_count
-                    FROM traces final
-                    WHERE workspace_id = :workspace_id
-                    AND project_id IN :project_ids
-                    AND error_info != ''
-                    AND toDateTime(UUIDv7ToDateTime(toUUID(id))) BETWEEN toStartOfDay(subtractDays(now(), 7)) AND now64(9)
-                    GROUP BY workspace_id, project_id
-                ),
-                error_count_past_period AS (
-                    SELECT
-                        project_id,
-                        count(error_info) AS past_period_error_count
-                    FROM traces final
-                    WHERE workspace_id = :workspace_id
-                    AND project_id IN :project_ids
-                    AND error_info != ''
-                    AND toDateTime(UUIDv7ToDateTime(toUUID(id))) \\< toStartOfDay(subtractDays(now(), 7))
-                    GROUP BY workspace_id, project_id
-                )
-            <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -2207,7 +2259,9 @@ class TraceDAOImpl implements TraceDAO {
                         NULL) as duration,
                     error_info
                 FROM traces final
+                <if(guardrails_filters)>
                 LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                <endif>
                 <if(feedback_scores_empty_filters)>
                 LEFT JOIN fsc ON fsc.entity_id = traces.id
                 <endif>
@@ -2306,8 +2360,8 @@ class TraceDAOImpl implements TraceDAO {
                 toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
                 sum(g.failed_count) AS guardrails_failed_count,
                 <if(project_stats)>
-                any(ec.recent_error_count) AS recent_error_count,
-                any(ecl.past_period_error_count) AS past_period_error_count
+                countIf(t.error_info != '' AND toDateTime(UUIDv7ToDateTime(toUUID(t.id))) BETWEEN toStartOfDay(subtractDays(now(), 7)) AND now64(9)) AS recent_error_count,
+                countIf(t.error_info != '' AND toDateTime(UUIDv7ToDateTime(toUUID(t.id))) \\< toStartOfDay(subtractDays(now(), 7))) AS past_period_error_count
                 <else>
                 countIf(t.error_info, t.error_info != '') AS error_count
                 <endif>
@@ -2316,10 +2370,6 @@ class TraceDAOImpl implements TraceDAO {
             LEFT JOIN feedback_scores_agg as f ON t.id = f.entity_id
             LEFT JOIN span_feedback_scores_agg as sfs ON t.id = sfs.trace_id
             LEFT JOIN guardrails_agg as g ON t.id = g.entity_id
-            <if(project_stats)>
-            LEFT JOIN error_count_current ec ON t.project_id = ec.project_id
-            LEFT JOIN error_count_past_period ecl ON t.project_id = ecl.project_id
-            <endif>
             GROUP BY t.workspace_id, t.project_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2399,7 +2449,9 @@ class TraceDAOImpl implements TraceDAO {
                 last_updated_by,
                 thread_id,
                 visibility_mode,
-                truncation_threshold
+                truncation_threshold,
+                input_slim,
+                output_slim
             )
             SELECT
                 t.id,
@@ -2418,7 +2470,9 @@ class TraceDAOImpl implements TraceDAO {
                 :user_name as last_updated_by,
                 <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
                 t.visibility_mode,
-                :truncation_threshold as truncation_threshold
+                :truncation_threshold as truncation_threshold,
+                <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
+                <if(output)> :output_slim <else> t.output_slim <endif> as output_slim
             FROM traces t
             WHERE t.id IN :ids AND t.workspace_id = :workspace_id
             ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
@@ -2457,10 +2511,9 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("project_id", trace.projectId())
                 .bind("name", StringUtils.defaultIfBlank(trace.name(), ""))
                 .bind("start_time", trace.startTime().toString())
-                .bind("input", Objects.toString(trace.input(), ""))
-                .bind("output", Objects.toString(trace.output(), ""))
-                .bind("metadata", Objects.toString(trace.metadata(), ""))
                 .bind("thread_id", StringUtils.defaultIfBlank(trace.threadId(), ""));
+
+        bindInputOutputMetadataAndSlim(statement, trace, null);
 
         if (trace.endTime() != null) {
             statement.bind("end_time", trace.endTime().toString());
@@ -2487,6 +2540,28 @@ class TraceDAOImpl implements TraceDAO {
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
         return statement;
+    }
+
+    /**
+     * Binds input, output, metadata, and their slim versions (input_slim, output_slim) to a statement.
+     * Centralizes the JSON conversion and binding logic for consistency across single and batch inserts.
+     *
+     * @param statement the statement to bind to
+     * @param trace the trace containing the values
+     * @param index optional index suffix for batch operations (e.g., 0, 1, 2); pass null for single insert
+     */
+    private void bindInputOutputMetadataAndSlim(Statement statement, Trace trace, Integer index) {
+        String suffix = index != null ? String.valueOf(index) : "";
+
+        String inputValue = TruncationUtils.toJsonString(trace.input());
+        String outputValue = TruncationUtils.toJsonString(trace.output());
+        String metadataValue = TruncationUtils.toJsonString(trace.metadata());
+
+        statement.bind("input" + suffix, inputValue)
+                .bind("output" + suffix, outputValue)
+                .bind("metadata" + suffix, metadataValue)
+                .bind("input_slim" + suffix, TruncationUtils.createSlimJsonString(inputValue))
+                .bind("output_slim" + suffix, TruncationUtils.createSlimJsonString(outputValue));
     }
 
     private ST buildInsertTemplate(Trace trace, String workspaceId) {
@@ -2536,10 +2611,18 @@ class TraceDAOImpl implements TraceDAO {
         }
 
         Optional.ofNullable(traceUpdate.input())
-                .ifPresent(input -> statement.bind("input", input.toString()));
+                .ifPresent(input -> {
+                    String inputValue = input.toString();
+                    statement.bind("input", inputValue);
+                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
+                });
 
         Optional.ofNullable(traceUpdate.output())
-                .ifPresent(output -> statement.bind("output", output.toString()));
+                .ifPresent(output -> {
+                    String outputValue = output.toString();
+                    statement.bind("output", outputValue);
+                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+                });
 
         Optional.ofNullable(traceUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
@@ -2794,6 +2877,7 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.VISIBILITY_MODE, row, "visibility_mode", String.class))
                         .flatMap(VisibilityMode::fromString)
                         .orElse(null))
+                .experiment(mapExperiment(exclude, row))
                 .build();
     }
 
@@ -2811,6 +2895,35 @@ class TraceDAOImpl implements TraceDAO {
                         .details(JsonNodeFactory.instance.objectNode())
                         .build())
                 .toList());
+    }
+
+    private ExperimentItemReference mapExperiment(Set<Trace.TraceField> exclude, Row row) {
+        String experimentIdStr = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_id", String.class);
+        String experimentDatasetIdStr = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_dataset_id",
+                String.class);
+        String experimentDatasetItemIdStr = getValue(exclude, Trace.TraceField.EXPERIMENT, row,
+                "experiment_dataset_item_id", String.class);
+
+        // Only check key fields - experimentName is editable and its absence doesn't indicate missing data
+        if (StringUtils.isBlank(experimentIdStr) || StringUtils.isBlank(experimentDatasetIdStr)
+                || StringUtils.isBlank(experimentDatasetItemIdStr)
+                || CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(experimentIdStr)
+                || CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(experimentDatasetIdStr)
+                || CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE.equals(experimentDatasetItemIdStr)) {
+            return null;
+        }
+
+        UUID experimentId = UUID.fromString(experimentIdStr);
+        UUID experimentDatasetId = UUID.fromString(experimentDatasetIdStr);
+        UUID experimentDatasetItemId = UUID.fromString(experimentDatasetItemIdStr);
+        String experimentName = getValue(exclude, Trace.TraceField.EXPERIMENT, row, "experiment_name", String.class);
+
+        return ExperimentItemReference.builder()
+                .id(experimentId)
+                .name(experimentName)
+                .datasetId(experimentDatasetId)
+                .datasetItemId(experimentDatasetItemId)
+                .build();
     }
 
     private Publisher<TraceDetails> mapToTraceDetails(Result result) {
@@ -2886,7 +2999,9 @@ class TraceDAOImpl implements TraceDAO {
             template.add("log_comment", logComment);
 
             var finalTemplate = template;
-            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields()))
+            Optional.ofNullable(
+                    sortingQueryBuilder.toOrderBySql(traceSearchCriteria.sortingFields(),
+                            TraceSortingFactory.EXPERIMENT_FIELD_MAPPING))
                     .ifPresent(sortFields -> {
 
                         if (sortFields.contains("feedback_scores")) {
@@ -2895,6 +3010,10 @@ class TraceDAOImpl implements TraceDAO {
 
                         if (hasSpanStatistics(sortFields)) {
                             finalTemplate.add("sort_has_span_statistics", true);
+                        }
+
+                        if (sortFields.contains("experiment_id") || sortFields.contains("eaag.experiment")) {
+                            finalTemplate.add("sort_has_experiment", true);
                         }
 
                         finalTemplate.add("sort_fields", sortFields);
@@ -2964,6 +3083,8 @@ class TraceDAOImpl implements TraceDAO {
                                 fields.contains(Trace.TraceField.LLM_SPAN_COUNT.getValue()));
                         template.add("exclude_has_tool_spans",
                                 fields.contains(Trace.TraceField.HAS_TOOL_SPANS.getValue()));
+                        template.add("exclude_experiment",
+                                fields.contains(Trace.TraceField.EXPERIMENT.getValue()));
                     }
                 });
     }
@@ -3040,18 +3161,16 @@ class TraceDAOImpl implements TraceDAO {
 
             int i = 0;
             for (Trace trace : traces) {
-
                 statement.bind("id" + i, trace.id())
                         .bind("project_id" + i, trace.projectId())
                         .bind("name" + i, StringUtils.defaultIfBlank(trace.name(), ""))
                         .bind("start_time" + i, trace.startTime().toString())
-                        .bind("input" + i, getOrDefault(trace.input()))
-                        .bind("output" + i, getOrDefault(trace.output()))
-                        .bind("metadata" + i, getOrDefault(trace.metadata()))
                         .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
                                 trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
                         .bind("thread_id" + i, StringUtils.defaultIfBlank(trace.threadId(), ""));
+
+                bindInputOutputMetadataAndSlim(statement, trace, i);
 
                 if (trace.endTime() != null) {
                     statement.bind("end_time" + i, trace.endTime().toString());
@@ -3083,10 +3202,6 @@ class TraceDAOImpl implements TraceDAO {
             return Mono.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));
         });
-    }
-
-    private String getOrDefault(JsonNode value) {
-        return value != null ? value.toString() : "";
     }
 
     @Override
@@ -3500,9 +3615,17 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("name", traceUpdate.name());
         }
         Optional.ofNullable(traceUpdate.input())
-                .ifPresent(input -> statement.bind("input", input.toString()));
+                .ifPresent(input -> {
+                    String inputValue = input.toString();
+                    statement.bind("input", inputValue);
+                    statement.bind("input_slim", TruncationUtils.createSlimJsonString(inputValue));
+                });
         Optional.ofNullable(traceUpdate.output())
-                .ifPresent(output -> statement.bind("output", output.toString()));
+                .ifPresent(output -> {
+                    String outputValue = output.toString();
+                    statement.bind("output", outputValue);
+                    statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
+                });
         Optional.ofNullable(traceUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
         Optional.ofNullable(traceUpdate.endTime())

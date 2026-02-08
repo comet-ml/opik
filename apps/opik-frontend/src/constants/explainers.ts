@@ -82,7 +82,6 @@ export enum EXPLAINER_ID {
   prompt_improvement_optimizer = "prompt_improvement_optimizer",
   whats_an_alert = "whats_an_alert",
   what_are_dashboards = "what_are_dashboards",
-  whats_the_optimization_studio = "whats_the_optimization_studio",
   whats_the_optimization_config = "whats_the_optimization_config",
   whats_the_algorithm_section = "whats_the_algorithm_section",
   whats_the_dataset_section = "whats_the_dataset_section",
@@ -101,6 +100,10 @@ export enum EXPLAINER_ID {
   optimizer_enable_llm_crossover = "optimizer_enable_llm_crossover",
   optimizer_output_style_guidance = "optimizer_output_style_guidance",
   optimizer_infer_output_style = "optimizer_infer_output_style",
+  // Dashboard widget explainers
+  feedback_score_groupby_requires_single_metric = "feedback_score_groupby_requires_single_metric",
+  duration_groupby_requires_single_metric = "duration_groupby_requires_single_metric",
+  usage_groupby_requires_single_metric = "usage_groupby_requires_single_metric",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -595,17 +598,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "Set up dashboards to monitor quality, cost, and performance of your projects and share experiment results",
     docLink: "/production/dashboards",
   },
-  [EXPLAINER_ID.whats_the_optimization_studio]: {
-    id: EXPLAINER_ID.whats_the_optimization_studio,
-    description:
-      "Test multiple variations for your agent or prompt to find the best one based on your metrics.",
-    docLink: "/agent_optimization/overview",
-  },
   [EXPLAINER_ID.whats_the_optimization_config]: {
     id: EXPLAINER_ID.whats_the_optimization_config,
     description:
       "Configure your setup and let Opik automatically find the best prompt.",
-    docLink: "/agent_optimization/overview",
+    docLink: "/agent_optimization/optimization_studio",
   },
   [EXPLAINER_ID.whats_the_algorithm_section]: {
     id: EXPLAINER_ID.whats_the_algorithm_section,
@@ -674,5 +671,21 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.optimizer_infer_output_style,
     description:
       "Automatically detect and maintain output style from examples.",
+  },
+  // Dashboard widget explainers
+  [EXPLAINER_ID.feedback_score_groupby_requires_single_metric]: {
+    id: EXPLAINER_ID.feedback_score_groupby_requires_single_metric,
+    description:
+      "Group by is available only when exactly one metric is selected. Select a single metric from the Metrics dropdown to enable grouping.",
+  },
+  [EXPLAINER_ID.duration_groupby_requires_single_metric]: {
+    id: EXPLAINER_ID.duration_groupby_requires_single_metric,
+    description:
+      "Group by is available only when exactly one duration percentile is selected. Select a single percentile from the Duration metrics dropdown to enable grouping.",
+  },
+  [EXPLAINER_ID.usage_groupby_requires_single_metric]: {
+    id: EXPLAINER_ID.usage_groupby_requires_single_metric,
+    description:
+      "Group by is available only when exactly one usage metric is selected. Select a single metric from the Usage metrics dropdown to enable grouping.",
   },
 };

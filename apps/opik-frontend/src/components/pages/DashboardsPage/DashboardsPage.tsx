@@ -14,7 +14,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import TextCell from "@/components/shared/DataTableCells/TextCell";
 import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { Dashboard } from "@/types/dashboard";
@@ -37,30 +37,27 @@ import {
 } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
   getRowId,
 } from "@/components/shared/DataTable/utils";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const SELECTED_COLUMNS_KEY = "dashboards-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "dashboards-columns-width";
 const COLUMNS_ORDER_KEY = "dashboards-columns-order";
 const COLUMNS_SORT_KEY = "dashboards-columns-sort";
 const PAGINATION_SIZE_KEY = "dashboards-pagination-size";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "description",
   "last_updated_at",
   "created_at",
@@ -72,6 +69,13 @@ const DashboardsPage: React.FunctionComponent = () => {
 
   const columnsDef: ColumnData<Dashboard>[] = useMemo(() => {
     return [
+      {
+        id: COLUMN_NAME_ID,
+        label: "Name",
+        type: COLUMN_TYPE.string,
+        cell: TextCell as never,
+        sortable: true,
+      },
       {
         id: "id",
         label: "ID",
@@ -139,7 +143,7 @@ const DashboardsPage: React.FunctionComponent = () => {
     queryParamConfig: JsonParam,
   });
 
-  const { data, isPending } = useDashboardsList(
+  const { data, isPending, isPlaceholderData, isFetching } = useDashboardsList(
     {
       workspaceName,
       sorting: sortedColumns,
@@ -168,9 +172,13 @@ const DashboardsPage: React.FunctionComponent = () => {
   }, [dashboards, rowSelection]);
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 
@@ -190,18 +198,6 @@ const DashboardsPage: React.FunctionComponent = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Dashboard>(),
-      mapColumnDataFields<Dashboard, Dashboard>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
-        customMeta: {
-          nameKey: "name",
-          idKey: "id",
-          resource: RESOURCE_TYPE.dashboard,
-        },
-        sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-      }),
       ...convertColumnDataToColumn<Dashboard, Dashboard>(columnsDef, {
         columnsOrder,
         selectedColumns,
@@ -309,6 +305,7 @@ const DashboardsPage: React.FunctionComponent = () => {
             )}
           </DataTableNoData>
         }
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

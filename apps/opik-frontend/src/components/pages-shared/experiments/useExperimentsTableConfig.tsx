@@ -9,20 +9,22 @@ import {
 } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 import get from "lodash/get";
+import uniqBy from "lodash/uniqBy";
 
 import { Groups } from "@/types/groups";
 import {
-  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
   ColumnData,
   DynamicColumn,
   COLUMN_TYPE,
   COLUMN_DATASET_ID,
+  COLUMN_PROJECT_ID,
   COLUMN_METADATA_ID,
-  AggregatedFeedbackScore,
+  COLUMN_NAME_ID,
   SCORE_TYPE_FEEDBACK,
-  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
-import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
+import { getExperimentScore, RowWithScores } from "./scoresUtils";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   buildGroupFieldName,
   buildGroupFieldNameForMeta,
@@ -36,12 +38,13 @@ import TextCell from "@/components/shared/DataTableCells/TextCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import {
   generateActionsColumDef,
-  generateGroupedRowCellDef,
   generateDataRowCellDef,
+  generateGroupedRowCellDef,
+  generateSelectColumDef,
   getSharedShiftCheckboxClickHandler,
 } from "@/components/shared/DataTable/utils";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { DELETED_DATASET_LABEL } from "@/constants/groups";
+import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
 import { Experiment, ExperimentsAggregations } from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
@@ -77,9 +80,13 @@ export const useExperimentsTableConfig = <
   setSortedColumns,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    `${storageKeyPrefix}-selected-columns`,
+    `${storageKeyPrefix}-selected-columns-v2`,
     {
-      defaultValue: defaultSelectedColumns,
+      defaultValue: migrateSelectedColumns(
+        `${storageKeyPrefix}-selected-columns`,
+        defaultSelectedColumns,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 
@@ -113,6 +120,34 @@ export const useExperimentsTableConfig = <
     setSelectedColumns,
   });
 
+  /**
+   * Generates a unique row ID for an experiment.
+   * When grouping is active, the same experiment can appear in multiple groups
+   * (e.g., when grouping by tags, an experiment with multiple tags appears once per tag).
+   * This method creates unique IDs by combining the experiment ID with grouping field values.
+   *
+   * @param row - The experiment row
+   * @returns A unique row ID (either simple "experimentId" or compound "experimentId|field:value")
+   */
+  const getExperimentRowId = useMemo(() => {
+    return (row: T) => {
+      // Find all grouping fields in the row
+      const groupingFields = Object.keys(row).filter((key) =>
+        key.startsWith(GROUPING_KEY),
+      );
+
+      if (groupingFields.length > 0) {
+        // Create a unique ID by combining the experiment ID with all grouping field values
+        const groupParts = groupingFields
+          .map((field) => `${field}:${row[field as keyof T]}`)
+          .join("|");
+        return `${row.id}|${groupParts}`;
+      }
+
+      return row.id;
+    };
+  }, []);
+
   const { checkboxClickHandler } = useMemo(() => {
     return {
       checkboxClickHandler: getSharedShiftCheckboxClickHandler(),
@@ -120,49 +155,23 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
-    const getScoreByName = (
-      scores: AggregatedFeedbackScore[] | undefined,
-      scoreName: string,
-    ) => scores?.find((f) => f.name === scoreName);
-
     return [
       ...dynamicScoresColumns.map(
         ({ label, id, columnType, type: scoreType }) => {
           const actualType = scoreType || SCORE_TYPE_FEEDBACK;
-          const isExperimentScore = actualType === SCORE_TYPE_EXPERIMENT;
 
-          // Extract conditional values
-          const displayLabel = isExperimentScore ? label : `${label} (avg)`;
-          const scoresKey = isExperimentScore
-            ? "experiment_scores"
-            : "feedback_scores";
-
-          // Common fields
           const columnData: ColumnData<T> = {
             id,
-            label: displayLabel,
+            label,
             type: columnType,
             scoreType: actualType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
             aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row: T) => {
-              const rowWithScores = row as T & {
-                feedback_scores?: AggregatedFeedbackScore[];
-                experiment_scores?: AggregatedFeedbackScore[];
-              };
-              const scores = rowWithScores[scoresKey];
-              return getScoreByName(scores, label);
-            },
+            accessorFn: (row) => getExperimentScore(id, row as RowWithScores),
             customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) => {
-                const aggWithScores = aggregation as ExperimentsAggregations & {
-                  feedback_scores?: AggregatedFeedbackScore[];
-                  experiment_scores?: AggregatedFeedbackScore[];
-                };
-                const scores = aggWithScores[scoresKey];
-                return getScoreByName(scores, label)?.value;
-              },
+              accessorFn: (aggregation: ExperimentsAggregations) =>
+                getExperimentScore(id, aggregation)?.value,
             },
           };
 
@@ -173,9 +182,28 @@ export const useExperimentsTableConfig = <
   }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {
-    return experiments.filter(
-      (row) => rowSelection[row.id] && !checkIsGroupRowType(row.id),
-    );
+    const selected = experiments.filter((row) => {
+      if (checkIsGroupRowType(row.id)) {
+        return false;
+      }
+
+      // Check if this experiment is selected using either simple or compound ID
+      // When grouping is active, the rowSelection keys are compound IDs like "experimentId|grouping_field:value"
+      // We need to check both the simple ID and all possible compound IDs
+      if (rowSelection[row.id]) {
+        return true;
+      }
+
+      // Check if any compound ID containing this experiment ID is selected
+      return Object.keys(rowSelection).some((selectionKey) => {
+        return (
+          selectionKey.startsWith(`${row.id}|`) && rowSelection[selectionKey]
+        );
+      });
+    });
+
+    // Deduplicate by experiment ID since the same experiment can appear in multiple groups
+    return uniqBy(selected, "id");
   }, [rowSelection, experiments]);
 
   const groupFieldNames = useMemo(
@@ -216,11 +244,30 @@ export const useExperimentsTableConfig = <
               idKey: `${metaKey}.value`,
               resource: RESOURCE_TYPE.dataset,
               getIsDeleted: (row: T) =>
-                get(row, `${metaKey}.label`, "") === DELETED_DATASET_LABEL,
+                get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
               countAggregationKey: "experiment_count",
               explainer: {
                 id: "group-experiments",
                 description: `Some experiments reference a dataset that has been deleted`,
+              },
+            },
+          } as ColumnData<T>;
+          break;
+        case COLUMN_PROJECT_ID:
+          groupCellDef = {
+            ...groupCellDef,
+            type: COLUMN_TYPE.string,
+            cell: ResourceCell.Group as never,
+            customMeta: {
+              nameKey: `${metaKey}.label`,
+              idKey: `${metaKey}.value`,
+              resource: RESOURCE_TYPE.project,
+              getIsDeleted: (row: T) =>
+                get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
+              countAggregationKey: "experiment_count",
+              explainer: {
+                id: "group-experiments",
+                description: `Some experiments reference a project that has been deleted`,
               },
             },
           } as ColumnData<T>;
@@ -239,38 +286,52 @@ export const useExperimentsTableConfig = <
       );
     });
 
-    const baseColumns = [
-      generateDataRowCellDef<T>(
-        {
-          id: COLUMN_NAME_ID,
-          label: "Name",
-          type: COLUMN_TYPE.string,
-          cell: ResourceCell as never,
-          customMeta: {
-            nameKey: "name",
-            idKey: "dataset_id",
-            resource: RESOURCE_TYPE.experiment,
-            getSearch: (data: Experiment) => ({
-              experiments: [data.id],
-            }),
-          },
-          headerCheckbox: true,
-          sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
-          size: 200,
-        },
-        checkboxClickHandler,
-      ),
-      ...groupColumns,
-      ...convertColumnDataToColumn<T, T>(defaultColumns, {
+    const hasGrouping = groups.length > 0;
+    const nameColumn = defaultColumns.find((col) => col.id === COLUMN_NAME_ID);
+    const columnsWithoutName = defaultColumns.filter(
+      (col) => col.id !== COLUMN_NAME_ID,
+    );
+
+    const firstColumn =
+      hasGrouping && nameColumn
+        ? generateDataRowCellDef<T>(
+            {
+              ...nameColumn,
+              cell: ResourceCell as never,
+              customMeta: {
+                nameKey: "name",
+                idKey: "dataset_id",
+                resource: RESOURCE_TYPE.experiment,
+                getSearch: (data: Experiment) => ({
+                  experiments: [data.id],
+                }),
+              },
+              headerCheckbox: true,
+            },
+            checkboxClickHandler,
+          )
+        : generateSelectColumDef<T>();
+
+    const regularColumns = convertColumnDataToColumn<T, T>(
+      hasGrouping && nameColumn ? columnsWithoutName : defaultColumns,
+      {
         columnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
-      }),
-      ...convertColumnDataToColumn<T, T>(scoresColumnsData, {
-        columnsOrder: scoresColumnsOrder,
-        selectedColumns,
-        sortableColumns: sortableBy,
-      }),
+      },
+    );
+
+    const scoresColumns = convertColumnDataToColumn<T, T>(scoresColumnsData, {
+      columnsOrder: scoresColumnsOrder,
+      selectedColumns,
+      sortableColumns: sortableBy,
+    });
+
+    const baseColumns = [
+      firstColumn,
+      ...groupColumns,
+      ...regularColumns,
+      ...scoresColumns,
     ];
 
     if (actionsCell) {
@@ -314,7 +375,10 @@ export const useExperimentsTableConfig = <
 
   const columnPinningConfig = useMemo(() => {
     return {
-      left: [COLUMN_NAME_ID, ...groupFieldNames],
+      left:
+        groupFieldNames.length > 0
+          ? [COLUMN_NAME_ID, ...groupFieldNames]
+          : [COLUMN_SELECT_ID],
       right: [],
     } as ColumnPinningState;
   }, [groupFieldNames]);
@@ -354,6 +418,9 @@ export const useExperimentsTableConfig = <
     scoresColumnsData,
     checkboxClickHandler,
     groupFieldNames,
+
+    // Utility methods
+    getExperimentRowId,
 
     // Configs
     sortConfig,

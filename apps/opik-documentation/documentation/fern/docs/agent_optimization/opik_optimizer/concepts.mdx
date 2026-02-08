@@ -47,7 +47,11 @@ examples, or tool interactions.
   </Accordion>
   <Accordion title="ChatPrompt">
     The object to optimize which contains your chat messages with placeholders for variables that change on each example.
-    See the [API Reference](/agent_optimization/api-reference#chatprompt).
+    See the [API Reference](/agent_optimization/advanced/api_reference#chatprompt).
+  </Accordion>
+  <Accordion title="Candidate">
+    A concrete prompt (or multi-prompt bundle) produced by an optimizer for evaluation. Candidates are what get scored and compared
+    during optimization, and each candidate maps to a specific set of messages, parameters, and tool configuration.
   </Accordion>
   <Accordion title="Metric">
     An object defining how to measure the performance of a prompt. The metric functions should accept two parameters:
@@ -62,13 +66,18 @@ examples, or tool interactions.
   </Accordion>
   <Accordion title="Optimization Run">
     A single execution of a prompt optimization process using a specific configuration. For example,
-    calling `optimizer.optimize_prompt(...)` once constitutes a Run. Each Run is typically logged to
-    the Opik platform for tracking.
+    calling `optimizer.optimize_prompt(...)` once constitutes a Run. Each Run is logged as an Optimization Run
+    in Opik and contains multiple rounds, trials, and candidate evaluations.
   </Accordion>
   <Accordion title="Optimization Trial">
-    Each optimization run is made up of one or more optimization trials. A trial corresponds to a
-    single evaluation of a candidate prompt or prompt configuration. You can view each trial's prompt,
+    Each optimization run is made up of one or more optimization trials. A trial corresponds to evaluating
+    a candidate on the chosen dataset slice (full, sampled, or minibatch). You can view each trial's prompt,
     score, and reasoning history inside the Opik UI to understand optimizer progress.
+  </Accordion>
+  <Accordion title="Optimization Round">
+    A logical iteration within a run where the optimizer proposes one or more candidates, evaluates them,
+    and uses the results to decide the next candidates. Some optimizers expose rounds explicitly (e.g., evolutionary,
+    hierarchical), while others operate with a simpler trial-by-trial loop.
   </Accordion>
   <Accordion title="Prompt model">
   The model that is used to evaluate the prompt. This is the model that you use the prompt with,
@@ -86,11 +95,11 @@ examples, or tool interactions.
 
 ## Next Steps
 
-- Explore specific [Optimizers](/agent_optimization/overview#optimization-algorithms) for algorithm details.
+- Explore specific [Optimizers](/agent_optimization/algorithms/overview) for algorithm details.
 - Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
-- Refer to the [API Reference](/agent_optimization/api-reference) for detailed configuration options.
+- Refer to the [API Reference](/agent_optimization/advanced/api_reference) for detailed configuration options.
 
 <Info>
-  📓 Want to see these concepts in action? Check out our [Example Projects & Cookbooks](/agent_optimization/optimizer-cookbooks/optimizer_introduction_cookbook)
+  📓 Want to see these concepts in action? Check out our [Example Projects & Cookbooks](/agent_optimization/cookbooks/optimizer_introduction_cookbook)
   for step-by-step, runnable Colab notebooks.
 </Info>

@@ -1,0 +1,27 @@
+---
+description: Git conventions
+alwaysApply: true
+---
+# Git Workflow
+
+## Branch Naming
+`{USERNAME}/{TICKET}-{summary}`
+- `andrescrz/OPIK-2180-add-feature`
+- `user/issue-123-fix-bug`
+- `user/NA-hotfix-description`
+
+## Commit Format
+`[OPIK-####] [COMPONENT] description`
+- `[OPIK-1234] [BE] Add create trace endpoint`
+- `[OPIK-1234] [FE] Add metrics dashboard`
+- `[OPIK-1234] [SDK] Add Python method`
+- `[OPIK-1234] [DOCS] Update API documentation`
+
+## PR Title
+`[OPIK-####] [COMPONENT] description`
+
+## Never
+- Commit directly to main
+- Include customer names in commits/PRs
+- Commit secrets or .env files
+- Force push to main/master

@@ -63,6 +63,9 @@ public class OpikConfiguration extends JobConfiguration {
     private OnlineScoringConfig onlineScoring = new OnlineScoringConfig();
 
     @Valid @NotNull @JsonProperty
+    private DatasetExportConfig datasetExport = new DatasetExportConfig();
+
+    @Valid @NotNull @JsonProperty
     private ClickHouseLogAppenderConfig clickHouseLogAppender = new ClickHouseLogAppenderConfig();
 
     @Valid @NotNull @JsonProperty
@@ -106,4 +109,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private OptimizationLogsConfig optimizationLogs = new OptimizationLogsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 }

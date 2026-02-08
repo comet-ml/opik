@@ -39,7 +39,7 @@ class OpikCallback(dspy_callback.BaseCallback):
 
         self._origins_metadata: Dict[str, Any] = {"created_from": "dspy"}
 
-        self._context_storage = context_storage.OpikContextStorage()
+        self._context_storage = context_storage.get_current_context_instance()
 
         self._project_name = project_name
         self.log_graph = log_graph
@@ -194,8 +194,7 @@ class OpikCallback(dspy_callback.BaseCallback):
                 trace_data.init_end_time()
                 self._opik_client.trace(**trace_data.as_parameters)
 
-            if self._context_storage.get_trace_data() == trace_data:
-                self._context_storage.set_trace_data(None)
+            self._context_storage.pop_trace_data(ensure_id=trace_data.id)
 
     def _end_span(
         self,
@@ -233,7 +232,7 @@ class OpikCallback(dspy_callback.BaseCallback):
                 # Store the original provider (e.g., "openrouter") in metadata
                 extra_metadata["llm_router"] = span_data.provider
                 # Update to the actual provider for accurate cost tracking
-                update_kwargs["provider"] = actual_provider
+                update_kwargs["provider"] = actual_provider.lower()
 
             if (
                 actual_model is not None
@@ -254,9 +253,7 @@ class OpikCallback(dspy_callback.BaseCallback):
                 self._opik_client.span(**span_data.as_parameters)
 
             # remove span data from context
-            current_span = self._context_storage.top_span_data()
-            if current_span and current_span.id == span_data.id:
-                self._context_storage.pop_span_data()
+            self._context_storage.pop_span_data(ensure_id=span_data.id)
 
     def _collect_common_span_data(
         self, instance: Any, inputs: Dict[str, Any]

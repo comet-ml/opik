@@ -102,9 +102,9 @@ def test_extraction__trace_without_end_time__does_not_extract_attachments(
         entity_type="trace",
     )
 
-    assert (
-        len(attachment_list) == 0
-    ), f"Expected no attachments, but found {len(attachment_list)}"
+    assert len(attachment_list) == 0, (
+        f"Expected no attachments, but found {len(attachment_list)}"
+    )
 
 
 def test_extraction__trace_with_end_time__extracts_attachments_from_output(
@@ -290,9 +290,9 @@ def test_extraction__span_without_end_time__does_not_extract_attachments(
         entity_type="span",
     )
 
-    assert (
-        len(attachment_list) == 0
-    ), f"Expected no attachments, but found {len(attachment_list)}"
+    assert len(attachment_list) == 0, (
+        f"Expected no attachments, but found {len(attachment_list)}"
+    )
 
 
 def test_extraction__trace_update__extracts_attachments(
@@ -410,5 +410,128 @@ def test_extraction__various_file_types__all_extracted(
         opik_client=opik_client,
         entity_type="trace",
         entity_id=trace_id,
+        expected_sizes=expected_sizes,
+    )
+
+
+def test_extraction__backend_reinjects_extracted_attachments(
+    opik_client: opik.Opik,
+):
+    """Test that backend reinjects extracted attachments."""
+    trace_id = id_helpers.generate_id()
+    span_id = id_helpers.generate_id()
+
+    # Create a trace with end_time and base64-encoded images in input
+    trace_input = {
+        "image1": _create_base64_url("image/png", constants.PNG_BASE64),
+        "text": "regular text field",
+    }
+    trace = opik_client.trace(
+        id=trace_id,
+        name="test-trace-backend_reinjects_extracted_attachments",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        input=trace_input,
+        end_time=datetime_helpers.local_timestamp(),
+    )
+
+    # Create a span with end_time and attachments
+    span_input = {
+        "image": _create_base64_url("image/png", constants.PNG_BASE64),
+    }
+    trace.span(
+        id=span_id,
+        name="test-span--backend_reinjects_extracted_attachments",
+        input=span_input,
+        end_time=datetime_helpers.local_timestamp(),
+    )
+
+    opik_client.flush()
+
+    #
+    # Verify attachments were extracted and uploaded for trace and span
+    #
+    expected_sizes = [
+        len(base64.b64decode(constants.PNG_BASE64)),
+    ]
+    verifiers.verify_auto_extracted_attachments(
+        opik_client=opik_client,
+        entity_type="trace",
+        entity_id=trace_id,
+        expected_sizes=expected_sizes,
+    )
+
+    expected_sizes = [
+        len(base64.b64decode(constants.PNG_BASE64)),
+    ]
+    verifiers.verify_auto_extracted_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=span_id,
+        expected_sizes=expected_sizes,
+    )
+
+    #
+    # Verify trace and span returned by backend has extracted attachments injected back into
+    #
+
+    # Verify trace
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name="test-trace-backend_reinjects_extracted_attachments",
+        input=trace_input,
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+    # Verify span
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=span_id,
+        parent_span_id=None,
+        trace_id=trace_id,
+        name="test-span--backend_reinjects_extracted_attachments",
+        input=span_input,
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+
+def test_extraction__input_as_top_level_list(
+    opik_client: opik.Opik,
+):
+    """Test that top-level lists are extracted and uploaded as separate attachments."""
+    trace_id = id_helpers.generate_id()
+    span_id = id_helpers.generate_id()
+
+    # Create trace first
+    trace = opik_client.trace(
+        id=trace_id,
+        name="test-trace-for-attachment-list-extraction",
+        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+    )
+
+    # Create a span with end_time and a top-level list in the input with attachments
+    data = [
+        {"image": constants.JPEG_BASE64},
+        {"pdf": constants.PDF_BASE64},
+    ]
+
+    trace.span(
+        id=span_id,
+        name="test-span-extraction",
+        input=data,
+        end_time=datetime_helpers.local_timestamp(),
+    )
+
+    opik_client.flush()
+
+    # Verify attachments were extracted and uploaded
+    expected_sizes = [
+        len(base64.b64decode(constants.JPEG_BASE64)),
+        len(base64.b64decode(constants.PDF_BASE64)),
+    ]
+    verifiers.verify_auto_extracted_attachments(
+        opik_client=opik_client,
+        entity_type="span",
+        entity_id=span_id,
         expected_sizes=expected_sizes,
     )

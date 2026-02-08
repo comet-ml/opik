@@ -15,6 +15,22 @@ import {
 import SortableMenuSection from "./SortableMenuSection";
 import { ColumnData } from "@/types/shared";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+
+/**
+ * Computes the list of column IDs that should be selected when "Select all" is checked.
+ * Excludes columns specified in excludeFromSelectAll.
+ *
+ * @param allColumnsIds - All available column IDs
+ * @param excludeFromSelectAll - Column IDs to exclude from select all
+ * @returns Filtered list of column IDs for select all functionality
+ */
+export function computeSelectAllColumnsIds(
+  allColumnsIds: string[],
+  excludeFromSelectAll: string[],
+): string[] {
+  return allColumnsIds.filter((id) => !excludeFromSelectAll.includes(id));
+}
 
 type ColumnsButtonShared<TColumnData> = {
   columns: ColumnData<TColumnData>[];
@@ -30,6 +46,7 @@ export type ColumnsButtonProps<TColumnData> = {
   selectedColumns: string[];
   onSelectionChange: (selectedColumns: string[]) => void;
   sections?: ColumnsButtonExtraSection<TColumnData>[];
+  excludeFromSelectAll?: string[]; // Column IDs to exclude when selecting all (but include when deselecting all)
 } & ColumnsButtonShared<TColumnData>;
 
 const ColumnsButton = <TColumnData,>({
@@ -39,6 +56,7 @@ const ColumnsButton = <TColumnData,>({
   order,
   onOrderChange,
   sections,
+  excludeFromSelectAll = [],
 }: ColumnsButtonProps<TColumnData>) => {
   const [search, setSearch] = useState("");
 
@@ -51,12 +69,34 @@ const ColumnsButton = <TColumnData,>({
     [columns, sections],
   );
 
+  // Columns to select when "Select all" is checked (excludes metadata fields)
+  const selectAllColumnsIds = useMemo(
+    () => computeSelectAllColumnsIds(allColumnsIds, excludeFromSelectAll),
+    [allColumnsIds, excludeFromSelectAll],
+  );
+
   const allColumnsSelected = useMemo(() => {
-    return selectedColumns.length === allColumnsIds.length;
-  }, [selectedColumns, allColumnsIds]);
+    // Check if all non-excluded columns are selected
+    return (
+      selectAllColumnsIds.length > 0 &&
+      selectAllColumnsIds.every((id) => selectedColumns.includes(id))
+    );
+  }, [selectedColumns, selectAllColumnsIds]);
 
   const toggleColumns = (value: boolean) => {
-    onSelectionChange(value ? allColumnsIds : []);
+    if (value) {
+      // Selecting all: select all non-metadata columns + preserve any already-selected metadata fields
+      const currentlySelectedMetadataFields = selectedColumns.filter((id) =>
+        excludeFromSelectAll.includes(id),
+      );
+      onSelectionChange([
+        ...selectAllColumnsIds,
+        ...currentlySelectedMetadataFields,
+      ]);
+    } else {
+      // Deselecting all: clear everything including metadata fields
+      onSelectionChange([]);
+    }
   };
 
   const filteredColumns = useMemo(() => {
@@ -109,17 +149,28 @@ const ColumnsButton = <TColumnData,>({
           filteredSections.map((section, index) => {
             if (section.columns.length === 0) return null;
             const isFirst = index === 0;
+            const hasTitle = section.title && section.title.trim().length > 0;
+            // Generate a stable key: use title if available, otherwise use column IDs
+            // Sort column IDs for stability regardless of order
+            const sectionKey = hasTitle
+              ? section.title
+              : section.columns
+                  .map((col) => col.id)
+                  .sort()
+                  .join("-");
 
             return (
-              <React.Fragment key={`fragment-${section.title}`}>
+              <React.Fragment key={`fragment-${sectionKey}`}>
                 {!(isFirst && filteredColumns.length === 0) && (
-                  <DropdownMenuSeparator key={`separator-${section.title}`} />
+                  <DropdownMenuSeparator key={`separator-${sectionKey}`} />
                 )}
-                <DropdownMenuLabel key={`label-${section.title}`}>
-                  {section.title}
-                </DropdownMenuLabel>
+                {hasTitle && (
+                  <DropdownMenuLabel key={`label-${section.title}`}>
+                    {section.title}
+                  </DropdownMenuLabel>
+                )}
                 <SortableMenuSection
-                  key={`sortable-section-${section.title}`}
+                  key={`sortable-section-${sectionKey}`}
                   columns={section.columns}
                   selectedColumns={selectedColumns}
                   onSelectionChange={onSelectionChange}
@@ -136,12 +187,13 @@ const ColumnsButton = <TColumnData,>({
 
   return (
     <DropdownMenu onOpenChange={openStateChangeHandler}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Columns3 className="mr-1.5 size-3.5" />
-          Columns
-        </Button>
-      </DropdownMenuTrigger>
+      <TooltipWrapper content="Columns">
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="icon-sm" data-testid="columns-button">
+            <Columns3 className="size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+      </TooltipWrapper>
       <DropdownMenuContent className="min-w-56 max-w-72 p-0 pt-12" align="end">
         <div
           className="absolute inset-x-1 top-1 h-11"

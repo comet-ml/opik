@@ -9,7 +9,12 @@ import opik
 from rich.console import Console
 
 from .experiment import recreate_experiments
-from .utils import matches_name_pattern, clean_feedback_scores
+from .utils import (
+    matches_name_pattern,
+    clean_feedback_scores,
+    clean_usage_for_import,
+    sort_spans_topologically,
+)
 
 console = Console()
 
@@ -126,12 +131,9 @@ def import_projects_from_directory(
                             str, str
                         ] = {}  # Maps original span ID to new span ID
 
-                        # Sort spans to process root spans (no parent) first, then children
-                        root_spans = [
-                            s for s in spans_info if not s.get("parent_span_id")
-                        ]
-                        child_spans = [s for s in spans_info if s.get("parent_span_id")]
-                        sorted_spans = root_spans + child_spans
+                        # Sort spans topologically to ensure parents are processed before children
+                        # This handles multi-level hierarchies correctly
+                        sorted_spans = sort_spans_topologically(spans_info)
 
                         for span_info in sorted_spans:
                             # Clean feedback scores to remove read-only fields
@@ -153,8 +155,12 @@ def import_projects_from_directory(
                                 ]
 
                             # Create span with parent_span_id if available
+                            # Clean usage data to avoid double-prefixing of original_usage keys
+                            usage_data = clean_usage_for_import(span_info.get("usage"))
+
                             span = client.span(
                                 name=span_info.get("name", "imported_span"),
+                                type=span_info.get("type", "general"),
                                 start_time=(
                                     datetime.fromisoformat(
                                         span_info["start_time"].replace("Z", "+00:00")
@@ -173,7 +179,7 @@ def import_projects_from_directory(
                                 output=span_info.get("output", {}),
                                 metadata=span_info.get("metadata"),
                                 tags=span_info.get("tags"),
-                                usage=span_info.get("usage"),
+                                usage=usage_data,
                                 feedback_scores=span_feedback_scores,
                                 model=span_info.get("model"),
                                 provider=span_info.get("provider"),

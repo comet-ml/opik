@@ -37,7 +37,6 @@ import useThreadFeedbackScoreSetMutation from "@/api/traces/useThreadFeedbackSco
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import { UpdateFeedbackScoreData } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceAnnotateViewer/types";
-import { ThreadStatus } from "@/types/thread";
 import {
   getAnnotationQueueItemId,
   getFeedbackScoresByUser,
@@ -177,20 +176,10 @@ const getChangedScores = (state: AnnotationState) => {
 
 const validateCurrentItem = (
   item: Trace | Thread | undefined,
-  isThread: boolean,
 ): ValidationError[] => {
   const errors: ValidationError[] = [];
 
   if (!item) return errors;
-
-  if (isThread && (item as Thread).status === ThreadStatus.ACTIVE) {
-    errors.push({
-      type: "active_thread",
-      message:
-        "Active threads cannot be scored. Please set the thread status to inactive before submitting feedback scores.",
-      icon: "MessageCircleWarning",
-    });
-  }
 
   return errors;
 };
@@ -226,13 +215,14 @@ interface SMEFlowContextValue {
   currentItem: Trace | Thread | undefined;
   nextItem: Trace | Thread | undefined;
   currentView: WORKFLOW_STATUS;
-  isLastUnprocessedItem: boolean;
+  isCurrentItemProcessed: boolean;
 
   // Computed state
   processedCount: number;
   totalCount: number;
   canStartAnnotation: boolean;
   unprocessedItems: (Trace | Thread)[];
+  hasAnyUnsavedChanges: boolean;
 
   // Annotation state
   currentAnnotationState: AnnotationState;
@@ -243,6 +233,7 @@ interface SMEFlowContextValue {
   // Actions
   setCurrentView: (currentView: WORKFLOW_STATUS) => void;
   handleStartAnnotating: () => void;
+  handleReviewAnnotations: () => void;
   handleNext: () => void;
   handlePrevious: () => void;
   handleSubmit: () => void;
@@ -418,6 +409,11 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     }
   }, [setCurrentView, unprocessedIds, allItemIds]);
 
+  const handleReviewAnnotations = useCallback(() => {
+    setCurrentView(WORKFLOW_STATUS.ANNOTATING);
+    setCurrentIndex(0);
+  }, [setCurrentView]);
+
   const handleNext = useCallback(() => {
     // Always cache the current annotation state when navigating away
     // This ensures that any changes (including deletions) are preserved
@@ -458,15 +454,11 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     [queueItems, unprocessedIds, allItemIds],
   );
 
-  const isLastUnprocessedItem = useMemo(() => {
-    if (unprocessedIds.length === 0) return true;
-
-    const currentId = currentItem?.id;
-    if (!currentId) return false;
-
-    const currentUnprocessedIdx = unprocessedIds.indexOf(currentId);
-    return currentUnprocessedIdx === unprocessedIds.length - 1;
-  }, [unprocessedIds, currentItem?.id]);
+  const isCurrentItemProcessed = useMemo(() => {
+    if (!currentItem || !annotationQueue) return false;
+    const feedbackScoreNames = annotationQueue.feedback_definition_names ?? [];
+    return isItemProcessed(currentItem, feedbackScoreNames, currentUserName);
+  }, [currentItem, annotationQueue, currentUserName]);
 
   const handleNextUnprocessed = useCallback(() => {
     const nextIndex = getNextUnprocessedIndex(currentIndex);
@@ -684,7 +676,14 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
       omit(prev, getAnnotationQueueItemId(currentItem)),
     );
 
-    handleNextUnprocessed();
+    const wasLastUnprocessed =
+      unprocessedIds.length === 1 && unprocessedIds[0] === currentItem.id;
+
+    if (wasLastUnprocessed) {
+      setCurrentView(WORKFLOW_STATUS.COMPLETED);
+    } else {
+      handleNextUnprocessed();
+    }
   }, [
     currentItem,
     annotationQueue,
@@ -695,6 +694,8 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     submitTraceFeedbackScores,
     submitThreadFeedbackScores,
     handleNextUnprocessed,
+    unprocessedIds,
+    setCurrentView,
   ]);
 
   useEffect(() => {
@@ -743,25 +744,19 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   ]);
 
   const validationState = useMemo((): ValidationState => {
-    const errors = validateCurrentItem(currentItem, isThread);
+    const errors = validateCurrentItem(currentItem);
     const hasChanges = hasUnsavedChanges(currentAnnotationState);
     return {
       canSubmit: errors.length === 0 && hasChanges,
       errors,
     };
-  }, [currentItem, isThread, currentAnnotationState]);
+  }, [currentItem, currentAnnotationState]);
 
   useEffect(() => {
-    if (!isItemsLoading && queueItems.length > 0) {
-      if (
-        unprocessedItems.length === 0 &&
-        currentView !== WORKFLOW_STATUS.COMPLETED
-      ) {
+    if (!currentView && !isItemsLoading && queueItems.length > 0) {
+      if (unprocessedItems.length === 0) {
         setCurrentView(WORKFLOW_STATUS.COMPLETED);
-      } else if (
-        unprocessedItems.length > 0 &&
-        currentView !== WORKFLOW_STATUS.ANNOTATING
-      ) {
+      } else {
         setCurrentView(WORKFLOW_STATUS.INITIAL);
       }
     }
@@ -773,6 +768,14 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     setCurrentView,
   ]);
 
+  const hasAnyUnsavedChanges = useMemo(() => {
+    const currentItemHasChanges = hasUnsavedChanges(currentAnnotationState);
+    const cachedItemsHaveChanges = Object.values(cachedAnnotationStates).some(
+      (state) => hasUnsavedChanges(state),
+    );
+    return currentItemHasChanges || cachedItemsHaveChanges;
+  }, [currentAnnotationState, cachedAnnotationStates]);
+
   const contextValue: SMEFlowContextValue = {
     // Queue data
     annotationQueue,
@@ -783,13 +786,14 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     currentItem,
     nextItem,
     currentView: currentView || WORKFLOW_STATUS.INITIAL,
-    isLastUnprocessedItem,
+    isCurrentItemProcessed,
 
     // Computed state
     processedCount,
     totalCount,
     canStartAnnotation,
     unprocessedItems,
+    hasAnyUnsavedChanges,
 
     // Annotation state
     currentAnnotationState,
@@ -800,6 +804,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     // Actions
     setCurrentView,
     handleStartAnnotating,
+    handleReviewAnnotations,
     handleNext,
     handlePrevious,
     handleSubmit,

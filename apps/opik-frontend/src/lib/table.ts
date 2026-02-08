@@ -25,6 +25,30 @@ export const hasAnyVisibleColumns = <TColumnData>(
 ) => columns.some(({ id }) => selectedColumns.includes(id));
 
 /**
+ * Migrates selected columns from an old localStorage key.
+ * Returns the migrated value to be persisted by the caller.
+ *
+ * @param oldStorageKey - The old localStorage key to migrate from
+ * @param defaultColumns - Default columns to use if no stored data exists
+ * @param columnsToAdd - Columns to add during migration
+ * @returns The selected columns array
+ */
+export const migrateSelectedColumns = (
+  oldStorageKey: string,
+  defaultColumns: string[],
+  columnsToAdd: string[] = [],
+): string[] => {
+  const oldData = localStorage.getItem(oldStorageKey);
+
+  if (oldData !== null) {
+    const oldColumns = JSON.parse(oldData);
+    return [...new Set([...oldColumns, ...columnsToAdd])];
+  }
+
+  return defaultColumns;
+};
+
+/**
  * Determines if a column can be sorted based on the backend's sortable_by response.
  * Handles multiple matching patterns:
  * 1. Direct match: column id exactly matches a sortable field
@@ -73,19 +97,19 @@ export const convertColumnDataToColumn = <TColumnData, TData>(
       ? selectedColumns.includes(column.id)
       : true;
     if (isSelected) {
-      if (
+      // If column explicitly sets sortable to false, respect that
+      // Otherwise, check if backend supports sorting
+      const shouldEnableSorting =
+        column.sortable !== false &&
         Boolean(sortableColumns?.length) &&
-        isColumnSortable(column.id, sortableColumns)
-      ) {
-        retVal.push(
-          mapColumnDataFields({
-            ...column,
-            sortable: true,
-          }),
-        );
-      } else {
-        retVal.push(mapColumnDataFields(column));
-      }
+        isColumnSortable(column.id, sortableColumns);
+
+      retVal.push(
+        mapColumnDataFields({
+          ...column,
+          sortable: shouldEnableSorting,
+        }),
+      );
     }
   });
 
@@ -130,4 +154,49 @@ export const mapColumnDataFields = <TColumnData, TData>(
     }),
     enableSorting: columnData.sortable || false,
   };
+};
+
+/**
+ * Injects a callback into a column's custom metadata.
+ * Useful for adding dynamic row click handlers to columns that need to be editable via the columns menu.
+ *
+ * @param columns - Array of column definitions
+ * @param columnId - ID of the column to inject the callback into
+ * @param callback - The callback function to inject
+ * @param additionalMeta - Optional additional metadata to merge
+ * @returns The modified columns array
+ */
+export const injectColumnCallback = <TData>(
+  columns: ColumnDef<TData>[],
+  columnId: string,
+  callback: (row: TData) => void,
+  additionalMeta?: Record<string, unknown>,
+): ColumnDef<TData>[] => {
+  const columnIndex = columns.findIndex((col) => {
+    const column = col as { accessorKey?: string };
+    return column.accessorKey === columnId;
+  });
+
+  if (columnIndex === -1) {
+    return columns;
+  }
+
+  const targetColumn = columns[columnIndex];
+  const updatedColumn: ColumnDef<TData> = {
+    ...targetColumn,
+    meta: {
+      ...targetColumn.meta,
+      custom: {
+        ...targetColumn.meta?.custom,
+        callback,
+        ...additionalMeta,
+      },
+    },
+  };
+
+  return [
+    ...columns.slice(0, columnIndex),
+    updatedColumn,
+    ...columns.slice(columnIndex + 1),
+  ];
 };

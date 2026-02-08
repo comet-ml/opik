@@ -590,10 +590,11 @@ class MultiValueFeedbackScoresE2ETest {
         var datasetId = datasetResourceClient.createDataset(dataset, API_KEY1, TEST_WORKSPACE);
 
         // create an experiment with a specific name for retrieval
+        // Use datasetName (not datasetId) to properly link experiment to dataset
         var experimentName = RandomStringUtils.secure().nextAlphanumeric(10);
         var experiment = experimentResourceClient.createPartialExperiment()
                 .name(experimentName)
-                .datasetId(datasetId)
+                .datasetName(dataset.name())
                 .build();
 
         UUID experimentId = experimentResourceClient.create(experiment, API_KEY1, TEST_WORKSPACE);
@@ -616,7 +617,8 @@ class MultiValueFeedbackScoresE2ETest {
                 .source(DatasetItemSource.TRACE)
                 .build();
 
-        datasetResourceClient.createDatasetItems(new DatasetItemBatch(null, datasetId, List.of(datasetItem)),
+        datasetResourceClient.createDatasetItems(
+                DatasetItemBatch.builder().datasetId(datasetId).items(List.of(datasetItem)).build(),
                 TEST_WORKSPACE, API_KEY1);
 
         // define the feedback scores for the same trace from different users
@@ -660,7 +662,8 @@ class MultiValueFeedbackScoresE2ETest {
                         .datasetId(datasetId)
                         .build())
                 .toList();
-        datasetResourceClient.createDatasetItems(new DatasetItemBatch(null, datasetId, datasetItems),
+        datasetResourceClient.createDatasetItems(
+                DatasetItemBatch.builder().datasetName(null).datasetId(datasetId).items(datasetItems).build(),
                 TEST_WORKSPACE, API_KEY1);
 
         // create an optimization

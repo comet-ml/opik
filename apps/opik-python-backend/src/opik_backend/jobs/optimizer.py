@@ -109,7 +109,7 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         span.set_attribute("workspace_id", context.workspace_id)
         span.set_attribute("workspace_name", context.workspace_name)
         
-        logger.info(
+        logger.debug(
             f"Processing Optimization Studio job: {context.optimization_id} "
             f"for workspace: {context.workspace_name}"
         )
@@ -119,6 +119,9 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         env_vars = {
             **LLM_API_KEYS,  # OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
         }
+        
+        # Mark subprocess as Optimization Studio execution (SDK display behavior).
+        env_vars["OPIK_OPTIMIZATION_STUDIO"] = "true"
         
         # Pass Opik API key if provided (for cloud deployment)
         if context.opik_api_key:
@@ -153,7 +156,7 @@ def process_optimizer_job(*args: Any, **kwargs: Any) -> Dict[str, Any]:
         with CancellationHandle(str(context.optimization_id), on_cancelled=on_cancelled) as cancellation_handle:
             
             try:
-                logger.info(f"Starting optimization subprocess for optimization {context.optimization_id}")
+                logger.debug(f"Starting optimization subprocess for optimization {context.optimization_id}")
                 
                 # Execute optimization in isolated subprocess
                 result = executor.execute(

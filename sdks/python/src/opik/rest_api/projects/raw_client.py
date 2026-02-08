@@ -15,12 +15,15 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
+from ..types.breakdown_config_public import BreakdownConfigPublic
 from ..types.feedback_score_names import FeedbackScoreNames
 from ..types.project_detailed import ProjectDetailed
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
 from ..types.project_page_public import ProjectPagePublic
 from ..types.project_public import ProjectPublic
 from ..types.project_stats_summary import ProjectStatsSummary
+from ..types.span_filter_public import SpanFilterPublic
+from ..types.token_usage_names import TokenUsageNames
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_thread_filter_public import TraceThreadFilterPublic
 from .types.project_metric_request_public_interval import ProjectMetricRequestPublicInterval
@@ -392,6 +395,44 @@ class RawProjectsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def find_token_usage_names(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[TokenUsageNames]:
+        """
+        Find Token Usage names
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[TokenUsageNames]
+            Token Usage names resource
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(id)}/token-usage/names",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    TokenUsageNames,
+                    parse_obj_as(
+                        type_=TokenUsageNames,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def get_project_metrics(
         self,
         id: str,
@@ -400,8 +441,10 @@ class RawProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        span_filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
         trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
         thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
+        breakdown: typing.Optional[BreakdownConfigPublic] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectMetricResponsePublic]:
         """
@@ -419,9 +462,13 @@ class RawProjectsClient:
 
         interval_end : typing.Optional[dt.datetime]
 
+        span_filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
+
         trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
 
         thread_filters : typing.Optional[typing.Sequence[TraceThreadFilterPublic]]
+
+        breakdown : typing.Optional[BreakdownConfigPublic]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -439,11 +486,17 @@ class RawProjectsClient:
                 "interval": interval,
                 "interval_start": interval_start,
                 "interval_end": interval_end,
+                "span_filters": convert_and_respect_annotation_metadata(
+                    object_=span_filters, annotation=typing.Sequence[SpanFilterPublic], direction="write"
+                ),
                 "trace_filters": convert_and_respect_annotation_metadata(
                     object_=trace_filters, annotation=typing.Sequence[TraceFilterPublic], direction="write"
                 ),
                 "thread_filters": convert_and_respect_annotation_metadata(
                     object_=thread_filters, annotation=typing.Sequence[TraceThreadFilterPublic], direction="write"
+                ),
+                "breakdown": convert_and_respect_annotation_metadata(
+                    object_=breakdown, annotation=BreakdownConfigPublic, direction="write"
                 ),
             },
             headers={
@@ -984,6 +1037,44 @@ class AsyncRawProjectsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def find_token_usage_names(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[TokenUsageNames]:
+        """
+        Find Token Usage names
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[TokenUsageNames]
+            Token Usage names resource
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(id)}/token-usage/names",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    TokenUsageNames,
+                    parse_obj_as(
+                        type_=TokenUsageNames,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_project_metrics(
         self,
         id: str,
@@ -992,8 +1083,10 @@ class AsyncRawProjectsClient:
         interval: typing.Optional[ProjectMetricRequestPublicInterval] = OMIT,
         interval_start: typing.Optional[dt.datetime] = OMIT,
         interval_end: typing.Optional[dt.datetime] = OMIT,
+        span_filters: typing.Optional[typing.Sequence[SpanFilterPublic]] = OMIT,
         trace_filters: typing.Optional[typing.Sequence[TraceFilterPublic]] = OMIT,
         thread_filters: typing.Optional[typing.Sequence[TraceThreadFilterPublic]] = OMIT,
+        breakdown: typing.Optional[BreakdownConfigPublic] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectMetricResponsePublic]:
         """
@@ -1011,9 +1104,13 @@ class AsyncRawProjectsClient:
 
         interval_end : typing.Optional[dt.datetime]
 
+        span_filters : typing.Optional[typing.Sequence[SpanFilterPublic]]
+
         trace_filters : typing.Optional[typing.Sequence[TraceFilterPublic]]
 
         thread_filters : typing.Optional[typing.Sequence[TraceThreadFilterPublic]]
+
+        breakdown : typing.Optional[BreakdownConfigPublic]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1031,11 +1128,17 @@ class AsyncRawProjectsClient:
                 "interval": interval,
                 "interval_start": interval_start,
                 "interval_end": interval_end,
+                "span_filters": convert_and_respect_annotation_metadata(
+                    object_=span_filters, annotation=typing.Sequence[SpanFilterPublic], direction="write"
+                ),
                 "trace_filters": convert_and_respect_annotation_metadata(
                     object_=trace_filters, annotation=typing.Sequence[TraceFilterPublic], direction="write"
                 ),
                 "thread_filters": convert_and_respect_annotation_metadata(
                     object_=thread_filters, annotation=typing.Sequence[TraceThreadFilterPublic], direction="write"
+                ),
+                "breakdown": convert_and_respect_annotation_metadata(
+                    object_=breakdown, annotation=BreakdownConfigPublic, direction="write"
                 ),
             },
             headers={

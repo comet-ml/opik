@@ -23,6 +23,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.CSV_UPLOAD_ENABLED]: false,
   [FeatureToggleKeys.EXPORT_ENABLED]: true,
   [FeatureToggleKeys.DATASET_VERSIONING_ENABLED]: false,
+  [FeatureToggleKeys.DATASET_EXPORT_ENABLED]: true,
   [FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED]: false,
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED]: false,
@@ -34,6 +35,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: false,
+  [FeatureToggleKeys.OLLAMA_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: false,
 };
 

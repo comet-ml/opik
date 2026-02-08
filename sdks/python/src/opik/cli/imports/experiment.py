@@ -28,7 +28,9 @@ from .utils import (
     translate_trace_id,
     matches_name_pattern,
     clean_feedback_scores,
+    clean_usage_for_import,
     debug_print,
+    sort_spans_topologically,
 )
 from .prompt import import_prompts_from_directory
 from .dataset import import_datasets_from_directory
@@ -828,12 +830,9 @@ def _import_traces_from_projects_directory(
                 # Build span_id_map to translate parent_span_id references
                 span_id_map: Dict[str, str] = {}  # Maps original span ID to new span ID
 
-                # First pass: create all spans and build span_id_map
-                # We need to create spans in order so parent spans exist before children
-                # Sort spans to process root spans (no parent) first, then children
-                root_spans = [s for s in spans_info if not s.get("parent_span_id")]
-                child_spans = [s for s in spans_info if s.get("parent_span_id")]
-                sorted_spans = root_spans + child_spans
+                # Sort spans topologically to ensure parents are processed before children
+                # This handles multi-level hierarchies correctly
+                sorted_spans = sort_spans_topologically(spans_info)
 
                 for span_info in sorted_spans:
                     # Clean feedback scores to remove read-only fields
@@ -853,8 +852,12 @@ def _import_traces_from_projects_directory(
                         new_parent_span_id = span_id_map[original_parent_span_id]
 
                     # Create span with parent_span_id if available
+                    # Clean usage data to avoid double-prefixing of original_usage keys
+                    usage_data = clean_usage_for_import(span_info.get("usage"))
+
                     span = client.span(
                         name=span_info.get("name", "imported_span"),
+                        type=span_info.get("type", "general"),
                         start_time=(
                             datetime.fromisoformat(
                                 span_info["start_time"].replace("Z", "+00:00")
@@ -873,7 +876,7 @@ def _import_traces_from_projects_directory(
                         output=span_info.get("output", {}),
                         metadata=span_info.get("metadata"),
                         tags=span_info.get("tags"),
-                        usage=span_info.get("usage"),
+                        usage=usage_data,
                         feedback_scores=span_feedback_scores,
                         model=span_info.get("model"),
                         provider=span_info.get("provider"),

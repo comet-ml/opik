@@ -3,6 +3,8 @@ import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { ProjectMetricTrace } from "@/types/projects";
 import { Filter } from "@/types/filters";
 import { processFiltersArray } from "@/lib/filters";
+import { BreakdownConfig } from "@/types/dashboard";
+import { BREAKDOWN_FIELD } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
 
 export enum METRIC_NAME_TYPE {
   FEEDBACK_SCORES = "FEEDBACK_SCORES",
@@ -14,6 +16,10 @@ export enum METRIC_NAME_TYPE {
   THREAD_COUNT = "THREAD_COUNT",
   THREAD_DURATION = "THREAD_DURATION",
   THREAD_FEEDBACK_SCORES = "THREAD_FEEDBACK_SCORES",
+  SPAN_COUNT = "SPAN_COUNT",
+  SPAN_DURATION = "SPAN_DURATION",
+  SPAN_FEEDBACK_SCORES = "SPAN_FEEDBACK_SCORES",
+  SPAN_TOKEN_USAGE = "SPAN_TOKEN_USAGE",
 }
 
 export enum INTERVAL_TYPE {
@@ -30,11 +36,36 @@ type UseProjectMetricsParams = {
   intervalEnd: string | undefined;
   traceFilters?: Filter[];
   threadFilters?: Filter[];
+  spanFilters?: Filter[];
+  breakdown?: BreakdownConfig;
 };
 
-interface ProjectMetricsResponse {
+export interface ProjectMetricResult {
+  name: string;
+  data: Array<{
+    time: string;
+    value: number;
+  }>;
+}
+
+export interface ProjectMetricsResponse {
+  project_id: string;
+  metric_type: METRIC_NAME_TYPE;
+  interval: INTERVAL_TYPE;
   results: ProjectMetricTrace[];
 }
+
+const processBreakdownConfig = (breakdown?: BreakdownConfig) => {
+  if (!breakdown || breakdown.field === BREAKDOWN_FIELD.NONE) {
+    return undefined;
+  }
+
+  return {
+    field: breakdown.field,
+    ...(breakdown.metadataKey && { metadata_key: breakdown.metadataKey }),
+    ...(breakdown.subMetric && { sub_metric: breakdown.subMetric }),
+  };
+};
 
 const getProjectMetric = async (
   { signal }: QueryFunctionContext,
@@ -46,6 +77,8 @@ const getProjectMetric = async (
     intervalEnd,
     traceFilters,
     threadFilters,
+    spanFilters,
+    breakdown,
   }: UseProjectMetricsParams,
 ) => {
   const { data } = await api.post<ProjectMetricsResponse>(
@@ -61,18 +94,20 @@ const getProjectMetric = async (
       thread_filters: threadFilters
         ? processFiltersArray(threadFilters)
         : undefined,
+      span_filters: spanFilters ? processFiltersArray(spanFilters) : undefined,
+      breakdown: processBreakdownConfig(breakdown),
     },
     {
       signal,
     },
   );
 
-  return data?.results;
+  return data;
 };
 
 const useProjectMetric = (
   params: UseProjectMetricsParams,
-  config?: QueryConfig<ProjectMetricTrace[]>,
+  config?: QueryConfig<ProjectMetricsResponse>,
 ) => {
   return useQuery({
     queryKey: ["projectMetrics", params],

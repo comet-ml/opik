@@ -153,7 +153,7 @@ class ExperimentDAO {
             WITH experiments_final AS (
                 SELECT
                     *, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
-                FROM experiments
+                FROM experiments FINAL
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
                 <if(optimization_id)> AND optimization_id = :optimization_id <endif>
@@ -162,22 +162,28 @@ class ExperimentDAO {
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
                 <if(id)> AND id = :id <endif>
                 <if(ids_list)> AND id IN :ids_list <endif>
+                <if(experiment_ids)> AND id IN :experiment_ids <endif>
                 <if(lastRetrievedId)> AND id \\< :lastRetrievedId <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                ORDER BY (workspace_id, dataset_id, id) DESC
+                <if(limit &&
+                !feedback_scores_filters &&
+                !feedback_scores_empty_filters &&
+                !experiment_scores_filters &&
+                !experiment_scores_empty_filters &&
+                !project_id &&
+                !project_deleted &&
+                !sort_fields
+                )>
+                LIMIT :limit <if(offset)> OFFSET :offset <endif>
+                <endif>
             ), experiment_items_final AS (
                 SELECT
                     id, experiment_id, trace_id
                 FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id IN (SELECT id FROM experiments_final)
-            ), trace_final AS (
-                SELECT
-                    id
-                FROM traces
-                WHERE workspace_id = :workspace_id
             ), experiment_durations AS (
                 SELECT
                     experiment_id,
@@ -277,23 +283,16 @@ class ExperimentDAO {
                        author
                 FROM feedback_scores_with_ranking
                 WHERE rn = 1
-            ), feedback_scores_combined_grouped AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    groupArray(value) AS values
-                FROM feedback_scores_combined
-                GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
-                FROM feedback_scores_combined_grouped
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                    max(last_updated_at) AS last_updated_at
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
             ),
             feedback_scores_agg AS (
                 SELECT
@@ -326,6 +325,35 @@ class ExperimentDAO {
                 ) as fs_avg
                 GROUP BY experiment_id
             ),
+            <if(feedback_scores_empty_filters)>
+             fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores_final
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            ),
+            <endif>
+            experiment_scores_final AS (
+                SELECT
+                    e.id AS experiment_id,
+                    JSON_VALUE(score, '$.name') AS name,
+                    CAST(JSON_VALUE(score, '$.value') AS Decimal(18, 9)) AS value
+                FROM experiments_final AS e
+                ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                WHERE length(e.experiment_scores) > 2
+                  AND length(JSON_VALUE(score, '$.name')) > 0
+            ),
+            <if(experiment_scores_empty_filters)>
+             esc AS (SELECT experiment_id, COUNT(experiment_id) AS experiment_scores_count
+                 FROM experiment_scores_final
+                 GROUP BY experiment_id
+                 HAVING <experiment_scores_empty_filters>
+            ),
+            <endif>
             experiment_scores_agg AS (
                 SELECT
                     experiment_id,
@@ -333,23 +361,14 @@ class ExperimentDAO {
                         groupArray(name),
                         groupArray(value)
                     ) AS experiment_scores
-                FROM (
-                    SELECT
-                        e.id AS experiment_id,
-                        JSON_VALUE(score, '$.name') AS name,
-                        CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
-                    FROM experiments_final AS e
-                    ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
-                    WHERE length(e.experiment_scores) > 2
-                      AND length(JSON_VALUE(score, '$.name')) > 0
-                ) AS es
+                FROM experiment_scores_final
                 GROUP BY experiment_id
             ),
             comments_agg AS (
                 SELECT
                     ei.experiment_id,
                     groupUniqArrayArray(tc.comments_array) as comments_array_agg
-                FROM experiment_items ei
+                FROM experiment_items_final ei
                 LEFT JOIN (
                     SELECT
                         entity_id,
@@ -371,28 +390,17 @@ class ExperimentDAO {
                     )
                     GROUP BY entity_id
                 ) AS tc ON ei.trace_id = tc.entity_id
-                WHERE ei.trace_id IN (SELECT id FROM trace_final)
                 GROUP BY ei.experiment_id
-            ), experiment_trace_ids AS (
-                -- Get any trace_id per experiment (all traces have same project_id)
-                SELECT experiment_id, any(trace_id) as trace_id
-                FROM experiment_items_final
-                GROUP BY experiment_id
             ), experiment_projects AS (
                 -- All traces from an experiment belong to the same project (SDK invariant)
-                -- Look up project_id only for the trace_ids we need (one trace per experiment)
-                -- Using LIMIT 1 BY id instead of FINAL for better performance (stops reading after first match)
+                -- Using ANY JOIN to handle potential duplicate trace versions
                 SELECT
-                    et.experiment_id,
-                    t.project_id
-                FROM experiment_trace_ids et
-                INNER JOIN (
-                    SELECT id, project_id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND id IN (SELECT trace_id FROM experiment_trace_ids)
-                    LIMIT 1 BY id
-                ) t ON et.trace_id = t.id
+                    ei.experiment_id,
+                    ifNull(any(t.project_id), '') AS project_id
+                FROM experiment_items_final ei
+                LEFT ANY JOIN traces t ON ei.trace_id = t.id
+                    AND t.workspace_id = :workspace_id
+                GROUP BY ei.experiment_id
             )
             SELECT
                 e.workspace_id as workspace_id,
@@ -428,17 +436,67 @@ class ExperimentDAO {
             LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
             LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
             LEFT JOIN comments_agg AS ca ON e.id = ca.experiment_id
+            WHERE 1=1
+            <if(feedback_scores_filters)>
+            AND id in (
+                SELECT DISTINCT experiment_id FROM experiment_items_final
+                WHERE trace_id IN (
+                    SELECT
+                    entity_id AS trace_id
+                    FROM (
+                        SELECT *
+                        FROM feedback_scores_final
+                        ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                    )
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
+                )
+            )
+            <endif>
+            <if(feedback_scores_empty_filters)>
+            AND id NOT IN (
+               SELECT DISTINCT experiment_id FROM experiment_items_final
+               WHERE trace_id IN (SELECT entity_id FROM fsc)
+            )
+            <endif>
+            <if(experiment_scores_filters)>
+            AND id IN (
+                SELECT experiment_id
+                FROM experiment_scores_final
+                GROUP BY experiment_id
+                HAVING <experiment_scores_filters>
+            )
+            <endif>
+            <if(experiment_scores_empty_filters)>
+            AND id NOT IN (SELECT experiment_id FROM esc)
+            <endif>
+            <if(project_id)>
+            AND ep.project_id = :project_id
+            <endif>
+            <if(project_deleted)>
+            AND ep.project_id = ''
+            <endif>
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
-            <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
+            <if(limit && (
+                feedback_scores_filters ||
+                feedback_scores_empty_filters ||
+                experiment_scores_filters ||
+                experiment_scores_empty_filters ||
+                project_id ||
+                project_deleted ||
+                sort_fields
+                )
+            )>
+            LIMIT :limit <if(offset)> OFFSET :offset <endif>
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
     private static final String FIND_COUNT = """
-            SELECT count(id) as count
-            FROM
-            (
-                SELECT id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
+            WITH experiments_initial AS (
+                SELECT id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids, experiment_scores
                 FROM experiments
                 WHERE workspace_id = :workspace_id
                 <if(dataset_id)> AND dataset_id = :dataset_id <endif>
@@ -446,11 +504,166 @@ class ExperimentDAO {
                 <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(dataset_ids)> AND dataset_id IN :dataset_ids <endif>
+                <if(experiment_ids)> AND id IN :experiment_ids <endif>
                 <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
                 <if(filters)> AND <filters> <endif>
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ) as latest_rows
+            ), experiment_items_final AS (
+                SELECT
+                    id, experiment_id, trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN (SELECT id FROM experiments_initial)
+            ), feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    value,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                   AND workspace_id = :workspace_id
+                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
+            ), feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                    max(last_updated_at) AS last_updated_at
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            )
+            <if(feedback_scores_empty_filters)>
+             , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM feedback_scores_final
+                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY entity_id, name
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
+            <if(experiment_scores_filters || experiment_scores_empty_filters)>
+             , experiment_scores_final AS (
+                SELECT
+                    e.id AS experiment_id,
+                    JSON_VALUE(score, '$.name') AS name,
+                    CAST(JSON_VALUE(score, '$.value') AS Decimal(18, 9)) AS value
+                FROM experiments_initial AS e
+                ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                WHERE length(e.experiment_scores) > 2
+                  AND length(JSON_VALUE(score, '$.name')) > 0
+            )
+            <endif>
+            <if(experiment_scores_empty_filters)>
+             , esc AS (SELECT experiment_id, COUNT(experiment_id) AS experiment_scores_count
+                 FROM experiment_scores_final
+                 GROUP BY experiment_id
+                 HAVING <experiment_scores_empty_filters>
+            )
+            <endif>
+            <if(project_id || project_deleted)>
+            , experiment_projects AS (
+                -- All traces from an experiment belong to the same project (SDK invariant)
+                -- Using ANY JOIN to handle potential duplicate trace versions
+                SELECT
+                    ei.experiment_id,
+                    ifNull(any(t.project_id), '') AS project_id
+                FROM experiment_items_final ei
+                LEFT ANY JOIN traces t ON ei.trace_id = t.id
+                    AND t.workspace_id = :workspace_id
+                GROUP BY ei.experiment_id
+            )
+            <endif>
+            SELECT count(e.id) as count
+            FROM experiments_initial e
+            <if(project_id || project_deleted)>
+            LEFT JOIN experiment_projects ep ON e.id = ep.experiment_id
+            <endif>
+            WHERE 1=1
+            <if(feedback_scores_filters)>
+            AND id in (
+                SELECT DISTINCT experiment_id FROM experiment_items_final
+                WHERE trace_id IN (
+                    SELECT
+                    entity_id AS trace_id
+                    FROM (
+                        SELECT *
+                        FROM feedback_scores_final
+                        ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
+                        LIMIT 1 BY entity_id, name
+                    )
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
+                )
+            )
+            <endif>
+            <if(feedback_scores_empty_filters)>
+            AND id NOT IN (
+               SELECT DISTINCT experiment_id FROM experiment_items_final
+               WHERE trace_id IN (SELECT entity_id FROM fsc)
+            )
+            <endif>
+            <if(experiment_scores_filters)>
+            AND id IN (
+                SELECT experiment_id
+                FROM experiment_scores_final
+                GROUP BY experiment_id
+                HAVING <experiment_scores_filters>
+            )
+            <endif>
+            <if(experiment_scores_empty_filters)>
+            AND e.id NOT IN (SELECT experiment_id FROM esc)
+            <endif>
+            <if(project_id)>
+            AND ep.project_id = :project_id
+            <endif>
+            <if(project_deleted)>
+            AND ep.project_id = ''
+            <endif>
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -458,8 +671,10 @@ class ExperimentDAO {
     private static final String FIND_GROUPS = """
             WITH experiments_filtered AS (
                 SELECT
+                    id,
                     dataset_id,
                     metadata,
+                    tags,
                     arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids,
                     created_at
                 FROM experiments final
@@ -467,9 +682,43 @@ class ExperimentDAO {
                 <if(types)> AND type IN :types <endif>
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(filters)> AND <filters> <endif>
+            ), experiment_items_final AS (
+                SELECT
+                    id, experiment_id, trace_id
+                FROM experiment_items
+                WHERE workspace_id = :workspace_id
+                AND experiment_id IN (SELECT id FROM experiments_filtered)
+            ), experiment_projects AS (
+                -- All traces from an experiment belong to the same project (SDK invariant)
+                -- Using ANY JOIN to handle potential duplicate trace versions
+                SELECT
+                    ei.experiment_id,
+                    ifNull(any(t.project_id), '') AS project_id
+                FROM experiment_items_final ei
+                LEFT ANY JOIN traces t ON ei.trace_id = t.id
+                    AND t.workspace_id = :workspace_id
+                GROUP BY ei.experiment_id
+            ), experiments_with_projects AS (
+                SELECT
+                    ef.id,
+                    ef.dataset_id,
+                    ef.metadata,
+                    ef.tags,
+                    ef.prompt_ids,
+                    ef.created_at,
+                    ep.project_id
+                FROM experiments_filtered ef
+                LEFT JOIN experiment_projects ep ON ef.id = ep.experiment_id
             )
             SELECT <groupSelects>, max(created_at) AS last_created_experiment_at
-            FROM experiments_filtered
+            FROM experiments_with_projects
+            WHERE 1=1
+            <if(project_id)>
+            AND project_id = :project_id
+            <endif>
+            <if(project_deleted)>
+            AND project_id = ''
+            <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -645,22 +894,34 @@ class ExperimentDAO {
                       AND length(JSON_VALUE(score, '$.name')) > 0
                 ) AS es
                 GROUP BY experiment_id
-            ),
-            experiments_full AS (
+            ), experiment_projects AS (
+                -- All traces from an experiment belong to the same project (SDK invariant)
+                -- Using ANY JOIN to handle potential duplicate trace versions
+                SELECT
+                    ei.experiment_id,
+                    ifNull(any(t.project_id), '') AS project_id
+                FROM experiment_items_final ei
+                LEFT ANY JOIN traces t ON ei.trace_id = t.id
+                    AND t.workspace_id = :workspace_id
+                GROUP BY ei.experiment_id
+            ), experiments_full AS (
                 SELECT
                     e.id as id,
                     e.dataset_id AS dataset_id,
                     e.metadata AS metadata,
+                    e.tags AS tags,
                     fs.feedback_scores as feedback_scores,
                     es.experiment_scores as experiment_scores,
                     ed.trace_count as trace_count,
                     ed.duration_values AS duration,
                     ed.total_estimated_cost_sum as total_estimated_cost,
-                    ed.total_estimated_cost_avg as total_estimated_cost_avg
+                    ed.total_estimated_cost_avg as total_estimated_cost_avg,
+                    ep.project_id
                 FROM experiments_final AS e
                 LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
                 LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
                 LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
+                LEFT JOIN experiment_projects ep ON e.id = ep.experiment_id
             )
             SELECT
                 count(DISTINCT id) as experiment_count,
@@ -672,6 +933,13 @@ class ExperimentDAO {
                 avgMap(duration) as duration,
                 <groupSelects>
             FROM experiments_full
+            WHERE 1=1
+            <if(project_id)>
+            AND project_id = :project_id
+            <endif>
+            <if(project_deleted)>
+            AND project_id = ''
+            <endif>
             GROUP BY <groupBy>
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -714,19 +982,11 @@ class ExperimentDAO {
             """;
     private static final String FIND_MOST_RECENT_CREATED_EXPERIMENT_BY_DATASET_IDS = """
             SELECT
-            	dataset_id,
-            	max(created_at) as created_at
-            FROM (
-                SELECT
-                    id,
-                    dataset_id,
-                    created_at
-                FROM experiments
-                WHERE dataset_id IN :dataset_ids
-            	AND workspace_id = :workspace_id
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            )
+                dataset_id,
+                max(created_at) as created_at
+            FROM experiments
+            WHERE dataset_id IN :dataset_ids
+            AND workspace_id = :workspace_id
             GROUP BY dataset_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -739,8 +999,6 @@ class ExperimentDAO {
             WHERE workspace_id = :workspace_id
             <if(experiment_ids)> AND id IN :experiment_ids <endif>
             <if(prompt_ids)>AND (prompt_id IN :prompt_ids OR hasAny(mapKeys(prompt_versions), :prompt_ids))<endif>
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -788,7 +1046,7 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                <if(tags)> :tags <else> tags <endif> as tags,
+                <if(tags)><if(merge_tags)> arrayDistinct(arrayConcat(tags, :tags)) <else> :tags <endif> <else> tags <endif> as tags,
                 created_by,
                 :user_name as last_updated_by,
                 prompt_version_id,
@@ -801,10 +1059,10 @@ class ExperimentDAO {
                 created_at,
                 now64(9) as last_updated_at
             FROM experiments
-            WHERE id = :id
+            WHERE id IN (:ids)
             AND workspace_id = :workspace_id
             ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-            LIMIT 1
+            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -1149,14 +1407,41 @@ class ExperimentDAO {
                 .ifPresent(datasetIds -> template.add("dataset_ids", datasetIds));
         Optional.ofNullable(criteria.promptId())
                 .ifPresent(promptId -> template.add("prompt_ids", promptId));
+        Optional.ofNullable(criteria.projectId())
+                .ifPresent(projectId -> template.add("project_id", projectId));
+        if (criteria.projectDeleted()) {
+            template.add("project_deleted", true);
+        }
         Optional.ofNullable(criteria.optimizationId())
                 .ifPresent(optimizationId -> template.add("optimization_id", optimizationId));
         Optional.ofNullable(criteria.types())
                 .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> template.add("types", types));
+        Optional.ofNullable(criteria.experimentIds())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(experimentIds -> template.add("experiment_ids", experimentIds));
         Optional.ofNullable(criteria.filters())
                 .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
                 .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                        FilterStrategy.FEEDBACK_SCORES))
+                .ifPresent(feedbackScoresFilters -> template.add("feedback_scores_filters", feedbackScoresFilters));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                        FilterStrategy.FEEDBACK_SCORES_IS_EMPTY))
+                .ifPresent(feedbackScoresEmptyFilters -> template.add("feedback_scores_empty_filters",
+                        feedbackScoresEmptyFilters));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                        FilterStrategy.EXPERIMENT_SCORES))
+                .ifPresent(
+                        experimentScoresFilters -> template.add("experiment_scores_filters", experimentScoresFilters));
+        Optional.ofNullable(criteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters,
+                        FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY))
+                .ifPresent(experimentScoresEmptyFilters -> template.add("experiment_scores_empty_filters",
+                        experimentScoresEmptyFilters));
         return template;
     }
 
@@ -1169,14 +1454,23 @@ class ExperimentDAO {
                 .ifPresent(datasetIds -> statement.bind("dataset_ids", datasetIds.toArray(UUID[]::new)));
         Optional.ofNullable(criteria.promptId())
                 .ifPresent(promptId -> statement.bind("prompt_ids", List.of(promptId).toArray(UUID[]::new)));
+        Optional.ofNullable(criteria.projectId())
+                .ifPresent(projectId -> statement.bind("project_id", projectId));
         Optional.ofNullable(criteria.optimizationId())
                 .ifPresent(optimizationId -> statement.bind("optimization_id", optimizationId));
         Optional.ofNullable(criteria.types())
                 .filter(CollectionUtils::isNotEmpty)
                 .ifPresent(types -> statement.bind("types", types));
+        Optional.ofNullable(criteria.experimentIds())
+                .filter(CollectionUtils::isNotEmpty)
+                .ifPresent(experimentIds -> statement.bind("experiment_ids", experimentIds.toArray(UUID[]::new)));
         Optional.ofNullable(criteria.filters())
                 .ifPresent(filters -> {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT_SCORES_IS_EMPTY);
                 });
         if (!isCount) {
             statement.bind("entity_type", criteria.entityType().getType());
@@ -1378,6 +1672,8 @@ class ExperimentDAO {
         Optional.ofNullable(criteria.filters())
                 .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.EXPERIMENT))
                 .ifPresent(experimentFilters -> template.add("filters", experimentFilters));
+        Optional.ofNullable(criteria.projectId())
+                .ifPresent(projectId -> template.add("project_id", projectId));
 
         groupingQueryBuilder.addGroupingTemplateParams(criteria.groups(), template);
 
@@ -1394,6 +1690,8 @@ class ExperimentDAO {
                 .ifPresent(filters -> {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
                 });
+        Optional.ofNullable(criteria.projectId())
+                .ifPresent(projectId -> statement.bind("project_id", projectId));
     }
 
     private Publisher<ExperimentGroupItem> mapExperimentGroupItem(Result result, int groupsCount) {
@@ -1437,20 +1735,31 @@ class ExperimentDAO {
     Mono<Void> update(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate) {
         log.info("Updating experiment with id '{}'", id);
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> updateWithInsert(id, experimentUpdate, connection))
+                .flatMapMany(connection -> updateWithInsert(Set.of(id), experimentUpdate, false, "update_experiment",
+                        connection))
                 .then();
     }
 
-    private Publisher<? extends Result> updateWithInsert(@NonNull UUID id, @NonNull ExperimentUpdate experimentUpdate,
-            Connection connection) {
+    Mono<Void> update(@NonNull Set<UUID> ids, @NonNull ExperimentUpdate update, boolean mergeTags) {
+        Preconditions.checkArgument(!ids.isEmpty(), "experiment IDs must not be empty");
+        log.info("Updating batch of '{}' experiments", ids.size());
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(
+                        connection -> updateWithInsert(ids, update, mergeTags, "bulk_update_experiments", connection))
+                .then();
+    }
+
+    private Publisher<? extends Result> updateWithInsert(@NonNull Set<UUID> ids,
+            @NonNull ExperimentUpdate experimentUpdate,
+            boolean mergeTags, String queryName, Connection connection) {
 
         return makeFluxContextAware((userName, workspaceId) -> {
-            var template = buildUpdateTemplate(experimentUpdate, UPDATE, "update_experiment", workspaceId);
+            var template = buildUpdateTemplate(experimentUpdate, mergeTags, queryName, workspaceId);
             String sql = template.render();
 
             Statement statement = connection.createStatement(sql);
             bindUpdateParams(experimentUpdate, statement);
-            statement.bind("id", id)
+            statement.bind("ids", ids.toArray(UUID[]::new))
                     .bind("workspace_id", workspaceId)
                     .bind("user_name", userName);
 
@@ -1458,9 +1767,9 @@ class ExperimentDAO {
         });
     }
 
-    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, String update, String queryName,
+    private ST buildUpdateTemplate(ExperimentUpdate experimentUpdate, boolean mergeTags, String queryName,
             String workspaceId) {
-        var template = getSTWithLogComment(update, queryName, workspaceId, "");
+        var template = getSTWithLogComment(UPDATE, queryName, workspaceId, "");
 
         if (StringUtils.isNotBlank(experimentUpdate.name())) {
             template.add("name", experimentUpdate.name());
@@ -1474,6 +1783,7 @@ class ExperimentDAO {
         // because an EMPTY set is a valid value here, and it is used to remove tags
         if (experimentUpdate.tags() != null) {
             template.add("tags", true);
+            template.add("merge_tags", mergeTags);
         }
 
         if (experimentUpdate.type() != null) {

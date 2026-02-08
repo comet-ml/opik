@@ -31,6 +31,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean optimizationStudioEnabled;
     @JsonProperty
     @NotNull boolean datasetVersioningEnabled;
+    @JsonProperty
+    @NotNull boolean datasetExportEnabled;
     // LLM Provider feature flags
     @JsonProperty
     @NotNull boolean openaiProviderEnabled;
@@ -46,6 +48,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean bedrockProviderEnabled;
     @JsonProperty
     @NotNull boolean customllmProviderEnabled;
+    @JsonProperty
+    @NotNull boolean ollamaProviderEnabled;
     @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;
 }

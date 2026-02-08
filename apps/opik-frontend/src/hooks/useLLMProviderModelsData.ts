@@ -166,6 +166,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+      label: "Claude Opus 4.6",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5,
       label: "Claude Opus 4.5",
     },
@@ -311,6 +315,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_5,
       label: "anthropic/claude-opus-4.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6,
+      label: "anthropic/claude-opus-4.6",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
@@ -1518,6 +1526,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.CUSTOM]: [
+    // the list will be fully populated based on the provider config response
+  ],
+
+  [PROVIDER_TYPE.OLLAMA]: [
     // the list will be fully populated based on the provider config response
   ],
 

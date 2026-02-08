@@ -125,6 +125,7 @@ interface DataTableProps<TData, TValue> {
   renderCustomRow?: (row: Row<TData>) => ReactNode | null;
   getIsCustomRow?: (row: Row<TData>) => boolean;
   activeRowId?: string;
+  getRowClassName?: (row: Row<TData>) => string;
   sortConfig?: SortConfig;
   resizeConfig?: ResizeConfig;
   selectionConfig?: SelectionConfig;
@@ -157,6 +158,7 @@ const DataTable = <TData, TValue>({
   renderCustomRow,
   getIsCustomRow = () => false,
   activeRowId,
+  getRowClassName,
   sortConfig,
   resizeConfig,
   selectionConfig,
@@ -286,9 +288,12 @@ const DataTable = <TData, TValue>({
         data-state={row.getIsSelected() && "selected"}
         data-row-active={row.id === activeRowId}
         data-row-id={row.id}
-        className={cn({
-          "cursor-pointer": isRowClickable || isGrouped,
-        })}
+        className={cn(
+          {
+            "cursor-pointer": isRowClickable || isGrouped,
+          },
+          getRowClassName?.(row),
+        )}
         {...(isRowClickable || isGrouped
           ? {
               onClick: (e) =>
@@ -395,7 +400,7 @@ const DataTable = <TData, TValue>({
   };
 
   return (
-    <TableWrapper showLoadingOverlay={showLoadingOverlay}>
+    <TableWrapper>
       <DataTableTooltipContext>
         <Table
           ref={tableRef}
@@ -465,6 +470,7 @@ const DataTable = <TData, TValue>({
             table={table}
             renderRow={renderRow}
             renderNoData={renderNoData}
+            showLoadingOverlay={showLoadingOverlay}
           />
         </Table>
       </DataTableTooltipContext>

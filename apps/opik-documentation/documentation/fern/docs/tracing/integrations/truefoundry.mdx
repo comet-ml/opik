@@ -1,0 +1,163 @@
+---
+description: Start here to integrate TrueFoundry with Opik for enterprise MLOps platform capabilities with LLM gateway features.
+headline: TrueFoundry | Opik Documentation
+og:description: Learn to integrate TrueFoundry with Opik using the OpenAI SDK wrapper to log all LLM calls for comprehensive observability.
+og:site_name: Opik Documentation
+og:title: Integrate TrueFoundry with Opik for Enterprise MLOps
+title: Observability for TrueFoundry with Opik
+---
+
+[TrueFoundry](https://www.truefoundry.com/) is an enterprise MLOps platform that provides a unified interface for deploying and managing ML models, including LLMs. It offers features like model deployment, monitoring, A/B testing, and cost optimization.
+
+## Gateway Overview
+
+TrueFoundry provides enterprise-grade features for managing ML and LLM deployments, including:
+
+- **Unified OpenAI-Compatible Endpoint**: Routes through TrueFoundry to any supported model (OpenAI, Anthropic, self-hosted, etc.)
+- **End-to-End Tracing**: Full request/response logs with system messages, token breakdowns (prompt, completion, total), latency per call, and cost analytics per model and environment
+- **Production-Grade Controls**: Rate limiting, quotas by user/team, budget alerts and spend caps, scoped API keys with RBAC
+- **Data Sovereignty**: VPC and on-premises deployment options for compliance and data privacy
+- **Multi-Cloud Support**: Deploy across AWS, Azure, GCP, and on-premise infrastructure
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=truefoundry&utm_campaign=opik) provides a hosted version of the Opik platform. [Simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=truefoundry&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=truefoundry&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
+
+First, ensure you have both `opik` and `openai` packages installed:
+
+```bash
+pip install opik openai
+```
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring TrueFoundry
+
+You'll need your TrueFoundry API endpoint and credentials. You can get these from your TrueFoundry dashboard.
+
+Set your configuration as environment variables:
+
+```bash
+export TRUEFOUNDRY_API_KEY="YOUR_TRUEFOUNDRY_API_KEY"
+export TRUEFOUNDRY_BASE_URL="YOUR_TRUEFOUNDRY_BASE_URL"
+```
+
+Or set them programmatically:
+
+```python
+import os
+import getpass
+
+if "TRUEFOUNDRY_API_KEY" not in os.environ:
+    os.environ["TRUEFOUNDRY_API_KEY"] = getpass.getpass("Enter your TrueFoundry API key: ")
+
+if "TRUEFOUNDRY_BASE_URL" not in os.environ:
+    os.environ["TRUEFOUNDRY_BASE_URL"] = input("Enter your TrueFoundry base URL: ")
+```
+
+## Logging LLM Calls
+
+Since TrueFoundry provides an OpenAI-compatible API for LLM deployments, we can use the [Opik OpenAI SDK wrapper](/docs/opik/integrations/openai) to automatically log TrueFoundry calls as generations in Opik.
+
+### Simple LLM Call
+
+```python
+import os
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Create an OpenAI client with TrueFoundry's base URL
+client = OpenAI(
+    api_key=os.environ["TRUEFOUNDRY_API_KEY"],
+    base_url=os.environ["TRUEFOUNDRY_BASE_URL"]
+)
+
+# Wrap the client with Opik tracking
+client = track_openai(client, project_name="truefoundry-integration-demo")
+
+# Make a chat completion request
+response = client.chat.completions.create(
+    model="your-deployed-model-name",
+    messages=[
+        {"role": "system", "content": "You are a knowledgeable AI assistant."},
+        {"role": "user", "content": "What is the largest city in France?"}
+    ]
+)
+
+# Print the assistant's reply
+print(response.choices[0].message.content)
+```
+
+## Advanced Usage
+
+### Using with the `@track` decorator
+
+If you have multiple steps in your LLM pipeline, you can use the `@track` decorator to log the traces for each step. If TrueFoundry is called within one of these steps, the LLM call will be associated with that corresponding step:
+
+```python
+import os
+from opik import track
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Create and wrap the OpenAI client with TrueFoundry's base URL
+client = OpenAI(
+    api_key=os.environ["TRUEFOUNDRY_API_KEY"],
+    base_url=os.environ["TRUEFOUNDRY_BASE_URL"]
+)
+client = track_openai(client)
+
+@track
+def generate_response(prompt: str):
+    response = client.chat.completions.create(
+        model="your-deployed-model-name",
+        messages=[
+            {"role": "system", "content": "You are a knowledgeable AI assistant."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response.choices[0].message.content
+
+@track
+def refine_response(initial_response: str):
+    response = client.chat.completions.create(
+        model="your-deployed-model-name",
+        messages=[
+            {"role": "system", "content": "You enhance and polish text responses."},
+            {"role": "user", "content": f"Please improve this response: {initial_response}"}
+        ]
+    )
+    return response.choices[0].message.content
+
+@track(project_name="truefoundry-integration-demo")
+def generate_and_refine(prompt: str):
+    # First LLM call: Generate initial response
+    initial = generate_response(prompt)
+    
+    # Second LLM call: Refine the response
+    refined = refine_response(initial)
+    
+    return refined
+
+# Example usage
+result = generate_and_refine("Explain quantum computing in simple terms.")
+```
+
+The trace will show nested LLM calls with hierarchical spans.
+
+## Further Improvements
+
+If you have suggestions for improving the TrueFoundry integration, please let us know by opening an issue on [GitHub](https://github.com/comet-ml/opik/issues).

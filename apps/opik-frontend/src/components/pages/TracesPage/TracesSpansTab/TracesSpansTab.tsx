@@ -15,7 +15,9 @@ import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
+import isArray from "lodash/isArray";
 import get from "lodash/get";
+import uniq from "lodash/uniq";
 import {
   useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
@@ -27,6 +29,7 @@ import useTracesOrSpansList, {
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
   COLUMN_COMMENTS_ID,
+  COLUMN_EXPERIMENT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_SPAN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAIL_STATISTIC_ID,
@@ -44,14 +47,14 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+  normalizeMetadataPaths,
+  buildDynamicMetadataColumns,
+} from "@/lib/metadata";
+import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
+import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import Loader from "@/components/shared/Loader/Loader";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -65,7 +68,11 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
+import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
@@ -74,6 +81,7 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
@@ -81,6 +89,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
+import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDate, formatDuration } from "@/lib/date";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
@@ -99,7 +108,7 @@ import { SelectItem } from "@/components/ui/select";
 import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 import SpanTypeCell from "@/components/shared/DataTableCells/SpanTypeCell";
-import { Filter } from "@/types/filters";
+import { Filter, FilterOperator } from "@/types/filters";
 import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
@@ -172,16 +181,6 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     statisticDataFormater: formatDuration,
   },
   {
-    id: COLUMN_METADATA_ID,
-    label: "Metadata",
-    type: COLUMN_TYPE.dictionary,
-    accessorFn: (row) =>
-      isObject(row.metadata)
-        ? JSON.stringify(row.metadata, null, 2)
-        : row.metadata,
-    cell: CodeCell as never,
-  },
-  {
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
@@ -226,12 +225,14 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
 ];
 
 const DEFAULT_TRACES_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
+  COLUMN_ID_ID,
   "name",
+  "start_time",
   "input",
   "output",
   "duration",
@@ -240,6 +241,7 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "traces-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "traces-columns-width";
 const COLUMNS_ORDER_KEY = "traces-columns-order";
 const COLUMNS_SORT_KEY_SUFFIX = "-columns-sort";
@@ -429,6 +431,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   placeholder: "Select span score",
                 },
               },
+              [COLUMN_EXPERIMENT_ID]: {
+                keyComponent: ExperimentsSelectBox,
+                keyComponentProps: {
+                  className: "w-full min-w-72",
+                  projectId,
+                },
+                defaultOperator: "=" as FilterOperator,
+                operators: [{ label: "=", value: "=" as FilterOperator }],
+              },
             }
           : {}),
         [COLUMN_GUARDRAILS_ID]: {
@@ -448,6 +459,33 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
 
+  // Declare selectedColumns early so it can be used in excludeFields computation
+  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
+    SELECTED_COLUMNS_KEY_V2,
+    {
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_TRACES_PAGE_COLUMNS,
+        [COLUMN_ID_ID, "start_time"],
+      ),
+    },
+  );
+
+  // Compute exclude parameter based on visible columns and data type
+  const excludeFields = useMemo(() => {
+    const exclude: string[] = [];
+
+    // Only exclude experiment field for traces (not spans) when column is not visible
+    if (
+      type === TRACE_DATA_TYPE.traces &&
+      !selectedColumns.includes(COLUMN_EXPERIMENT_ID)
+    ) {
+      exclude.push("experiment");
+    }
+
+    return exclude;
+  }, [type, selectedColumns]);
+
   // Enable table data loading after initial render to allow users to change the date filter
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -456,25 +494,27 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, refetch } = useTracesOrSpansList(
-    {
-      projectId,
-      type: type as TRACE_DATA_TYPE,
-      sorting: sortedColumns,
-      filters,
-      page: page as number,
-      size: size as number,
-      search: search as string,
-      truncate: truncationEnabled,
-      fromTime: intervalStart,
-      toTime: intervalEnd,
-    },
-    {
-      enabled: isTableDataEnabled,
-      refetchInterval: REFETCH_INTERVAL,
-      refetchOnMount: false,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching, refetch } =
+    useTracesOrSpansList(
+      {
+        projectId,
+        type: type as TRACE_DATA_TYPE,
+        sorting: sortedColumns,
+        filters,
+        page: page as number,
+        size: size as number,
+        search: search as string,
+        truncate: truncationEnabled,
+        fromTime: intervalStart,
+        toTime: intervalEnd,
+        exclude: excludeFields,
+      },
+      {
+        enabled: isTableDataEnabled,
+        refetchInterval: REFETCH_INTERVAL,
+        refetchOnMount: false,
+      },
+    );
 
   const { refetch: refetchExportData } = useTracesOrSpansList(
     {
@@ -488,6 +528,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       truncate: false,
       fromTime: intervalStart,
       toTime: intervalEnd,
+      exclude: excludeFields,
     },
     {
       enabled: false,
@@ -535,6 +576,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
+  const isTableLoading =
+    isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending;
+
   const noData = !search && filters.length === 0;
   const noDataText = noData
     ? `There are no ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"} yet`
@@ -545,6 +589,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [data?.content],
   );
 
+  const showEmptyState =
+    !isTableLoading && noData && rows.length === 0 && page === 1;
+
+  // Extract metadata paths directly from loaded traces/spans data
+  const metadataPaths = useMemo(() => {
+    const allPaths = rows.reduce<string[]>((acc, row) => {
+      if (row.metadata && (isObject(row.metadata) || isArray(row.metadata))) {
+        return acc.concat(getJSONPaths(row.metadata, "metadata", []));
+      }
+      return acc;
+    }, []);
+    return uniq(allPaths).sort();
+  }, [rows]);
+
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
@@ -553,13 +611,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const columnsStatistic: ColumnsStatistic = useMemo(
     () => statisticData?.stats ?? [],
     [statisticData],
-  );
-
-  const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
-    {
-      defaultValue: DEFAULT_TRACES_PAGE_COLUMNS,
-    },
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
@@ -574,6 +625,16 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   >(COLUMNS_SCORES_ORDER_KEY, {
     defaultValue: [],
   });
+
+  const [metadataColumnsOrder, setMetadataColumnsOrder] = useLocalStorageState<
+    string[]
+  >("traces-metadata-columns-order", {
+    defaultValue: [],
+  });
+  const [metadataMainColumnOrder, setMetadataMainColumnOrder] =
+    useLocalStorageState<string[]>("traces-metadata-main-column-order", {
+      defaultValue: [COLUMN_METADATA_ID],
+    });
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -602,10 +663,19 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       }));
   }, [spanFeedbackScoresData?.scores, type]);
 
+  const dynamicMetadataColumns = useMemo(() => {
+    const paths = metadataPaths ?? [];
+    const normalizedPaths = normalizeMetadataPaths(paths);
+    return buildDynamicMetadataColumns(normalizedPaths);
+  }, [metadataPaths]);
+
+  // Only include feedback scores in dynamic columns cache (auto-selects new ones)
+  // Metadata columns are NOT auto-selected - users must manually choose them
   const dynamicColumnsIds = useMemo(
     () => [
       ...dynamicScoresColumns.map((c) => c.id),
       ...dynamicSpanScoresColumns.map((c) => c.id),
+      // Note: metadata columns are NOT included here - they won't be auto-selected
     ],
     [dynamicScoresColumns, dynamicSpanScoresColumns],
   );
@@ -672,6 +742,58 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return feedbackScoresColumns;
   }, [dynamicScoresColumns, dynamicSpanScoresColumns, type]);
 
+  // Metadata main column (single "Metadata" column)
+  const metadataMainColumnData = useMemo(() => {
+    return [
+      {
+        id: COLUMN_METADATA_ID,
+        label: "Metadata",
+        type: COLUMN_TYPE.dictionary,
+        accessorFn: (row) =>
+          isObject(row.metadata)
+            ? JSON.stringify(row.metadata, null, 2)
+            : row.metadata,
+        cell: CodeCell as never,
+      },
+    ] as ColumnData<BaseTraceData>[];
+  }, []);
+
+  const metadataColumnsData = useMemo(() => {
+    // Add individual metadata field columns (without main "Metadata" column)
+    const fieldColumns = dynamicMetadataColumns.map(({ label, id }) => {
+      // Change label from ".ITEM" to "Metadata.ITEM"
+      const columnLabel = label.startsWith(".")
+        ? `Metadata${label}`
+        : `Metadata.${label}`;
+
+      return {
+        id,
+        label: columnLabel,
+        type: COLUMN_TYPE.string,
+        sortable: false, // Disable sorting for metadata columns - backend may not fully support it yet
+        accessorFn: (row) => {
+          // Use lodash/get to extract nested value
+          // This will return undefined if the path doesn't exist (e.g.,
+          // LLM span doesn't have metadata.tool_name)
+          const value = get(row, id);
+
+          // Handle missing values - show "-" if field doesn't exist
+          // This happens when viewing spans of different types
+          if (value === undefined || value === null) {
+            return "-";
+          }
+
+          // Return raw value - AutodetectCell will handle type detection
+          // and display primitives as text, objects/arrays as JSON
+          return value;
+        },
+        cell: AutodetectCell as never,
+      };
+    }) as ColumnData<BaseTraceData>[];
+
+    return fieldColumns;
+  }, [dynamicMetadataColumns]);
+
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
@@ -734,6 +856,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const columnData = useMemo(() => {
     return [
+      {
+        id: COLUMN_ID_ID,
+        label: "ID",
+        type: COLUMN_TYPE.string,
+        cell: IdCell as never,
+        sortable: true,
+      },
       ...SHARED_COLUMNS,
       ...(type === TRACE_DATA_TYPE.traces
         ? [
@@ -760,6 +889,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 asId: true,
               },
               explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_threads],
+            },
+            {
+              id: COLUMN_EXPERIMENT_ID,
+              label: "Experiment",
+              type: COLUMN_TYPE.string,
+              cell: ResourceCell as never,
+              customMeta: {
+                nameKey: "experiment.name",
+                idKey: "experiment.dataset_id",
+                resource: RESOURCE_TYPE.experiment,
+                getSearch: (row: BaseTraceData) => ({
+                  experiments: [get(row, "experiment.id")],
+                }),
+              },
             },
           ]
         : []),
@@ -806,6 +949,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
+      // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
   }, [type, handleThreadIdClick, isGuardrailsEnabled]);
 
@@ -825,8 +969,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               type: COLUMN_TYPE.string,
             },
             {
-              id: "experiment_id",
-              label: "Experiment ID",
+              id: COLUMN_EXPERIMENT_ID,
+              label: "Experiment",
               type: COLUMN_TYPE.string,
             },
             {
@@ -859,6 +1003,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         id: "error_info",
         label: "Errors",
         type: COLUMN_TYPE.errors,
+      },
+      {
+        id: COLUMN_METADATA_ID,
+        label: "Metadata",
+        type: COLUMN_TYPE.dictionary,
       },
       {
         id: COLUMN_FEEDBACK_SCORES_ID,
@@ -894,17 +1043,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Trace | Span>(),
-      mapColumnDataFields<BaseTraceData, Span | Trace>({
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
-        sortable: isColumnSortable(COLUMN_ID_ID, sortableBy),
-      }),
       ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(columnData, {
         columnsOrder,
         selectedColumns,
@@ -918,15 +1056,34 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           sortableColumns: sortableBy,
         },
       ),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        metadataMainColumnData,
+        {
+          columnsOrder: metadataMainColumnOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
+      ...convertColumnDataToColumn<BaseTraceData, Span | Trace>(
+        metadataColumnsData,
+        {
+          columnsOrder: metadataColumnsOrder,
+          selectedColumns,
+          sortableColumns: sortableBy,
+        },
+      ),
     ];
   }, [
-    handleRowClick,
     sortableBy,
     columnData,
     columnsOrder,
     selectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
+    metadataMainColumnData,
+    metadataMainColumnOrder,
+    metadataColumnsData,
+    metadataColumnsOrder,
   ]);
 
   const columnsToExport = useMemo(() => {
@@ -975,20 +1132,64 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
+  // Handler to update combined order for Feedback scores and Metadata main column
+  const handleCombinedOrderChange = useCallback(
+    (newOrder: string[]) => {
+      // Split the combined order back into scores and metadata orders
+      const scoresIds = scoresColumnsData.map((col) => col.id);
+      const metadataIds = metadataMainColumnData.map((col) => col.id);
+
+      const newScoresOrder = newOrder.filter((id) => scoresIds.includes(id));
+      const newMetadataOrder = newOrder.filter((id) =>
+        metadataIds.includes(id),
+      );
+
+      setScoresColumnsOrder(newScoresOrder);
+      setMetadataMainColumnOrder(newMetadataOrder);
+    },
+    [
+      scoresColumnsData,
+      metadataMainColumnData,
+      setScoresColumnsOrder,
+      setMetadataMainColumnOrder,
+    ],
+  );
+
   const columnSections = useMemo(() => {
-    return [
+    // Combine Feedback scores and Metadata main column into one section
+    const combinedColumns = [...scoresColumnsData, ...metadataMainColumnData];
+    const combinedOrder = [...scoresColumnsOrder, ...metadataMainColumnOrder];
+
+    const sections = [
       {
         title: "Feedback scores",
-        columns: scoresColumnsData,
-        order: scoresColumnsOrder,
-        onOrderChange: setScoresColumnsOrder,
+        columns: combinedColumns,
+        order: combinedOrder,
+        onOrderChange: handleCombinedOrderChange,
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
-  if (isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending) {
-    return <Loader />;
-  }
+    // Add Metadata fields section if there are metadata columns
+    if (metadataColumnsData.length > 0) {
+      sections.push({
+        title: "Metadata fields",
+        columns: metadataColumnsData,
+        order: metadataColumnsOrder,
+        onOrderChange: setMetadataColumnsOrder,
+      });
+    }
+
+    return sections;
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    metadataMainColumnData,
+    metadataMainColumnOrder,
+    handleCombinedOrderChange,
+    metadataColumnsData,
+    metadataColumnsOrder,
+    setMetadataColumnsOrder,
+  ]);
 
   return (
     <>
@@ -1018,6 +1219,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -1064,51 +1266,57 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
             sections={columnSections}
+            excludeFromSelectAll={
+              metadataColumnsData.length > 0
+                ? metadataColumnsData.map((col) => col.id)
+                : []
+            }
           ></ColumnsButton>
         </div>
       </PageBodyStickyContainer>
 
-      {noData && rows.length === 0 && page === 1 ? (
-        <NoTracesPage />
-      ) : (
-        <>
-          <DataTable
-            columns={columns}
-            columnsStatistic={columnsStatistic}
-            data={rows}
-            onRowClick={handleRowClick}
-            activeRowId={activeRowId ?? ""}
-            sortConfig={sortConfig}
-            resizeConfig={resizeConfig}
-            selectionConfig={{
-              rowSelection,
-              setRowSelection,
-            }}
-            getRowId={getRowId}
-            rowHeight={height as ROW_HEIGHT}
-            columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
-            noData={<DataTableNoData title={noDataText} />}
-            TableWrapper={PageBodyStickyTableWrapper}
-            stickyHeader
-            meta={meta}
+      <DataTableStateHandler
+        isLoading={isTableLoading}
+        isEmpty={showEmptyState}
+        emptyState={<NoTracesPage />}
+      >
+        <DataTable
+          columns={columns}
+          columnsStatistic={columnsStatistic}
+          data={rows}
+          onRowClick={handleRowClick}
+          activeRowId={activeRowId ?? ""}
+          sortConfig={sortConfig}
+          resizeConfig={resizeConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          rowHeight={height as ROW_HEIGHT}
+          columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
+          noData={<DataTableNoData title={noDataText} />}
+          TableWrapper={PageBodyStickyTableWrapper}
+          stickyHeader
+          meta={meta}
+          showLoadingOverlay={isPlaceholderData && isFetching}
+        />
+        <PageBodyStickyContainer
+          className="py-4"
+          direction="horizontal"
+          limitWidth
+        >
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+            supportsTruncation
+            truncationEnabled={truncationEnabled}
           />
-          <PageBodyStickyContainer
-            className="py-4"
-            direction="horizontal"
-            limitWidth
-          >
-            <DataTablePagination
-              page={page as number}
-              pageChange={setPage}
-              size={size as number}
-              sizeChange={setSize}
-              total={data?.total ?? 0}
-              supportsTruncation
-              truncationEnabled={truncationEnabled}
-            />
-          </PageBodyStickyContainer>
-        </>
-      )}
+        </PageBodyStickyContainer>
+      </DataTableStateHandler>
       <TraceDetailsPanel
         projectId={projectId}
         traceId={traceId!}

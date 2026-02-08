@@ -1,11 +1,10 @@
-import React from "react";
-import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
+import React, { useCallback } from "react";
+import { ColumnPinningState, ColumnSort, Row } from "@tanstack/react-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { ROW_HEIGHT, OnChangeFn } from "@/types/shared";
 import { Experiment } from "@/types/datasets";
 import { Card } from "@/components/ui/card";
 import DataTable from "@/components/shared/DataTable/DataTable";
-import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { DataTableWrapperProps } from "@/components/shared/DataTable/DataTableWrapper";
 import { TABLE_WRAPPER_ATTRIBUTE } from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -13,7 +12,7 @@ import { TABLE_WRAPPER_ATTRIBUTE } from "@/components/layout/PageBodyStickyTable
 export const getRowId = (e: Experiment) => e.id;
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: ["name"],
+  left: [],
   right: [],
 };
 
@@ -42,6 +41,8 @@ interface CompareOptimizationsTrialsTableProps {
   onSortChange: OnChangeFn<ColumnSort[]>;
   columnsWidth: Record<string, number>;
   onColumnsWidthChange: OnChangeFn<Record<string, number>>;
+  highlightedTrialId?: string;
+  showLoadingOverlay?: boolean;
 }
 
 const CompareOptimizationsTrialsTable: React.FC<
@@ -56,7 +57,19 @@ const CompareOptimizationsTrialsTable: React.FC<
   onSortChange,
   columnsWidth,
   onColumnsWidthChange,
+  highlightedTrialId,
+  showLoadingOverlay,
 }) => {
+  const getRowClassName = useCallback(
+    (row: Row<Experiment>) => {
+      if (highlightedTrialId && row.id === highlightedTrialId) {
+        return "comet-table-row-best";
+      }
+      return "";
+    },
+    [highlightedTrialId],
+  );
+
   return (
     <Card className="h-full flex-1 overflow-hidden">
       <DataTable
@@ -74,12 +87,13 @@ const CompareOptimizationsTrialsTable: React.FC<
           onColumnResize: onColumnsWidthChange,
         }}
         getRowId={getRowId}
+        getRowClassName={getRowClassName}
         rowHeight={rowHeight}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={StickyTableWrapperWithBorder}
-        TableBody={DataTableVirtualBody}
         stickyHeader
+        showLoadingOverlay={showLoadingOverlay}
       />
     </Card>
   );
