@@ -104,7 +104,6 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     [visiblePaths, searchQuery, pathToExpand, searchTerm, isArrayAccess],
   );
 
-
   const entries = useMemo(
     () =>
       Array.isArray(data)
@@ -322,7 +321,7 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
-        className="min-w-[470px] w-2/3 max-w-[600px] p-0"
+        className="w-2/3 min-w-[470px] max-w-[600px] p-0"
         align="start"
         side="bottom"
         onOpenAutoFocus={(e) => e.preventDefault()}

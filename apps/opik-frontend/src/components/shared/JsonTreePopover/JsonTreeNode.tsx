@@ -135,7 +135,11 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
         )}
         <span
           className="comet-body-s truncate text-[var(--key-color)]"
-          style={{ "--key-color": VALUE_TYPE_STYLES.key.color } as React.CSSProperties}
+          style={
+            {
+              "--key-color": VALUE_TYPE_STYLES.key.color,
+            } as React.CSSProperties
+          }
         >
           {nodeKey}
         </span>
@@ -144,7 +148,11 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
             <span className="comet-body-s text-muted-foreground">:</span>
             <span
               className="comet-body-s truncate text-[var(--value-color)]"
-              style={{ "--value-color": getValueTypeStyle(value).color } as React.CSSProperties}
+              style={
+                {
+                  "--value-color": getValueTypeStyle(value).color,
+                } as React.CSSProperties
+              }
             >
               {getValuePreview(value)}
             </span>

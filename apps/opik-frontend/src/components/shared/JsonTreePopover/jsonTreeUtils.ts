@@ -58,7 +58,6 @@ export const parseSearchQuery = (searchQuery: string): ParsedSearchQuery => {
   return { pathToExpand: null, searchTerm: searchQuery };
 };
 
-
 export const isArrayAccessMode = (searchQuery: string): boolean => {
   if (!searchQuery) return false;
   const lastBracketIndex = searchQuery.lastIndexOf("[");
@@ -162,7 +161,9 @@ export const filterVisiblePaths = (
           const childPart = item.path.slice(childPrefix.length);
           // Only match the immediate child name (before any further dots or brackets)
           const immediateChild = childPart.split(/[.[]/)[0];
-          return immediateChild.toLowerCase().includes(searchTerm.toLowerCase());
+          return immediateChild
+            .toLowerCase()
+            .includes(searchTerm.toLowerCase());
         }
         return true;
       }
@@ -203,11 +204,11 @@ export const findFirstChildPath = (
 };
 
 export const VALUE_TYPE_STYLES = {
-  key: { color: "var(--color-green)" }, 
-  object: { color: "var(--chart-tick-stroke)" }, 
-  array: { color: "var(--chart-tick-stroke)" }, 
-  string: { color: "#056BD1" }, 
-  number: { color: "var(--color-purple)" }, 
+  key: { color: "var(--color-green)" },
+  object: { color: "var(--chart-tick-stroke)" },
+  array: { color: "var(--chart-tick-stroke)" },
+  string: { color: "#056BD1" },
+  number: { color: "var(--color-purple)" },
   boolean: { color: "var(--color-purple)" },
   null: { color: "var(--muted-foreground)" },
   default: {},
