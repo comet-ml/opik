@@ -8,6 +8,9 @@ import {
   getValuePreview,
 } from "./jsonTreeUtils";
 
+const INDENT_PER_DEPTH = 16;
+const BASE_PADDING_LEFT = 4;
+
 const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
   nodeKey,
   value,
@@ -21,7 +24,7 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
   onFocusPath,
 }) => {
   const nodeRef = useRef<HTMLDivElement>(null);
-  const indent = depth * 16;
+  const indent = depth * INDENT_PER_DEPTH + BASE_PADDING_LEFT;
   const isExpanded = expandedPaths.has(path);
   const isFocused = focusedPath === path;
   const isExpandable =
@@ -111,11 +114,11 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
       <div
         ref={nodeRef}
         className={cn(
-          "flex items-center gap-1 py-1 px-2 rounded cursor-pointer",
+          "flex items-center gap-1 py-1 pr-2 rounded cursor-pointer pl-[var(--node-indent)]",
           "hover:bg-muted transition-colors font-mono",
           isFocused && "bg-muted",
         )}
-        style={{ paddingLeft: indent + 4 }}
+        style={{ "--node-indent": `${indent}px` } as React.CSSProperties}
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
       >
@@ -130,15 +133,18 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
         ) : (
           <span className="w-5 shrink-0" />
         )}
-        <span className="comet-body-s truncate" style={VALUE_TYPE_STYLES.key}>
+        <span
+          className="comet-body-s truncate text-[var(--key-color)]"
+          style={{ "--key-color": VALUE_TYPE_STYLES.key.color } as React.CSSProperties}
+        >
           {nodeKey}
         </span>
         {showValues && (
           <>
             <span className="comet-body-s text-muted-foreground">:</span>
             <span
-              className="comet-body-s truncate"
-              style={getValueTypeStyle(value)}
+              className="comet-body-s truncate text-[var(--value-color)]"
+              style={{ "--value-color": getValueTypeStyle(value).color } as React.CSSProperties}
             >
               {getValuePreview(value)}
             </span>

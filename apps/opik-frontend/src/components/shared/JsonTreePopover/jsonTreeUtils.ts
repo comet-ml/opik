@@ -58,16 +58,7 @@ export const parseSearchQuery = (searchQuery: string): ParsedSearchQuery => {
   return { pathToExpand: null, searchTerm: searchQuery };
 };
 
-/**
- * Determines if the search query is in array access mode.
- * Array access mode is when "[" is the last separator and query doesn't end with "]".
- *
- * Examples:
- * - "tags[" -> true
- * - "tags[0" -> true
- * - "tags[0]" -> false
- * - "user.name" -> false
- */
+
 export const isArrayAccessMode = (searchQuery: string): boolean => {
   if (!searchQuery) return false;
   const lastBracketIndex = searchQuery.lastIndexOf("[");
@@ -211,19 +202,13 @@ export const findFirstChildPath = (
   return firstChild?.path ?? null;
 };
 
-// Color styles using CSS variables from the design system
-// Keys: #11A675 (green) - using --color-green
-// Object/Array: #373D4D - using --chart-tick-stroke
-// Strings: #056BD1 (blue) - custom color close to system blue
-// Numbers/Booleans: #7C3AED (purple) - using --color-purple
-
 export const VALUE_TYPE_STYLES = {
-  key: { color: "var(--color-green)" }, // #11A675 equivalent
-  object: { color: "var(--chart-tick-stroke)" }, // #373D4D
-  array: { color: "var(--chart-tick-stroke)" }, // #373D4D
-  string: { color: "#056BD1" }, // Strings blue
-  number: { color: "var(--color-purple)" }, // #7C3AED equivalent
-  boolean: { color: "var(--color-purple)" }, // #7C3AED equivalent
+  key: { color: "var(--color-green)" }, 
+  object: { color: "var(--chart-tick-stroke)" }, 
+  array: { color: "var(--chart-tick-stroke)" }, 
+  string: { color: "#056BD1" }, 
+  number: { color: "var(--color-purple)" }, 
+  boolean: { color: "var(--color-purple)" },
   null: { color: "var(--muted-foreground)" },
   default: {},
 } as const;
