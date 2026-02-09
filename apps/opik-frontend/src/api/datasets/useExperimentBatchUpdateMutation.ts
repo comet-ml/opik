@@ -8,7 +8,10 @@ import { useToast } from "@/components/ui/use-toast";
 
 type UseExperimentBatchUpdateMutationParams = {
   ids: string[];
-  experiment: Partial<Experiment>;
+  experiment: Partial<Experiment> & {
+    tagsToAdd?: string[];
+    tagsToRemove?: string[];
+  };
   mergeTags?: boolean;
 };
 
@@ -22,9 +25,16 @@ const useExperimentBatchUpdateMutation = () => {
       experiment,
       mergeTags = false,
     }: UseExperimentBatchUpdateMutationParams) => {
+      const { tags, tagsToAdd, tagsToRemove, ...rest } = experiment;
+
+      const payload: Record<string, unknown> = { ...rest };
+      if (tags !== undefined) payload.tags = tags;
+      if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
+      if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
+
       const { data } = await api.patch(`${EXPERIMENTS_REST_ENDPOINT}batch`, {
         ids,
-        update: experiment,
+        update: payload,
         merge_tags: mergeTags,
       });
       return data;

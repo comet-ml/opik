@@ -26,6 +26,8 @@ public record DatasetItemUpdate(
         @Schema(description = "Dataset item data", implementation = JsonNode.class, ref = "JsonNode") Map<String, JsonNode> data,
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "Dataset item description") String description,
         @Schema(description = "Tags") Set<String> tags,
+        @Schema(description = "Tags to add") Set<String> tagsToAdd,
+        @Schema(description = "Tags to remove") Set<String> tagsToRemove,
         @Schema(description = "Evaluators") List<@Valid EvaluatorItem> evaluators,
         @Schema(description = "Execution policy") @Valid ExecutionPolicy executionPolicy,
         @Schema(description = "When true, clears the item-level execution policy (falls back to dataset-level)") Boolean clearExecutionPolicy) {

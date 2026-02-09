@@ -1148,7 +1148,19 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                <if(tags)><if(merge_tags)> arrayDistinct(arrayConcat(tags, :tags)) <else> :tags <endif> <else> tags <endif> as tags,
+                <if(tags_to_add || tags_to_remove)>
+                    <if(tags_to_add && tags_to_remove)>
+                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), tags), :tags_to_add))
+                    <elseif(tags_to_add)>
+                        arrayDistinct(arrayConcat(tags, :tags_to_add))
+                    <elseif(tags_to_remove)>
+                        arrayFilter(x -> NOT has(:tags_to_remove, x), tags)
+                    <endif>
+                <elseif(tags)>
+                    <if(merge_tags)> arrayDistinct(arrayConcat(tags, :tags)) <else> :tags <endif>
+                <else>
+                    tags
+                <endif> as tags,
                 created_by,
                 :user_name as last_updated_by,
                 prompt_version_id,
@@ -2047,9 +2059,17 @@ class ExperimentDAO {
             template.add("metadata", experimentUpdate.metadata().toString());
         }
 
-        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
-        // because an EMPTY set is a valid value here, and it is used to remove tags
-        if (experimentUpdate.tags() != null) {
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (experimentUpdate.tagsToAdd() != null || experimentUpdate.tagsToRemove() != null) {
+            if (experimentUpdate.tagsToAdd() != null) {
+                template.add("tags_to_add", true);
+            }
+            if (experimentUpdate.tagsToRemove() != null) {
+                template.add("tags_to_remove", true);
+            }
+        }
+        // Old approach: tags with mergeTags boolean (backwards compatible)
+        else if (experimentUpdate.tags() != null) {
             template.add("tags", true);
             template.add("merge_tags", mergeTags);
         }
@@ -2078,9 +2098,17 @@ class ExperimentDAO {
             statement.bind("metadata", experimentUpdate.metadata().toString());
         }
 
-        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
-        // because an EMPTY set is a valid value here, and it is used to remove tags
-        if (experimentUpdate.tags() != null) {
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (experimentUpdate.tagsToAdd() != null || experimentUpdate.tagsToRemove() != null) {
+            if (experimentUpdate.tagsToAdd() != null) {
+                statement.bind("tags_to_add", experimentUpdate.tagsToAdd().toArray(String[]::new));
+            }
+            if (experimentUpdate.tagsToRemove() != null) {
+                statement.bind("tags_to_remove", experimentUpdate.tagsToRemove().toArray(String[]::new));
+            }
+        }
+        // Old approach: tags with mergeTags boolean (backwards compatible)
+        else if (experimentUpdate.tags() != null) {
             statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
         }
 

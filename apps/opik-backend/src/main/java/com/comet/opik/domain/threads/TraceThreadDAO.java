@@ -620,7 +620,19 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.last_updated_by,
                 tt.created_at,
                 now64(6) as last_updated_at,
-                <if(tags)><if(merge_tags)>arrayConcat(tt.tags, :tags)<else>:tags<endif><else>tt.tags<endif> as tags,
+                <if(tags_to_add || tags_to_remove)>
+                    <if(tags_to_add && tags_to_remove)>
+                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), tt.tags), :tags_to_add))
+                    <elseif(tags_to_add)>
+                        arrayDistinct(arrayConcat(tt.tags, :tags_to_add))
+                    <elseif(tags_to_remove)>
+                        arrayFilter(x -> NOT has(:tags_to_remove, x), tt.tags)
+                    <endif>
+                <elseif(tags)>
+                    <if(merge_tags)>arrayDistinct(arrayConcat(tt.tags, :tags))<else>:tags<endif>
+                <else>
+                    tt.tags
+                <endif> as tags,
                 tt.sampling_per_rule,
                 tt.scored_at
             FROM trace_threads tt
@@ -661,6 +673,10 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     template.add("tags", tags.toString());
                     template.add("merge_tags", mergeTags);
                 });
+        Optional.ofNullable(update.tagsToAdd())
+                .ifPresent(tagsToAdd -> template.add("tags_to_add", tagsToAdd.toString()));
+        Optional.ofNullable(update.tagsToRemove())
+                .ifPresent(tagsToRemove -> template.add("tags_to_remove", tagsToRemove.toString()));
 
         return template;
     }
@@ -668,5 +684,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     private void bindBulkUpdateParams(TraceThreadUpdate update, Statement statement) {
         Optional.ofNullable(update.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        Optional.ofNullable(update.tagsToAdd())
+                .ifPresent(tagsToAdd -> statement.bind("tags_to_add", tagsToAdd.toArray(String[]::new)));
+        Optional.ofNullable(update.tagsToRemove())
+                .ifPresent(tagsToRemove -> statement.bind("tags_to_remove", tagsToRemove.toArray(String[]::new)));
     }
 }

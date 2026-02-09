@@ -14,7 +14,10 @@ import {
 type UseDatasetItemBatchUpdateMutationParams = {
   datasetId: string;
   itemIds: string[];
-  item: Partial<DatasetItem>;
+  item: Partial<DatasetItem> & {
+    tagsToAdd?: string[];
+    tagsToRemove?: string[];
+  };
   mergeTags?: boolean;
   isAllItemsSelected?: boolean;
   filters?: Filters;
@@ -37,6 +40,14 @@ const useDatasetItemBatchUpdateMutation = () => {
       search,
       batchGroupId,
     }: UseDatasetItemBatchUpdateMutationParams) => {
+      const { tags, tagsToAdd, tagsToRemove, ...rest } = item;
+
+      const updatePayload: Record<string, unknown> = { ...rest };
+      if (tags !== undefined) updatePayload.tags = tags;
+      if (tagsToAdd !== undefined) updatePayload.tags_to_add = tagsToAdd;
+      if (tagsToRemove !== undefined)
+        updatePayload.tags_to_remove = tagsToRemove;
+
       let payload;
 
       if (isAllItemsSelected) {
@@ -48,12 +59,16 @@ const useDatasetItemBatchUpdateMutation = () => {
         payload = {
           dataset_id: datasetId,
           filters: processFiltersArray(combinedFilters),
-          update: item,
+          update: updatePayload,
           merge_tags: mergeTags,
           ...(batchGroupId && { batch_group_id: batchGroupId }),
         };
       } else {
-        payload = { ids: itemIds, update: item, merge_tags: mergeTags };
+        payload = {
+          ids: itemIds,
+          update: updatePayload,
+          merge_tags: mergeTags,
+        };
       }
 
       const { data } = await api.patch(

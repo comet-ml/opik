@@ -2438,7 +2438,19 @@ class TraceDAOImpl implements TraceDAO {
                 <if(input)> :input <else> t.input <endif> as input,
                 <if(output)> :output <else> t.output <endif> as output,
                 <if(metadata)> :metadata <else> t.metadata <endif> as metadata,
-                <if(tags)><if(merge_tags)>arrayConcat(t.tags, :tags)<else>:tags<endif><else>t.tags<endif> as tags,
+                <if(tags_to_add || tags_to_remove)>
+                    <if(tags_to_add && tags_to_remove)>
+                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), t.tags), :tags_to_add))
+                    <elseif(tags_to_add)>
+                        arrayDistinct(arrayConcat(t.tags, :tags_to_add))
+                    <elseif(tags_to_remove)>
+                        arrayFilter(x -> NOT has(:tags_to_remove, x), t.tags)
+                    <endif>
+                <elseif(tags)>
+                    <if(merge_tags)>arrayDistinct(arrayConcat(t.tags, :tags))<else>:tags<endif>
+                <else>
+                    t.tags
+                <endif> as tags,
                 <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
                 t.created_at,
                 t.created_by,
@@ -3648,11 +3660,24 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(input -> template.add("input", input.toString()));
         Optional.ofNullable(traceUpdate.output())
                 .ifPresent(output -> template.add("output", output.toString()));
-        Optional.ofNullable(traceUpdate.tags())
-                .ifPresent(tags -> {
-                    template.add("tags", tags.toString());
-                    template.add("merge_tags", mergeTags);
-                });
+
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (traceUpdate.tagsToAdd() != null || traceUpdate.tagsToRemove() != null) {
+            if (traceUpdate.tagsToAdd() != null) {
+                template.add("tags_to_add", true);
+            }
+            if (traceUpdate.tagsToRemove() != null) {
+                template.add("tags_to_remove", true);
+            }
+        }
+        // Old approach: tags with mergeTags boolean (backwards compatible)
+        else {
+            Optional.ofNullable(traceUpdate.tags())
+                    .ifPresent(tags -> {
+                        template.add("tags", tags.toString());
+                        template.add("merge_tags", mergeTags);
+                    });
+        }
         Optional.ofNullable(traceUpdate.metadata())
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
         Optional.ofNullable(traceUpdate.endTime())
@@ -3684,8 +3709,22 @@ class TraceDAOImpl implements TraceDAO {
                     statement.bind("output", outputValue);
                     statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
                 });
-        Optional.ofNullable(traceUpdate.tags())
-                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (traceUpdate.tagsToAdd() != null || traceUpdate.tagsToRemove() != null) {
+            if (traceUpdate.tagsToAdd() != null) {
+                statement.bind("tags_to_add", traceUpdate.tagsToAdd().toArray(String[]::new));
+            }
+            if (traceUpdate.tagsToRemove() != null) {
+                statement.bind("tags_to_remove", traceUpdate.tagsToRemove().toArray(String[]::new));
+            }
+        }
+        // Old approach: tags (backwards compatible)
+        else {
+            Optional.ofNullable(traceUpdate.tags())
+                    .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        }
+
         Optional.ofNullable(traceUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(traceUpdate.metadata())

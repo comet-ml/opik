@@ -2465,7 +2465,19 @@ class SpanDAO {
                 <if(provider)> :provider <else> s.provider <endif> as provider,
                 <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
                 <if(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
-                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags,
+                <if(tags_to_add || tags_to_remove)>
+                    <if(tags_to_add && tags_to_remove)>
+                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), s.tags), :tags_to_add))
+                    <elseif(tags_to_add)>
+                        arrayDistinct(arrayConcat(s.tags, :tags_to_add))
+                    <elseif(tags_to_remove)>
+                        arrayFilter(x -> NOT has(:tags_to_remove, x), s.tags)
+                    <endif>
+                <elseif(tags)>
+                    <if(merge_tags)>arrayDistinct(arrayConcat(s.tags, :tags))<else>:tags<endif>
+                <else>
+                    s.tags
+                <endif> as tags,
                 <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> s.usage <endif> as usage,
                 <if(error_info)> :error_info <else> s.error_info <endif> as error_info,
                 s.created_at,
@@ -2526,6 +2538,10 @@ class SpanDAO {
                     template.add("tags", tags.toString());
                     template.add("merge_tags", mergeTags);
                 });
+        Optional.ofNullable(spanUpdate.tagsToAdd())
+                .ifPresent(tagsToAdd -> template.add("tags_to_add", tagsToAdd.toString()));
+        Optional.ofNullable(spanUpdate.tagsToRemove())
+                .ifPresent(tagsToRemove -> template.add("tags_to_remove", tagsToRemove.toString()));
         Optional.ofNullable(spanUpdate.metadata())
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
         if (StringUtils.isNotBlank(spanUpdate.model())) {
@@ -2570,6 +2586,10 @@ class SpanDAO {
                 });
         Optional.ofNullable(spanUpdate.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        Optional.ofNullable(spanUpdate.tagsToAdd())
+                .ifPresent(tagsToAdd -> statement.bind("tags_to_add", tagsToAdd.toArray(String[]::new)));
+        Optional.ofNullable(spanUpdate.tagsToRemove())
+                .ifPresent(tagsToRemove -> statement.bind("tags_to_remove", tagsToRemove.toArray(String[]::new)));
         Optional.ofNullable(spanUpdate.usage())
                 .ifPresent(usage -> {
                     var usageKeys = new ArrayList<String>();

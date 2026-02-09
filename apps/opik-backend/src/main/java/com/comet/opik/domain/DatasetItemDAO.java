@@ -851,7 +851,19 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 s.created_by,
                 :user_name as last_updated_by,
                 <if(data)> :data <else> s.data <endif> as data,
-                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
+                <if(tags_to_add || tags_to_remove)>
+                    <if(tags_to_add && tags_to_remove)>
+                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), s.tags), :tags_to_add))
+                    <elseif(tags_to_add)>
+                        arrayDistinct(arrayConcat(s.tags, :tags_to_add))
+                    <elseif(tags_to_remove)>
+                        arrayFilter(x -> NOT has(:tags_to_remove, x), s.tags)
+                    <endif>
+                <elseif(tags)>
+                    <if(merge_tags)>arrayDistinct(arrayConcat(s.tags, :tags))<else>:tags<endif>
+                <else>
+                    s.tags
+                <endif> as tags
             FROM dataset_items AS s
             WHERE s.workspace_id = :workspace_id
             <if(ids)> AND s.id IN :ids <endif>
@@ -1670,11 +1682,24 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
         Optional.ofNullable(update.data())
                 .ifPresent(data -> template.add("data", data.toString()));
-        Optional.ofNullable(update.tags())
-                .ifPresent(tags -> {
-                    template.add("tags", tags.toString());
-                    template.add("merge_tags", mergeTags);
-                });
+
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (update.tagsToAdd() != null || update.tagsToRemove() != null) {
+            if (update.tagsToAdd() != null) {
+                template.add("tags_to_add", true);
+            }
+            if (update.tagsToRemove() != null) {
+                template.add("tags_to_remove", true);
+            }
+        }
+        // Old approach: tags with mergeTags boolean (backwards compatible)
+        else {
+            Optional.ofNullable(update.tags())
+                    .ifPresent(tags -> {
+                        template.add("tags", tags.toString());
+                        template.add("merge_tags", mergeTags);
+                    });
+        }
 
         return template;
     }
@@ -1688,8 +1713,21 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 .ifPresent(metadata -> statement.bind("metadata", DatasetItemResultMapper.getOrDefault(metadata)));
         Optional.ofNullable(update.data())
                 .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
-        Optional.ofNullable(update.tags())
-                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (update.tagsToAdd() != null || update.tagsToRemove() != null) {
+            if (update.tagsToAdd() != null) {
+                statement.bind("tags_to_add", update.tagsToAdd().toArray(String[]::new));
+            }
+            if (update.tagsToRemove() != null) {
+                statement.bind("tags_to_remove", update.tagsToRemove().toArray(String[]::new));
+            }
+        }
+        // Old approach: tags (backwards compatible)
+        else {
+            Optional.ofNullable(update.tags())
+                    .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        }
     }
 
     @Override

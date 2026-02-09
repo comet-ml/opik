@@ -28,6 +28,8 @@ public record TraceUpdate(
         @Schema(implementation = JsonListString.class) JsonNode output,
         @Schema(implementation = JsonListString.class) JsonNode metadata,
         Set<String> tags,
+        Set<String> tagsToAdd,
+        Set<String> tagsToRemove,
         ErrorInfo errorInfo,
         String threadId,
         @PositiveOrZero Double ttft) {
