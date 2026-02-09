@@ -39,8 +39,10 @@ import {
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
+  searchThreadsWithFilters,
   searchAndWaitForDone,
   parseFilterString,
+  parseThreadFilterString,
 } from "@/utils/searchHelpers";
 import { SearchTimeoutError } from "@/errors";
 
@@ -1037,14 +1039,25 @@ export class OpikClient {
    * });
    * ```
    */
-  public searchTraces = async (options?: {
-    projectName?: string;
-    filterString?: string;
-    maxResults?: number;
-    truncate?: boolean;
-    waitForAtLeast?: number;
-    waitForTimeout?: number;
-  }): Promise<OpikApi.TracePublic[]> => {
+  private async executeSearch<T, TFilter>(
+    resourceType: "traces" | "threads",
+    options: {
+      projectName?: string;
+      filterString?: string;
+      maxResults?: number;
+      truncate?: boolean;
+      waitForAtLeast?: number;
+      waitForTimeout?: number;
+    },
+    parseFilters: (filterString?: string) => TFilter[] | null,
+    searchWithFilters: (
+      api: OpikApiClientTemp,
+      projectName: string,
+      filters: TFilter[] | null,
+      maxResults: number,
+      truncate: boolean
+    ) => Promise<T[]>
+  ): Promise<T[]> {
     const {
       projectName,
       filterString,
@@ -1052,9 +1065,9 @@ export class OpikClient {
       truncate = true,
       waitForAtLeast,
       waitForTimeout = 60,
-    } = options ?? {};
+    } = options;
 
-    logger.debug("Searching traces", {
+    logger.debug(`Searching ${resourceType}`, {
       projectName,
       filterString,
       maxResults,
@@ -1063,15 +1076,11 @@ export class OpikClient {
       waitForTimeout,
     });
 
-    // Parse filters
-    const filters = parseFilterString(filterString);
-
-    // Determine project name
+    const filters = parseFilters(filterString);
     const targetProject = projectName ?? this.config.projectName;
 
-    // Create search function
     const searchFn = () =>
-      searchTracesWithFilters(
+      searchWithFilters(
         this.api,
         targetProject,
         filters,
@@ -1079,7 +1088,6 @@ export class OpikClient {
         truncate
       );
 
-    // Execute with or without polling
     if (waitForAtLeast === undefined) {
       return await searchFn();
     }
@@ -1087,17 +1095,92 @@ export class OpikClient {
     const result = await searchAndWaitForDone(
       searchFn,
       waitForAtLeast,
-      waitForTimeout * 1000, // Convert to ms
-      5000 // 5 second poll interval
+      waitForTimeout * 1000,
+      5000
     );
 
     if (result.length < waitForAtLeast) {
       throw new SearchTimeoutError(
-        `Timeout after ${waitForTimeout} seconds: expected ${waitForAtLeast} traces, but only ${result.length} were found.`
+        `Timeout after ${waitForTimeout} seconds: expected ${waitForAtLeast} ${resourceType}, but only ${result.length} were found.`
       );
     }
 
     return result;
+  }
+
+  public searchTraces = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.TracePublic[]> => {
+    return this.executeSearch<OpikApi.TracePublic, OpikApi.TraceFilterPublic>(
+      "traces",
+      options ?? {},
+      parseFilterString,
+      searchTracesWithFilters
+    );
+  };
+
+  /**
+   * Search for threads in a project with optional filtering.
+   *
+   * Threads represent conversations or sessions that group related traces together.
+   * This method allows you to search and filter threads using Opik Query Language (OQL).
+   *
+   * @param options - Search options
+   * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
+   * @param options.filterString - Filter string using Opik Query Language (OQL).
+   *   Supports filtering by: id, status, feedback_scores, duration, number_of_messages, tags, metadata, etc.
+   *   Examples: 'status = "active"', 'feedback_scores.quality > 0.8', 'duration > 300'
+   * @param options.maxResults - Maximum number of threads to return (default: 1000)
+   * @param options.truncate - Whether to truncate large fields in the response (default: true)
+   * @param options.waitForAtLeast - If specified, polls until at least this many threads are found
+   * @param options.waitForTimeout - Timeout in seconds when using waitForAtLeast (default: 60)
+   * @returns Promise resolving to an array of threads
+   * @throws {SearchTimeoutError} If waitForAtLeast is specified and timeout is reached
+   *
+   * @example
+   * ```typescript
+   * // Get all threads in a project
+   * const threads = await client.searchThreads({ projectName: "My Project" });
+   *
+   * // Filter by status
+   * const activeThreads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   filterString: 'status = "active"'
+   * });
+   *
+   * // Filter by feedback score
+   * const highQualityThreads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   filterString: 'feedback_scores.quality > 0.8'
+   * });
+   *
+   * // Wait for at least 5 threads
+   * const threads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   waitForAtLeast: 5,
+   *   waitForTimeout: 30
+   * });
+   * ```
+   */
+  public searchThreads = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.TraceThread[]> => {
+    return this.executeSearch<OpikApi.TraceThread, OpikApi.TraceThreadFilter>(
+      "threads",
+      options ?? {},
+      parseThreadFilterString,
+      searchThreadsWithFilters
+    );
   };
 
   private logFeedbackScores(
