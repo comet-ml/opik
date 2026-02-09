@@ -17,7 +17,7 @@ The service uses LLMs (OpenAI, Anthropic, or Google) to analyze trace data and p
 - **Agent Framework**: Google ADK
 - **Session Storage**: MySQL (via Google ADK's DatabaseSessionService)
 - **Streaming**: Server-Sent Events (SSE)
-- **Authentication**: Comet session tokens (or development mode for local testing)
+- **Authentication**: Comet session tokens (pass-through to Opik backend's AuthFilter)
 - **Frontend Integration**: Frontend calls OpikAssist directly via nginx proxy at `/opik-assist/`
 
 ## Configuration
@@ -35,11 +35,8 @@ The service uses LLMs (OpenAI, Anthropic, or Google) to analyze trace data and p
 #### Optional
 - `PORT` - Server port (default: `8081`)
 - `URL_PREFIX` - URL prefix for all endpoints (default: `""`, production: `/opik-assist`)
-- `DEVELOPMENT_MODE` - Enable development mode to bypass authentication (default: `false`)
-- `DEV_USER_ID` - Default user ID for development mode
-- `DEV_WORKSPACE_NAME` - Default workspace name for development mode
-
-**Note**: The LLM model is hardcoded to `openai/gpt-4.1` and not configurable via environment variables.
+- `AGENT_MODEL` - LLM model to use (default: `openai/gpt-4.1`)
+- `AGENT_REASONING_EFFORT` - Reasoning effort for the model (optional, model-specific)
 
 #### Monitoring (Optional)
 - `SENTRY_DSN` - Sentry error monitoring DSN
@@ -96,7 +93,7 @@ These tables are created automatically on first connection.
 ## Known Limitations
 
 1. **OpenAI Only**: Currently restricted to OpenAI GPT-4.1 for simplicity
-2. **Development Mode**: Authentication bypassed locally (uses `DEVELOPMENT_MODE=true`)
+2. **Local Auth**: In standalone mode (no session token), uses `"default"` user ID
 3. **ADK Schema Migrations**: Not automatic - requires manual intervention when upgrading ADK
 
 ### Schema Migrations

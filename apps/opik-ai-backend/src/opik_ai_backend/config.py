@@ -47,6 +47,18 @@ class Settings(BaseSettings):
         alias="SESSION_SERVICE_URI",
     )
 
+    # Agent LLM configuration
+    agent_model: str = Field(
+        default="openai/gpt-4.1",
+        description="LLM model name for the agent (e.g., openai/gpt-4.1)",
+        alias="AGENT_MODEL",
+    )
+    agent_reasoning_effort: Optional[str] = Field(
+        default=None,
+        description="Reasoning effort for the model (optional, model-specific)",
+        alias="AGENT_REASONING_EFFORT",
+    )
+
     # CORS configuration
     allowed_origins: list[str] = Field(
         default=[

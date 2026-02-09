@@ -6,7 +6,7 @@ from .opik_backend_client import OpikBackendClient
 FEEDBACK_SCORE_NAME = "opikassist_user_feedback"
 
 
-def get_project_name_from_trace_id(
+async def get_project_name_from_trace_id(
     opik_client: OpikBackendClient, trace_id: str
 ) -> str:
     """
@@ -19,10 +19,10 @@ def get_project_name_from_trace_id(
     Returns:
         The project name
     """
-    return opik_client.get_project_name_from_trace(trace_id)
+    return await opik_client.get_project_name_from_trace(trace_id)
 
 
-def submit_feedback_to_opik(
+async def submit_feedback_to_opik(
     opik_client: OpikBackendClient,
     session_id: str,
     feedback_value: int,
@@ -43,7 +43,7 @@ def submit_feedback_to_opik(
     """
     try:
         # First, close the thread (required before submitting feedback)
-        opik_client.close_thread(thread_id=session_id, project_id=project_id)
+        await opik_client.close_thread(thread_id=session_id, project_id=project_id)
 
         # Then submit feedback score to the thread
         scores = [
@@ -56,7 +56,7 @@ def submit_feedback_to_opik(
             }
         ]
 
-        opik_client.log_thread_feedback_scores(scores=scores)
+        await opik_client.log_thread_feedback_scores(scores=scores)
 
         logger.info(
             f"Successfully submitted feedback {feedback_value} for session {session_id}"
@@ -67,7 +67,7 @@ def submit_feedback_to_opik(
         raise
 
 
-def delete_feedback_from_opik(
+async def delete_feedback_from_opik(
     opik_client: OpikBackendClient,
     session_id: str,
     trace_id: str,
@@ -84,9 +84,9 @@ def delete_feedback_from_opik(
         Exception: If the Opik API call fails or feedback not found
     """
     try:
-        project_name = opik_client.get_project_name_from_trace(trace_id)
+        project_name = await opik_client.get_project_name_from_trace(trace_id)
 
-        opik_client.delete_thread_feedback_scores(
+        await opik_client.delete_thread_feedback_scores(
             project_name=project_name,
             thread_id=session_id,
             names=[FEEDBACK_SCORE_NAME],

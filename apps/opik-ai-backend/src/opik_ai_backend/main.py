@@ -1,6 +1,8 @@
+import asyncio
 import json
 import os
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Literal, Optional, Tuple
 
@@ -11,6 +13,7 @@ if os.getenv("NEW_RELIC_LICENSE_KEY"):
 
     newrelic.agent.initialize()
 
+import aiohttp
 import sentry_sdk
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
@@ -386,6 +389,31 @@ def process_event_for_sse(event: Event) -> Optional[str]:
     return "".join(result_events) if result_events else None
 
 
+async def retry_middleware(
+    req: aiohttp.ClientRequest, handler: aiohttp.typedefs.Handler
+) -> aiohttp.ClientResponse:
+    """Retry middleware for transient server errors (502, 503, 504).
+    
+    Retries up to 3 times with exponential backoff (0.5s * 2^attempt).
+    """
+    retry_statuses = {502, 503, 504}
+    max_retries = 3
+    backoff_factor = 0.5
+
+    for attempt in range(max_retries):
+        resp = await handler(req)
+        if resp.status not in retry_statuses or attempt == max_retries - 1:
+            return resp
+        delay = backoff_factor * (2 ** attempt)
+        logger.warning(
+            f"Request to {req.url} returned {resp.status}, "
+            f"retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
+        )
+        resp.close()
+        await asyncio.sleep(delay)
+    return resp
+
+
 def get_fast_api_app(
     *,
     session_service_uri: Optional[str] = None,
@@ -409,8 +437,32 @@ def get_fast_api_app(
     else:
         logger.info("Internal logging to Opik is disabled (OPIK_INTERNAL_URL not set)")
     
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Startup: Create shared aiohttp session with retry middleware
+        timeout = aiohttp.ClientTimeout(total=30)
+        app.state.http_session = aiohttp.ClientSession(
+            base_url=settings.agent_opik_url,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            timeout=timeout,
+            middlewares=(retry_middleware,),
+        )
+        logger.info(f"Created shared aiohttp session with retry middleware for {settings.agent_opik_url}")
+        
+        yield
+        
+        # Shutdown: Close aiohttp session and flush analytics
+        from .analytics import flush_events
+        
+        await app.state.http_session.close()
+        flush_events()
+        logger.info("Closed shared aiohttp session and flushed analytics events")
+    
     # Run the FastAPI server.
-    app = FastAPI()
+    app = FastAPI(lifespan=lifespan)
 
     if allow_origins:
         app.add_middleware(
@@ -454,14 +506,6 @@ def get_fast_api_app(
             ) from last_exception
     else:
         session_service = InMemorySessionService()
-
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        """Flush any pending analytics events on shutdown."""
-        from .analytics import flush_events
-
-        flush_events()
-        logger.info("Application shutdown - flushed analytics events")
 
     @app.get(
         f"{url_prefix}/healthz",
@@ -541,14 +585,14 @@ def get_fast_api_app(
 
         # Create Opik backend client
         opik_client = OpikBackendClient(
-            base_url=settings.agent_opik_url,
+            session=app.state.http_session,
             session_token=current_user.session_token,
             workspace=current_user.workspace_name,
         )
 
         # Get trace to extract project_id
         try:
-            trace = opik_client.get_trace(trace_id)
+            trace = await opik_client.get_trace(trace_id)
             project_id = trace["project_id"]
         except Exception as e:
             logger.exception(f"Failed to get trace {trace_id}: {e}")
@@ -562,7 +606,7 @@ def get_fast_api_app(
 
         # Submit feedback to Opik (this will close the thread first)
         try:
-            submit_feedback_to_opik(
+            await submit_feedback_to_opik(
                 opik_client,
                 session_id,
                 req.value,
@@ -606,14 +650,14 @@ def get_fast_api_app(
 
         # Create Opik backend client
         opik_client = OpikBackendClient(
-            base_url=settings.agent_opik_url,
+            session=app.state.http_session,
             session_token=current_user.session_token,
             workspace=current_user.workspace_name,
         )
 
         # Delete feedback from Opik
         try:
-            delete_feedback_from_opik(
+            await delete_feedback_from_opik(
                 opik_client,
                 session_id,
                 trace_id,
@@ -652,12 +696,12 @@ def get_fast_api_app(
 
         # Create Opik backend client
         opik_client = OpikBackendClient(
-            base_url=settings.agent_opik_url,
+            session=app.state.http_session,
             session_token=current_user.session_token,
             workspace=current_user.workspace_name,
         )
 
-        project_name = get_project_name_from_trace_id(opik_client, trace_id)
+        project_name = await get_project_name_from_trace_id(opik_client, trace_id)
 
         if not session:
             # If it doesn't exists, create a new sessions
@@ -737,7 +781,7 @@ def get_fast_api_app(
         trace_id: Optional[str] = None,
     ) -> Runner:
         """Returns the runner for the given app."""
-        root_agent = get_agent(
+        root_agent = await get_agent(
             opik_client=opik_client,
             trace_id=trace_id,
         )

@@ -1,4 +1,12 @@
-import os
+"""Trace-analyzer agent: builds ADK agents with Opik trace tools and manages sessions.
+
+Exposes get_agent() to create an ADK Agent that can analyze traces/spans via
+OpikBackendClient, get_runner() for session-aware execution, and create_session()
+for session lifecycle. Trace data is loaded into the system prompt so the LLM
+has full context. When trace_id is missing or spans fail to load, the agent
+still works but with degraded context.
+"""
+
 import time
 import traceback
 import uuid
@@ -116,13 +124,13 @@ Use this data to identify relevant spans. If you need input, output, or metadata
 
 
 def safe_wrapper(func: Callable[..., Any]) -> Callable[..., dict[str, Any]]:
-    """Wrap a function to catch any exceptions and return a dictionary with a 'result' key."""
+    """Wrap an async function to catch any exceptions and return a dictionary with a 'result' key."""
     from .config import settings
 
     @wraps(func)
-    def wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    async def wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
         try:
-            result = func(*args, **kwargs)
+            result = await func(*args, **kwargs)
             if not isinstance(result, dict):
                 return {"result": result}
             return result
@@ -152,7 +160,7 @@ def get_agent_tools(
 ) -> list[Callable[..., Any]]:
     """Return the tools for the agent."""
 
-    def get_trace_data() -> dict[str, Any]:
+    async def get_trace_data() -> dict[str, Any]:
         """Return the trace data for the current trace.
 
         Returns:
@@ -162,9 +170,9 @@ def get_agent_tools(
             raise ValueError(
                 "trace_id is required but was not provided to get_agent_tools"
             )
-        return get_trace_data_impl(opik_client, trace_id)
+        return await get_trace_data_impl(opik_client, trace_id)
 
-    def get_span_details(
+    async def get_span_details(
         span_id: str,
         include_input: bool = False,
         include_output: bool = False,
@@ -181,7 +189,7 @@ def get_agent_tools(
         Returns:
             A dictionary containing the requested fields. Always includes span_id.
         """
-        return get_span_details_impl(
+        return await get_span_details_impl(
             opik_client,
             span_id,
             include_input,
@@ -308,7 +316,7 @@ async def agent_loop_async(agent, query: str, user_id: str, trace_id: str):
     return final_response
 
 
-def get_agent(
+async def get_agent(
     opik_client: OpikBackendClient,
     opik_metadata: Optional[dict[str, Any]] = None,
     trace_id: Optional[str] = None,
@@ -330,9 +338,9 @@ def get_agent(
         try:
             import json
 
-            trace = opik_client.get_trace(trace_id)
+            trace = await opik_client.get_trace(trace_id)
             project_id = trace["project_id"]
-            spans_data = get_spans_data_impl(opik_client, trace_id, project_id)
+            spans_data = await get_spans_data_impl(opik_client, trace_id, project_id)
             spans_data_str = json.dumps({"result": spans_data}, indent=2)
             logger.info(f"Loaded spans data for trace {trace_id} into system prompt")
         except Exception as e:
@@ -347,14 +355,13 @@ def get_agent(
         spans_data=spans_data_str,
     )
 
-    model_name = os.environ.get("AGENT_MODEL", "openai/gpt-4.1")
-    
+    model_name = settings.agent_model
+
     # Configure model with optional reasoning_effort
     model_kwargs = {}
-    reasoning_effort = os.environ.get("AGENT_REASONING_EFFORT")
-    if reasoning_effort:
-        model_kwargs["reasoning_effort"] = reasoning_effort
-    
+    if settings.agent_reasoning_effort:
+        model_kwargs["reasoning_effort"] = settings.agent_reasoning_effort
+
     llm_model = LiteLlm(model_name, **model_kwargs)
 
     # Build agent kwargs, conditionally adding callbacks if tracker is available

@@ -296,10 +296,6 @@ services:
       # Server configuration
       PORT: 8081
       URL_PREFIX: /opik-ai
-      # Development mode for local auth (bypasses session token auth)
-      DEVELOPMENT_MODE: "true"
-      DEV_USER_ID: "local-dev-user"
-      DEV_WORKSPACE_NAME: "default"
       # MySQL session storage (uses same DB as Opik backend)
       # Note: Uses mysql:// (mysqlclient driver), not mysql+pymysql://
       SESSION_SERVICE_URI: "mysql://opik:opik@mysql:3306/opik"

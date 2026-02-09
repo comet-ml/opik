@@ -4,11 +4,14 @@ This client passes through session cookies and workspace headers from the fronte
 to the Opik backend, which handles authentication itself via AuthFilter.
 """
 
+import json as json_module
 from typing import Optional
 
-import requests
+import aiohttp
 
 from .logger_config import logger
+
+_DEFAULT_TIMEOUT = 30
 
 
 class OpikBackendClient:
@@ -16,7 +19,7 @@ class OpikBackendClient:
 
     def __init__(
         self,
-        base_url: str,
+        session: aiohttp.ClientSession,
         session_token: Optional[str] = None,
         workspace: Optional[str] = None,
     ):
@@ -24,31 +27,28 @@ class OpikBackendClient:
         Initialize the Opik backend client.
 
         Args:
-            base_url: Base URL of the Opik backend (e.g., "http://backend:8080")
+            session: Shared aiohttp ClientSession with base_url already configured
             session_token: Session token cookie value (optional, for cloud mode)
             workspace: Workspace name (optional, for cloud mode)
         """
-        self.base_url = base_url.rstrip("/")
+        self._session = session
         self.session_token = session_token
         self.workspace = workspace
 
-    def _get_headers(self) -> dict[str, str]:
-        """Build headers for requests."""
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
-        if self.workspace:
-            headers["Comet-Workspace"] = self.workspace
-        return headers
-
     def _get_cookies(self) -> Optional[dict[str, str]]:
-        """Build cookies for requests."""
+        """Build cookies for requests (per-call, not session-level)."""
         if self.session_token:
             return {"sessionToken": self.session_token}
         return None
 
-    def get_trace(self, trace_id: str) -> dict:
+    def _get_headers(self) -> dict[str, str]:
+        """Build headers for requests (per-call, not session-level)."""
+        headers = {}
+        if self.workspace:
+            headers["Comet-Workspace"] = self.workspace
+        return headers
+
+    async def get_trace(self, trace_id: str) -> dict:
         """
         Get trace by ID.
 
@@ -59,19 +59,19 @@ class OpikBackendClient:
             Trace data as dict
 
         Raises:
-            requests.HTTPError: If the request fails
+            aiohttp.ClientResponseError: If the request fails
         """
-        url = f"{self.base_url}/v1/private/traces/{trace_id}"
-        response = requests.get(
+        url = f"/v1/private/traces/{trace_id}"
+        async with self._session.get(
             url,
-            headers=self._get_headers(),
             cookies=self._get_cookies(),
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()
+            headers=self._get_headers(),
+            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
 
-    def get_project(self, project_id: str) -> dict:
+    async def get_project(self, project_id: str) -> dict:
         """
         Get project by ID.
 
@@ -82,19 +82,19 @@ class OpikBackendClient:
             Project data as dict
 
         Raises:
-            requests.HTTPError: If the request fails
+            aiohttp.ClientResponseError: If the request fails
         """
-        url = f"{self.base_url}/v1/private/projects/{project_id}"
-        response = requests.get(
+        url = f"/v1/private/projects/{project_id}"
+        async with self._session.get(
             url,
-            headers=self._get_headers(),
             cookies=self._get_cookies(),
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()
+            headers=self._get_headers(),
+            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
 
-    def get_span(self, span_id: str) -> dict:
+    async def get_span(self, span_id: str) -> dict:
         """
         Get a single span by ID.
 
@@ -105,19 +105,19 @@ class OpikBackendClient:
             Span data as dict
 
         Raises:
-            requests.HTTPError: If the request fails
+            aiohttp.ClientResponseError: If the request fails
         """
-        url = f"{self.base_url}/v1/private/spans/{span_id}"
-        response = requests.get(
+        url = f"/v1/private/spans/{span_id}"
+        async with self._session.get(
             url,
-            headers=self._get_headers(),
             cookies=self._get_cookies(),
-            timeout=30,
-        )
-        response.raise_for_status()
-        return response.json()
+            headers=self._get_headers(),
+            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
 
-    def search_spans(
+    async def search_spans(
         self, project_id: str, trace_id: str, truncate: bool = False
     ) -> list[dict]:
         """
@@ -132,36 +132,36 @@ class OpikBackendClient:
             List of span dicts
 
         Raises:
-            requests.HTTPError: If the request fails
+            aiohttp.ClientResponseError: If the request fails
         """
-        url = f"{self.base_url}/v1/private/spans/search"
+        url = "/v1/private/spans/search"
         payload = {
             "project_id": project_id,
             "trace_id": trace_id,
             "truncate": truncate,
         }
-        headers = self._get_headers()
         # This endpoint returns chunked NDJSON as application/octet-stream
+        headers = self._get_headers()
         headers["Accept"] = "application/octet-stream"
-        response = requests.post(
+        
+        async with self._session.post(
             url,
             headers=headers,
             cookies=self._get_cookies(),
             json=payload,
-            timeout=30,
-        )
-        response.raise_for_status()
-
-        import json as json_module
+            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+        ) as response:
+            response.raise_for_status()
+            text = await response.text()
 
         spans = []
-        for line in response.text.strip().split("\r\n"):
+        for line in text.strip().split("\r\n"):
             line = line.strip()
             if line:
                 spans.append(json_module.loads(line))
         return spans
 
-    def get_project_name_from_trace(self, trace_id: str) -> str:
+    async def get_project_name_from_trace(self, trace_id: str) -> str:
         """
         Get project name from trace ID.
 
@@ -175,14 +175,14 @@ class OpikBackendClient:
             Project name
 
         Raises:
-            requests.HTTPError: If the request fails
+            aiohttp.ClientResponseError: If the request fails
         """
-        trace = self.get_trace(trace_id)
+        trace = await self.get_trace(trace_id)
         project_id = trace["project_id"]
-        project = self.get_project(project_id)
+        project = await self.get_project(project_id)
         return project["name"]
 
-    def close_thread(self, thread_id: str, project_id: str) -> None:
+    async def close_thread(self, thread_id: str, project_id: str) -> None:
         """
         Close a thread.
 
@@ -191,24 +191,24 @@ class OpikBackendClient:
             project_id: The project ID (UUID)
 
         Raises:
-            requests.HTTPError: If the request fails
+            aiohttp.ClientResponseError: If the request fails
         """
-        url = f"{self.base_url}/v1/private/traces/threads/close"
+        url = "/v1/private/traces/threads/close"
         payload = {
             "project_id": project_id,
             "thread_id": thread_id,
         }
-        response = requests.put(
+        async with self._session.put(
             url,
-            headers=self._get_headers(),
             cookies=self._get_cookies(),
+            headers=self._get_headers(),
             json=payload,
-            timeout=30,
-        )
-        response.raise_for_status()
+            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+        ) as response:
+            response.raise_for_status()
         logger.info(f"Successfully closed thread {thread_id}")
 
-    def log_thread_feedback_scores(self, scores: list[dict]) -> None:
+    async def log_thread_feedback_scores(self, scores: list[dict]) -> None:
         """
         Log feedback scores for threads.
 
@@ -221,21 +221,21 @@ class OpikBackendClient:
                 - source (str): Score source (e.g., "ui")
 
         Raises:
-            requests.HTTPError: If the request fails
+            aiohttp.ClientResponseError: If the request fails
         """
-        url = f"{self.base_url}/v1/private/traces/threads/feedback-scores"
+        url = "/v1/private/traces/threads/feedback-scores"
         payload = {"scores": scores}
-        response = requests.put(
+        async with self._session.put(
             url,
-            headers=self._get_headers(),
             cookies=self._get_cookies(),
+            headers=self._get_headers(),
             json=payload,
-            timeout=30,
-        )
-        response.raise_for_status()
+            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+        ) as response:
+            response.raise_for_status()
         logger.info(f"Successfully logged {len(scores)} feedback scores")
 
-    def delete_thread_feedback_scores(
+    async def delete_thread_feedback_scores(
         self, project_name: str, thread_id: str, names: list[str]
     ) -> None:
         """
@@ -247,22 +247,22 @@ class OpikBackendClient:
             names: List of score names to delete
 
         Raises:
-            requests.HTTPError: If the request fails
+            aiohttp.ClientResponseError: If the request fails
         """
-        url = f"{self.base_url}/v1/private/traces/threads/feedback-scores/delete"
+        url = "/v1/private/traces/threads/feedback-scores/delete"
         payload = {
             "project_name": project_name,
             "thread_id": thread_id,
             "names": names,
         }
-        response = requests.post(
+        async with self._session.post(
             url,
-            headers=self._get_headers(),
             cookies=self._get_cookies(),
+            headers=self._get_headers(),
             json=payload,
-            timeout=30,
-        )
-        response.raise_for_status()
+            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+        ) as response:
+            response.raise_for_status()
         logger.info(
             f"Successfully deleted feedback scores {names} for thread {thread_id}"
         )

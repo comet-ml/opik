@@ -13,7 +13,7 @@ from .opik_backend_client import OpikBackendClient
 TEST_PREFIX = "eval-"
 
 
-def get_trace_data_impl(
+async def get_trace_data_impl(
     opik_client: OpikBackendClient, trace_id: str
 ) -> dict[str, Any]:
     """Return the trace data for the given trace.
@@ -33,11 +33,11 @@ def get_trace_data_impl(
     if trace_id.startswith(TEST_PREFIX):
         raise ValueError(f"Test traces (prefix '{TEST_PREFIX}') are not supported in production")
 
-    trace_data = opik_client.get_trace(trace_id)
+    trace_data = await opik_client.get_trace(trace_id)
     return {"trace": trace_data}
 
 
-def _get_spans_impl(
+async def _get_spans_impl(
     opik_client: OpikBackendClient, trace_id: str, project_id: str
 ) -> dict[str, dict]:
     """Return the spans for the given trace.
@@ -60,7 +60,7 @@ def _get_spans_impl(
 
     future_spans = {}
 
-    spans = opik_client.search_spans(
+    spans = await opik_client.search_spans(
         project_id=project_id, trace_id=trace_id, truncate=False
     )
     if len(spans) == 0:
@@ -74,7 +74,7 @@ def _get_spans_impl(
     return future_spans
 
 
-def get_spans_data_impl(
+async def get_spans_data_impl(
     opik_client: OpikBackendClient, trace_id: str, project_id: str
 ) -> list[dict[str, Any]]:
     """Return the list of spans for the given trace. Span input, output, and metadata are excluded as they can be quite large but can be requested later if needed using get_span_details.
@@ -87,12 +87,13 @@ def get_spans_data_impl(
     Returns:
         The spans data without input, output, and metadata fields. These can be retrieved on-demand using get_span_details.
     """
-    spans = _get_spans_impl(opik_client, trace_id, project_id)
+    spans = await _get_spans_impl(opik_client, trace_id, project_id)
     span_without_large_fields = []
     for span in spans.values():
         single_span = span.copy()
-        single_span.pop("input")
-        single_span.pop("output")
+        # Remove potentially large fields
+        single_span.pop("input", None)
+        single_span.pop("output", None)
         single_span.pop(
             "metadata", None
         )
@@ -101,7 +102,7 @@ def get_spans_data_impl(
 
 
 
-def get_span_details_impl(
+async def get_span_details_impl(
     opik_client: OpikBackendClient,
     span_id: str,
     include_input: bool = False,
@@ -123,15 +124,15 @@ def get_span_details_impl(
     Returns:
         A dictionary containing the requested fields. Always includes span_id.
     """
-    span = opik_client.get_span(span_id)
+    span = await opik_client.get_span(span_id)
 
     result: dict[str, Any] = {"span_id": span_id}
 
     if include_input:
-        result["input"] = span["input"]
+        result["input"] = span.get("input", None)
     if include_output:
-        result["output"] = span["output"]
+        result["output"] = span.get("output", None)
     if include_metadata:
-        result["metadata"] = span.get("metadata")
+        result["metadata"] = span.get("metadata", None)
 
     return result

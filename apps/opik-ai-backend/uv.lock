@@ -2354,7 +2354,6 @@ dev = [
     { name = "mypy" },
     { name = "ragas" },
     { name = "ruff" },
-    { name = "types-requests" },
 ]
 
 [package.metadata]
@@ -2376,7 +2375,6 @@ dev = [
     { name = "mypy", specifier = ">=1.17.1" },
     { name = "ragas", specifier = ">=0.3.2" },
     { name = "ruff", specifier = ">=0.8.0" },
-    { name = "types-requests", specifier = ">=2.32.4.20250809" },
 ]
 
 [[package]]
@@ -3818,18 +3816,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/09/dd/9dc12092b88b95b88ef161c856619c1ef1f52bec1248273abe43ba56f123/types_awscrt-0.27.5.tar.gz", hash = "sha256:8eefe50d1709520663b77d3643a772c35ace3d8acfcb296f857627622c84cb4c", size = 16953, upload-time = "2025-07-31T02:03:20.284Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/fc/259979fadf4c6b0ff8a025d61a7d47e2868b4e9e429983c3ee58fdc9d106/types_awscrt-0.27.5-py3-none-any.whl", hash = "sha256:99ee40e787dfb92ae93a5c956251a03b847de3ac532552f7e06dd5eb6e0fd02f", size = 39627, upload-time = "2025-07-31T02:03:19.168Z" },
-]
-
-[[package]]
-name = "types-requests"
-version = "2.32.4.20250809"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "urllib3" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ed/b0/9355adb86ec84d057fea765e4c49cce592aaf3d5117ce5609a95a7fc3dac/types_requests-2.32.4.20250809.tar.gz", hash = "sha256:d8060de1c8ee599311f56ff58010fb4902f462a1470802cf9f6ed27bc46c4df3", size = 23027, upload-time = "2025-08-09T03:17:10.664Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/6f/ec0012be842b1d888d46884ac5558fd62aeae1f0ec4f7a581433d890d4b5/types_requests-2.32.4.20250809-py3-none-any.whl", hash = "sha256:f73d1832fb519ece02c85b1f09d5f0dd3108938e7d47e7f94bbfa18a6782b163", size = 20644, upload-time = "2025-08-09T03:17:09.716Z" },
 ]
 
 [[package]]
