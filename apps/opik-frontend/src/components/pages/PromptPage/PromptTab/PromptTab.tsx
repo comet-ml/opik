@@ -140,11 +140,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             tags={activeVersion?.tags || []}
             onAddTag={(newTag) => {
               if (!activeVersion?.id) return;
-              const updatedTags = [...(activeVersion.tags || []), newTag];
               updateVersionsMutation.mutate({
                 versionIds: [activeVersion.id],
-                tags: updatedTags,
-                mergeTags: false,
+                tags: [newTag],
+                mergeTags: true,
               });
             }}
             onDeleteTag={(tagToDelete) => {

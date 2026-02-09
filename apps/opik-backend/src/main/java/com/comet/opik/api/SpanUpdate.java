@@ -37,6 +37,8 @@ public record SpanUpdate(
         String model,
         String provider,
         Set<String> tags,
+        Set<String> tagsToAdd,
+        Set<String> tagsToRemove,
         Map<String, Integer> usage,
         @DecimalMin("0.0") BigDecimal totalEstimatedCost,
         ErrorInfo errorInfo) {

@@ -9,7 +9,10 @@ import { useToast } from "@/components/ui/use-toast";
 type UseTraceBatchUpdateMutationParams = {
   projectId: string;
   traceIds: string[];
-  trace: Partial<Trace>;
+  trace: Partial<Trace> & {
+    tagsToAdd?: string[];
+    tagsToRemove?: string[];
+  };
   mergeTags?: boolean;
 };
 
@@ -21,11 +24,18 @@ const useTraceBatchUpdateMutation = () => {
     mutationFn: async ({
       traceIds,
       trace,
-      mergeTags,
+      mergeTags = false,
     }: UseTraceBatchUpdateMutationParams) => {
+      const { tags, tagsToAdd, tagsToRemove, ...rest } = trace;
+
+      const payload: Record<string, unknown> = { ...rest };
+      if (tags !== undefined) payload.tags = tags;
+      if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
+      if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
+
       const { data } = await api.patch(TRACES_REST_ENDPOINT + "batch", {
         ids: traceIds,
-        update: trace,
+        update: payload,
         merge_tags: mergeTags,
       });
 
