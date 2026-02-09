@@ -201,7 +201,7 @@ describe.skipIf(!shouldRunApiTests)(
       expect(threads.length).toBeGreaterThanOrEqual(1);
 
       // Find our thread
-      const ourThread = threads.find((t) => t.threadModelId === threadId);
+      const ourThread = threads.find((t) => t.id === threadId);
       expect(ourThread).toBeDefined();
 
       // ADD THREADS: Add thread to the queue
