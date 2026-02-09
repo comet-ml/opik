@@ -1150,7 +1150,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
+                <if(tags_to_add || tags_to_remove)>
+                    <if(tags_to_add && tags_to_remove)>
+                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), src.tags), :tags_to_add))
+                    <elseif(tags_to_add)>
+                        arrayDistinct(arrayConcat(src.tags, :tags_to_add))
+                    <elseif(tags_to_remove)>
+                        arrayFilter(x -> NOT has(:tags_to_remove, x), src.tags)
+                    <endif>
+                <elseif(tags)>
+                    <if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif>
+                <else>
+                    src.tags
+                <endif> as tags,
                 src.item_created_at,
                 now64(9) as item_last_updated_at,
                 src.item_created_by,
@@ -2326,7 +2338,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().data() != null) {
                     template.add("data", true);
                 }
-                if (batchUpdate.update().tags() != null) {
+
+                // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+                if (batchUpdate.update().tagsToAdd() != null || batchUpdate.update().tagsToRemove() != null) {
+                    if (batchUpdate.update().tagsToAdd() != null) {
+                        template.add("tags_to_add", true);
+                    }
+                    if (batchUpdate.update().tagsToRemove() != null) {
+                        template.add("tags_to_remove", true);
+                    }
+                }
+                // Old approach: tags with mergeTags boolean (backwards compatible)
+                else if (batchUpdate.update().tags() != null) {
                     template.add("tags", true);
                     if (Boolean.TRUE.equals(batchUpdate.mergeTags())) {
                         template.add("merge_tags", true);
@@ -2375,7 +2398,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             .getOrDefault(batchUpdate.update().data());
                     statement.bind("data", dataAsStrings);
                 }
-                if (batchUpdate.update().tags() != null) {
+
+                // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+                if (batchUpdate.update().tagsToAdd() != null || batchUpdate.update().tagsToRemove() != null) {
+                    if (batchUpdate.update().tagsToAdd() != null) {
+                        statement.bind("tags_to_add", batchUpdate.update().tagsToAdd().toArray(new String[0]));
+                    }
+                    if (batchUpdate.update().tagsToRemove() != null) {
+                        statement.bind("tags_to_remove", batchUpdate.update().tagsToRemove().toArray(new String[0]));
+                    }
+                }
+                // Old approach: tags (backwards compatible)
+                else if (batchUpdate.update().tags() != null) {
                     statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
                 }
 
