@@ -58,6 +58,8 @@ public class FreeModelServiceProvider implements LlmServiceProvider {
                 .name(freeModelConfig.getActualModel())
                 .temperature(modelParameters.temperature())
                 .seed(modelParameters.seed())
+                .throttling(modelParameters.throttling())
+                .maxConcurrentRequests(modelParameters.maxConcurrentRequests())
                 .build();
 
         var builder = OpenAiChatModel.builder()
