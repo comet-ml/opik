@@ -9,6 +9,7 @@ import { Plus, RotateCcw } from "lucide-react";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_SELECTED_DATASET_KEY,
+  PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
 } from "@/constants/llm";
 import {
   useAddPrompt,
@@ -67,6 +68,13 @@ const PlaygroundPrompts = ({
     },
   );
 
+  const [, setDatasetVersionKey] = useLocalStorageState<string | null>(
+    PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
+    {
+      defaultValue: null,
+    },
+  );
+
   const handleAddPrompt = () => {
     const newPrompt = generateDefaultPrompt({
       setupProviders: providerKeys,
@@ -87,6 +95,7 @@ const PlaygroundPrompts = ({
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
     setDatasetId(null);
+    setDatasetVersionKey(null);
     setSelectedRuleIds(null);
     clearCreatedExperiments();
     setIsRunning(false);
@@ -100,6 +109,7 @@ const PlaygroundPrompts = ({
     calculateDefaultModel,
     setPromptMap,
     setDatasetId,
+    setDatasetVersionKey,
     setSelectedRuleIds,
     clearCreatedExperiments,
     setIsRunning,
