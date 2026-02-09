@@ -298,13 +298,10 @@ export class OpikClient {
 
 
   private async getProjectIdByName(projectName: string): Promise<string> {
-    const projectsResponse = await this.api.projects.findProjects({
+    const project = await this.api.projects.retrieveProject({
       name: projectName,
-      size: 1,
     });
 
-    const projects = projectsResponse.content ?? [];
-    const project = projects.find((p) => p.name === projectName);
     if (!project?.id) {
       throw new Error(`Project "${projectName}" not found`);
     }
