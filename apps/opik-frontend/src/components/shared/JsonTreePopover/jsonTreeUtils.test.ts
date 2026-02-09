@@ -777,7 +777,7 @@ describe("getValuePreview", () => {
 
   it("should return array length for arrays", () => {
     // Arrange
-    const emptyArray: unknown[] = [];
+    const emptyArray: number[] = [];
     const filledArray = [1, 2, 3];
 
     // Act
