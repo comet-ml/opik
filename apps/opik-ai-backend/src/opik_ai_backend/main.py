@@ -419,6 +419,28 @@ def get_fast_api_app(
     session_service_uri: Optional[str] = None,
     allow_origins: Optional[list[str]] = None,
 ) -> FastAPI:
+    """Create and configure the trace analyzer FastAPI application.
+
+    Sets up the full application including middleware, session management,
+    and all route handlers for the trace analyzer agent.
+
+    Args:
+        session_service_uri: Database URI for persistent session storage.
+            When provided, a DatabaseSessionService is created with up to 10
+            connection attempts using exponential backoff (starting at 2s, max 30s).
+            Raises RuntimeError if all attempts fail.
+            When None, an InMemorySessionService is used instead.
+        allow_origins: CORS origins to allow. When provided, CORSMiddleware
+            is added with credentials, all methods, and all headers allowed.
+
+    Returns:
+        A configured FastAPI instance with these side effects:
+        - A shared aiohttp.ClientSession (with retry middleware) is created
+          on startup and closed on shutdown via the lifespan manager.
+        - If settings.opik_internal_url is set, the Opik SDK is configured
+          for internal observability (OpikTracer / @opik.track).
+        - Analytics events are flushed on shutdown.
+    """
     # Configure Opik SDK for internal logging (OpikTracer, @opik.track)
     # This sets the defaults for get_client_cached() and implicit SDK usage
     if settings.opik_internal_url is not None:
