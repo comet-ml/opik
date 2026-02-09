@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import os
 import time
@@ -6,8 +7,11 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, Literal, Optional, Tuple
 
+# Import settings early to check New Relic configuration
+from .config import settings
+
 # Conditionally initialize New Relic only if license key is configured
-if os.getenv("NEW_RELIC_LICENSE_KEY"):
+if settings.new_relic_license_key:
     os.environ["NEW_RELIC_LOG"] = "stdout"
     import newrelic.agent
 
@@ -33,7 +37,6 @@ from google.genai import types
 from ._agent import APP_NAME, create_session, extract_tool_calls, get_agent, get_runner
 from .analytics import track_conversation_resumed, track_conversation_started
 from .auth_dependencies import UserContext, get_current_user
-from .config import settings
 from .logger_config import logger
 from .opik_backend_client import OpikBackendClient
 from .opik_utils import (
@@ -58,7 +61,7 @@ if settings.sentry_dsn:
 else:
     logger.info("Sentry SDK not configured - skipping initialization")
 
-url_prefix = os.getenv("URL_PREFIX", "")
+url_prefix = settings.url_prefix
 
 
 class AgentRunRequest(common.BaseModel):
@@ -149,9 +152,6 @@ def generate_tool_call_id(function_call) -> str:
         return str(function_call.id)
 
     # Fallback: generate a hash if no ID is provided (shouldn't happen with ADK)
-    import hashlib
-    import json
-
     logger.warning("Function call missing ID, generating fallback hash")
     data_to_hash = {
         "name": function_call.name,
@@ -392,19 +392,19 @@ def process_event_for_sse(event: Event) -> Optional[str]:
 async def retry_middleware(
     req: aiohttp.ClientRequest, handler: aiohttp.typedefs.Handler
 ) -> aiohttp.ClientResponse:
-    """Retry middleware for transient server errors (502, 503, 504).
-    
-    Retries up to 3 times with exponential backoff (0.5s * 2^attempt).
+    """Retry middleware for transient server errors.
+
+    Retries up to settings.retry_max_attempts times with exponential backoff.
     """
-    retry_statuses = {502, 503, 504}
-    max_retries = 3
-    backoff_factor = 0.5
+    retry_statuses = set(settings.retry_statuses)
+    max_retries = settings.retry_max_attempts
+    backoff_factor = settings.retry_backoff_factor
 
     for attempt in range(max_retries):
         resp = await handler(req)
         if resp.status not in retry_statuses or attempt == max_retries - 1:
             return resp
-        delay = backoff_factor * (2 ** attempt)
+        delay = backoff_factor * (2**attempt)
         logger.warning(
             f"Request to {req.url} returned {resp.status}, "
             f"retrying in {delay}s (attempt {attempt + 1}/{max_retries})"
@@ -423,7 +423,7 @@ def get_fast_api_app(
     # This sets the defaults for get_client_cached() and implicit SDK usage
     if settings.opik_internal_url is not None:
         import opik.config
-        
+
         logger.info(
             f"Configuring internal logging to Opik at {settings.opik_internal_url}, "
             f"workspace={settings.opik_internal_workspace}, project={settings.opik_internal_project}"
@@ -432,11 +432,15 @@ def get_fast_api_app(
         if settings.opik_internal_api_key is not None:
             opik.config.update_session_config("api_key", settings.opik_internal_api_key)
         if settings.opik_internal_workspace is not None:
-            opik.config.update_session_config("workspace", settings.opik_internal_workspace)
-        opik.config.update_session_config("project_name", settings.opik_internal_project)
+            opik.config.update_session_config(
+                "workspace", settings.opik_internal_workspace
+            )
+        opik.config.update_session_config(
+            "project_name", settings.opik_internal_project
+        )
     else:
         logger.info("Internal logging to Opik is disabled (OPIK_INTERNAL_URL not set)")
-    
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Startup: Create shared aiohttp session with retry middleware
@@ -450,17 +454,19 @@ def get_fast_api_app(
             timeout=timeout,
             middlewares=(retry_middleware,),
         )
-        logger.info(f"Created shared aiohttp session with retry middleware for {settings.agent_opik_url}")
-        
+        logger.info(
+            f"Created shared aiohttp session with retry middleware for {settings.agent_opik_url}"
+        )
+
         yield
-        
+
         # Shutdown: Close aiohttp session and flush analytics
         from .analytics import flush_events
-        
+
         await app.state.http_session.close()
         flush_events()
         logger.info("Closed shared aiohttp session and flushed analytics events")
-    
+
     # Run the FastAPI server.
     app = FastAPI(lifespan=lifespan)
 
@@ -498,7 +504,9 @@ def get_fast_api_app(
                         f"Retrying in {retry_delay}s..."
                     )
                     time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 1.5, 30.0)  # exponential backoff, max 30s
+                    retry_delay = min(
+                        retry_delay * 1.5, 30.0
+                    )  # exponential backoff, max 30s
         else:
             # All retries exhausted
             raise RuntimeError(
@@ -742,8 +750,7 @@ def get_fast_api_app(
         async def event_generator():
             try:
                 stream_mode = StreamingMode.SSE if req.streaming else StreamingMode.NONE
-                runner = await _get_runner_async(
-                    app_name=APP_NAME,
+                runner = await _get_runner_for_agent(
                     opik_client=opik_client,
                     trace_id=trace_id,
                 )
@@ -775,15 +782,15 @@ def get_fast_api_app(
             },
         )
 
-    async def _get_runner_async(
-        app_name: str,
+    async def _get_runner_for_agent(
         opik_client: OpikBackendClient,
-        trace_id: Optional[str] = None,
+        trace_id: str,
     ) -> Runner:
         """Returns the runner for the given app."""
         root_agent = await get_agent(
             opik_client=opik_client,
             trace_id=trace_id,
+            opik_metadata=None,
         )
         runner = get_runner(agent=root_agent, session_service=session_service)
         return runner
@@ -797,12 +804,6 @@ app: FastAPI = get_fast_api_app(
     session_service_uri=settings.session_service_uri,
     allow_origins=settings.allowed_origins,
 )
-
-# You can add more FastAPI routes or configurations below if needed
-# Example:
-# @app.get("/hello")
-# async def read_root():
-#     return {"Hello": "World"}
 
 if __name__ == "__main__":
     # Use the PORT environment variable provided by Cloud Run, defaulting to 8081

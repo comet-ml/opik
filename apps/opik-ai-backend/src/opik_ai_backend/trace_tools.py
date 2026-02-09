@@ -31,7 +31,9 @@ async def get_trace_data_impl(
     if trace_id is None:
         raise ValueError("trace_id is required")
     if trace_id.startswith(TEST_PREFIX):
-        raise ValueError(f"Test traces (prefix '{TEST_PREFIX}') are not supported in production")
+        raise ValueError(
+            f"Test traces (prefix '{TEST_PREFIX}') are not supported in production"
+        )
 
     trace_data = await opik_client.get_trace(trace_id)
     return {"trace": trace_data}
@@ -56,7 +58,9 @@ async def _get_spans_impl(
     if trace_id is None:
         raise ValueError("trace_id is required")
     if trace_id.startswith(TEST_PREFIX):
-        raise ValueError(f"Test traces (prefix '{TEST_PREFIX}') are not supported in production")
+        raise ValueError(
+            f"Test traces (prefix '{TEST_PREFIX}') are not supported in production"
+        )
 
     future_spans = {}
 
@@ -64,9 +68,7 @@ async def _get_spans_impl(
         project_id=project_id, trace_id=trace_id, truncate=False
     )
     if len(spans) == 0:
-        raise ValueError(
-            f"No spans found for trace {trace_id} in project {project_id}"
-        )
+        raise ValueError(f"No spans found for trace {trace_id} in project {project_id}")
 
     for individual_span in spans:
         future_spans[individual_span["id"]] = individual_span
@@ -94,12 +96,9 @@ async def get_spans_data_impl(
         # Remove potentially large fields
         single_span.pop("input", None)
         single_span.pop("output", None)
-        single_span.pop(
-            "metadata", None
-        )
+        single_span.pop("metadata", None)
         span_without_large_fields.append(single_span)
     return span_without_large_fields
-
 
 
 async def get_span_details_impl(

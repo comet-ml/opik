@@ -7,6 +7,7 @@ has full context. When trace_id is missing or spans fail to load, the agent
 still works but with degraded context.
 """
 
+import json
 import time
 import traceback
 import uuid
@@ -27,11 +28,7 @@ from opik.opik_context import update_current_span
 from .logger_config import logger
 from .opik_backend_client import OpikBackendClient
 from .trace_tools import TEST_PREFIX  # noqa: F401
-from .trace_tools import (
-    get_span_details_impl,
-    get_spans_data_impl,
-    get_trace_data_impl,
-)
+from .trace_tools import get_span_details_impl, get_spans_data_impl, get_trace_data_impl
 
 # Re-export TEST_PREFIX for backward compatibility with other modules
 __all__ = ["TEST_PREFIX"]
@@ -150,13 +147,13 @@ def safe_wrapper(func: Callable[..., Any]) -> Callable[..., dict[str, Any]]:
     # Apply @opik.track decorator only if internal logging is configured
     if settings.opik_internal_url:
         wrapper = opik.track(wrapper)
-    
+
     return wrapper
 
 
 def get_agent_tools(
     opik_client: OpikBackendClient,
-    trace_id: Optional[str] = None,
+    trace_id: str,
 ) -> list[Callable[..., Any]]:
     """Return the tools for the agent."""
 
@@ -166,10 +163,6 @@ def get_agent_tools(
         Returns:
             The trace data.
         """
-        if trace_id is None:
-            raise ValueError(
-                "trace_id is required but was not provided to get_agent_tools"
-            )
         return await get_trace_data_impl(opik_client, trace_id)
 
     async def get_span_details(
@@ -205,14 +198,11 @@ def get_agent_tools(
 
 def get_safe_agent_tools(
     opik_client: OpikBackendClient,
-    trace_id: Optional[str] = None,
+    trace_id: str,
 ) -> list[Callable[..., Any]]:
-    """Return the tools for the agent, tools calls are tracked with Opik and errors are catched as ADK don't catch tool call errors"""
+    """Return the tools for the agent, tool calls are tracked with Opik and errors are caught as ADK doesn't catch tool call errors"""
 
-    return [
-        safe_wrapper(tool)
-        for tool in get_agent_tools(opik_client, trace_id)
-    ]
+    return [safe_wrapper(tool) for tool in get_agent_tools(opik_client, trace_id)]
 
 
 async def create_session(
@@ -264,14 +254,16 @@ async def single_turn_conversation(
     # Wrap the input into Google GenAI format
     content = types.Content(role="user", parts=[types.Part(text=query)])
 
-    # Run the agent
-    events = runner.run(user_id=user_id, session_id=session_id, new_message=content)
+    # Run the agent asynchronously
+    events = runner.run_async(
+        user_id=user_id, session_id=session_id, new_message=content
+    )
 
     final_response = None
 
     content_parts = []
 
-    for event in events:
+    async for event in events:
         if event.is_final_response():
             if event.content:
                 content_parts.append(event.content)
@@ -318,36 +310,33 @@ async def agent_loop_async(agent, query: str, user_id: str, trace_id: str):
 
 async def get_agent(
     opik_client: OpikBackendClient,
+    trace_id: str,
     opik_metadata: Optional[dict[str, Any]] = None,
-    trace_id: Optional[str] = None,
 ):
     from .config import settings
-    
-    # Ensure trace_id is in metadata if provided
+
+    # Ensure trace_id is in metadata
     if opik_metadata is None:
         opik_metadata = {}
-    if trace_id is not None and "trace_id" not in opik_metadata:
+    if "trace_id" not in opik_metadata:
         opik_metadata["trace_id"] = trace_id
 
     # Only create OpikTracer if internal logging is configured
     tracker = OpikTracer(metadata=opik_metadata) if settings.opik_internal_url else None
 
-    # Fetch spans data if trace_id is provided
+    # Fetch spans data for the trace
     spans_data_str = "[]"
-    if trace_id is not None:
-        try:
-            import json
-
-            trace = await opik_client.get_trace(trace_id)
-            project_id = trace["project_id"]
-            spans_data = await get_spans_data_impl(opik_client, trace_id, project_id)
-            spans_data_str = json.dumps({"result": spans_data}, indent=2)
-            logger.info(f"Loaded spans data for trace {trace_id} into system prompt")
-        except Exception as e:
-            logger.warning(
-                f"Failed to load spans data for system prompt: {e}", exc_info=True
-            )
-            spans_data_str = f"[]  # Note: Failed to load spans data: {str(e)}"
+    try:
+        trace = await opik_client.get_trace(trace_id)
+        project_id = trace["project_id"]
+        spans_data = await get_spans_data_impl(opik_client, trace_id, project_id)
+        spans_data_str = json.dumps({"result": spans_data}, indent=2)
+        logger.info(f"Loaded spans data for trace {trace_id} into system prompt")
+    except Exception as e:
+        logger.warning(
+            f"Failed to load spans data for system prompt: {e}", exc_info=True
+        )
+        spans_data_str = f"[]  # Note: Failed to load spans data: {str(e)}"
 
     instructions = INSTRUCTIONS.format(
         trace_schema=TRACE_SCHEMA,
@@ -374,18 +363,20 @@ async def get_agent(
         "instruction": instructions,
         "tools": get_safe_agent_tools(opik_client, trace_id),
     }
-    
+
     # Add OpikTracer callbacks only if internal logging is configured
     if tracker is not None:
-        agent_kwargs.update({
-            "before_agent_callback": tracker.before_agent_callback,
-            "after_agent_callback": tracker.after_agent_callback,
-            "before_model_callback": tracker.before_model_callback,
-            "after_model_callback": tracker.after_model_callback,
-            "before_tool_callback": tracker.before_tool_callback,
-            "after_tool_callback": tracker.after_tool_callback,
-        })
-    
+        agent_kwargs.update(
+            {
+                "before_agent_callback": tracker.before_agent_callback,
+                "after_agent_callback": tracker.after_agent_callback,
+                "before_model_callback": tracker.before_model_callback,
+                "after_model_callback": tracker.after_model_callback,
+                "before_tool_callback": tracker.before_tool_callback,
+                "after_tool_callback": tracker.after_tool_callback,
+            }
+        )
+
     root_agent = Agent(**agent_kwargs)
     return root_agent
 

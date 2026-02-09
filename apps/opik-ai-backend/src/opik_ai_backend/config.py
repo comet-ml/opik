@@ -109,6 +109,36 @@ class Settings(BaseSettings):
         alias="SEGMENT_ENVIRONMENT",
     )
 
+    # New Relic configuration
+    new_relic_license_key: Optional[str] = Field(
+        default=None,
+        description="New Relic license key for APM monitoring",
+        alias="NEW_RELIC_LICENSE_KEY",
+    )
+
+    # URL prefix configuration
+    url_prefix: str = Field(
+        default="",
+        description="URL prefix for all endpoints",
+        alias="URL_PREFIX",
+    )
+
+    # HTTP retry configuration
+    retry_statuses: list[int] = Field(
+        default=[502, 503, 504],
+        description="HTTP status codes that trigger retry",
+    )
+    retry_max_attempts: int = Field(
+        default=3,
+        description="Maximum number of retry attempts",
+        alias="RETRY_MAX_ATTEMPTS",
+    )
+    retry_backoff_factor: float = Field(
+        default=0.5,
+        description="Backoff factor for exponential retry delay",
+        alias="RETRY_BACKOFF_FACTOR",
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

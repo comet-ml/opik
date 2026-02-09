@@ -143,7 +143,7 @@ class OpikBackendClient:
         # This endpoint returns chunked NDJSON as application/octet-stream
         headers = self._get_headers()
         headers["Accept"] = "application/octet-stream"
-        
+
         async with self._session.post(
             url,
             headers=headers,

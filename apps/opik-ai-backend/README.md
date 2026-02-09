@@ -18,7 +18,7 @@ The service uses LLMs (OpenAI, Anthropic, or Google) to analyze trace data and p
 - **Session Storage**: MySQL (via Google ADK's DatabaseSessionService)
 - **Streaming**: Server-Sent Events (SSE)
 - **Authentication**: Comet session tokens (pass-through to Opik backend's AuthFilter)
-- **Frontend Integration**: Frontend calls OpikAssist directly via nginx proxy at `/opik-assist/`
+- **Frontend Integration**: Frontend calls OpikAssist directly via nginx proxy at `/opik-ai/`
 
 ## Configuration
 
@@ -45,7 +45,7 @@ The service uses LLMs (OpenAI, Anthropic, or Google) to analyze trace data and p
 
 ## API Endpoints
 
-All endpoints are prefixed with `URL_PREFIX` (default: `/opik-assist` in production):
+All endpoints are prefixed with `URL_PREFIX` (default: `/opik-ai` in production):
 
 - `GET /healthz` - Health check endpoint
 - `GET /trace-analyzer/session/{trace_id}` - Get conversation history
@@ -65,7 +65,7 @@ export OPENAI_API_KEY="your-key-here"
 
 2. Start the service:
 ```bash
-docker compose --profile opik-assist up
+docker compose --profile opik-ai-backend up
 ```
 
 3. The service will be available at `http://localhost:8081`
@@ -78,7 +78,7 @@ The Opik backend only needs the feature toggle enabled:
 export TOGGLE_OPIK_AI_ENABLED="true"
 ```
 
-**Note**: The backend doesn't call OpikAssist directly. The frontend makes requests to OpikAssist via the nginx proxy at `/opik-assist/`. In local development, the frontend uses `VITE_BASE_OPIK_AI_URL` to configure the OpikAssist endpoint.
+**Note**: The backend doesn't call OpikAssist directly. The frontend makes requests to OpikAssist via the nginx proxy at `/opik-ai/`. In local development, the frontend uses `VITE_BASE_OPIK_AI_URL` to configure the OpikAssist endpoint.
 
 ## Database Schema
 
