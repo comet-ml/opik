@@ -208,6 +208,16 @@ def configure_opik_not_configured():
 
 
 @pytest.fixture()
+def temp_file_15kb():
+    file_size = 15 * 1024
+    with tempfile.NamedTemporaryFile(delete=True) as f:
+        f.write(np.random.bytes(file_size))
+        f.flush()
+
+        yield f
+
+
+@pytest.fixture()
 def temp_file_15mb():
     file_size = 15 * 1024 * 1024
     with tempfile.NamedTemporaryFile(delete=True) as f:

@@ -15,7 +15,7 @@ from tests.testlib import (
 )
 
 
-def test_start_as_current_span__inside__happy_flow(fake_backend):
+def test_start_as_current_span__inside__happy_flow(fake_backend, temp_file_15kb):
     """Test that the span parameters are logged correctly when the span is updated inside the context manager."""
     with opik.start_as_current_span(
         "test-span", project_name="test-project", flush=True
@@ -34,7 +34,7 @@ def test_start_as_current_span__inside__happy_flow(fake_backend):
         span.input = {"input": "test-input"}
         span.output = {"output": "test-output"}
         span.attachments = [
-            attachment.Attachment(data="./test_file.txt", create_temp_copy=False)
+            attachment.Attachment(data=temp_file_15kb.name, create_temp_copy=False)
         ]
 
     assert len(fake_backend.trace_trees) == 1
