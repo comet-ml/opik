@@ -21,21 +21,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
+import { DropdownOption } from "@/types/shared";
 
 import { cn } from "@/lib/utils";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import Loader from "@/components/shared/Loader/Loader";
-import {
-  mustachePlugin,
-  codeMirrorPromptTheme,
-} from "@/constants/codeMirrorPlugins";
-import { DropdownOption } from "@/types/shared";
-import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
-import LLMPromptMessageActions, {
-  ImprovePromptConfig,
-} from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
-import PromptMessageMediaSection from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaSection";
-import { useMessageContent } from "@/hooks/useMessageContent";
 import {
   getTextFromMessageContent,
   hasAudiosInContent,
@@ -43,11 +31,27 @@ import {
   hasVideosInContent,
   isMediaAllowedForRole,
 } from "@/lib/llm";
+
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import Loader from "@/components/shared/Loader/Loader";
 import {
   JsonTreePopover,
   JsonObject,
   JsonValue,
 } from "@/components/shared/JsonTreePopover";
+
+import {
+  mustachePlugin,
+  codeMirrorPromptTheme,
+} from "@/constants/codeMirrorPlugins";
+import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
+
+import LLMPromptMessageActions, {
+  ImprovePromptConfig,
+} from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
+import PromptMessageMediaSection from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaSection";
+
+import { useMessageContent } from "@/hooks/useMessageContent";
 import { useJsonPopover } from "./useJsonPopover";
 
 import isEmpty from "lodash/isEmpty";

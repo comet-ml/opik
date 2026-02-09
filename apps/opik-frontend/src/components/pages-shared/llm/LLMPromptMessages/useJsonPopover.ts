@@ -35,29 +35,31 @@ const handleOpenBraceKey = (deps: BraceKeyHandlerDeps): boolean => {
   const view = editorViewRef.current;
   if (!view) return true;
 
-  const cursorPos = view.state.selection.main.head;
+  const selection = view.state.selection.main;
+  const from = selection.from;
+  const to = selection.to;
   const doc = view.state.doc;
 
-  // Check if the character before cursor is also BRACE_OPEN
-  const charBefore =
-    cursorPos > 0 ? doc.sliceString(cursorPos - 1, cursorPos) : "";
+  // Check if the character before the selection start is also BRACE_OPEN
+  const charBefore = from > 0 ? doc.sliceString(from - 1, from) : "";
 
-  // Insert the BRACE_OPEN character first
+  // Replace selection (or insert at cursor if no selection) with BRACE_OPEN
+  const newCursorPos = from + 1;
   view.dispatch({
-    changes: { from: cursorPos, insert: BRACE_OPEN },
-    selection: { anchor: cursorPos + 1 },
+    changes: { from, to, insert: BRACE_OPEN },
+    selection: { anchor: newCursorPos },
   });
 
   // If this completes MUSTACHE_OPEN, open the popover
   if (charBefore === BRACE_OPEN) {
     // Store the position after MUSTACHE_OPEN
-    setBraceStartPos(cursorPos + 1);
+    setBraceStartPos(newCursorPos);
     setJsonSearchQuery("");
 
     // Use requestMeasure to get accurate coordinates after DOM update
     view.requestMeasure({
       read: () => {
-        const coords = view.coordsAtPos(cursorPos + 1);
+        const coords = view.coordsAtPos(newCursorPos);
         const editorRect = view.dom.getBoundingClientRect();
         return { coords, editorRect };
       },
@@ -92,17 +94,19 @@ const handleCloseBraceKey = (deps: BraceKeyHandlerDeps): boolean => {
   const view = editorViewRef.current;
   if (!view) return true;
 
-  const cursorPos = view.state.selection.main.head;
+  const selection = view.state.selection.main;
+  const from = selection.from;
+  const to = selection.to;
   const doc = view.state.doc;
 
-  // Check if the character before cursor is also BRACE_CLOSE
-  const charBefore =
-    cursorPos > 0 ? doc.sliceString(cursorPos - 1, cursorPos) : "";
+  // Check if the character before the selection start is also BRACE_CLOSE
+  const charBefore = from > 0 ? doc.sliceString(from - 1, from) : "";
 
-  // Insert the BRACE_CLOSE character
+  // Replace selection (or insert at cursor if no selection) with BRACE_CLOSE
+  const newCursorPos = from + 1;
   view.dispatch({
-    changes: { from: cursorPos, insert: BRACE_CLOSE },
-    selection: { anchor: cursorPos + 1 },
+    changes: { from, to, insert: BRACE_CLOSE },
+    selection: { anchor: newCursorPos },
   });
 
   // If this completes MUSTACHE_CLOSE, close the popover
@@ -125,12 +129,15 @@ const handleOpenBracketKey = (deps: BraceKeyHandlerDeps): boolean => {
   const view = editorViewRef.current;
   if (!view) return false;
 
-  // When popover is open, insert just '[' without auto-pairing
+  // When popover is open, replace selection with '[' without auto-pairing
   if (isJsonPopoverOpen) {
-    const cursorPos = view.state.selection.main.head;
+    const selection = view.state.selection.main;
+    const from = selection.from;
+    const to = selection.to;
+    const newCursorPos = from + 1;
     view.dispatch({
-      changes: { from: cursorPos, insert: BRACKET_OPEN },
-      selection: { anchor: cursorPos + 1 },
+      changes: { from, to, insert: BRACKET_OPEN },
+      selection: { anchor: newCursorPos },
     });
     return true;
   }
@@ -203,8 +210,34 @@ export const useJsonPopover = ({
           },
         });
         view.focus();
+      } else if (view) {
+        // Fallback: check if {{ already exists before cursor
+        const cursorPos = view.state.selection.main.head;
+        const doc = view.state.doc;
+        const textBeforeCursor =
+          cursorPos >= MUSTACHE_OPEN_LEN
+            ? doc.sliceString(cursorPos - MUSTACHE_OPEN_LEN, cursorPos)
+            : "";
+
+        if (textBeforeCursor === MUSTACHE_OPEN) {
+          // {{ exists before cursor, just insert path and closing }}
+          view.dispatch({
+            changes: {
+              from: cursorPos,
+              to: cursorPos,
+              insert: `${path}${MUSTACHE_CLOSE}`,
+            },
+            selection: {
+              anchor: cursorPos + path.length + MUSTACHE_CLOSE_LEN,
+            },
+          });
+          view.focus();
+        } else {
+          // No {{ before cursor, insert full mustache syntax
+          insertTextAtCursor(`${MUSTACHE_OPEN}${path}${MUSTACHE_CLOSE}`);
+        }
       } else {
-        // Fallback: insert full mustache syntax at cursor
+        // No view available, use insertTextAtCursor
         insertTextAtCursor(`${MUSTACHE_OPEN}${path}${MUSTACHE_CLOSE}`);
       }
       setIsJsonPopoverOpen(false);
@@ -224,16 +257,36 @@ export const useJsonPopover = ({
   }, []);
 
   // Track text changes and cursor moves while popover is open to update search query
+  // Also detect when {{ was pasted and set braceStartPos accordingly
   const handleEditorUpdate = useCallback(
     (update: ViewUpdate) => {
+      const doc = update.state.doc;
+      const cursorPos = update.state.selection.main.head;
+
+      // Detect pasted {{ when popover is open but braceStartPos is null
+      if (
+        isJsonPopoverOpen &&
+        braceStartPos === null &&
+        update.docChanged &&
+        hasJsonData
+      ) {
+        const textBeforeCursor =
+          cursorPos >= MUSTACHE_OPEN_LEN
+            ? doc.sliceString(cursorPos - MUSTACHE_OPEN_LEN, cursorPos)
+            : "";
+
+        if (textBeforeCursor === MUSTACHE_OPEN) {
+          // {{ was pasted, set braceStartPos to position after {{
+          setBraceStartPos(cursorPos);
+          return;
+        }
+      }
+
       if (
         isJsonPopoverOpen &&
         braceStartPos !== null &&
         (update.docChanged || update.selectionSet)
       ) {
-        const doc = update.state.doc;
-        const cursorPos = update.state.selection.main.head;
-
         // Check if MUSTACHE_OPEN is still present before braceStartPos
         const openingBraces =
           braceStartPos >= MUSTACHE_OPEN_LEN
@@ -271,7 +324,7 @@ export const useJsonPopover = ({
         }
       }
     },
-    [isJsonPopoverOpen, braceStartPos],
+    [isJsonPopoverOpen, braceStartPos, hasJsonData],
   );
 
   // CodeMirror extension to detect mustache delimiters ({{ and }})
