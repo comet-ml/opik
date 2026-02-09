@@ -1,4 +1,5 @@
 import { Dataset } from "../dataset/Dataset";
+import { DatasetVersion } from "../dataset/DatasetVersion";
 import {
   EvaluationResult,
   EvaluationTask,
@@ -12,9 +13,13 @@ import { DatasetItemData } from "../dataset/DatasetItem";
 import { OpikClient } from "@/client/Client";
 import type { Prompt } from "@/prompt/Prompt";
 
+type DatasetOrVersion<T extends DatasetItemData> =
+  | Dataset<T>
+  | DatasetVersion<T>;
+
 export interface EvaluateOptions<T = Record<string, unknown>> {
-  /** The dataset to evaluate against, containing inputs and expected outputs */
-  dataset: Dataset<T extends DatasetItemData ? T : DatasetItemData & T>;
+  /** The dataset or dataset version to evaluate against, containing inputs and expected outputs */
+  dataset: DatasetOrVersion<T extends DatasetItemData ? T : DatasetItemData & T>;
 
   /** The specific LLM task to perform (e.g., classification, generation, question-answering) */
   task: EvaluationTask<T>;
@@ -64,12 +69,16 @@ export async function evaluate<T = Record<string, unknown>>(
   // Get Opik client
   const client = options.client ?? OpikSingleton.getInstance();
 
+  // Get version info for experiment linking
+  const versionInfo = await options.dataset.getVersionInfo();
+
   // Create experiment for this evaluation run
   const experiment = await client.createExperiment({
     name: options.experimentName,
     datasetName: options.dataset.name,
     experimentConfig: options.experimentConfig,
     prompts: options.prompts,
+    datasetVersionId: versionInfo?.id,
   });
 
   try {
