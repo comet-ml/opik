@@ -1,9 +1,10 @@
-import React, { useMemo } from "react";
+import React from "react";
+import capitalize from "lodash/capitalize";
 import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 
-interface ChatMessage {
+export interface ChatMessage {
   role: string;
   content: string | Array<{ type: string; [key: string]: unknown }>;
 }
@@ -27,7 +28,7 @@ const getRoleLabel = (role: string): string => {
   if (LLM_MESSAGE_ROLE[roleKey]) {
     return LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE[roleKey]] || role;
   }
-  return role.charAt(0).toUpperCase() + role.slice(1);
+  return capitalize(role);
 };
 
 const getTextAndMedia = (
@@ -50,15 +51,25 @@ const getTextAndMedia = (
 
     content.forEach((part) => {
       const item = part as MediaItem;
+
       if (item.type === "text" && item.text) {
         textParts.push(item.text);
-      } else if (item.type === "image_url") {
+        return;
+      }
+
+      if (item.type === "image_url") {
         const url = item.image_url?.url || item.url;
         if (url) images.push(url);
-      } else if (item.type === "video_url") {
+        return;
+      }
+
+      if (item.type === "video_url") {
         const url = item.video_url?.url || item.url;
         if (url) videos.push(url);
-      } else if (item.type === "audio_url" || item.type === "input_audio") {
+        return;
+      }
+
+      if (item.type === "audio_url" || item.type === "input_audio") {
         const url = item.audio_url?.url || item.input_audio?.data || item.url;
         if (url) audios.push(url);
       }
@@ -100,22 +111,12 @@ export const PromptMessageCard: React.FC<PromptMessageCardProps> = ({
 };
 
 interface PromptMessagesReadonlyProps {
-  template: string | object;
+  messages: ChatMessage[];
 }
 
 const PromptMessagesReadonly: React.FC<PromptMessagesReadonlyProps> = ({
-  template,
+  messages,
 }) => {
-  const messages = useMemo<ChatMessage[]>(() => {
-    try {
-      const data =
-        typeof template === "string" ? JSON.parse(template) : template;
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
-    }
-  }, [template]);
-
   if (messages.length === 0) {
     return null;
   }
@@ -123,7 +124,7 @@ const PromptMessagesReadonly: React.FC<PromptMessagesReadonlyProps> = ({
   return (
     <div className="flex flex-col gap-2">
       {messages.map((message, index) => (
-        <PromptMessageCard key={index} message={message} />
+        <PromptMessageCard key={`${message.role}-${index}`} message={message} />
       ))}
     </div>
   );

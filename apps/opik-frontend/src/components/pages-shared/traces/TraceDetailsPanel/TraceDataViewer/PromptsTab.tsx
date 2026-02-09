@@ -9,7 +9,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
-import PromptMessagesReadonly from "@/components/pages-shared/llm/PromptMessagesReadonly/PromptMessagesReadonly";
+import PromptMessagesReadonly, {
+  ChatMessage,
+} from "@/components/pages-shared/llm/PromptMessagesReadonly/PromptMessagesReadonly";
 import get from "lodash/get";
 import {
   Code2,
@@ -117,23 +119,17 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
 }) => {
   const [showRawView, setShowRawView] = useState(false);
 
-  const templateString = useMemo(() => {
-    if (typeof template === "string") return template;
-    if (template !== null && template !== undefined) {
-      return JSON.stringify(template, null, 2);
-    }
-    return "";
-  }, [template]);
-
-  const hasMessages = useMemo(() => {
+  const messages = useMemo<ChatMessage[]>(() => {
     try {
       const data =
         typeof template === "string" ? JSON.parse(template) : template;
-      return Array.isArray(data) && data.length > 0;
+      return Array.isArray(data) ? data : [];
     } catch {
-      return false;
+      return [];
     }
   }, [template]);
+
+  const hasMessages = messages.length > 0;
 
   return (
     <div className="space-y-2">
@@ -176,7 +172,7 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
           search={search}
         />
       ) : (
-        <PromptMessagesReadonly template={templateString} />
+        <PromptMessagesReadonly messages={messages} />
       )}
 
       <div className="flex items-center justify-between text-xs text-muted-slate">
