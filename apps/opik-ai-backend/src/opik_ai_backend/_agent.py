@@ -244,7 +244,12 @@ async def create_session(
     return session_service, session_id, session
 
 
-def get_runner(agent: Agent, session_service: BaseSessionService):
+def get_runner(agent: Agent, session_service: BaseSessionService) -> Runner:
+    """Create a Runner that executes the given agent using the provided session service.
+
+    Wraps an already-initialized Agent with a BaseSessionService into a Runner,
+    reusing the existing session service state and configuration.
+    """
     return Runner(agent=agent, app_name=APP_NAME, session_service=session_service)
 
 
@@ -282,7 +287,9 @@ async def get_agent(
         logger.warning(
             f"Failed to load spans data for system prompt: {e}", exc_info=True
         )
-        spans_data_str = f"[]  # Note: Failed to load spans data: {str(e)}"
+        spans_data_str = json.dumps(
+            {"result": [], "error": f"Failed to load spans data: {e}"}
+        )
 
     instructions = INSTRUCTIONS.format(
         trace_schema=TRACE_SCHEMA,
