@@ -364,8 +364,9 @@ const tracesQueues = await client.getTracesAnnotationQueues({
 });
 
 for (const queue of tracesQueues) {
+  const itemsCount = await queue.getItemsCount();
   console.log(
-    `Queue: ${queue.name}, Scope: ${queue.scope}, Items: ${queue.itemsCount}`
+    `Queue: ${queue.name}, Scope: ${queue.scope}, Items: ${itemsCount}`
   );
 }
 
@@ -375,8 +376,9 @@ const threadsQueues = await client.getThreadsAnnotationQueues({
 });
 
 for (const queue of threadsQueues) {
+  const itemsCount = await queue.getItemsCount();
   console.log(
-    `Queue: ${queue.name}, Scope: ${queue.scope}, Items: ${queue.itemsCount}`
+    `Queue: ${queue.name}, Scope: ${queue.scope}, Items: ${itemsCount}`
   );
 }
 ```
