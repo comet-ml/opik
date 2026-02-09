@@ -534,26 +534,30 @@ export class OpikClient {
     }
   }
 
-  /**
-   * Deletes a traces annotation queue by its ID.
-   *
-   * @param id - The ID of the traces annotation queue to delete
-   */
-  public deleteTracesAnnotationQueue = async (id: string): Promise<void> => {
-    logger.debug(`Deleting traces annotation queue with ID "${id}"`);
+  private async deleteAnnotationQueueById(id: string, scope: "traces" | "threads"): Promise<void> {
+    logger.debug(`Deleting ${scope} annotation queue with ID "${id}"`);
 
     try {
       await this.api.annotationQueues.deleteAnnotationQueueBatch({
         ids: [id],
       });
 
-      logger.debug(`Successfully deleted traces annotation queue with ID "${id}"`);
+      logger.debug(`Successfully deleted ${scope} annotation queue with ID "${id}"`);
     } catch (error) {
-      logger.error(`Failed to delete traces annotation queue with ID "${id}"`, {
+      logger.error(`Failed to delete ${scope} annotation queue with ID "${id}"`, {
         error,
       });
       throw error;
     }
+  }
+
+  /**
+   * Deletes a traces annotation queue by its ID.
+   *
+   * @param id - The ID of the traces annotation queue to delete
+   */
+  public deleteTracesAnnotationQueue = async (id: string): Promise<void> => {
+    return this.deleteAnnotationQueueById(id, "traces");
   };
 
   /**
@@ -562,20 +566,7 @@ export class OpikClient {
    * @param id - The ID of the threads annotation queue to delete
    */
   public deleteThreadsAnnotationQueue = async (id: string): Promise<void> => {
-    logger.debug(`Deleting threads annotation queue with ID "${id}"`);
-
-    try {
-      await this.api.annotationQueues.deleteAnnotationQueueBatch({
-        ids: [id],
-      });
-
-      logger.debug(`Successfully deleted threads annotation queue with ID "${id}"`);
-    } catch (error) {
-      logger.error(`Failed to delete threads annotation queue with ID "${id}"`, {
-        error,
-      });
-      throw error;
-    }
+    return this.deleteAnnotationQueueById(id, "threads");
   };
 
   /**
