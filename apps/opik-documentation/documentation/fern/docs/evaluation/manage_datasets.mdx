@@ -500,6 +500,48 @@ const pinnedResult = await evaluate({
 ```
 </CodeBlocks>
 
+### Working with dataset versions programmatically
+
+You can access version metadata and retrieve items from specific versions using the SDK:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import Opik
+
+client = Opik()
+dataset = client.get_dataset(name="My dataset")
+
+# Get current version info
+version_info = dataset.get_version_info()
+print(f"Current version: {version_info.version_name}")
+
+# Access a specific version
+v1 = dataset.get_version_view("v1")
+print(f"Version: {v1.version_name}, Items: {v1.items_total}")
+
+# Retrieve items from a specific version
+items = v1.get_items()
+```
+
+```typescript title="TypeScript" language="typescript"
+import { Opik } from "opik";
+
+const client = new Opik();
+const dataset = await client.getDataset("My dataset");
+
+// Get current version info
+const versionInfo = await dataset.getVersionInfo();
+console.log(`Current version: ${versionInfo?.versionName}`);
+
+// Access a specific version
+const v1 = await dataset.getVersionView("v1");
+console.log(`Version: ${v1.versionName}, Items: ${v1.itemsTotal}`);
+
+// Retrieve items from a specific version
+const items = await v1.getItems();
+```
+</CodeBlocks>
+
 ## Expanding a dataset with AI
 
 Dataset expansion allows you to use AI to generate additional synthetic samples based on your existing dataset. This is particularly useful when you have a small dataset and want to create more diverse test cases to improve your evaluation coverage.

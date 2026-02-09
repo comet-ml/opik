@@ -1,13 +1,10 @@
 import { generateId } from "@/utils/generateId";
 import { DatasetItem, DatasetItemData } from "./DatasetItem";
 import { DatasetVersion } from "./DatasetVersion";
+import { getDatasetItems } from "./getDatasetItems";
 import { OpikClient } from "@/client/Client";
-import {
-  DatasetItemPublic,
-  DatasetItemWrite,
-  DatasetVersionPublic,
-} from "@/rest_api/api";
-import { parseNdjsonStreamToArray, splitIntoBatches } from "@/utils/stream";
+import { DatasetItemWrite, DatasetVersionPublic } from "@/rest_api/api";
+import { splitIntoBatches } from "@/utils/stream";
 import { logger } from "@/utils/logger";
 import {
   DatasetItemMissingIdError,
@@ -18,7 +15,6 @@ import {
   JsonNotArrayError,
   JsonParseError,
 } from "@/errors/common/errors";
-import { serialization } from "@/rest_api";
 import { OpikApiError } from "@/rest_api/errors";
 import stringify from "fast-json-stable-stringify";
 
@@ -168,66 +164,13 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    * @returns A list of objects representing the dataset items
    */
   public async getItems(nbSamples?: number, lastRetrievedId?: string) {
-    const datasetItems = await this.getItemsAsDataclasses(
+    const datasetItems = await getDatasetItems<T>(this.opik, {
+      datasetName: this.name,
       nbSamples,
-      lastRetrievedId
-    );
+      lastRetrievedId,
+    });
 
     return datasetItems.map((item) => item.getContent(true));
-  }
-
-  private async getItemsAsDataclasses(
-    nbSamples?: number,
-    lastRetrievedId?: string
-  ): Promise<DatasetItem<T>[]> {
-    // Handle edge case: nbSamples = 0 means no items requested
-    if (nbSamples === 0) {
-      return [];
-    }
-
-    const MAX_STREAM_LIMIT = 2000;
-    const allItems: DatasetItem<T>[] = [];
-    let remaining = nbSamples;
-    let currentLastId = lastRetrievedId;
-
-    while (true) {
-      const streamLimit = Math.min(remaining ?? MAX_STREAM_LIMIT, MAX_STREAM_LIMIT);
-
-      const streamResponse = await this.opik.api.datasets.streamDatasetItems({
-        datasetName: this.name,
-        lastRetrievedId: currentLastId,
-        steamLimit: streamLimit,
-      });
-
-      const rawItems = await parseNdjsonStreamToArray<DatasetItemPublic>(
-        streamResponse,
-        serialization.DatasetItemPublic,
-        streamLimit
-      );
-
-      if (rawItems.length === 0) {
-        break;
-      }
-
-      const items = rawItems.map((item) => DatasetItem.fromApiModel<T>(item));
-      allItems.push(...items);
-
-      currentLastId = rawItems[rawItems.length - 1].id;
-
-      if (remaining !== undefined) {
-        remaining -= rawItems.length;
-        if (remaining <= 0) {
-          break;
-        }
-      }
-
-      // If we got fewer items than requested, we've reached the end
-      if (rawItems.length < streamLimit) {
-        break;
-      }
-    }
-
-    return allItems;
   }
 
   /**
@@ -298,13 +241,11 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     const mappedItems: Record<string, unknown>[] = items.map((item) => {
       const itemCopy = { ...item } as Record<string, unknown>;
 
-      if (Object.keys(keysMapping).length > 0) {
-        for (const [key, value] of Object.entries(keysMapping)) {
-          if (key in itemCopy) {
-            const content = itemCopy[key];
-            delete itemCopy[key];
-            itemCopy[value] = content;
-          }
+      for (const [key, value] of Object.entries(keysMapping)) {
+        if (key in itemCopy) {
+          const content = itemCopy[key];
+          delete itemCopy[key];
+          itemCopy[value] = content;
         }
       }
 
@@ -354,7 +295,9 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     logger.debug("Syncing dataset hashes with backend", { datasetId: this.id });
 
     try {
-      const allItems = await this.getItemsAsDataclasses();
+      const allItems = await getDatasetItems<T>(this.opik, {
+        datasetName: this.name,
+      });
 
       this.clearHashState();
 
@@ -435,7 +378,6 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
 
   /**
    * Find a version by its name (e.g., "v1", "v2").
-   * Uses paginated search to find the version.
    *
    * @param versionName The version name to find
    * @returns The DatasetVersionPublic or undefined if not found
@@ -443,38 +385,17 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
   private async findVersionByName(
     versionName: string
   ): Promise<DatasetVersionPublic | undefined> {
-    const pageSize = 100;
-    let page = 1;
-
-    while (true) {
-      try {
-        const response = await this.opik.api.datasets.listDatasetVersions(
-          this.id,
-          { page, size: pageSize }
-        );
-
-        const versions = response.content ?? [];
-        if (versions.length === 0) {
-          return undefined;
-        }
-
-        const found = versions.find((v) => v.versionName === versionName);
-        if (found) {
-          return found;
-        }
-
-        // If we got fewer results than page size, we've reached the end
-        if (versions.length < pageSize) {
-          return undefined;
-        }
-
-        page++;
-      } catch (error) {
-        if (error instanceof OpikApiError && error.statusCode === 404) {
-          return undefined;
-        }
-        throw error;
+    try {
+      const response =
+        await this.opik.api.datasets.retrieveDatasetVersion(this.id, {
+          versionName,
+        });
+      return response;
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        return undefined;
       }
+      throw error;
     }
   }
 }

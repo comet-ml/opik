@@ -295,6 +295,7 @@ describe("Dataset version methods", () => {
   let opikClient: OpikClient;
   let dataset: Dataset;
   let listDatasetVersionsSpy: MockInstance;
+  let retrieveDatasetVersionSpy: MockInstance;
 
   beforeEach(() => {
     opikClient = createTestClient();
@@ -313,6 +314,11 @@ describe("Dataset version methods", () => {
       "listDatasetVersions"
     );
 
+    retrieveDatasetVersionSpy = vi.spyOn(
+      opikClient.api.datasets,
+      "retrieveDatasetVersion"
+    );
+
     vi.spyOn(opikClient.api.datasets, "streamDatasetItems").mockImplementation(
       () => mockAPIFunctionWithStream("")
     );
@@ -324,13 +330,8 @@ describe("Dataset version methods", () => {
 
   describe("getVersionView", () => {
     it("should return DatasetVersion for existing version", async () => {
-      listDatasetVersionsSpy.mockImplementation(() =>
-        createMockHttpResponsePromise({
-          content: [MOCK_VERSION_INFO],
-          page: 1,
-          size: 100,
-          total: 1,
-        })
+      retrieveDatasetVersionSpy.mockImplementation(() =>
+        createMockHttpResponsePromise(MOCK_VERSION_INFO)
       );
 
       const versionView = await dataset.getVersionView("v1");
@@ -345,13 +346,10 @@ describe("Dataset version methods", () => {
     });
 
     it("should throw DatasetVersionNotFoundError when version not found", async () => {
-      listDatasetVersionsSpy.mockImplementation(() =>
-        createMockHttpResponsePromise({
-          content: [],
-          page: 1,
-          size: 100,
-          total: 0,
-        })
+      retrieveDatasetVersionSpy.mockImplementation(() =>
+        Promise.reject(
+          new OpikApiError({ message: "Not found", statusCode: 404 })
+        )
       );
 
       await expect(dataset.getVersionView("v99")).rejects.toThrow(
@@ -359,60 +357,14 @@ describe("Dataset version methods", () => {
       );
     });
 
-    it("should find version on later pages via pagination", async () => {
-      const v2VersionInfo: DatasetVersionPublic = {
-        ...MOCK_VERSION_INFO,
-        id: "version-id-2",
-        versionName: "v2",
-      };
-
-      listDatasetVersionsSpy
-        .mockImplementationOnce(() =>
-          createMockHttpResponsePromise({
-            content: Array(100).fill(MOCK_VERSION_INFO),
-            page: 1,
-            size: 100,
-            total: 101,
-          })
+    it("should propagate non-404 errors", async () => {
+      retrieveDatasetVersionSpy.mockImplementation(() =>
+        Promise.reject(
+          new OpikApiError({ message: "Server error", statusCode: 500 })
         )
-        .mockImplementationOnce(() =>
-          createMockHttpResponsePromise({
-            content: [v2VersionInfo],
-            page: 2,
-            size: 100,
-            total: 101,
-          })
-        );
-
-      const versionView = await dataset.getVersionView("v2");
-
-      expect(listDatasetVersionsSpy).toHaveBeenCalledTimes(2);
-      expect(versionView.versionName).toBe("v2");
-    });
-
-    it("should throw when version not found after pagination", async () => {
-      listDatasetVersionsSpy
-        .mockImplementationOnce(() =>
-          createMockHttpResponsePromise({
-            content: Array(100).fill(MOCK_VERSION_INFO),
-            page: 1,
-            size: 100,
-            total: 150,
-          })
-        )
-        .mockImplementationOnce(() =>
-          createMockHttpResponsePromise({
-            content: Array(50).fill(MOCK_VERSION_INFO),
-            page: 2,
-            size: 100,
-            total: 150,
-          })
-        );
-
-      await expect(dataset.getVersionView("nonexistent")).rejects.toThrow(
-        DatasetVersionNotFoundError
       );
-      expect(listDatasetVersionsSpy).toHaveBeenCalledTimes(2);
+
+      await expect(dataset.getVersionView("v1")).rejects.toThrow(OpikApiError);
     });
   });
 

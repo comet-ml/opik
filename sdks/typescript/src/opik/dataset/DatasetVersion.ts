@@ -1,8 +1,7 @@
-import { DatasetItemData, DatasetItem } from "./DatasetItem";
+import { DatasetItemData } from "./DatasetItem";
+import { getDatasetItems } from "./getDatasetItems";
 import { OpikClient } from "@/client/Client";
-import { DatasetItemPublic, DatasetVersionPublic } from "@/rest_api/api";
-import { parseNdjsonStreamToArray } from "@/utils/stream";
-import { serialization } from "@/rest_api";
+import { DatasetVersionPublic } from "@/rest_api/api";
 import stringify from "fast-json-stable-stringify";
 
 /**
@@ -145,10 +144,12 @@ export class DatasetVersion<T extends DatasetItemData = DatasetItemData> {
     nbSamples?: number,
     lastRetrievedId?: string
   ): Promise<(T & { id: string })[]> {
-    const datasetItems = await this.getItemsAsDataclasses(
+    const datasetItems = await getDatasetItems<T>(this.opik, {
+      datasetName: this.datasetName,
+      datasetVersion: this.versionInfo.versionHash,
       nbSamples,
-      lastRetrievedId
-    );
+      lastRetrievedId,
+    });
     return datasetItems.map((item) => item.getContent(true));
   }
 
@@ -178,60 +179,5 @@ export class DatasetVersion<T extends DatasetItemData = DatasetItemData> {
     });
 
     return stringify(mappedItems);
-  }
-
-  private async getItemsAsDataclasses(
-    nbSamples?: number,
-    lastRetrievedId?: string
-  ): Promise<DatasetItem<T>[]> {
-    // Handle edge case: nbSamples = 0 means no items requested
-    if (nbSamples === 0) {
-      return [];
-    }
-
-    const MAX_STREAM_LIMIT = 2000;
-    const allItems: DatasetItem<T>[] = [];
-    let remaining = nbSamples;
-    let currentLastId = lastRetrievedId;
-
-    while (true) {
-      const streamLimit = Math.min(remaining ?? MAX_STREAM_LIMIT, MAX_STREAM_LIMIT);
-
-      const streamResponse = await this.opik.api.datasets.streamDatasetItems({
-        datasetName: this.datasetName,
-        lastRetrievedId: currentLastId,
-        steamLimit: streamLimit,
-        datasetVersion: this.versionInfo.versionHash,
-      });
-
-      const rawItems = await parseNdjsonStreamToArray<DatasetItemPublic>(
-        streamResponse,
-        serialization.DatasetItemPublic,
-        streamLimit
-      );
-
-      if (rawItems.length === 0) {
-        break;
-      }
-
-      const items = rawItems.map((item) => DatasetItem.fromApiModel<T>(item));
-      allItems.push(...items);
-
-      currentLastId = rawItems[rawItems.length - 1].id;
-
-      if (remaining !== undefined) {
-        remaining -= rawItems.length;
-        if (remaining <= 0) {
-          break;
-        }
-      }
-
-      // If we got fewer items than requested, we've reached the end
-      if (rawItems.length < streamLimit) {
-        break;
-      }
-    }
-
-    return allItems;
   }
 }
