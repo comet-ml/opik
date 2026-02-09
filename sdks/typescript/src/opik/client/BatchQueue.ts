@@ -190,7 +190,9 @@ export abstract class BatchQueue<EntityData = object, EntityId = string> {
       return;
     }
 
-    this.updateQueue.add(id, updates);
+    // Merge with any existing pending update, then add to queue
+    const existingUpdate = this.updateQueue.queue.get(id);
+    this.updateQueue.add(id, { ...existingUpdate, ...updates });
   };
 
   public delete = (id: EntityId) => {

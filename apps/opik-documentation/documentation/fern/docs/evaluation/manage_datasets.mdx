@@ -447,7 +447,7 @@ When running experiments from the Playground:
 
 ### Selecting a specific version in the SDK
 
-When running experiments programmatically, you can specify which dataset version to use:
+When running experiments programmatically, you can specify which dataset version to use by passing a `DatasetVersion` object to `evaluate()`:
 
 <CodeBlocks>
 ```python title="Python" language="python"
@@ -457,7 +457,7 @@ from opik.evaluation import evaluate
 client = Opik()
 dataset = client.get_dataset(name="My dataset")
 
-# Run experiment on the latest version (default)
+# Run experiment on the latest version (default behavior)
 result = evaluate(
     experiment_name="baseline-experiment",
     dataset=dataset,
@@ -465,11 +465,11 @@ result = evaluate(
     scoring_metrics=[my_metric],
 )
 
-# Run experiment on a specific version by tag
+# Run experiment on a specific version
+v1_view = dataset.get_version_view("v1")
 result = evaluate(
-    experiment_name="production-test",
-    dataset=dataset,
-    dataset_version="production",  # Use version tagged as "production"
+    experiment_name="v1-experiment",
+    dataset=v1_view,  # Pass the DatasetVersion object
     task=my_task_function,
     scoring_metrics=[my_metric],
 )
@@ -490,6 +490,52 @@ const result = await evaluate({
 });
 ```
 </CodeBlocks>
+
+### Working with dataset versions programmatically
+
+The Python SDK provides methods for inspecting and working with dataset versions:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik import Opik
+
+client = Opik()
+dataset = client.get_dataset(name="My dataset")
+
+# Get the current (latest) version name
+current_version = dataset.get_current_version_name()
+print(f"Current version: {current_version}")  # e.g., "v3"
+
+# Get detailed version info (returns DatasetVersionPublic)
+version_info = dataset.get_version_info()
+print(f"Version ID: {version_info.id}")
+print(f"Version name: {version_info.version_name}")
+print(f"Items total: {version_info.items_total}")
+print(f"Created at: {version_info.created_at}")
+
+# Get a read-only view of a specific version
+v1_view = dataset.get_version_view("v1")
+
+# Access version metadata
+print(f"Version: {v1_view.version_name}")
+print(f"Items in v1: {v1_view.items_total}")
+print(f"Items added: {v1_view.items_added}")
+print(f"Items modified: {v1_view.items_modified}")
+print(f"Items deleted: {v1_view.items_deleted}")
+
+# Get items from a specific version
+v1_items = v1_view.get_items()
+
+# Export version data
+v1_df = v1_view.to_pandas()
+v1_json = v1_view.to_json()
+```
+</CodeBlocks>
+
+<Note>
+  `DatasetVersion` is a read-only view. You cannot insert, update, or delete items
+  through a `DatasetVersion` object. All mutations must be done through the `Dataset` object.
+</Note>
 
 ## Expanding a dataset with AI
 
