@@ -761,7 +761,12 @@ def get_fast_api_app(
                         yield sse_event_str
             except Exception as e:
                 logger.exception("Error in event_generator: %s", e)
-                yield f'data: {{"error": "{str(e)}"}}\n\n'
+                error_msg = json.dumps(
+                    {
+                        "error": "An internal error occurred while processing the request."
+                    }
+                )
+                yield f"data: {error_msg}\n\n"
 
         # Returns a streaming response with the proper media type for SSE
         return StreamingResponse(
