@@ -2438,35 +2438,24 @@ class TraceDAOImpl implements TraceDAO {
                 <if(input)> :input <else> t.input <endif> as input,
                 <if(output)> :output <else> t.output <endif> as output,
                 <if(metadata)> :metadata <else> t.metadata <endif> as metadata,
-                <if(tags_to_add || tags_to_remove)>
-                    <if(tags_to_add && tags_to_remove)>
-                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), t.tags), :tags_to_add))
-                    <elseif(tags_to_add)>
-                        arrayDistinct(arrayConcat(t.tags, :tags_to_add))
-                    <elseif(tags_to_remove)>
-                        arrayFilter(x -> NOT has(:tags_to_remove, x), t.tags)
-                    <endif>
-                <elseif(tags)>
-                    <if(merge_tags)>arrayDistinct(arrayConcat(t.tags, :tags))<else>:tags<endif>
-                <else>
-                    t.tags
-                <endif> as tags,
-                <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
-                t.created_at,
-                t.created_by,
-                :user_name as last_updated_by,
-                <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
-                t.visibility_mode,
-                :truncation_threshold as truncation_threshold,
-                <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> t.output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> t.ttft <endif> as ttft
-            FROM traces t
-            WHERE t.id IN :ids AND t.workspace_id = :workspace_id
-            ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
-            LIMIT 1 BY t.id
-            SETTINGS log_comment = '<log_comment>';
-            """;
+                """ + SqlFragments.tagUpdateFragment("t.tags") + """
+            as tags,
+                           <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
+                           t.created_at,
+                           t.created_by,
+                           :user_name as last_updated_by,
+                           <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
+                           t.visibility_mode,
+                           :truncation_threshold as truncation_threshold,
+                           <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
+                           <if(output)> :output_slim <else> t.output_slim <endif> as output_slim,
+                           <if(ttft)> :ttft <else> t.ttft <endif> as ttft
+                       FROM traces t
+                       WHERE t.id IN :ids AND t.workspace_id = :workspace_id
+                       ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
+                       LIMIT 1 BY t.id
+                       SETTINGS log_comment = '<log_comment>';
+                       """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;

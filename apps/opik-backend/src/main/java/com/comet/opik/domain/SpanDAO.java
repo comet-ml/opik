@@ -2465,35 +2465,26 @@ class SpanDAO {
                 <if(provider)> :provider <else> s.provider <endif> as provider,
                 <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
                 <if(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
-                <if(tags_to_add || tags_to_remove)>
-                    <if(tags_to_add && tags_to_remove)>
-                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), s.tags), :tags_to_add))
-                    <elseif(tags_to_add)>
-                        arrayDistinct(arrayConcat(s.tags, :tags_to_add))
-                    <elseif(tags_to_remove)>
-                        arrayFilter(x -> NOT has(:tags_to_remove, x), s.tags)
-                    <endif>
-                <elseif(tags)>
-                    <if(merge_tags)>arrayDistinct(arrayConcat(s.tags, :tags))<else>:tags<endif>
-                <else>
-                    s.tags
-                <endif> as tags,
-                <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> s.usage <endif> as usage,
-                <if(error_info)> :error_info <else> s.error_info <endif> as error_info,
-                s.created_at,
-                s.created_by,
-                :user_name as last_updated_by,
-                :truncation_threshold,
-                <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> s.output_slim <endif> as output_slim,
-                <if(ttft)> :ttft <else> s.ttft <endif> as ttft
-            FROM spans s
-            WHERE s.id IN :ids AND s.workspace_id = :workspace_id
-            ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
-            LIMIT 1 BY s.id
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
+                """
+            + SqlFragments.tagUpdateFragment("s.tags")
+            + """
+                    as tags,
+                                   <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> s.usage <endif> as usage,
+                                   <if(error_info)> :error_info <else> s.error_info <endif> as error_info,
+                                   s.created_at,
+                                   s.created_by,
+                                   :user_name as last_updated_by,
+                                   :truncation_threshold,
+                                   <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
+                                   <if(output)> :output_slim <else> s.output_slim <endif> as output_slim,
+                                   <if(ttft)> :ttft <else> s.ttft <endif> as ttft
+                               FROM spans s
+                               WHERE s.id IN :ids AND s.workspace_id = :workspace_id
+                               ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
+                               LIMIT 1 BY s.id
+                               SETTINGS log_comment = '<log_comment>'
+                               ;
+                               """;
 
     @WithSpan
     public Mono<Void> bulkUpdate(@NonNull Set<UUID> ids, @NonNull SpanUpdate update, boolean mergeTags) {

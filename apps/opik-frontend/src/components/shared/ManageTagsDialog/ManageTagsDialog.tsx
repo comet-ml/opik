@@ -1,4 +1,6 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { Tag } from "lucide-react";
+
 import {
   Dialog,
   DialogContent,
@@ -17,7 +19,6 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { Tag } from "lucide-react";
 
 export type EntityWithTags = {
   id: string;
@@ -49,11 +50,22 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
 }) => {
   const { toast } = useToast();
   const [newTagInput, setNewTagInput] = useState<string>("");
-  const [newTags, setNewTags] = useState<string[]>([]);
-  const [tagsToRemove, setTagsToRemove] = useState<string[]>([]);
+  const [newTags, setNewTags] = useState<Set<string>>(new Set());
+  const [tagsToRemove, setTagsToRemove] = useState<Set<string>>(new Set());
 
   const isOverLimit =
     maxEntities && !isAllItemsSelected && entities.length > maxEntities;
+
+  useEffect(() => {
+    if (isOverLimit && open) {
+      toast({
+        title: "Error",
+        description: `You can only add tags to up to ${maxEntities} items at a time. Please select fewer items.`,
+        variant: "destructive",
+      });
+      setOpen(false);
+    }
+  }, [isOverLimit, open, maxEntities, setOpen, toast]);
 
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -70,7 +82,7 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
 
     return Array.from(tagCounts.keys())
       .filter((tag) => tagCounts.get(tag) === entities.length)
-      .filter((tag) => !tagsToRemove.includes(tag));
+      .filter((tag) => !tagsToRemove.has(tag));
   }, [entities.length, tagCounts, tagsToRemove]);
 
   const individualTags = useMemo(() => {
@@ -78,20 +90,20 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
 
     return Array.from(tagCounts.keys())
       .filter((tag) => tagCounts.get(tag)! < entities.length)
-      .filter((tag) => !tagsToRemove.includes(tag));
+      .filter((tag) => !tagsToRemove.has(tag));
   }, [entities.length, tagCounts, tagsToRemove]);
 
   const handleClose = () => {
     setOpen(false);
     setNewTagInput("");
-    setNewTags([]);
-    setTagsToRemove([]);
+    setNewTags(new Set());
+    setTagsToRemove(new Set());
   };
 
   const handleAddNewTag = useCallback(() => {
     const trimmedTag = newTagInput.trim();
 
-    if (maxTags && newTags.length >= maxTags) {
+    if (maxTags && newTags.size >= maxTags) {
       toast({
         title: "Too many tags",
         description: `You can only add up to ${maxTags} tags at once`,
@@ -100,45 +112,61 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
       return;
     }
 
-    if (newTags.includes(trimmedTag)) {
+    if (newTags.has(trimmedTag)) {
       toast({
-        title: "Error",
+        title: "Tag already added",
         description: `Tag "${trimmedTag}" is already in the list`,
         variant: "destructive",
       });
       return;
     }
 
-    setNewTags((prev) => [...prev, trimmedTag]);
+    if (
+      tagCounts.has(trimmedTag) &&
+      tagCounts.get(trimmedTag) === entities.length
+    ) {
+      toast({
+        title: "Tag already exists",
+        description: `Tag "${trimmedTag}" is already applied to all selected items`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setNewTags((prev) => new Set(prev).add(trimmedTag));
     setNewTagInput("");
-  }, [newTagInput, newTags, toast, maxTags]);
+  }, [newTagInput, newTags, toast, maxTags, tagCounts, entities.length]);
 
   const handleRemoveNewTag = useCallback((tag: string) => {
-    setNewTags((prev) => prev.filter((t) => t !== tag));
+    setNewTags((prev) => {
+      const next = new Set(prev);
+      next.delete(tag);
+      return next;
+    });
   }, []);
 
   const handleRemoveExistingTag = useCallback(
     (tag: string) => {
-      if (maxTags && tagsToRemove.length >= maxTags) {
+      if (maxTags && tagsToRemove.size >= maxTags) {
         toast({
-          variant: "destructive",
           title: "Too many tags to remove",
           description: `You can only remove up to ${maxTags} tags at once`,
+          variant: "destructive",
         });
         return;
       }
-      setTagsToRemove((prev) => [...prev, tag]);
+      setTagsToRemove((prev) => new Set(prev).add(tag));
     },
-    [maxTags, tagsToRemove, toast],
+    [maxTags, tagsToRemove.size, toast],
   );
 
   const handleUpdateTags = async () => {
     try {
-      await onUpdate(newTags, tagsToRemove);
+      await onUpdate(Array.from(newTags), Array.from(tagsToRemove));
 
       const removedMsg =
-        tagsToRemove.length > 0 ? `${tagsToRemove.length} removed` : "";
-      const addedMsg = newTags.length > 0 ? `${newTags.length} added` : "";
+        tagsToRemove.size > 0 ? `${tagsToRemove.size} removed` : "";
+      const addedMsg = newTags.size > 0 ? `${newTags.size} added` : "";
       const separator = removedMsg && addedMsg ? ", " : "";
 
       toast({
@@ -152,14 +180,6 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
   };
 
   if (isOverLimit) {
-    if (open) {
-      toast({
-        title: "Error",
-        description: `You can only add tags to up to ${maxEntities} items at a time. Please select fewer items.`,
-        variant: "destructive",
-      });
-      setOpen(false);
-    }
     return null;
   }
 
@@ -213,9 +233,9 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
               </Button>
             </div>
 
-            {newTags.length > 0 && (
+            {newTags.size > 0 && (
               <div className="flex flex-wrap gap-2">
-                {newTags.map((tag) => (
+                {Array.from(newTags).map((tag) => (
                   <RemovableTag
                     key={tag}
                     label={tag}
@@ -226,7 +246,7 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
               </div>
             )}
 
-            {newTags.length === 0 && (
+            {newTags.size === 0 && (
               <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
                 <div className="flex flex-col items-center gap-1">
                   <Tag className="size-4" />
@@ -310,7 +330,7 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
           </Button>
           <Button
             onClick={handleUpdateTags}
-            disabled={newTags.length === 0 && tagsToRemove.length === 0}
+            disabled={newTags.size === 0 && tagsToRemove.size === 0}
           >
             Update tags for {itemCount} {itemCount === 1 ? "item" : "items"}
           </Button>

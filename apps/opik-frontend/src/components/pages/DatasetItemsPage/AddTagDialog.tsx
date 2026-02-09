@@ -40,10 +40,12 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
         // Draft mode: update each item individually in local state
         rows.forEach((item) => {
           const currentTags = item?.tags || [];
-          const finalTags = [
-            ...currentTags.filter((t) => !tagsToRemove.includes(t)),
-            ...tagsToAdd,
-          ];
+          const finalTags = Array.from(
+            new Set([
+              ...currentTags.filter((t) => !tagsToRemove.includes(t)),
+              ...tagsToAdd,
+            ]),
+          );
           bulkEditItems([item.id], { tags: finalTags });
         });
 

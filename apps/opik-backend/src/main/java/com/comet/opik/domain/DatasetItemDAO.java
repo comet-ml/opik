@@ -851,28 +851,18 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 s.created_by,
                 :user_name as last_updated_by,
                 <if(data)> :data <else> s.data <endif> as data,
-                <if(tags_to_add || tags_to_remove)>
-                    <if(tags_to_add && tags_to_remove)>
-                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), s.tags), :tags_to_add))
-                    <elseif(tags_to_add)>
-                        arrayDistinct(arrayConcat(s.tags, :tags_to_add))
-                    <elseif(tags_to_remove)>
-                        arrayFilter(x -> NOT has(:tags_to_remove, x), s.tags)
-                    <endif>
-                <elseif(tags)>
-                    <if(merge_tags)>arrayDistinct(arrayConcat(s.tags, :tags))<else>:tags<endif>
-                <else>
-                    s.tags
-                <endif> as tags
-            FROM dataset_items AS s
-            WHERE s.workspace_id = :workspace_id
-            <if(ids)> AND s.id IN :ids <endif>
-            <if(dataset_id)> AND s.dataset_id = :dataset_id <endif>
-            <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
-            ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
-            LIMIT 1 BY s.id
-            SETTINGS log_comment = '<log_comment>';
-            """;
+                """ + SqlFragments.tagUpdateFragment("s.tags")
+            + """
+                    as tags
+                               FROM dataset_items AS s
+                               WHERE s.workspace_id = :workspace_id
+                               <if(ids)> AND s.id IN :ids <endif>
+                               <if(dataset_id)> AND s.dataset_id = :dataset_id <endif>
+                               <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
+                               ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
+                               LIMIT 1 BY s.id
+                               SETTINGS log_comment = '<log_comment>';
+                               """;
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = """
             WITH experiment_items_filtered AS (

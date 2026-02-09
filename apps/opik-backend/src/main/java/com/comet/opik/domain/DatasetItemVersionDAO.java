@@ -1184,19 +1184,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                <if(tags_to_add || tags_to_remove)>
-                    <if(tags_to_add && tags_to_remove)>
-                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), src.tags), :tags_to_add))
-                    <elseif(tags_to_add)>
-                        arrayDistinct(arrayConcat(src.tags, :tags_to_add))
-                    <elseif(tags_to_remove)>
-                        arrayFilter(x -> NOT has(:tags_to_remove, x), src.tags)
-                    <endif>
-                <elseif(tags)>
-                    <if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif>
-                <else>
-                    src.tags
-                <endif> as tags,
+                """ + SqlFragments.tagUpdateFragment("src.tags") + """
+                as tags,
                 <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
                 <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
                 src.item_created_at,
