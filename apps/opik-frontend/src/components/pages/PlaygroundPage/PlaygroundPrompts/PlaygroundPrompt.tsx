@@ -49,46 +49,6 @@ import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMe
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 
-// ALEX
-const mockJsonTreeData = {
-  user: {
-    id: 12345,
-    name: "John Doe",
-    email: "john.doe@example.com",
-    profile: {
-      age: 28,
-      location: "San Francisco",
-      preferences: {
-        theme: "dark",
-        language: "en",
-        notifications: true,
-      },
-    },
-    roles: ["admin", "editor"],
-  },
-  context: {
-    sessionId: "sess_abc123",
-    timestamp: "2026-02-08T10:30:00Z",
-    source: "web",
-  },
-  input: {
-    query: "How do I reset my password?",
-    metadata: {
-      category: "support",
-      priority: "high",
-    },
-  },
-  history: [
-    { role: "user", content: "Hello" },
-    { role: "assistant", content: "Hi! How can I help you today?" },
-  ],
-  settings: {
-    maxTokens: 1024,
-    temperature: 0.7,
-    topP: 0.9,
-  },
-};
-
 interface PlaygroundPromptProps {
   workspaceName: string;
   index: number;
@@ -422,7 +382,6 @@ const PlaygroundPrompt = ({
             updatePrompt(promptId, { messages: updatedMessages });
           },
         }}
-        jsonTreeData={mockJsonTreeData}
       />
 
       <AddNewPromptVersionDialog
