@@ -77,11 +77,12 @@ type AddEditFeedbackDefinitionDialogProps = {
   setOpen: (open: boolean) => void;
   feedbackDefinition?: FeedbackDefinition;
   mode?: FeedbackDefinitionDialogMode;
+  onCreated?: (feedbackDefinition: CreateFeedbackDefinition) => void;
 };
 
 const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
   AddEditFeedbackDefinitionDialogProps
-> = ({ open, setOpen, feedbackDefinition, mode = "create" }) => {
+> = ({ open, setOpen, feedbackDefinition, mode = "create", onCreated }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const feedbackDefinitionCreateMutation =
     useFeedbackDefinitionCreateMutation();
@@ -140,7 +141,10 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
         feedbackDefinition: composedFeedbackDefinition,
         workspaceName,
       });
+      onCreated?.(composedFeedbackDefinition);
     }
+
+    setOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composedFeedbackDefinition, workspaceName, feedbackDefinition, isEdit]);
 
@@ -205,15 +209,13 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <DialogClose asChild>
-            <Button
-              type="submit"
-              disabled={!isValidFeedbackDefinition(composedFeedbackDefinition)}
-              onClick={submitHandler}
-            >
-              {submitText}
-            </Button>
-          </DialogClose>
+          <Button
+            type="submit"
+            disabled={!isValidFeedbackDefinition(composedFeedbackDefinition)}
+            onClick={submitHandler}
+          >
+            {submitText}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
