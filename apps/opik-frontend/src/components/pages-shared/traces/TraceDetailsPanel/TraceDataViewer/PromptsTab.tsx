@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Span, Trace } from "@/types/traces";
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import { PromptLibraryMetadata } from "@/types/playground";
@@ -9,8 +9,15 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
+import PromptMessagesReadonly from "@/components/pages-shared/llm/PromptMessagesReadonly/PromptMessagesReadonly";
 import get from "lodash/get";
-import { ExternalLink, FileTerminal, GitCommitVertical } from "lucide-react";
+import {
+  Code2,
+  ExternalLink,
+  FileTerminal,
+  GitCommitVertical,
+  MessageSquare,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
@@ -93,6 +100,96 @@ const CustomUseInPlaygroundButton: React.FC<{
   );
 };
 
+interface PromptContentViewProps {
+  template: unknown;
+  promptInfo: PromptWithLatestVersion;
+  promptId?: string;
+  workspaceName: string;
+  search?: string;
+}
+
+const PromptContentView: React.FC<PromptContentViewProps> = ({
+  template,
+  promptInfo,
+  promptId,
+  workspaceName,
+  search,
+}) => {
+  const [showRawView, setShowRawView] = useState(false);
+
+  const templateString = useMemo(() => {
+    if (typeof template === "string") return template;
+    if (template !== null && template !== undefined) {
+      return JSON.stringify(template, null, 2);
+    }
+    return "";
+  }, [template]);
+
+  const hasMessages = useMemo(() => {
+    try {
+      const data =
+        typeof template === "string" ? JSON.parse(template) : template;
+      return Array.isArray(data) && data.length > 0;
+    } catch {
+      return false;
+    }
+  }, [template]);
+
+  return (
+    <div className="space-y-2">
+      {hasMessages && (
+        <div className="flex items-center justify-end">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowRawView(!showRawView)}
+          >
+            {showRawView ? (
+              <>
+                <MessageSquare className="mr-1.5 size-3.5" />
+                Message view
+              </>
+            ) : (
+              <>
+                <Code2 className="mr-1.5 size-3.5" />
+                Raw view
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {showRawView || !hasMessages ? (
+        <SyntaxHighlighter
+          withSearch
+          data={template as object}
+          search={search}
+        />
+      ) : (
+        <PromptMessagesReadonly template={templateString} />
+      )}
+
+      <div className="flex items-center justify-between text-xs text-muted-slate">
+        {promptId && (
+          <Button variant="outline" size="sm" asChild>
+            <Link
+              to="/$workspaceName/prompts/$promptId"
+              params={{ workspaceName, promptId }}
+              className="inline-flex items-center"
+            >
+              View in Prompt library
+            </Link>
+          </Button>
+        )}
+        <TryInPlaygroundButton
+          prompt={promptInfo}
+          ButtonComponent={CustomUseInPlaygroundButton}
+        />
+      </div>
+    </div>
+  );
+};
+
 const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   data,
   search,
@@ -122,9 +219,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
 
     return prompts.map((promptInfo: PromptWithLatestVersion, index: number) => {
       const promptName = promptInfo?.name || `Prompt ${index + 1}`;
-      // Use raw template (object) for JSON display, fallback to promptInfo for edge cases
       const rawTemplate = rawPrompts[index]?.version?.template;
-      const promptContent = rawTemplate ?? promptInfo;
       const commitHash = promptInfo?.latest_version?.commit;
       const promptId = promptInfo?.id;
 
@@ -149,30 +244,13 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
             </div>
           </AccordionTrigger>
           <AccordionContent>
-            <div className="space-x-1 space-y-2">
-              <SyntaxHighlighter
-                withSearch
-                data={promptContent as object}
-                search={search}
-              />
-              <div className="flex items-center justify-between text-xs text-muted-slate">
-                {promptId && (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link
-                      to="/$workspaceName/prompts/$promptId"
-                      params={{ workspaceName, promptId }}
-                      className="inline-flex items-center"
-                    >
-                      View in Prompt library
-                    </Link>
-                  </Button>
-                )}
-                <TryInPlaygroundButton
-                  prompt={promptInfo}
-                  ButtonComponent={CustomUseInPlaygroundButton}
-                />
-              </div>
-            </div>
+            <PromptContentView
+              template={rawTemplate}
+              promptInfo={promptInfo}
+              promptId={promptId}
+              workspaceName={workspaceName}
+              search={search}
+            />
           </AccordionContent>
         </AccordionItem>
       );
