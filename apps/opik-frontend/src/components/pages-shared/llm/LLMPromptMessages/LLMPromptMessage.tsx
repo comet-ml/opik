@@ -10,6 +10,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+
 import { Button } from "@/components/ui/button";
 import { FormErrorSkeleton } from "@/components/ui/form";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,8 +21,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
-import { DropdownOption } from "@/types/shared";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import Loader from "@/components/shared/Loader/Loader";
+import {
+  JsonTreePopover,
+  JsonObject,
+  JsonValue,
+} from "@/components/shared/JsonTreePopover";
+import LLMPromptMessageActions, {
+  ImprovePromptConfig,
+} from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
+import PromptMessageMediaSection from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaSection";
 
 import { cn } from "@/lib/utils";
 import {
@@ -31,30 +41,18 @@ import {
   hasVideosInContent,
   isMediaAllowedForRole,
 } from "@/lib/llm";
+import { useMessageContent } from "@/hooks/useMessageContent";
+import { useJsonPopover } from "./useJsonPopover";
 
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import Loader from "@/components/shared/Loader/Loader";
-import {
-  JsonTreePopover,
-  JsonObject,
-  JsonValue,
-} from "@/components/shared/JsonTreePopover";
+import isEmpty from "lodash/isEmpty";
 
+import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
+import { DropdownOption } from "@/types/shared";
 import {
   mustachePlugin,
   codeMirrorPromptTheme,
 } from "@/constants/codeMirrorPlugins";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
-
-import LLMPromptMessageActions, {
-  ImprovePromptConfig,
-} from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
-import PromptMessageMediaSection from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaSection";
-
-import { useMessageContent } from "@/hooks/useMessageContent";
-import { useJsonPopover } from "./useJsonPopover";
-
-import isEmpty from "lodash/isEmpty";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
