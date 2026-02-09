@@ -18,6 +18,7 @@ import {
   computePathsToExpand,
   filterVisiblePaths,
   findFirstChildPath,
+  computeVisibleTopLevelKeys,
 } from "./jsonTreeUtils";
 import JsonTreeNode from "./JsonTreeNode";
 import PopoverHeader from "./PopoverHeader";
@@ -274,6 +275,21 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     onOpenChange,
   ]);
 
+  // When filtering is active, compute which top-level entries should be shown
+  const filteredEntries = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return entries;
+    }
+
+    const visibleTopLevelKeys =
+      computeVisibleTopLevelKeys(filteredVisiblePaths);
+
+    return entries.filter(([key]) => {
+      const path = Array.isArray(data) ? `[${key.slice(1, -1)}]` : key;
+      return visibleTopLevelKeys.has(path);
+    }) as typeof entries;
+  }, [searchQuery, filteredVisiblePaths, entries, data]);
+
   const renderTree = () => {
     if (searchQuery.trim() && filteredVisiblePaths.length === 0) {
       return (
@@ -295,7 +311,7 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
         className="max-h-[var(--tree-max-height)] overflow-auto"
         style={{ "--tree-max-height": MAX_HEIGHT } as React.CSSProperties}
       >
-        {entries.map(([key, value]) => {
+        {filteredEntries.map(([key, value]) => {
           const path = Array.isArray(data) ? `[${key.slice(1, -1)}]` : key;
           return (
             <JsonTreeNode

@@ -7,6 +7,8 @@ import {
   findFirstChildPath,
   getVisiblePaths,
   getValuePreview,
+  extractTopLevelKey,
+  computeVisibleTopLevelKeys,
   VisiblePathItem,
 } from "./jsonTreeUtils";
 
@@ -365,6 +367,84 @@ describe("getVisiblePaths", () => {
       { path: "user.name", value: "John" },
       { path: "settings", value: { theme: "dark" } },
     ]);
+  });
+});
+
+describe("extractTopLevelKey", () => {
+  it("should return the whole path when no separator exists", () => {
+    expect(extractTopLevelKey("user")).toBe("user");
+    expect(extractTopLevelKey("settings")).toBe("settings");
+  });
+
+  it("should extract key before dot separator", () => {
+    expect(extractTopLevelKey("user.name")).toBe("user");
+    expect(extractTopLevelKey("user.profile.email")).toBe("user");
+  });
+
+  it("should extract key before bracket separator", () => {
+    expect(extractTopLevelKey("user[0]")).toBe("user");
+    expect(extractTopLevelKey("tags[0].name")).toBe("tags");
+  });
+
+  it("should handle root array elements", () => {
+    expect(extractTopLevelKey("[0]")).toBe("[0]");
+    expect(extractTopLevelKey("[0].name")).toBe("[0]");
+    expect(extractTopLevelKey("[10]")).toBe("[10]");
+    expect(extractTopLevelKey("[123].value")).toBe("[123]");
+  });
+
+  it("should take earlier separator when both exist", () => {
+    expect(extractTopLevelKey("user.tags[0]")).toBe("user");
+    expect(extractTopLevelKey("items[0].name")).toBe("items");
+  });
+});
+
+describe("computeVisibleTopLevelKeys", () => {
+  it("should return empty set for empty paths", () => {
+    const result = computeVisibleTopLevelKeys([]);
+    expect(result).toEqual(new Set());
+  });
+
+  it("should extract unique top-level keys from paths", () => {
+    const paths: VisiblePathItem[] = [
+      { path: "user", value: {} },
+      { path: "user.name", value: "John" },
+      { path: "user.email", value: "john@example.com" },
+      { path: "settings", value: {} },
+    ];
+    const result = computeVisibleTopLevelKeys(paths);
+    expect(result).toEqual(new Set(["user", "settings"]));
+  });
+
+  it("should handle array paths", () => {
+    const paths: VisiblePathItem[] = [
+      { path: "tags", value: [] },
+      { path: "tags[0]", value: "tag1" },
+      { path: "tags[1]", value: "tag2" },
+    ];
+    const result = computeVisibleTopLevelKeys(paths);
+    expect(result).toEqual(new Set(["tags"]));
+  });
+
+  it("should handle root array elements", () => {
+    const paths: VisiblePathItem[] = [
+      { path: "[0]", value: "a" },
+      { path: "[0].name", value: "John" },
+      { path: "[1]", value: "b" },
+      { path: "[2].value", value: 42 },
+    ];
+    const result = computeVisibleTopLevelKeys(paths);
+    expect(result).toEqual(new Set(["[0]", "[1]", "[2]"]));
+  });
+
+  it("should handle mixed object and nested paths", () => {
+    const paths: VisiblePathItem[] = [
+      { path: "user.profile.name", value: "John" },
+      { path: "settings.theme", value: "dark" },
+      { path: "tags[0]", value: "tag1" },
+    ];
+    const result = computeVisibleTopLevelKeys(paths);
+    expect(result).toEqual(new Set(["user", "settings", "tags"]));
   });
 });
 

@@ -203,6 +203,56 @@ export const findFirstChildPath = (
   return firstChild?.path ?? null;
 };
 
+/**
+ * Extracts the top-level key from a path.
+ * For object keys: first segment before '.' or '['
+ * For array indices: the '[index]' part at the start
+ *
+ * Examples:
+ * - "user" -> "user"
+ * - "user.name" -> "user"
+ * - "user[0]" -> "user"
+ * - "[0]" -> "[0]"
+ * - "[0].name" -> "[0]"
+ */
+export const extractTopLevelKey = (path: string): string => {
+  const dotIndex = path.indexOf(".");
+  const bracketIndex = path.indexOf("[");
+
+  if (bracketIndex === 0) {
+    // Path starts with '[' - it's a root array element like '[0]'
+    const closeBracket = path.indexOf("]");
+    return path.slice(0, closeBracket + 1);
+  } else if (dotIndex === -1 && bracketIndex === -1) {
+    // No separator - the whole path is the top-level key
+    return path;
+  } else if (dotIndex === -1) {
+    // Only bracket exists
+    return path.slice(0, bracketIndex);
+  } else if (bracketIndex === -1) {
+    // Only dot exists
+    return path.slice(0, dotIndex);
+  } else {
+    // Both exist - take the earlier one
+    return path.slice(0, Math.min(dotIndex, bracketIndex));
+  }
+};
+
+/**
+ * Computes the set of top-level keys that should be visible based on filtered paths.
+ */
+export const computeVisibleTopLevelKeys = (
+  filteredVisiblePaths: VisiblePathItem[],
+): Set<string> => {
+  const visibleTopLevelKeys = new Set<string>();
+
+  for (const item of filteredVisiblePaths) {
+    visibleTopLevelKeys.add(extractTopLevelKey(item.path));
+  }
+
+  return visibleTopLevelKeys;
+};
+
 export const VALUE_TYPE_STYLES = {
   key: { color: "var(--color-green)" },
   object: { color: "var(--chart-tick-stroke)" },
