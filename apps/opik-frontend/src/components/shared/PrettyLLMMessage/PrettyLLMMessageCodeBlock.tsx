@@ -1,30 +1,40 @@
-import React from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { EditorView } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
+import React, { useMemo } from "react";
+import { highlightCode, classHighlighter } from "@lezer/highlight";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { cn } from "@/lib/utils";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
-import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { PrettyLLMMessageCodeBlockProps } from "./types";
-
-const PRETTY_CODEMIRROR_SETUP = {
-  foldGutter: false,
-  lineNumbers: true,
-  highlightActiveLineGutter: false,
-  highlightActiveLine: false,
-};
-
-const CODEMIRROR_EXTENSIONS = [
-  jsonLanguage,
-  EditorView.lineWrapping,
-  EditorState.readOnly.of(true),
-  EditorView.editable.of(false),
-];
 
 const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> =
   React.memo(({ code, label = "JSON", className }) => {
-    const theme = useCodemirrorTheme();
+    const lines = useMemo(() => {
+      const tree = jsonLanguage.parser.parse(code);
+      const result: React.ReactNode[][] = [[]];
+      let key = 0;
+      highlightCode(
+        code,
+        tree,
+        classHighlighter,
+        (text, classes) => {
+          const current = result[result.length - 1];
+          current.push(
+            classes ? (
+              <span key={key++} className={classes}>
+                {text}
+              </span>
+            ) : (
+              text
+            ),
+          );
+        },
+        () => {
+          result.push([]);
+        },
+      );
+      return result;
+    }, [code]);
+
+    const gutterWidth = String(lines.length).length;
 
     return (
       <div
@@ -43,13 +53,20 @@ const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> =
             className="p-0"
           />
         </div>
-        <div className="max-h-[500px] overflow-auto [&>div>.absolute]:!hidden [&_.cm-editor]:!bg-primary-foreground [&_.cm-gutters]:!bg-primary-foreground">
-          <CodeMirror
-            theme={theme}
-            value={code}
-            basicSetup={PRETTY_CODEMIRROR_SETUP}
-            extensions={CODEMIRROR_EXTENSIONS}
-          />
+        <div className="max-h-[500px] overflow-auto">
+          <pre className="static-code-highlight m-0 p-0">
+            {lines.map((tokens, i) => (
+              <div key={i} className="flex">
+                <span
+                  className="static-code-gutter shrink-0 select-none px-2 text-right"
+                  style={{ minWidth: `${gutterWidth + 2}ch` }}
+                >
+                  {i + 1}
+                </span>
+                <span className="flex-1 px-1">{tokens}</span>
+              </div>
+            ))}
+          </pre>
         </div>
       </div>
     );

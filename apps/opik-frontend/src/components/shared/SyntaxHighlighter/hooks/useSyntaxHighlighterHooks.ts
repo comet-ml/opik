@@ -112,15 +112,13 @@ export const useLLMMessagesExpandAll = (
 
   const handleValueChange = useCallback(
     (value: string[]) => {
-      startTransition(() => {
-        const newExpandedSet = new Set(value);
-        const allExpanded =
-          allMessageIds.length > 0 &&
-          allMessageIds.every((id) => newExpandedSet.has(id));
+      const newExpandedSet = new Set(value);
+      const allExpanded =
+        allMessageIds.length > 0 &&
+        allMessageIds.every((id) => newExpandedSet.has(id));
 
-        setIsAllExpanded(allExpanded);
-        setCustomExpandedIds(allExpanded ? new Set() : newExpandedSet);
-      });
+      setIsAllExpanded(allExpanded);
+      setCustomExpandedIds(allExpanded ? new Set() : newExpandedSet);
     },
     [allMessageIds, setIsAllExpanded],
   );

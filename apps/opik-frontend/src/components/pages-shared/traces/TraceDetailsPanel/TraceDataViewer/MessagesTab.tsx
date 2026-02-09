@@ -1,4 +1,10 @@
-import React, { useRef, useMemo, useCallback, useState } from "react";
+import React, {
+  useRef,
+  useMemo,
+  useCallback,
+  useState,
+  useEffect,
+} from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
 import { UnifiedMediaItem } from "@/hooks/useUnifiedMedia";
@@ -21,8 +27,10 @@ import { useLLMMessagesExpandAll } from "@/components/shared/SyntaxHighlighter/h
 import Loader from "@/components/shared/Loader/Loader";
 
 const ESTIMATED_COLLAPSED_HEIGHT = 36;
+const ESTIMATED_EXPANDED_HEIGHT = 200;
 const VIRTUALIZATION_THRESHOLD = 30;
-const VIRTUAL_OVERSCAN = 5;
+const VIRTUAL_OVERSCAN = 10;
+const TOGGLE_SUPPRESS_MS = 300;
 
 type MessagesTabProps = {
   transformedInput: object;
@@ -110,6 +118,11 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
     handleValueChange,
   } = useLLMMessagesExpandAll(allMessageIds, "messages-tab-combined");
 
+  const expandedSet = useMemo(
+    () => new Set(expandedMessages),
+    [expandedMessages],
+  );
+
   const copyText = useMemo(
     () =>
       JSON.stringify(
@@ -136,12 +149,46 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   const virtualizer = useVirtualizer({
     count: combinedMessages.length,
     getScrollElement: () => effectiveScrollRef.current,
-    estimateSize: () => ESTIMATED_COLLAPSED_HEIGHT,
+    estimateSize: (index) => {
+      const id = combinedMessages[index]?.id;
+      return id && expandedSet.has(id)
+        ? ESTIMATED_EXPANDED_HEIGHT
+        : ESTIMATED_COLLAPSED_HEIGHT;
+    },
     overscan: VIRTUAL_OVERSCAN,
     getItemKey: (index) => combinedMessages[index].id,
     enabled: shouldVirtualize,
     scrollMargin,
   });
+
+  const lastToggleTimeRef = useRef(0);
+
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
+    item,
+    _delta,
+    instance,
+  ) => {
+    if (Date.now() - lastToggleTimeRef.current < TOGGLE_SUPPRESS_MS) {
+      return false;
+    }
+    return item.start < (instance.scrollOffset ?? 0);
+  };
+
+  const pendingMeasureRef = useRef(false);
+
+  const wrappedHandleToggleAll = useCallback(() => {
+    lastToggleTimeRef.current = Date.now();
+    pendingMeasureRef.current = true;
+    handleToggleAll();
+  }, [handleToggleAll]);
+
+  useEffect(() => {
+    if (pendingMeasureRef.current) {
+      pendingMeasureRef.current = false;
+      lastToggleTimeRef.current = Date.now();
+      virtualizer.measure();
+    }
+  }, [expandedMessages, virtualizer]);
 
   const renderMessage = useCallback(
     (message: LLMMessageDescriptor) => (
@@ -163,7 +210,11 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
   const expandCollapseButton = (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button onClick={handleToggleAll} variant="outline" size="icon-2xs">
+        <Button
+          onClick={wrappedHandleToggleAll}
+          variant="outline"
+          size="icon-2xs"
+        >
           {isAllExpanded ? <FoldVertical /> : <UnfoldVertical />}
         </Button>
       </TooltipTrigger>
@@ -199,24 +250,29 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
           className="relative"
           style={{ height: virtualizer.getTotalSize() }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const message = combinedMessages[virtualRow.index];
-            return (
-              <div
-                key={message.id}
-                data-index={virtualRow.index}
-                ref={virtualizer.measureElement}
-                className="absolute left-0 w-full pb-1"
-                style={{
-                  transform: `translateY(${
-                    virtualRow.start - virtualizer.options.scrollMargin
-                  }px)`,
-                }}
-              >
-                {renderMessage(message)}
-              </div>
-            );
-          })}
+          <div
+            className="absolute left-0 top-0 w-full"
+            style={{
+              transform: `translateY(${
+                (virtualizer.getVirtualItems()[0]?.start ?? 0) -
+                virtualizer.options.scrollMargin
+              }px)`,
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const message = combinedMessages[virtualRow.index];
+              return (
+                <div
+                  key={message.id}
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
+                  className="w-full pb-1"
+                >
+                  {renderMessage(message)}
+                </div>
+              );
+            })}
+          </div>
         </div>
       </PrettyLLMMessage.Container>
     );
