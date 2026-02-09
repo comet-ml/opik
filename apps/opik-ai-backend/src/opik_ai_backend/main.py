@@ -572,6 +572,10 @@ def get_fast_api_app(
         current_user: UserContext = Depends(get_current_user),
     ):
         """Set or update feedback for an OpikAssist conversation session."""
+        if settings.opik_internal_url is None:
+            logger.debug("Internal monitoring not configured, skipping feedback submission")
+            return {"status": "ok"}
+
         # Validate feedback value
         if req.value not in (0, 1):
             raise HTTPException(
@@ -642,6 +646,10 @@ def get_fast_api_app(
         current_user: UserContext = Depends(get_current_user),
     ):
         """Remove feedback for an OpikAssist conversation session."""
+        if settings.opik_internal_url is None:
+            logger.debug("Internal monitoring not configured, skipping feedback deletion")
+            return
+
         session_id = get_session_id_from_trace_id(trace_id)
 
         # Check if session exists
