@@ -11,5 +11,7 @@ import java.util.Set;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record TraceThreadUpdate(
-        Set<String> tags) {
+        Set<String> tags,
+        Set<String> tagsToAdd,
+        Set<String> tagsToRemove) {
 }
