@@ -276,9 +276,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     minDate,
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage();
-  const [search = "", setSearch] = useQueryParam("search", StringParam, {
-    updateType: "replaceIn",
-  });
+  const [search = "", setSearch] = useQueryParam(
+    `${type}_search`,
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",

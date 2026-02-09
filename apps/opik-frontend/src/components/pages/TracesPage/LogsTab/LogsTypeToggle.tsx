@@ -16,7 +16,7 @@ const LogsTypeToggle: React.FC<LogsTypeToggleProps> = ({
       type="single"
       value={value}
       onValueChange={(val) => val && onValueChange(val as LOGS_TYPE)}
-      variant="ghost"
+      variant="secondary"
       className="w-fit"
     >
       <ToggleGroupItem value={LOGS_TYPE.threads} size="sm">
