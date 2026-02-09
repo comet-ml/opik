@@ -4,6 +4,7 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.domain.SqlFragments;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
@@ -620,26 +621,15 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.last_updated_by,
                 tt.created_at,
                 now64(6) as last_updated_at,
-                <if(tags_to_add || tags_to_remove)>
-                    <if(tags_to_add && tags_to_remove)>
-                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), tt.tags), :tags_to_add))
-                    <elseif(tags_to_add)>
-                        arrayDistinct(arrayConcat(tt.tags, :tags_to_add))
-                    <elseif(tags_to_remove)>
-                        arrayFilter(x -> NOT has(:tags_to_remove, x), tt.tags)
-                    <endif>
-                <elseif(tags)>
-                    <if(merge_tags)>arrayDistinct(arrayConcat(tt.tags, :tags))<else>:tags<endif>
-                <else>
-                    tt.tags
-                <endif> as tags,
-                tt.sampling_per_rule,
-                tt.scored_at
-            FROM trace_threads tt
-            WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
-            ORDER BY (tt.workspace_id, tt.project_id, tt.thread_id, tt.id) DESC, tt.last_updated_at DESC
-            LIMIT 1 BY tt.id;
-            """;
+                """ + SqlFragments.tagUpdateFragment("tt.tags") + """
+            as tags,
+                           tt.sampling_per_rule,
+                           tt.scored_at
+                       FROM trace_threads tt
+                       WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
+                       ORDER BY (tt.workspace_id, tt.project_id, tt.thread_id, tt.id) DESC, tt.last_updated_at DESC
+                       LIMIT 1 BY tt.id;
+                       """;
 
     @Override
     public Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags) {

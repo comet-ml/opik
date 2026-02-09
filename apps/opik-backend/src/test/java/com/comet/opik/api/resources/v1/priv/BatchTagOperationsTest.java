@@ -30,6 +30,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -42,6 +45,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -122,7 +126,7 @@ class BatchTagOperationsTest {
 
         @Test
         @DisplayName("Should add tags using tagsToAdd")
-        void testAddTags() {
+        void batchUpdateWhenAddingTags() {
             var experiment = createExperiment(Set.of("initial"));
 
             batchUpdate(experiment.id(), Set.of("new-1", "new-2"), null);
@@ -133,7 +137,7 @@ class BatchTagOperationsTest {
 
         @Test
         @DisplayName("Should remove tags using tagsToRemove")
-        void testRemoveTags() {
+        void batchUpdateWhenRemovingTags() {
             var experiment = createExperiment(Set.of("tag1", "tag2", "tag3"));
 
             batchUpdate(experiment.id(), null, Set.of("tag2", "tag3"));
@@ -143,7 +147,7 @@ class BatchTagOperationsTest {
 
         @Test
         @DisplayName("Should add and remove in single operation")
-        void testAddAndRemoveSimultaneously() {
+        void batchUpdateWhenAddingAndRemovingSimultaneously() {
             var experiment = createExperiment(Set.of("old-1", "old-2", "keep"));
 
             batchUpdate(experiment.id(), Set.of("new-1", "new-2"), Set.of("old-1", "old-2"));
@@ -154,7 +158,7 @@ class BatchTagOperationsTest {
 
         @Test
         @DisplayName("Should prevent duplicates and handle non-existent tags")
-        void testEdgeCases() {
+        void batchUpdateWhenHandlingEdgeCases() {
             var experiment = createExperiment(Set.of("existing"));
 
             batchUpdate(experiment.id(), Set.of("existing", "new"), null);
@@ -166,32 +170,27 @@ class BatchTagOperationsTest {
                     .containsExactlyInAnyOrder("existing", "new");
         }
 
-        @Test
-        @DisplayName("Should validate 50 tag limit")
-        void testTagCountLimit() {
-            var experiment = createExperiment(Set.of());
+        static Stream<Arguments> invalidTagPayloads() {
             Set<String> tooManyTags = IntStream.range(0, 51)
                     .mapToObj(i -> "tag-" + i)
                     .collect(Collectors.toSet());
+            Set<String> tooLongTag = Set.of("a".repeat(101));
 
-            var response = batchUpdateRequest()
-                    .method(HttpMethod.PATCH, Entity.json(ExperimentBatchUpdate.builder()
-                            .ids(Set.of(experiment.id()))
-                            .update(ExperimentUpdate.builder().tagsToAdd(tooManyTags).build())
-                            .build()));
-
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            return Stream.of(
+                    Arguments.of("50 tag limit", tooManyTags),
+                    Arguments.of("100 character tag length", tooLongTag));
         }
 
-        @Test
-        @DisplayName("Should validate 100 character tag length")
-        void testTagLengthLimit() {
+        @ParameterizedTest(name = "Should validate {0}")
+        @MethodSource("invalidTagPayloads")
+        @DisplayName("Should reject invalid tag payloads")
+        void batchUpdateWhenInvalidTagPayload(String description, Set<String> invalidTags) {
             var experiment = createExperiment(Set.of());
 
             var response = batchUpdateRequest()
                     .method(HttpMethod.PATCH, Entity.json(ExperimentBatchUpdate.builder()
                             .ids(Set.of(experiment.id()))
-                            .update(ExperimentUpdate.builder().tagsToAdd(Set.of("a".repeat(101))).build())
+                            .update(ExperimentUpdate.builder().tagsToAdd(invalidTags).build())
                             .build()));
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
@@ -199,7 +198,7 @@ class BatchTagOperationsTest {
 
         @Test
         @DisplayName("Should maintain backwards compatibility with tags + mergeTags")
-        void testBackwardsCompatibility() {
+        void batchUpdateWhenUsingLegacyMergeTags() {
             var experiment = createExperiment(Set.of("existing"));
 
             batchUpdateRequest()

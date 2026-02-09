@@ -1150,44 +1150,33 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                <if(tags_to_add || tags_to_remove)>
-                    <if(tags_to_add && tags_to_remove)>
-                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), src.tags), :tags_to_add))
-                    <elseif(tags_to_add)>
-                        arrayDistinct(arrayConcat(src.tags, :tags_to_add))
-                    <elseif(tags_to_remove)>
-                        arrayFilter(x -> NOT has(:tags_to_remove, x), src.tags)
-                    <endif>
-                <elseif(tags)>
-                    <if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif>
-                <else>
-                    src.tags
-                <endif> as tags,
-                src.item_created_at,
-                now64(9) as item_last_updated_at,
-                src.item_created_by,
-                :userName as item_last_updated_by,
-                now64(9) as created_at,
-                now64(9) as last_updated_at,
-                :userName as created_by,
-                :userName as last_updated_by,
-                src.workspace_id
-            FROM (
-                SELECT *
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND dataset_version_id = :baseVersionId
-                <if(item_ids)>
-                AND dataset_item_id IN :itemIds
-                <endif>
-                <if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY dataset_item_id
-            ) AS src
-            """;
+                """ + SqlFragments.tagUpdateFragment("src.tags") + """
+            as tags,
+                           src.item_created_at,
+                           now64(9) as item_last_updated_at,
+                           src.item_created_by,
+                           :userName as item_last_updated_by,
+                           now64(9) as created_at,
+                           now64(9) as last_updated_at,
+                           :userName as created_by,
+                           :userName as last_updated_by,
+                           src.workspace_id
+                       FROM (
+                           SELECT *
+                           FROM dataset_item_versions
+                           WHERE workspace_id = :workspace_id
+                           AND dataset_id = :datasetId
+                           AND dataset_version_id = :baseVersionId
+                           <if(item_ids)>
+                           AND dataset_item_id IN :itemIds
+                           <endif>
+                           <if(dataset_item_filters)>
+                           AND <dataset_item_filters>
+                           <endif>
+                           ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                           LIMIT 1 BY dataset_item_id
+                       ) AS src
+                       """;
 
     // Copy items from source version to target version
     // Optionally excludes items matching filters (when exclude_filters is set)

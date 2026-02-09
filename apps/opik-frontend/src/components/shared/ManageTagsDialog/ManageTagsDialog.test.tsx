@@ -175,8 +175,9 @@ describe("ManageTagsDialog", () => {
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith(
           expect.objectContaining({
-            title: "Error",
+            title: "Tag already added",
             description: 'Tag "tag" is already in the list',
+            variant: "destructive",
           }),
         );
       });
@@ -236,21 +237,21 @@ describe("ManageTagsDialog", () => {
         "Type a tag and press Enter...",
       );
 
-      fireEvent.change(input, { target: { value: "tag1" } });
+      fireEvent.change(input, { target: { value: "newtag1" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
       await waitFor(() => {
-        expect(screen.getByText("tag1")).toBeInTheDocument();
+        expect(screen.getByText("newtag1")).toBeInTheDocument();
       });
 
-      fireEvent.change(input, { target: { value: "tag2" } });
+      fireEvent.change(input, { target: { value: "newtag2" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
       await waitFor(() => {
-        expect(screen.getByText("tag2")).toBeInTheDocument();
+        expect(screen.getByText("newtag2")).toBeInTheDocument();
       });
 
-      fireEvent.change(input, { target: { value: "tag3" } });
+      fireEvent.change(input, { target: { value: "newtag3" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
       await waitFor(() => {
@@ -262,7 +263,7 @@ describe("ManageTagsDialog", () => {
         );
       });
 
-      expect(screen.queryByText("tag3")).not.toBeInTheDocument();
+      expect(screen.queryByText("newtag3")).not.toBeInTheDocument();
     });
   });
 
