@@ -20,18 +20,13 @@ from google.adk.events import Event, EventActions
 from google.adk.models.lite_llm import LiteLlm
 from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService
-from google.genai import types
 from opik.decorator.error_info_collector import collect
 from opik.integrations.adk import OpikTracer
 from opik.opik_context import update_current_span
 
 from .logger_config import logger
 from .opik_backend_client import OpikBackendClient
-from .trace_tools import TEST_PREFIX  # noqa: F401
 from .trace_tools import get_span_details_impl, get_spans_data_impl, get_trace_data_impl
-
-# Re-export TEST_PREFIX for backward compatibility with other modules
-__all__ = ["TEST_PREFIX"]
 
 APP_NAME = "trace-analyzer"
 
@@ -248,66 +243,6 @@ def get_runner(agent: Agent, session_service: BaseSessionService):
     return Runner(agent=agent, app_name=APP_NAME, session_service=session_service)
 
 
-async def single_turn_conversation(
-    runner: Runner, session_id: str, user_id: str, query: str
-) -> Optional[str]:
-    # Wrap the input into Google GenAI format
-    content = types.Content(role="user", parts=[types.Part(text=query)])
-
-    # Run the agent asynchronously
-    events = runner.run_async(
-        user_id=user_id, session_id=session_id, new_message=content
-    )
-
-    final_response = None
-
-    content_parts = []
-
-    async for event in events:
-        if event.is_final_response():
-            if event.content:
-                content_parts.append(event.content)
-            if event.content and event.content.parts:
-                final_response = event.content.parts[0].text
-
-    assert final_response is not None, f"Final response is None, {content_parts}"
-
-    return final_response
-
-
-async def agent_loop_async(agent, query: str, user_id: str, trace_id: str):
-    session_service, session_id, session = await create_session(user_id, trace_id)
-    # Initialize the root agent runner
-    runner = get_runner(agent=agent, session_service=session_service)
-
-    final_response = None
-
-    try:
-        while True:
-            final_response = await single_turn_conversation(
-                runner, session_id, user_id, query
-            )
-
-            if final_response is not None:
-                print("Agent response:", final_response)
-            else:
-                print("Final response received but content is empty or malformed.")
-
-            query = input("You: ")
-    except Exception as e:
-        print(f"Error: {e}")
-
-    print("#" * 80)
-    print("FINAL RESPONSE")
-    print(final_response)
-    print("#" * 80)
-
-    # Cleanup: Close all sessions and shut down background resources
-    await runner.close()
-
-    return final_response
-
-
 async def get_agent(
     opik_client: OpikBackendClient,
     trace_id: str,
@@ -379,84 +314,3 @@ async def get_agent(
 
     root_agent = Agent(**agent_kwargs)
     return root_agent
-
-
-async def extract_tool_calls(
-    session_service: BaseSessionService, session_id: str, user_id: str
-) -> list[dict[str, Any]]:
-    session = await session_service.get_session(
-        app_name=APP_NAME, user_id=user_id, session_id=session_id
-    )
-
-    if not session:
-        raise ValueError(f"Session {session_id} not found")
-
-    tool_calls = []
-
-    for event in session.events:
-        function_calls = event.get_function_calls()
-        if function_calls:
-            for function_call in function_calls:
-                tool_calls.append(
-                    {"name": function_call.name, "kwargs": function_call.args}
-                )
-
-    return tool_calls
-
-
-async def extract_tool_calls_with_responses(
-    session_service: BaseSessionService, session_id: str, user_id: str
-) -> list[dict[str, Any]]:
-    """Extract tool calls with their responses from the session.
-
-    Uses ADK's reliable get_function_calls() and get_function_responses() methods
-    to extract both the tool calls and their responses, pairing them by function name.
-
-    Args:
-        session_service: The session service to use.
-        session_id: The session ID.
-        user_id: The user ID.
-
-    Returns:
-        List of tool calls with their responses, each containing:
-        - name: The tool name
-        - kwargs: The tool arguments
-        - response: The tool response data (if available)
-    """
-    session = await session_service.get_session(
-        app_name=APP_NAME, user_id=user_id, session_id=session_id
-    )
-
-    if not session:
-        raise ValueError(f"Session {session_id} not found")
-
-    tool_calls_with_responses = []
-    pending_calls: dict[str, dict[str, Any]] = {}  # Map function name to pending call
-
-    for event in session.events:
-        # Extract function calls using ADK's reliable method
-        function_calls = event.get_function_calls()
-        if function_calls:
-            for function_call in function_calls:
-                call_data = {
-                    "name": function_call.name,
-                    "kwargs": dict(function_call.args) if function_call.args else {},
-                    "response": None,
-                }
-                pending_calls[function_call.name] = call_data
-                tool_calls_with_responses.append(call_data)
-
-        # Extract function responses using ADK's reliable method
-        function_responses = event.get_function_responses()
-        if function_responses:
-            for function_response in function_responses:
-                func_name = function_response.name
-                response_data = function_response.response
-
-                # Find the most recent pending call with this name
-                if func_name in pending_calls:
-                    pending_calls[func_name]["response"] = response_data
-                    # Remove from pending after matching
-                    del pending_calls[func_name]
-
-    return tool_calls_with_responses

@@ -34,7 +34,7 @@ from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.sessions.session import Session
 from google.genai import types
 
-from ._agent import APP_NAME, create_session, extract_tool_calls, get_agent, get_runner
+from ._agent import APP_NAME, create_session, get_agent, get_runner
 from .analytics import track_conversation_resumed, track_conversation_started
 from .auth_dependencies import UserContext, get_current_user
 from .logger_config import logger
@@ -543,8 +543,6 @@ def get_fast_api_app(
         )
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
-
-        _ = await extract_tool_calls(session_service, session_id, current_user.user_id)
 
         messages = extract_messages_from_session(session)
 
