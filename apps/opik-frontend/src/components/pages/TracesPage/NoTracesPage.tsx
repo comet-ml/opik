@@ -1,6 +1,5 @@
 import React, { useMemo } from "react";
 import { Book, GraduationCap } from "lucide-react";
-import { useQueryParam } from "use-query-params";
 import noDataTracesImageUrl from "/images/no-data-traces.png";
 import noDataSpansImageUrl from "/images/no-data-spans.png";
 import noDataMetricsImageUrl from "/images/no-data-metrics.png";
@@ -10,9 +9,14 @@ import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/Qu
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
-const NoTracesPage = () => {
+type NoTracesPageProps = {
+  type?: TRACE_DATA_TYPE | "metrics";
+};
+
+const NoTracesPage: React.FC<NoTracesPageProps> = ({
+  type = TRACE_DATA_TYPE.traces,
+}) => {
   const { open: openQuickstart } = useOpenQuickStartDialog();
-  const [type = TRACE_DATA_TYPE.traces] = useQueryParam("type");
 
   const imageUrl = useMemo(() => {
     switch (type) {
