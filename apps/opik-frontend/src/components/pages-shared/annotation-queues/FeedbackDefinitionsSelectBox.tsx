@@ -101,11 +101,13 @@ const FeedbackDefinitionsSelectBox: React.FC<
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
 
   const options: DropdownOption<string>[] = useMemo(() => {
-    return (data?.content || []).map((feedbackDefinition) => ({
-      value: String(feedbackDefinition[valueField]),
-      label: feedbackDefinition.name,
-      description: feedbackDefinition.description,
-    }));
+    return (data?.content || [])
+      .map((feedbackDefinition) => ({
+        value: String(feedbackDefinition[valueField]),
+        label: feedbackDefinition.name,
+        description: feedbackDefinition.description,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [data?.content, valueField]);
 
   const loadableSelectBoxProps = props.multiselect
