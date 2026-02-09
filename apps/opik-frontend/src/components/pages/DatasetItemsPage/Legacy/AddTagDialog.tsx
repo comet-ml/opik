@@ -1,9 +1,10 @@
 import React, { useCallback } from "react";
-import { DatasetItem } from "@/types/datasets";
-import useDatasetItemBatchUpdateMutation from "@/api/datasets/useDatasetItemBatchUpdateMutation";
-import { Filters } from "@/types/filters";
-import { generateBatchGroupId } from "@/lib/utils";
+
 import ManageTagsDialog from "@/components/shared/ManageTagsDialog/ManageTagsDialog";
+import useDatasetItemBatchUpdateMutation from "@/api/datasets/useDatasetItemBatchUpdateMutation";
+import { generateBatchGroupId } from "@/lib/utils";
+import { DatasetItem } from "@/types/datasets";
+import { Filters } from "@/types/filters";
 
 type AddTagDialogProps = {
   datasetId: string;
