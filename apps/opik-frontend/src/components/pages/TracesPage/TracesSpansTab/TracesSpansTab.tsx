@@ -1280,7 +1280,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       <DataTableStateHandler
         isLoading={isTableLoading}
         isEmpty={showEmptyState}
-        emptyState={<NoTracesPage />}
+        emptyState={<NoTracesPage type={type} />}
       >
         <DataTable
           columns={columns}

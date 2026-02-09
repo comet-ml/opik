@@ -19,14 +19,9 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import ViewSelector, {
   VIEW_TYPE,
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
-import { LOGS_TYPE } from "@/constants/traces";
-
-enum PROJECT_TAB {
-  logs = "logs",
-  metrics = "metrics",
-  evaluators = "rules",
-  annotationQueues = "annotation-queues",
-}
+import useProjectTabs, {
+  PROJECT_TAB,
+} from "@/components/pages/TracesPage/useProjectTabs";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
@@ -47,53 +42,8 @@ const TracesPage = () => {
 
   const projectName = project?.name || projectId;
 
-  // Default to traces - always use traces as the default logs type
-  const defaultLogsType = LOGS_TYPE.traces;
-
-  // Remember the user's selected LOGS_TYPE to preserve their choice across tab switches
-  const [userSelectedLogsType, setUserSelectedLogsType] =
-    useState<LOGS_TYPE | null>(null);
-
-  const [queryType = defaultLogsType, setQueryType] = useQueryParam(
-    "type",
-    StringParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
-
-  // Determine which main tab is active based on the type value
-  // Cast once to avoid repeated casting throughout the component
-  const typeAsProjectTab = queryType as PROJECT_TAB;
-  const typeAsLogsType = queryType as LOGS_TYPE;
-  const isValidProjectTab =
-    Object.values(PROJECT_TAB).includes(typeAsProjectTab);
-  const isValidLogsType = Object.values(LOGS_TYPE).includes(typeAsLogsType);
-
-  const activeTab = isValidProjectTab ? typeAsProjectTab : PROJECT_TAB.logs;
-
-  // Compute valid logsType for LogsTab - normalize to valid LOGS_TYPE or use default
-  const logsType = isValidLogsType ? typeAsLogsType : defaultLogsType;
-
-  // Handle logs type change from LogsTab
-  const handleLogsTypeChange = (newLogsType: LOGS_TYPE) => {
-    setUserSelectedLogsType(newLogsType);
-    setQueryType(newLogsType);
-  };
-
-  // Handle tab change - preserve user's selected logs type when returning to Logs tab
-  const handleTabChange = (newTab: string) => {
-    if (newTab === PROJECT_TAB.logs) {
-      // Use remembered value if available, otherwise use default
-      setQueryType(userSelectedLogsType ?? defaultLogsType);
-    } else {
-      // Remember current logs type before switching away
-      if (isValidLogsType) {
-        setUserSelectedLogsType(typeAsLogsType);
-      }
-      setQueryType(newTab);
-    }
-  };
+  const { activeTab, logsType, setLogsType, handleTabChange } =
+    useProjectTabs();
 
   const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
     "view",
@@ -138,7 +88,7 @@ const TracesPage = () => {
               projectId={projectId}
               projectName={projectName}
               logsType={logsType}
-              onLogsTypeChange={handleLogsTypeChange}
+              onLogsTypeChange={setLogsType}
             />
           </TabsContent>
           <TabsContent value={PROJECT_TAB.metrics}>
