@@ -13,7 +13,6 @@ type UseSpanBatchUpdateMutationParams = {
     tagsToAdd?: string[];
     tagsToRemove?: string[];
   };
-  mergeTags?: boolean;
 };
 
 const useSpanBatchUpdateMutation = () => {
@@ -21,22 +20,16 @@ const useSpanBatchUpdateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({
-      spanIds,
-      span,
-      mergeTags = false,
-    }: UseSpanBatchUpdateMutationParams) => {
-      const { tags, tagsToAdd, tagsToRemove, ...rest } = span;
+    mutationFn: async ({ spanIds, span }: UseSpanBatchUpdateMutationParams) => {
+      const { tagsToAdd, tagsToRemove, ...rest } = span;
 
       const payload: Record<string, unknown> = { ...rest };
-      if (tags !== undefined) payload.tags = tags;
       if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
       if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
 
       const { data } = await api.patch(SPANS_REST_ENDPOINT + "batch", {
         ids: spanIds,
         update: payload,
-        merge_tags: mergeTags,
       });
 
       return data;

@@ -2328,7 +2328,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     template.add("data", true);
                 }
 
-                // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+                // Tag update strategy, two approaches (if both are provided, tagsToAdd/tagsToRemove takes precedence):
+                // 1. tagsToAdd/tagsToRemove: Used by frontend. Allows efficient atomic add/remove in single call.
+                // 2. tags + mergeTags: Used by SDK clients for backwards compatibility.
+                //    - mergeTags=true: Merge provided tags with existing tags
+                //    - mergeTags=false: Replace all tags with provided tags
                 if (batchUpdate.update().tagsToAdd() != null || batchUpdate.update().tagsToRemove() != null) {
                     if (batchUpdate.update().tagsToAdd() != null) {
                         template.add("tags_to_add", true);
@@ -2336,9 +2340,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if (batchUpdate.update().tagsToRemove() != null) {
                         template.add("tags_to_remove", true);
                     }
-                }
-                // Old approach: tags with mergeTags boolean (backwards compatible)
-                else if (batchUpdate.update().tags() != null) {
+                } else if (batchUpdate.update().tags() != null) {
                     template.add("tags", true);
                     if (Boolean.TRUE.equals(batchUpdate.mergeTags())) {
                         template.add("merge_tags", true);
@@ -2388,7 +2390,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     statement.bind("data", dataAsStrings);
                 }
 
-                // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+                // Tag update strategy (see above for full explanation)
                 if (batchUpdate.update().tagsToAdd() != null || batchUpdate.update().tagsToRemove() != null) {
                     if (batchUpdate.update().tagsToAdd() != null) {
                         statement.bind("tags_to_add", batchUpdate.update().tagsToAdd().toArray(new String[0]));
@@ -2396,9 +2398,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if (batchUpdate.update().tagsToRemove() != null) {
                         statement.bind("tags_to_remove", batchUpdate.update().tagsToRemove().toArray(new String[0]));
                     }
-                }
-                // Old approach: tags (backwards compatible)
-                else if (batchUpdate.update().tags() != null) {
+                } else if (batchUpdate.update().tags() != null) {
                     statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
                 }
 

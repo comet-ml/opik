@@ -3572,7 +3572,11 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.output())
                 .ifPresent(output -> template.add("output", output.toString()));
 
-        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        // Tag update strategy, two approaches (if both are provided, tagsToAdd/tagsToRemove takes precedence):
+        // 1. tagsToAdd/tagsToRemove: Used by frontend. Allows efficient atomic add/remove in single call.
+        // 2. tags + mergeTags: Used by SDK clients for backwards compatibility.
+        //    - mergeTags=true: Merge provided tags with existing tags
+        //    - mergeTags=false: Replace all tags with provided tags
         if (traceUpdate.tagsToAdd() != null || traceUpdate.tagsToRemove() != null) {
             if (traceUpdate.tagsToAdd() != null) {
                 template.add("tags_to_add", true);
@@ -3580,9 +3584,7 @@ class TraceDAOImpl implements TraceDAO {
             if (traceUpdate.tagsToRemove() != null) {
                 template.add("tags_to_remove", true);
             }
-        }
-        // Old approach: tags with mergeTags boolean (backwards compatible)
-        else {
+        } else {
             Optional.ofNullable(traceUpdate.tags())
                     .ifPresent(tags -> {
                         template.add("tags", tags.toString());
@@ -3619,7 +3621,7 @@ class TraceDAOImpl implements TraceDAO {
                     statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
                 });
 
-        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        // Tag update strategy (see above for full explanation)
         if (traceUpdate.tagsToAdd() != null || traceUpdate.tagsToRemove() != null) {
             if (traceUpdate.tagsToAdd() != null) {
                 statement.bind("tags_to_add", traceUpdate.tagsToAdd().toArray(String[]::new));
@@ -3627,9 +3629,7 @@ class TraceDAOImpl implements TraceDAO {
             if (traceUpdate.tagsToRemove() != null) {
                 statement.bind("tags_to_remove", traceUpdate.tagsToRemove().toArray(String[]::new));
             }
-        }
-        // Old approach: tags (backwards compatible)
-        else {
+        } else {
             Optional.ofNullable(traceUpdate.tags())
                     .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
         }

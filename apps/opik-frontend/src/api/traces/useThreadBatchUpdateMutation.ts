@@ -9,11 +9,9 @@ type UseThreadBatchUpdateMutationParams = {
   projectId: string;
   threadIds: string[];
   thread: {
-    tags?: string[];
     tagsToAdd?: string[];
     tagsToRemove?: string[];
   };
-  mergeTags?: boolean;
 };
 
 const useThreadBatchUpdateMutation = () => {
@@ -24,19 +22,16 @@ const useThreadBatchUpdateMutation = () => {
     mutationFn: async ({
       threadIds,
       thread,
-      mergeTags = false,
     }: UseThreadBatchUpdateMutationParams) => {
-      const { tags, tagsToAdd, tagsToRemove, ...rest } = thread;
+      const { tagsToAdd, tagsToRemove, ...rest } = thread;
 
       const payload: Record<string, unknown> = { ...rest };
-      if (tags !== undefined) payload.tags = tags;
       if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
       if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
 
       const { data } = await api.patch(TRACES_REST_ENDPOINT + "threads/batch", {
         ids: threadIds,
         update: payload,
-        merge_tags: mergeTags,
       });
 
       return data;

@@ -192,7 +192,6 @@ describe("ManageTagsDialog", () => {
           open={true}
           setOpen={mockSetOpen}
           onUpdate={mockOnUpdate}
-          maxTagLength={10}
         />,
       );
 
@@ -200,7 +199,7 @@ describe("ManageTagsDialog", () => {
         "Type a tag and press Enter...",
       ) as HTMLInputElement;
 
-      expect(input.maxLength).toBe(10);
+      expect(input.maxLength).toBe(100);
     });
 
     it("should use default maxTagLength of 100", () => {
@@ -222,14 +221,19 @@ describe("ManageTagsDialog", () => {
   });
 
   describe("Max Tags Validation", () => {
-    it("should enforce maxTags limit for additions", async () => {
+    it("should enforce maxTags limit on submission", async () => {
+      const existingTags = Array.from({ length: 49 }, (_, i) => `tag${i + 1}`);
+      const entitiesWithManyTags = [
+        { id: "1", tags: existingTags },
+        { id: "2", tags: existingTags },
+      ];
+
       render(
         <ManageTagsDialog
-          entities={defaultEntities}
+          entities={entitiesWithManyTags}
           open={true}
           setOpen={mockSetOpen}
           onUpdate={mockOnUpdate}
-          maxTags={2}
         />,
       );
 
@@ -237,33 +241,36 @@ describe("ManageTagsDialog", () => {
         "Type a tag and press Enter...",
       );
 
-      fireEvent.change(input, { target: { value: "newtag1" } });
+      fireEvent.change(input, { target: { value: "tag50" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
       await waitFor(() => {
-        expect(screen.getByText("newtag1")).toBeInTheDocument();
+        expect(screen.getByText("tag50")).toBeInTheDocument();
       });
 
-      fireEvent.change(input, { target: { value: "newtag2" } });
+      fireEvent.change(input, { target: { value: "tag51" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
       await waitFor(() => {
-        expect(screen.getByText("newtag2")).toBeInTheDocument();
+        expect(screen.getByText("tag51")).toBeInTheDocument();
       });
 
-      fireEvent.change(input, { target: { value: "newtag3" } });
-      fireEvent.keyDown(input, { key: "Enter" });
+      const updateButton = screen.getByRole("button", {
+        name: /Update tags for/i,
+      });
+      fireEvent.click(updateButton);
 
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith(
           expect.objectContaining({
-            title: "Too many tags",
-            description: "You can only add up to 2 tags at once",
+            title: "Tag limit exceeded",
+            description: "An item can only have up to 50 tags",
+            variant: "destructive",
           }),
         );
       });
 
-      expect(screen.queryByText("newtag3")).not.toBeInTheDocument();
+      expect(mockOnUpdate).not.toHaveBeenCalled();
     });
   });
 
@@ -280,7 +287,6 @@ describe("ManageTagsDialog", () => {
           open={true}
           setOpen={mockSetOpen}
           onUpdate={mockOnUpdate}
-          maxEntities={1000}
         />,
       );
 
@@ -307,7 +313,6 @@ describe("ManageTagsDialog", () => {
           open={true}
           setOpen={mockSetOpen}
           onUpdate={mockOnUpdate}
-          maxEntities={1000}
           isAllItemsSelected={true}
         />,
       );

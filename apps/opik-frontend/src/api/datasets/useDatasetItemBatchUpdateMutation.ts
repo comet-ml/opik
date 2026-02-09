@@ -18,7 +18,6 @@ type UseDatasetItemBatchUpdateMutationParams = {
     tagsToAdd?: string[];
     tagsToRemove?: string[];
   };
-  mergeTags?: boolean;
   isAllItemsSelected?: boolean;
   filters?: Filters;
   search?: string;
@@ -34,16 +33,14 @@ const useDatasetItemBatchUpdateMutation = () => {
       datasetId,
       itemIds,
       item,
-      mergeTags,
       isAllItemsSelected,
       filters = [],
       search,
       batchGroupId,
     }: UseDatasetItemBatchUpdateMutationParams) => {
-      const { tags, tagsToAdd, tagsToRemove, ...rest } = item;
+      const { tagsToAdd, tagsToRemove, ...rest } = item;
 
       const updatePayload: Record<string, unknown> = { ...rest };
-      if (tags !== undefined) updatePayload.tags = tags;
       if (tagsToAdd !== undefined) updatePayload.tags_to_add = tagsToAdd;
       if (tagsToRemove !== undefined)
         updatePayload.tags_to_remove = tagsToRemove;
@@ -60,14 +57,12 @@ const useDatasetItemBatchUpdateMutation = () => {
           dataset_id: datasetId,
           filters: processFiltersArray(combinedFilters),
           update: updatePayload,
-          merge_tags: mergeTags,
           ...(batchGroupId && { batch_group_id: batchGroupId }),
         };
       } else {
         payload = {
           ids: itemIds,
           update: updatePayload,
-          merge_tags: mergeTags,
         };
       }
 
