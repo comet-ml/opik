@@ -182,14 +182,15 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
     if (!open) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const currentIndex = filteredVisiblePaths.findIndex(
-        (p) => p.path === focusedPath,
-      );
-
       // Only handle navigation keys
       if (!NAVIGATION_KEYS.includes(e.key)) {
         return;
       }
+      
+      const currentIndex = filteredVisiblePaths.findIndex(
+        (p) => p.path === focusedPath,
+      );
+
 
       e.stopPropagation();
 
@@ -200,7 +201,7 @@ const JsonTreePopover: React.FC<JsonTreePopoverProps> = ({
 
           const nextIndex = e.shiftKey
             ? (currentIndex - 1 + filteredVisiblePaths.length) %
-              filteredVisiblePaths.length
+            filteredVisiblePaths.length
             : (currentIndex + 1) % filteredVisiblePaths.length;
           setFocusedPath(filteredVisiblePaths[nextIndex].path);
           break;

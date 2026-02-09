@@ -257,7 +257,7 @@ export const VALUE_TYPE_STYLES = {
   key: { color: "var(--color-green)" },
   object: { color: "var(--chart-tick-stroke)" },
   array: { color: "var(--chart-tick-stroke)" },
-  string: { color: "#056BD1" },
+  string: { color: "var(--color-blue)" },
   number: { color: "var(--color-purple)" },
   boolean: { color: "var(--color-purple)" },
   null: { color: "var(--muted-foreground)" },
