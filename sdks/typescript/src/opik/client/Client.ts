@@ -53,6 +53,15 @@ interface TraceData extends Omit<ITrace, "startTime"> {
   startTime?: Date;
 }
 
+interface AnnotationQueueOptions {
+  name: string;
+  projectName?: string;
+  description?: string;
+  instructions?: string;
+  commentsEnabled?: boolean;
+  feedbackDefinitionNames?: string[];
+}
+
 export const clients: OpikClient[] = [];
 
 export class OpikClient {
@@ -303,14 +312,7 @@ export class OpikClient {
   }
 
   private async createAnnotationQueueInternal<T extends TracesAnnotationQueue | ThreadsAnnotationQueue>(
-    options: {
-      name: string;
-      projectName?: string;
-      description?: string;
-      instructions?: string;
-      commentsEnabled?: boolean;
-      feedbackDefinitionNames?: string[];
-    },
+    options: AnnotationQueueOptions,
     QueueClass: (new (data: OpikApi.AnnotationQueuePublic, opik: OpikClient) => T) & {
       readonly SCOPE: "trace" | "thread";
     }
@@ -378,14 +380,7 @@ export class OpikClient {
    * @param options.feedbackDefinitionNames - Optional list of feedback definition names
    * @returns The created TracesAnnotationQueue object
    */
-  public createTracesAnnotationQueue = async (options: {
-    name: string;
-    projectName?: string;
-    description?: string;
-    instructions?: string;
-    commentsEnabled?: boolean;
-    feedbackDefinitionNames?: string[];
-  }): Promise<TracesAnnotationQueue> => {
+  public createTracesAnnotationQueue = async (options: AnnotationQueueOptions): Promise<TracesAnnotationQueue> => {
     return this.createAnnotationQueueInternal(options, TracesAnnotationQueue);
   };
 
@@ -401,14 +396,7 @@ export class OpikClient {
    * @param options.feedbackDefinitionNames - Optional list of feedback definition names
    * @returns The created ThreadsAnnotationQueue object
    */
-  public createThreadsAnnotationQueue = async (options: {
-    name: string;
-    projectName?: string;
-    description?: string;
-    instructions?: string;
-    commentsEnabled?: boolean;
-    feedbackDefinitionNames?: string[];
-  }): Promise<ThreadsAnnotationQueue> => {
+  public createThreadsAnnotationQueue = async (options: AnnotationQueueOptions): Promise<ThreadsAnnotationQueue> => {
     return this.createAnnotationQueueInternal(options, ThreadsAnnotationQueue);
   };
 
