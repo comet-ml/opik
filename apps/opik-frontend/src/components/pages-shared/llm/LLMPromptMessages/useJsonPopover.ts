@@ -223,10 +223,14 @@ export const useJsonPopover = ({
     }
   }, []);
 
-  // Track text changes while popover is open to update search query
+  // Track text changes and cursor moves while popover is open to update search query
   const handleEditorUpdate = useCallback(
     (update: ViewUpdate) => {
-      if (isJsonPopoverOpen && braceStartPos !== null && update.docChanged) {
+      if (
+        isJsonPopoverOpen &&
+        braceStartPos !== null &&
+        (update.docChanged || update.selectionSet)
+      ) {
         const doc = update.state.doc;
         const cursorPos = update.state.selection.main.head;
 

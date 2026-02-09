@@ -10,7 +10,6 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import isEmpty from "lodash/isEmpty";
 import { Button } from "@/components/ui/button";
 import { FormErrorSkeleton } from "@/components/ui/form";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,6 +49,8 @@ import {
   JsonValue,
 } from "@/components/shared/JsonTreePopover";
 import { useJsonPopover } from "./useJsonPopover";
+
+import isEmpty from "lodash/isEmpty";
 
 const MESSAGE_TYPE_OPTIONS = [
   {

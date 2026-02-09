@@ -14,74 +14,128 @@ import {
 
 describe("parseSearchQuery", () => {
   it("should return empty result for empty query", () => {
-    expect(parseSearchQuery("")).toEqual({
+    // Arrange
+    const query = "";
+
+    // Act
+    const result = parseSearchQuery(query);
+
+    // Assert
+    expect(result).toEqual({
       pathToExpand: null,
       searchTerm: "",
     });
   });
 
   it("should handle query ending with '.' (expand children)", () => {
-    expect(parseSearchQuery("user.")).toEqual({
+    // Arrange
+    const simpleQuery = "user.";
+    const nestedQuery = "user.profile.";
+
+    // Act
+    const simpleResult = parseSearchQuery(simpleQuery);
+    const nestedResult = parseSearchQuery(nestedQuery);
+
+    // Assert
+    expect(simpleResult).toEqual({
       pathToExpand: "user",
       searchTerm: "",
     });
-
-    expect(parseSearchQuery("user.profile.")).toEqual({
+    expect(nestedResult).toEqual({
       pathToExpand: "user.profile",
       searchTerm: "",
     });
   });
 
   it("should handle query ending with '[' (array access)", () => {
-    expect(parseSearchQuery("tags[")).toEqual({
+    // Arrange
+    const simpleQuery = "tags[";
+    const nestedQuery = "user.items[";
+
+    // Act
+    const simpleResult = parseSearchQuery(simpleQuery);
+    const nestedResult = parseSearchQuery(nestedQuery);
+
+    // Assert
+    expect(simpleResult).toEqual({
       pathToExpand: "tags",
       searchTerm: "",
     });
-
-    expect(parseSearchQuery("user.items[")).toEqual({
+    expect(nestedResult).toEqual({
       pathToExpand: "user.items",
       searchTerm: "",
     });
   });
 
   it("should handle dot notation with search term", () => {
-    expect(parseSearchQuery("user.name")).toEqual({
+    // Arrange
+    const simpleQuery = "user.name";
+    const nestedQuery = "user.profile.email";
+
+    // Act
+    const simpleResult = parseSearchQuery(simpleQuery);
+    const nestedResult = parseSearchQuery(nestedQuery);
+
+    // Assert
+    expect(simpleResult).toEqual({
       pathToExpand: "user",
       searchTerm: "name",
     });
-
-    expect(parseSearchQuery("user.profile.email")).toEqual({
+    expect(nestedResult).toEqual({
       pathToExpand: "user.profile",
       searchTerm: "email",
     });
   });
 
   it("should handle array notation with index search", () => {
-    expect(parseSearchQuery("tags[0")).toEqual({
+    // Arrange
+    const simpleQuery = "tags[0";
+    const nestedQuery = "user.items[12";
+
+    // Act
+    const simpleResult = parseSearchQuery(simpleQuery);
+    const nestedResult = parseSearchQuery(nestedQuery);
+
+    // Assert
+    expect(simpleResult).toEqual({
       pathToExpand: "tags",
       searchTerm: "0",
     });
-
-    expect(parseSearchQuery("user.items[12")).toEqual({
+    expect(nestedResult).toEqual({
       pathToExpand: "user.items",
       searchTerm: "12",
     });
   });
 
   it("should handle root level search (no separator)", () => {
-    expect(parseSearchQuery("user")).toEqual({
+    // Arrange
+    const userQuery = "user";
+    const nameQuery = "name";
+
+    // Act
+    const userResult = parseSearchQuery(userQuery);
+    const nameResult = parseSearchQuery(nameQuery);
+
+    // Assert
+    expect(userResult).toEqual({
       pathToExpand: null,
       searchTerm: "user",
     });
-
-    expect(parseSearchQuery("name")).toEqual({
+    expect(nameResult).toEqual({
       pathToExpand: null,
       searchTerm: "name",
     });
   });
 
   it("should handle complex nested paths", () => {
-    expect(parseSearchQuery("user.tags[0].name")).toEqual({
+    // Arrange
+    const query = "user.tags[0].name";
+
+    // Act
+    const result = parseSearchQuery(query);
+
+    // Assert
+    expect(result).toEqual({
       pathToExpand: "user.tags[0]",
       searchTerm: "name",
     });
@@ -90,61 +144,124 @@ describe("parseSearchQuery", () => {
 
 describe("isArrayAccessMode", () => {
   it("should return false for empty query", () => {
-    expect(isArrayAccessMode("")).toBe(false);
+    // Arrange
+    const query = "";
+
+    // Act
+    const result = isArrayAccessMode(query);
+
+    // Assert
+    expect(result).toBe(false);
   });
 
   it("should return true when '[' is the last separator", () => {
-    expect(isArrayAccessMode("tags[")).toBe(true);
-    expect(isArrayAccessMode("tags[0")).toBe(true);
-    expect(isArrayAccessMode("user.items[")).toBe(true);
-    expect(isArrayAccessMode("user.items[1")).toBe(true);
+    // Arrange
+    const queries = ["tags[", "tags[0", "user.items[", "user.items[1"];
+
+    // Act & Assert
+    queries.forEach((query) => {
+      expect(isArrayAccessMode(query)).toBe(true);
+    });
   });
 
   it("should return false when query ends with ']'", () => {
-    expect(isArrayAccessMode("tags[0]")).toBe(false);
-    expect(isArrayAccessMode("user.items[1]")).toBe(false);
+    // Arrange
+    const queries = ["tags[0]", "user.items[1]"];
+
+    // Act & Assert
+    queries.forEach((query) => {
+      expect(isArrayAccessMode(query)).toBe(false);
+    });
   });
 
   it("should return false for dot notation", () => {
-    expect(isArrayAccessMode("user.name")).toBe(false);
-    expect(isArrayAccessMode("user.")).toBe(false);
+    // Arrange
+    const queries = ["user.name", "user."];
+
+    // Act & Assert
+    queries.forEach((query) => {
+      expect(isArrayAccessMode(query)).toBe(false);
+    });
   });
 
   it("should return false when '.' comes after '['", () => {
-    expect(isArrayAccessMode("tags[0].name")).toBe(false);
+    // Arrange
+    const query = "tags[0].name";
+
+    // Act
+    const result = isArrayAccessMode(query);
+
+    // Assert
+    expect(result).toBe(false);
   });
 });
 
 describe("computePathsToExpand", () => {
   it("should handle single path segment", () => {
-    const result = computePathsToExpand("user");
+    // Arrange
+    const path = "user";
+
+    // Act
+    const result = computePathsToExpand(path);
+
+    // Assert
     expect(result).toEqual(new Set(["user"]));
   });
 
   it("should handle dot notation", () => {
-    const result = computePathsToExpand("user.profile");
+    // Arrange
+    const path = "user.profile";
+
+    // Act
+    const result = computePathsToExpand(path);
+
+    // Assert
     expect(result).toEqual(new Set(["user", "user.profile"]));
   });
 
   it("should handle deeply nested dot notation", () => {
-    const result = computePathsToExpand("user.profile.settings");
+    // Arrange
+    const path = "user.profile.settings";
+
+    // Act
+    const result = computePathsToExpand(path);
+
+    // Assert
     expect(result).toEqual(
       new Set(["user", "user.profile", "user.profile.settings"]),
     );
   });
 
   it("should handle array notation", () => {
-    const result = computePathsToExpand("tags[0]");
+    // Arrange
+    const path = "tags[0]";
+
+    // Act
+    const result = computePathsToExpand(path);
+
+    // Assert
     expect(result).toEqual(new Set(["tags", "tags[0]"]));
   });
 
   it("should handle mixed dot and array notation", () => {
-    const result = computePathsToExpand("user.tags[0]");
+    // Arrange
+    const path = "user.tags[0]";
+
+    // Act
+    const result = computePathsToExpand(path);
+
+    // Assert
     expect(result).toEqual(new Set(["user", "user.tags", "user.tags[0]"]));
   });
 
   it("should handle complex nested paths with arrays", () => {
-    const result = computePathsToExpand("user.tags[0].name");
+    // Arrange
+    const path = "user.tags[0].name";
+
+    // Act
+    const result = computePathsToExpand(path);
+
+    // Assert
     expect(result).toEqual(
       new Set(["user", "user.tags", "user.tags[0]", "user.tags[0].name"]),
     );
@@ -152,6 +269,7 @@ describe("computePathsToExpand", () => {
 });
 
 describe("filterVisiblePaths", () => {
+  // Arrange - shared test data
   const mockVisiblePaths: VisiblePathItem[] = [
     { path: "user", value: {} },
     { path: "user.name", value: "John" },
@@ -167,24 +285,54 @@ describe("filterVisiblePaths", () => {
   ];
 
   it("should return all paths when search query is empty", () => {
-    const result = filterVisiblePaths(mockVisiblePaths, "", null, "", false);
+    // Arrange
+    const searchQuery = "";
+
+    // Act
+    const result = filterVisiblePaths(
+      mockVisiblePaths,
+      searchQuery,
+      null,
+      "",
+      false,
+    );
+
+    // Assert
     expect(result).toEqual(mockVisiblePaths);
   });
 
   it("should return all paths when search query is whitespace", () => {
-    const result = filterVisiblePaths(mockVisiblePaths, "   ", null, "", false);
+    // Arrange
+    const searchQuery = "   ";
+
+    // Act
+    const result = filterVisiblePaths(
+      mockVisiblePaths,
+      searchQuery,
+      null,
+      "",
+      false,
+    );
+
+    // Assert
     expect(result).toEqual(mockVisiblePaths);
   });
 
   it("should filter root level by search term (includes nested paths)", () => {
+    // Arrange
+    const searchQuery = "user";
+    const searchTerm = "user";
+
+    // Act
     const result = filterVisiblePaths(
       mockVisiblePaths,
-      "user",
+      searchQuery,
       null,
-      "user",
+      searchTerm,
       false,
     );
-    // Filters by root key, but includes all visible paths under that root
+
+    // Assert
     expect(result.map((p) => p.path)).toEqual([
       "user",
       "user.name",
@@ -195,14 +343,20 @@ describe("filterVisiblePaths", () => {
   });
 
   it("should filter children when path is expanded with dot (includes nested)", () => {
+    // Arrange
+    const searchQuery = "user.";
+    const pathToExpand = "user";
+
+    // Act
     const result = filterVisiblePaths(
       mockVisiblePaths,
-      "user.",
-      "user",
+      searchQuery,
+      pathToExpand,
       "",
       false,
     );
-    // Shows all children that start with the prefix, including nested
+
+    // Assert
     expect(result.map((p) => p.path)).toEqual([
       "user.name",
       "user.email",
@@ -212,24 +366,40 @@ describe("filterVisiblePaths", () => {
   });
 
   it("should filter children with search term", () => {
+    // Arrange
+    const searchQuery = "user.na";
+    const pathToExpand = "user";
+    const searchTerm = "na";
+
+    // Act
     const result = filterVisiblePaths(
       mockVisiblePaths,
-      "user.na",
-      "user",
-      "na",
+      searchQuery,
+      pathToExpand,
+      searchTerm,
       false,
     );
+
+    // Assert
     expect(result.map((p) => p.path)).toEqual(["user.name"]);
   });
 
   it("should filter array children in array access mode", () => {
+    // Arrange
+    const searchQuery = "tags[";
+    const pathToExpand = "tags";
+    const isArrayAccess = true;
+
+    // Act
     const result = filterVisiblePaths(
       mockVisiblePaths,
-      "tags[",
-      "tags",
+      searchQuery,
+      pathToExpand,
       "",
-      true,
+      isArrayAccess,
     );
+
+    // Assert
     expect(result.map((p) => p.path)).toEqual([
       "tags[0]",
       "tags[1]",
@@ -238,36 +408,58 @@ describe("filterVisiblePaths", () => {
   });
 
   it("should filter array children by index in array access mode", () => {
+    // Arrange
+    const searchQuery = "tags[1";
+    const pathToExpand = "tags";
+    const searchTerm = "1";
+    const isArrayAccess = true;
+
+    // Act
     const result = filterVisiblePaths(
       mockVisiblePaths,
-      "tags[1",
-      "tags",
-      "1",
-      true,
+      searchQuery,
+      pathToExpand,
+      searchTerm,
+      isArrayAccess,
     );
+
+    // Assert
     expect(result.map((p) => p.path)).toEqual(["tags[1]", "tags[10]"]);
   });
 
   it("should fall back to global search when no children found", () => {
+    // Arrange
+    const searchQuery = "nonexistent.";
+    const pathToExpand = "nonexistent";
+
+    // Act
     const result = filterVisiblePaths(
       mockVisiblePaths,
-      "nonexistent.",
-      "nonexistent",
+      searchQuery,
+      pathToExpand,
       "",
       false,
     );
+
+    // Assert
     expect(result).toEqual([]);
   });
 
   it("should be case insensitive", () => {
+    // Arrange
+    const searchQuery = "USER";
+    const searchTerm = "USER";
+
+    // Act
     const result = filterVisiblePaths(
       mockVisiblePaths,
-      "USER",
+      searchQuery,
       null,
-      "USER",
+      searchTerm,
       false,
     );
-    // Case insensitive match on root key, includes all nested paths
+
+    // Assert
     expect(result.map((p) => p.path)).toEqual([
       "user",
       "user.name",
@@ -279,6 +471,7 @@ describe("filterVisiblePaths", () => {
 });
 
 describe("findFirstChildPath", () => {
+  // Arrange - shared test data
   const mockPaths: VisiblePathItem[] = [
     { path: "user", value: {} },
     { path: "user.name", value: "John" },
@@ -289,30 +482,61 @@ describe("findFirstChildPath", () => {
   ];
 
   it("should find first child with dot notation", () => {
-    const result = findFirstChildPath(mockPaths, "user");
+    // Arrange
+    const pathToExpand = "user";
+
+    // Act
+    const result = findFirstChildPath(mockPaths, pathToExpand);
+
+    // Assert
     expect(result).toBe("user.name");
   });
 
   it("should find first child with array notation", () => {
-    const result = findFirstChildPath(mockPaths, "tags");
+    // Arrange
+    const pathToExpand = "tags";
+
+    // Act
+    const result = findFirstChildPath(mockPaths, pathToExpand);
+
+    // Assert
     expect(result).toBe("tags[0]");
   });
 
   it("should return null when no children found", () => {
-    const result = findFirstChildPath(mockPaths, "nonexistent");
+    // Arrange
+    const pathToExpand = "nonexistent";
+
+    // Act
+    const result = findFirstChildPath(mockPaths, pathToExpand);
+
+    // Assert
     expect(result).toBeNull();
   });
 
   it("should return null for empty paths array", () => {
-    const result = findFirstChildPath([], "user");
+    // Arrange
+    const emptyPaths: VisiblePathItem[] = [];
+    const pathToExpand = "user";
+
+    // Act
+    const result = findFirstChildPath(emptyPaths, pathToExpand);
+
+    // Assert
     expect(result).toBeNull();
   });
 });
 
 describe("getVisiblePaths", () => {
   it("should return root level entries for object", () => {
+    // Arrange
     const data = { name: "John", age: 30 };
-    const result = getVisiblePaths(data, new Set());
+    const expandedPaths = new Set<string>();
+
+    // Act
+    const result = getVisiblePaths(data, expandedPaths);
+
+    // Assert
     expect(result).toEqual([
       { path: "name", value: "John" },
       { path: "age", value: 30 },
@@ -320,8 +544,14 @@ describe("getVisiblePaths", () => {
   });
 
   it("should return root level entries for array", () => {
+    // Arrange
     const data = ["a", "b", "c"];
-    const result = getVisiblePaths(data, new Set());
+    const expandedPaths = new Set<string>();
+
+    // Act
+    const result = getVisiblePaths(data, expandedPaths);
+
+    // Assert
     expect(result).toEqual([
       { path: "[0]", value: "a" },
       { path: "[1]", value: "b" },
@@ -330,8 +560,14 @@ describe("getVisiblePaths", () => {
   });
 
   it("should expand nested objects when path is in expandedPaths", () => {
+    // Arrange
     const data = { user: { name: "John", age: 30 } };
-    const result = getVisiblePaths(data, new Set(["user"]));
+    const expandedPaths = new Set(["user"]);
+
+    // Act
+    const result = getVisiblePaths(data, expandedPaths);
+
+    // Assert
     expect(result).toEqual([
       { path: "user", value: { name: "John", age: 30 } },
       { path: "user.name", value: "John" },
@@ -340,8 +576,14 @@ describe("getVisiblePaths", () => {
   });
 
   it("should expand nested arrays when path is in expandedPaths", () => {
+    // Arrange
     const data = { tags: ["a", "b"] };
-    const result = getVisiblePaths(data, new Set(["tags"]));
+    const expandedPaths = new Set(["tags"]);
+
+    // Act
+    const result = getVisiblePaths(data, expandedPaths);
+
+    // Assert
     expect(result).toEqual([
       { path: "tags", value: ["a", "b"] },
       { path: "tags[0]", value: "a" },
@@ -350,8 +592,14 @@ describe("getVisiblePaths", () => {
   });
 
   it("should handle deeply nested expansion", () => {
+    // Arrange
     const data = { user: { profile: { name: "John" } } };
-    const result = getVisiblePaths(data, new Set(["user", "user.profile"]));
+    const expandedPaths = new Set(["user", "user.profile"]);
+
+    // Act
+    const result = getVisiblePaths(data, expandedPaths);
+
+    // Assert
     expect(result).toEqual([
       { path: "user", value: { profile: { name: "John" } } },
       { path: "user.profile", value: { name: "John" } },
@@ -360,8 +608,14 @@ describe("getVisiblePaths", () => {
   });
 
   it("should not expand paths not in expandedPaths", () => {
+    // Arrange
     const data = { user: { name: "John" }, settings: { theme: "dark" } };
-    const result = getVisiblePaths(data, new Set(["user"]));
+    const expandedPaths = new Set(["user"]);
+
+    // Act
+    const result = getVisiblePaths(data, expandedPaths);
+
+    // Assert
     expect(result).toEqual([
       { path: "user", value: { name: "John" } },
       { path: "user.name", value: "John" },
@@ -372,113 +626,230 @@ describe("getVisiblePaths", () => {
 
 describe("extractTopLevelKey", () => {
   it("should return the whole path when no separator exists", () => {
-    expect(extractTopLevelKey("user")).toBe("user");
-    expect(extractTopLevelKey("settings")).toBe("settings");
+    // Arrange
+    const paths = ["user", "settings"];
+
+    // Act & Assert
+    expect(extractTopLevelKey(paths[0])).toBe("user");
+    expect(extractTopLevelKey(paths[1])).toBe("settings");
   });
 
   it("should extract key before dot separator", () => {
-    expect(extractTopLevelKey("user.name")).toBe("user");
-    expect(extractTopLevelKey("user.profile.email")).toBe("user");
+    // Arrange
+    const simplePath = "user.name";
+    const nestedPath = "user.profile.email";
+
+    // Act
+    const simpleResult = extractTopLevelKey(simplePath);
+    const nestedResult = extractTopLevelKey(nestedPath);
+
+    // Assert
+    expect(simpleResult).toBe("user");
+    expect(nestedResult).toBe("user");
   });
 
   it("should extract key before bracket separator", () => {
-    expect(extractTopLevelKey("user[0]")).toBe("user");
-    expect(extractTopLevelKey("tags[0].name")).toBe("tags");
+    // Arrange
+    const arrayPath = "user[0]";
+    const nestedArrayPath = "tags[0].name";
+
+    // Act
+    const arrayResult = extractTopLevelKey(arrayPath);
+    const nestedArrayResult = extractTopLevelKey(nestedArrayPath);
+
+    // Assert
+    expect(arrayResult).toBe("user");
+    expect(nestedArrayResult).toBe("tags");
   });
 
   it("should handle root array elements", () => {
-    expect(extractTopLevelKey("[0]")).toBe("[0]");
-    expect(extractTopLevelKey("[0].name")).toBe("[0]");
-    expect(extractTopLevelKey("[10]")).toBe("[10]");
-    expect(extractTopLevelKey("[123].value")).toBe("[123]");
+    // Arrange
+    const paths = ["[0]", "[0].name", "[10]", "[123].value"];
+
+    // Act & Assert
+    expect(extractTopLevelKey(paths[0])).toBe("[0]");
+    expect(extractTopLevelKey(paths[1])).toBe("[0]");
+    expect(extractTopLevelKey(paths[2])).toBe("[10]");
+    expect(extractTopLevelKey(paths[3])).toBe("[123]");
   });
 
   it("should take earlier separator when both exist", () => {
-    expect(extractTopLevelKey("user.tags[0]")).toBe("user");
-    expect(extractTopLevelKey("items[0].name")).toBe("items");
+    // Arrange
+    const dotFirstPath = "user.tags[0]";
+    const bracketFirstPath = "items[0].name";
+
+    // Act
+    const dotFirstResult = extractTopLevelKey(dotFirstPath);
+    const bracketFirstResult = extractTopLevelKey(bracketFirstPath);
+
+    // Assert
+    expect(dotFirstResult).toBe("user");
+    expect(bracketFirstResult).toBe("items");
   });
 });
 
 describe("computeVisibleTopLevelKeys", () => {
   it("should return empty set for empty paths", () => {
-    const result = computeVisibleTopLevelKeys([]);
+    // Arrange
+    const paths: VisiblePathItem[] = [];
+
+    // Act
+    const result = computeVisibleTopLevelKeys(paths);
+
+    // Assert
     expect(result).toEqual(new Set());
   });
 
   it("should extract unique top-level keys from paths", () => {
+    // Arrange
     const paths: VisiblePathItem[] = [
       { path: "user", value: {} },
       { path: "user.name", value: "John" },
       { path: "user.email", value: "john@example.com" },
       { path: "settings", value: {} },
     ];
+
+    // Act
     const result = computeVisibleTopLevelKeys(paths);
+
+    // Assert
     expect(result).toEqual(new Set(["user", "settings"]));
   });
 
   it("should handle array paths", () => {
+    // Arrange
     const paths: VisiblePathItem[] = [
       { path: "tags", value: [] },
       { path: "tags[0]", value: "tag1" },
       { path: "tags[1]", value: "tag2" },
     ];
+
+    // Act
     const result = computeVisibleTopLevelKeys(paths);
+
+    // Assert
     expect(result).toEqual(new Set(["tags"]));
   });
 
   it("should handle root array elements", () => {
+    // Arrange
     const paths: VisiblePathItem[] = [
       { path: "[0]", value: "a" },
       { path: "[0].name", value: "John" },
       { path: "[1]", value: "b" },
       { path: "[2].value", value: 42 },
     ];
+
+    // Act
     const result = computeVisibleTopLevelKeys(paths);
+
+    // Assert
     expect(result).toEqual(new Set(["[0]", "[1]", "[2]"]));
   });
 
   it("should handle mixed object and nested paths", () => {
+    // Arrange
     const paths: VisiblePathItem[] = [
       { path: "user.profile.name", value: "John" },
       { path: "settings.theme", value: "dark" },
       { path: "tags[0]", value: "tag1" },
     ];
+
+    // Act
     const result = computeVisibleTopLevelKeys(paths);
+
+    // Assert
     expect(result).toEqual(new Set(["user", "settings", "tags"]));
   });
 });
 
 describe("getValuePreview", () => {
   it("should return 'null' for null values", () => {
-    expect(getValuePreview(null)).toBe("null");
+    // Arrange
+    const value = null;
+
+    // Act
+    const result = getValuePreview(value);
+
+    // Assert
+    expect(result).toBe("null");
   });
 
   it("should return array length for arrays", () => {
-    expect(getValuePreview([])).toBe("Array[0]");
-    expect(getValuePreview([1, 2, 3])).toBe("Array[3]");
+    // Arrange
+    const emptyArray: unknown[] = [];
+    const filledArray = [1, 2, 3];
+
+    // Act
+    const emptyResult = getValuePreview(emptyArray);
+    const filledResult = getValuePreview(filledArray);
+
+    // Assert
+    expect(emptyResult).toBe("Array[0]");
+    expect(filledResult).toBe("Array[3]");
   });
 
   it("should return object key count for objects", () => {
-    expect(getValuePreview({})).toBe("Object{0}");
-    expect(getValuePreview({ a: 1, b: 2 })).toBe("Object{2}");
+    // Arrange
+    const emptyObject = {};
+    const filledObject = { a: 1, b: 2 };
+
+    // Act
+    const emptyResult = getValuePreview(emptyObject);
+    const filledResult = getValuePreview(filledObject);
+
+    // Assert
+    expect(emptyResult).toBe("Object{0}");
+    expect(filledResult).toBe("Object{2}");
   });
 
   it("should truncate long strings", () => {
+    // Arrange
     const longString = "a".repeat(50);
-    expect(getValuePreview(longString)).toBe(`"${"a".repeat(30)}..."`);
+
+    // Act
+    const result = getValuePreview(longString);
+
+    // Assert
+    expect(result).toBe(`"${"a".repeat(30)}..."`);
   });
 
   it("should not truncate short strings", () => {
-    expect(getValuePreview("hello")).toBe('"hello"');
+    // Arrange
+    const shortString = "hello";
+
+    // Act
+    const result = getValuePreview(shortString);
+
+    // Assert
+    expect(result).toBe('"hello"');
   });
 
   it("should stringify numbers", () => {
-    expect(getValuePreview(42)).toBe("42");
-    expect(getValuePreview(3.14)).toBe("3.14");
+    // Arrange
+    const integer = 42;
+    const decimal = 3.14;
+
+    // Act
+    const integerResult = getValuePreview(integer);
+    const decimalResult = getValuePreview(decimal);
+
+    // Assert
+    expect(integerResult).toBe("42");
+    expect(decimalResult).toBe("3.14");
   });
 
   it("should stringify booleans", () => {
-    expect(getValuePreview(true)).toBe("true");
-    expect(getValuePreview(false)).toBe("false");
+    // Arrange
+    const trueValue = true;
+    const falseValue = false;
+
+    // Act
+    const trueResult = getValuePreview(trueValue);
+    const falseResult = getValuePreview(falseValue);
+
+    // Assert
+    expect(trueResult).toBe("true");
+    expect(falseResult).toBe("false");
   });
 });
