@@ -502,49 +502,7 @@ const pinnedResult = await evaluate({
 
 ### Working with dataset versions programmatically
 
-You can access version metadata and retrieve items from specific versions using the SDK:
-
-<CodeBlocks>
-```python title="Python" language="python"
-from opik import Opik
-
-client = Opik()
-dataset = client.get_dataset(name="My dataset")
-
-# Get current version info
-version_info = dataset.get_version_info()
-print(f"Current version: {version_info.version_name}")
-
-# Access a specific version
-v1 = dataset.get_version_view("v1")
-print(f"Version: {v1.version_name}, Items: {v1.items_total}")
-
-# Retrieve items from a specific version
-items = v1.get_items()
-```
-
-```typescript title="TypeScript" language="typescript"
-import { Opik } from "opik";
-
-const client = new Opik();
-const dataset = await client.getDataset("My dataset");
-
-// Get current version info
-const versionInfo = await dataset.getVersionInfo();
-console.log(`Current version: ${versionInfo?.versionName}`);
-
-// Access a specific version
-const v1 = await dataset.getVersionView("v1");
-console.log(`Version: ${v1.versionName}, Items: ${v1.itemsTotal}`);
-
-// Retrieve items from a specific version
-const items = await v1.getItems();
-```
-</CodeBlocks>
-
-### Working with dataset versions programmatically
-
-The Python SDK provides methods for inspecting and working with dataset versions:
+The SDK provides methods for inspecting and working with dataset versions:
 
 <CodeBlocks>
 ```python title="Python" language="python"
@@ -580,6 +538,40 @@ v1_items = v1_view.get_items()
 # Export version data
 v1_df = v1_view.to_pandas()
 v1_json = v1_view.to_json()
+```
+
+```typescript title="TypeScript" language="typescript"
+import { Opik } from "opik";
+
+const client = new Opik();
+const dataset = await client.getDataset("My dataset");
+
+// Get the current (latest) version name
+const currentVersion = await dataset.getCurrentVersionName();
+console.log(`Current version: ${currentVersion}`); // e.g., "v3"
+
+// Get detailed version info (returns DatasetVersionPublic)
+const versionInfo = await dataset.getVersionInfo();
+console.log(`Version ID: ${versionInfo?.id}`);
+console.log(`Version name: ${versionInfo?.versionName}`);
+console.log(`Items total: ${versionInfo?.itemsTotal}`);
+console.log(`Created at: ${versionInfo?.createdAt}`);
+
+// Get a read-only view of a specific version
+const v1View = await dataset.getVersionView("v1");
+
+// Access version metadata
+console.log(`Version: ${v1View.versionName}`);
+console.log(`Items in v1: ${v1View.itemsTotal}`);
+console.log(`Items added: ${v1View.itemsAdded}`);
+console.log(`Items modified: ${v1View.itemsModified}`);
+console.log(`Items deleted: ${v1View.itemsDeleted}`);
+
+// Get items from a specific version
+const v1Items = await v1View.getItems();
+
+// Export version data as JSON
+const v1Json = await v1View.toJson();
 ```
 </CodeBlocks>
 
