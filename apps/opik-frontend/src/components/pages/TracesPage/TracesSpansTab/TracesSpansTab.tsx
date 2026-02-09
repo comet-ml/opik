@@ -55,7 +55,6 @@ import { BaseTraceData, Span, SPAN_TYPE, Trace } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
-import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -114,6 +113,8 @@ import {
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import LogsTypeToggle from "@/components/pages/TracesPage/LogsTab/LogsTypeToggle";
+import { LOGS_TYPE } from "@/constants/traces";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -240,24 +241,28 @@ const DEFAULT_TRACES_PAGE_COLUMNS: string[] = [
   USER_FEEDBACK_COLUMN_ID,
 ];
 
-const SELECTED_COLUMNS_KEY = "traces-selected-columns";
-const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
-const COLUMNS_WIDTH_KEY = "traces-columns-width";
-const COLUMNS_ORDER_KEY = "traces-columns-order";
-const COLUMNS_SORT_KEY_SUFFIX = "-columns-sort";
-const COLUMNS_SCORES_ORDER_KEY = "traces-scores-columns-order";
-const DYNAMIC_COLUMNS_KEY = "traces-dynamic-columns";
-const PAGINATION_SIZE_KEY = "traces-pagination-size";
-const ROW_HEIGHT_KEY = "traces-row-height";
+const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
+const SELECTED_COLUMNS_KEY_V2_SUFFIX = `${SELECTED_COLUMNS_KEY_SUFFIX}-v2`;
+const COLUMNS_WIDTH_KEY_SUFFIX = "columns-width";
+const COLUMNS_ORDER_KEY_SUFFIX = "columns-order";
+const COLUMNS_SORT_KEY_SUFFIX = "columns-sort";
+const COLUMNS_SCORES_ORDER_KEY_SUFFIX = "scores-columns-order";
+const DYNAMIC_COLUMNS_KEY_SUFFIX = "dynamic-columns";
+const PAGINATION_SIZE_KEY_SUFFIX = "pagination-size";
+const ROW_HEIGHT_KEY_SUFFIX = "row-height";
 
 type TracesSpansTabProps = {
   type: TRACE_DATA_TYPE;
   projectId: string;
   projectName: string;
+  logsType: LOGS_TYPE;
+  onLogsTypeChange: (type: LOGS_TYPE) => void;
 };
 
 export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   type,
+  logsType,
+  onLogsTypeChange,
   projectId,
   projectName,
 }) => {
@@ -271,9 +276,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     minDate,
     maxDate,
   } = useMetricDateRangeWithQueryAndStorage();
-  const [search = "", setSearch] = useQueryParam("search", StringParam, {
-    updateType: "replaceIn",
-  });
+  const [search = "", setSearch] = useQueryParam(
+    `${type}_search`,
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
     updateType: "replaceIn",
@@ -294,7 +303,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
   >({
-    localStorageKey: PAGINATION_SIZE_KEY,
+    localStorageKey: `${type}-${PAGINATION_SIZE_KEY_SUFFIX}`,
     queryKey: "size",
     defaultValue: 100,
     queryParamConfig: NumberParam,
@@ -312,7 +321,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
   >({
-    localStorageKey: ROW_HEIGHT_KEY,
+    localStorageKey: `${type}-${ROW_HEIGHT_KEY_SUFFIX}`,
     queryKey: "height",
     defaultValue: ROW_HEIGHT.small,
     queryParamConfig: StringParam,
@@ -333,7 +342,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
-    localStorageKey: `${type}${COLUMNS_SORT_KEY_SUFFIX}`,
+    localStorageKey: `${type}-${COLUMNS_SORT_KEY_SUFFIX}`,
     queryKey: `${type}_sorting`,
     defaultValue: [],
     queryParamConfig: JsonParam,
@@ -461,10 +470,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   // Declare selectedColumns early so it can be used in excludeFields computation
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY_V2,
+    `${type}-${SELECTED_COLUMNS_KEY_V2_SUFFIX}`,
     {
       defaultValue: migrateSelectedColumns(
-        SELECTED_COLUMNS_KEY,
+        `${type}-${SELECTED_COLUMNS_KEY_SUFFIX}`,
         DEFAULT_TRACES_PAGE_COLUMNS,
         [COLUMN_ID_ID, "start_time"],
       ),
@@ -614,7 +623,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   const [columnsOrder, setColumnsOrder] = useLocalStorageState<string[]>(
-    COLUMNS_ORDER_KEY,
+    `${type}-${COLUMNS_ORDER_KEY_SUFFIX}`,
     {
       defaultValue: [],
     },
@@ -622,23 +631,23 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const [scoresColumnsOrder, setScoresColumnsOrder] = useLocalStorageState<
     string[]
-  >(COLUMNS_SCORES_ORDER_KEY, {
+  >(`${type}-${COLUMNS_SCORES_ORDER_KEY_SUFFIX}`, {
     defaultValue: [],
   });
 
   const [metadataColumnsOrder, setMetadataColumnsOrder] = useLocalStorageState<
     string[]
-  >("traces-metadata-columns-order", {
+  >(`${type}-metadata-columns-order`, {
     defaultValue: [],
   });
   const [metadataMainColumnOrder, setMetadataMainColumnOrder] =
-    useLocalStorageState<string[]>("traces-metadata-main-column-order", {
+    useLocalStorageState<string[]>(`${type}-metadata-main-column-order`, {
       defaultValue: [COLUMN_METADATA_ID],
     });
 
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
-  >(COLUMNS_WIDTH_KEY, {
+  >(`${type}-${COLUMNS_WIDTH_KEY_SUFFIX}`, {
     defaultValue: {},
   });
 
@@ -681,7 +690,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   );
 
   useDynamicColumnsCache({
-    dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
+    dynamicColumnsKey: `${type}-${DYNAMIC_COLUMNS_KEY_SUFFIX}`,
     dynamicColumnsIds,
     setSelectedColumns,
   });
@@ -1193,20 +1202,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   return (
     <>
-      <PageBodyStickyContainer direction="horizontal" limitWidth>
-        <ExplainerCallout
-          className="mb-4"
-          {...(type === TRACE_DATA_TYPE.traces
-            ? EXPLAINERS_MAP[EXPLAINER_ID.what_are_traces]
-            : EXPLAINERS_MAP[EXPLAINER_ID.what_are_spans])}
-        />
-      </PageBodyStickyContainer>
       <PageBodyStickyContainer
         className="-mt-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 py-4"
         direction="bidirectional"
         limitWidth
       >
         <div className="flex items-center gap-2">
+          <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
           <SearchInput
             searchText={search as string}
             setSearchText={setSearch}
@@ -1278,7 +1280,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       <DataTableStateHandler
         isLoading={isTableLoading}
         isEmpty={showEmptyState}
-        emptyState={<NoTracesPage />}
+        emptyState={<NoTracesPage type={type} />}
       >
         <DataTable
           columns={columns}

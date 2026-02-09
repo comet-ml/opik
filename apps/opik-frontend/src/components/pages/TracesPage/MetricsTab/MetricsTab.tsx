@@ -93,7 +93,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
       <DataTableStateHandler
         isLoading={isLoading}
         isEmpty={showEmptyState}
-        emptyState={<NoTracesPage />}
+        emptyState={<NoTracesPage type="metrics" />}
       >
         <ProjectMetricsSection
           projectId={projectId}
