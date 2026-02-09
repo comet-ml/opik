@@ -22,7 +22,6 @@ import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPl
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
-import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
@@ -88,15 +87,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   };
 
   const displayText = activeVersion?.template || "";
-
-  const {
-    images: extractedImages,
-    videos: extractedVideos,
-    audios: extractedAudios,
-  } = useMemo(() => {
-    const content = parsePromptVersionContent(activeVersion);
-    return parseLLMMessageContent(content);
-  }, [activeVersion]);
 
   const isChatPrompt = useMemo(() => {
     return prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
@@ -182,12 +172,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           {isChatPrompt ? (
             <ChatPromptView template={activeVersion?.template || ""} />
           ) : (
-            <TextPromptView
-              template={displayText}
-              extractedImages={extractedImages}
-              extractedVideos={extractedVideos}
-              extractedAudios={extractedAudios}
-            />
+            <TextPromptView template={displayText} />
           )}
           {activeVersion?.metadata && (
             <>

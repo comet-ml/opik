@@ -11,20 +11,9 @@ interface ChatMessage {
 
 interface TextPromptViewProps {
   template: string;
-  extractedImages: string[];
-  extractedVideos: string[];
-  extractedAudios: string[];
 }
 
-const TextPromptView: React.FC<TextPromptViewProps> = ({
-  template,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  extractedImages,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  extractedVideos,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  extractedAudios,
-}) => {
+const TextPromptView: React.FC<TextPromptViewProps> = ({ template }) => {
   const [showRawView, setShowRawView] = useState(false);
 
   const messages = useMemo<ChatMessage[]>(() => {
@@ -73,7 +62,10 @@ const TextPromptView: React.FC<TextPromptViewProps> = ({
       ) : isJsonMessages ? (
         <div className="flex flex-col gap-2" data-testid="prompt-text-content">
           {messages.map((message, index) => (
-            <ChatPromptMessageReadonly key={index} message={message} />
+            <ChatPromptMessageReadonly
+              key={`${message.role}-${index}`}
+              message={message}
+            />
           ))}
         </div>
       ) : (
