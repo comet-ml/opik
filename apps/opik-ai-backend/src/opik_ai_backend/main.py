@@ -557,6 +557,14 @@ def get_fast_api_app(
             app_name=APP_NAME, user_id=current_user.user_id, session_id=session_id
         )
 
+    def create_opik_client(user: UserContext) -> OpikBackendClient:
+        """Create an OpikBackendClient wired to the shared session and user credentials."""
+        return OpikBackendClient(
+            session=app.state.http_session,
+            session_token=user.session_token,
+            workspace=user.workspace_name,
+        )
+
     @app.put(f"{url_prefix}/trace-analyzer/session/{{trace_id}}/feedback")
     async def set_session_feedback(
         trace_id: str,
@@ -589,12 +597,7 @@ def get_fast_api_app(
                 },
             )
 
-        # Create Opik backend client
-        opik_client = OpikBackendClient(
-            session=app.state.http_session,
-            session_token=current_user.session_token,
-            workspace=current_user.workspace_name,
-        )
+        opik_client = create_opik_client(current_user)
 
         # Get trace to extract project_id
         try:
@@ -654,12 +657,7 @@ def get_fast_api_app(
                 },
             )
 
-        # Create Opik backend client
-        opik_client = OpikBackendClient(
-            session=app.state.http_session,
-            session_token=current_user.session_token,
-            workspace=current_user.workspace_name,
-        )
+        opik_client = create_opik_client(current_user)
 
         # Delete feedback from Opik
         try:
@@ -700,12 +698,7 @@ def get_fast_api_app(
             app_name=APP_NAME, user_id=current_user.user_id, session_id=session_id
         )
 
-        # Create Opik backend client
-        opik_client = OpikBackendClient(
-            session=app.state.http_session,
-            session_token=current_user.session_token,
-            workspace=current_user.workspace_name,
-        )
+        opik_client = create_opik_client(current_user)
 
         project_name = await get_project_name_from_trace_id(opik_client, trace_id)
 

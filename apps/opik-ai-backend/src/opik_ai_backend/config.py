@@ -123,6 +123,13 @@ class Settings(BaseSettings):
         alias="URL_PREFIX",
     )
 
+    # HTTP client configuration
+    opik_backend_timeout: int = Field(
+        default=30,
+        description="Timeout in seconds for HTTP calls to Opik backend",
+        alias="OPIK_BACKEND_TIMEOUT",
+    )
+
     # HTTP retry configuration
     retry_statuses: list[int] = Field(
         default=[502, 503, 504],

@@ -9,9 +9,8 @@ from typing import Optional
 
 import aiohttp
 
+from .config import settings
 from .logger_config import logger
-
-_DEFAULT_TIMEOUT = 30
 
 
 class OpikBackendClient:
@@ -66,7 +65,7 @@ class OpikBackendClient:
             url,
             cookies=self._get_cookies(),
             headers=self._get_headers(),
-            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=settings.opik_backend_timeout),
         ) as response:
             response.raise_for_status()
             return await response.json()
@@ -89,7 +88,7 @@ class OpikBackendClient:
             url,
             cookies=self._get_cookies(),
             headers=self._get_headers(),
-            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=settings.opik_backend_timeout),
         ) as response:
             response.raise_for_status()
             return await response.json()
@@ -112,7 +111,7 @@ class OpikBackendClient:
             url,
             cookies=self._get_cookies(),
             headers=self._get_headers(),
-            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=settings.opik_backend_timeout),
         ) as response:
             response.raise_for_status()
             return await response.json()
@@ -149,7 +148,7 @@ class OpikBackendClient:
             headers=headers,
             cookies=self._get_cookies(),
             json=payload,
-            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=settings.opik_backend_timeout),
         ) as response:
             response.raise_for_status()
             text = await response.text()
@@ -203,7 +202,7 @@ class OpikBackendClient:
             cookies=self._get_cookies(),
             headers=self._get_headers(),
             json=payload,
-            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=settings.opik_backend_timeout),
         ) as response:
             response.raise_for_status()
         logger.info(f"Successfully closed thread {thread_id}")
@@ -230,7 +229,7 @@ class OpikBackendClient:
             cookies=self._get_cookies(),
             headers=self._get_headers(),
             json=payload,
-            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=settings.opik_backend_timeout),
         ) as response:
             response.raise_for_status()
         logger.info(f"Successfully logged {len(scores)} feedback scores")
@@ -260,7 +259,7 @@ class OpikBackendClient:
             cookies=self._get_cookies(),
             headers=self._get_headers(),
             json=payload,
-            timeout=aiohttp.ClientTimeout(total=_DEFAULT_TIMEOUT),
+            timeout=aiohttp.ClientTimeout(total=settings.opik_backend_timeout),
         ) as response:
             response.raise_for_status()
         logger.info(

@@ -205,7 +205,12 @@ async def create_session(
     trace_id: str,
     session_id: Optional[str] = None,
     session_service: Optional[BaseSessionService] = None,
-):
+) -> tuple[BaseSessionService, str, Any]:
+    """Create (or reuse) a session for the trace-analyzer agent.
+
+    Initializes the session, injects the trace_id into session state, and returns
+    the session service, session ID, and session object.
+    """
     if session_id is None:
         session_id = str(uuid.uuid4())
 
@@ -247,7 +252,13 @@ async def get_agent(
     opik_client: OpikBackendClient,
     trace_id: str,
     opik_metadata: Optional[dict[str, Any]] = None,
-):
+) -> Agent:
+    """Build an ADK Agent configured with trace-analysis tools and a pre-loaded system prompt.
+
+    Fetches spans data for the trace and injects it into the system prompt so the LLM
+    has full context from the first turn. If spans fail to load, the agent still works
+    but with degraded context.
+    """
     from .config import settings
 
     # Ensure trace_id is in metadata
