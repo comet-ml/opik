@@ -20,5 +20,9 @@ public record LlmAsJudgeModelParameters(
         @JsonView({AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) Integer seed,
         @JsonView({AutomationRuleEvaluator.View.Public.class,
-                AutomationRuleEvaluator.View.Write.class}) JsonNode customParameters){
+                AutomationRuleEvaluator.View.Write.class}) JsonNode customParameters,
+        @JsonView({AutomationRuleEvaluator.View.Public.class,
+                AutomationRuleEvaluator.View.Write.class}) Double throttling,
+        @JsonView({AutomationRuleEvaluator.View.Public.class,
+                AutomationRuleEvaluator.View.Write.class}) Integer maxConcurrentRequests){
 }

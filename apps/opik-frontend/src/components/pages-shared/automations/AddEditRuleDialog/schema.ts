@@ -140,6 +140,8 @@ const LLMJudgeBaseSchema = z.object({
       .optional()
       .nullable(),
     custom_parameters: z.record(z.string(), z.unknown()).optional().nullable(),
+    throttling: z.number().min(0).optional(),
+    maxConcurrentRequests: z.number().int().min(1).optional(),
   }),
   template: z.nativeEnum(LLM_JUDGE),
   messages: z.array(
@@ -491,6 +493,8 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
       temperature: data.model?.temperature ?? 0,
       seed: data.model?.seed ?? null,
       custom_parameters: data.model?.custom_parameters ?? null,
+      throttling: data.model?.throttling,
+      maxConcurrentRequests: data.model?.max_concurrent_requests,
     },
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
@@ -506,7 +510,13 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsThreadFormType
     | LLMJudgeDetailsSpanFormType,
 ) => {
-  const { temperature, seed, custom_parameters } = data.config;
+  const {
+    temperature,
+    seed,
+    custom_parameters,
+    throttling,
+    maxConcurrentRequests,
+  } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
     temperature,
@@ -518,6 +528,14 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
 
   if (custom_parameters != null) {
     model.custom_parameters = custom_parameters;
+  }
+
+  if (throttling != null) {
+    model.throttling = throttling;
+  }
+
+  if (maxConcurrentRequests != null) {
+    model.max_concurrent_requests = maxConcurrentRequests;
   }
 
   return {
