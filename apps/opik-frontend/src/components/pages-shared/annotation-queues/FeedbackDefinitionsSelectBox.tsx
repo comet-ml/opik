@@ -1,12 +1,21 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import { DropdownOption } from "@/types/shared";
-import { FeedbackDefinition } from "@/types/feedback-definitions";
+import {
+  CreateFeedbackDefinition,
+  FeedbackDefinition,
+} from "@/types/feedback-definitions";
 import useAppStore from "@/store/AppStore";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import AddEditFeedbackDefinitionDialog from "@/components/shared/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
 
@@ -16,6 +25,7 @@ interface BaseFeedbackDefinitionsSelectBoxProps {
   className?: string;
   disabled?: boolean;
   valueField?: keyof FeedbackDefinition;
+  onInnerDialogOpenChange?: (open: boolean) => void;
 }
 
 interface SingleSelectFeedbackDefinitionsProps
@@ -40,7 +50,12 @@ type FeedbackDefinitionsSelectBoxProps =
 const FeedbackDefinitionsSelectBox: React.FC<
   FeedbackDefinitionsSelectBoxProps
 > = (props) => {
-  const { className, disabled, valueField = "id" } = props;
+  const {
+    className,
+    disabled,
+    valueField = "id",
+    onInnerDialogOpenChange,
+  } = props;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [feedbackDefinitionDialogOpen, setFeedbackDefinitionDialogOpen] =
@@ -51,6 +66,24 @@ const FeedbackDefinitionsSelectBox: React.FC<
     dialogKeyRef.current = dialogKeyRef.current + 1;
     setFeedbackDefinitionDialogOpen(true);
   }, []);
+
+  const handleFeedbackDefinitionCreated = (
+    feedbackDefinition: CreateFeedbackDefinition,
+  ) => {
+    const newValue = String(
+      feedbackDefinition[valueField as keyof CreateFeedbackDefinition],
+    );
+
+    if (props.multiselect) {
+      props.onChange([...props.value, newValue]);
+    } else {
+      props.onChange(newValue);
+    }
+  };
+
+  useLayoutEffect(() => {
+    onInnerDialogOpenChange?.(feedbackDefinitionDialogOpen);
+  }, [feedbackDefinitionDialogOpen, onInnerDialogOpenChange]);
 
   const { data, isLoading } = useFeedbackDefinitionsList(
     {
@@ -96,13 +129,15 @@ const FeedbackDefinitionsSelectBox: React.FC<
     () => (
       <div className="px-0.5">
         <Separator className="my-1" />
-        <Button
-          variant="link"
-          className="w-full justify-start px-2"
+        <div
+          className="flex h-10 cursor-pointer items-center rounded-md px-4 hover:bg-primary-foreground"
           onClick={handleAddNewClick}
         >
-          Add new feedback definition
-        </Button>
+          <div className="comet-body-s flex items-center gap-2 text-primary">
+            <Plus className="size-3.5 shrink-0" />
+            <span>Add new</span>
+          </div>
+        </div>
       </div>
     ),
     [handleAddNewClick],
@@ -127,6 +162,7 @@ const FeedbackDefinitionsSelectBox: React.FC<
         key={dialogKeyRef.current}
         open={feedbackDefinitionDialogOpen}
         setOpen={setFeedbackDefinitionDialogOpen}
+        onCreated={handleFeedbackDefinitionCreated}
       />
     </>
   );
