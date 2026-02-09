@@ -162,7 +162,17 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
       {showRawView || !hasMessages ? (
         <SyntaxHighlighter
           withSearch
-          data={template as object}
+          data={
+            (() => {
+              try {
+                return typeof template === "string"
+                  ? JSON.parse(template)
+                  : template;
+              } catch {
+                return template;
+              }
+            })() as object
+          }
           search={search}
         />
       ) : (
