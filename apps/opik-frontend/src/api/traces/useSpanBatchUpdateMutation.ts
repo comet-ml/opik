@@ -9,7 +9,10 @@ import { useToast } from "@/components/ui/use-toast";
 type UseSpanBatchUpdateMutationParams = {
   projectId: string;
   spanIds: string[];
-  span: Partial<Span>;
+  span: Partial<Span> & {
+    tagsToAdd?: string[];
+    tagsToRemove?: string[];
+  };
   mergeTags?: boolean;
 };
 
@@ -21,11 +24,18 @@ const useSpanBatchUpdateMutation = () => {
     mutationFn: async ({
       spanIds,
       span,
-      mergeTags,
+      mergeTags = false,
     }: UseSpanBatchUpdateMutationParams) => {
+      const { tags, tagsToAdd, tagsToRemove, ...rest } = span;
+
+      const payload: Record<string, unknown> = { ...rest };
+      if (tags !== undefined) payload.tags = tags;
+      if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
+      if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
+
       const { data } = await api.patch(SPANS_REST_ENDPOINT + "batch", {
         ids: spanIds,
-        update: span,
+        update: payload,
         merge_tags: mergeTags,
       });
 

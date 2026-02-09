@@ -2463,22 +2463,23 @@ class TraceDAOImpl implements TraceDAO {
                 <if(input)> :input <else> t.input <endif> as input,
                 <if(output)> :output <else> t.output <endif> as output,
                 <if(metadata)> :metadata <else> t.metadata <endif> as metadata,
-                <if(tags)><if(merge_tags)>arrayConcat(t.tags, :tags)<else>:tags<endif><else>t.tags<endif> as tags,
-                <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
-                t.created_at,
-                t.created_by,
-                :user_name as last_updated_by,
-                <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
-                t.visibility_mode,
-                :truncation_threshold as truncation_threshold,
-                <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> t.output_slim <endif> as output_slim
-            FROM traces t
-            WHERE t.id IN :ids AND t.workspace_id = :workspace_id
-            ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
-            LIMIT 1 BY t.id
-            SETTINGS log_comment = '<log_comment>';
-            """;
+                """ + SqlFragments.tagUpdateFragment("t.tags") + """
+            as tags,
+                           <if(error_info)> :error_info <else> t.error_info <endif> as error_info,
+                           t.created_at,
+                           t.created_by,
+                           :user_name as last_updated_by,
+                           <if(thread_id)> :thread_id <else> t.thread_id <endif> as thread_id,
+                           t.visibility_mode,
+                           :truncation_threshold as truncation_threshold,
+                           <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
+                           <if(output)> :output_slim <else> t.output_slim <endif> as output_slim
+                       FROM traces t
+                       WHERE t.id IN :ids AND t.workspace_id = :workspace_id
+                       ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
+                       LIMIT 1 BY t.id
+                       SETTINGS log_comment = '<log_comment>';
+                       """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -3592,11 +3593,24 @@ class TraceDAOImpl implements TraceDAO {
                 .ifPresent(input -> template.add("input", input.toString()));
         Optional.ofNullable(traceUpdate.output())
                 .ifPresent(output -> template.add("output", output.toString()));
-        Optional.ofNullable(traceUpdate.tags())
-                .ifPresent(tags -> {
-                    template.add("tags", tags.toString());
-                    template.add("merge_tags", mergeTags);
-                });
+
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (traceUpdate.tagsToAdd() != null || traceUpdate.tagsToRemove() != null) {
+            if (traceUpdate.tagsToAdd() != null) {
+                template.add("tags_to_add", true);
+            }
+            if (traceUpdate.tagsToRemove() != null) {
+                template.add("tags_to_remove", true);
+            }
+        }
+        // Old approach: tags with mergeTags boolean (backwards compatible)
+        else {
+            Optional.ofNullable(traceUpdate.tags())
+                    .ifPresent(tags -> {
+                        template.add("tags", tags.toString());
+                        template.add("merge_tags", mergeTags);
+                    });
+        }
         Optional.ofNullable(traceUpdate.metadata())
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
         Optional.ofNullable(traceUpdate.endTime())
@@ -3626,8 +3640,22 @@ class TraceDAOImpl implements TraceDAO {
                     statement.bind("output", outputValue);
                     statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
                 });
-        Optional.ofNullable(traceUpdate.tags())
-                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (traceUpdate.tagsToAdd() != null || traceUpdate.tagsToRemove() != null) {
+            if (traceUpdate.tagsToAdd() != null) {
+                statement.bind("tags_to_add", traceUpdate.tagsToAdd().toArray(String[]::new));
+            }
+            if (traceUpdate.tagsToRemove() != null) {
+                statement.bind("tags_to_remove", traceUpdate.tagsToRemove().toArray(String[]::new));
+            }
+        }
+        // Old approach: tags (backwards compatible)
+        else {
+            Optional.ofNullable(traceUpdate.tags())
+                    .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        }
+
         Optional.ofNullable(traceUpdate.endTime())
                 .ifPresent(endTime -> statement.bind("end_time", endTime.toString()));
         Optional.ofNullable(traceUpdate.metadata())

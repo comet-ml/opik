@@ -1150,32 +1150,33 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
-                src.item_created_at,
-                now64(9) as item_last_updated_at,
-                src.item_created_by,
-                :userName as item_last_updated_by,
-                now64(9) as created_at,
-                now64(9) as last_updated_at,
-                :userName as created_by,
-                :userName as last_updated_by,
-                src.workspace_id
-            FROM (
-                SELECT *
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND dataset_version_id = :baseVersionId
-                <if(item_ids)>
-                AND dataset_item_id IN :itemIds
-                <endif>
-                <if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY dataset_item_id
-            ) AS src
-            """;
+                """ + SqlFragments.tagUpdateFragment("src.tags") + """
+            as tags,
+                           src.item_created_at,
+                           now64(9) as item_last_updated_at,
+                           src.item_created_by,
+                           :userName as item_last_updated_by,
+                           now64(9) as created_at,
+                           now64(9) as last_updated_at,
+                           :userName as created_by,
+                           :userName as last_updated_by,
+                           src.workspace_id
+                       FROM (
+                           SELECT *
+                           FROM dataset_item_versions
+                           WHERE workspace_id = :workspace_id
+                           AND dataset_id = :datasetId
+                           AND dataset_version_id = :baseVersionId
+                           <if(item_ids)>
+                           AND dataset_item_id IN :itemIds
+                           <endif>
+                           <if(dataset_item_filters)>
+                           AND <dataset_item_filters>
+                           <endif>
+                           ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                           LIMIT 1 BY dataset_item_id
+                       ) AS src
+                       """;
 
     // Copy items from source version to target version
     // Optionally excludes items matching filters (when exclude_filters is set)
@@ -2326,7 +2327,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().data() != null) {
                     template.add("data", true);
                 }
-                if (batchUpdate.update().tags() != null) {
+
+                // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+                if (batchUpdate.update().tagsToAdd() != null || batchUpdate.update().tagsToRemove() != null) {
+                    if (batchUpdate.update().tagsToAdd() != null) {
+                        template.add("tags_to_add", true);
+                    }
+                    if (batchUpdate.update().tagsToRemove() != null) {
+                        template.add("tags_to_remove", true);
+                    }
+                }
+                // Old approach: tags with mergeTags boolean (backwards compatible)
+                else if (batchUpdate.update().tags() != null) {
                     template.add("tags", true);
                     if (Boolean.TRUE.equals(batchUpdate.mergeTags())) {
                         template.add("merge_tags", true);
@@ -2375,7 +2387,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             .getOrDefault(batchUpdate.update().data());
                     statement.bind("data", dataAsStrings);
                 }
-                if (batchUpdate.update().tags() != null) {
+
+                // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+                if (batchUpdate.update().tagsToAdd() != null || batchUpdate.update().tagsToRemove() != null) {
+                    if (batchUpdate.update().tagsToAdd() != null) {
+                        statement.bind("tags_to_add", batchUpdate.update().tagsToAdd().toArray(new String[0]));
+                    }
+                    if (batchUpdate.update().tagsToRemove() != null) {
+                        statement.bind("tags_to_remove", batchUpdate.update().tagsToRemove().toArray(new String[0]));
+                    }
+                }
+                // Old approach: tags (backwards compatible)
+                else if (batchUpdate.update().tags() != null) {
                     statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
                 }
 

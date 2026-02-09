@@ -4,6 +4,7 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
+import com.comet.opik.domain.SqlFragments;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
@@ -620,14 +621,15 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.last_updated_by,
                 tt.created_at,
                 now64(6) as last_updated_at,
-                <if(tags)><if(merge_tags)>arrayConcat(tt.tags, :tags)<else>:tags<endif><else>tt.tags<endif> as tags,
-                tt.sampling_per_rule,
-                tt.scored_at
-            FROM trace_threads tt
-            WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
-            ORDER BY (tt.workspace_id, tt.project_id, tt.thread_id, tt.id) DESC, tt.last_updated_at DESC
-            LIMIT 1 BY tt.id;
-            """;
+                """ + SqlFragments.tagUpdateFragment("tt.tags") + """
+            as tags,
+                           tt.sampling_per_rule,
+                           tt.scored_at
+                       FROM trace_threads tt
+                       WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
+                       ORDER BY (tt.workspace_id, tt.project_id, tt.thread_id, tt.id) DESC, tt.last_updated_at DESC
+                       LIMIT 1 BY tt.id;
+                       """;
 
     @Override
     public Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags) {
@@ -661,6 +663,10 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     template.add("tags", tags.toString());
                     template.add("merge_tags", mergeTags);
                 });
+        Optional.ofNullable(update.tagsToAdd())
+                .ifPresent(tagsToAdd -> template.add("tags_to_add", tagsToAdd.toString()));
+        Optional.ofNullable(update.tagsToRemove())
+                .ifPresent(tagsToRemove -> template.add("tags_to_remove", tagsToRemove.toString()));
 
         return template;
     }
@@ -668,5 +674,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     private void bindBulkUpdateParams(TraceThreadUpdate update, Statement statement) {
         Optional.ofNullable(update.tags())
                 .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
+        Optional.ofNullable(update.tagsToAdd())
+                .ifPresent(tagsToAdd -> statement.bind("tags_to_add", tagsToAdd.toArray(String[]::new)));
+        Optional.ofNullable(update.tagsToRemove())
+                .ifPresent(tagsToRemove -> statement.bind("tags_to_remove", tagsToRemove.toArray(String[]::new)));
     }
 }

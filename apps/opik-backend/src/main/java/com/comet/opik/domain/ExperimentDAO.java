@@ -1148,26 +1148,28 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                <if(tags)><if(merge_tags)> arrayDistinct(arrayConcat(tags, :tags)) <else> :tags <endif> <else> tags <endif> as tags,
-                created_by,
-                :user_name as last_updated_by,
-                prompt_version_id,
-                prompt_id,
-                prompt_versions,
-                <if(type)> :type <else> type <endif> as type,
-                optimization_id,
-                <if(status)> :status <else> status <endif> as status,
-                <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
-                created_at,
-                now64(9) as last_updated_at
-            FROM experiments
-            WHERE id IN (:ids)
-            AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-            LIMIT 1 BY id
-            SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
+                """ + SqlFragments.tagUpdateFragment("tags")
+            + """
+                    as tags,
+                                   created_by,
+                                   :user_name as last_updated_by,
+                                   prompt_version_id,
+                                   prompt_id,
+                                   prompt_versions,
+                                   <if(type)> :type <else> type <endif> as type,
+                                   optimization_id,
+                                   <if(status)> :status <else> status <endif> as status,
+                                   <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
+                                   created_at,
+                                   now64(9) as last_updated_at
+                               FROM experiments
+                               WHERE id IN (:ids)
+                               AND workspace_id = :workspace_id
+                               ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                               LIMIT 1 BY id
+                               SETTINGS log_comment = '<log_comment>'
+                               ;
+                               """;
 
     private final @NonNull ConnectionFactory connectionFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
@@ -2047,9 +2049,17 @@ class ExperimentDAO {
             template.add("metadata", experimentUpdate.metadata().toString());
         }
 
-        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
-        // because an EMPTY set is a valid value here, and it is used to remove tags
-        if (experimentUpdate.tags() != null) {
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (experimentUpdate.tagsToAdd() != null || experimentUpdate.tagsToRemove() != null) {
+            if (experimentUpdate.tagsToAdd() != null) {
+                template.add("tags_to_add", true);
+            }
+            if (experimentUpdate.tagsToRemove() != null) {
+                template.add("tags_to_remove", true);
+            }
+        }
+        // Old approach: tags with mergeTags boolean (backwards compatible)
+        else if (experimentUpdate.tags() != null) {
             template.add("tags", true);
             template.add("merge_tags", mergeTags);
         }
@@ -2078,9 +2088,17 @@ class ExperimentDAO {
             statement.bind("metadata", experimentUpdate.metadata().toString());
         }
 
-        // we are checking if tags are not null instead of using CollectionUtils.isNotEmpty
-        // because an EMPTY set is a valid value here, and it is used to remove tags
-        if (experimentUpdate.tags() != null) {
+        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        if (experimentUpdate.tagsToAdd() != null || experimentUpdate.tagsToRemove() != null) {
+            if (experimentUpdate.tagsToAdd() != null) {
+                statement.bind("tags_to_add", experimentUpdate.tagsToAdd().toArray(String[]::new));
+            }
+            if (experimentUpdate.tagsToRemove() != null) {
+                statement.bind("tags_to_remove", experimentUpdate.tagsToRemove().toArray(String[]::new));
+            }
+        }
+        // Old approach: tags with mergeTags boolean (backwards compatible)
+        else if (experimentUpdate.tags() != null) {
             statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
         }
 
