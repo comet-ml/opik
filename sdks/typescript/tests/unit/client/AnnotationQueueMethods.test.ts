@@ -33,28 +33,29 @@ describe("OpikClient Annotation Queue Methods", () => {
     let createSpy: MockInstance<
       typeof client.api.annotationQueues.createAnnotationQueue
     >;
-    let findProjectsSpy: MockInstance<
-      typeof client.api.projects.findProjects
+    let retrieveProjectSpy: MockInstance<
+      typeof client.api.projects.retrieveProject
     >;
 
     beforeEach(() => {
       createSpy = vi
         .spyOn(client.api.annotationQueues, "createAnnotationQueue")
         .mockImplementation(mockAPIFunction);
-      findProjectsSpy = vi
-        .spyOn(client.api.projects, "findProjects")
+      retrieveProjectSpy = vi
+        .spyOn(client.api.projects, "retrieveProject")
         .mockImplementation(mockAPIFunction);
     });
 
     afterEach(() => {
       createSpy.mockRestore();
-      findProjectsSpy.mockRestore();
+      retrieveProjectSpy.mockRestore();
     });
 
     it("should call API and return TracesAnnotationQueue instance", async () => {
-      findProjectsSpy.mockImplementationOnce(() =>
+      retrieveProjectSpy.mockImplementationOnce(() =>
         createMockHttpResponsePromise({
-          content: [{ id: "project-id", name: "opik-sdk-typescript" }],
+          id: "project-id",
+          name: "opik-sdk-typescript",
         })
       );
 
@@ -86,28 +87,29 @@ describe("OpikClient Annotation Queue Methods", () => {
     let createSpy: MockInstance<
       typeof client.api.annotationQueues.createAnnotationQueue
     >;
-    let findProjectsSpy: MockInstance<
-      typeof client.api.projects.findProjects
+    let retrieveProjectSpy: MockInstance<
+      typeof client.api.projects.retrieveProject
     >;
 
     beforeEach(() => {
       createSpy = vi
         .spyOn(client.api.annotationQueues, "createAnnotationQueue")
         .mockImplementation(mockAPIFunction);
-      findProjectsSpy = vi
-        .spyOn(client.api.projects, "findProjects")
+      retrieveProjectSpy = vi
+        .spyOn(client.api.projects, "retrieveProject")
         .mockImplementation(mockAPIFunction);
     });
 
     afterEach(() => {
       createSpy.mockRestore();
-      findProjectsSpy.mockRestore();
+      retrieveProjectSpy.mockRestore();
     });
 
     it("should call API and return ThreadsAnnotationQueue instance", async () => {
-      findProjectsSpy.mockImplementationOnce(() =>
+      retrieveProjectSpy.mockImplementationOnce(() =>
         createMockHttpResponsePromise({
-          content: [{ id: "project-id", name: "opik-sdk-typescript" }],
+          id: "project-id",
+          name: "opik-sdk-typescript",
         })
       );
 
@@ -265,22 +267,15 @@ describe("OpikClient Annotation Queue Methods", () => {
     let findSpy: MockInstance<
       typeof client.api.annotationQueues.findAnnotationQueues
     >;
-    let findProjectsSpy: MockInstance<
-      typeof client.api.projects.findProjects
-    >;
 
     beforeEach(() => {
       findSpy = vi
         .spyOn(client.api.annotationQueues, "findAnnotationQueues")
         .mockImplementation(mockAPIFunction);
-      findProjectsSpy = vi
-        .spyOn(client.api.projects, "findProjects")
-        .mockImplementation(mockAPIFunction);
     });
 
     afterEach(() => {
       findSpy.mockRestore();
-      findProjectsSpy.mockRestore();
     });
 
     it("should return array of TracesAnnotationQueue instances", async () => {
