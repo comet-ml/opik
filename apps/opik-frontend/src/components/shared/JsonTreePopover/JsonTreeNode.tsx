@@ -56,7 +56,7 @@ const JsonTreeNode: React.FC<JsonTreeNodeProps> = ({
     if (isFocused && nodeRef.current) {
       nodeRef.current.scrollIntoView({
         block: "nearest",
-        behavior: "smooth",
+        behavior: "auto",
       });
     }
   }, [isFocused]);

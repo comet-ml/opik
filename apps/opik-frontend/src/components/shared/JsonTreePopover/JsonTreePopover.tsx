@@ -24,7 +24,7 @@ import JsonTreeNode from "./JsonTreeNode";
 import PopoverHeader from "./PopoverHeader";
 import PopoverFooter from "./PopoverFooter";
 
-const MAX_HEIGHT = 320;
+const MAX_HEIGHT = '320px';
 
 const KEY_CYCLE_FOCUS = "Tab";
 const KEY_FOCUS_NEXT = "ArrowDown";
