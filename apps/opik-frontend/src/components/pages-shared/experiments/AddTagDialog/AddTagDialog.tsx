@@ -40,8 +40,6 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
       open={open}
       setOpen={setOpen}
       onUpdate={handleUpdate}
-      maxTagLength={100}
-      maxTags={50}
     />
   );
 };

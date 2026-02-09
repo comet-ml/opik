@@ -48,7 +48,6 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
             tagsToAdd,
             tagsToRemove,
           },
-          mergeTags: false,
         });
       } else if (type === TRACE_DATA_TYPE.spans) {
         const ids = rows.map((row) => row.id);
@@ -62,7 +61,6 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
             tagsToAdd,
             tagsToRemove,
           },
-          mergeTags: false,
         });
       } else {
         const threadModelIds = rows.map(
@@ -75,7 +73,6 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
             tagsToAdd,
             tagsToRemove,
           },
-          mergeTags: false,
         });
       }
 

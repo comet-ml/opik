@@ -20,6 +20,10 @@ import {
 } from "@/components/ui/accordion";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
+const MAX_TAG_LENGTH = 100;
+const MAX_ENTITIES = 1000;
+const MAX_TAGS = 50;
+
 export type EntityWithTags = {
   id: string;
   tags?: string[];
@@ -30,11 +34,8 @@ type ManageTagsDialogProps<T extends EntityWithTags = EntityWithTags> = {
   open: boolean | number;
   setOpen: (open: boolean | number) => void;
   onUpdate: (tagsToAdd: string[], tagsToRemove: string[]) => Promise<void>;
-  maxTagLength?: number;
-  maxEntities?: number;
   isAllItemsSelected?: boolean;
   totalCount?: number;
-  maxTags?: number;
 };
 
 const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
@@ -42,30 +43,26 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
   open,
   setOpen,
   onUpdate,
-  maxTagLength = 100,
-  maxEntities = 1000,
   isAllItemsSelected = false,
   totalCount,
-  maxTags,
 }) => {
   const { toast } = useToast();
   const [newTagInput, setNewTagInput] = useState<string>("");
   const [newTags, setNewTags] = useState<Set<string>>(new Set());
   const [tagsToRemove, setTagsToRemove] = useState<Set<string>>(new Set());
 
-  const isOverLimit =
-    maxEntities && !isAllItemsSelected && entities.length > maxEntities;
+  const isOverLimit = !isAllItemsSelected && entities.length > MAX_ENTITIES;
 
   useEffect(() => {
     if (isOverLimit && open) {
       toast({
         title: "Error",
-        description: `You can only add tags to up to ${maxEntities} items at a time. Please select fewer items.`,
+        description: `You can only add tags to up to ${MAX_ENTITIES} items at a time. Please select fewer items.`,
         variant: "destructive",
       });
       setOpen(false);
     }
-  }, [isOverLimit, open, maxEntities, setOpen, toast]);
+  }, [isOverLimit, open, setOpen, toast]);
 
   const tagCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -103,15 +100,6 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
   const handleAddNewTag = useCallback(() => {
     const trimmedTag = newTagInput.trim();
 
-    if (maxTags && newTags.size >= maxTags) {
-      toast({
-        title: "Too many tags",
-        description: `You can only add up to ${maxTags} tags at once`,
-        variant: "destructive",
-      });
-      return;
-    }
-
     if (newTags.has(trimmedTag)) {
       toast({
         title: "Tag already added",
@@ -135,7 +123,7 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
 
     setNewTags((prev) => new Set(prev).add(trimmedTag));
     setNewTagInput("");
-  }, [newTagInput, newTags, toast, maxTags, tagCounts, entities.length]);
+  }, [newTagInput, newTags, toast, tagCounts, entities]);
 
   const handleRemoveNewTag = useCallback((tag: string) => {
     setNewTags((prev) => {
@@ -145,22 +133,28 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
     });
   }, []);
 
-  const handleRemoveExistingTag = useCallback(
-    (tag: string) => {
-      if (maxTags && tagsToRemove.size >= maxTags) {
-        toast({
-          title: "Too many tags to remove",
-          description: `You can only remove up to ${maxTags} tags at once`,
-          variant: "destructive",
-        });
-        return;
-      }
-      setTagsToRemove((prev) => new Set(prev).add(tag));
-    },
-    [maxTags, tagsToRemove.size, toast],
-  );
+  const handleRemoveExistingTag = useCallback((tag: string) => {
+    setTagsToRemove((prev) => new Set(prev).add(tag));
+  }, []);
 
   const handleUpdateTags = async () => {
+    const allTagsAfterUpdate = entities.map((entity) => {
+      const currentTags = new Set(entity.tags || []);
+      tagsToRemove.forEach((tag) => currentTags.delete(tag));
+      newTags.forEach((tag) => currentTags.add(tag));
+      return currentTags.size;
+    });
+
+    const maxTagCount = Math.max(...allTagsAfterUpdate);
+    if (maxTagCount > MAX_TAGS) {
+      toast({
+        title: "Tag limit exceeded",
+        description: `An item can only have up to ${MAX_TAGS} tags`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       await onUpdate(Array.from(newTags), Array.from(tagsToRemove));
 
@@ -220,7 +214,7 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
                     handleAddNewTag();
                   }
                 }}
-                maxLength={maxTagLength}
+                maxLength={MAX_TAG_LENGTH}
                 className="flex-1"
               />
               <Button

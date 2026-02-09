@@ -1673,7 +1673,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         Optional.ofNullable(update.data())
                 .ifPresent(data -> template.add("data", data.toString()));
 
-        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        // Tag update strategy, two approaches (if both are provided, tagsToAdd/tagsToRemove takes precedence):
+        // 1. tagsToAdd/tagsToRemove: Used by frontend. Allows efficient atomic add/remove in single call.
+        // 2. tags + mergeTags: Used by SDK clients for backwards compatibility.
+        //    - mergeTags=true: Merge provided tags with existing tags
+        //    - mergeTags=false: Replace all tags with provided tags
         if (update.tagsToAdd() != null || update.tagsToRemove() != null) {
             if (update.tagsToAdd() != null) {
                 template.add("tags_to_add", true);
@@ -1681,9 +1685,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             if (update.tagsToRemove() != null) {
                 template.add("tags_to_remove", true);
             }
-        }
-        // Old approach: tags with mergeTags boolean (backwards compatible)
-        else {
+        } else {
             Optional.ofNullable(update.tags())
                     .ifPresent(tags -> {
                         template.add("tags", tags.toString());

@@ -2049,7 +2049,11 @@ class ExperimentDAO {
             template.add("metadata", experimentUpdate.metadata().toString());
         }
 
-        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        // Tag update strategy, two approaches (if both are provided, tagsToAdd/tagsToRemove takes precedence):
+        // 1. tagsToAdd/tagsToRemove: Used by frontend. Allows efficient atomic add/remove in single call.
+        // 2. tags + mergeTags: Used by SDK clients for backwards compatibility.
+        //    - mergeTags=true: Merge provided tags with existing tags
+        //    - mergeTags=false: Replace all tags with provided tags
         if (experimentUpdate.tagsToAdd() != null || experimentUpdate.tagsToRemove() != null) {
             if (experimentUpdate.tagsToAdd() != null) {
                 template.add("tags_to_add", true);
@@ -2057,9 +2061,7 @@ class ExperimentDAO {
             if (experimentUpdate.tagsToRemove() != null) {
                 template.add("tags_to_remove", true);
             }
-        }
-        // Old approach: tags with mergeTags boolean (backwards compatible)
-        else if (experimentUpdate.tags() != null) {
+        } else if (experimentUpdate.tags() != null) {
             template.add("tags", true);
             template.add("merge_tags", mergeTags);
         }
@@ -2088,7 +2090,7 @@ class ExperimentDAO {
             statement.bind("metadata", experimentUpdate.metadata().toString());
         }
 
-        // New approach: tagsToAdd and tagsToRemove (takes precedence if present)
+        // Tag update strategy (see above for full explanation)
         if (experimentUpdate.tagsToAdd() != null || experimentUpdate.tagsToRemove() != null) {
             if (experimentUpdate.tagsToAdd() != null) {
                 statement.bind("tags_to_add", experimentUpdate.tagsToAdd().toArray(String[]::new));
@@ -2096,9 +2098,7 @@ class ExperimentDAO {
             if (experimentUpdate.tagsToRemove() != null) {
                 statement.bind("tags_to_remove", experimentUpdate.tagsToRemove().toArray(String[]::new));
             }
-        }
-        // Old approach: tags with mergeTags boolean (backwards compatible)
-        else if (experimentUpdate.tags() != null) {
+        } else if (experimentUpdate.tags() != null) {
             statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
         }
 

@@ -2524,15 +2524,24 @@ class SpanDAO {
                 .ifPresent(input -> template.add("input", input.toString()));
         Optional.ofNullable(spanUpdate.output())
                 .ifPresent(output -> template.add("output", output.toString()));
-        Optional.ofNullable(spanUpdate.tags())
-                .ifPresent(tags -> {
-                    template.add("tags", tags.toString());
-                    template.add("merge_tags", mergeTags);
-                });
-        Optional.ofNullable(spanUpdate.tagsToAdd())
-                .ifPresent(tagsToAdd -> template.add("tags_to_add", tagsToAdd.toString()));
-        Optional.ofNullable(spanUpdate.tagsToRemove())
-                .ifPresent(tagsToRemove -> template.add("tags_to_remove", tagsToRemove.toString()));
+
+        // Tag update strategy, two approaches (if both are provided, tagsToAdd/tagsToRemove takes precedence):
+        // 1. tagsToAdd/tagsToRemove: Used by frontend. Allows efficient atomic add/remove in single call.
+        // 2. tags + mergeTags: Used by SDK clients for backwards compatibility.
+        //    - mergeTags=true: Merge provided tags with existing tags
+        //    - mergeTags=false: Replace all tags with provided tags
+        if (spanUpdate.tagsToAdd() != null || spanUpdate.tagsToRemove() != null) {
+            if (spanUpdate.tagsToAdd() != null) {
+                template.add("tags_to_add", spanUpdate.tagsToAdd().toString());
+            }
+            if (spanUpdate.tagsToRemove() != null) {
+                template.add("tags_to_remove", spanUpdate.tagsToRemove().toString());
+            }
+        } else if (spanUpdate.tags() != null) {
+            template.add("tags", spanUpdate.tags().toString());
+            template.add("merge_tags", mergeTags);
+        }
+
         Optional.ofNullable(spanUpdate.metadata())
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
         if (StringUtils.isNotBlank(spanUpdate.model())) {
@@ -2575,12 +2584,19 @@ class SpanDAO {
                     statement.bind("output", outputValue);
                     statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
                 });
-        Optional.ofNullable(spanUpdate.tags())
-                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
-        Optional.ofNullable(spanUpdate.tagsToAdd())
-                .ifPresent(tagsToAdd -> statement.bind("tags_to_add", tagsToAdd.toArray(String[]::new)));
-        Optional.ofNullable(spanUpdate.tagsToRemove())
-                .ifPresent(tagsToRemove -> statement.bind("tags_to_remove", tagsToRemove.toArray(String[]::new)));
+
+        // Tag update strategy (see above for full explanation)
+        if (spanUpdate.tagsToAdd() != null || spanUpdate.tagsToRemove() != null) {
+            if (spanUpdate.tagsToAdd() != null) {
+                statement.bind("tags_to_add", spanUpdate.tagsToAdd().toArray(String[]::new));
+            }
+            if (spanUpdate.tagsToRemove() != null) {
+                statement.bind("tags_to_remove", spanUpdate.tagsToRemove().toArray(String[]::new));
+            }
+        } else if (spanUpdate.tags() != null) {
+            statement.bind("tags", spanUpdate.tags().toArray(String[]::new));
+        }
+
         Optional.ofNullable(spanUpdate.usage())
                 .ifPresent(usage -> {
                     var usageKeys = new ArrayList<String>();
