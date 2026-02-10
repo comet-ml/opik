@@ -76,7 +76,10 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const [promptId, setPromptId] = useState<string | undefined>(prompt?.id);
   const isEdit = Boolean(promptId);
 
-  const [metadata, setMetadata] = useState(extractMetadata(prompt));
+  const [metadata, setMetadata] = useState(
+    extractMetadata(prompt) ||
+      (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
+  );
   const [description, setDescription] = useState("");
   const [name, setName] = useState(defaultName);
   const [changeDescription, setChangeDescription] = useState("");
@@ -89,10 +92,13 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const { mutate: newVersionMutate } = useCreatePromptVersionMutation();
   const { mutate: createMutate } = usePromptCreateMutation();
 
-  const { data: promptData, isPending } = usePromptById(
+  const needsFetch = Boolean(promptId) && prompt?.id !== promptId;
+  const { data: promptData, isPending: isFetchPending } = usePromptById(
     { promptId: promptId! },
-    { enabled: Boolean(promptId) && prompt?.id !== promptId },
+    { enabled: needsFetch },
   );
+
+  const isPending = needsFetch && isFetchPending;
 
   useEffect(() => {
     setPromptId(prompt?.id);
@@ -100,12 +106,14 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   useEffect(() => {
     // Reset name when dialog opens:
+    // - If no prompt prop was provided (creating new from scratch), use defaultName
     // - If editing existing prompt (promptId exists), use defaultName
-    // - If creating new prompt (no promptId), clear the name field
+    // - If prompt prop was provided but user chose "Save as new" (promptId cleared), clear name
     if (open) {
-      setName(promptId ? defaultName : "");
+      const shouldClearName = prompt && !promptId;
+      setName(shouldClearName ? "" : defaultName);
     }
-  }, [open, defaultName, promptId]);
+  }, [open, defaultName, promptId, prompt]);
 
   const selectedPrompt = useMemo(() => {
     return !promptId
@@ -117,11 +125,20 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   useEffect(() => {
     if (!isPending) {
-      setMetadata(extractMetadata(selectedPrompt));
+      const promptMetadata = extractMetadata(selectedPrompt);
+      setMetadata(
+        promptMetadata ||
+          (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
+      );
     }
-  }, [isPending, selectedPrompt]);
+  }, [isPending, selectedPrompt, providedMetadata]);
 
-  const isValid = (isEdit ? !isPending : name.length) && template.length;
+  const hasValidTemplate = template.length > 0;
+  const canSaveNewPrompt = !isEdit && name.length > 0;
+  const canSaveExistingPrompt = isEdit && !isPending && Boolean(selectedPrompt);
+
+  const isValid =
+    hasValidTemplate && (canSaveNewPrompt || canSaveExistingPrompt);
 
   const handleClickEditPrompt = () => {
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
