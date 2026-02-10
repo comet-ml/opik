@@ -5,6 +5,7 @@ import com.comet.opik.api.ManualEvaluationEntityType;
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
 import com.comet.opik.domain.ExperimentItemService;
+import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.evaluators.ManualEvaluationService;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -29,6 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
@@ -51,6 +53,7 @@ public class ManualEvaluationResource {
 
     private final @NonNull ManualEvaluationService manualEvaluationService;
     private final @NonNull ExperimentItemService experimentItemService;
+    private final @NonNull ExperimentService experimentService;
     private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
@@ -142,9 +145,9 @@ public class ManualEvaluationResource {
 
     @POST
     @Path("/experiments")
-    @Operation(operationId = "evaluateExperiments", summary = "Manually evaluate experiments", description = "Manually trigger evaluation rules on traces associated with experiment items. Bypasses sampling and enqueues all traces from the specified experiments for evaluation.", responses = {
+    @Operation(operationId = "evaluateExperiments", summary = "Manually evaluate experiments", description = "Manually trigger evaluation rules on traces associated with experiment items. Requires experiment IDs in entity_ids (trace IDs are not accepted). Bypasses sampling and enqueues all traces from the specified experiments for evaluation.", responses = {
             @ApiResponse(responseCode = "202", description = "Accepted - Evaluation request queued successfully", content = @Content(schema = @Schema(implementation = ManualEvaluationResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request or missing automation rules", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request, non-experiment IDs in entity_ids, or missing automation rules", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Not Found - Project or experiment not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @RateLimited
     public Response evaluateExperiments(
@@ -152,6 +155,16 @@ public class ManualEvaluationResource {
 
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
+
+        var experimentIds = Set.copyOf(request.entityIds());
+        var allExperimentsInWorkspace = Boolean.TRUE.equals(
+                experimentService.validateExperimentWorkspace(workspaceId, experimentIds).block());
+        if (!allExperimentsInWorkspace) {
+            log.warn("Experiment evaluation rejected: one or more entity_ids are not experiment IDs in workspace '{}'", workspaceId);
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorMessage("entity_ids must contain only experiment IDs belonging to this workspace; trace IDs are not accepted"))
+                    .build();
+        }
 
         log.info(
                 "Manual evaluation request for '{}' experiments with '{}' rules in project '{}', workspace '{}' by user '{}'",

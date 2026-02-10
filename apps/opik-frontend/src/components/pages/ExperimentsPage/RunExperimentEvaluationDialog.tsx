@@ -15,10 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import useRulesList from "@/api/automations/useRulesList";
 import useExperimentEvaluationMutation from "@/api/datasets/useExperimentEvaluationMutation";
 import useAppStore from "@/store/AppStore";
-import {
-  EVALUATORS_RULE_TYPE,
-  EvaluatorsRule,
-} from "@/types/automations";
+import { EVALUATORS_RULE_TYPE, EvaluatorsRule } from "@/types/automations";
 import Loader from "@/components/shared/Loader/Loader";
 
 const STALE_TIME = 5 * 60 * 1000;

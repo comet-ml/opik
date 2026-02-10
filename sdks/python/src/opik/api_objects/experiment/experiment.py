@@ -211,7 +211,7 @@ class Experiment:
             return exp_data.status == "running"
 
         synchronization.until(
-            check_function=check_status_running,
+            function=check_status_running,
             sleep=poll_interval,
             max_try_seconds=timeout or float("inf"),
         )
@@ -235,7 +235,7 @@ class Experiment:
         LOGGER.info("Waiting for evaluation to complete on experiment '%s'", self.name)
 
         synchronization.until(
-            check_function=check_status_complete,
+            function=check_status_complete,
             sleep=poll_interval,
             max_try_seconds=timeout or float("inf"),
         )
