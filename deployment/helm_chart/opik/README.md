@@ -75,34 +75,6 @@ Open http://localhost:5173 in your browser
 
 Call opik api on http://localhost:5173/api
 
-## Configuring Custom Path Prefix
-
-By default, Opik is served at the root path `/`. If you need to serve Opik at a custom path prefix (e.g., `/opik`), you can configure this using the `component.frontend.pathPrefix` value.
-
-**Note:** Using a custom path prefix requires rebuilding the frontend Docker image with matching build arguments, as the frontend base URL is compiled at build time.
-
-### Example: Serving at `/opik` path
-
-1. Build the frontend image with custom path:
-```bash
-cd apps/opik-frontend
-docker build \
-  --build-arg VITE_BASE_URL=/opik \
-  --build-arg VITE_BASE_API_URL=/opik/api \
-  -t my-opik-frontend:custom .
-```
-
-2. Install Helm chart with custom path prefix and image:
-```bash
-helm upgrade --install opik -n opik --create-namespace opik/opik \
-  --set component.frontend.pathPrefix=/opik \
-  --set component.frontend.image.repository=my-opik-frontend \
-  --set component.frontend.image.tag=custom \
-  --set component.frontend.image.pullPolicy=Never
-```
-
-3. Access Opik at: http://localhost:5173/opik
-
 # Helm Chart Details
 
 ## Requirements
@@ -363,7 +335,7 @@ helm upgrade --install opik -n opik --create-namespace opik/opik \
 | component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
-| component.frontend.pathPrefix | string | `""` | Path prefix for frontend URLs (e.g., "/opik" to serve at http://localhost/opik). Set to "" or "/" for no prefix. Note: Using a custom pathPrefix requires rebuilding the frontend image with matching VITE_BASE_URL build arg. |
+| component.frontend.pathPrefix | string | `""` |  |
 | component.frontend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.frontend.replicaCount | int | `1` |  |
 | component.frontend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
