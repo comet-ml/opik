@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DatasetEvaluator;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorPage;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -41,11 +42,14 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull DatasetService datasetService;
 
     @Override
     public List<DatasetEvaluator> createBatch(@NonNull UUID datasetId, @NonNull DatasetEvaluatorBatchRequest request) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
+
+        datasetService.findById(datasetId, workspaceId, Visibility.PRIVATE);
 
         log.info("Creating '{}' dataset evaluators for dataset '{}' in workspace '{}'",
                 request.evaluators().size(), datasetId, workspaceId);
@@ -82,6 +86,8 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
     @Override
     public DatasetEvaluatorPage getByDatasetId(@NonNull UUID datasetId, int page, int size) {
         String workspaceId = requestContext.get().getWorkspaceId();
+
+        datasetService.findById(datasetId, workspaceId, Visibility.PRIVATE);
 
         log.info("Getting dataset evaluators for dataset '{}' in workspace '{}', page='{}', size='{}'",
                 datasetId, workspaceId, page, size);
