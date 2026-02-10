@@ -1,40 +1,56 @@
+# WFGY / Opik long-horizon dataset smoke test (single cell)
+
 import os
+import getpass
+from pathlib import Path
 
-import opik
+# 1) Clone your fork of opik (only if not already cloned)
+REPO_URL = "https://github.com/onestardao/opik.git"
+REPO_DIR = Path("opik")
 
+if not REPO_DIR.exists():
+    print(f"Cloning {REPO_URL} ...")
+    # `!` is executed by IPython, safe to call here
+    get_ipython().system(f"git clone {REPO_URL}")
+else:
+    print("Repository 'opik' already exists, skipping clone.")
 
-DATASET_NAME = "wfgy_long_horizon_tension_crash_test"
-THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-DATASET_FILE = os.path.join(THIS_DIR, "sample_dataset.jsonl")
+# 2) Change directory into the repo
+os.chdir(REPO_DIR)
+print("Current working directory:", os.getcwd())
 
+# 3) Install Opik SDK (quiet mode)
+print("Installing 'opik' Python package...")
+get_ipython().system("pip install -q opik")
 
-def main() -> None:
-    """
-    Create (or fetch) an Opik dataset and populate it from a JSONL file.
+# 4) Configure Opik credentials (Opik Cloud)
+#    You must create an Opik Cloud account and an API key in advance.
+if "OPIK_API_KEY" not in os.environ:
+    os.environ["OPIK_API_KEY"] = getpass.getpass("Enter your Opik API key: ")
 
-    The JSONL file should contain one JSON object per line, with at least:
-    - input: str
-    - optional metadata / tags fields
+if "OPIK_WORKSPACE" not in os.environ:
+    os.environ["OPIK_WORKSPACE"] = input("Enter your Opik workspace name (usually your username): ")
 
-    Opik will automatically deduplicate items when using the Python SDK,
-    so re-running this script is safe.
-    """
-    # Use default Opik configuration (env vars or `opik configure`).
-    client = opik.Opik()
+print("OPIK_API_KEY and OPIK_WORKSPACE are set.")
 
-    dataset = client.get_or_create_dataset(name=DATASET_NAME)
+# 5) Go to the WFGY example folder
+example_dir = Path("sdks/python/examples/wfgy_long_horizon_tension_crash_test")
+if not example_dir.exists():
+    raise FileNotFoundError(f"Example folder not found: {example_dir}")
 
-    if not os.path.exists(DATASET_FILE):
-        raise FileNotFoundError(
-            f"Dataset source file not found: {DATASET_FILE}"
-        )
+os.chdir(example_dir)
+print("Now in example folder:", os.getcwd())
+print("Folder contents:")
+get_ipython().system("ls")
 
-    dataset.read_jsonl_from_file(DATASET_FILE)
+# 6) Run create_dataset.py to push items into Opik
+print("\nRunning create_dataset.py ...")
+exit_code = get_ipython().system("python create_dataset.py")
 
-    print(f"Dataset name: {dataset.name}")
-    print(f"Dataset id:   {dataset.id}")
-    print(f"Loaded items from: {DATASET_FILE}")
-
-
-if __name__ == "__main__":
-    main()
+if exit_code == 0:
+    print("\ncreate_dataset.py finished successfully.")
+    print("You should now see a dataset named")
+    print("  'wfgy_long_horizon_tension_crash_test'")
+    print("in the Datasets section of your Opik workspace.")
+else:
+    print("\ncreate_dataset.py exited with a non-zero status. Check the error above.")
