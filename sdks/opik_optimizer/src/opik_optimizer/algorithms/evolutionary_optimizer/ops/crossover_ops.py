@@ -166,22 +166,31 @@ def deap_crossover(
     metadata_1 = getattr(ind1, "prompts_metadata", {})
     metadata_2 = getattr(ind2, "prompts_metadata", {})
     merged_metadata = {**metadata_2, **metadata_1}
+    child1_metadata = copy.deepcopy(merged_metadata)
+    child2_metadata = copy.deepcopy(merged_metadata)
 
     # Apply tool updates if optimizing tools
     optimize_tools = bool(getattr(optimizer, "_optimize_tools", False))
     tool_names = getattr(optimizer, "_tool_names", None)
     metric = getattr(optimizer, "_evaluation_metric", None)
     if optimize_tools and optimizer is not None:
-        merged_metadata = tool_ops.apply_tool_updates_to_metadata(
+        child1_metadata = tool_ops.apply_tool_updates_to_metadata(
             optimizer=optimizer,
             child_data=child1_data,
-            metadata=merged_metadata,
+            metadata=child1_metadata,
+            tool_names=tool_names,
+            metric=metric,
+        )
+        child2_metadata = tool_ops.apply_tool_updates_to_metadata(
+            optimizer=optimizer,
+            child_data=child2_data,
+            metadata=child2_metadata,
             tool_names=tool_names,
             metric=metric,
         )
 
-    setattr(child1, "prompts_metadata", copy.deepcopy(merged_metadata))
-    setattr(child2, "prompts_metadata", copy.deepcopy(merged_metadata))
+    setattr(child1, "prompts_metadata", child1_metadata)
+    setattr(child2, "prompts_metadata", child2_metadata)
 
     return child1, child2
 

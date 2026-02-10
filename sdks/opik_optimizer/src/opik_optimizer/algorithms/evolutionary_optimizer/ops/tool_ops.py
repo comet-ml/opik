@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import copy
+import logging
 from typing import Any
 
 from ....api_objects import chat_prompt
 from ....utils.toolcalling.ops import toolcalling as toolcalling_utils
+
+logger = logging.getLogger(__name__)
 
 
 def apply_tool_updates_to_metadata(
@@ -74,20 +77,28 @@ def apply_tool_description_update(
     optimizer.prompts_per_round = 1
     # Build candidate prompt with tools
     try:
-        candidates = toolcalling_utils.generate_tool_description_candidates(
-            optimizer=optimizer,
-            current_prompt=prompt,
-            best_score=0.0,
-            round_num=round_num,
-            previous_rounds=optimizer.get_history_rounds(),
-            metric=metric,
-            build_history_context_fn=lambda _rounds: "",
-            tool_names=tool_names,
-            optimization_id=optimizer.current_optimization_id,
-            project_name=optimizer.project_name,
-            tool_description_reporter=None,
-        )
-        return candidates[0] if candidates else prompt
+        try:
+            candidates = toolcalling_utils.generate_tool_description_candidates(
+                optimizer=optimizer,
+                current_prompt=prompt,
+                best_score=0.0,
+                round_num=round_num,
+                previous_rounds=optimizer.get_history_rounds(),
+                metric=metric,
+                build_history_context_fn=lambda _rounds: "",
+                tool_names=tool_names,
+                optimization_id=optimizer.current_optimization_id,
+                project_name=optimizer.project_name,
+                tool_description_reporter=None,
+            )
+            return candidates[0] if candidates else prompt
+        except Exception as exc:
+            logger.warning(
+                "Tool description update failed during evolutionary step; keeping current prompt. error=%s",
+                exc,
+            )
+            logger.debug("Tool description update traceback", exc_info=True)
+            return prompt
     finally:
         if original_prompts_per_round is None:
             delattr(optimizer, "prompts_per_round")
