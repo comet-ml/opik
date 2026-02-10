@@ -4,13 +4,14 @@ import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
 import isFunction from "lodash/isFunction";
 
-import { cn, formatNumericData } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import { TraceFeedbackScore, Thread, Span } from "@/types/traces";
 import {
   extractReasonsFromValueByAuthor,
   getIsMultiValueFeedbackScore,
+  formatScoreDisplay,
 } from "@/lib/feedback-scores";
 import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
 import { BaseTraceData } from "@/types/traces";
@@ -117,7 +118,7 @@ const FeedbackScoreAggregationCell = <TData,>(
   context: CellContext<TData, string>,
 ) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { accessorFn, dataFormatter = formatNumericData } = (custom ??
+  const { accessorFn, dataFormatter = formatScoreDisplay } = (custom ??
     {}) as CustomMeta;
 
   const rowId = context.row.id;

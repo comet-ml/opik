@@ -530,15 +530,6 @@
   },
   {
     "type": "dependency",
-    "from": "src/components/shared/Dashboard/widgets/ExperimentsLeaderboardWidget/helpers.ts",
-    "to": "src/components/pages-shared/experiments/scoresUtils.ts",
-    "rule": {
-      "severity": "error",
-      "name": "no-shared-importing-pages"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsBreakdownSection.tsx",
     "to": "src/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete.tsx",
     "rule": {
