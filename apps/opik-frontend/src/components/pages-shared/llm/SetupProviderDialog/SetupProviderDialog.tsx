@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm, UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
@@ -30,6 +30,7 @@ interface SetupProviderDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   onProviderAdded?: () => void;
+  allowedProviders?: PROVIDER_TYPE[];
 }
 
 type Step = "select" | "configure";
@@ -38,10 +39,18 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
   open,
   setOpen,
   onProviderAdded,
+  allowedProviders,
 }) => {
   const providerOptions = useProviderOptions({
     includeAddNewOptions: true,
   });
+
+  const filteredOptions = useMemo(() => {
+    if (!allowedProviders) return providerOptions;
+    return providerOptions.filter(
+      (opt) => opt.providerType && allowedProviders.includes(opt.providerType),
+    );
+  }, [providerOptions, allowedProviders]);
 
   const [step, setStep] = useState<Step>("select");
   const [selectedComposedProvider, setSelectedComposedProvider] = useState<
@@ -187,6 +196,15 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
     [setOpen, resetDialog],
   );
 
+  useEffect(() => {
+    if (open && filteredOptions.length === 1 && step === "select") {
+      const option = filteredOptions[0];
+      if (option.providerType) {
+        handleProviderSelect(option.value, option.providerType);
+      }
+    }
+  }, [open, filteredOptions, step, handleProviderSelect]);
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg sm:max-w-[720px]">
@@ -202,7 +220,7 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         <DialogAutoScrollBody className="flex flex-col pr-6">
           {step === "select" ? (
             <ProviderSelectionStep
-              providerOptions={providerOptions}
+              providerOptions={filteredOptions}
               selectedComposedProvider={selectedComposedProvider}
               onSelectProvider={handleProviderSelect}
             />
@@ -220,16 +238,18 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
         <DialogFooter>
           {step === "select" ? null : (
             <div className="flex w-full justify-between">
-              <Button
-                variant="ghost"
-                onClick={handleBack}
-                type="button"
-                className="p-0"
-              >
-                <ChevronLeft className="mr-1 size-4" />
-                Back
-              </Button>
-              <div className="flex gap-2">
+              {filteredOptions.length > 1 && (
+                <Button
+                  variant="ghost"
+                  onClick={handleBack}
+                  type="button"
+                  className="p-0"
+                >
+                  <ChevronLeft className="mr-1 size-4" />
+                  Back
+                </Button>
+              )}
+              <div className="ml-auto flex gap-2">
                 <Button variant="outline" onClick={handleCancel} type="button">
                   Cancel
                 </Button>
