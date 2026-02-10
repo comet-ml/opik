@@ -96,6 +96,7 @@ You are {{action}} a custom visualization for LLM {{data_type}} data.
   - Text/Code for strings and formatted content
   - Image/Video/Audio for media URLs
   - InlineRow with background: "muted" for metadata stats (Text labels, values, and "•" separators)
+  - Text with variant: "caption" for lightweight metadata at top of views (date, ID, turns)
 - Every view SHOULD include a TextBlock or Code widget for input data
 - Every view SHOULD include a TextBlock or Code widget for output data
 - Bind dynamic data using { "path": "/json/pointer/path" } syntax

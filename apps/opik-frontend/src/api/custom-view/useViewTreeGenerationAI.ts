@@ -186,6 +186,20 @@ Example - Displaying "Name: my-trace • Duration: 5644.77ms":
 {"id":"label-duration","type":"Text","props":{"value":"Duration:"},"children":null,"parentKey":"stats-row"}
 {"id":"value-duration","type":"Number","props":{"value":{"path":"/duration"}},"children":null,"parentKey":"stats-row"}
 
+### Caption Meta Line (lightweight metadata)
+For simple contextual info at the top of a view (date, project ID, turns count, trace name),
+use Text widgets with variant: "caption" for smaller, muted-color text:
+- Single Text with variant: "caption" if the data is a pre-composed string
+- InlineRow (no background) with Text(variant: "caption") children + "•" separators for multiple data-bound fields
+
+Example - Caption line with multiple bound fields:
+{"id":"meta-line","type":"InlineRow","props":{},"children":["meta-date","meta-sep","meta-project"],"parentKey":"root"}
+{"id":"meta-date","type":"Text","props":{"value":{"path":"/created_at"},"variant":"caption"},"children":null,"parentKey":"meta-line"}
+{"id":"meta-sep","type":"Text","props":{"value":"•","variant":"caption"},"children":null,"parentKey":"meta-line"}
+{"id":"meta-project","type":"Text","props":{"value":{"path":"/project_id"},"variant":"caption"},"children":null,"parentKey":"meta-line"}
+
+Use caption meta lines for brief context; use muted InlineRow stats rows for detailed metadata sections.
+
 ### Container Rules
 - Level1Container: TOP-LEVEL semantic sections only (metadata, trace context, conversation)
   - **CANNOT contain other Level1Containers** - this is strictly forbidden
@@ -296,7 +310,7 @@ const buildSystemPrompt = (
       ? `Trace data contains information about a single LLM execution:
 - /input: The input data (CHECK TYPE: if object/JSON use Code widget, if string use TextBlock)
 - /output: The output data (CHECK TYPE: if object/JSON use Code widget, if string use TextBlock)
-- /name, /duration, /model: Metadata fields (use InlineRow with Text + bullet separators)
+- /name, /duration, /model: Metadata fields (use InlineRow stats row or caption meta line with Text + bullet separators)
 - /tools, /tool_response: Tool-related data (use Level2Container with icon="tool", Code widget inside)
 - /metadata, /usage: Additional info (use InlineRow with muted background for stats rows)
 - /feedback_scores: Scores/ratings (use Number widgets)`
@@ -333,6 +347,7 @@ ${dataTypeDescription}
   - Text/Code for strings and formatted content
   - Image/Video/Audio for media URLs
   - InlineRow with muted background for metadata stats (Text labels + values + bullet separators)
+  - Text with variant "caption" for simple metadata at top of views (date, ID, turns count)
 - For trace conversations: display messages in order with proper labels
 - For thread data: highlight key metrics (message count, usage)
 - Bind dynamic data using { "path": "/json/pointer/path" } syntax (e.g., { "path": "/model" }, { "path": "/tools/0/name" })
