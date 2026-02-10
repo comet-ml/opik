@@ -418,11 +418,12 @@ class BaseOptimizer(ABC):
         optimizable_prompts, is_single_prompt_optimization = (
             self._normalize_prompt_input(prompt)
         )
+        optimizable_roles = normalize_optimizable_roles(optimize_prompts)
 
         from .utils.toolcalling.ops import toolcalling as toolcalling_utils
 
         optimize_tools = toolcalling_utils.validate_optimization_flags(
-            optimize_prompts=bool(optimize_prompts),
+            optimize_prompts=bool(optimizable_roles),
             optimize_tools=optimize_tools,
             supports_tool_optimization=self.supports_tool_optimization,
             warn_unsupported=True,
@@ -521,7 +522,6 @@ class BaseOptimizer(ABC):
         if not isinstance(resolved_strategy, str) or not resolved_strategy:
             resolved_strategy = constants.DEFAULT_N_SAMPLES_STRATEGY
 
-        optimizable_roles = normalize_optimizable_roles(optimize_prompts)
         extra_params["optimizable_roles"] = optimizable_roles
         self._optimizable_roles = optimizable_roles
         if not optimizable_roles:

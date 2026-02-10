@@ -303,3 +303,89 @@ def test_gepa_adapter_records_per_item_metrics() -> None:
     assert trials[0].get("extra", {}).get("score_label") == "per_item"
     # This confirms that adapter creation in run_optimization
     # can access self.agent successfully
+
+
+def test_gepa_adapter_passes_allow_tool_use_to_candidate_agent() -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 1.0
+
+    metric_fn.__name__ = "metric_fn"
+
+    class CandidateAgent:
+        def __init__(self) -> None:
+            self.last_allow_tool_use: bool | None = None
+
+        def invoke_agent_candidates(
+            self,
+            prompts: dict[str, ChatPrompt],
+            dataset_item: dict[str, Any],
+            allow_tool_use: bool = False,
+        ) -> list[str]:
+            _ = prompts, dataset_item
+            self.last_allow_tool_use = allow_tool_use
+            return [" candidate "]
+
+    agent = CandidateAgent()
+    context = make_optimization_context(
+        prompt, dataset=dataset, metric=metric_fn, allow_tool_use=True
+    )
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=agent,  # type: ignore[arg-type]
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+    )
+
+    result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
+
+    assert result == ["candidate"]
+    assert agent.last_allow_tool_use is True
+
+
+def test_gepa_adapter_falls_back_for_legacy_agent_signature() -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 1.0
+
+    metric_fn.__name__ = "metric_fn"
+
+    class LegacyAgent:
+        def invoke_agent(
+            self,
+            prompts: dict[str, ChatPrompt],
+            dataset_item: dict[str, Any],
+        ) -> str:
+            _ = prompts, dataset_item
+            return " legacy "
+
+    context = make_optimization_context(
+        prompt, dataset=dataset, metric=metric_fn, allow_tool_use=True
+    )
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=LegacyAgent(),  # type: ignore[arg-type]
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+    )
+
+    result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
+    assert result == ["legacy"]

@@ -99,18 +99,38 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         dataset_item: dict[str, Any],
     ) -> list[str]:
         """Invoke the agent and normalize candidate outputs for scoring."""
+        allow_tool_use = bool(getattr(self._context, "allow_tool_use", False))
         if hasattr(self._agent, "invoke_agent_candidates"):
-            candidates = self._agent.invoke_agent_candidates(
-                prompts=prompt_variants,
-                dataset_item=dataset_item,
-            )
-        else:
-            candidates = [
-                self._agent.invoke_agent(
+            invoke_candidates = self._agent.invoke_agent_candidates
+            try:
+                candidates = invoke_candidates(
+                    prompts=prompt_variants,
+                    dataset_item=dataset_item,
+                    allow_tool_use=allow_tool_use,
+                )
+            except TypeError as exc:
+                if "allow_tool_use" not in str(exc):
+                    raise
+                candidates = invoke_candidates(
                     prompts=prompt_variants,
                     dataset_item=dataset_item,
                 )
-            ]
+        else:
+            invoke_agent = self._agent.invoke_agent
+            try:
+                single_candidate = invoke_agent(
+                    prompts=prompt_variants,
+                    dataset_item=dataset_item,
+                    allow_tool_use=allow_tool_use,
+                )
+            except TypeError as exc:
+                if "allow_tool_use" not in str(exc):
+                    raise
+                single_candidate = invoke_agent(
+                    prompts=prompt_variants,
+                    dataset_item=dataset_item,
+                )
+            candidates = [single_candidate]
         return [str(c).strip() for c in candidates if c is not None and str(c).strip()]
 
     def _record_adapter_metric_call(self) -> None:
