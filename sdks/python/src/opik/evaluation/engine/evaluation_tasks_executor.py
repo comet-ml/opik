@@ -73,28 +73,29 @@ class StreamingExecutor(Generic[T]):
 
         # Process futures as they complete and update progress bar
         for future in futures.as_completed(self._submitted_futures):
-            result = future.result()
-            results.append(result)
+            try:
+                result = future.result()
+                results.append(result)
 
-            # Update running scores if result has score_results attribute
-            if hasattr(result, "score_results") and isinstance(
-                result.score_results, list
-            ):
-                for score in result.score_results:
-                    if isinstance(score, ScoreResult) and not score.scoring_failed:
-                        score_totals[score.name] += score.value
-                        score_counts[score.name] += 1
+                # Update running scores if result has score_results attribute
+                if hasattr(result, "score_results") and isinstance(
+                    result.score_results, list
+                ):
+                    for score in result.score_results:
+                        if isinstance(score, ScoreResult) and not score.scoring_failed:
+                            score_totals[score.name] += score.value
+                            score_counts[score.name] += 1
 
-                # Update progress bar with running averages
-                if self._progress_bar is not None and score_counts:
-                    postfix_dict = {
-                        name: f"{score_totals[name] / score_counts[name]:.4f}"
-                        for name in score_counts
-                    }
-                    self._progress_bar.set_postfix(postfix_dict)
-
-            if self._progress_bar is not None:
-                self._progress_bar.update(1)
+                    # Update progress bar with running averages
+                    if self._progress_bar is not None and score_counts:
+                        postfix_dict = {
+                            name: f"{score_totals[name] / score_counts[name]:.4f}"
+                            for name in score_counts
+                        }
+                        self._progress_bar.set_postfix(postfix_dict)
+            finally:
+                if self._progress_bar is not None:
+                    self._progress_bar.update(1)
 
         return results
 
