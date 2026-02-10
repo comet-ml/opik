@@ -671,7 +671,7 @@ class SpanDAO {
                 FROM spans
                 WHERE id IN :ids
                 AND workspace_id = :workspace_id
-                AND project_id IN (SELECT project_id FROM target_projects)
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s
@@ -687,7 +687,7 @@ class SpanDAO {
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND entity_id IN :ids
-                AND project_id IN (SELECT project_id FROM target_projects)
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS c ON s.id = c.entity_id
