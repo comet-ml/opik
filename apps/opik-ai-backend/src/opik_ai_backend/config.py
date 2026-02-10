@@ -146,6 +146,18 @@ class Settings(BaseSettings):
         alias="RETRY_BACKOFF_FACTOR",
     )
 
+    # Session service retry configuration
+    session_service_max_retries: int = Field(
+        default=10,
+        description="Max retries for session service DB initialization",
+        alias="SESSION_SERVICE_MAX_RETRIES",
+    )
+    session_service_retry_delay: float = Field(
+        default=2.0,
+        description="Initial retry delay in seconds for session service DB initialization",
+        alias="SESSION_SERVICE_RETRY_DELAY",
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

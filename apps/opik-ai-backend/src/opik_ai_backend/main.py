@@ -222,7 +222,8 @@ def parse_event_parts(event: Event) -> ParsedEventParts:
             # Use {type:id} template format so frontend can replace with entity names
             # Example: {span:01978716-1435...} can be replaced with the span name
             if function_call.name == "get_span_details":
-                span_id = function_call.args.get("span_id", "unknown")
+                args = function_call.args or {}
+                span_id = args.get("span_id", "unknown")
                 display_name = f"Fetching span details for {{span:{span_id}}}"
             elif function_call.name == "get_trace_data":
                 display_name = "Retrieving trace information and metadata"
@@ -247,7 +248,7 @@ def parse_event_parts(event: Event) -> ParsedEventParts:
             else:
                 # Fallback if no ID (shouldn't happen with ADK)
                 logger.warning("Function response missing ID, using fallback")
-                tool_response_id = f"response-{function_response.name}-{event.id}"
+                tool_response_id = generate_tool_call_id(function_response)
 
             tool_responses.append(
                 {
@@ -466,7 +467,7 @@ def get_fast_api_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Startup: Create shared aiohttp session with retry middleware
-        timeout = aiohttp.ClientTimeout(total=30)
+        timeout = aiohttp.ClientTimeout(total=settings.opik_backend_timeout)
         app.state.http_session = aiohttp.ClientSession(
             base_url=settings.agent_opik_url,
             headers={
@@ -506,8 +507,8 @@ def get_fast_api_app(
     if session_service_uri:
         # Retry logic to handle transient DB errors during startup
         # (e.g., concurrent DDL from Opik backend migrations)
-        max_retries = 10
-        retry_delay = 2.0  # seconds
+        max_retries = settings.session_service_max_retries
+        retry_delay = settings.session_service_retry_delay
         last_exception: Exception | None = None
 
         for attempt in range(max_retries):
