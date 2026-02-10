@@ -13,6 +13,13 @@ export enum LOGS_TYPE {
   spans = "spans",
 }
 
+export enum PROJECT_TAB {
+  logs = "logs",
+  metrics = "metrics",
+  evaluators = "rules",
+  annotationQueues = "annotation-queues",
+}
+
 export const METADATA_AGENT_GRAPH_KEY = "_opik_graph_definition";
 
 export const SPANS_COLORS_MAP: Record<BASE_TRACE_DATA_TYPE, string> = {
