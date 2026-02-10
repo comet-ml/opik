@@ -24,6 +24,22 @@ vi.mock(
   }),
 );
 
+vi.mock("@/hooks/useWorkspaceColorMap", () => ({
+  default: () => ({
+    colorMap: null,
+    getColor: () => "#000000",
+    getChartColorMap: () => ({}),
+  }),
+}));
+
+vi.mock("@/hooks/useUpdateColorMapping", () => ({
+  default: () => ({
+    updateColor: vi.fn(),
+    resetColor: vi.fn(),
+    isPending: false,
+  }),
+}));
+
 vi.mock("@/store/AppStore", () => ({
   default: vi.fn((selector) =>
     selector({

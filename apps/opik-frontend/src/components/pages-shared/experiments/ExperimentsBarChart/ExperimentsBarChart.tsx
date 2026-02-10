@@ -11,11 +11,9 @@ import {
   ChartLegend,
   ChartTooltip,
 } from "@/components/ui/chart";
-import {
-  getDefaultHashedColorsChartConfig,
-  truncateChartLabel,
-} from "@/lib/charts";
+import { truncateChartLabel } from "@/lib/charts";
 import React, { useCallback, useMemo, useState } from "react";
+import useChartConfig from "@/hooks/useChartConfig";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
@@ -29,6 +27,7 @@ interface ExperimentsBarChartProps {
   chartId: string;
   data: BarDataPoint[];
   keys: string[];
+  labelsMap?: Record<string, string>;
 }
 
 const CHART_INNER_PADDING = 100;
@@ -38,6 +37,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
   chartId,
   data,
   keys,
+  labelsMap,
 }) => {
   const [activeBar, setActiveBar] = useState<string | null>(null);
   const [width, setWidth] = useState<number>(0);
@@ -45,9 +45,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
     setWidth(node.clientWidth),
   );
 
-  const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig(keys);
-  }, [keys]);
+  const config = useChartConfig(keys, labelsMap);
 
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {

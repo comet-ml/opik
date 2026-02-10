@@ -9,8 +9,7 @@ import {
 } from "@/components/ui/chart";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { DEFAULT_CHART_TICK } from "@/constants/chart";
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
-import { generateTagVariant } from "@/lib/traces";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 import dayjs from "dayjs";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
@@ -32,6 +31,8 @@ const HomePageChart: React.FC<MetricOverviewChartProps> = ({
   renderValue,
   customYTickFormatter,
 }) => {
+  const { getColor } = useWorkspaceColorMap();
+
   const {
     width: tickWidth,
     ticks,
@@ -48,11 +49,11 @@ const HomePageChart: React.FC<MetricOverviewChartProps> = ({
     return chartData.projects.reduce<ChartConfig>((acc, project) => {
       acc[project.id] = {
         label: project.name,
-        color: TAG_VARIANTS_COLOR_MAP[generateTagVariant(project.name)!],
+        color: getColor(project.name),
       };
       return acc;
     }, {});
-  }, [chartData.projects]);
+  }, [chartData.projects, getColor]);
 
   const renderDot: LineDot = useCallback((props: DotProps) => {
     const { key, ...rest } = props;
