@@ -306,7 +306,7 @@ This example shows how to:
 - run an evaluation that logs full traces and LLM-as-a-judge metrics to the UI.
 
 The test cases are adapted from the open-source  
-[WFGY · Tension Universe](https://github.com/onestardao/WFGY) project and are intended as a template you can extend with your own long-horizon stress tests.
+[WFGY · Tension Universe](https://github.com/onestardao/WFGY/blob/main/TensionUniverse/EventHorizon/README.md) project and are intended as a template you can extend with your own long-horizon stress tests.
 
 
 ## ⭐ Star Us on GitHub
