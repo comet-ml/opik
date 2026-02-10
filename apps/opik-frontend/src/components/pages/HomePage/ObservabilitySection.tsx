@@ -27,6 +27,8 @@ import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackSc
 import { get } from "lodash";
 import { formatNumericData } from "@/lib/utils";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
+import { LOGS_TYPE } from "@/constants/traces";
+import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
@@ -141,6 +143,8 @@ const ObservabilitySection: React.FunctionComponent = () => {
                   workspaceName,
                 },
                 search: {
+                  tab: PROJECT_TAB.logs,
+                  logsType: LOGS_TYPE.traces,
                   traces_filters: [
                     {
                       operator: "is_not_empty",

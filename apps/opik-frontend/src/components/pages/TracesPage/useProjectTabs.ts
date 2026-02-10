@@ -12,13 +12,20 @@ export enum PROJECT_TAB {
 const DEFAULT_TAB = PROJECT_TAB.logs;
 const DEFAULT_LOGS_TYPE = LOGS_TYPE.traces;
 
-const isProjectTab = (value: string | null | undefined): value is PROJECT_TAB =>
+export const isProjectTab = (
+  value: string | null | undefined,
+): value is PROJECT_TAB =>
   Object.values(PROJECT_TAB).includes(value as PROJECT_TAB);
 
-const isLogsType = (value: string | null | undefined): value is LOGS_TYPE =>
-  Object.values(LOGS_TYPE).includes(value as LOGS_TYPE);
+export const isLogsType = (
+  value: string | null | undefined,
+): value is LOGS_TYPE => Object.values(LOGS_TYPE).includes(value as LOGS_TYPE);
 
 const QUERY_PARAM_OPTIONS = { updateType: "replaceIn" as const };
+
+type UseProjectTabsOptions = {
+  defaultLogsType?: LOGS_TYPE;
+};
 
 /**
  * Manages TracesPage URL params with backward compatibility.
@@ -30,7 +37,8 @@ const QUERY_PARAM_OPTIONS = { updateType: "replaceIn" as const };
  * If only the legacy `type` param is present, it is used to compute
  * activeTab and logsType for backward compatibility.
  */
-const useProjectTabs = () => {
+const useProjectTabs = (options?: UseProjectTabsOptions) => {
+  const resolvedDefaultLogsType = options?.defaultLogsType ?? DEFAULT_LOGS_TYPE;
   // New query params
   const [tabParam, setTabParam] = useQueryParam(
     "tab",
@@ -56,7 +64,9 @@ const useProjectTabs = () => {
     if (tabParam || logsTypeParam) {
       return {
         activeTab: isProjectTab(tabParam) ? tabParam : DEFAULT_TAB,
-        logsType: isLogsType(logsTypeParam) ? logsTypeParam : DEFAULT_LOGS_TYPE,
+        logsType: isLogsType(logsTypeParam)
+          ? logsTypeParam
+          : resolvedDefaultLogsType,
       };
     }
 
@@ -68,12 +78,12 @@ const useProjectTabs = () => {
 
     if (isProjectTab(legacyType)) {
       // ?type=metrics → Metrics tab, default logsType
-      return { activeTab: legacyType, logsType: DEFAULT_LOGS_TYPE };
+      return { activeTab: legacyType, logsType: resolvedDefaultLogsType };
     }
 
     // No params at all → defaults
-    return { activeTab: DEFAULT_TAB, logsType: DEFAULT_LOGS_TYPE };
-  }, [tabParam, logsTypeParam, legacyType]);
+    return { activeTab: DEFAULT_TAB, logsType: resolvedDefaultLogsType };
+  }, [tabParam, logsTypeParam, legacyType, resolvedDefaultLogsType]);
 
   // Clear legacy param when writing new params
   const clearLegacy = useCallback(() => {

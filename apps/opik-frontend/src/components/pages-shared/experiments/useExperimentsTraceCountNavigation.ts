@@ -4,6 +4,8 @@ import useAppStore from "@/store/AppStore";
 import { generateExperimentIdFilter } from "@/lib/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 import { ColumnData } from "@/types/shared";
+import { LOGS_TYPE } from "@/constants/traces";
+import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
 
 /**
  * Hook that provides navigation callback for trace_count column in experiments tables.
@@ -24,6 +26,8 @@ export const useExperimentsTraceCountNavigation = () => {
           workspaceName,
         },
         search: {
+          tab: PROJECT_TAB.logs,
+          logsType: LOGS_TYPE.traces,
           traces_filters: generateExperimentIdFilter(row.id),
         },
       });

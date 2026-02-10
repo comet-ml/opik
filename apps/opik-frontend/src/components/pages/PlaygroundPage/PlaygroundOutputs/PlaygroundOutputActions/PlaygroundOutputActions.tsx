@@ -16,6 +16,8 @@ import PlaygroundProgressIndicator from "@/components/pages/PlaygroundPage/Playg
 import NavigationTag from "@/components/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { generateExperimentIdFilter } from "@/lib/filters";
+import { LOGS_TYPE } from "@/constants/traces";
+import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
 
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useProjectByName from "@/api/projects/useProjectByName";
@@ -453,6 +455,8 @@ const PlaygroundOutputActions = ({
                     name="Traces"
                     className="h-8"
                     search={{
+                      tab: PROJECT_TAB.logs,
+                      logsType: LOGS_TYPE.traces,
                       traces_filters: generateExperimentIdFilter(
                         createdExperiments[0].id,
                       ),

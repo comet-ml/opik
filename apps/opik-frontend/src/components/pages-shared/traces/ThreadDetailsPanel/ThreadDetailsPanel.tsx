@@ -80,6 +80,8 @@ import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToD
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { LOGS_TYPE } from "@/constants/traces";
+import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -534,6 +536,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   workspaceName,
                 },
                 search: {
+                  tab: PROJECT_TAB.logs,
+                  logsType: LOGS_TYPE.traces,
                   traces_filters: [
                     {
                       id: "thread_id_filter",

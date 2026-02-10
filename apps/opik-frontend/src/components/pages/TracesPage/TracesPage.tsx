@@ -1,7 +1,10 @@
+import { useMemo } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
+import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
+import { useMetricDateRangeWithQueryAndStorage } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import LogsTab from "@/components/pages/TracesPage/LogsTab/LogsTab";
@@ -22,6 +25,8 @@ import ViewSelector, {
 import useProjectTabs, {
   PROJECT_TAB,
 } from "@/components/pages/TracesPage/useProjectTabs";
+import { LOGS_TYPE } from "@/constants/traces";
+import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
@@ -42,8 +47,38 @@ const TracesPage = () => {
 
   const projectName = project?.name || projectId;
 
-  const { activeTab, logsType, setLogsType, handleTabChange } =
-    useProjectTabs();
+  const { intervalStart, intervalEnd } =
+    useMetricDateRangeWithQueryAndStorage();
+
+  const { data: threadsStats } = useThreadsStatistic(
+    {
+      projectId,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
+    },
+    {
+      enabled: !!projectId,
+      refetchOnMount: false,
+    },
+  );
+
+  const defaultLogsType = useMemo(() => {
+    const threadCountStat = threadsStats?.stats?.find(
+      (stat) =>
+        stat.name === "thread_count" &&
+        stat.type === STATISTIC_AGGREGATION_TYPE.COUNT,
+    );
+    const threadCount =
+      threadCountStat?.type === STATISTIC_AGGREGATION_TYPE.COUNT
+        ? threadCountStat.value
+        : 0;
+
+    return threadCount > 0 ? LOGS_TYPE.threads : LOGS_TYPE.traces;
+  }, [threadsStats]);
+
+  const { activeTab, logsType, setLogsType, handleTabChange } = useProjectTabs({
+    defaultLogsType,
+  });
 
   const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
     "view",
