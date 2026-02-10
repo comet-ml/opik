@@ -200,8 +200,16 @@ const buildDataSummary = (
 - Name: ${trace.name}
 - Duration: ${trace.duration}ms
 - Available fields: ${keys.join(", ")}
-- Input: ${typeof trace.input === "string" ? trace.input : JSON.stringify(trace.input) ?? ""}
-- Output: ${typeof trace.output === "string" ? trace.output : JSON.stringify(trace.output) ?? ""}`;
+- Input: ${
+      typeof trace.input === "string"
+        ? trace.input
+        : JSON.stringify(trace.input) ?? ""
+    }
+- Output: ${
+      typeof trace.output === "string"
+        ? trace.output
+        : JSON.stringify(trace.output) ?? ""
+    }`;
   }
 
   return "";

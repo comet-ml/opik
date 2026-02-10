@@ -17,6 +17,7 @@ const SourceSyncer: React.FC<{ trace: Trace }> = ({ trace }) => {
   const { setSource } = useDataView();
   useEffect(() => {
     setSource({ ...trace });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trace.id, setSource]);
   return null;
 };
