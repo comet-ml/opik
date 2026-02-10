@@ -21,8 +21,7 @@ import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import { TagProps } from "@/components/ui/tag";
 import { Filter } from "@/types/filters";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
-import { LOGS_TYPE } from "@/constants/traces";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 export enum RESOURCE_TYPE {
   project,

@@ -53,8 +53,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
-import { LOGS_TYPE } from "@/constants/traces";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 

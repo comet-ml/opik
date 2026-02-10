@@ -90,8 +90,7 @@ import {
 } from "./helpers";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useConfirmAction } from "@/components/shared/ConfirmDialog/useConfirmAction";
-import { LOGS_TYPE } from "@/constants/traces";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 export const DEFAULT_LLM_AS_JUDGE_DATA = {
   [EVALUATORS_RULE_SCOPE.trace]: {

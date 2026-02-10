@@ -9,8 +9,7 @@ import {
   AnnotationQueue,
 } from "@/types/annotation-queues";
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import { LOGS_TYPE } from "@/constants/traces";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 type NoDataWrapperProps = {
   title: string;

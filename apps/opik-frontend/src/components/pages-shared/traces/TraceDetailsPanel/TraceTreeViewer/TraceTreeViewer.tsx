@@ -13,10 +13,10 @@ import { Span, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import {
   LOGS_TYPE,
+  PROJECT_TAB,
   SPANS_COLORS_MAP,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
 import { Button } from "@/components/ui/button";
 import NoData from "@/components/shared/NoData/NoData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";

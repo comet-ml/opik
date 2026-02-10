@@ -80,8 +80,7 @@ import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToD
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { LOGS_TYPE } from "@/constants/traces";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 type ThreadDetailsPanelProps = {
   projectId: string;

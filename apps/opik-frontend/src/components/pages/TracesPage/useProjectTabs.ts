@@ -1,13 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
-import { LOGS_TYPE } from "@/constants/traces";
-
-export enum PROJECT_TAB {
-  logs = "logs",
-  metrics = "metrics",
-  evaluators = "rules",
-  annotationQueues = "annotation-queues",
-}
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 const DEFAULT_TAB = PROJECT_TAB.logs;
 const DEFAULT_LOGS_TYPE = LOGS_TYPE.traces;

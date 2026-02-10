@@ -22,10 +22,8 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import ViewSelector, {
   VIEW_TYPE,
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
-import useProjectTabs, {
-  PROJECT_TAB,
-} from "@/components/pages/TracesPage/useProjectTabs";
-import { LOGS_TYPE } from "@/constants/traces";
+import useProjectTabs from "@/components/pages/TracesPage/useProjectTabs";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 const TracesPage = () => {

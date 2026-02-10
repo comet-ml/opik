@@ -4,8 +4,7 @@ import useAppStore from "@/store/AppStore";
 import { generateExperimentIdFilter } from "@/lib/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 import { ColumnData } from "@/types/shared";
-import { LOGS_TYPE } from "@/constants/traces";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 /**
  * Hook that provides navigation callback for trace_count column in experiments tables.

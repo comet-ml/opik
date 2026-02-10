@@ -27,8 +27,7 @@ import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackSc
 import { get } from "lodash";
 import { formatNumericData } from "@/lib/utils";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
-import { LOGS_TYPE } from "@/constants/traces";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 const COLUMNS_WIDTH_KEY = "home-projects-columns-width";
 
