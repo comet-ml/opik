@@ -660,7 +660,7 @@ fi
 if [[ "$*" == *"--local-be-fe"* ]]; then
   LOCAL_BE_FE=true
   PORT_MAPPING=true  # Required for local processes to connect to infrastructure
-  export OPIK_REVERSE_PROXY_URL="http://host.docker.internal:8080"
+  export OPIK_REVERSE_PROXY_URL="http://host.docker.internal:${OPIK_BACKEND_PORT:-8080}"
   # Remove the flag from arguments
   set -- ${@/--local-be-fe/}
 fi

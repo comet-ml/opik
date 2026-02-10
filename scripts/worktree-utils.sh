@@ -61,19 +61,20 @@ calculate_port_offset() {
     elif command -v md5sum &>/dev/null; then
         hash_hex=$(echo -n "$hash_input" | md5sum | cut -d' ' -f1)
     else
-        # Fallback: simple character-based hash
+        # Fallback: simple character-based hash, map to range 1-99
         local sum=0
         for (( i=0; i<${#hash_input}; i++ )); do
-            sum=$(( (sum + $(printf '%d' "'${hash_input:$i:1}")) % 100 ))
+            sum=$(( (sum + $(printf '%d' "'${hash_input:$i:1}")) % 99 + 1 ))
         done
         echo "$sum"
         return
     fi
 
-    # Convert first 4 hex chars to decimal mod 100
+    # Convert first 4 hex chars to decimal, map to range 1-99
+    # (offset 0 is reserved for the main repo)
     local first_four="${hash_hex:0:4}"
     local decimal=$((16#$first_four))
-    echo $((decimal % 100))
+    echo $((decimal % 99 + 1))
 }
 
 # Base ports (standard Opik ports)
