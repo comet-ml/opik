@@ -2,8 +2,15 @@ import type { AttributeValue, Tracer } from "@opentelemetry/api";
 import { SpanStatusCode } from "@opentelemetry/api";
 import type { ExportResultCode } from "@opentelemetry/core";
 import type { NodeSDKConfiguration } from "@opentelemetry/sdk-node";
-import type { ErrorInfo, Span, Trace } from "opik";
+import type { Span, Trace } from "opik";
 import { Opik, logger } from "opik";
+
+/** Shape used for error_info when creating traces/spans; matches Opik API ErrorInfo. */
+type ErrorInfo = {
+  exceptionType: string;
+  message?: string;
+  traceback: string;
+};
 
 type SpanExporter = NodeSDKConfiguration["traceExporter"];
 type ExportFunction = SpanExporter["export"];
