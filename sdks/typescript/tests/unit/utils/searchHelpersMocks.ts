@@ -37,3 +37,26 @@ export const createMockTraceWithFeedback = (
   createMockTrace({
     feedbackScores,
   });
+
+export const createMockThread = (
+  overrides?: Partial<OpikApi.TraceThread>
+): OpikApi.TraceThread => ({
+  id: "thread-1",
+  projectId: "project-1",
+  threadModelId: "thread-model-1",
+  startTime: new Date("2024-01-01T00:00:00Z"),
+  endTime: new Date("2024-01-01T00:10:00Z"),
+  duration: 600,
+  status: "active",
+  numberOfMessages: 5,
+  totalEstimatedCost: 0.05,
+  ...overrides,
+});
+
+export const createMockThreads = (count: number): OpikApi.TraceThread[] =>
+  Array.from({ length: count }, (_, i) =>
+    createMockThread({
+      id: `thread-${i + 1}`,
+      threadModelId: `thread-model-${i + 1}`,
+    })
+  );

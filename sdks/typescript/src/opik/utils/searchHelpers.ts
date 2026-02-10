@@ -64,11 +64,38 @@ export async function searchAndWaitForDone<T>(
 }
 
 /**
- * Parses a filter string using OpikQueryLanguage and converts to TraceFilterPublic format
+ * Searches threads with filters and returns parsed results
  */
-export function parseFilterString(
-  filterString?: string
-): OpikApi.TraceFilterPublic[] | null {
+export async function searchThreadsWithFilters(
+  apiClient: OpikApiClientTemp,
+  projectName: string,
+  filters: OpikApi.TraceThreadFilter[] | null,
+  maxResults: number,
+  truncate: boolean
+): Promise<OpikApi.TraceThread[]> {
+  const streamResponse = await apiClient.traces.searchTraceThreads({
+    projectName,
+    filters: filters ?? undefined,
+    limit: maxResults,
+    truncate,
+  });
+
+  const threads = await parseNdjsonStreamToArray<OpikApi.TraceThread>(
+    streamResponse,
+    serialization.TraceThread,
+    maxResults
+  );
+
+  return threads;
+}
+
+/**
+ * Generic filter parsing function that works for both traces and threads
+ */
+function parseFilterStringGeneric<TFilter, TOperator>(
+  filterString: string | undefined,
+  operatorCast: (op: string) => TOperator
+): TFilter[] | null {
   if (!filterString) {
     return null;
   }
@@ -80,14 +107,15 @@ export function parseFilterString(
     return null;
   }
 
-  // Convert FilterExpression[] to TraceFilterPublic[]
-  // FilterExpression has: { field, operator, value, key?, type? }
-  // TraceFilterPublic has: { field?, operator?, value?, key? }
-  // The operator is validated by OpikQueryLanguage and is guaranteed to be a valid operator string
   return filterExpressions.map((expr) => {
-    const filter: OpikApi.TraceFilterPublic = {
+    const filter: {
+      field: string;
+      operator: TOperator;
+      value: string;
+      key?: string;
+    } = {
       field: expr.field,
-      operator: expr.operator as OpikApi.TraceFilterPublicOperator,
+      operator: operatorCast(expr.operator),
       value: expr.value,
     };
 
@@ -95,6 +123,30 @@ export function parseFilterString(
       filter.key = expr.key;
     }
 
-    return filter;
+    return filter as TFilter;
   });
+}
+
+/**
+ * Parses a filter string using OpikQueryLanguage and converts to TraceFilterPublic format
+ */
+export function parseFilterString(
+  filterString?: string
+): OpikApi.TraceFilterPublic[] | null {
+  return parseFilterStringGeneric<OpikApi.TraceFilterPublic, OpikApi.TraceFilterPublicOperator>(
+    filterString,
+    (op) => op as OpikApi.TraceFilterPublicOperator
+  );
+}
+
+/**
+ * Parses a filter string using OpikQueryLanguage and converts to TraceThreadFilter format
+ */
+export function parseThreadFilterString(
+  filterString?: string
+): OpikApi.TraceThreadFilter[] | null {
+  return parseFilterStringGeneric<OpikApi.TraceThreadFilter, OpikApi.TraceThreadFilterOperator>(
+    filterString,
+    (op) => op as OpikApi.TraceThreadFilterOperator
+  );
 }

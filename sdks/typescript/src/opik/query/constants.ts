@@ -50,6 +50,9 @@ export const COLUMNS: Record<string, ColumnType> = {
   type: "string",
   model: "string",
   provider: "string",
+  first_message: "string",
+  last_message: "string",
+  template_structure: "string",
 };
 
 /**
@@ -77,6 +80,9 @@ export const SUPPORTED_OPERATORS: Record<string, readonly string[]> = {
   type: OPERATOR_SETS.STRING_OPS,
   model: OPERATOR_SETS.STRING_OPS,
   provider: OPERATOR_SETS.STRING_OPS,
+  first_message: OPERATOR_SETS.LIMITED_STRING_OPS,
+  last_message: OPERATOR_SETS.LIMITED_STRING_OPS,
+  template_structure: OPERATOR_SETS.STRING_OPS,
 };
 
 /**
