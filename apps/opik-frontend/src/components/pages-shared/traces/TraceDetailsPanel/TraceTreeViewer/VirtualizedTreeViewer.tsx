@@ -418,7 +418,9 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
                     {node.data.attachment_count &&
                       node.data.attachment_count > 0 && (
                         <TooltipWrapper
-                          content={`${node.data.attachment_count} attachment${node.data.attachment_count > 1 ? "s" : ""}`}
+                          content={`${node.data.attachment_count} attachment${
+                            node.data.attachment_count > 1 ? "s" : ""
+                          }`}
                         >
                           <div className="flex size-5 items-center justify-center">
                             <Paperclip className="size-3 text-muted-slate" />
