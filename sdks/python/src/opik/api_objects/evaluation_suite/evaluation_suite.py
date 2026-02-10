@@ -10,6 +10,9 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from opik.api_objects.prompt import base_prompt
+from opik.api_objects.dataset import dataset as dataset_module
+from opik.evaluation import evaluator as opik_evaluator
+from opik.evaluation.metrics import score_result
 
 from . import types
 
@@ -18,7 +21,8 @@ if TYPE_CHECKING:
 
 LOGGER = logging.getLogger(__name__)
 
-# Type alias for the task function
+SUITE_ITEM_INDEX_KEY = "__suite_item_index__"
+
 LLMTask = Callable[[Dict[str, Any]], Any]
 
 
@@ -76,11 +80,13 @@ class EvaluationSuite:
     def __init__(
         self,
         name: str,
+        dataset: dataset_module.Dataset,
         description: Optional[str] = None,
         evaluators: Optional[List["suite_evaluators.LLMJudge"]] = None,
         execution_policy: Optional[types.ExecutionPolicy] = None,
     ):
         self._name = name
+        self._dataset = dataset
         self._description = description
         self._evaluators = evaluators or []
         self._execution_policy = execution_policy or types.ExecutionPolicy()
@@ -110,6 +116,11 @@ class EvaluationSuite:
     def items(self) -> List[types.SuiteItem]:
         """The list of test items in this suite."""
         return self._items
+
+    @property
+    def dataset(self) -> dataset_module.Dataset:
+        """The underlying dataset storing suite items."""
+        return self._dataset
 
     def add_item(
         self,
@@ -157,6 +168,11 @@ class EvaluationSuite:
             metadata=metadata,
         )
         self._items.append(item)
+
+        dataset_item = dict(data)
+        dataset_item[SUITE_ITEM_INDEX_KEY] = len(self._items) - 1
+        self._dataset.insert([dataset_item])
+
         return self
 
     def run(
@@ -195,7 +211,6 @@ class EvaluationSuite:
 
         Raises:
             ValueError: If no items have been added to the suite.
-            NotImplementedError: Backend integration not yet available.
 
         Example:
             >>> def my_llm_task(data: dict) -> str:
@@ -209,13 +224,99 @@ class EvaluationSuite:
                 "No items added to the evaluation suite. Use add_item() first."
             )
 
-        # TODO: Implement when backend is merged
-        # This will:
-        # 1. Fetch evaluator configs from backend (dataset_evaluators table)
-        # 2. For each item, run task runs_per_item times
-        # 3. Score each run with evaluators
-        # 4. Determine pass/fail based on execution policy
-        raise NotImplementedError(
-            "Backend integration not yet available. "
-            "This API is ready for use once the backend is merged."
+        scoring_metrics = self._get_scoring_metrics()
+
+        def wrapped_task(item: Dict[str, Any]) -> Dict[str, Any]:
+            task_input = {k: v for k, v in item.items() if k != SUITE_ITEM_INDEX_KEY}
+            output = task(task_input)
+            return {"output": output, "input": task_input}
+
+        eval_result = opik_evaluator.evaluate(
+            dataset=self._dataset,
+            task=wrapped_task,
+            scoring_metrics=scoring_metrics,
+            experiment_name_prefix=experiment_name_prefix,
+            experiment_name=experiment_name,
+            project_name=project_name,
+            experiment_config=experiment_config,
+            prompts=prompts,
+            experiment_tags=experiment_tags,
+            verbose=verbose,
+            task_threads=worker_threads,
         )
+
+        return self._convert_to_suite_result(eval_result)
+
+    def _get_scoring_metrics(self) -> List["suite_evaluators.LLMJudge"]:
+        """Get all scoring metrics (evaluators) for the suite."""
+        return list(self._evaluators)
+
+    def _convert_to_suite_result(
+        self,
+        eval_result: Any,
+    ) -> types.SuiteResult:
+        """Convert EvaluationResult to SuiteResult."""
+        from opik.evaluation import test_result as test_result_module
+
+        results_by_item: Dict[int, List[test_result_module.TestResult]] = {}
+        for test_result in eval_result.test_results:
+            item_index = test_result.test_case.dataset_item_content.get(
+                SUITE_ITEM_INDEX_KEY, 0
+            )
+            if item_index not in results_by_item:
+                results_by_item[item_index] = []
+            results_by_item[item_index].append(test_result)
+
+        item_results: List[types.SuiteItemResult] = []
+        passed_items = 0
+
+        for index, item in enumerate(self._items):
+            test_results = results_by_item.get(index, [])
+
+            run_results: List[types.SuiteItemRunResult] = []
+            for test_result in test_results:
+                all_passed = all(
+                    self._score_passed(sr) for sr in test_result.score_results
+                )
+                run_result = types.SuiteItemRunResult(
+                    run_index=test_result.trial_id,
+                    output=test_result.test_case.task_output,
+                    score_results=test_result.score_results,
+                    passed=all_passed,
+                    trace_id=test_result.test_case.trace_id or "",
+                )
+                run_results.append(run_result)
+
+            passed_runs = sum(1 for r in run_results if r.passed)
+            total_runs = len(run_results)
+            item_passed = passed_runs >= 1 if total_runs > 0 else False
+
+            if item_passed:
+                passed_items += 1
+
+            item_result = types.SuiteItemResult(
+                item=item,
+                run_results=run_results,
+                passed=item_passed,
+                passed_runs=passed_runs,
+                total_runs=total_runs,
+            )
+            item_results.append(item_result)
+
+        return types.SuiteResult(
+            experiment_id=eval_result.experiment_id,
+            experiment_name=eval_result.experiment_name,
+            experiment_url=eval_result.experiment_url,
+            item_results=item_results,
+            passed_items=passed_items,
+            total_items=len(self._items),
+            passed=passed_items == len(self._items),
+        )
+
+    def _score_passed(self, score: score_result.ScoreResult) -> bool:
+        """Determine if a score result indicates a pass."""
+        if isinstance(score.value, bool):
+            return score.value
+        if isinstance(score.value, (int, float)):
+            return score.value >= 0.5
+        return False

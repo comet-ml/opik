@@ -992,11 +992,17 @@ class Opik:
         """
         from . import evaluation_suite
 
+        suite_dataset = self.create_dataset(
+            name=name,
+            description=description,
+        )
+
         return evaluation_suite.EvaluationSuite(
             name=name,
             description=description,
             evaluators=evaluators or [],
             execution_policy=execution_policy,
+            dataset=suite_dataset,
         )
 
     def create_experiment(
