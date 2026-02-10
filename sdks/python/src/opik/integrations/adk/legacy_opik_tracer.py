@@ -192,6 +192,8 @@ class LegacyOpikTracer:
                     LOGGER.warning(
                         "No current trace found in context for agent output update"
                     )
+                    self._current_trace_created_by_opik_tracer.set(None)
+                    self._last_model_output = None
                     return
 
                 if trace_data.id == self._current_trace_created_by_opik_tracer.get():
@@ -263,6 +265,7 @@ class LegacyOpikTracer:
         try:
             span_data = self._context_storage.top_span_data()
             if span_data is None:
+                self._last_model_output = None
                 LOGGER.warning(
                     "No current span found in context for model output update"
                 )
