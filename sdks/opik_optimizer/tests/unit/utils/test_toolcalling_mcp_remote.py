@@ -1,4 +1,9 @@
+import pytest
+
 from opik_optimizer.utils.toolcalling.runtime import mcp_remote
+
+
+pytest.importorskip("mcp")
 
 
 def test_mcp_remote__load_sdk() -> None:

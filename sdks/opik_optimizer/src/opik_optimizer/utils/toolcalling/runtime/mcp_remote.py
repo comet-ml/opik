@@ -41,7 +41,8 @@ async def _get_or_create_client(
 async def _start_client(url: str, headers: Mapping[str, str]) -> tuple[Any, Any]:
     """Start a remote MCP client session and return session + transport."""
     ClientSession, streamablehttp_client = _load_remote_sdk()
-    transport_cm = streamablehttp_client(url, headers=dict(headers))
+    safe_headers = {str(k): "" if v is None else str(v) for k, v in headers.items()}
+    transport_cm = streamablehttp_client(url, headers=safe_headers)
     read_stream, write_stream, _get_session_id = await transport_cm.__aenter__()
     session = cast(type[Any], ClientSession)(read_stream, write_stream)
     if hasattr(session, "__aenter__"):

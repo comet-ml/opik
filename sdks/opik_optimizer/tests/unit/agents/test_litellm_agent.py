@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from opik_optimizer.agents.litellm_agent import LiteLLMAgent
+from opik_optimizer.agents.litellm_agent import _sanitize_tool_arguments_for_logging
 from opik_optimizer.api_objects import chat_prompt
 from tests.unit.fixtures.builders import make_litellm_completion_response
 from tests.unit.fixtures import system_message, user_message
@@ -86,6 +87,22 @@ class TestLiteLLMAgentInitialization:
             # Restore
             if old_val:
                 os.environ["OPIK_PROJECT_NAME"] = old_val
+
+
+def test_sanitize_tool_arguments_for_logging_redacts_sensitive_keys() -> None:
+    args = {
+        "api_key": "super-secret-value",
+        "nested": {"token": "abcd", "query": "hello"},
+        "password_hint": "something",
+        "normal": "x" * 80,
+    }
+    sanitized = _sanitize_tool_arguments_for_logging(args)
+
+    assert sanitized["api_key"] == "***REDACTED***"
+    assert sanitized["nested"]["token"] == "***REDACTED***"
+    assert sanitized["password_hint"] == "***REDACTED***"
+    assert sanitized["nested"]["query"] == "hello"
+    assert sanitized["normal"].endswith("...")
 
 
 class TestLiteLLMAgentInvoke:

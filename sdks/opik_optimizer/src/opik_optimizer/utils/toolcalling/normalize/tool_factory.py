@@ -254,9 +254,20 @@ def resolve_toolcalling_tools(
                     },
                 }
                 resolved_tools.append(function_entry)
-                resolved_map.setdefault(
-                    function_name, factory._build_callable(server, tool_name)
-                )
+                if require_approval:
+                    logger.debug(
+                        "MCP tool requires approval before execution name=%s server=%s",
+                        function_name,
+                        server_label,
+                    )
+                    resolved_map.setdefault(
+                        function_name,
+                        _build_approval_required_callable(function_name),
+                    )
+                else:
+                    resolved_map.setdefault(
+                        function_name, factory._build_callable(server, tool_name)
+                    )
             continue
 
         if "mcp" not in tool:
@@ -279,10 +290,24 @@ def resolve_toolcalling_tools(
                     )
                     mcp_tool_name = tool_block.get("name")
                     server = mcp_block.get("server")
+                    require_approval = (
+                        bool(mcp_block.get("require_approval"))
+                        if isinstance(mcp_block, dict)
+                        else False
+                    )
                     if mcp_tool_name and isinstance(server, dict):
-                        resolved_map[function_name] = factory._build_callable(
-                            server, mcp_tool_name
-                        )
+                        if require_approval:
+                            logger.debug(
+                                "MCP pre-resolved tool requires approval before execution name=%s",
+                                function_name,
+                            )
+                            resolved_map[function_name] = (
+                                _build_approval_required_callable(function_name)
+                            )
+                        else:
+                            resolved_map[function_name] = factory._build_callable(
+                                server, mcp_tool_name
+                            )
                 continue
 
         resolved = factory.resolve_tool_entry(tool)
@@ -333,20 +358,20 @@ def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]
     if not isinstance(servers, Mapping):
         raise ValueError("Cursor MCP config must include 'mcpServers'.")
 
-    def _resolve_env_value(value: Any, env_key: str) -> Any:
+    def _resolve_env_value(value: Any, env_key: str) -> str:
         """Resolve ${env:VAR} tokens or empty values using environment variables."""
         if not isinstance(value, str):
-            return value
+            return str(value)
         if value.startswith("${env:") and value.endswith("}"):
             env_name = value[6:-1]
-            return os.environ.get(env_name, "")
+            return str(os.environ.get(env_name, ""))
         if value == "":
-            return os.environ.get(env_key, "")
+            return str(os.environ.get(env_key, ""))
         return value
 
-    def _resolve_env_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
+    def _resolve_env_mapping(mapping: Mapping[str, Any]) -> dict[str, str]:
         """Resolve env tokens in a mapping for headers/auth/env values."""
-        resolved: dict[str, Any] = {}
+        resolved: dict[str, str] = {}
         for key, value in mapping.items():
             resolved[key] = _resolve_env_value(value, key)
         return resolved
@@ -448,11 +473,22 @@ def _warn_require_approval() -> None:
     if _REQUIRE_APPROVAL_WARNED:
         return
     warnings.warn(
-        "require_approval is ignored by the optimizer toolcalling runtime.",
+        "require_approval tools are registered but blocked from execution until approved.",
         UserWarning,
         stacklevel=2,
     )
     _REQUIRE_APPROVAL_WARNED = True
+
+
+def _build_approval_required_callable(function_name: str) -> Callable[..., Any]:
+    """Return a callable that blocks execution for tools requiring approval."""
+
+    def _blocked_callable(**_kwargs: Any) -> Any:
+        raise PermissionError(
+            f"Tool '{function_name}' requires approval before execution."
+        )
+
+    return _blocked_callable
 
 
 def _collect_function_names(
@@ -566,9 +602,8 @@ def _log_remote_tool_response(tool_name: str, response: Any) -> None:
     text = response_to_text(response)
     if "quota exceeded" in text.lower():
         logger.warning(
-            "MCP remote tool quota exceeded name=%s response=%s",
+            "MCP remote tool quota exceeded name=%s",
             tool_name,
-            _snippet(text),
         )
 
     meta = _extract_response_meta(response)

@@ -21,6 +21,14 @@ from . import prompts as toolcalling_prompts
 from ..normalize.tool_factory import ToolCallingFactory
 
 logger = logging.getLogger(__name__)
+_SENSITIVE_METADATA_KEYS = (
+    "mcp",
+    "server",
+    "authorization",
+    "auth",
+    "headers",
+    "env",
+)
 
 ToolDescriptionReporter = Callable[[str, str, dict[str, Any]], None]
 
@@ -93,7 +101,7 @@ def resolve_prompt_tools(
         }
         return resolved, None
 
-    if optimize_tools:
+    if optimize_tools is not None:
         return prepare_tool_optimization(prompt_or_prompts, optimize_tools)
 
     resolved_prompt = ToolCallingFactory().resolve_prompt(prompt_or_prompts)
@@ -267,7 +275,7 @@ def prepare_tool_optimization(
     optimize_tools: bool | dict[str, bool] | None,
 ) -> tuple[chat_prompt.ChatPrompt, list[str] | None]:
     """Resolve MCP tools and return selected tool names for optimization."""
-    if not optimize_tools:
+    if optimize_tools is None:
         return prompt, None
 
     resolved_prompt = ToolCallingFactory().resolve_prompt(prompt)
@@ -281,19 +289,40 @@ def prepare_tool_optimization(
 
     tool_names: list[str] | None = None
     if isinstance(optimize_tools, dict):
-        tool_names = [name for name, enabled in optimize_tools.items() if enabled]
-        if not tool_names:
+        requested_names = [name for name, enabled in optimize_tools.items() if enabled]
+        if not requested_names:
             raise ValueError("optimize_tools dict did not enable any tools.")
-        available = {segment.segment_id for segment in tool_segments}
-        missing = [
-            name
-            for name in tool_names
-            if f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{name}" not in available
-        ]
-        if missing:
-            raise ValueError(
-                f"Tools not found in prompt: {missing}. Available: {sorted(available)}"
+        available_segment_ids = [segment.segment_id for segment in tool_segments]
+        available_lookup = {
+            segment_id: segment_id for segment_id in available_segment_ids
+        }
+        suffix_lookup = {
+            segment_id.rsplit(".", 1)[-1]: segment_id
+            for segment_id in available_segment_ids
+        }
+        resolved_names: list[str] = []
+        missing_inputs: list[str] = []
+        for requested in requested_names:
+            direct_match = available_lookup.get(requested)
+            prefixed_match = available_lookup.get(
+                f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{requested}"
             )
+            suffix_match = suffix_lookup.get(requested)
+            resolved_segment = direct_match or prefixed_match or suffix_match
+            if resolved_segment is None:
+                missing_inputs.append(requested)
+                continue
+            resolved_tool_name = resolved_segment.replace(
+                prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
+            )
+            if resolved_tool_name not in resolved_names:
+                resolved_names.append(resolved_tool_name)
+        if missing_inputs:
+            raise ValueError(
+                "Tools not found in prompt for optimize_tools entries: "
+                f"{missing_inputs}. Available segment IDs: {sorted(available_segment_ids)}"
+            )
+        tool_names = resolved_names
     elif optimize_tools is True:
         tool_names = [
             segment.segment_id.replace(
@@ -529,7 +558,7 @@ def _build_tool_blocks(segments: list[prompt_segments.PromptSegment]) -> str:
         tool_name = segment.segment_id.replace(
             prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
         )
-        tool_metadata = segment.metadata.get("raw_tool", {})
+        tool_metadata = _sanitize_tool_metadata(segment.metadata.get("raw_tool", {}))
         tool_metadata_json = json.dumps(
             tool_metadata, indent=2, sort_keys=True, default=str
         )
@@ -540,6 +569,22 @@ def _build_tool_blocks(segments: list[prompt_segments.PromptSegment]) -> str:
         )
         blocks.append(block)
     return "\n\n".join(blocks)
+
+
+def _sanitize_tool_metadata(raw_tool: Any) -> Any:
+    """Remove sensitive MCP/server/auth metadata before sending to model prompts."""
+    if isinstance(raw_tool, dict):
+        sanitized: dict[str, Any] = {}
+        for key, value in raw_tool.items():
+            key_text = str(key)
+            if any(secret in key_text.lower() for secret in _SENSITIVE_METADATA_KEYS):
+                sanitized[key_text] = "***REDACTED***"
+                continue
+            sanitized[key_text] = _sanitize_tool_metadata(value)
+        return sanitized
+    if isinstance(raw_tool, list):
+        return [_sanitize_tool_metadata(item) for item in raw_tool]
+    return raw_tool
 
 
 def build_tool_blocks_from_prompt(

@@ -32,6 +32,41 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 _WARNED_NO_LOGPROBS = False
+_SENSITIVE_ARGUMENT_KEYS = (
+    "key",
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "api_key",
+)
+_MAX_LOG_VALUE_LENGTH = 48
+
+
+def _sanitize_tool_arguments_for_logging(arguments: Any) -> Any:
+    """Return a redacted copy of tool-call arguments for exception logs."""
+    if isinstance(arguments, dict):
+        sanitized: dict[str, Any] = {}
+        for key, value in arguments.items():
+            key_text = str(key)
+            key_lower = key_text.lower()
+            if any(secret in key_lower for secret in _SENSITIVE_ARGUMENT_KEYS):
+                sanitized[key_text] = "***REDACTED***"
+            else:
+                sanitized[key_text] = _sanitize_tool_arguments_for_logging(value)
+        return sanitized
+    if isinstance(arguments, list):
+        return [_sanitize_tool_arguments_for_logging(item) for item in arguments]
+    if isinstance(arguments, tuple):
+        return tuple(_sanitize_tool_arguments_for_logging(item) for item in arguments)
+    if isinstance(arguments, str):
+        lowered = arguments.lower()
+        if any(secret in lowered for secret in _SENSITIVE_ARGUMENT_KEYS):
+            return "***REDACTED***"
+        if len(arguments) > _MAX_LOG_VALUE_LENGTH:
+            return f"{arguments[:_MAX_LOG_VALUE_LENGTH]}..."
+        return arguments
+    return arguments
 
 
 def _patch_litellm_choices_logprobs() -> None:
@@ -378,10 +413,13 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
 
                     tool_func = function_map.get(tool_name)
                     if argument_error is not None:
+                        safe_raw_arguments = _sanitize_tool_arguments_for_logging(
+                            raw_arguments
+                        )
                         logger.warning(
                             "Skipping tool call due to invalid arguments name=%s args=%r",
                             tool_name,
-                            raw_arguments,
+                            safe_raw_arguments,
                         )
                         tool_result = argument_error
                     else:
@@ -391,8 +429,13 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                             else:
                                 tool_result = tool_func(**arguments)
                         except Exception as exc:  # pragma: no cover - defensive logging
+                            safe_arguments = _sanitize_tool_arguments_for_logging(
+                                arguments
+                            )
                             logger.exception(
-                                "Tool call failed name=%s args=%s", tool_name, arguments
+                                "Tool call failed name=%s args=%s",
+                                tool_name,
+                                safe_arguments,
                             )
                             tool_result = f"Error calling tool `{tool_name}`: {exc}"
                     last_tool_response = str(tool_result)
