@@ -2,7 +2,11 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast
+from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from opik.evaluation.suite_evaluators import LLMJudge
+    from opik.api_objects.evaluation_suite import types as evaluation_suite_types
 
 import httpx
 
@@ -940,6 +944,60 @@ class Opik:
             if e.status_code == 404:
                 return self.create_dataset(name, description)
             raise
+
+    def create_evaluation_suite(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        evaluators: Optional[List["LLMJudge"]] = None,
+        execution_policy: Optional["evaluation_suite_types.ExecutionPolicy"] = None,
+    ) -> "evaluation_suite.EvaluationSuite":
+        """
+        Create a new evaluation suite for regression testing.
+
+        Evaluation suites are pre-configured test suites that let you validate
+        that prompt changes, model updates, or code modifications don't break
+        existing functionality.
+
+        Args:
+            name: The name of the evaluation suite.
+            description: Optional description of what this suite tests.
+            evaluators: Suite-level evaluators (e.g., LLMJudge instances)
+                applied to all test items.
+            execution_policy: Default execution policy controlling runs_per_item
+                and pass_threshold for handling LLM non-determinism.
+
+        Returns:
+            EvaluationSuite: The created evaluation suite object.
+
+        Example:
+            >>> from opik.evaluation.suite_evaluators import LLMJudge
+            >>>
+            >>> suite = client.create_evaluation_suite(
+            ...     name="Refund Policy Tests",
+            ...     description="Regression tests for refund scenarios",
+            ...     evaluators=[
+            ...         LLMJudge(assertions=[
+            ...             {"name": "no_hallucination", "expected_behavior": "No hallucinated information"},
+            ...         ]),
+            ...     ]
+            ... )
+            >>>
+            >>> suite.add_item(
+            ...     data={"user_input": "How do I get a refund?", "user_tier": "premium"},
+            ...     description="Premium user refund request",
+            ... )
+            >>>
+            >>> results = suite.run(task=my_llm_function)
+        """
+        from . import evaluation_suite
+
+        return evaluation_suite.EvaluationSuite(
+            name=name,
+            description=description,
+            evaluators=evaluators or [],
+            execution_policy=execution_policy,
+        )
 
     def create_experiment(
         self,

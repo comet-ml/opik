@@ -1,8 +1,10 @@
 from .base import BaseSuiteEvaluator
-from .assertion_evaluator import AssertionEvaluator, Assertion
+from .llm_judge import LLMJudge, Assertion
+from .opik_llm_judge_config import LLMJudgeConfig
 
 __all__ = [
     "BaseSuiteEvaluator",
-    "AssertionEvaluator",
+    "LLMJudge",
+    "LLMJudgeConfig",
     "Assertion",
 ]
