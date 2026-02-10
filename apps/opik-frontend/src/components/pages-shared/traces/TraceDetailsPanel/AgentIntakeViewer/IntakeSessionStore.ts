@@ -6,6 +6,7 @@ import {
   OptimizationRun,
   OptimizationChange,
   PromptChange,
+  ScalarChange,
   AssertionResult,
 } from "@/types/agent-intake";
 import { CommitResult } from "@/api/agent-intake/useOptimizeStreaming";
@@ -26,6 +27,7 @@ export interface OptimizationState {
   changes: OptimizationChange[];
   optimizationId?: string;
   promptChanges?: PromptChange[];
+  scalarChanges?: ScalarChange[];
   experimentTraces?: Record<string, string>;
   finalAssertionResults?: AssertionResult[];
   commitResult?: CommitResult;

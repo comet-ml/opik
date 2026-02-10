@@ -5,6 +5,7 @@ import {
   AssertionResult,
   OptimizationChange,
   PromptChange,
+  ScalarChange,
   RunStatus,
   RegressionResult,
   RegressionItem,
@@ -18,6 +19,7 @@ export type OptimizationResult = {
   iterations?: number;
   changes: OptimizationChange[];
   promptChanges?: PromptChange[];
+  scalarChanges?: ScalarChange[];
   experimentTraces?: Record<string, string>;
   finalAssertionResults?: AssertionResult[];
 };
@@ -74,6 +76,7 @@ type BackendOptimizeEvent = {
   iterations?: number;
   changes?: OptimizationChange[];
   prompt_changes?: PromptChange[];
+  scalar_changes?: ScalarChange[];
   experiment_traces?: Record<string, string>;
   final_assertion_results?: BackendAssertionResult[];
 };
@@ -189,6 +192,7 @@ async function parseOptimizeSSEStream(
               iterations: data.iterations,
               changes: data.changes || [],
               promptChanges: data.prompt_changes,
+              scalarChanges: data.scalar_changes,
               experimentTraces: data.experiment_traces,
               finalAssertionResults: finalAssertions,
             });
@@ -247,6 +251,7 @@ export function useOptimizeStart(traceId: string) {
 export type CommitRequest = {
   optimization_id: string;
   prompt_names: string[];
+  scalar_keys?: string[];
   project_id?: string;
   metadata?: Record<string, unknown>;
 };

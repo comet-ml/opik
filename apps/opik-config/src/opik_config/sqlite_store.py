@@ -390,8 +390,9 @@ class SQLiteConfigStore:
 
         Precedence:
         1. If mask_id provided: check mask override for (mask_id, variant, key)
-        2. Fall back to published value for (env, key)
-        3. If neither exists: key is missing
+        2. Fall back to PROD version's snapshot (from blueprint versioning)
+        3. Fall back to config_published (legacy/fallback)
+        4. If none exists: key is missing
         """
         result = ResolveResult()
         assigned_variant: str | None = None
@@ -422,6 +423,30 @@ class SQLiteConfigStore:
             result.assigned_variant = assigned_variant
             result.experiment_type = experiment_type
 
+            # Get PROD snapshot from blueprint versioning system
+            prod_snapshot: dict[str, Any] | None = None
+            blueprint_row = conn.execute(
+                "SELECT id FROM blueprints WHERE project_id = ?",
+                (project_id,)
+            ).fetchone()
+
+            if blueprint_row:
+                # Get the PROD pointer (or requested env pointer)
+                pointer_row = conn.execute("""
+                    SELECT version_number FROM environment_pointers
+                    WHERE blueprint_id = ? AND env = ?
+                """, (blueprint_row["id"], env)).fetchone()
+
+                if pointer_row:
+                    # Get that version's snapshot
+                    version_row = conn.execute("""
+                        SELECT snapshot_json FROM deployment_versions
+                        WHERE blueprint_id = ? AND version_number = ?
+                    """, (blueprint_row["id"], pointer_row["version_number"])).fetchone()
+
+                    if version_row and version_row["snapshot_json"]:
+                        prod_snapshot = json.loads(version_row["snapshot_json"])
+
             for key in keys:
                 # Get key_id if it exists
                 key_row = conn.execute(
@@ -435,7 +460,7 @@ class SQLiteConfigStore:
 
                 key_id = key_row["id"]
                 value_id: int | None = None
-                value_json: str | None = None
+                value: Any | None = None
 
                 # 1. Check mask override if mask_id and variant are known
                 if mask_id and assigned_variant:
@@ -449,10 +474,20 @@ class SQLiteConfigStore:
 
                     if override:
                         value_id = override["value_id"]
-                        value_json = override["value_json"]
+                        value = json.loads(override["value_json"])
 
-                # 2. Fall back to published value
-                if value_id is None:
+                # 2. Fall back to PROD snapshot (from blueprint versioning)
+                if value is None and prod_snapshot:
+                    # Check prompts section first, then config section
+                    if key in prod_snapshot.get("prompts", {}):
+                        value = prod_snapshot["prompts"][key]
+                        value_id = 0  # Snapshot doesn't track value_ids
+                    elif key in prod_snapshot.get("config", {}):
+                        value = prod_snapshot["config"][key]
+                        value_id = 0
+
+                # 3. Fall back to config_published (legacy/no blueprint)
+                if value is None:
                     published = conn.execute("""
                         SELECT cp.value_id, cv.value_json
                         FROM config_published cp
@@ -462,14 +497,15 @@ class SQLiteConfigStore:
 
                     if published:
                         value_id = published["value_id"]
-                        value_json = published["value_json"]
+                        value = json.loads(published["value_json"])
 
-                # 3. If still no value, key is missing
-                if value_id is None:
+                # 4. If still no value, key is missing
+                if value is None:
                     result.missing_keys.append(key)
                 else:
-                    result.resolved_values[key] = json.loads(value_json)  # type: ignore
-                    result.resolved_value_ids[key] = value_id
+                    result.resolved_values[key] = value
+                    if value_id is not None:
+                        result.resolved_value_ids[key] = value_id
 
         return result
 
@@ -563,6 +599,7 @@ class SQLiteConfigStore:
         key: str,
         value: Any,
         created_by: str | None = None,
+        _skip_version: bool = False,
     ) -> int:
         """
         Publish a value for a key in an environment.
@@ -570,6 +607,7 @@ class SQLiteConfigStore:
         - Ensures key exists
         - Appends value to config_values
         - Updates config_published pointer
+        - Creates a new deployment version (unless _skip_version=True)
 
         Returns the value_id.
         """
@@ -586,7 +624,16 @@ class SQLiteConfigStore:
                     updated_at = excluded.updated_at
             """, (project_id, env, key_id, value_id, now))
 
-            return value_id
+        # Create a new deployment version after publishing (unless skipped)
+        if not _skip_version:
+            self._create_deployment_version_for_change(
+                project_id=project_id,
+                env=env,
+                change_summary=f"Updated {key}",
+                created_by=created_by,
+            )
+
+        return value_id
 
     def create_or_update_mask(
         self,
@@ -798,14 +845,50 @@ class SQLiteConfigStore:
 
             return None
 
+    def find_key_by_field_name(self, project_id: str, field_name: str) -> str | None:
+        """
+        Find the config key by field name.
+
+        Searches registered keys where source_json.field_name matches.
+        Returns the full key string (e.g., "ModerationConfig.risk_tolerance") or None.
+        """
+        with self._transaction() as conn:
+            rows = conn.execute("""
+                SELECT key, source_json FROM config_keys WHERE project_id = ?
+            """, (project_id,)).fetchall()
+
+            for row in rows:
+                try:
+                    if row["source_json"]:
+                        source = json.loads(row["source_json"])
+                        if source.get("field_name") == field_name:
+                            return row["key"]
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+            return None
+
     def list_published(self, project_id: str, env: str) -> list[dict[str, Any]]:
         """List all published values for an environment."""
         with self._transaction() as conn:
             rows = conn.execute("""
-                SELECT ck.key, cv.value_json, cp.value_id, cp.updated_at
+                SELECT ck.key, cv.value_json, cp.value_id, cp.updated_at,
+                       orig.value_json as original_value_json,
+                       ver.version_count,
+                       ck.annotations_json
                 FROM config_published cp
                 JOIN config_keys ck ON ck.id = cp.key_id
                 JOIN config_values cv ON cv.id = cp.value_id
+                LEFT JOIN (
+                    SELECT key_id, value_json,
+                           ROW_NUMBER() OVER (PARTITION BY key_id ORDER BY id ASC) as rn
+                    FROM config_values
+                ) orig ON orig.key_id = ck.id AND orig.rn = 1
+                LEFT JOIN (
+                    SELECT key_id, COUNT(*) as version_count
+                    FROM config_values
+                    GROUP BY key_id
+                ) ver ON ver.key_id = ck.id
                 WHERE cp.project_id = ? AND cp.env = ?
                 ORDER BY ck.key
             """, (project_id, env)).fetchall()
@@ -816,6 +899,9 @@ class SQLiteConfigStore:
                     "value": json.loads(row["value_json"]),
                     "value_id": row["value_id"],
                     "updated_at": row["updated_at"],
+                    "original_value": json.loads(row["original_value_json"]) if row["original_value_json"] else json.loads(row["value_json"]),
+                    "version": row["version_count"] or 1,
+                    "annotations": json.loads(row["annotations_json"]) if row["annotations_json"] else None,
                 }
                 for row in rows
             ]
@@ -2275,6 +2361,45 @@ class SQLiteConfigStore:
 
         return blueprint
 
+    def _create_deployment_version_for_change(
+        self,
+        project_id: str,
+        env: str = "prod",
+        change_summary: str | None = None,
+        change_type: str = "manual",
+        created_by: str | None = None,
+    ) -> dict[str, Any] | None:
+        """
+        Create a new deployment version after a config change.
+        Builds a snapshot from current published values and creates a version.
+
+        Returns the created version, or None if no blueprint exists.
+        """
+        blueprint = self.get_blueprint_for_project(project_id)
+        if not blueprint:
+            blueprint = self.get_or_create_blueprint_for_project(project_id)
+
+        published = self.list_published(project_id, env)
+        if not published:
+            return None
+
+        snapshot: dict[str, Any] = {"prompts": {}, "config": {}}
+        for item in published:
+            key = item["key"]
+            value = item["value"]
+            if isinstance(value, dict) and "prompt_name" in value:
+                snapshot["prompts"][key] = value
+            else:
+                snapshot["config"][key] = value
+
+        return self.create_deployment_version(
+            blueprint_id=blueprint["id"],
+            snapshot=snapshot,
+            change_summary=change_summary,
+            change_type=change_type,
+            created_by=created_by,
+        )
+
     def create_deployment_version(
         self,
         blueprint_id: str,
@@ -2463,27 +2588,59 @@ class SQLiteConfigStore:
                 "updated_at": row["updated_at"],
             }
 
+    def apply_snapshot_to_published(
+        self,
+        project_id: str,
+        env: str,
+        snapshot: dict[str, Any],
+    ) -> None:
+        """
+        Apply a deployment version's snapshot to config_published.
+
+        This syncs the versioned snapshot to the live resolution table,
+        making the snapshot's values available for resolve() calls.
+
+        Does NOT create new deployment versions (those already exist).
+        """
+        prompts = snapshot.get("prompts", {})
+        config = snapshot.get("config", {})
+
+        for key, value in {**prompts, **config}.items():
+            self.publish_value(
+                project_id=project_id,
+                env=env,
+                key=key,
+                value=value,
+                created_by="promote",
+                _skip_version=True,
+            )
+
     def set_environment_pointer(
         self,
         blueprint_id: str,
         env: str,
         version_number: int,
+        sync_to_published: bool = True,
     ) -> dict[str, Any]:
         """
         Set the pointer for an environment to a specific version.
+
+        When sync_to_published is True (default) and env is not "latest",
+        also syncs the version's snapshot to config_published so that
+        resolve() returns the correct values.
 
         Returns the updated pointer.
         """
         now = self._now()
 
         with self._transaction() as conn:
-            # Verify version exists
-            version = conn.execute("""
-                SELECT id FROM deployment_versions
+            # Verify version exists and get snapshot
+            version_row = conn.execute("""
+                SELECT id, snapshot_json FROM deployment_versions
                 WHERE blueprint_id = ? AND version_number = ?
             """, (blueprint_id, version_number)).fetchone()
 
-            if not version:
+            if not version_row:
                 raise ValueError(f"Version {version_number} not found for blueprint {blueprint_id}")
 
             conn.execute("""
@@ -2494,12 +2651,27 @@ class SQLiteConfigStore:
                     updated_at = excluded.updated_at
             """, (blueprint_id, env, version_number, now))
 
-            return {
-                "blueprint_id": blueprint_id,
-                "env": env,
-                "version_number": version_number,
-                "updated_at": now,
-            }
+            # Get project_id for this blueprint
+            blueprint_row = conn.execute(
+                "SELECT project_id FROM blueprints WHERE id = ?",
+                (blueprint_id,)
+            ).fetchone()
+
+        # Sync to config_published for real environments (not "latest")
+        if sync_to_published and env != "latest" and blueprint_row:
+            snapshot = json.loads(version_row["snapshot_json"])
+            self.apply_snapshot_to_published(
+                project_id=blueprint_row["project_id"],
+                env=env,
+                snapshot=snapshot,
+            )
+
+        return {
+            "blueprint_id": blueprint_id,
+            "env": env,
+            "version_number": version_number,
+            "updated_at": now,
+        }
 
     def get_blueprint_history(
         self,

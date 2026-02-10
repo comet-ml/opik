@@ -273,6 +273,12 @@ def set_mask_override():
     value = data["value"]
     created_by = data.get("created_by")
 
+    # Auto-resolve simple field names to fully-qualified keys
+    if "." not in key:
+        resolved_key = store.find_key_by_field_name(project_id, key)
+        if resolved_key:
+            key = resolved_key
+
     value_id = store.set_mask_override(
         project_id=project_id,
         env=env,
@@ -282,7 +288,7 @@ def set_mask_override():
         value=value,
         created_by=created_by,
     )
-    return jsonify({"value_id": value_id}), 201
+    return jsonify({"value_id": value_id, "resolved_key": key}), 201
 
 
 @app.route("/v1/config/prompts/override", methods=["POST"])
@@ -396,64 +402,6 @@ def _get_prompt_bridge() -> PromptBridge:
         return PromptBridge(config_store=store, use_mock=True)
 
 
-def _create_deployment_version_for_prompt_change(
-    prompt_name: str,
-    template: str,
-    project_id: str = "default",
-    env: str = "prod",
-    change_description: str | None = None,
-) -> dict[str, Any] | None:
-    """
-    After a prompt is edited, update config and create a deployment version.
-
-    Returns deployment version info or None if no blueprint exists.
-    """
-    # Find the config key for this prompt
-    key = store.find_key_by_prompt_name(project_id, env, prompt_name)
-    if not key:
-        LOGGER.debug(f"No config key found for prompt '{prompt_name}', skipping deployment version")
-        return None
-
-    # Update the published value
-    store.publish_value(
-        project_id=project_id,
-        env=env,
-        key=key,
-        value={"prompt_name": prompt_name, "prompt": template},
-        created_by="manual_edit",
-    )
-
-    # Create deployment version if blueprint exists
-    blueprint = store.get_blueprint_for_project(project_id)
-    if not blueprint:
-        LOGGER.debug(f"No blueprint for project '{project_id}', skipping deployment version")
-        return None
-
-    # Build snapshot from current published values
-    published = store.list_published(project_id, env)
-    snapshot: dict[str, Any] = {"prompts": {}, "config": {}}
-    for item in published:
-        k = item["key"]
-        v = item["value"]
-        if isinstance(v, dict) and "prompt_name" in v:
-            snapshot["prompts"][k] = v
-        else:
-            snapshot["config"][k] = v
-
-    version = store.create_deployment_version(
-        blueprint_id=blueprint["id"],
-        snapshot=snapshot,
-        change_summary=change_description or f"Updated {prompt_name}",
-        change_type="manual",
-        created_by="manual_edit",
-    )
-
-    return {
-        "deployment_version": version["version_number"],
-        "blueprint_id": blueprint["id"],
-    }
-
-
 @app.route("/v1/config/prompts/commit", methods=["POST"])
 def commit_prompt_to_opik():
     """
@@ -513,6 +461,19 @@ def commit_prompt_to_opik():
                 else:
                     snapshot["config"][key] = value
 
+            # Get the committed prompt value from the experiment and overlay it
+            committed_value = store.get_experiment_prompt_value(
+                project_id=project_id,
+                env=env,
+                mask_id=mask_id,
+                prompt_name=prompt_name,
+                variant=variant,
+            )
+            if committed_value:
+                config_key = store.find_key_by_prompt_name(project_id, env, prompt_name)
+                if config_key:
+                    snapshot["prompts"][config_key] = committed_value
+
             version = store.create_deployment_version(
                 blueprint_id=blueprint["id"],
                 snapshot=snapshot,
@@ -529,6 +490,91 @@ def commit_prompt_to_opik():
         return jsonify({"error": str(e)}), 404
     except Exception as e:
         LOGGER.error(f"Failed to commit prompt: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/v1/config/scalars/commit", methods=["POST"])
+def commit_scalar():
+    """
+    Commit a scalar/config variable from experiment to published config.
+    Also creates a new deployment version in the project's blueprint.
+
+    Input:
+    - project_id?: string (default "default")
+    - env?: string (default "prod")
+    - mask_id: string (the experiment ID)
+    - key: string (e.g., "ModerationConfig.risk_tolerance")
+    - metadata?: object
+
+    Output:
+    - key: string
+    - value: any (the committed value)
+    - deployment_version?: int (if blueprint exists)
+    """
+    data = request.get_json()
+    required = ["mask_id", "key"]
+    if not data or any(k not in data for k in required):
+        return jsonify({"error": f"Missing required fields: {required}"}), 400
+
+    project_id = data.get("project_id", "default")
+    env = data.get("env", "prod")
+    mask_id = data["mask_id"]
+    key = data["key"]
+
+    # Auto-resolve simple field names to fully-qualified keys (same as masks/override)
+    if "." not in key:
+        resolved_key = store.find_key_by_field_name(project_id, key)
+        if resolved_key:
+            key = resolved_key
+
+    try:
+        # Get the override value from the experiment
+        overrides = store.list_mask_overrides(project_id, env, mask_id)
+        override_by_key = {o["key"]: o["value"] for o in overrides}
+
+        if key not in override_by_key:
+            return jsonify({"error": f"No override found for key '{key}' in experiment '{mask_id}'"}), 400
+
+        value = override_by_key[key]
+
+        # Update published config with the new value
+        store.publish_value(project_id, env, key, value)
+        LOGGER.info(f"Committed scalar '{key}' = {value} from experiment '{mask_id}'")
+
+        result = {
+            "key": key,
+            "value": value,
+            "commit": "scalar",  # Scalars don't have commits like prompts
+        }
+
+        # Also create a deployment version if blueprint exists
+        blueprint = store.get_blueprint_for_project(project_id)
+        if blueprint:
+            # Build snapshot from current published values
+            published = store.list_published(project_id, env)
+            snapshot = {"prompts": {}, "config": {}}
+            for item in published:
+                item_key = item["key"]
+                item_value = item["value"]
+                if isinstance(item_value, dict) and "prompt_name" in item_value:
+                    snapshot["prompts"][item_key] = item_value
+                else:
+                    snapshot["config"][item_key] = item_value
+
+            version = store.create_deployment_version(
+                blueprint_id=blueprint["id"],
+                snapshot=snapshot,
+                change_summary=f"Updated {key}",
+                change_type="optimizer",
+                source_experiment_id=mask_id,
+                created_by=data.get("created_by"),
+            )
+            result["deployment_version"] = version["version_number"]
+            result["blueprint_id"] = blueprint["id"]
+
+        return jsonify(result), 201
+    except Exception as e:
+        LOGGER.error(f"Failed to commit scalar: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -700,15 +746,8 @@ def create_prompt():
             created_by=data.get("created_by"),
         )
 
-        # Create deployment version if prompt is part of config system
-        deployment_info = _create_deployment_version_for_prompt_change(
-            prompt_name=data["name"],
-            template=data["template"],
-            change_description=data.get("change_description") or f"Updated {data['name']}",
-        )
-        if deployment_info:
-            result["deployment_version"] = deployment_info["deployment_version"]
-            result["blueprint_id"] = deployment_info["blueprint_id"]
+        # NOTE: Deployment versions are only created via explicit commit endpoint
+        # SDK calls (from agents, optimizer tests, etc.) don't create deployment versions
 
         response = jsonify(result)
         response.status_code = 201
@@ -878,15 +917,11 @@ def create_prompt_version_by_name():
                 "created_by": latest.get("created_by"),
             }
 
-        # Create deployment version if prompt is part of config system
-        deployment_info = _create_deployment_version_for_prompt_change(
-            prompt_name=name,
-            template=template,
-            change_description=f"Updated {name}",
-        )
+        # NOTE: Deployment versions are only created via explicit commit endpoint
+        # SDK calls (from agents, optimizer tests, etc.) don't create deployment versions
 
         # Return PromptVersionDetail shape
-        response_data = {
+        return jsonify({
             "id": result.get("id"),
             "prompt_id": result.get("prompt_id"),
             "commit": result.get("commit"),
@@ -896,13 +931,7 @@ def create_prompt_version_by_name():
             "template_structure": result.get("template_structure", "text"),
             "created_at": result.get("created_at"),
             "created_by": result.get("created_by"),
-        }
-
-        if deployment_info:
-            response_data["deployment_version"] = deployment_info["deployment_version"]
-            response_data["blueprint_id"] = deployment_info["blueprint_id"]
-
-        return jsonify(response_data), 200
+        }), 200
 
     except Exception as e:
         LOGGER.exception(f"Error creating prompt version: {e}")
@@ -979,17 +1008,8 @@ def create_prompt_version(prompt_id: str):
     if not result:
         return jsonify({"error": f"Failed to create version for prompt '{prompt_id}'"}), 500
 
-    # Create deployment version if prompt is part of config system
-    prompt_name = prompt_info.get("name", "")
-    if prompt_name:
-        deployment_info = _create_deployment_version_for_prompt_change(
-            prompt_name=prompt_name,
-            template=data["template"],
-            change_description=data.get("change_description") or f"Updated {prompt_name}",
-        )
-        if deployment_info:
-            result["deployment_version"] = deployment_info["deployment_version"]
-            result["blueprint_id"] = deployment_info["blueprint_id"]
+    # NOTE: Deployment versions are only created via explicit commit endpoint
+    # SDK calls (from agents, optimizer tests, etc.) don't create deployment versions
 
     return jsonify(result), 201
 
@@ -1715,7 +1735,8 @@ def get_version_diff(blueprint_id: str, version_number: int):
 
     Shows what changed (like a PR diff) including:
     - Added/removed/modified prompts
-    - Line-by-line diff for each modified prompt
+    - Added/removed/modified config values
+    - Line-by-line diff for each modified item
 
     Response:
     {
@@ -1724,7 +1745,8 @@ def get_version_diff(blueprint_id: str, version_number: int):
         "changes": [
             {
                 "type": "modified",  // "added" | "removed" | "modified"
-                "prompt_name": "Researcher System Prompt",
+                "name": "AgentConfig.researcher_system_prompt",
+                "category": "prompt",  // "prompt" | "config"
                 "diff": [
                     {"type": "context", "content": "You are a research...", "line": 1},
                     {"type": "deletion", "content": "- old line", "line": 2},
@@ -1736,7 +1758,9 @@ def get_version_diff(blueprint_id: str, version_number: int):
         "summary": {
             "added": 0,
             "removed": 0,
-            "modified": 1
+            "modified": 1,
+            "prompts_changed": 1,
+            "config_changed": 0
         }
     }
     """
@@ -1757,44 +1781,89 @@ def get_version_diff(blueprint_id: str, version_number: int):
 
     current_prompts = current.get("snapshot", {}).get("prompts", {})
     previous_prompts = previous.get("snapshot", {}).get("prompts", {}) if previous else {}
+    current_config = current.get("snapshot", {}).get("config", {})
+    previous_config = previous.get("snapshot", {}).get("config", {}) if previous else {}
 
     changes = []
-    summary = {"added": 0, "removed": 0, "modified": 0}
+    summary = {"added": 0, "removed": 0, "modified": 0, "prompts_changed": 0, "config_changed": 0}
 
-    # Find added and modified prompts
+    # Diff prompts
     for name, current_value in current_prompts.items():
         if name not in previous_prompts:
-            # New prompt
             summary["added"] += 1
+            summary["prompts_changed"] += 1
             changes.append({
                 "type": "added",
-                "prompt_name": name,
+                "name": name,
+                "category": "prompt",
                 "content": current_value,
                 "diff": None,
             })
         else:
-            # Check if modified
             prev_value = previous_prompts[name]
             curr_text = _extract_prompt_text(current_value)
             prev_text = _extract_prompt_text(prev_value)
 
             if curr_text != prev_text:
                 summary["modified"] += 1
+                summary["prompts_changed"] += 1
                 diff_lines = _compute_diff_lines(prev_text, curr_text)
                 changes.append({
                     "type": "modified",
-                    "prompt_name": name,
+                    "name": name,
+                    "category": "prompt",
                     "diff": diff_lines,
                 })
 
-    # Find removed prompts
     for name in previous_prompts:
         if name not in current_prompts:
             summary["removed"] += 1
+            summary["prompts_changed"] += 1
             changes.append({
                 "type": "removed",
-                "prompt_name": name,
+                "name": name,
+                "category": "prompt",
                 "content": previous_prompts[name],
+                "diff": None,
+            })
+
+    # Diff config values
+    for name, current_value in current_config.items():
+        if name not in previous_config:
+            summary["added"] += 1
+            summary["config_changed"] += 1
+            changes.append({
+                "type": "added",
+                "name": name,
+                "category": "config",
+                "content": current_value,
+                "diff": None,
+            })
+        else:
+            prev_value = previous_config[name]
+            curr_text = _format_config_value(current_value)
+            prev_text = _format_config_value(prev_value)
+
+            if curr_text != prev_text:
+                summary["modified"] += 1
+                summary["config_changed"] += 1
+                diff_lines = _compute_diff_lines(prev_text, curr_text)
+                changes.append({
+                    "type": "modified",
+                    "name": name,
+                    "category": "config",
+                    "diff": diff_lines,
+                })
+
+    for name in previous_config:
+        if name not in current_config:
+            summary["removed"] += 1
+            summary["config_changed"] += 1
+            changes.append({
+                "type": "removed",
+                "name": name,
+                "category": "config",
+                "content": previous_config[name],
                 "diff": None,
             })
 
@@ -1835,6 +1904,21 @@ def _extract_prompt_text(value: dict | str) -> str:
         import json
         return json.dumps(value, indent=2)
     return str(value)
+
+
+def _format_config_value(value: Any) -> str:
+    """Format a config value for diff comparison."""
+    import json
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return value
+    # For complex types, use JSON
+    return json.dumps(value, indent=2, sort_keys=True)
 
 
 def _compute_diff_lines(old_text: str, new_text: str) -> list[dict]:
@@ -1897,4 +1981,4 @@ def _compute_diff_lines(old_text: str, new_text: str) -> list[dict]:
 
 
 def run_service(host: str = "127.0.0.1", port: int = 5050, debug: bool = False) -> None:
-    app.run(host=host, port=port, debug=debug)
+    app.run(host=host, port=port, debug=debug, use_reloader=False)

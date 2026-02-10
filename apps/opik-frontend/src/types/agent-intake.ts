@@ -176,6 +176,12 @@ export type PromptChange = {
   diff?: DiffChange[];
 };
 
+export type ScalarChange = {
+  key: string;
+  original_value: unknown;
+  modified_value: unknown;
+};
+
 export type OptimizationCompleteEvent = {
   type: OPTIMIZE_EVENT_TYPE.optimization_complete;
   success: boolean;
@@ -183,6 +189,7 @@ export type OptimizationCompleteEvent = {
   iterations?: number;
   changes: OptimizationChange[];
   prompt_changes?: PromptChange[];
+  scalar_changes?: ScalarChange[];
   experiment_traces?: Record<string, string>;
   final_assertion_results?: AssertionResult[];
 };

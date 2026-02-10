@@ -6,7 +6,8 @@ import {
   ColumnPinningState,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { FlaskConical, Pencil, FileText, Sparkles, Split } from "lucide-react";
+import { FlaskConical, Pencil, FileText, Sparkles, Split, ChevronDown, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 
 import { COLUMN_SELECT_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -73,6 +74,72 @@ const parsePromptValue = (value: unknown): PromptValue | null => {
   return null;
 };
 
+type DiffLineType = "addition" | "deletion" | "context";
+type DiffLine = { type: DiffLineType; content: string };
+
+const computeSimpleDiff = (oldText: string, newText: string): DiffLine[] => {
+  const oldLines = oldText.split("\n");
+  const newLines = newText.split("\n");
+  const diff: DiffLine[] = [];
+
+  const maxLen = Math.max(oldLines.length, newLines.length);
+  for (let i = 0; i < maxLen; i++) {
+    const oldLine = oldLines[i];
+    const newLine = newLines[i];
+
+    if (oldLine === newLine) {
+      diff.push({ type: "context", content: oldLine ?? "" });
+    } else {
+      if (oldLine !== undefined) {
+        diff.push({ type: "deletion", content: oldLine });
+      }
+      if (newLine !== undefined) {
+        diff.push({ type: "addition", content: newLine });
+      }
+    }
+  }
+  return diff;
+};
+
+const extractPromptText = (promptValue: PromptValue | null): string => {
+  if (!promptValue) return "";
+  if (typeof promptValue.prompt === "string") return promptValue.prompt;
+  if (typeof promptValue.prompt === "object" && promptValue.prompt !== null) {
+    return JSON.stringify(promptValue.prompt, null, 2);
+  }
+  return String(promptValue.prompt ?? "");
+};
+
+const InlineDiffView: React.FC<{ diff: DiffLine[] }> = ({ diff }) => {
+  if (!diff || diff.length === 0) return null;
+
+  const hasChanges = diff.some((line) => line.type !== "context");
+  if (!hasChanges) return null;
+
+  return (
+    <div className="mt-2 overflow-x-auto rounded border bg-muted/30 font-mono text-xs">
+      {diff.map((line, idx) => (
+        <div
+          key={idx}
+          className={cn("flex px-2 py-0.5", {
+            "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300":
+              line.type === "addition",
+            "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300":
+              line.type === "deletion",
+            "text-muted-slate": line.type === "context",
+          })}
+        >
+          <span className="mr-2 w-3 shrink-0">
+            {line.type === "addition" && "+"}
+            {line.type === "deletion" && "-"}
+          </span>
+          <span className="whitespace-pre-wrap break-all">{line.content}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const KeyCell = (context: CellContext<ConfigVariable, string>) => {
   const { column, table, row } = context;
   const value = context.getValue();
@@ -99,14 +166,65 @@ const KeyCell = (context: CellContext<ConfigVariable, string>) => {
   );
 };
 
+const PromptDiffCell: React.FC<{
+  currentValue: unknown;
+  fallbackValue: unknown;
+  version: number;
+  variableKey: string;
+}> = ({ currentValue, fallbackValue, version, variableKey }) => {
+  const [expanded, setExpanded] = useState(false);
+  const promptData = parsePromptValue(currentValue);
+  const fallbackData = parsePromptValue(fallbackValue);
+
+  const currentText = extractPromptText(promptData);
+  const fallbackText = extractPromptText(fallbackData);
+  const hasChanges = version > 1 && currentText !== fallbackText;
+  const diff = hasChanges ? computeSimpleDiff(fallbackText, currentText) : [];
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-1">
+        {hasChanges && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+            className="shrink-0 text-muted-slate hover:text-foreground"
+          >
+            {expanded ? (
+              <ChevronDown className="size-3" />
+            ) : (
+              <ChevronRight className="size-3" />
+            )}
+          </button>
+        )}
+        <span className="truncate text-sm">
+          {promptData?.prompt_name ?? String(currentValue)}
+        </span>
+        {hasChanges && (
+          <Tag variant="purple" size="sm" className="ml-1 shrink-0">
+            modified
+          </Tag>
+        )}
+      </div>
+      <div className="flex items-center gap-1 text-xs text-muted-slate">
+        <span>╰</span>
+        <code className="font-mono">
+          {generateFakeCommitId(variableKey, version)}
+        </code>
+      </div>
+      {expanded && hasChanges && <InlineDiffView diff={diff} />}
+    </div>
+  );
+};
+
 const CurrentValueCell = (
   context: CellContext<ConfigVariable, string | number | boolean>,
 ) => {
   const { column, table, row } = context;
   const value = context.getValue();
-  const { type, version, key } = row.original;
-
-  const promptData = type === "prompt" ? parsePromptValue(value) : null;
+  const { type, version, key, fallback } = row.original;
 
   return (
     <CellWrapper
@@ -114,17 +232,12 @@ const CurrentValueCell = (
       tableMetadata={table.options.meta}
     >
       {type === "prompt" ? (
-        <div className="flex flex-col">
-          <span className="truncate text-sm">
-            {promptData?.prompt_name ?? String(value)}
-          </span>
-          <div className="flex items-center gap-1 text-xs text-muted-slate">
-            <span>╰─</span>
-            <code className="font-mono">
-              {generateFakeCommitId(key, version)}
-            </code>
-          </div>
-        </div>
+        <PromptDiffCell
+          currentValue={value}
+          fallbackValue={fallback}
+          version={version}
+          variableKey={key}
+        />
       ) : type === "boolean" ? (
         <Tag variant={value ? "green" : "gray"} size="sm">
           {String(value)}
@@ -156,7 +269,7 @@ const FallbackCell = (
             {promptData?.prompt_name ?? String(value)}
           </span>
           <div className="flex items-center gap-1 text-xs text-muted-slate">
-            <span>╰─</span>
+            <span>╰</span>
             <code className="font-mono">{generateFakeCommitId(key, 1)}</code>
           </div>
         </div>

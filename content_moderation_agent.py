@@ -7,7 +7,7 @@ os.environ["OPIK_URL_OVERRIDE"] = "http://localhost:5174/api/"
 import json
 import opik
 from dataclasses import dataclass, field
-from typing import TypedDict, Optional
+from typing import Annotated, Optional
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -18,21 +18,11 @@ from opik_config import Prompt, experiment_context, agent_config
 
 
 # ============================================================================
-# Configuration
+# Default Prompt Text
 # ============================================================================
 
-@agent_config
-@dataclass
-class ModerationConfig:
-    """Configuration for the content moderation agent."""
-
-    # Scalar knob for precision/recall tradeoff
-    risk_tolerance: float = field(default=0.5)
-
-    # Prompt A - Extract risky elements (high recall)
-    extract_system_prompt: Prompt = field(default_factory=lambda: Prompt(
-        name="Extract Risk Elements",
-        prompt="""You are a content moderation analyst. Your task is to identify ALL potentially policy-relevant elements in the given text.
+EXTRACT_SYSTEM_PROMPT = """\
+You are a content moderation analyst. Your task is to identify ALL potentially policy-relevant elements in the given text.
 
 IMPORTANT: Prioritize HIGH RECALL. Include borderline cases - it's better to flag something that turns out to be fine than to miss something harmful.
 
@@ -62,11 +52,9 @@ Rules:
 2. Include items even with low confidence if they could be policy-relevant
 3. If no risks found, return {"risk_items": []}
 4. Return ONLY the JSON object, no other text"""
-    ))
 
-    extract_user_prompt: Prompt = field(default_factory=lambda: Prompt(
-        name="Extract User Prompt",
-        prompt="""Analyze this content for policy violations:
+EXTRACT_USER_PROMPT = """\
+Analyze this content for policy violations:
 
 CONTENT:
 {content}
@@ -77,12 +65,9 @@ CONTEXT:
 - Prior violations: {prior_violations}
 
 Extract all potentially risky elements. Remember: high recall is critical."""
-    ))
 
-    # Prompt B - Score severity (calibrated scoring)
-    score_system_prompt: Prompt = field(default_factory=lambda: Prompt(
-        name="Score Severity",
-        prompt="""You are a content moderation scoring system. Given extracted risk items, you must produce calibrated severity scores.
+SCORE_SYSTEM_PROMPT = """\
+You are a content moderation scoring system. Given extracted risk items, you must produce calibrated severity scores.
 
 You must return ONLY valid JSON with this exact structure:
 {
@@ -118,11 +103,9 @@ The "uncertainty" score reflects how confident you are in the overall assessment
 - Low uncertainty (<0.3) when: clear-cut violations or clearly safe content
 
 Return ONLY the JSON object, no other text."""
-    ))
 
-    score_user_prompt: Prompt = field(default_factory=lambda: Prompt(
-        name="Score User Prompt",
-        prompt="""Score the severity of these extracted risk items:
+SCORE_USER_PROMPT = """\
+Score the severity of these extracted risk items:
 
 ORIGINAL CONTENT:
 {content}
@@ -136,12 +119,9 @@ CONTEXT:
 - Prior violations: {prior_violations}
 
 Provide calibrated severity scores."""
-    ))
 
-    # Prompt C - Explain decision (no control authority)
-    explain_system_prompt: Prompt = field(default_factory=lambda: Prompt(
-        name="Explain Decision",
-        prompt="""You are a content moderation explanation generator. Given the moderation decision that has ALREADY been made, provide a clear rationale.
+EXPLAIN_SYSTEM_PROMPT = """\
+You are a content moderation explanation generator. Given the moderation decision that has ALREADY been made, provide a clear rationale.
 
 IMPORTANT: You do NOT choose the action. The action has already been determined. Your job is only to explain it.
 
@@ -164,11 +144,9 @@ User message guidelines:
 - For ESCALATE: leave empty (human reviewer will handle)
 
 Return ONLY the JSON object, no other text."""
-    ))
 
-    explain_user_prompt: Prompt = field(default_factory=lambda: Prompt(
-        name="Explain User Prompt",
-        prompt="""Generate an explanation for this moderation decision:
+EXPLAIN_USER_PROMPT = """\
+Generate an explanation for this moderation decision:
 
 CONTENT:
 {content}
@@ -187,7 +165,58 @@ THRESHOLDS USED:
 - Escalate threshold: {t_escalate}
 
 Explain why this decision was made."""
-    ))
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+@agent_config
+@dataclass
+class ModerationConfig:
+    """Configuration for the content moderation agent."""
+
+    risk_tolerance: Annotated[
+        float,
+        "THIS THE PRIMARY MECHANISM FOR LOWERING THE NUMBER OF ESCALATIONS!",
+        "Fed to compute_thresholds() which linearly scales t_warn, t_remove, t_escalate",
+        "Higher values make thresholds more lenient (fewer removals/escalations)",
+        ".5 is a good balance between false positives and false negatives and minimizes escalations"
+    ] = 0.5
+
+    extract_system_prompt: Annotated[
+        Prompt,
+        "Output is JSON-parsed; risk_items array is passed verbatim to scoring stage",
+        "First stage in 3-stage pipeline - runs before any scoring or decisions",
+    ] = field(default_factory=lambda: Prompt(name="Extract Risk Elements", prompt=EXTRACT_SYSTEM_PROMPT))
+
+    extract_user_prompt: Annotated[
+        Prompt,
+        "Formatted with {content}, {channel}, {region}, {prior_violations} from request context",
+    ] = field(default_factory=lambda: Prompt(name="Extract User Prompt", prompt=EXTRACT_USER_PROMPT))
+
+    score_system_prompt: Annotated[
+        Prompt,
+        "Output is JSON-parsed; scores.overall and scores.uncertainty drive determine_action()",
+        "overall < t_warn -> ALLOW, < t_remove -> WARN, < t_escalate -> REMOVE, else ESCALATE",
+        "uncertainty >= 0.7 with moderate risk forces ESCALATE for human review",
+    ] = field(default_factory=lambda: Prompt(name="Score Severity", prompt=SCORE_SYSTEM_PROMPT))
+
+    score_user_prompt: Annotated[
+        Prompt,
+        "Receives risk_items JSON from extract stage; formatted with same context variables",
+    ] = field(default_factory=lambda: Prompt(name="Score User Prompt", prompt=SCORE_USER_PROMPT))
+
+    explain_system_prompt: Annotated[
+        Prompt,
+        "Runs AFTER determine_action() - decision is already made and passed in",
+        "Output shown to end users (user_message) and moderators (mod_notes)",
+    ] = field(default_factory=lambda: Prompt(name="Explain Decision", prompt=EXPLAIN_SYSTEM_PROMPT))
+
+    explain_user_prompt: Annotated[
+        Prompt,
+        "Receives the final decision + all scores/thresholds for explanation generation",
+    ] = field(default_factory=lambda: Prompt(name="Explain User Prompt", prompt=EXPLAIN_USER_PROMPT))
 
 
 config = ModerationConfig()
@@ -198,11 +227,15 @@ config = ModerationConfig()
 # ============================================================================
 
 def compute_thresholds(risk_tolerance: float) -> dict:
-    """Compute action thresholds from risk_tolerance scalar."""
+    """Compute action thresholds from risk_tolerance scalar.
+
+    At tolerance=0.0 (aggressive): t_warn=0.05, t_remove=0.15, t_escalate=0.30
+    At tolerance=1.0 (lenient):    t_warn=0.70, t_remove=0.85, t_escalate=0.95
+    """
     return {
-        "t_warn": 0.25 + 0.25 * risk_tolerance,
-        "t_remove": 0.45 + 0.35 * risk_tolerance,
-        "t_escalate": 0.65 + 0.25 * risk_tolerance,
+        "t_warn": 0.05 + 0.65 * risk_tolerance,
+        "t_remove": 0.15 + 0.70 * risk_tolerance,
+        "t_escalate": 0.30 + 0.65 * risk_tolerance,
     }
 
 
@@ -300,6 +333,7 @@ def moderate_content(
 
     # Use provided risk_tolerance or fall back to config
     tolerance = risk_tolerance if risk_tolerance is not None else config.risk_tolerance
+    print(tolerance)
     thresholds = compute_thresholds(tolerance)
 
     print(f"\n[Moderation] Processing content ({len(content)} chars)")
@@ -353,6 +387,9 @@ def moderate_content(
     # -------------------------------------------------------------------------
     decision = determine_action(overall, uncertainty, prior_violations, thresholds)
     print(f"[Moderation] Decision: {decision}")
+
+    if decision == "ESCALATE":
+        opik.opik_context.update_current_trace(tags=["escalate"])
 
     # -------------------------------------------------------------------------
     # Stage C: Explain decision
@@ -442,4 +479,8 @@ def chat():
 
 
 if __name__ == "__main__":
+    print("Running sample moderation to verify setup...")
+    result = moderate_content("This is a test message to verify the agent is working.")
+    print(f"Sample result: decision={result['decision']}, overall={result['scores'].get('overall', 0)}")
+    print("\nStarting Flask server on port 8001...")
     app.run(port=8001)

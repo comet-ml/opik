@@ -168,7 +168,8 @@ def _resolve_all_fields(
                 # Check if key was resolved or is missing
                 if key in response.get("resolved_values", {}):
                     raw_value = response["resolved_values"][key]
-                    resolved_values[field_name] = _decode_value(raw_value, type_hint, default)
+                    base_type = _unwrap_annotated(type_hint)
+                    resolved_values[field_name] = _decode_value(raw_value, base_type, default)
                 else:
                     # Key is missing from backend, use default
                     resolved_values[field_name] = default
@@ -446,9 +447,9 @@ def agent_config(
         original_getattribute = cls.__getattribute__
         original_init = cls.__init__
 
-        # Get type hints for decoding
+        # Get type hints for decoding (include_extras=True preserves Annotated)
         try:
-            type_hints = get_type_hints(cls)
+            type_hints = get_type_hints(cls, include_extras=True)
         except Exception:
             type_hints = {}
 

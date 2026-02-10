@@ -12,6 +12,7 @@ import {
   Plus,
   Minus,
   FileEdit,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -123,7 +124,54 @@ const PromptContent: React.FC<{ value: unknown; name: string }> = ({
   );
 };
 
-const ChangedPrompt: React.FC<{ change: VersionChange }> = ({ change }) => {
+const ConfigContent: React.FC<{ value: unknown; name: string }> = ({
+  value,
+  name,
+}) => {
+  const [expanded, setExpanded] = useState(true);
+
+  const formatValue = (val: unknown): string => {
+    if (val === null) return "null";
+    if (typeof val === "boolean") return val ? "true" : "false";
+    if (typeof val === "number") return String(val);
+    if (typeof val === "string") return val;
+    return JSON.stringify(val, null, 2);
+  };
+
+  const content = formatValue(value);
+  const isSimple = typeof value !== "object" || value === null;
+
+  return (
+    <div className="rounded-lg border bg-background">
+      <button
+        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/30"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? (
+          <ChevronDown className="size-4 text-muted-slate" />
+        ) : (
+          <ChevronRight className="size-4 text-muted-slate" />
+        )}
+        <Settings className="size-4 text-muted-slate" />
+        <span className="font-medium">{name}</span>
+        {isSimple && (
+          <span className="ml-auto font-mono text-sm text-muted-slate">
+            {content}
+          </span>
+        )}
+      </button>
+      {expanded && !isSimple && (
+        <div className="border-t px-4 py-3">
+          <pre className="whitespace-pre-wrap break-words font-mono text-sm text-muted-slate">
+            {content}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ChangedItem: React.FC<{ change: VersionChange }> = ({ change }) => {
   const [expanded, setExpanded] = useState(true);
 
   const Icon =
@@ -145,6 +193,9 @@ const ChangedPrompt: React.FC<{ change: VersionChange }> = ({ change }) => {
         ? "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-900/20"
         : "border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/20";
 
+  const isConfig = change.category === "config";
+  const CategoryIcon = isConfig ? Settings : FileText;
+
   return (
     <div className={cn("rounded-lg border", bgClass)}>
       <button
@@ -161,7 +212,8 @@ const ChangedPrompt: React.FC<{ change: VersionChange }> = ({ change }) => {
           <span className="size-4" />
         )}
         <Icon className={cn("size-4", colorClass)} />
-        <span className="font-medium">{change.prompt_name}</span>
+        <CategoryIcon className="size-3 text-muted-slate" />
+        <span className="font-medium">{change.name}</span>
         <span
           className={cn(
             "rounded px-1.5 py-0.5 text-xs font-medium uppercase",
@@ -170,6 +222,11 @@ const ChangedPrompt: React.FC<{ change: VersionChange }> = ({ change }) => {
         >
           {change.type}
         </span>
+        {isConfig && (
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-slate">
+            config
+          </span>
+        )}
       </button>
       {expanded && change.diff && (
         <div className="border-t px-4 py-3">
@@ -225,7 +282,10 @@ const VersionDetailPage: React.FC<VersionDetailPageProps> = ({
   });
 
   const prompts = version.snapshot?.prompts || {};
+  const config = version.snapshot?.config || {};
   const promptNames = Object.keys(prompts);
+  const configNames = Object.keys(config);
+  const totalItems = promptNames.length + configNames.length;
 
   // Get environments pointing to this version
   const envs = history
@@ -300,11 +360,17 @@ const VersionDetailPage: React.FC<VersionDetailPageProps> = ({
                     {diffData.summary.removed} removed
                   </span>
                 )}
+                {diffData.summary.prompts_changed > 0 &&
+                  diffData.summary.config_changed > 0 && (
+                    <span className="ml-3 text-muted-slate/70">
+                      ({diffData.summary.prompts_changed} prompt
+                      {diffData.summary.prompts_changed !== 1 ? "s" : ""},{" "}
+                      {diffData.summary.config_changed} config)
+                    </span>
+                  )}
                 {!diffData.summary.modified &&
                   !diffData.summary.added &&
-                  !diffData.summary.removed && (
-                    <span>No prompt changes</span>
-                  )}
+                  !diffData.summary.removed && <span>No changes</span>}
               </p>
             )}
           </div>
@@ -320,7 +386,7 @@ const VersionDetailPage: React.FC<VersionDetailPageProps> = ({
             ) : (
               <div className="space-y-3">
                 {diffData.changes.map((change, idx) => (
-                  <ChangedPrompt key={idx} change={change} />
+                  <ChangedItem key={idx} change={change} />
                 ))}
               </div>
             )}
@@ -333,19 +399,50 @@ const VersionDetailPage: React.FC<VersionDetailPageProps> = ({
         <div className="border-b px-4 py-3">
           <h2 className="font-medium">Configuration Snapshot</h2>
           <p className="mt-1 text-sm text-muted-slate">
-            All {promptNames.length} prompt{promptNames.length !== 1 ? "s" : ""}{" "}
-            at this version
+            {promptNames.length > 0 && (
+              <span>
+                {promptNames.length} prompt{promptNames.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            {promptNames.length > 0 && configNames.length > 0 && ", "}
+            {configNames.length > 0 && (
+              <span>
+                {configNames.length} config value
+                {configNames.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            {totalItems === 0 && "Empty snapshot"}
           </p>
         </div>
         <div className="space-y-3 p-4">
-          {promptNames.length === 0 ? (
+          {totalItems === 0 ? (
             <div className="py-8 text-center text-sm text-muted-slate">
-              No prompts in this snapshot
+              No items in this snapshot
             </div>
           ) : (
-            promptNames.map((name) => (
-              <PromptContent key={name} name={name} value={prompts[name]} />
-            ))
+            <>
+              {promptNames.length > 0 && (
+                <div className="space-y-3">
+                  {promptNames.map((name) => (
+                    <PromptContent key={name} name={name} value={prompts[name]} />
+                  ))}
+                </div>
+              )}
+              {configNames.length > 0 && (
+                <div className="space-y-3">
+                  {promptNames.length > 0 && (
+                    <div className="my-4 border-t pt-4">
+                      <h3 className="mb-3 text-sm font-medium text-muted-slate">
+                        Config Values
+                      </h3>
+                    </div>
+                  )}
+                  {configNames.map((name) => (
+                    <ConfigContent key={name} name={name} value={config[name]} />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

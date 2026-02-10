@@ -6,12 +6,13 @@ import {
   Loader2,
   MessageSquare,
   FileText,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tag } from "@/components/ui/tag";
-import { PromptChange, DiffLine, DiffChange } from "@/types/agent-intake";
+import { PromptChange, DiffLine, DiffChange, ScalarChange } from "@/types/agent-intake";
 import {
   commitOptimization,
   CommitResult,
@@ -20,6 +21,7 @@ import {
 type OptimizationChangesPanelProps = {
   optimizationId: string;
   promptChanges: PromptChange[];
+  scalarChanges?: ScalarChange[];
   onCommitComplete: (result: CommitResult) => void;
   onDiscard: () => void;
 };
@@ -145,6 +147,66 @@ const PromptDiff: React.FC<{
   );
 };
 
+const formatScalarValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? String(value) : value.toFixed(4);
+  }
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return `"${value}"`;
+  return JSON.stringify(value);
+};
+
+const ScalarChangeItem: React.FC<{
+  change: ScalarChange;
+  isChecked: boolean;
+  onToggle: () => void;
+}> = ({ change, isChecked, onToggle }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="rounded-lg border bg-background">
+      <div className="flex items-center gap-3 p-3">
+        <Checkbox
+          checked={isChecked}
+          onCheckedChange={onToggle}
+          id={`scalar-${change.key}`}
+        />
+        <button
+          type="button"
+          className="flex flex-1 items-center gap-2"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          {isExpanded ? (
+            <ChevronDown className="size-4 text-muted-slate" />
+          ) : (
+            <ChevronRight className="size-4 text-muted-slate" />
+          )}
+          <span className="comet-body-s font-medium text-foreground">
+            {change.key}
+          </span>
+          <Tag variant="gray" size="sm">
+            <SlidersHorizontal className="mr-1 size-3" />
+            scalar
+          </Tag>
+        </button>
+      </div>
+      {isExpanded && (
+        <div className="border-t px-3 pb-3 pt-2">
+          <div className="rounded bg-muted/30 p-2 font-mono text-xs">
+            <div className="text-red-600 line-through opacity-75">
+              - {formatScalarValue(change.original_value)}
+            </div>
+            <div className="text-green-700">
+              + {formatScalarValue(change.modified_value)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const PromptChangeItem: React.FC<{
   change: PromptChange;
   isChecked: boolean;
@@ -201,37 +263,51 @@ const PromptChangeItem: React.FC<{
 const OptimizationChangesPanel: React.FC<OptimizationChangesPanelProps> = ({
   optimizationId,
   promptChanges,
+  scalarChanges = [],
   onCommitComplete,
   onDiscard,
 }) => {
   const [checkedState, setCheckedState] = useState<Record<string, boolean>>(
-    () =>
-      promptChanges.reduce(
-        (acc, change) => {
-          acc[change.prompt_name] = true;
-          return acc;
-        },
-        {} as Record<string, boolean>
-      )
+    () => {
+      const state: Record<string, boolean> = {};
+      promptChanges.forEach((change) => {
+        state[`prompt:${change.prompt_name}`] = true;
+      });
+      scalarChanges.forEach((change) => {
+        state[`scalar:${change.key}`] = true;
+      });
+      return state;
+    }
   );
   const [isCommitting, setIsCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedCount = Object.values(checkedState).filter(Boolean).length;
 
-  const handleToggle = useCallback((promptName: string) => {
+  const handleTogglePrompt = useCallback((promptName: string) => {
     setCheckedState((prev) => ({
       ...prev,
-      [promptName]: !prev[promptName],
+      [`prompt:${promptName}`]: !prev[`prompt:${promptName}`],
+    }));
+  }, []);
+
+  const handleToggleScalar = useCallback((key: string) => {
+    setCheckedState((prev) => ({
+      ...prev,
+      [`scalar:${key}`]: !prev[`scalar:${key}`],
     }));
   }, []);
 
   const handleSave = useCallback(async () => {
     const selectedPrompts = Object.entries(checkedState)
-      .filter(([_, checked]) => checked)
-      .map(([name]) => name);
+      .filter(([key, checked]) => checked && key.startsWith("prompt:"))
+      .map(([key]) => key.replace("prompt:", ""));
 
-    if (selectedPrompts.length === 0) return;
+    const selectedScalars = Object.entries(checkedState)
+      .filter(([key, checked]) => checked && key.startsWith("scalar:"))
+      .map(([key]) => key.replace("scalar:", ""));
+
+    if (selectedPrompts.length === 0 && selectedScalars.length === 0) return;
 
     setIsCommitting(true);
     setError(null);
@@ -240,6 +316,7 @@ const OptimizationChangesPanel: React.FC<OptimizationChangesPanelProps> = ({
       const result = await commitOptimization({
         optimization_id: optimizationId,
         prompt_names: selectedPrompts,
+        scalar_keys: selectedScalars,
         project_id: "default",
         metadata: { optimizer_generated: true },
       });
@@ -251,6 +328,8 @@ const OptimizationChangesPanel: React.FC<OptimizationChangesPanelProps> = ({
     }
   }, [checkedState, optimizationId, onCommitComplete]);
 
+  const totalChanges = promptChanges.length + scalarChanges.length;
+
   return (
     <div className="rounded-lg border bg-green-50">
       <div className="border-b border-green-200 px-4 py-3">
@@ -258,19 +337,31 @@ const OptimizationChangesPanel: React.FC<OptimizationChangesPanelProps> = ({
           Optimization Complete!
         </div>
         <div className="comet-body-s text-green-700">
-          {promptChanges.length} prompt
-          {promptChanges.length !== 1 ? "s were" : " was"} modified to pass all
+          {totalChanges} {totalChanges === 1 ? "value was" : "values were"} modified to pass all
           assertions.
+          {promptChanges.length > 0 && scalarChanges.length > 0 && (
+            <span className="text-green-600">
+              {" "}({promptChanges.length} prompt{promptChanges.length !== 1 ? "s" : ""}, {scalarChanges.length} scalar{scalarChanges.length !== 1 ? "s" : ""})
+            </span>
+          )}
         </div>
       </div>
 
       <div className="space-y-2 p-4">
+        {scalarChanges.map((change) => (
+          <ScalarChangeItem
+            key={change.key}
+            change={change}
+            isChecked={checkedState[`scalar:${change.key}`]}
+            onToggle={() => handleToggleScalar(change.key)}
+          />
+        ))}
         {promptChanges.map((change) => (
           <PromptChangeItem
             key={change.prompt_name}
             change={change}
-            isChecked={checkedState[change.prompt_name]}
-            onToggle={() => handleToggle(change.prompt_name)}
+            isChecked={checkedState[`prompt:${change.prompt_name}`]}
+            onToggle={() => handleTogglePrompt(change.prompt_name)}
           />
         ))}
       </div>

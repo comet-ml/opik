@@ -355,6 +355,7 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
                 changes: result.changes,
                 optimizationId: result.optimizationId,
                 promptChanges: result.promptChanges,
+                scalarChanges: result.scalarChanges,
                 experimentTraces: result.experimentTraces,
                 finalAssertionResults: result.finalAssertionResults,
               });
@@ -505,7 +506,7 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
                     <OptimizationProgress
                       runs={optimization.runs}
                       isOptimizing={optimization.isOptimizing}
-                      isComplete={optimization.isComplete && !optimization.promptChanges?.length}
+                      isComplete={optimization.isComplete && !optimization.promptChanges?.length && !optimization.scalarChanges?.length}
                       success={optimization.success}
                       cancelled={optimization.cancelled}
                       changes={optimization.changes}
@@ -530,18 +531,20 @@ const AgentIntakeViewer: React.FC<AgentIntakeViewerProps> = ({
                     />
                     {optimization.isComplete &&
                       optimization.success &&
-                      optimization.promptChanges &&
-                      optimization.promptChanges.length > 0 &&
+                      ((optimization.promptChanges && optimization.promptChanges.length > 0) ||
+                       (optimization.scalarChanges && optimization.scalarChanges.length > 0)) &&
                       !optimization.commitResult && (
                         <OptimizationChangesPanel
                           optimizationId={optimization.optimizationId || ""}
-                          promptChanges={optimization.promptChanges}
+                          promptChanges={optimization.promptChanges || []}
+                          scalarChanges={optimization.scalarChanges}
                           onCommitComplete={(result) => {
                             updateOptimization(traceId, { commitResult: result });
                           }}
                           onDiscard={() => {
                             updateOptimization(traceId, {
                               promptChanges: [],
+                              scalarChanges: [],
                             });
                           }}
                         />

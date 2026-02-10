@@ -18,6 +18,7 @@ export type ConfigVariable = {
   lastUsed: string;
   version: number;
   experimentCount: number;
+  annotations?: string[];
 };
 
 export type ExperimentOverride = {
@@ -65,6 +66,9 @@ type PublishedValue = {
   value: unknown;
   value_id: number;
   updated_at: string;
+  original_value?: unknown;
+  version?: number;
+  annotations?: string[];
 };
 
 type Mask = {
@@ -122,15 +126,16 @@ const fetchConfigData = async (projectId: string): Promise<ConfigData> => {
     }
   }
 
-  const variables: ConfigVariable[] = published.map((item, index) => ({
+  const variables: ConfigVariable[] = published.map((item) => ({
     id: item.key,
     key: item.key,
     currentValue: item.value as ConfigValueType,
-    fallback: item.value as ConfigValueType,
+    fallback: (item.original_value ?? item.value) as ConfigValueType,
     type: inferType(item.value, item.key),
     lastUsed: item.updated_at,
-    version: index + 1,
+    version: item.version ?? 1,
     experimentCount: experimentCountMap.get(item.key)?.size ?? 0,
+    annotations: item.annotations,
   }));
 
   const experiments: ConfigExperiment[] = masks.map((mask) => {

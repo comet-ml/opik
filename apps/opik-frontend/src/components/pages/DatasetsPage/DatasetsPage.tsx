@@ -167,7 +167,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
 ];
 
-const EVAL_PROJECT_NAME = "itamar_agent_app";
+const EVAL_PROJECT_NAME = "content_moderation_agent";
 
 const DatasetsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);

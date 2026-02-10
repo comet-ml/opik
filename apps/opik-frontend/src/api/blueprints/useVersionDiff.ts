@@ -15,7 +15,8 @@ export type DiffLine = {
 
 export type VersionChange = {
   type: "added" | "removed" | "modified";
-  prompt_name: string;
+  name: string;
+  category: "prompt" | "config";
   diff: DiffLine[] | null;
   content?: unknown;
 };
@@ -28,6 +29,8 @@ export type VersionDiff = {
     added: number;
     removed: number;
     modified: number;
+    prompts_changed: number;
+    config_changed: number;
   };
 };
 

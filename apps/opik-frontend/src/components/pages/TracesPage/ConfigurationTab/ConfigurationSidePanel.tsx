@@ -120,6 +120,17 @@ const ConfigurationSidePanel: React.FC<ConfigurationSidePanelProps> = ({
             </div>
           </div>
 
+          {variable.annotations && variable.annotations.length > 0 && (
+            <div>
+              <h3 className="mb-2 text-sm font-medium">Context</h3>
+              <ul className="list-inside list-disc space-y-1 text-sm text-muted-slate">
+                {variable.annotations.map((annotation, idx) => (
+                  <li key={idx}>{annotation}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <Separator />
 
           {isPromptType ? (
@@ -142,14 +153,6 @@ const ConfigurationSidePanel: React.FC<ConfigurationSidePanelProps> = ({
               </div>
             </div>
           )}
-
-          <Separator />
-
-          <div className="text-sm text-muted-slate">
-            <p>
-              Changes made here will be picked up by agents on their next run.
-            </p>
-          </div>
         </div>
       </div>
 
