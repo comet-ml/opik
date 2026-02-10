@@ -35,11 +35,10 @@ const useSpanBatchUpdateMutation = () => {
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        get(error, ["response", "data", "errors", "0"]) ??
+        get(error, ["response", "data", "message"]) ??
+        error.message;
 
       toast({
         title: "Error",

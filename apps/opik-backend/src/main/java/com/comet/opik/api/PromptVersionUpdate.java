@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 
 import java.util.Set;
@@ -42,5 +44,5 @@ public record PromptVersionUpdate(
                 - If merge_tags is false, these tags will replace all existing tags.
                 - null: preserve existing tags (no change).
                 - empty set: clear all tags when merge_tags is false.
-                """) Set<@NotBlank String> tags) {
+                """) @Valid @Size(max = 50, message = "Cannot have more than 50 tags") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tags) {
 }

@@ -197,6 +197,25 @@ class BatchTagOperationsTest {
         }
 
         @Test
+        @DisplayName("Should reject update when total tags would exceed limit via sequential adds")
+        void batchUpdateWhenExceedingTotalTagLimitViaSequentialAdds() {
+            Set<String> initialTags = IntStream.range(0, 45)
+                    .mapToObj(i -> "existing-" + i)
+                    .collect(Collectors.toSet());
+            var experiment = createExperiment(initialTags);
+
+            var response = batchUpdateRequest()
+                    .method(HttpMethod.PATCH, Entity.json(ExperimentBatchUpdate.builder()
+                            .ids(Set.of(experiment.id()))
+                            .update(ExperimentUpdate.builder()
+                                    .tagsToAdd(Set.of("new-1", "new-2", "new-3", "new-4", "new-5", "new-6"))
+                                    .build())
+                            .build()));
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        @Test
         @DisplayName("Should maintain backwards compatibility with tags + mergeTags")
         void batchUpdateWhenUsingLegacyMergeTags() {
             var experiment = createExperiment(Set.of("existing"));
