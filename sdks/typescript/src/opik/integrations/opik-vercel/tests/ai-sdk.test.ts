@@ -450,7 +450,8 @@ describe("Opik - Vercel AI SDK integration", () => {
     });
 
     expect(traceCall.traces[0].errorInfo).toBeDefined();
-    expect(traceCall.traces[0].errorInfo.exceptionType).toBe("Error");
-    expect(traceCall.traces[0].errorInfo.message).toBe(errorMessage);
+    const errorInfo = traceCall.traces[0].errorInfo!;
+    expect(errorInfo.exceptionType).toBe("Error");
+    expect(errorInfo.message).toBe(errorMessage);
   });
 });
