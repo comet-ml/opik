@@ -31,6 +31,10 @@ const PrettyLLMMessageCodeBlock: React.FC<PrettyLLMMessageCodeBlockProps> =
           result.push([]);
         },
       );
+      // Drop trailing empty line produced by a final newline in source
+      if (result.length > 1 && result[result.length - 1].length === 0) {
+        result.pop();
+      }
       return result;
     }, [code]);
 

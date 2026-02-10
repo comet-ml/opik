@@ -26,11 +26,11 @@ import PrettyLLMMessage from "@/components/shared/PrettyLLMMessage";
 import { useLLMMessagesExpandAll } from "@/components/shared/SyntaxHighlighter/hooks/useSyntaxHighlighterHooks";
 import Loader from "@/components/shared/Loader/Loader";
 
-const ESTIMATED_COLLAPSED_HEIGHT = 36;
-const ESTIMATED_EXPANDED_HEIGHT = 200;
-const VIRTUALIZATION_THRESHOLD = 30;
-const VIRTUAL_OVERSCAN = 10;
-const TOGGLE_SUPPRESS_MS = 300;
+const ESTIMATED_COLLAPSED_HEIGHT = 36; // single header row height in px
+const ESTIMATED_EXPANDED_HEIGHT = 200; // fallback for expanded items before measurement
+const VIRTUALIZATION_THRESHOLD = 30; // render all messages below this count
+const VIRTUAL_OVERSCAN = 10; // extra items rendered outside viewport
+const TOGGLE_SUPPRESS_MS = 300; // ignore scroll adjustments after expand/collapse
 
 type MessagesTabProps = {
   transformedInput: object;
@@ -188,7 +188,8 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
       lastToggleTimeRef.current = Date.now();
       virtualizer.measure();
     }
-  }, [expandedMessages, virtualizer]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedMessages]);
 
   const renderMessage = useCallback(
     (message: LLMMessageDescriptor) => (

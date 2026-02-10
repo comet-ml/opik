@@ -70,6 +70,10 @@
     --codemirror-gutter: #94a3b8;
     --codemirror-line-highlight: #e6e6fe;
     --codemirror-syntax-blue: #005cc5;
+    --codemirror-syntax-string: #032f62;
+    --codemirror-syntax-bool: #e36209;
+    --codemirror-syntax-keyword: #d73a49;
+    --codemirror-syntax-punctuation: #6a737d;
 
     /* Chart colors */
     --chart-tick-stroke: #373d4d;
@@ -289,6 +293,10 @@
     --codemirror-gutter: #7d8590;
     --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
     --codemirror-syntax-blue: #79c0ff;
+    --codemirror-syntax-string: #a5d6ff;
+    --codemirror-syntax-bool: #ffab70;
+    --codemirror-syntax-keyword: #ff7b72;
+    --codemirror-syntax-punctuation: #8b949e;
 
     /* Chart colors */
     --chart-tick-stroke: #a3a3a3;
@@ -395,19 +403,19 @@
       color: var(--codemirror-syntax-blue);
     }
     .tok-string {
-      color: #032f62;
+      color: var(--codemirror-syntax-string);
     }
     .tok-number {
       color: var(--codemirror-syntax-blue);
     }
     .tok-bool {
-      color: #e36209;
+      color: var(--codemirror-syntax-bool);
     }
     .tok-keyword {
-      color: #d73a49;
+      color: var(--codemirror-syntax-keyword);
     }
     .tok-punctuation {
-      color: #6a737d;
+      color: var(--codemirror-syntax-punctuation);
     }
   }
 
@@ -418,16 +426,16 @@
 
   .dark .static-code-highlight {
     .tok-string {
-      color: #a5d6ff;
+      color: var(--codemirror-syntax-string);
     }
     .tok-bool {
-      color: #ffab70;
+      color: var(--codemirror-syntax-bool);
     }
     .tok-keyword {
-      color: #ff7b72;
+      color: var(--codemirror-syntax-keyword);
     }
     .tok-punctuation {
-      color: #8b949e;
+      color: var(--codemirror-syntax-punctuation);
     }
   }
 
