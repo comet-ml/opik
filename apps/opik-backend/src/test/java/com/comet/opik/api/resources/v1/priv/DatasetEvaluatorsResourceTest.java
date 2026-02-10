@@ -17,6 +17,7 @@ import com.comet.opik.api.resources.utils.resources.DatasetEvaluatorResourceClie
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
@@ -33,6 +34,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.HashSet;
 import java.util.List;
@@ -53,6 +55,7 @@ class DatasetEvaluatorsResourceTest {
     private static final String TEST_WORKSPACE_NAME = "workspace" + RandomStringUtils.secure().nextAlphanumeric(36);
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
     private final MySQLContainer MYSQL_CONTAINER = MySQLContainerUtils.newMySQLContainer();
     private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer();
@@ -144,7 +147,7 @@ class DatasetEvaluatorsResourceTest {
         void createDatasetEvaluatorWithCustomConfig() {
             var datasetId = createDataset();
 
-            var evaluatorCreate = DatasetEvaluatorCreate.builder()
+            var evaluatorCreate = factory.manufacturePojo(DatasetEvaluatorCreate.class).toBuilder()
                     .name("hallucination-check")
                     .metricType("hallucination")
                     .metricConfig(datasetEvaluatorClient.createValidMetricConfig())

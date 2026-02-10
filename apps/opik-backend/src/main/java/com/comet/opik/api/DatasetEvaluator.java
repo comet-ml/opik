@@ -61,7 +61,7 @@ public record DatasetEvaluator(
             @NotNull @Size(min = 1, max = 1000) List<@NotNull @Valid DatasetEvaluatorCreate> evaluators) {
     }
 
-    @Builder
+    @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record DatasetEvaluatorCreate(
