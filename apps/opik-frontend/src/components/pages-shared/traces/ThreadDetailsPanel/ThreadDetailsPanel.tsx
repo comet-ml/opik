@@ -78,7 +78,10 @@ import { Separator } from "@/components/ui/separator";
 import ThreadDetailsTags from "./ThreadDetailsTags";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
+import AttachmentsList from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
+import { MediaProvider } from "@/components/shared/PrettyLLMMessage/llmMessages";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { useThreadMedia } from "@/hooks/useThreadMedia";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
@@ -196,6 +199,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       (tracesData?.content ?? []).sort((t1, t2) => t1.id.localeCompare(t2.id)),
     [tracesData],
   );
+
+  const { media } = useThreadMedia(traces);
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls: boolean) => {
@@ -434,13 +439,20 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           </TabsList>
         </div>
         <TabsContent value="messages">
-          <div style={bodyStyle}>
-            <TraceMessages
-              traces={traces}
-              handleOpenTrace={handleOpenTrace}
-              traceId={traceId}
-            />
-          </div>
+          <MediaProvider media={media}>
+            {media.length > 0 && (
+              <div className="mb-4 px-6">
+                <AttachmentsList media={media} />
+              </div>
+            )}
+            <div style={bodyStyle}>
+              <TraceMessages
+                traces={traces}
+                handleOpenTrace={handleOpenTrace}
+                traceId={traceId}
+              />
+            </div>
+          </MediaProvider>
         </TabsContent>
         <TabsContent value="feedback_scores" className="px-6">
           <ConfigurableFeedbackScoreTable

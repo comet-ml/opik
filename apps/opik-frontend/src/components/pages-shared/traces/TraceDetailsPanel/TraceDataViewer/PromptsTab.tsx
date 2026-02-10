@@ -159,6 +159,9 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
                     <Link
                       to="/$workspaceName/prompts/$promptId"
                       params={{ workspaceName, promptId }}
+                      search={{
+                        activeVersionId: rawPrompts[index]?.version?.id,
+                      }}
                       className="inline-flex items-center"
                     >
                       View in Prompt library
