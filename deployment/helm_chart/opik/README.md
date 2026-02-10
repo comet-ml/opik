@@ -377,14 +377,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.ingress.tls.hosts | list | `[]` |  |
 | component.python-backend.ingress.tls.secretName | string | `""` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
-| component.python-backend.networkPolicy.enabled | bool | `true` |  |
-| component.python-backend.networkPolicy.engineEgress.except[0] | string | `"10.0.0.0/8"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[1] | string | `"100.64.0.0/10"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[2] | string | `"172.16.0.0/12"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[3] | string | `"192.0.0.0/24"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[4] | string | `"198.18.0.0/15"` |  |
-| component.python-backend.networkPolicy.engineEgress.except[5] | string | `"192.168.0.0/16"` |  |
-| component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
+| component.python-backend.networkPolicy.enabled | bool | `false` |  |
 | component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
