@@ -123,6 +123,20 @@ def _build_openai_response_format(
     }
 
 
+def _ensure_openai_response_format(
+    response_model: type[BaseModel] | None,
+    model: str,
+    call_time_params: dict[str, Any],
+) -> None:
+    """Attach strict OpenAI response_format when structured output is requested."""
+    if response_model is None or "response_format" in call_time_params:
+        return
+    if model.startswith("openai/") or model.startswith("gpt-"):
+        call_time_params["response_format"] = _build_openai_response_format(
+            response_model
+        )
+
+
 def requested_multiple_candidates(model_parameters: dict[str, Any] | None) -> bool:
     """Return True when model parameters request multiple completions (n > 1)."""
     n_value = (model_parameters or {}).get("n", 1) or 1
@@ -601,11 +615,7 @@ def call_model(
         frequency_penalty=frequency_penalty,
         metadata=metadata,
     )
-    if response_model is not None and "response_format" not in call_time_params:
-        if model.startswith("openai/") or model.startswith("gpt-"):
-            call_time_params["response_format"] = _build_openai_response_format(
-                response_model
-            )
+    _ensure_openai_response_format(response_model, model, call_time_params)
 
     if model_parameters is None:
         model_parameters = {}
@@ -783,11 +793,7 @@ async def call_model_async(
         frequency_penalty=frequency_penalty,
         metadata=metadata,
     )
-    if response_model is not None and "response_format" not in call_time_params:
-        if model.startswith("openai/") or model.startswith("gpt-"):
-            call_time_params["response_format"] = _build_openai_response_format(
-                response_model
-            )
+    _ensure_openai_response_format(response_model, model, call_time_params)
 
     if model_parameters is None:
         model_parameters = {}
