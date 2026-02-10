@@ -33,6 +33,46 @@ class SampleResponseModel(BaseModel):
 
 
 class TestCallModelSync:
+    def test_call_model_uses_strict_response_schema_for_openai(self) -> None:
+        captured_kwargs: dict[str, Any] = {}
+        mock_response = make_mock_response(
+            '{"inner": {"value": 1, "detail": null}, "note": null}'
+        )
+
+        class Inner(BaseModel):
+            value: int
+            detail: str | None = None
+
+        class Outer(BaseModel):
+            inner: Inner
+            note: str | None = None
+
+        def capture_completion(**kwargs: Any) -> MagicMock:
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda x: capture_completion
+
+            result = _llm_calls.call_model(
+                messages=[user_message("test")],
+                model="gpt-4o",
+                response_model=Outer,
+            )
+
+        assert isinstance(result, Outer)
+        response_format = captured_kwargs.get("response_format", {})
+        schema = response_format.get("json_schema", {}).get("schema", {})
+        assert schema.get("additionalProperties") is False
+        assert schema.get("required") == ["inner", "note"]
+        assert schema.get("$defs", {}).get("Inner", {}).get("additionalProperties") is (
+            False
+        )
+        assert schema.get("$defs", {}).get("Inner", {}).get("required") == [
+            "value",
+            "detail",
+        ]
+
     def test_call_model_increments_counter(self) -> None:
         mock_response = make_mock_response("response")
 
@@ -90,6 +130,47 @@ class TestCallModelSync:
 
 
 class TestCallModelAsync:
+    @pytest.mark.asyncio
+    async def test_call_model_async_uses_strict_response_schema_for_openai(self) -> None:
+        captured_kwargs: dict[str, Any] = {}
+        mock_response = make_mock_response(
+            '{"inner": {"value": 1, "detail": null}, "note": null}'
+        )
+
+        class Inner(BaseModel):
+            value: int
+            detail: str | None = None
+
+        class Outer(BaseModel):
+            inner: Inner
+            note: str | None = None
+
+        async def capture_completion(**kwargs: Any) -> Any:
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda x: capture_completion
+
+            result = await _llm_calls.call_model_async(
+                messages=[user_message("test")],
+                model="gpt-4o",
+                response_model=Outer,
+            )
+
+        assert isinstance(result, Outer)
+        response_format = captured_kwargs.get("response_format", {})
+        schema = response_format.get("json_schema", {}).get("schema", {})
+        assert schema.get("additionalProperties") is False
+        assert schema.get("required") == ["inner", "note"]
+        assert schema.get("$defs", {}).get("Inner", {}).get("additionalProperties") is (
+            False
+        )
+        assert schema.get("$defs", {}).get("Inner", {}).get("required") == [
+            "value",
+            "detail",
+        ]
+
     @pytest.mark.asyncio
     async def test_call_model_async_increments_counter(self) -> None:
         mock_response = make_mock_response("response")

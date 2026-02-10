@@ -83,6 +83,46 @@ def build_llm_call_metadata(optimizer: Any, call_type: str) -> dict[str, Any]:
 logger = logging.getLogger(__name__)
 
 
+def _normalize_schema_for_openai_strict(schema: Any) -> Any:
+    """Normalize schema for OpenAI strict structured outputs.
+
+    OpenAI strict mode requires:
+    - object schemas define additionalProperties=false
+    - required includes all keys present in properties
+    """
+    if isinstance(schema, dict):
+        normalized: dict[str, Any] = {
+            key: _normalize_schema_for_openai_strict(value)
+            for key, value in schema.items()
+        }
+        if normalized.get("type") == "object":
+            if "additionalProperties" not in normalized:
+                normalized["additionalProperties"] = False
+            properties = normalized.get("properties")
+            if isinstance(properties, dict):
+                normalized["required"] = list(properties.keys())
+        return normalized
+    if isinstance(schema, list):
+        return [_normalize_schema_for_openai_strict(item) for item in schema]
+    return schema
+
+
+def _build_openai_response_format(
+    response_model: type[BaseModel],
+) -> dict[str, Any]:
+    """Build OpenAI json_schema response_format with strict object schemas."""
+    schema = response_model.model_json_schema()
+    strict_schema = _normalize_schema_for_openai_strict(schema)
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": response_model.__name__,
+            "schema": strict_schema,
+            "strict": True,
+        },
+    }
+
+
 def requested_multiple_candidates(model_parameters: dict[str, Any] | None) -> bool:
     """Return True when model parameters request multiple completions (n > 1)."""
     n_value = (model_parameters or {}).get("n", 1) or 1
@@ -372,7 +412,7 @@ def _append_json_format_instructions(
     Returns:
         Modified messages list with format instructions appended
     """
-    schema = response_model.model_json_schema()
+    schema = _normalize_schema_for_openai_strict(response_model.model_json_schema())
     schema_json = json.dumps(schema, indent=2)
     format_instructions = f"""
 STRICT OUTPUT FORMAT:
@@ -563,14 +603,9 @@ def call_model(
     )
     if response_model is not None and "response_format" not in call_time_params:
         if model.startswith("openai/") or model.startswith("gpt-"):
-            call_time_params["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": response_model.__name__,
-                    "schema": response_model.model_json_schema(),
-                    "strict": True,
-                },
-            }
+            call_time_params["response_format"] = _build_openai_response_format(
+                response_model
+            )
 
     if model_parameters is None:
         model_parameters = {}
@@ -748,6 +783,11 @@ async def call_model_async(
         frequency_penalty=frequency_penalty,
         metadata=metadata,
     )
+    if response_model is not None and "response_format" not in call_time_params:
+        if model.startswith("openai/") or model.startswith("gpt-"):
+            call_time_params["response_format"] = _build_openai_response_format(
+                response_model
+            )
 
     if model_parameters is None:
         model_parameters = {}
