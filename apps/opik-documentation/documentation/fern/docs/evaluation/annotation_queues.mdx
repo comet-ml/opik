@@ -242,14 +242,11 @@ const threadQueue = await client.createThreadsAnnotationQueue({
   description: "Threads needing review",
 });
 
-// Get threads and add them to the queue
-// Note: searchThreads is not yet available in the TypeScript SDK
-const threadsResponse = await client.api.traces.getTraceThreads({
+// Search for threads and add them to the queue
+const threads = await client.searchThreads({
   projectName: "my-project",
-  size: 100,
+  filterString: 'tags contains "important"',
 });
-
-const threads = threadsResponse.content || [];
 await threadQueue.addThreads(threads);
 ```
 

@@ -190,14 +190,18 @@ describe.skipIf(!shouldRunApiTests)(
         2000
       );
 
-      // GET THREADS: Use the REST API directly to get threads
-      // Note: searchThreads is not yet available in the TypeScript SDK
-      const threadsResponse = await client.api.traces.getTraceThreads({
-        projectName: testProjectName,
-        size: 100,
-      });
+      // GET THREADS: Search for threads using searchThreads
+      const threads = await searchAndWaitForDone(
+        async () => {
+          return await client.searchThreads({
+            projectName: testProjectName,
+          });
+        },
+        1,
+        30000,
+        2000
+      );
 
-      const threads = threadsResponse.content || [];
       expect(threads.length).toBeGreaterThanOrEqual(1);
 
       // Find our thread
