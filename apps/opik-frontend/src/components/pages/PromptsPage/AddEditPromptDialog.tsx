@@ -27,7 +27,11 @@ import {
   Accordion,
 } from "@/components/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import {
+  Prompt,
+  PROMPT_TEMPLATE_STRUCTURE,
+  PROMPT_TYPE,
+} from "@/types/prompts";
 import { LLMMessage } from "@/types/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
@@ -64,6 +68,9 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
   );
   const [templateStructure, setTemplateStructure] =
     useState<PROMPT_TEMPLATE_STRUCTURE>(PROMPT_TEMPLATE_STRUCTURE.TEXT);
+  const [promptType, setPromptType] = useState<PROMPT_TYPE>(
+    PROMPT_TYPE.MUSTACHE,
+  );
   const [messages, setMessages] = useState<LLMMessage[]>([
     generateDefaultLLMPromptMessage(),
   ]);
@@ -146,6 +153,7 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
           name,
           template: promptTemplate,
           template_structure: templateStructure,
+          type: promptType,
           ...(metadata && { metadata: safelyParseJSON(metadata) }),
           ...(description && { description }),
         },
@@ -221,6 +229,40 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
               </ToggleGroup>
               <Description>
                 Choose between a simple text prompt or a chat conversation
+              </Description>
+            </div>
+          )}
+          {!isEdit && (
+            <div className="flex flex-col gap-2 pb-4">
+              <Label htmlFor="promptTemplateType">Template type</Label>
+              <ToggleGroup
+                type="single"
+                variant="ghost"
+                value={promptType}
+                onValueChange={(value) => {
+                  if (value) {
+                    setPromptType(value as PROMPT_TYPE);
+                  }
+                }}
+                className="w-fit justify-start"
+              >
+                <ToggleGroupItem
+                  value={PROMPT_TYPE.MUSTACHE}
+                  aria-label="Mustache template"
+                  className="gap-1.5"
+                >
+                  <span>Mustache</span>
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value={PROMPT_TYPE.JINJA2}
+                  aria-label="Jinja2 template"
+                  className="gap-1.5"
+                >
+                  <span>Jinja2</span>
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <Description>
+                Choose the templating engine for variable substitution
               </Description>
             </div>
           )}
