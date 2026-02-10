@@ -58,12 +58,15 @@ module.exports = {
       name: "no-api-importing-components",
       severity: "error",
       comment:
-        "API layer must not import React components (exception: use-toast.ts)",
+        "API layer must not import React components (exception: use-toast.ts, catalog metadata)",
       from: { path: "^src/api/" },
       to: {
         path: "^src/components/",
-        // Only allow use-toast.ts - it's essentially a hook
-        pathNot: ["^src/components/ui/use-toast\\.ts$"],
+        // Allow use-toast.ts (a hook) and data-view-widgets catalog (metadata for AI, not UI)
+        pathNot: [
+          "^src/components/ui/use-toast\\.ts$",
+          "^src/components/shared/data-view-widgets/index\\.ts$",
+        ],
       },
     },
 
