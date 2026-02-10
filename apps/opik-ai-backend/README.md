@@ -26,7 +26,8 @@ The service uses LLMs (OpenAI, Anthropic, or Google) to analyze trace data and p
 
 #### Required
 - `AGENT_OPIK_URL` - Opik backend URL (e.g., `http://backend:8080`)
-- `OPENAI_API_KEY` - OpenAI API key (required for LLM functionality)
+  - OpikAssist routes LLM calls through the Opik backend's AI proxy at `/v1/private/chat/completions`
+  - The proxy uses the end-user's configured provider API key (stored per-workspace in the database)
 
 #### Database
 - `SESSION_SERVICE_URI` - MySQL connection string (e.g., `mysql://opik:opik@mysql:3306/opik`)
@@ -58,17 +59,16 @@ All endpoints are prefixed with `URL_PREFIX` (default: `/opik-ai` in production)
 
 ### Using Docker Compose
 
-1. Set the OpenAI API key:
-```bash
-export OPENAI_API_KEY="your-key-here"
-```
-
-2. Start the service:
+1. Start the service:
 ```bash
 docker compose --profile opik-ai-backend up
 ```
 
-3. The service will be available at `http://localhost:8081`
+2. The service will be available at `http://localhost:8081`
+
+3. Configure your LLM provider API key in the Opik UI (Settings > LLM Providers)
+   - OpikAssist uses the end-user's configured provider API key via the Opik backend proxy
+   - No API key needs to be configured on the OpikAssist service itself
 
 ### Backend Configuration
 
@@ -92,9 +92,10 @@ These tables are created automatically on first connection.
 
 ## Known Limitations
 
-1. **OpenAI Only**: Currently restricted to OpenAI GPT-4.1 for simplicity
+1. **Model Configuration**: Uses `AGENT_MODEL` env var (default: `openai/gpt-4.1`) - the model must be supported by the user's configured provider
 2. **Local Auth**: In standalone mode (no session token), uses `"default"` user ID
 3. **ADK Schema Migrations**: Not automatic - requires manual intervention when upgrading ADK
+4. **Provider API Keys**: Requires users to configure their LLM provider API keys in the Opik UI (Settings > LLM Providers)
 
 ### Schema Migrations
 
