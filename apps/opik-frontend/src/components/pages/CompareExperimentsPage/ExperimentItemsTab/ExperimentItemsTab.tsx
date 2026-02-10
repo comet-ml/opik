@@ -78,6 +78,7 @@ import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsCo
 import useExperimentItemsStatistic from "@/api/datasets/useExperimentItemsStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import {
   calculateHeightStyle,
@@ -529,6 +530,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           header: FeedbackScoreHeader as never,
           cell: CompareExperimentsFeedbackScoreCell as never,
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
           supportsPercentiles: true,
           customMeta: {
             experimentsIds,
