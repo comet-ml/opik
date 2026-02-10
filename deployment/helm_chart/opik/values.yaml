@@ -270,16 +270,25 @@ component:
     securityContext:
       privileged: true
     networkPolicy:
-      enabled: true
-      engineEgress:
-        ipBlock: 0.0.0.0/0
-        except:
-          - 10.0.0.0/8
-          - 100.64.0.0/10
-          - 172.16.0.0/12
-          - 192.0.0.0/24
-          - 198.18.0.0/15
-          - 192.168.0.0/16
+      enabled: false
+      # example networks to block
+      # engineEgress:
+      #   ipBlock: 0.0.0.0/0
+      #   except:
+      #     # Standard RFC1918 Private Ranges
+      #     - 10.0.0.0/8
+      #     - 172.16.0.0/12
+      #     - 192.168.0.0/16
+      #     # EKS / Carrier Grade NAT
+      #     - 100.64.0.0/10
+      #     # AWS Metadata & Link Local (Very Important)
+      #     - 169.254.0.0/16
+      #     # Reserved / Protocol Ranges
+      #     - 127.0.0.0/8
+      #     - 192.0.0.0/24
+      #     - 198.18.0.0/15
+      #     - 224.0.0.0/4
+      #     - 255.255.255.255/32
 
     service:
       type: ClusterIP
