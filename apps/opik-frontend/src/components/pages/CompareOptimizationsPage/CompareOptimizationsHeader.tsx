@@ -96,9 +96,15 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
 
       if (promptId && promptName) {
         const isNewPrompt = promptId !== existingPrompt?.id;
-        const message = isNewPrompt
-          ? <span>New prompt <b>{promptName}</b> created</span>
-          : <span>New version saved to <b>{promptName}</b></span>;
+        const message = isNewPrompt ? (
+          <span>
+            New prompt <b>{promptName}</b> created
+          </span>
+        ) : (
+          <span>
+            New version saved to <b>{promptName}</b>
+          </span>
+        );
 
         toast({
           description: message,
