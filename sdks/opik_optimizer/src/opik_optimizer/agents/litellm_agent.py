@@ -355,19 +355,46 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
             if msg.tool_calls:
                 for tool_call in msg["tool_calls"]:
                     tool_name = tool_call["function"]["name"]
-                    arguments = json.loads(tool_call["function"]["arguments"])
+                    raw_arguments = tool_call["function"].get("arguments", "{}")
+                    arguments: dict[str, Any]
+                    tool_result: Any
+                    argument_error: str | None = None
+                    if isinstance(raw_arguments, dict):
+                        parsed_arguments = raw_arguments
+                    else:
+                        try:
+                            parsed_arguments = json.loads(raw_arguments)
+                        except (json.JSONDecodeError, TypeError) as exc:
+                            parsed_arguments = {}
+                            argument_error = (
+                                f"Invalid JSON arguments for tool `{tool_name}`: {exc}"
+                            )
+                    if not isinstance(parsed_arguments, dict):
+                        parsed_arguments = {}
+                        argument_error = (
+                            f"Tool `{tool_name}` arguments must be a JSON object."
+                        )
+                    arguments = parsed_arguments
 
                     tool_func = function_map.get(tool_name)
-                    try:
-                        if tool_func is None:
-                            tool_result = f"Unknown tool `{tool_name}`"
-                        else:
-                            tool_result = tool_func(**arguments)
-                    except Exception as exc:  # pragma: no cover - defensive logging
-                        logger.exception(
-                            "Tool call failed name=%s args=%s", tool_name, arguments
+                    if argument_error is not None:
+                        logger.warning(
+                            "Skipping tool call due to invalid arguments name=%s args=%r",
+                            tool_name,
+                            raw_arguments,
                         )
-                        tool_result = f"Error calling tool `{tool_name}`: {exc}"
+                        tool_result = argument_error
+                    else:
+                        try:
+                            if tool_func is None:
+                                tool_result = f"Unknown tool `{tool_name}`"
+                            else:
+                                tool_result = tool_func(**arguments)
+                        except Exception as exc:  # pragma: no cover - defensive logging
+                            logger.exception(
+                                "Tool call failed name=%s args=%s", tool_name, arguments
+                            )
+                            tool_result = f"Error calling tool `{tool_name}`: {exc}"
                     last_tool_response = str(tool_result)
                     messages.append(
                         {
