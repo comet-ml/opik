@@ -53,6 +53,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import ErrorsCountCell from "@/components/shared/DataTableCells/ErrorsCountCell";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -158,6 +159,8 @@ const ProjectsPage: React.FunctionComponent = () => {
                 workspaceName,
               },
               search: {
+                tab: PROJECT_TAB.logs,
+                logsType: LOGS_TYPE.traces,
                 traces_filters: [
                   {
                     operator: "is_not_empty",
