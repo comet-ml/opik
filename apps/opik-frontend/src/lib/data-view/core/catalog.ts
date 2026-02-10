@@ -288,11 +288,16 @@ function generateComponentsSection<
     const def = catalog.components[name];
     if (!def) continue;
 
+    const propNames = Object.keys(
+      (def.props as z.ZodObject<z.ZodRawShape>).shape,
+    );
+
     lines.push(`### ${name}`);
     lines.push(def.description);
     lines.push(
       `- Container: ${def.hasChildren ? "Yes (can have children)" : "No"}`,
     );
+    lines.push(`- Props: ${propNames.join(", ")}`);
     lines.push("");
   }
 

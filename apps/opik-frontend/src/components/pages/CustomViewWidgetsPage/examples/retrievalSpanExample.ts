@@ -39,7 +39,7 @@ export const retrievalSpanExample = {
           value: { path: "/statsLine" },
           variant: "body-small",
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       indexesList: {
@@ -51,7 +51,7 @@ export const retrievalSpanExample = {
           label: "Indexes:",
           showCopy: false,
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
     },

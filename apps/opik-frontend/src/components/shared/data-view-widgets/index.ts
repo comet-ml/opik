@@ -4,9 +4,8 @@
 // Central export for all custom view widgets.
 // Widgets are organized by category:
 // - primitives/: Inline display widgets (Text, Number, Label, Tag, Bool, Link, etc.)
-// - blocks/: Block-level widgets (Header, Divider, TextBlock, Code)
+// - blocks/: Block-level widgets (Header, Divider, TextBlock, Code, Image, Video, Audio, File, ChatMessage)
 // - containers/: Layout widgets (Level1Container, Level2Container, InlineRow)
-// - (future) media/: Media widgets (Image, Video, Audio, File)
 
 import { createCatalog, type ComponentRegistry } from "@/lib/data-view";
 

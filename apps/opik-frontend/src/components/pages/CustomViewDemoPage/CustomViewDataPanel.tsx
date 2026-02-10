@@ -209,7 +209,7 @@ const ReadyState = () => {
 
   // Renderer reads tree and source from context automatically
   return (
-    <div className="space-y-4">
+    <div className="rounded-md border bg-background p-4">
       <Renderer registry={customViewRegistry} />
     </div>
   );

@@ -18,8 +18,8 @@ The most basic trace view showing input/output with navigation.
 ```
 Level1Container
 ├── Text (timestamp, caption variant)
-├── TextBlock (input, role="input")
-├── TextBlock (output, role="output", expandable)
+├── TextBlock (input)
+├── TextBlock (output, expandable)
 └── LinkButton (trace navigation)
 ```
 
@@ -34,37 +34,33 @@ Level1Container
 A single collapsible tool call span with metadata and I/O.
 
 ```
-Level2Container (collapsible)
-├── InlineRow (metadata)
-│   ├── LinkButton (span link)
-│   ├── Label + Text (Model: gpt-5-mini)
-│   └── Label + Text (Duration: 42ms)
+Level2Container (collapsible, icon="tool", status="success")
+├── LinkButton (span link)
+├── Text (stats line: "Model: Gpt-5-mini • Duration: 0.01s")
 ├── Code (input JSON)
 └── Code (output JSON)
 ```
 
 **Key Features:**
-- Level2Container provides collapse/expand functionality
-- InlineRow groups related inline widgets horizontally
+- Level2Container provides collapse/expand functionality with icon and status
+- Stats displayed as a single Text widget with pre-composed "Label: value • Label: value" format
 - Code widget with syntax highlighting for JSON
-- Label + Text pattern for key-value display
+- Level2Container can only contain leaf widgets (no InlineRow)
 
 ### Pattern 3: Retrieval Span (`retrievalSpanExample.ts`)
 
 A retrieval operation showing index information.
 
 ```
-Level2Container (collapsible)
-├── InlineRow
-│   ├── Label + Number (Indexes queried: 2)
-│   └── Label + Number (Documents retrieved: 0)
-├── Label (Indexes:)
-└── Code (index names list)
+Level2Container (collapsible, icon="retrieval", status="success")
+├── Text (stats line: "Indexes Queried: 2 • Documents Retrieved: 0")
+└── Code (index names list, label="Indexes:")
 ```
 
 **Key Features:**
-- Number widget for count display
-- Code widget (no syntax highlighting) for plain text lists
+- Stats displayed as a single Text widget with pre-composed "Label: value • Label: value" format
+- Code widget with integrated label prop for section title
+- Level2Container can only contain leaf widgets (no InlineRow)
 
 ### Pattern 4: Trace with Tool Calls (`traceWithToolCallsExample.ts`)
 
@@ -98,49 +94,38 @@ Level1Container
 Thread view with conversation turns and metadata.
 
 ```
-Level1Container
-├── Header (Thread title)
-├── InlineRow (thread metadata)
-│   ├── Label + Number (Turns)
-│   ├── Text (date)
-│   ├── Text (duration)
-│   ├── Tag (status)
-│   └── Label + Text (cost)
-├── Divider
-├── Level1Container (Conversation)
-│   ├── TextBlock (user message, role="input")
-│   └── TextBlock (assistant message, role="output")
+Container (root)
+├── Text (meta line: "Turns:26 • Nov 25, 2025 • 14.5s • Inactive • Total cost: $0.0024", caption)
+├── ChatMessage (user message, role="user")
+├── ChatMessage (assistant message, role="assistant")
 ├── InlineRow (tags)
-│   ├── Label + Tag (Agent)
-│   └── Label + Tag (Category)
-└── Level2Container (Trace details - collapsed)
-    ├── InlineRow (trace ID, duration)
-    └── InlineRow (pipeline)
+│   ├── Tag (Agent: fallback, default variant)
+│   └── Tag (Category: other, default variant)
+└── Level1Container (Trace details - collapsed)
+    └── Code (trace details, language="text")
 ```
 
 **Key Features:**
-- Header widget for section titles
-- Divider for visual separation
-- Nested Level1Container for subsection (conversation)
-- Tag widgets with semantic variants (info, default)
-- Collapsible trace details section
+- Single Text widget with pre-composed meta line (values + bullet separators)
+- ChatMessage widgets for conversation turns (not TextBlock)
+- Tag widgets with labels including the category prefix (e.g., "Agent: fallback")
+- Collapsible Level1Container for trace details with Code block
 
 ### Pattern 6: Metadata Container (`metadataContainerExample.ts`)
 
 Metadata display with tags and links.
 
 ```
-Level1Container (titled "Run Metadata")
-├── InlineRow (model info)
-│   ├── Label + Text (Model)
-│   └── Label + Text (Provider)
-├── InlineRow (performance)
-│   ├── Label + Text (Latency)
-│   ├── Label + Number (Tokens)
-│   └── Label + Text (Cost)
+Level1Container (titled "Metadata")
+├── InlineRow (stats, background: "muted")
+│   ├── Text("Model:") + Text({path}) + Text("•")
+│   ├── Text("Provider:") + Text({path}) + Text("•")
+│   ├── Text("Latency:") + Text({path}) + Text("•")
+│   ├── Text("Tokens:") + Text({path}) + Text("•")
+│   └── Text("Cost:") + Text({path})
 ├── InlineRow (status tags)
 │   ├── Tag (status - success)
-│   ├── Tag (cached - info)
+│   ├── Tag (cached - default)
 │   └── Tag (streamed - default)
 └── InlineRow (links)
     ├── LinkButton (trace)
@@ -149,6 +134,8 @@ Level1Container (titled "Run Metadata")
 
 **Key Features:**
 - Level1Container with title prop
+- InlineRow with background: "muted" for stats using Text labels + values + "•" bullet separators
+- No Label widgets — just Text widgets for both labels and values
 - Multiple InlineRow sections for organization
 - Mix of Tag variants for different states
 

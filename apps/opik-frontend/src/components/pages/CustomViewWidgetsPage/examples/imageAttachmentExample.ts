@@ -35,7 +35,7 @@ export const imageAttachmentExample = {
         id: "metaText",
         type: "Text",
         props: { value: { path: "/metaLine" } },
-        children: undefined,
+        children: null,
         parentKey: "metaRow",
       },
       image: {
@@ -47,7 +47,7 @@ export const imageAttachmentExample = {
           label: "Image",
           tag: { path: "/imageTag" },
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
     },

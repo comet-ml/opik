@@ -29,7 +29,7 @@ export const chatMessageWidgetConfig = {
       .describe("Message role: 'user' or 'assistant'"),
   }),
   description:
-    "Chat message bubble for conversation display. User messages are right-aligned purple, assistant messages are left-aligned white.",
+    "Chat bubble for conversation turns. Best for thread views to show user/assistant messages. Use role='user' for user messages, role='assistant' for AI responses.",
 };
 
 // ============================================================================

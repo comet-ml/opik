@@ -91,13 +91,13 @@ You are {{action}} a custom visualization for LLM {{data_type}} data.
 {{format_instructions}}
 
 ## Best Practices
-- Organize related fields into Section widgets with clear titles
+- Organize related fields into Level1Container sections with clear titles
 - Use appropriate widgets for different data types:
   - Text/Code for strings and formatted content
   - Image/Video/Audio for media URLs
-  - KeyValue for simple label-value pairs
-- Every view MUST have exactly one TextBlock with role="input"
-- Every view MUST have exactly one TextBlock with role="output"
+  - InlineRow with background: "muted" for metadata stats (Text labels, values, and "•" separators)
+- Every view SHOULD include a TextBlock or Code widget for input data
+- Every view SHOULD include a TextBlock or Code widget for output data
 - Bind dynamic data using { "path": "/json/pointer/path" } syntax
 - Static values (like section titles) should be literal strings`;
 

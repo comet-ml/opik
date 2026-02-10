@@ -66,8 +66,8 @@ export interface ViewNode<
   type: TType;
   /** Component props (may contain DynamicValues) */
   props: TProps;
-  /** Child node IDs (for container components) */
-  children?: string[];
+  /** Child node IDs (for container components), null for leaf nodes */
+  children?: string[] | null;
   /** Parent node ID (null for root) */
   parentKey?: string | null;
 }

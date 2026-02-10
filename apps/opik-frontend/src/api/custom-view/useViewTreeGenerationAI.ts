@@ -75,13 +75,13 @@ Each line must be a valid JSON object with these fields:
 {"op":"add","path":"/nodes","value":{}}
 {"op":"add","path":"/nodes/root-container","value":{"id":"root-container","type":"Container","props":{"layout":"stack","gap":"md"},"children":["input-code","trace-context","output-block"],"parentKey":null}}
 {"op":"add","path":"/nodes/input-code","value":{"id":"input-code","type":"Code","props":{"content":{"path":"/input"},"label":"Input","language":"json"},"children":null,"parentKey":"root-container"}}
-{"op":"add","path":"/nodes/trace-context","value":{"id":"trace-context","type":"Level1Container","props":{"title":"Trace context"},"children":["row-name","row-duration","tool-section"],"parentKey":"root-container"}}
-{"op":"add","path":"/nodes/row-name","value":{"id":"row-name","type":"InlineRow","props":{},"children":["label-name","text-name"],"parentKey":"trace-context"}}
-{"op":"add","path":"/nodes/label-name","value":{"id":"label-name","type":"Label","props":{"text":"Name"},"children":null,"parentKey":"row-name"}}
-{"op":"add","path":"/nodes/text-name","value":{"id":"text-name","type":"Text","props":{"value":{"path":"/name"}},"children":null,"parentKey":"row-name"}}
-{"op":"add","path":"/nodes/row-duration","value":{"id":"row-duration","type":"InlineRow","props":{},"children":["label-duration","num-duration"],"parentKey":"trace-context"}}
-{"op":"add","path":"/nodes/label-duration","value":{"id":"label-duration","type":"Label","props":{"text":"Duration (ms)"},"children":null,"parentKey":"row-duration"}}
-{"op":"add","path":"/nodes/num-duration","value":{"id":"num-duration","type":"Number","props":{"value":{"path":"/duration"}},"children":null,"parentKey":"row-duration"}}
+{"op":"add","path":"/nodes/trace-context","value":{"id":"trace-context","type":"Level1Container","props":{"title":"Trace context"},"children":["stats-row","tool-section"],"parentKey":"root-container"}}
+{"op":"add","path":"/nodes/stats-row","value":{"id":"stats-row","type":"InlineRow","props":{"background":"muted"},"children":["text-name-label","text-name-value","sep1","text-duration-label","num-duration"],"parentKey":"trace-context"}}
+{"op":"add","path":"/nodes/text-name-label","value":{"id":"text-name-label","type":"Text","props":{"value":"Name:"},"children":null,"parentKey":"stats-row"}}
+{"op":"add","path":"/nodes/text-name-value","value":{"id":"text-name-value","type":"Text","props":{"value":{"path":"/name"}},"children":null,"parentKey":"stats-row"}}
+{"op":"add","path":"/nodes/sep1","value":{"id":"sep1","type":"Text","props":{"value":"•"},"children":null,"parentKey":"stats-row"}}
+{"op":"add","path":"/nodes/text-duration-label","value":{"id":"text-duration-label","type":"Text","props":{"value":"Duration:"},"children":null,"parentKey":"stats-row"}}
+{"op":"add","path":"/nodes/num-duration","value":{"id":"num-duration","type":"Number","props":{"value":{"path":"/duration"}},"children":null,"parentKey":"stats-row"}}
 {"op":"add","path":"/nodes/tool-section","value":{"id":"tool-section","type":"Level2Container","props":{"summary":"Tool response","icon":"tool","defaultOpen":false},"children":["tool-response-code"],"parentKey":"trace-context"}}
 {"op":"add","path":"/nodes/tool-response-code","value":{"id":"tool-response-code","type":"Code","props":{"content":{"path":"/tool_response"},"language":"json"},"children":null,"parentKey":"tool-section"}}
 {"op":"add","path":"/nodes/output-block","value":{"id":"output-block","type":"TextBlock","props":{"content":{"path":"/output/content"},"label":"Output"},"children":null,"parentKey":"root-container"}}
@@ -97,7 +97,7 @@ Each line must be a valid JSON object with these fields:
 8. Child nodes must have "parentKey" set to their parent's ID
 9. Every node must include: id, type, props, children (array or null), parentKey (string or null)
 10. **CRITICAL:** Use Code widget (not TextBlock) for JSON/object data - TextBlock is for text/markdown only
-11. **CRITICAL:** Key-value pairs MUST use InlineRow with Label + Text/Number - never use Label alone
+11. **CRITICAL:** Metadata fields MUST use InlineRow with background: "muted", Text labels, Text/Number values, and "•" bullet separators - do NOT use Label widgets for key-value display
 12. **CRITICAL:** Tool calls, tool responses must use Level2Container with icon="tool" and dynamic summary
 13. **CRITICAL:** Level1Container CANNOT contain Level1Container - use Level2Container for nested items
 `;
@@ -154,8 +154,8 @@ const SCHEMA_GENERATION_RULES = `
 - TextBlock, Text, Label, Code, Image, Video, Audio, etc. are leaf nodes and CANNOT have children (children must be null)
 
 ### Required Elements
-- Every view MUST have exactly one TextBlock with role="input" - but ONLY if the input data is TEXT/markdown
-- Every view MUST have exactly one TextBlock with role="output" - but ONLY if the output data is TEXT/markdown
+- Every view SHOULD include a TextBlock or Code widget for input data - but ONLY if the input data is TEXT/markdown
+- Every view SHOULD include a TextBlock or Code widget for output data - but ONLY if the output data is TEXT/markdown
 - **CRITICAL:** If input or output is JSON/object data, use Code widget with language="json" instead of TextBlock
 - Input/Output blocks should be direct children of the root Container
 
@@ -169,22 +169,22 @@ Example - If /input contains {"messages": [...]}:
 - WRONG: TextBlock with content: {"path": "/input"}
 - CORRECT: Code with content: {"path": "/input"}, language: "json", label: "Input"
 
-### CRITICAL: Key-Value Pairs Layout
-**NEVER use Label widgets alone.** For key-value pairs (like "Name", "Duration", "Model", etc.):
-- ALWAYS wrap in InlineRow container with Label + value widget
-- Use Label for the key, Text/Number for the value
+### CRITICAL: Metadata Stats Row Pattern
+For metadata fields (model, duration, latency, cost, name, etc.), use an InlineRow
+with background: "muted" containing Text widgets for labels, values, and bullet separators:
+- Each label is a static Text widget (e.g., "Model:")
+- Each value is a dynamic Text or Number widget bound to a data path
+- Bullet "•" Text widgets separate each pair
+- The InlineRow uses background: "muted" for visual grouping
+- Do NOT use Label widgets for key-value display
 
-Example - Displaying "Duration: 5644.77ms":
-- WRONG: Just a Label widget with text "Duration (ms)"
-- CORRECT:
-  1. Create InlineRow container
-  2. Add Label child with text "Duration (ms)"
-  3. Add Number child with value bound to the duration path
-
-Pattern for key-value in InlineRow:
-{"id":"row-duration","type":"InlineRow","props":{},"children":["label-duration","value-duration"],"parentKey":"parent-id"}
-{"id":"label-duration","type":"Label","props":{"text":"Duration (ms)"},"children":null,"parentKey":"row-duration"}
-{"id":"value-duration","type":"Number","props":{"value":{"path":"/duration"}},"children":null,"parentKey":"row-duration"}
+Example - Displaying "Name: my-trace • Duration: 5644.77ms":
+{"id":"stats-row","type":"InlineRow","props":{"background":"muted"},"children":["label-name","value-name","sep1","label-duration","value-duration"],"parentKey":"parent-id"}
+{"id":"label-name","type":"Text","props":{"value":"Name:"},"children":null,"parentKey":"stats-row"}
+{"id":"value-name","type":"Text","props":{"value":{"path":"/name"}},"children":null,"parentKey":"stats-row"}
+{"id":"sep1","type":"Text","props":{"value":"•"},"children":null,"parentKey":"stats-row"}
+{"id":"label-duration","type":"Text","props":{"value":"Duration:"},"children":null,"parentKey":"stats-row"}
+{"id":"value-duration","type":"Number","props":{"value":{"path":"/duration"}},"children":null,"parentKey":"stats-row"}
 
 ### Container Rules
 - Level1Container: TOP-LEVEL semantic sections only (metadata, trace context, conversation)
@@ -226,7 +226,7 @@ Example structure for a tool call:
 {"id":"tool-output","type":"Code","props":{"content":{"path":"/tools/0/output"},"label":"Output","language":"json"},"children":null,"parentKey":"tool-container"}
 
 ### Layout Rules
-- InlineRow: for key-value pairs (Label + Text/Number)
+- InlineRow: for metadata stats rows (Text labels + values + bullet separators)
 - Block components (TextBlock, Code, Image) get their own row
 - Inline primitives (Label, Text, Number, Tag) should be in InlineRow
 
@@ -296,9 +296,9 @@ const buildSystemPrompt = (
       ? `Trace data contains information about a single LLM execution:
 - /input: The input data (CHECK TYPE: if object/JSON use Code widget, if string use TextBlock)
 - /output: The output data (CHECK TYPE: if object/JSON use Code widget, if string use TextBlock)
-- /name, /duration, /model: Metadata fields (use InlineRow + Label + Text/Number)
+- /name, /duration, /model: Metadata fields (use InlineRow with Text + bullet separators)
 - /tools, /tool_response: Tool-related data (use Level2Container with icon="tool", Code widget inside)
-- /metadata, /usage: Additional info (use InlineRow for key-value pairs)
+- /metadata, /usage: Additional info (use InlineRow with muted background for stats rows)
 - /feedback_scores: Scores/ratings (use Number widgets)`
       : `Thread data contains a conversation with:
 - Thread metadata: id, duration, number_of_messages, usage, etc.
@@ -328,11 +328,11 @@ ${currentTreeSection}
 ${dataTypeDescription}
 
 ## Best Practices for ${dataTypeLabel === "trace" ? "Traces" : "Threads"}
-- Organize related fields into Section widgets with clear titles
+- Organize related fields into Level1Container sections with clear titles
 - Use appropriate widgets for different data types:
   - Text/Code for strings and formatted content
   - Image/Video/Audio for media URLs
-  - KeyValue for simple label-value pairs
+  - InlineRow with muted background for metadata stats (Text labels + values + bullet separators)
 - For trace conversations: display messages in order with proper labels
 - For thread data: highlight key metrics (message count, usage)
 - Bind dynamic data using { "path": "/json/pointer/path" } syntax (e.g., { "path": "/model" }, { "path": "/tools/0/name" })

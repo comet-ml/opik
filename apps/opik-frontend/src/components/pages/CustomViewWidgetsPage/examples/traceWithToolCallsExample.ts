@@ -38,7 +38,7 @@ export const traceWithToolCallsExample = {
         id: "timestamp",
         type: "Text",
         props: { value: { path: "/timestamp" }, variant: "caption" },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       input: {
@@ -48,7 +48,7 @@ export const traceWithToolCallsExample = {
           label: "Input",
           content: { path: "/input" },
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       output: {
@@ -60,7 +60,7 @@ export const traceWithToolCallsExample = {
           maxLines: 3,
           expandable: true,
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       traceLink: {
@@ -71,7 +71,7 @@ export const traceWithToolCallsExample = {
           id: { path: "/traceId" },
           label: "View trace",
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       // Tool Calls Wrapper (Level1Container with title for the section)
@@ -103,7 +103,7 @@ export const traceWithToolCallsExample = {
           value: { path: "/toolCalls/0/statsLine" },
           variant: "body-small",
         },
-        children: undefined,
+        children: null,
         parentKey: "toolCall1",
       },
       tc1Indexes: {
@@ -115,7 +115,7 @@ export const traceWithToolCallsExample = {
           label: "Indexes",
           showCopy: false,
         },
-        children: undefined,
+        children: null,
         parentKey: "toolCall1",
       },
       // Tool Call 2: check_query_type
@@ -139,7 +139,7 @@ export const traceWithToolCallsExample = {
           value: { path: "/toolCalls/1/description" },
           variant: "body-small",
         },
-        children: undefined,
+        children: null,
         parentKey: "toolCall2",
       },
       // Tool Call 3: Answer generation
@@ -163,7 +163,7 @@ export const traceWithToolCallsExample = {
           value: { path: "/toolCalls/2/description" },
           variant: "body-small",
         },
-        children: undefined,
+        children: null,
         parentKey: "toolCall3",
       },
     },

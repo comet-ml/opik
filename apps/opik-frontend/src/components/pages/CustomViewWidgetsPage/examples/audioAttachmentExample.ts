@@ -35,7 +35,7 @@ export const audioAttachmentExample = {
         id: "metaText",
         type: "Text",
         props: { value: { path: "/metaLine" } },
-        children: undefined,
+        children: null,
         parentKey: "metaRow",
       },
       audio: {
@@ -46,7 +46,7 @@ export const audioAttachmentExample = {
           label: "Generated speech",
           tag: { path: "/audioTag" },
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
     },

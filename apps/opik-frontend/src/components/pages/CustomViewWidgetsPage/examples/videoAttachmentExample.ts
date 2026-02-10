@@ -35,7 +35,7 @@ export const videoAttachmentExample = {
         id: "metaText",
         type: "Text",
         props: { value: { path: "/metaLine" } },
-        children: undefined,
+        children: null,
         parentKey: "metaRow",
       },
       video: {
@@ -46,7 +46,7 @@ export const videoAttachmentExample = {
           label: "Video",
           tag: { path: "/videoTag" },
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
     },

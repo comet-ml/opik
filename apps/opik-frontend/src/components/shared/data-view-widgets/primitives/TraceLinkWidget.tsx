@@ -29,7 +29,8 @@ export const traceLinkWidgetConfig = {
       "Display text (defaults to 'View Trace')",
     ),
   }),
-  description: "Opens a trace in a new window. AI provides only the trace ID.",
+  description:
+    "Opens a trace in a new browser tab. Use in trace context when contextType is 'trace'. Bind traceId to /id.",
 };
 
 // ============================================================================

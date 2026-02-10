@@ -6,46 +6,7 @@
 
 import type { ComponentRenderProps, ComponentRegistry } from "@/lib/data-view";
 import { useResolvedProps } from "@/lib/data-view";
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Safely converts a value to a displayable string.
- * - Objects/arrays are JSON stringified (compact for inline display)
- * - Strings are returned as-is
- * - null/undefined return empty string
- * - Other primitives are converted via String()
- */
-function toDisplayString(value: unknown, compact = true): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "object") {
-    try {
-      return compact ? JSON.stringify(value) : JSON.stringify(value, null, 2);
-    } catch {
-      return "[Object]";
-    }
-  }
-  return String(value);
-}
-
-/**
- * Checks if a value is JSON (object or array, not a string)
- */
-function isJsonValue(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !(value instanceof Date) &&
-    !(value instanceof RegExp)
-  );
-}
+import { toDisplayString, isJsonValue } from "../utils";
 
 // Components
 export { TextWidget, textWidgetConfig } from "./TextWidget";

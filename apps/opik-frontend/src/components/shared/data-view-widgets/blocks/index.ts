@@ -6,45 +6,11 @@
 
 import type { ComponentRenderProps, ComponentRegistry } from "@/lib/data-view";
 import { useResolvedProps } from "@/lib/data-view";
+import { toDisplayString as _toDisplayString, isJsonValue } from "../utils";
 
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Safely converts a value to a displayable string.
- * - Objects/arrays are JSON stringified with formatting
- * - Strings are returned as-is
- * - null/undefined return empty string
- * - Other primitives are converted via String()
- */
+/** Block-level display string: pretty-print JSON (compact=false) */
 function toDisplayString(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-  if (typeof value === "object") {
-    try {
-      return JSON.stringify(value, null, 2);
-    } catch {
-      return "[Complex Object]";
-    }
-  }
-  return String(value);
-}
-
-/**
- * Checks if a value is JSON (object or array, not a string)
- */
-function isJsonValue(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    !(value instanceof Date) &&
-    !(value instanceof RegExp)
-  );
+  return _toDisplayString(value, false);
 }
 
 // Components

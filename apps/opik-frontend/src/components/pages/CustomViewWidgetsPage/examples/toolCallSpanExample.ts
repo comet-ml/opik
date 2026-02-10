@@ -43,7 +43,7 @@ export const toolCallSpanExample = {
           id: { path: "/spanId" },
           label: "Span",
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       statsLine: {
@@ -53,7 +53,7 @@ export const toolCallSpanExample = {
           value: { path: "/statsLine" },
           variant: "body-small",
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       inputCode: {
@@ -65,7 +65,7 @@ export const toolCallSpanExample = {
           label: "Input",
           showCopy: true,
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       outputCode: {
@@ -77,7 +77,7 @@ export const toolCallSpanExample = {
           label: "Output",
           showCopy: true,
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
     },

@@ -31,7 +31,7 @@ export const linkButtonWidgetConfig = {
     label: NullableDynamicString.describe("Optional label (defaults to type)"),
   }),
   description:
-    "First-class navigation link to a trace or span. Only valid when a trace/span ID exists. Should not be used inside Input/Output blocks.",
+    "SPA navigation link to a trace or span (stays in current tab). Use for in-app navigation. Only valid when a trace/span ID exists.",
 };
 
 // ============================================================================

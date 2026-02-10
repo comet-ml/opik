@@ -1,12 +1,25 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Trace } from "@/types/traces";
-import { ViewTree, DataViewProvider, Renderer } from "@/lib/data-view";
+import {
+  ViewTree,
+  DataViewProvider,
+  Renderer,
+  useDataView,
+} from "@/lib/data-view";
 import { customViewRegistry } from "@/components/shared/data-view-widgets";
 
 interface AnnotationCustomViewPanelProps {
   trace: Trace;
   viewTree: ViewTree;
 }
+
+const SourceSyncer: React.FC<{ trace: Trace }> = ({ trace }) => {
+  const { setSource } = useDataView();
+  useEffect(() => {
+    setSource({ ...trace });
+  }, [trace.id, setSource]);
+  return null;
+};
 
 const AnnotationCustomViewPanel: React.FC<AnnotationCustomViewPanelProps> = ({
   trace,
@@ -38,6 +51,7 @@ const AnnotationCustomViewPanel: React.FC<AnnotationCustomViewPanelProps> = ({
   return (
     <div className="space-y-4">
       <DataViewProvider initialSource={sourceData} initialTree={viewTree}>
+        <SourceSyncer trace={trace} />
         <Renderer registry={customViewRegistry} />
       </DataViewProvider>
     </div>

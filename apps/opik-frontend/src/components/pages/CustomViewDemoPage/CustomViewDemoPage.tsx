@@ -168,23 +168,23 @@ const buildDataSummary = (
       summary += `\n- /traces/N/output - Assistant output for message N`;
       summary += `\n- /traces/N/id, /traces/N/name, /traces/N/duration, etc.`;
 
-      // Show actual first and last message content (truncated)
+      // Show actual first and last message content
       const firstTrace = thread.traces[0];
       const lastTrace = thread.traces[thread.traces.length - 1];
 
-      const truncate = (obj: unknown, maxLen: number = 200): string => {
-        const str = JSON.stringify(obj);
-        return str.length > maxLen ? str.slice(0, maxLen) + "..." : str;
+      const stringify = (obj: unknown): string => {
+        if (obj == null) return "";
+        return typeof obj === "string" ? obj : JSON.stringify(obj) ?? "";
       };
 
       summary += `\n\n### First message (trace 0):`;
-      summary += `\n- Input: ${truncate(firstTrace.input)}`;
-      summary += `\n- Output: ${truncate(firstTrace.output)}`;
+      summary += `\n- Input: ${stringify(firstTrace.input)}`;
+      summary += `\n- Output: ${stringify(firstTrace.output)}`;
 
       if (traceCount > 1) {
         summary += `\n\n### Last message (trace ${traceCount - 1}):`;
-        summary += `\n- Input: ${truncate(lastTrace.input)}`;
-        summary += `\n- Output: ${truncate(lastTrace.output)}`;
+        summary += `\n- Input: ${stringify(lastTrace.input)}`;
+        summary += `\n- Output: ${stringify(lastTrace.output)}`;
       }
     }
 
@@ -200,8 +200,8 @@ const buildDataSummary = (
 - Name: ${trace.name}
 - Duration: ${trace.duration}ms
 - Available fields: ${keys.join(", ")}
-- Input: ${JSON.stringify(trace.input).slice(0, 200)}...
-- Output: ${JSON.stringify(trace.output).slice(0, 200)}...`;
+- Input: ${typeof trace.input === "string" ? trace.input : JSON.stringify(trace.input) ?? ""}
+- Output: ${typeof trace.output === "string" ? trace.output : JSON.stringify(trace.output) ?? ""}`;
   }
 
   return "";

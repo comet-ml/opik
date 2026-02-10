@@ -40,7 +40,7 @@ export const threadOverviewExample = {
           value: { path: "/threadInfo/metaLine" },
           variant: "caption",
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       // Chat messages as direct children (no wrapper container)
@@ -51,7 +51,7 @@ export const threadOverviewExample = {
           content: { path: "/turn/userMessage" },
           role: "user",
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       assistantMessage: {
@@ -61,7 +61,7 @@ export const threadOverviewExample = {
           content: { path: "/turn/assistantMessage" },
           role: "assistant",
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       // Tags Section - labels included inside chips, all grey (default variant)
@@ -79,7 +79,7 @@ export const threadOverviewExample = {
           label: { path: "/turn/agentTagLabel" },
           variant: "default",
         },
-        children: undefined,
+        children: null,
         parentKey: "tagsSection",
       },
       categoryTag: {
@@ -89,7 +89,7 @@ export const threadOverviewExample = {
           label: { path: "/turn/categoryTagLabel" },
           variant: "default",
         },
-        children: undefined,
+        children: null,
         parentKey: "tagsSection",
       },
       // Trace Details - L1 container with single Code block
@@ -108,10 +108,10 @@ export const threadOverviewExample = {
         id: "traceCode",
         type: "Code",
         props: {
-          code: { path: "/turn/traceDetailsCode" },
+          content: { path: "/turn/traceDetailsCode" },
           language: "text",
         },
-        children: undefined,
+        children: null,
         parentKey: "traceDetails",
       },
     },

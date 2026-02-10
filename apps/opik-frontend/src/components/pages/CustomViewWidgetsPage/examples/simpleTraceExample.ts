@@ -28,7 +28,7 @@ export const simpleTraceExample = {
         id: "timestamp",
         type: "Text",
         props: { value: { path: "/timestamp" }, variant: "caption" },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       input: {
@@ -38,7 +38,7 @@ export const simpleTraceExample = {
           label: "Input",
           content: { path: "/input" },
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       output: {
@@ -50,7 +50,7 @@ export const simpleTraceExample = {
           maxLines: 3,
           expandable: true,
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
       traceLink: {
@@ -61,7 +61,7 @@ export const simpleTraceExample = {
           id: { path: "/traceId" },
           label: "View trace",
         },
-        children: undefined,
+        children: null,
         parentKey: "root",
       },
     },

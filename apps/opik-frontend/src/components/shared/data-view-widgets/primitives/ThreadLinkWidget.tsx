@@ -30,7 +30,7 @@ export const threadLinkWidgetConfig = {
     ),
   }),
   description:
-    "Opens a thread in a new window. AI provides only the thread ID.",
+    "Opens a thread in a new browser tab. Use in thread context when contextType is 'thread'. Bind threadId to /id.",
 };
 
 // ============================================================================

@@ -21,7 +21,7 @@ export const labelWidgetConfig = {
     text: DynamicString.describe("Label text"),
   }),
   description:
-    "Small text descriptor. Non-interactive. Never the only child of a container.",
+    "Key name in a key-value pair. MUST be paired with a value widget (Text, Number) inside InlineRow. Never standalone.",
 };
 
 // ============================================================================
