@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Opik } from "@/index";
 import { AnswerRelevance } from "@/evaluation/metrics/llmJudges/answerRelevance/AnswerRelevance";
+import { GEval, GEvalPreset } from "@/evaluation/metrics/llmJudges/gEval/GEval";
 import { Hallucination } from "@/evaluation/metrics/llmJudges/hallucination/Hallucination";
 import { Moderation } from "@/evaluation/metrics/llmJudges/moderation/Moderation";
 import { Usefulness } from "@/evaluation/metrics/llmJudges/usefulness/Usefulness";
@@ -212,6 +213,47 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       expect(result.value).toBeLessThan(0.4); // Should be not useful
       expect(result.reason).toBeDefined();
     }, 30000);
+  });
+
+  describe("GEval Metric", () => {
+    it("should score high quality output with custom task", async () => {
+      const metric = new GEval({
+        taskIntroduction:
+          "You evaluate how well a response answers a factual question.",
+        evaluationCriteria:
+          "Score from 0 (incorrect) to 10 (correct and complete).",
+      });
+
+      const result = await metric.score({
+        output: "The capital of France is Paris.",
+      });
+
+      expect(result.value).toBeGreaterThanOrEqual(0.0);
+      expect(result.value).toBeLessThanOrEqual(1.0);
+      expect(result.value).toBeGreaterThan(0.5);
+      expect(result.reason).toBeDefined();
+      if (result.reason) {
+        expect(typeof result.reason).toBe("string");
+        expect(result.reason.length).toBeGreaterThan(0);
+      }
+    }, 60000);
+
+    it("should score using qa_relevance preset", async () => {
+      const metric = new GEvalPreset({ preset: "qa_relevance" });
+
+      const result = await metric.score({
+        output:
+          "Paris is the capital and most populous city of France, located in the north-central part of the country.",
+      });
+
+      expect(result.value).toBeGreaterThanOrEqual(0.0);
+      expect(result.value).toBeLessThanOrEqual(1.0);
+      expect(result.reason).toBeDefined();
+      if (result.reason) {
+        expect(typeof result.reason).toBe("string");
+        expect(result.reason.length).toBeGreaterThan(0);
+      }
+    }, 60000);
   });
 
   describe("Metric Configuration", () => {
