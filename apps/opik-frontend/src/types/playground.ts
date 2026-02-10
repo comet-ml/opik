@@ -9,6 +9,17 @@ import {
 } from "@/types/providers";
 import { SPAN_TYPE } from "@/types/traces";
 
+export interface PromptLibraryMetadata {
+  name: string;
+  id: string;
+  version: {
+    template: unknown;
+    commit?: string;
+    id: string;
+    metadata?: object;
+  };
+}
+
 export interface PlaygroundPromptType {
   name: string;
   id: string;
