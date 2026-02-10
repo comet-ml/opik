@@ -11,13 +11,13 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
-import org.redisson.api.AutoClaimResult;
-import org.redisson.api.PendingEntry;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.StreamMessageId;
 import org.redisson.api.options.PlainOptions;
+import org.redisson.api.stream.AutoClaimResult;
+import org.redisson.api.stream.PendingEntry;
 import org.redisson.api.stream.StreamCreateGroupArgs;
+import org.redisson.api.stream.StreamMessageId;
 import org.redisson.api.stream.StreamPendingRangeArgs;
 import org.redisson.api.stream.StreamReadGroupArgs;
 import org.slf4j.Logger;
@@ -554,14 +554,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     /**
      * The delivery count indicates how many times a message has been delivered to consumers.
-     * Uses {@link PendingEntry#getLastTimeDelivered()} which returns number of times that a given message was delivered.
+     * Uses {@link PendingEntry#getDeliveryCount()} which returns number of times that a given message was delivered.
      *
      * @param messageId the message ID to query
      * @return Mono with the delivery count (0 if not found or on error)
      */
     private Mono<Long> getDeliveryCount(StreamMessageId messageId) {
         return listPending(messageId)
-                .map(PendingEntry::getLastTimeDelivered)
+                .map(PendingEntry::getDeliveryCount)
                 .defaultIfEmpty(0L);
     }
 
