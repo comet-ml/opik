@@ -869,5 +869,45 @@
       "severity": "info",
       "name": "no-orphans"
     }
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/data-view-widgets/blocks/VideoWidget.tsx",
+    "to": "src/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    },
+    "comment": "TODO: Move AttachmentPreviewDialog to shared components"
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/data-view-widgets/blocks/ImageWidget.tsx",
+    "to": "src/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    },
+    "comment": "TODO: Move AttachmentPreviewDialog to shared components"
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/shared/data-view-widgets/blocks/AudioWidget.tsx",
+    "to": "src/components/pages-shared/attachments/AttachmentPreviewDialog/AttachmentPreviewDialog.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-shared-importing-pages"
+    },
+    "comment": "TODO: Move AttachmentPreviewDialog to shared components"
+  },
+  {
+    "type": "dependency",
+    "from": "src/components/pages/CustomViewDemoPage/CustomViewChatPanel.tsx",
+    "to": "src/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader.tsx",
+    "rule": {
+      "severity": "error",
+      "name": "no-cross-page-imports"
+    },
+    "comment": "TODO: Move PlaygroundOutputLoader to pages-shared"
   }
 ]
