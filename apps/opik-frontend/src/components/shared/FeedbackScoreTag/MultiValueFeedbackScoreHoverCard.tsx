@@ -4,6 +4,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
+import ColorIndicator from "@/components/shared/ColorIndicator/ColorIndicator";
 import React from "react";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -15,10 +16,7 @@ import { getIsMultiValueFeedbackScore } from "@/lib/feedback-scores";
 const Header = ({ color, label }: { color: string; label: string }) => {
   return (
     <div className="flex h-6 items-center gap-1.5 pl-1 pr-2">
-      <div
-        className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
-        style={{ "--bg-color": color } as React.CSSProperties}
-      />
+      <ColorIndicator label={label} color={color} variant="square" />
       <div className="comet-body-xs-accented truncate text-foreground">
         {label}
       </div>
