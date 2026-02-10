@@ -30,7 +30,7 @@
         <testcontainers.version>2.0.2</testcontainers.version>
         <uuid.java.generator.version>5.2.0</uuid.java.generator.version>
         <wiremock.version>3.13.1</wiremock.version>
-        <redisson.version>3.52.0</redisson.version>
+        <redisson.version>4.2.0</redisson.version>
         <opentelmetry.version>2.24.0</opentelmetry.version>
         <aws.java.sdk.version>2.41.5</aws.java.sdk.version>
         <json-path.version>2.10.0</json-path.version>
@@ -63,7 +63,7 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.10.0</version>
+                <version>1.11.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -128,7 +128,7 @@
         <dependency>
             <groupId>software.amazon.jdbc</groupId>
             <artifactId>aws-advanced-jdbc-wrapper</artifactId>
-            <version>3.1.0</version>
+            <version>3.2.0</version>
         </dependency>
         <dependency>
             <groupId>io.dropwizard</groupId>
@@ -444,7 +444,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.14.0</version>
+                    <version>3.15.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
