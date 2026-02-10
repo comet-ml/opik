@@ -293,7 +293,13 @@ def build_response_sse_event(event: Event, text_parts: list[Any]) -> str:
     }
 
     sse_event = json.dumps(response_event)
-    logger.debug("Generated response SSE event: %s", sse_event)
+    logger.debug(
+        "response SSE: parts=%d partial=%s id=%s invocation=%s",
+        len(parts_data),
+        event.partial,
+        event.id,
+        event.invocation_id,
+    )
     return f"data: {sse_event}\n\n"
 
 
@@ -320,7 +326,12 @@ def build_tool_call_sse_events(
             "author": event.author,
         }
         sse_event = json.dumps(tool_call_event)
-        logger.debug("Generated tool_call SSE event: %s", sse_event)
+        logger.debug(
+            "tool_call SSE: id=%s name=%s author=%s",
+            tool_call["id"],
+            tool_call.get("name", "unknown"),
+            event.author,
+        )
         result.append(f"data: {sse_event}\n\n")
     return result
 
@@ -348,7 +359,12 @@ def build_tool_response_sse_events(
             "author": event.author,
         }
         sse_event = json.dumps(tool_response_event)
-        logger.debug("Generated tool_complete SSE event: %s", sse_event)
+        logger.debug(
+            "tool_complete SSE: id=%s name=%s author=%s",
+            tool_response["id"],
+            tool_response.get("name", "unknown"),
+            event.author,
+        )
         result.append(f"data: {sse_event}\n\n")
     return result
 
