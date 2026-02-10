@@ -504,7 +504,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'span'
                 AND workspace_id = :workspace_id
-                AND entity_id IN (SELECT id FROM target_spans)
+                AND project_id IN (SELECT project_id FROM target_projects)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -521,8 +521,8 @@ class TraceDAOImpl implements TraceDAO {
                        author
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'span'
-                  AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT id FROM target_spans)
+                AND workspace_id = :workspace_id
+                AND project_id IN (SELECT project_id FROM target_projects)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -666,10 +666,7 @@ class TraceDAOImpl implements TraceDAO {
             FROM (
                 SELECT
                     *,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL) AS duration
+                    duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
                 AND project_id IN (SELECT project_id FROM target_projects)
@@ -970,7 +967,7 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
             ), target_spans AS (
-                SELECT id, trace_id
+                SELECT DISTINCT id, trace_id
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -995,7 +992,6 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -1014,7 +1010,6 @@ class TraceDAOImpl implements TraceDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND entity_id IN (SELECT id FROM target_spans)
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -1202,24 +1197,14 @@ class TraceDAOImpl implements TraceDAO {
             <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores_final
-                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
+                 FROM feedback_scores_final
                  GROUP BY entity_id
                  HAVING <feedback_scores_empty_filters>
              )
             <endif>
             <if(span_feedback_scores_empty_filters)>
              , sfsc AS (SELECT trace_id, COUNT(trace_id) AS span_feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM span_feedback_scores_final
-                    ORDER BY (workspace_id, project_id, trace_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY trace_id, name
-                 )
+                 FROM span_feedback_scores_final
                  GROUP BY trace_id
                  HAVING <span_feedback_scores_empty_filters>
              )
@@ -1231,10 +1216,7 @@ class TraceDAOImpl implements TraceDAO {
                     truncated_output,
                     input_length,
                     output_length,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration
+                    duration
                 FROM traces t
                 <if(guardrails_filters)>
                     LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
@@ -1266,16 +1248,10 @@ class TraceDAOImpl implements TraceDAO {
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
                  AND id IN (
-                    SELECT
-                        entity_id
-                    FROM (
-                        SELECT *
-                        FROM feedback_scores_final
-                        ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                        LIMIT 1 BY entity_id, name
-                  )
-                  GROUP BY entity_id
-                  HAVING <feedback_scores_filters>
+                    SELECT entity_id
+                    FROM feedback_scores_final
+                    GROUP BY entity_id
+                    HAVING <feedback_scores_filters>
                  )
                  <endif>
                  <if(span_feedback_scores_filters)>
@@ -1480,7 +1456,7 @@ class TraceDAOImpl implements TraceDAO {
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
             ), target_spans AS (
-                SELECT id, trace_id
+                SELECT DISTINCT id, trace_id
                 FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -1635,24 +1611,14 @@ class TraceDAOImpl implements TraceDAO {
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores_final
-                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
+                 FROM feedback_scores_final
                  GROUP BY entity_id
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
             <if(span_feedback_scores_empty_filters)>
              , sfsc AS (SELECT trace_id, COUNT(trace_id) AS span_feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM span_feedback_scores_final
-                    ORDER BY (workspace_id, project_id, trace_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY trace_id, name
-                 )
+                 FROM span_feedback_scores_final
                  GROUP BY trace_id
                  HAVING <span_feedback_scores_empty_filters>
             )
@@ -1670,10 +1636,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM (
                     SELECT
                         id,
-                        if(end_time IS NOT NULL AND start_time IS NOT NULL
-                             AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                         (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                         NULL) AS duration
+                        duration
                     FROM traces
                         LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
                     <if(feedback_scores_empty_filters)>
@@ -1692,15 +1655,9 @@ class TraceDAOImpl implements TraceDAO {
                     <if(filters)> AND <filters> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                     <if(feedback_scores_filters)>
-                    AND id in (
-                        SELECT
-                            entity_id
-                        FROM (
-                            SELECT *
-                            FROM feedback_scores_final
-                            ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                            LIMIT 1 BY entity_id, name
-                        )
+                    AND id IN (
+                        SELECT entity_id
+                        FROM feedback_scores_final
                         GROUP BY entity_id
                         HAVING <feedback_scores_filters>
                     )
@@ -2263,24 +2220,14 @@ class TraceDAOImpl implements TraceDAO {
             )
             <if(span_feedback_scores_empty_filters)>
              , sfsc AS (SELECT trace_id, COUNT(trace_id) AS span_feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM span_feedback_scores_final
-                    ORDER BY (workspace_id, project_id, trace_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY trace_id, name
-                 )
+                 FROM span_feedback_scores_final
                  GROUP BY trace_id
                  HAVING <span_feedback_scores_empty_filters>
             )
             <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores_combined
-                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
+                 FROM feedback_scores_final
                  GROUP BY entity_id
                  HAVING <feedback_scores_empty_filters>
             )
@@ -2295,10 +2242,7 @@ class TraceDAOImpl implements TraceDAO {
                     if(output_length > 0, 1, 0) as output_count,
                     if(metadata_length > 0, 1, 0) as metadata_count,
                     length(tags) as tags_length,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                        NULL) as duration,
+                    duration,
                     error_info
                 FROM traces final
                 <if(guardrails_filters)>
@@ -2321,14 +2265,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                 <if(feedback_scores_filters)>
                 AND id IN (
-                    SELECT
-                        entity_id
-                    FROM (
-                        SELECT *
-                        FROM feedback_scores_final
-                        ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                        LIMIT 1 BY entity_id, name
-                    )
+                    SELECT entity_id
+                    FROM feedback_scores_final
                     GROUP BY entity_id
                     HAVING <feedback_scores_filters>
                 )
