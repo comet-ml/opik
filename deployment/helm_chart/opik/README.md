@@ -377,7 +377,10 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.ingress.tls.hosts | list | `[]` |  |
 | component.python-backend.ingress.tls.secretName | string | `""` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
+| component.python-backend.networkPolicy.annotations | object | `{}` |  |
 | component.python-backend.networkPolicy.enabled | bool | `false` |  |
+| component.python-backend.networkPolicy.engineEgress.except | list | `[]` |  |
+| component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
 | component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
