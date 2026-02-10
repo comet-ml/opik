@@ -17,8 +17,6 @@ import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { AggregatedFeedbackScore } from "@/types/shared";
 import { generateExperimentIdFilter } from "@/lib/filters";
-import { LOGS_TYPE } from "@/constants/traces";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
 import ViewSelector, {
   VIEW_TYPE,
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
@@ -109,8 +107,6 @@ const CompareExperimentsDetails: React.FunctionComponent<
 
   const experimentTracesSearch = useMemo(
     () => ({
-      tab: PROJECT_TAB.logs,
-      logsType: LOGS_TYPE.traces,
       traces_filters: generateExperimentIdFilter(experimentsIds[0]),
     }),
     [experimentsIds],

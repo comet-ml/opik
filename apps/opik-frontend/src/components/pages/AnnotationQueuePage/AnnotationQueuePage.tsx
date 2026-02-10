@@ -23,8 +23,6 @@ import AnnotationQueueProgressTag from "@/components/pages/AnnotationQueuePage/A
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { ANNOTATION_QUEUE_SCOPE } from "@/types/annotation-queues";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
-import { LOGS_TYPE } from "@/constants/traces";
-import { PROJECT_TAB } from "@/components/pages/TracesPage/useProjectTabs";
 
 const AnnotationQueuePage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam);
@@ -64,13 +62,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
   ]);
 
   const annotationQueueSearch = useMemo(() => {
-    const logsType =
-      annotationQueue?.scope === ANNOTATION_QUEUE_SCOPE.TRACE
-        ? LOGS_TYPE.traces
-        : LOGS_TYPE.threads;
     return {
-      tab: PROJECT_TAB.logs,
-      logsType,
       [`${annotationQueue?.scope}s_filters`]: generateAnnotationQueueIdFilter(
         annotationQueue?.id,
       ),
