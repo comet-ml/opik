@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Opik } from "@/index";
 import { AnswerRelevance } from "@/evaluation/metrics/llmJudges/answerRelevance/AnswerRelevance";
-import { GEval, GEvalPreset } from "@/evaluation/metrics/llmJudges/gEval/GEval";
+import { GEval } from "@/evaluation/metrics/llmJudges/gEval/GEval";
+import { QARelevanceJudge } from "@/evaluation/metrics/llmJudges/gEval/judges";
 import { Hallucination } from "@/evaluation/metrics/llmJudges/hallucination/Hallucination";
 import { Moderation } from "@/evaluation/metrics/llmJudges/moderation/Moderation";
 import { Usefulness } from "@/evaluation/metrics/llmJudges/usefulness/Usefulness";
@@ -238,8 +239,8 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
       }
     }, 60000);
 
-    it("should score using qa_relevance preset", async () => {
-      const metric = new GEvalPreset({ preset: "qa_relevance" });
+    it("should score using QARelevanceJudge", async () => {
+      const metric = new QARelevanceJudge();
 
       const result = await metric.score({
         output:

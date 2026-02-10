@@ -5,6 +5,21 @@ import {
 } from "@/evaluation/metrics/llmJudges/gEval/GEval";
 import { clearCoTCache } from "@/evaluation/metrics/llmJudges/gEval/GEval";
 import { GEVAL_PRESETS } from "@/evaluation/metrics/llmJudges/gEval/presets";
+import {
+  SummarizationConsistencyJudge,
+  SummarizationCoherenceJudge,
+  DialogueHelpfulnessJudge,
+  QARelevanceJudge,
+  DemographicBiasJudge,
+  PoliticalBiasJudge,
+  GenderBiasJudge,
+  ReligiousBiasJudge,
+  RegionalBiasJudge,
+  AgentToolCorrectnessJudge,
+  AgentTaskCompletionJudge,
+  PromptUncertaintyJudge,
+  ComplianceRiskJudge,
+} from "@/evaluation/metrics/llmJudges/gEval/judges";
 import { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
 import * as modelsFactory from "@/evaluation/models/modelsFactory";
 
@@ -594,6 +609,142 @@ describe("GEvalPreset", () => {
       });
 
       expect(metric).toBeDefined();
+    });
+  });
+});
+
+describe("GEval Judge classes", () => {
+  let mockModel: OpikBaseModel;
+
+  beforeEach(() => {
+    clearCoTCache();
+
+    mockModel = {
+      modelName: "test-model",
+      generateString: vi.fn().mockResolvedValue("CoT steps"),
+      generateProviderResponse: vi.fn().mockResolvedValue({
+        text: JSON.stringify({ score: 5, reason: "Average" }),
+        providerMetadata: {},
+      }),
+    } as unknown as OpikBaseModel;
+
+    vi.mocked(modelsFactory.resolveModel).mockReturnValue(mockModel);
+  });
+
+  const judgeClasses = [
+    { Class: SummarizationConsistencyJudge, expectedName: "summarization_consistency_judge", preset: "summarization_consistency" },
+    { Class: SummarizationCoherenceJudge, expectedName: "summarization_coherence_judge", preset: "summarization_coherence" },
+    { Class: DialogueHelpfulnessJudge, expectedName: "dialogue_helpfulness_judge", preset: "dialogue_helpfulness" },
+    { Class: QARelevanceJudge, expectedName: "qa_relevance_judge", preset: "qa_relevance" },
+    { Class: DemographicBiasJudge, expectedName: "demographic_bias_judge", preset: "bias_demographic" },
+    { Class: PoliticalBiasJudge, expectedName: "political_bias_judge", preset: "bias_political" },
+    { Class: GenderBiasJudge, expectedName: "gender_bias_judge", preset: "bias_gender" },
+    { Class: ReligiousBiasJudge, expectedName: "religious_bias_judge", preset: "bias_religion" },
+    { Class: RegionalBiasJudge, expectedName: "regional_bias_judge", preset: "bias_regional" },
+    { Class: AgentToolCorrectnessJudge, expectedName: "agent_tool_correctness_judge", preset: "agent_tool_correctness" },
+    { Class: AgentTaskCompletionJudge, expectedName: "agent_task_completion_judge", preset: "agent_task_completion" },
+    { Class: PromptUncertaintyJudge, expectedName: "prompt_uncertainty_judge", preset: "prompt_uncertainty" },
+    { Class: ComplianceRiskJudge, expectedName: "compliance_risk_judge", preset: "compliance_regulated_truthfulness" },
+  ] as const;
+
+  describe("Instantiation and naming", () => {
+    it.each(judgeClasses)(
+      "$Class.name should have name '$expectedName'",
+      ({ Class, expectedName }) => {
+        const judge = new Class({ trackMetric: false });
+
+        expect(judge.name).toBe(expectedName);
+      }
+    );
+
+    it("should have 13 judge classes", () => {
+      expect(judgeClasses).toHaveLength(13);
+    });
+  });
+
+  describe("Preset mapping", () => {
+    it.each(judgeClasses)(
+      "$Class.name should use taskIntroduction from '$preset' preset",
+      ({ Class, preset }) => {
+        const judge = new Class({ trackMetric: false });
+        const definition = GEVAL_PRESETS[preset];
+
+        expect(
+          (judge as unknown as { taskIntroduction: string }).taskIntroduction
+        ).toBe(definition.taskIntroduction);
+      }
+    );
+
+    it.each(judgeClasses)(
+      "$Class.name should use evaluationCriteria from '$preset' preset",
+      ({ Class, preset }) => {
+        const judge = new Class({ trackMetric: false });
+        const definition = GEVAL_PRESETS[preset];
+
+        expect(
+          (judge as unknown as { evaluationCriteria: string }).evaluationCriteria
+        ).toBe(definition.evaluationCriteria);
+      }
+    );
+  });
+
+  describe("Inheritance", () => {
+    it("should be an instance of GEval", () => {
+      const judge = new QARelevanceJudge({ trackMetric: false });
+
+      expect(judge).toBeInstanceOf(GEval);
+    });
+
+    it("should be an instance of GEvalPreset", () => {
+      const judge = new QARelevanceJudge({ trackMetric: false });
+
+      expect(judge).toBeInstanceOf(GEvalPreset);
+    });
+  });
+
+  describe("Constructor options", () => {
+    it("should accept no options (all defaults)", () => {
+      const judge = new QARelevanceJudge();
+
+      expect(judge.name).toBe("qa_relevance_judge");
+    });
+
+    it("should pass temperature through", async () => {
+      const judge = new QARelevanceJudge({
+        temperature: 0.7,
+        trackMetric: false,
+      });
+
+      await judge.score({ output: "Test" });
+
+      const cotOptions = (mockModel.generateString as ReturnType<typeof vi.fn>)
+        .mock.calls[0][2];
+      expect(cotOptions).toHaveProperty("temperature", 0.7);
+    });
+
+    it("should pass seed through", async () => {
+      const judge = new DemographicBiasJudge({
+        seed: 42,
+        trackMetric: false,
+      });
+
+      await judge.score({ output: "Test" });
+
+      const cotOptions = (mockModel.generateString as ReturnType<typeof vi.fn>)
+        .mock.calls[0][2];
+      expect(cotOptions).toHaveProperty("seed", 42);
+    });
+  });
+
+  describe("Scoring", () => {
+    it("should return a valid score result", async () => {
+      const judge = new ComplianceRiskJudge({ trackMetric: false });
+
+      const result = await judge.score({ output: "Test output" });
+
+      expect(result.value).toBeGreaterThanOrEqual(0);
+      expect(result.value).toBeLessThanOrEqual(1);
+      expect(result.name).toBe("compliance_risk_judge");
     });
   });
 });
