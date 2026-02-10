@@ -9,5 +9,6 @@ export interface FindExperimentGroupsAggregationsRequest {
     types?: string;
     name?: string;
     projectId?: string;
+    projectDeleted?: boolean;
     filters?: string;
 }

@@ -412,6 +412,7 @@ class ExperimentsClient:
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
+        project_deleted: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentGroupResponse:
@@ -427,6 +428,8 @@ class ExperimentsClient:
         name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        project_deleted : typing.Optional[bool]
 
         filters : typing.Optional[str]
 
@@ -449,6 +452,7 @@ class ExperimentsClient:
             types=types,
             name=name,
             project_id=project_id,
+            project_deleted=project_deleted,
             filters=filters,
             request_options=request_options,
         )
@@ -461,6 +465,7 @@ class ExperimentsClient:
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
+        project_deleted: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentGroupAggregationsResponse:
@@ -476,6 +481,8 @@ class ExperimentsClient:
         name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        project_deleted : typing.Optional[bool]
 
         filters : typing.Optional[str]
 
@@ -498,6 +505,7 @@ class ExperimentsClient:
             types=types,
             name=name,
             project_id=project_id,
+            project_deleted=project_deleted,
             filters=filters,
             request_options=request_options,
         )
@@ -1120,6 +1128,7 @@ class AsyncExperimentsClient:
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
+        project_deleted: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentGroupResponse:
@@ -1135,6 +1144,8 @@ class AsyncExperimentsClient:
         name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        project_deleted : typing.Optional[bool]
 
         filters : typing.Optional[str]
 
@@ -1160,6 +1171,7 @@ class AsyncExperimentsClient:
             types=types,
             name=name,
             project_id=project_id,
+            project_deleted=project_deleted,
             filters=filters,
             request_options=request_options,
         )
@@ -1172,6 +1184,7 @@ class AsyncExperimentsClient:
         types: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         project_id: typing.Optional[str] = None,
+        project_deleted: typing.Optional[bool] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> ExperimentGroupAggregationsResponse:
@@ -1187,6 +1200,8 @@ class AsyncExperimentsClient:
         name : typing.Optional[str]
 
         project_id : typing.Optional[str]
+
+        project_deleted : typing.Optional[bool]
 
         filters : typing.Optional[str]
 
@@ -1212,6 +1227,7 @@ class AsyncExperimentsClient:
             types=types,
             name=name,
             project_id=project_id,
+            project_deleted=project_deleted,
             filters=filters,
             request_options=request_options,
         )

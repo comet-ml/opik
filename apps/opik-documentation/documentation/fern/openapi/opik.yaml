@@ -2570,6 +2570,10 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
       - name: filters
         in: query
         schema:
@@ -2613,6 +2617,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
+          description: Filter experiments by deleted projects
       - name: filters
         in: query
         schema:
