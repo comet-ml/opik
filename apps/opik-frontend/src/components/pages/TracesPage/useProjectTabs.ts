@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { StringParam, useQueryParam } from "use-query-params";
+import useLocalStorageState from "use-local-storage-state";
 import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 const DEFAULT_TAB = PROJECT_TAB.logs;
@@ -17,6 +18,7 @@ export const isLogsType = (
 const QUERY_PARAM_OPTIONS = { updateType: "replaceIn" as const };
 
 type UseProjectTabsOptions = {
+  projectId: string;
   defaultLogsType?: LOGS_TYPE;
 };
 
@@ -30,8 +32,17 @@ type UseProjectTabsOptions = {
  * If only the legacy `type` param is present, it is used to compute
  * activeTab and logsType for backward compatibility.
  */
-const useProjectTabs = (options?: UseProjectTabsOptions) => {
-  const resolvedDefaultLogsType = options?.defaultLogsType ?? DEFAULT_LOGS_TYPE;
+const useProjectTabs = (options: UseProjectTabsOptions) => {
+  const { projectId, defaultLogsType } = options;
+
+  const [storedLogsType, setStoredLogsType] = useLocalStorageState<LOGS_TYPE>(
+    `project-${projectId}-logsType`,
+  );
+
+  const resolvedDefaultLogsType =
+    (isLogsType(storedLogsType) ? storedLogsType : null) ??
+    defaultLogsType ??
+    DEFAULT_LOGS_TYPE;
   // New query params
   const [tabParam, setTabParam] = useQueryParam(
     "tab",
@@ -96,13 +107,13 @@ const useProjectTabs = (options?: UseProjectTabsOptions) => {
   const setLogsType = useCallback(
     (newLogsType: LOGS_TYPE) => {
       setLogsTypeParam(newLogsType);
-      // Ensure tab is set to logs when changing logs type
       if (tabParam !== PROJECT_TAB.logs) {
         setTabParam(PROJECT_TAB.logs);
       }
       clearLegacy();
+      setStoredLogsType(newLogsType);
     },
-    [setLogsTypeParam, setTabParam, tabParam, clearLegacy],
+    [setLogsTypeParam, setTabParam, tabParam, clearLegacy, setStoredLogsType],
   );
 
   // Combined handler for main tab change
@@ -116,9 +127,13 @@ const useProjectTabs = (options?: UseProjectTabsOptions) => {
     [setTabParam, clearLegacy],
   );
 
+  const needsDefaultResolution =
+    !tabParam && !logsTypeParam && !legacyType && !isLogsType(storedLogsType);
+
   return {
     activeTab,
     logsType,
+    needsDefaultResolution,
     setActiveTab,
     setLogsType,
     handleTabChange,

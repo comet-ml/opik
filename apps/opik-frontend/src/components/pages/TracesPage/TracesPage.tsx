@@ -12,6 +12,7 @@ import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
 import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/DashboardsTab";
+import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Construction } from "lucide-react";
@@ -48,7 +49,7 @@ const TracesPage = () => {
   const { intervalStart, intervalEnd } =
     useMetricDateRangeWithQueryAndStorage();
 
-  const { data: threadsStats } = useThreadsStatistic(
+  const { data: threadsStats, isPending: isStatsPending } = useThreadsStatistic(
     {
       projectId,
       fromTime: intervalStart,
@@ -74,9 +75,18 @@ const TracesPage = () => {
     return threadCount > 0 ? LOGS_TYPE.threads : LOGS_TYPE.traces;
   }, [threadsStats]);
 
-  const { activeTab, logsType, setLogsType, handleTabChange } = useProjectTabs({
+  const {
+    activeTab,
+    logsType,
+    needsDefaultResolution,
+    setLogsType,
+    handleTabChange,
+  } = useProjectTabs({
+    projectId,
     defaultLogsType,
   });
+
+  const isResolvingDefault = needsDefaultResolution && isStatsPending;
 
   const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
     "view",
@@ -182,7 +192,7 @@ const TracesPage = () => {
             <div className="text-muted-slate">{project.description}</div>
           </PageBodyStickyContainer>
         )}
-        {renderContent()}
+        {isResolvingDefault ? <Loader /> : renderContent()}
       </PageBodyScrollContainer>
       {isGuardrailsEnabled && (
         <SetGuardrailDialog
