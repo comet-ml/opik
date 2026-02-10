@@ -2,6 +2,8 @@ from collections import defaultdict
 from concurrent import futures
 from typing import Any, Dict, List, Optional, TypeVar, Generic
 
+from ..metrics.score_result import ScoreResult
+
 from ...environment import get_tqdm_for_current_environment
 from .types import EvaluationTask
 
@@ -75,9 +77,11 @@ class StreamingExecutor(Generic[T]):
             results.append(result)
 
             # Update running scores if result has score_results attribute
-            if hasattr(result, "score_results"):
+            if hasattr(result, "score_results") and isinstance(
+                result.score_results, list
+            ):
                 for score in result.score_results:
-                    if not score.scoring_failed:
+                    if isinstance(score, ScoreResult) and not score.scoring_failed:
                         score_totals[score.name] += score.value
                         score_counts[score.name] += 1
 
