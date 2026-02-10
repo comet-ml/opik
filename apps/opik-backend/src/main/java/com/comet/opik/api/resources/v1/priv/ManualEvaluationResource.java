@@ -160,9 +160,11 @@ public class ManualEvaluationResource {
         var allExperimentsInWorkspace = Boolean.TRUE.equals(
                 experimentService.validateExperimentWorkspace(workspaceId, experimentIds).block());
         if (!allExperimentsInWorkspace) {
-            log.warn("Experiment evaluation rejected: one or more entity_ids are not experiment IDs in workspace '{}'", workspaceId);
+            log.warn("Experiment evaluation rejected: one or more entity_ids are not experiment IDs in workspace '{}'",
+                    workspaceId);
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ErrorMessage("entity_ids must contain only experiment IDs belonging to this workspace; trace IDs are not accepted"))
+                    .entity(new ErrorMessage(
+                            "entity_ids must contain only experiment IDs belonging to this workspace; trace IDs are not accepted"))
                     .build();
         }
 
