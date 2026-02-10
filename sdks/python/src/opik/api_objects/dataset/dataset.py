@@ -3,7 +3,6 @@ import datetime
 import logging
 import functools
 import sys
-import time
 from typing import (
     Optional,
     Any,
@@ -12,18 +11,16 @@ from typing import (
     Sequence,
     Set,
     TYPE_CHECKING,
-    Callable,
     Iterator,
 )
 
+from opik.api_objects import rest_helpers
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
     dataset_version_public,
 )
-from opik.rest_api.core.api_error import ApiError
 from opik.message_processing.batching import sequence_splitter
-from opik.rate_limit import rate_limit
 from opik import id_helpers
 import opik.exceptions as exceptions
 import opik.config as config
@@ -284,54 +281,6 @@ class DatasetVersion(DatasetExportOperations):
         return self._version_info
 
 
-def _ensure_rest_api_call_respecting_rate_limit(
-    rest_callable: Callable[[], Any],
-) -> Any:
-    """
-    Execute a REST API call with automatic retry on rate limit (429) errors.
-
-    This function handles HTTP 429 rate limit errors by waiting for the duration
-    specified in the response headers and retrying the request. Regular retries
-    for other errors are handled by the underlying rest client.
-
-    Args:
-        rest_callable: A callable that performs the REST API call.
-
-    Returns:
-        The result of the successful REST API call.
-
-    Raises:
-        ApiError: If the error is not a 429 rate limit error.
-    """
-    while True:
-        try:
-            result = rest_callable()
-            return result
-        except ApiError as exception:
-            if exception.status_code == 429:
-                # Parse rate limit headers to get retry delay
-                if exception.headers is not None:
-                    rate_limiter = rate_limit.parse_rate_limit(exception.headers)
-                    if rate_limiter is not None:
-                        retry_after = rate_limiter.retry_after()
-                        LOGGER.info(
-                            "Rate limited (HTTP 429), retrying in %s seconds",
-                            retry_after,
-                        )
-                        time.sleep(retry_after)
-                        continue
-
-                # Fallback: wait 1 second if no header available
-                LOGGER.info(
-                    "Rate limited (HTTP 429) with no retry-after header, retrying in 1 second"
-                )
-                time.sleep(1)
-                continue
-
-            # Re-raise if not a 429 error
-            raise
-
-
 class Dataset(DatasetExportOperations):
     def __init__(
         self,
@@ -428,7 +377,7 @@ class Dataset(DatasetExportOperations):
                 user operation together. All batches sent as part of one insert/update
                 call share the same batch_group_id.
         """
-        _ensure_rest_api_call_respecting_rate_limit(
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.create_or_update_dataset_items(
                 dataset_name=self._name, items=batch, batch_group_id=batch_group_id
             )
@@ -539,7 +488,7 @@ class Dataset(DatasetExportOperations):
                 user operation together. All batches sent as part of one delete
                 call share the same batch_group_id.
         """
-        _ensure_rest_api_call_respecting_rate_limit(
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.delete_dataset_items(
                 item_ids=batch, batch_group_id=batch_group_id
             )

@@ -725,3 +725,49 @@ def verify_dataset_filtered_items(
         assert inputs == expected_inputs, (
             f"Input mismatch: {inputs} != {expected_inputs}"
         )
+
+
+def verify_traces_annotation_queue(
+    opik_client: opik.Opik,
+    queue_id: str,
+    name: str = mock.ANY,  # type: ignore
+    scope: str = mock.ANY,  # type: ignore
+    description: Optional[str] = mock.ANY,  # type: ignore
+    instructions: Optional[str] = mock.ANY,  # type: ignore
+) -> None:
+    if not synchronization.until(
+        lambda: (opik_client.get_traces_annotation_queue(queue_id) is not None),
+        allow_errors=True,
+    ):
+        raise AssertionError(f"Failed to get annotation queue with id {queue_id}.")
+
+    queue = opik_client.get_traces_annotation_queue(queue_id)
+
+    assert queue.id is not None, "Queue id should not be None"
+    testlib.assert_equal(name, queue.name)
+    testlib.assert_equal(scope, queue.scope)
+    testlib.assert_equal(description, queue.description)
+    testlib.assert_equal(instructions, queue.instructions)
+
+
+def verify_threads_annotation_queue(
+    opik_client: opik.Opik,
+    queue_id: str,
+    name: str = mock.ANY,  # type: ignore
+    scope: str = mock.ANY,  # type: ignore
+    description: Optional[str] = mock.ANY,  # type: ignore
+    instructions: Optional[str] = mock.ANY,  # type: ignore
+) -> None:
+    if not synchronization.until(
+        lambda: (opik_client.get_threads_annotation_queue(queue_id) is not None),
+        allow_errors=True,
+    ):
+        raise AssertionError(f"Failed to get annotation queue with id {queue_id}.")
+
+    queue = opik_client.get_threads_annotation_queue(queue_id)
+
+    assert queue.id is not None, "Queue id should not be None"
+    testlib.assert_equal(name, queue.name)
+    testlib.assert_equal(scope, queue.scope)
+    testlib.assert_equal(description, queue.description)
+    testlib.assert_equal(instructions, queue.instructions)

@@ -52,6 +52,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O4_MINI = "o4-mini",
 
   //  <----- anthropic
+  CLAUDE_OPUS_4_6 = "claude-opus-4-6",
   CLAUDE_OPUS_4_5 = "claude-opus-4-5-20251101",
   CLAUDE_OPUS_4_1 = "claude-opus-4-1-20250805",
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
@@ -94,6 +95,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_OPUS_4 = "anthropic/claude-opus-4",
   ANTHROPIC_CLAUDE_OPUS_4_1 = "anthropic/claude-opus-4.1",
   ANTHROPIC_CLAUDE_OPUS_4_5 = "anthropic/claude-opus-4.5",
+  ANTHROPIC_CLAUDE_OPUS_4_6 = "anthropic/claude-opus-4.6",
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
   ARCEE_AI_AFM_4_5B = "arcee-ai/afm-4.5b",
@@ -514,6 +516,13 @@ export interface LLMOpenAIConfigsType {
   maxConcurrentRequests?: number;
 }
 
+export type AnthropicThinkingEffort =
+  | "adaptive"
+  | "low"
+  | "medium"
+  | "high"
+  | "max";
+
 export interface LLMAnthropicConfigsType {
   temperature: number;
   maxCompletionTokens: number;
@@ -521,6 +530,7 @@ export interface LLMAnthropicConfigsType {
   seed?: number | null;
   throttling?: number;
   maxConcurrentRequests?: number;
+  thinkingEffort?: AnthropicThinkingEffort;
 }
 
 export interface LLMOpenRouterConfigsType {
