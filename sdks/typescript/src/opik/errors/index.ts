@@ -6,3 +6,4 @@ export * from "./BaseError";
 export * from "./types";
 export * from "./dataset";
 export * from "./search";
+export * from "@/annotation-queue/errors";

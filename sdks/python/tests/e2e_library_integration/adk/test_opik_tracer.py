@@ -101,11 +101,6 @@ def start_api_server(request):
 
         yield base_url
 
-        if proc.stdout is not None:
-            print(proc.stdout.read())
-        if proc.stderr is not None:
-            print(proc.stderr.read())
-
         proc.terminate()
         proc.wait()
 
@@ -130,8 +125,9 @@ def test_opik_tracer_with_sample_agent(
         f"{base_url}/run",
         json=json_data,
     )
-    # print("Response: ", result.text)
-    assert result.status_code == 200
+    assert result.status_code == 200, (
+        f"ADK /run returned {result.status_code}. Response: {result.text!r}"
+    )
 
     traces = opik_client_unique_project_name.search_traces(
         filter_string='input contains "Hey, whats the weather in New York today?"',

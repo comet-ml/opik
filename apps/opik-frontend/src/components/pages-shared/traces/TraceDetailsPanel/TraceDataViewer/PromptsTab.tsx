@@ -40,12 +40,10 @@ const convertRawPromptToPromptWithLatestVersion = (
 ): PromptWithLatestVersion => {
   const date = new Date().toISOString();
 
-  // Use existing metadata or create default metadata for messages_json format
-  // This ensures parsePromptVersionContent knows how to parse the template correctly
-  const metadata = rawPrompt.version.metadata ?? {
-    created_from: "opik_ui",
-    type: "messages_json",
-  };
+  // Use existing metadata if available, otherwise use empty object
+  // Empty object causes isMessagesJsonFormat() to return false, so the template
+  // is treated as plain text (correct for SDK text prompts without metadata)
+  const metadata = rawPrompt.version.metadata ?? {};
 
   const promptVersion: PromptVersion = {
     id: rawPrompt.version.id,
@@ -161,6 +159,9 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
                     <Link
                       to="/$workspaceName/prompts/$promptId"
                       params={{ workspaceName, promptId }}
+                      search={{
+                        activeVersionId: rawPrompts[index]?.version?.id,
+                      }}
                       className="inline-flex items-center"
                     >
                       View in Prompt library
