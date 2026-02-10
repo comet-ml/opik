@@ -108,25 +108,13 @@ def _display_tools(
     tool_text = rich.text.Text()
     tool_text.append("\n")
     for tool in tools:
-        tool_key = tool.get("function", {}).get("name") or tool.get("name")
-        is_optimized = (
-            tool_key in optimized_tool_names
-            if optimized_tool_names is not None
-            else None
+        tool_text.append(
+            _render_tool_summary_line(
+                tool=tool,
+                optimized_tool_names=optimized_tool_names,
+                tool_use_allowed=bool(tool_use_allowed is not False),
+            )
         )
-        summary = format_tool_summary(tool)
-        name, sep, rest = summary.partition(":")
-        if sep:
-            name_style = "cyan"
-            if is_optimized is False:
-                name_style = "dim"
-            tool_text.append(name.strip(), style=name_style)
-            if tool_use_allowed is False:
-                tool_text.append(" (disabled)", style="red")
-            tool_text.append(": ")
-            tool_text.append(rest.strip(), style="dim")
-        else:
-            tool_text.append(summary.strip(), style="dim")
         tool_text.append("\n")
 
     panel = rich.panel.Panel(
@@ -179,6 +167,34 @@ def _format_tool_details(tool: dict[str, Any]) -> tuple[rich.text.Text, int]:
                     line += f": {desc}"
                 text.append(line, style="dim")
     return text, name_len
+
+
+def _render_tool_summary_line(
+    *,
+    tool: dict[str, Any],
+    optimized_tool_names: set[str] | None,
+    tool_use_allowed: bool,
+) -> rich.text.Text:
+    """Render one summary line for a tool with centralized styles."""
+    text = rich.text.Text()
+    tool_key = tool.get("function", {}).get("name") or tool.get("name")
+    is_optimized = (
+        tool_key in optimized_tool_names if optimized_tool_names is not None else None
+    )
+    summary = format_tool_summary(tool)
+    name, sep, rest = summary.partition(":")
+    if sep:
+        name_style = "cyan"
+        if is_optimized is False:
+            name_style = "dim"
+        text.append(name.strip(), style=name_style)
+        if not tool_use_allowed:
+            text.append(" (disabled)", style="red")
+        text.append(": ")
+        text.append(rest.strip(), style="dim")
+    else:
+        text.append(summary.strip(), style="dim")
+    return text
 
 
 def _display_chat_prompt_messages_and_tools(
@@ -269,16 +285,13 @@ def _display_chat_prompt_messages_and_tools(
                     details.stylize(name_style, 0, name_len)
                 tool_text.append(details)
             else:
-                summary = format_tool_summary(tool)
-                name, sep, rest = summary.partition(":")
-                if sep:
-                    tool_text.append(name.strip(), style=name_style)
-                    if not tool_use_allowed:
-                        tool_text.append(" (disabled)", style="red")
-                    tool_text.append(": ")
-                    tool_text.append(rest.strip(), style="dim")
-                else:
-                    tool_text.append(summary.strip(), style="dim")
+                tool_text.append(
+                    _render_tool_summary_line(
+                        tool=tool,
+                        optimized_tool_names=optimized_tool_names,
+                        tool_use_allowed=tool_use_allowed,
+                    )
+                )
             tool_text.append("\n")
         items.append(
             rich.panel.Panel(
