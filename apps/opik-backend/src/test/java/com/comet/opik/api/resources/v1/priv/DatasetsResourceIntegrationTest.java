@@ -51,6 +51,8 @@ import java.util.concurrent.TimeoutException;
 import static com.comet.opik.domain.ProjectService.DEFAULT_USER;
 import static com.comet.opik.domain.ProjectService.DEFAULT_WORKSPACE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -108,7 +110,7 @@ class DatasetsResourceIntegrationTest {
 
         var request = DatasetItemStreamRequest.builder().datasetName(datasetName).steamLimit(500).build();
 
-        when(itemService.getItems(workspaceId, request, Visibility.PRIVATE))
+        when(itemService.getItems(eq(workspaceId), eq(request), any(), eq(Visibility.PRIVATE)))
                 .thenReturn(Flux.defer(() -> itemFlux));
 
         try (var response = EXT.target("/v1/private/datasets/items/stream")

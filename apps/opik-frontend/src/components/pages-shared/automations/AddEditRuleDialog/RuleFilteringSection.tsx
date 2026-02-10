@@ -27,7 +27,6 @@ import {
   OPERATORS_MAP,
 } from "@/constants/filters";
 import { createFilter } from "@/lib/filters";
-import { ThreadStatus } from "@/types/thread";
 import FiltersContent from "@/components/shared/FiltersContent/FiltersContent";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
@@ -346,19 +345,6 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             placeholder: "Select score",
           },
         },
-        ...(isThreadScope
-          ? {
-              status: {
-                keyComponentProps: {
-                  options: [
-                    { value: ThreadStatus.ACTIVE, label: "Active" },
-                    { value: ThreadStatus.INACTIVE, label: "Inactive" },
-                  ],
-                  placeholder: "Select status",
-                },
-              },
-            }
-          : {}),
         ...(isSpanScope
           ? {
               type: {
@@ -407,13 +393,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           : {}),
       },
     }),
-    [
-      projectId,
-      isThreadScope,
-      isSpanScope,
-      isGuardrailsEnabled,
-      ruleDictionaryOperators,
-    ],
+    [projectId, isSpanScope, isGuardrailsEnabled, ruleDictionaryOperators],
   );
 
   const handleAddFilter = useCallback(() => {

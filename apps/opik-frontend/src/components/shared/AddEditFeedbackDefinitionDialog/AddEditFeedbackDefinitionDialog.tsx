@@ -7,6 +7,7 @@ import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogAutoScrollBody,
   DialogClose,
   DialogContent,
   DialogFooter,
@@ -76,11 +77,12 @@ type AddEditFeedbackDefinitionDialogProps = {
   setOpen: (open: boolean) => void;
   feedbackDefinition?: FeedbackDefinition;
   mode?: FeedbackDefinitionDialogMode;
+  onCreated?: (feedbackDefinition: CreateFeedbackDefinition) => void;
 };
 
 const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
   AddEditFeedbackDefinitionDialogProps
-> = ({ open, setOpen, feedbackDefinition, mode = "create" }) => {
+> = ({ open, setOpen, feedbackDefinition, mode = "create", onCreated }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const feedbackDefinitionCreateMutation =
     useFeedbackDefinitionCreateMutation();
@@ -139,7 +141,10 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
         feedbackDefinition: composedFeedbackDefinition,
         workspaceName,
       });
+      onCreated?.(composedFeedbackDefinition);
     }
+
+    setOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composedFeedbackDefinition, workspaceName, feedbackDefinition, isEdit]);
 
@@ -149,68 +154,68 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        {isEdit && (
-          <ExplainerCallout
-            Icon={MessageCircleWarning}
-            className="mb-2"
-            isDismissable={false}
-            {...EXPLAINERS_MAP[
-              EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition
-            ]}
-          />
-        )}
-        <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="feedbackDefinitionName">Name</Label>
-          <Input
-            id="feedbackDefinitionName"
-            placeholder="Feedback definition name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="feedbackDefinitionDescription">Description</Label>
-          <Textarea
-            id="feedbackDefinitionDescription"
-            placeholder="Feedback definition description"
-            className="min-h-20"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            maxLength={255}
-          />
-        </div>
-        <div className="flex flex-col gap-2 pb-4">
-          <Label htmlFor="feedbackDefinitionType">Type</Label>
-          <SelectBox
-            id="feedbackDefinitionType"
-            value={type}
-            onChange={(type) => {
-              setDetails(undefined);
-              setType(type as CreateFeedbackDefinition["type"]);
-            }}
-            options={TYPE_OPTIONS}
-          />
-        </div>
-        <div className="flex max-h-[400px] flex-col gap-4 overflow-y-auto">
-          <FeedbackDefinitionDetails
-            onChange={setDetails}
-            type={type}
-            details={details}
-          />
-        </div>
+        <DialogAutoScrollBody>
+          {isEdit && (
+            <ExplainerCallout
+              Icon={MessageCircleWarning}
+              className="mb-2"
+              isDismissable={false}
+              {...EXPLAINERS_MAP[
+                EXPLAINER_ID.what_happens_if_i_edit_a_feedback_definition
+              ]}
+            />
+          )}
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="feedbackDefinitionName">Name</Label>
+            <Input
+              id="feedbackDefinitionName"
+              placeholder="Feedback definition name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="feedbackDefinitionDescription">Description</Label>
+            <Textarea
+              id="feedbackDefinitionDescription"
+              placeholder="Feedback definition description"
+              className="min-h-20"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              maxLength={255}
+            />
+          </div>
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="feedbackDefinitionType">Type</Label>
+            <SelectBox
+              id="feedbackDefinitionType"
+              value={type}
+              onChange={(type) => {
+                setDetails(undefined);
+                setType(type as CreateFeedbackDefinition["type"]);
+              }}
+              options={TYPE_OPTIONS}
+            />
+          </div>
+          <div className="flex flex-col gap-4">
+            <FeedbackDefinitionDetails
+              onChange={setDetails}
+              type={type}
+              details={details}
+            />
+          </div>
+        </DialogAutoScrollBody>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
-          <DialogClose asChild>
-            <Button
-              type="submit"
-              disabled={!isValidFeedbackDefinition(composedFeedbackDefinition)}
-              onClick={submitHandler}
-            >
-              {submitText}
-            </Button>
-          </DialogClose>
+          <Button
+            type="submit"
+            disabled={!isValidFeedbackDefinition(composedFeedbackDefinition)}
+            onClick={submitHandler}
+          >
+            {submitText}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

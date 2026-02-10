@@ -18,6 +18,7 @@ generate_id = id_helpers.generate_id
 
 LOGGER = logging.getLogger(__name__)
 
+
 FilterParsedItemT = TypeVar(
     "FilterParsedItemT",
     bound=Union[
@@ -125,7 +126,7 @@ def parse_filter_expressions(
     if filter_string is None:
         return None
 
-    filter_expressions = opik_query_language.OpikQueryLanguage(
+    filter_expressions = opik_query_language.OpikQueryLanguage.for_traces(
         filter_string
     ).get_filter_expressions()
 

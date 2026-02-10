@@ -21,6 +21,7 @@ import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
   getOptimizationDefaultConfigByProvider,
+  extractMetricNameFromCode,
 } from "@/lib/optimizations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
@@ -198,12 +199,24 @@ export const useOptimizationsNewFormHandlers = () => {
         datasetNameValue,
       );
 
+      // For code metrics, extract the class name from the code
+      // For other metrics, use the metric type
+      const metricConfig = studioConfig.evaluation.metrics[0];
+      let objectiveName: string = metricConfig.type;
+      if (
+        metricConfig.type === METRIC_TYPE.CODE &&
+        metricConfig.parameters &&
+        "code" in metricConfig.parameters
+      ) {
+        objectiveName = extractMetricNameFromCode(metricConfig.parameters.code);
+      }
+
       const result = await createOptimization({
         optimization: {
           name: formData.name || undefined,
           studio_config: studioConfig,
           dataset_name: datasetNameValue,
-          objective_name: studioConfig.evaluation.metrics[0].type,
+          objective_name: objectiveName,
           status: OPTIMIZATION_STATUS.INITIALIZED,
         },
       });

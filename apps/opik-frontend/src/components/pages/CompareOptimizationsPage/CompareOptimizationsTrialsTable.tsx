@@ -5,7 +5,6 @@ import { ROW_HEIGHT, OnChangeFn } from "@/types/shared";
 import { Experiment } from "@/types/datasets";
 import { Card } from "@/components/ui/card";
 import DataTable from "@/components/shared/DataTable/DataTable";
-import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { DataTableWrapperProps } from "@/components/shared/DataTable/DataTableWrapper";
 import { TABLE_WRAPPER_ATTRIBUTE } from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -13,7 +12,7 @@ import { TABLE_WRAPPER_ATTRIBUTE } from "@/components/layout/PageBodyStickyTable
 export const getRowId = (e: Experiment) => e.id;
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: ["name"],
+  left: [],
   right: [],
 };
 
@@ -43,6 +42,7 @@ interface CompareOptimizationsTrialsTableProps {
   columnsWidth: Record<string, number>;
   onColumnsWidthChange: OnChangeFn<Record<string, number>>;
   highlightedTrialId?: string;
+  showLoadingOverlay?: boolean;
 }
 
 const CompareOptimizationsTrialsTable: React.FC<
@@ -58,11 +58,12 @@ const CompareOptimizationsTrialsTable: React.FC<
   columnsWidth,
   onColumnsWidthChange,
   highlightedTrialId,
+  showLoadingOverlay,
 }) => {
   const getRowClassName = useCallback(
     (row: Row<Experiment>) => {
       if (highlightedTrialId && row.id === highlightedTrialId) {
-        return "[&_td]:bg-[#e6f7ed] [&:hover_td]:!bg-[#d0f0dc]";
+        return "comet-table-row-best";
       }
       return "";
     },
@@ -91,8 +92,8 @@ const CompareOptimizationsTrialsTable: React.FC<
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={StickyTableWrapperWithBorder}
-        TableBody={DataTableVirtualBody}
         stickyHeader
+        showLoadingOverlay={showLoadingOverlay}
       />
     </Card>
   );

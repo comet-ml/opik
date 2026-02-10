@@ -33,8 +33,8 @@ import { Trace } from "@/types/traces";
 import { AnnotationQueue } from "@/types/annotation-queues";
 import {
   convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
+  injectColumnCallback,
+  migrateSelectedColumns,
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import {
@@ -52,6 +52,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
+import IdCell from "@/components/shared/DataTableCells/IdCell";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
@@ -80,6 +81,13 @@ import SelectBox, {
 import { useTruncationEnabled } from "@/components/server-sync-provider";
 
 const TRACE_COLUMNS: ColumnData<Trace>[] = [
+  {
+    id: COLUMN_ID_ID,
+    label: "ID",
+    type: COLUMN_TYPE.string,
+    cell: IdCell as never,
+    sortable: true,
+  },
   {
     id: "name",
     label: "Name",
@@ -225,10 +233,11 @@ const TRACE_FILTER_COLUMNS: ColumnData<Trace>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_ID_ID],
+  left: [COLUMN_SELECT_ID],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_ID_ID,
   "name",
   "input",
   "output",
@@ -236,6 +245,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "queue-trace-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "queue-trace-columns-width";
 const COLUMNS_ORDER_KEY = "queue-trace-columns-order";
 const COLUMNS_SORT_KEY = "queue-trace-columns-sort";
@@ -298,9 +308,13 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_ID_ID],
+      ),
     },
   );
 
@@ -328,7 +342,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     [annotationQueue.id, filters],
   );
 
-  const { data, isPending } = useTracesList(
+  const { data, isPending, isPlaceholderData, isFetching } = useTracesList(
     {
       projectId: annotationQueue.project_id,
       sorting: sortedColumns,
@@ -451,25 +465,38 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     [workspaceName, annotationQueue.project_id],
   );
 
+  const handleThreadIdClick = useCallback(
+    (row: Trace) => {
+      if (!row || !row.thread_id) return;
+
+      const url = generateTracesURL(
+        workspaceName,
+        annotationQueue.project_id,
+        "threads",
+        row.thread_id,
+      );
+      window.open(url, "_blank");
+    },
+    [workspaceName, annotationQueue.project_id],
+  );
+
   const columns = useMemo(() => {
-    return [
-      generateSelectColumDef<Trace>(),
-      mapColumnDataFields<Trace, Trace>({
-        id: COLUMN_ID_ID,
-        label: "ID",
-        type: COLUMN_TYPE.string,
-        cell: LinkCell as never,
-        customMeta: {
-          callback: handleRowClick,
-          asId: true,
-        },
-        sortable: isColumnSortable(COLUMN_ID_ID, sortableBy),
-      }),
-      ...convertColumnDataToColumn<Trace, Trace>(TRACE_COLUMNS, {
+    const convertedColumns = convertColumnDataToColumn<Trace, Trace>(
+      TRACE_COLUMNS,
+      {
         columnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
-      }),
+      },
+    );
+
+    return [
+      generateSelectColumDef<Trace>(),
+      ...injectColumnCallback(
+        convertedColumns,
+        "thread_id",
+        handleThreadIdClick,
+      ),
       ...convertColumnDataToColumn<Trace, Trace>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
         selectedColumns,
@@ -483,13 +510,13 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       }),
     ];
   }, [
-    handleRowClick,
     sortableBy,
     columnsOrder,
     selectedColumns,
     scoresColumnsData,
     scoresColumnsOrder,
     annotationQueue.id,
+    handleThreadIdClick,
   ]);
 
   const sortConfig = useMemo(
@@ -557,6 +584,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             config={filtersConfig as never}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -596,6 +624,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

@@ -62,6 +62,9 @@ tags:
   description: LLM Provider Key
 - name: Manual Evaluation
   description: "Manual evaluation resources for traces, threads, and spans"
+- name: Ollama
+  description: Ollama provider configuration endpoints with OpenAI-compatible API
+    support.
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
@@ -2219,6 +2222,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/datasets/{id}/versions/retrieve:
+    post:
+      tags:
+      - Datasets
+      summary: Retrieve dataset version by name
+      description: "Get a specific version by its version name (e.g., 'v1', 'v373').\
+        \ This is more efficient than paginating through all versions for large datasets."
+      operationId: retrieveDatasetVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionRetrieveRequest_Public"
+      responses:
+        "200":
+          description: Dataset version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions/hash/{versionHash}:
     patch:
       tags:
@@ -2339,6 +2381,15 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
       - name: sorting
         in: query
         schema:
@@ -2352,6 +2403,13 @@ paths:
         schema:
           type: string
           description: Filter experiments by a list of experiment IDs
+      - name: force_sorting
+        in: query
+        schema:
+          type: boolean
+          description: Force sorting even when exceeding the endpoint result set limit.
+            May result in slower queries
+          default: false
       responses:
         "200":
           description: Experiments resource
@@ -2507,6 +2565,15 @@ paths:
         schema:
           type: string
           description: "Filter experiments by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
       - name: filters
         in: query
         schema:
@@ -2545,6 +2612,16 @@ paths:
         schema:
           type: string
           description: "Filter experiments by name (partial match, case insensitive)"
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
+          description: Filter experiments by deleted projects
       - name: filters
         in: query
         schema:
@@ -3107,6 +3184,87 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ollama/models:
+    post:
+      tags:
+      - Ollama
+      summary: List available Ollama models
+      description: "Fetches the list of models available from the Ollama instance.\
+        \ URL may be provided with or without /v1 suffix (e.g., http://localhost:11434\
+        \ or http://localhost:11434/v1). The /v1 suffix will be automatically removed\
+        \ for model discovery. For actual LLM inference, use the URL with /v1 suffix\
+        \ for OpenAI-compatible endpoints."
+      operationId: listModels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OllamaInstanceBaseUrlRequest"
+        required: true
+      responses:
+        "200":
+          description: Models retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OllamaModel"
+        "422":
+          description: Unprocessable Content - Invalid URL format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "500":
+          description: Failed to fetch models
+        "503":
+          description: Ollama provider is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/ollama/test-connection:
+    post:
+      tags:
+      - Ollama
+      summary: Test connection to Ollama instance
+      description: "Validates that the provided Ollama URL is reachable. URL may be\
+        \ provided with or without /v1 suffix (e.g., http://localhost:11434 or http://localhost:11434/v1).\
+        \ The /v1 suffix will be automatically removed for connection testing. For\
+        \ inference, use the URL with /v1 suffix."
+      operationId: testConnection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OllamaInstanceBaseUrlRequest"
+        required: true
+      responses:
+        "200":
+          description: Connection test successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OllamaConnectionTestResponse"
+        "422":
+          description: Unprocessable Content - Invalid URL format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "502":
+          description: Connection test failed - Ollama instance unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OllamaConnectionTestResponse"
+        "503":
+          description: Ollama provider is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/otel/v1/traces:
     post:
       tags:
@@ -3505,6 +3663,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeedbackScoreNames"
+  /v1/private/projects/{id}/token-usage/names:
+    get:
+      tags:
+      - Projects
+      summary: Find Token Usage names
+      description: Find Token Usage names
+      operationId: findTokenUsageNames
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Token Usage names resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenUsageNames"
   /v1/private/projects/{id}/metrics:
     post:
       tags:
@@ -10230,6 +10409,8 @@ components:
           format: int32
         dataset_version:
           type: string
+        filters:
+          type: string
     DatasetUpdate:
       required:
       - name
@@ -10311,6 +10492,17 @@ components:
           minLength: 1
           type: string
           description: Version hash or tag to restore from
+    DatasetVersionRetrieveRequest_Public:
+      required:
+      - version_name
+      type: object
+      properties:
+        version_name:
+          minLength: 1
+          pattern: ^v\d+$
+          type: string
+          description: "Version name in format 'vN' (e.g., 'v1', 'v373')"
+          example: v1
     DatasetVersionUpdate_Public:
       type: object
       properties:
@@ -10418,6 +10610,9 @@ components:
         project_id:
           type: string
           format: uuid
+          readOnly: true
+        project_name:
+          type: string
           readOnly: true
         name:
           type: string
@@ -10732,6 +10927,32 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentItemBulkRecord"
+    ExperimentItemReference:
+      required:
+      - dataset_id
+      - dataset_item_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+        dataset_item_id:
+          type: string
+          description: Dataset Item ID
+          format: uuid
+      description: "Experiment reference with ID, name, dataset ID, and dataset item\
+        \ ID"
+      readOnly: true
     GuardrailsValidation:
       type: object
       properties:
@@ -10954,6 +11175,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentItemReference"
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -11267,6 +11490,9 @@ components:
         project_id:
           type: string
           format: uuid
+          readOnly: true
+        project_name:
+          type: string
           readOnly: true
         name:
           type: string
@@ -12227,6 +12453,7 @@ components:
           - openrouter
           - vertex-ai
           - bedrock
+          - ollama
           - custom-llm
           - opik-free
         api_key:
@@ -12293,6 +12520,7 @@ components:
           - openrouter
           - vertex-ai
           - bedrock
+          - ollama
           - custom-llm
           - opik-free
         api_key:
@@ -12355,6 +12583,7 @@ components:
           - openrouter
           - vertex-ai
           - bedrock
+          - ollama
           - custom-llm
           - opik-free
         api_key:
@@ -12466,6 +12695,60 @@ components:
           - trace
           - thread
           - span
+    OllamaModel:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+          description: Model name
+          example: llama2
+        size:
+          type: integer
+          description: Model size in bytes
+          format: int64
+        digest:
+          type: string
+          description: Model digest/hash
+        modified_at:
+          type: string
+          description: Model modification date
+          format: date-time
+      description: Ollama model information
+    OllamaInstanceBaseUrlRequest:
+      required:
+      - base_url
+      type: object
+      properties:
+        base_url:
+          minLength: 1
+          type: string
+          description: "Base URL of the Ollama instance. May include /v1 suffix which\
+            \ will be automatically removed for connection testing. For inference,\
+            \ use the URL with /v1 suffix for OpenAI-compatible endpoints."
+          example: http://localhost:11434/v1
+        api_key:
+          type: string
+          description: "Optional API key for authenticated Ollama instances. If provided,\
+            \ will be sent as Bearer token in Authorization header."
+      description: Request with Ollama instance base URL for connection testing or
+        model discovery.
+    OllamaConnectionTestResponse:
+      type: object
+      properties:
+        connected:
+          type: boolean
+          description: Whether the connection was successful
+        version:
+          type: string
+          description: Server version (returned even if connection failed or version
+            is incompatible)
+        error_message:
+          type: string
+          description: Error message if connection failed
+      description: Response from Ollama connection test.
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
     Optimization:
@@ -13080,6 +13363,13 @@ components:
           type: string
         type:
           type: string
+    TokenUsageNames:
+      type: object
+      properties:
+        names:
+          type: array
+          items:
+            type: string
     DataPointNumber_Public:
       required:
       - time
@@ -13131,6 +13421,24 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DataPointNumber_Public"
+    BreakdownConfig_Public:
+      type: object
+      properties:
+        field:
+          type: string
+          enum:
+          - none
+          - tags
+          - metadata
+          - name
+          - error_info
+          - model
+          - provider
+          - type
+        metadata_key:
+          type: string
+        sub_metric:
+          type: string
     ProjectMetricRequest_Public:
       type: object
       properties:
@@ -13174,6 +13482,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceThreadFilter_Public"
+        breakdown:
+          $ref: "#/components/schemas/BreakdownConfig_Public"
     ProjectStatsSummary:
       type: object
       properties:
@@ -13884,6 +14194,7 @@ components:
       - exportEnabled
       - geminiProviderEnabled
       - guardrailsEnabled
+      - ollamaProviderEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -13935,6 +14246,8 @@ components:
         bedrockProviderEnabled:
           type: boolean
         customllmProviderEnabled:
+          type: boolean
+        ollamaProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean
@@ -14659,6 +14972,32 @@ components:
           enum:
           - passed
           - failed
+    ExperimentItemReference_Public:
+      required:
+      - dataset_id
+      - dataset_item_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+        dataset_item_id:
+          type: string
+          description: Dataset Item ID
+          format: uuid
+      description: "Experiment reference with ID, name, dataset ID, and dataset item\
+        \ ID"
+      readOnly: true
     GuardrailsValidation_Public:
       type: object
       properties:
@@ -14783,6 +15122,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentItemReference_Public"
     TraceThread:
       type: object
       properties:

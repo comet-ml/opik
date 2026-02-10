@@ -52,3 +52,45 @@ def generate_llm_response(request: Request) -> str:
   The `opik_distributed_trace_headers` parameter is added by the `track` decorator to each function that is decorated
   and is a dictionary with the keys `opik_trace_id` and `opik_parent_span_id`.
 </Note>
+
+## Using the distributed_headers Context Manager
+
+As an alternative to passing `opik_distributed_trace_headers` as a parameter, you can use the `distributed_headers()` context manager for more explicit control over distributed header handling. This approach provides automatic cleanup, error handling, and optional data flushing.
+
+```python title="server.py"
+from opik import track
+from opik.decorator.context_manager import distributed_headers
+from fastapi import FastAPI, Request
+
+@track()
+def my_llm_application():
+    pass
+
+app = FastAPI()  # Or Flask, Django, or any other framework
+
+
+@app.post("/generate_response")
+def generate_llm_response(request: Request) -> str:
+    # Extract distributed headers from the request
+    headers = {
+        "opik_trace_id": request.headers.get("opik_trace_id"),
+        "opik_parent_span_id": request.headers.get("opik_parent_span_id"),
+    }
+
+    # Use the context manager to handle distributed headers
+    with distributed_headers(headers, flush=False):
+        result = my_llm_application()
+
+    return result
+```
+
+The `distributed_headers()` context manager accepts two parameters:
+
+- `headers`: A dictionary containing the distributed trace headers (`opik_trace_id` and `opik_parent_span_id`)
+- `flush` (optional): Whether to flush the Opik client data after the root span is processed. Defaults to `False`. Set to `True` if you want to ensure immediate data transmission.
+
+<Note>
+  The context manager automatically creates a root span with the provided headers, handles any errors that occur during execution, and cleans up the context when complete.
+</Note>
+
+For more details and additional examples, see the [distributed_headers context manager API reference](https://www.comet.com/docs/opik/python-sdk-reference/context_manager/distributed_headers.html).

@@ -21,16 +21,13 @@ import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import { Alert, ALERT_TYPE } from "@/types/alerts";
 import {
+  COLUMN_ID_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import {
-  convertColumnDataToColumn,
-  isColumnSortable,
-  mapColumnDataFields,
-} from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import {
@@ -50,6 +47,7 @@ import ExplainerDescription from "@/components/shared/ExplainerDescription/Expla
 export const getRowId = (a: Alert) => a.id!;
 
 const SELECTED_COLUMNS_KEY = "alerts-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "alerts-columns-width";
 const COLUMNS_ORDER_KEY = "alerts-columns-order";
 const COLUMNS_SORT_KEY = "alerts-columns-sort";
@@ -57,10 +55,16 @@ const PAGINATION_SIZE_KEY = "alerts-pagination-size";
 
 export const DEFAULT_COLUMNS: ColumnData<Alert>[] = [
   {
-    id: "id",
+    id: COLUMN_ID_ID,
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
+  },
+  {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    sortable: true,
   },
   {
     id: "alert_type",
@@ -147,11 +151,12 @@ export const FILTERS_COLUMNS: ColumnData<Alert>[] = [
 ];
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "alert_type",
   "webhook_url",
   "triggers",
@@ -206,7 +211,7 @@ const AlertsPage: React.FunctionComponent = () => {
     [],
   );
 
-  const { data, isPending } = useAlertsList(
+  const { data, isPending, isPlaceholderData, isFetching } = useAlertsList(
     {
       workspaceName,
       search: search!,
@@ -231,9 +236,13 @@ const AlertsPage: React.FunctionComponent = () => {
   const noDataText = noData ? "There are no alerts yet" : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 
@@ -257,12 +266,6 @@ const AlertsPage: React.FunctionComponent = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<Alert>(),
-      mapColumnDataFields<Alert, Alert>({
-        id: "name",
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        sortable: isColumnSortable("name", sortableBy),
-      }),
       ...convertColumnDataToColumn<Alert, Alert>(DEFAULT_COLUMNS, {
         columnsOrder,
         selectedColumns,
@@ -329,6 +332,7 @@ const AlertsPage: React.FunctionComponent = () => {
               filters={filters}
               onChange={setFilters}
               config={filtersConfig}
+              layout="icon"
             />
           </div>
 
@@ -367,6 +371,7 @@ const AlertsPage: React.FunctionComponent = () => {
               )}
             </DataTableNoData>
           }
+          showLoadingOverlay={isPlaceholderData && isFetching}
         />
         <div className="py-4">
           <DataTablePagination

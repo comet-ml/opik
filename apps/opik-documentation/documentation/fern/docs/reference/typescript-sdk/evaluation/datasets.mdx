@@ -135,6 +135,71 @@ const exportMapping = { question: "prompt", answer: "completion" };
 const exportedJson = await dataset.toJson(exportMapping);
 ```
 
+## Working with Dataset Versions
+
+Dataset versions are immutable snapshots. Use `DatasetVersion` for reproducible evaluations—ensuring the same data is used regardless of later changes.
+
+### Get a Specific Version
+
+```typescript
+const dataset = await opik.getDataset("my-dataset");
+
+// Get a read-only view of version v2
+const v2 = await dataset.getVersionView("v2");
+
+// Access version metadata
+console.log(v2.versionName);     // "v2"
+console.log(v2.itemsTotal);      // 150
+console.log(v2.createdAt);       // Date object
+
+// Get items from this version
+const items = await v2.getItems();
+
+// Export to JSON with key mapping
+const json = await v2.toJson({ input: "question", output: "answer" });
+```
+
+### Check Current Version
+
+```typescript
+// Get the latest version name
+const currentVersion = await dataset.getCurrentVersionName();
+// Returns: "v3" (or undefined if no versions)
+
+// Get detailed version info
+const info = await dataset.getVersionInfo();
+if (info) {
+  console.log(`${info.versionName}: ${info.itemsTotal} items`);
+  console.log(`Tags: ${info.tags?.join(", ")}`);
+}
+```
+
+### Use in Evaluations
+
+Pass a `DatasetVersion` to `evaluate()` for reproducible experiments:
+
+```typescript
+import { evaluate, Opik, ExactMatch } from "opik";
+
+const opik = new Opik();
+const dataset = await opik.getDataset("qa-dataset");
+
+// Pin to a specific version
+const v2 = await dataset.getVersionView("v2");
+
+const result = await evaluate({
+  dataset: v2,  // Uses v2 items, not latest
+  task: myTask,
+  scoringMetrics: [new ExactMatch()],
+  experimentName: "Evaluation on v2",
+});
+```
+
+<Tip>
+  When comparing experiments (A/B tests), use the same dataset version to
+  isolate the effect of your changes from data variations.
+</Tip>
+
 ## API Reference
 
 <Info>
@@ -265,3 +330,78 @@ Exports the dataset to a JSON string.
 - `keysMapping?: Record<string, string>` - Optional dictionary that maps dataset item field names to output JSON keys
 
 **Returns:** `Promise<string>` - A JSON string representation of all items in the dataset
+
+### Dataset Version Methods
+
+#### `getVersionView`
+
+Get a read-only view of a specific dataset version.
+
+**Arguments:**
+
+- `versionName: string` - The version name (e.g., "v1", "v2")
+
+**Returns:** `Promise<DatasetVersion<T>>`
+
+**Throws:** `DatasetVersionNotFoundError` if version doesn't exist
+
+#### `getCurrentVersionName`
+
+Get the name of the latest version.
+
+**Returns:** `Promise<string | undefined>` - Version name or undefined if no versions
+
+#### `getVersionInfo`
+
+Get metadata about the latest version.
+
+**Returns:** `Promise<DatasetVersionPublic | undefined>` - Version info or undefined
+
+### DatasetVersion Class
+
+A read-only view of dataset items at a specific version. Cannot modify data.
+
+#### Properties
+
+| Property            | Type                   | Description                           |
+| ------------------- | ---------------------- | ------------------------------------- |
+| `name`              | `string`               | Dataset name                          |
+| `id`                | `string`               | Dataset ID                            |
+| `versionId`         | `string \| undefined`  | Version's unique ID                   |
+| `versionName`       | `string \| undefined`  | Version name (e.g., "v1")             |
+| `versionHash`       | `string \| undefined`  | Content hash                          |
+| `tags`              | `string[] \| undefined`| Version tags                          |
+| `isLatest`          | `boolean \| undefined` | Whether this is the latest version    |
+| `itemsTotal`        | `number \| undefined`  | Total items in version                |
+| `itemsAdded`        | `number \| undefined`  | Items added since previous            |
+| `itemsModified`     | `number \| undefined`  | Items modified since previous         |
+| `itemsDeleted`      | `number \| undefined`  | Items deleted since previous          |
+| `changeDescription` | `string \| undefined`  | Version notes                         |
+| `createdAt`         | `Date \| undefined`    | Creation timestamp                    |
+| `createdBy`         | `string \| undefined`  | Creator                               |
+
+#### `getItems`
+
+Retrieve items from this version.
+
+**Arguments:**
+
+- `nbSamples?: number` - Number of items to retrieve (default: all)
+
+**Returns:** `Promise<T[]>` - Array of dataset items
+
+#### `toJson`
+
+Export version items to JSON string.
+
+**Arguments:**
+
+- `keysMapping?: Record<string, string>` - Map field names to output keys
+
+**Returns:** `Promise<string>` - JSON string
+
+#### `getVersionInfo`
+
+Get the full version metadata object.
+
+**Returns:** `DatasetVersionPublic` - Version info

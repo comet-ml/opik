@@ -2,10 +2,12 @@ import { ConstructorOpikConfig, loadConfig, OpikConfig } from "@/config/Config";
 import { OpikApiError, serialization } from "@/rest_api";
 import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
 import * as OpikApi from "@/rest_api/api";
+import { FeedbackScoreBatchItemSource } from "@/rest_api/api/types/FeedbackScoreBatchItemSource";
 import { Trace } from "@/tracer/Trace";
+import type { FeedbackScoreData } from "@/tracer/types";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
-import { getProjectUrl } from "@/utils/url";
+import { getProjectUrlByTraceId } from "@/utils/url";
 import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
@@ -37,8 +39,10 @@ import {
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
+  searchThreadsWithFilters,
   searchAndWaitForDone,
   parseFilterString,
+  parseThreadFilterString,
 } from "@/utils/searchHelpers";
 import { SearchTimeoutError } from "@/errors";
 
@@ -101,16 +105,12 @@ export class OpikClient {
     clients.push(this);
   }
 
-  private displayTraceLog = (projectName: string) => {
+  private displayTraceLog = (traceId: string, projectName: string) => {
     if (projectName === this.lastProjectNameLogged || !this.config.apiUrl) {
       return;
     }
 
-    const projectUrl = getProjectUrl({
-      apiUrl: this.config.apiUrl,
-      projectName,
-      workspaceName: this.config.workspaceName,
-    });
+    const projectUrl = getProjectUrlByTraceId(traceId, this.config.apiUrl);
 
     logger.info(
       `Started logging traces to the "${projectName}" project at ${createLink(projectUrl)}`
@@ -134,7 +134,7 @@ export class OpikClient {
 
     this.traceBatchQueue.create(trace.data);
     logger.debug("Trace added to the queue with ID:", trace.data.id);
-    this.displayTraceLog(projectName);
+    this.displayTraceLog(trace.data.id, projectName);
 
     return trace;
   };
@@ -292,6 +292,7 @@ export class OpikClient {
    * @param prompts Optional array of Prompt objects to link with the experiment
    * @param type Optional experiment type (defaults to "regular")
    * @param optimizationId Optional ID of an optimization associated with the experiment
+   * @param datasetVersionId Optional ID of the dataset version to link the experiment to
    * @returns The created Experiment object
    */
   public createExperiment = async ({
@@ -301,6 +302,7 @@ export class OpikClient {
     prompts,
     type = ExperimentType.Regular,
     optimizationId,
+    datasetVersionId,
   }: {
     datasetName: string;
     name?: string;
@@ -308,6 +310,7 @@ export class OpikClient {
     prompts?: Prompt[];
     type?: ExperimentType;
     optimizationId?: string;
+    datasetVersionId?: string;
   }): Promise<Experiment> => {
     logger.debug(`Creating experiment for dataset "${datasetName}"`);
 
@@ -325,7 +328,7 @@ export class OpikClient {
     const experiment = new Experiment({ id, name, datasetName, prompts }, this);
 
     try {
-      this.api.experiments.createExperiment({
+      await this.api.experiments.createExperiment({
         id,
         datasetName,
         name,
@@ -333,9 +336,10 @@ export class OpikClient {
         promptVersions,
         type,
         optimizationId,
+        datasetVersionId,
       });
 
-      logger.debug("Experiment added to the queue with id:", id);
+      logger.debug("Experiment created with id:", id);
       return experiment;
     } catch (error) {
       logger.error(`Failed to create experiment for dataset "${datasetName}"`, {
@@ -1035,14 +1039,25 @@ export class OpikClient {
    * });
    * ```
    */
-  public searchTraces = async (options?: {
-    projectName?: string;
-    filterString?: string;
-    maxResults?: number;
-    truncate?: boolean;
-    waitForAtLeast?: number;
-    waitForTimeout?: number;
-  }): Promise<OpikApi.TracePublic[]> => {
+  private async executeSearch<T, TFilter>(
+    resourceType: "traces" | "threads",
+    options: {
+      projectName?: string;
+      filterString?: string;
+      maxResults?: number;
+      truncate?: boolean;
+      waitForAtLeast?: number;
+      waitForTimeout?: number;
+    },
+    parseFilters: (filterString?: string) => TFilter[] | null,
+    searchWithFilters: (
+      api: OpikApiClientTemp,
+      projectName: string,
+      filters: TFilter[] | null,
+      maxResults: number,
+      truncate: boolean
+    ) => Promise<T[]>
+  ): Promise<T[]> {
     const {
       projectName,
       filterString,
@@ -1050,9 +1065,9 @@ export class OpikClient {
       truncate = true,
       waitForAtLeast,
       waitForTimeout = 60,
-    } = options ?? {};
+    } = options;
 
-    logger.debug("Searching traces", {
+    logger.debug(`Searching ${resourceType}`, {
       projectName,
       filterString,
       maxResults,
@@ -1061,15 +1076,11 @@ export class OpikClient {
       waitForTimeout,
     });
 
-    // Parse filters
-    const filters = parseFilterString(filterString);
-
-    // Determine project name
+    const filters = parseFilters(filterString);
     const targetProject = projectName ?? this.config.projectName;
 
-    // Create search function
     const searchFn = () =>
-      searchTracesWithFilters(
+      searchWithFilters(
         this.api,
         targetProject,
         filters,
@@ -1077,7 +1088,6 @@ export class OpikClient {
         truncate
       );
 
-    // Execute with or without polling
     if (waitForAtLeast === undefined) {
       return await searchFn();
     }
@@ -1085,18 +1095,142 @@ export class OpikClient {
     const result = await searchAndWaitForDone(
       searchFn,
       waitForAtLeast,
-      waitForTimeout * 1000, // Convert to ms
-      5000 // 5 second poll interval
+      waitForTimeout * 1000,
+      5000
     );
 
     if (result.length < waitForAtLeast) {
       throw new SearchTimeoutError(
-        `Timeout after ${waitForTimeout} seconds: expected ${waitForAtLeast} traces, but only ${result.length} were found.`
+        `Timeout after ${waitForTimeout} seconds: expected ${waitForAtLeast} ${resourceType}, but only ${result.length} were found.`
       );
     }
 
     return result;
+  }
+
+  public searchTraces = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.TracePublic[]> => {
+    return this.executeSearch<OpikApi.TracePublic, OpikApi.TraceFilterPublic>(
+      "traces",
+      options ?? {},
+      parseFilterString,
+      searchTracesWithFilters
+    );
   };
+
+  /**
+   * Search for threads in a project with optional filtering.
+   *
+   * Threads represent conversations or sessions that group related traces together.
+   * This method allows you to search and filter threads using Opik Query Language (OQL).
+   *
+   * @param options - Search options
+   * @param options.projectName - Name of the project to search in. Defaults to the client's configured project.
+   * @param options.filterString - Filter string using Opik Query Language (OQL).
+   *   Supports filtering by: id, status, feedback_scores, duration, number_of_messages, tags, metadata, etc.
+   *   Examples: 'status = "active"', 'feedback_scores.quality > 0.8', 'duration > 300'
+   * @param options.maxResults - Maximum number of threads to return (default: 1000)
+   * @param options.truncate - Whether to truncate large fields in the response (default: true)
+   * @param options.waitForAtLeast - If specified, polls until at least this many threads are found
+   * @param options.waitForTimeout - Timeout in seconds when using waitForAtLeast (default: 60)
+   * @returns Promise resolving to an array of threads
+   * @throws {SearchTimeoutError} If waitForAtLeast is specified and timeout is reached
+   *
+   * @example
+   * ```typescript
+   * // Get all threads in a project
+   * const threads = await client.searchThreads({ projectName: "My Project" });
+   *
+   * // Filter by status
+   * const activeThreads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   filterString: 'status = "active"'
+   * });
+   *
+   * // Filter by feedback score
+   * const highQualityThreads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   filterString: 'feedback_scores.quality > 0.8'
+   * });
+   *
+   * // Wait for at least 5 threads
+   * const threads = await client.searchThreads({
+   *   projectName: "My Project",
+   *   waitForAtLeast: 5,
+   *   waitForTimeout: 30
+   * });
+   * ```
+   */
+  public searchThreads = async (options?: {
+    projectName?: string;
+    filterString?: string;
+    maxResults?: number;
+    truncate?: boolean;
+    waitForAtLeast?: number;
+    waitForTimeout?: number;
+  }): Promise<OpikApi.TraceThread[]> => {
+    return this.executeSearch<OpikApi.TraceThread, OpikApi.TraceThreadFilter>(
+      "threads",
+      options ?? {},
+      parseThreadFilterString,
+      searchThreadsWithFilters
+    );
+  };
+
+  private logFeedbackScores(
+    scores: FeedbackScoreData[],
+    batchQueue: TraceFeedbackScoresBatchQueue | SpanFeedbackScoresBatchQueue
+  ): void {
+    for (const score of scores) {
+      batchQueue.create({
+        ...score,
+        projectName: score.projectName ?? this.config.projectName,
+        source: FeedbackScoreBatchItemSource.Sdk,
+      });
+    }
+  }
+
+  /**
+   * Log feedback scores to existing traces in batch.
+   *
+   * @param scores - Array of feedback score data with trace IDs
+   *
+   * @example
+   * ```typescript
+   * client.logTracesFeedbackScores([
+   *   { id: "trace-id-1", name: "quality", value: 0.9, reason: "Good response" },
+   *   { id: "trace-id-2", name: "relevance", value: 0.8 }
+   * ]);
+   * await client.flush();
+   * ```
+   */
+  public logTracesFeedbackScores(scores: FeedbackScoreData[]): void {
+    this.logFeedbackScores(scores, this.traceFeedbackScoresBatchQueue);
+  }
+
+  /**
+   * Log feedback scores to existing spans in batch.
+   *
+   * @param scores - Array of feedback score data with span IDs
+   *
+   * @example
+   * ```typescript
+   * client.logSpansFeedbackScores([
+   *   { id: "span-id-1", name: "accuracy", value: 0.95 },
+   *   { id: "span-id-2", name: "completeness", value: 0.85, reason: "Missing details" }
+   * ]);
+   * await client.flush();
+   * ```
+   */
+  public logSpansFeedbackScores(scores: FeedbackScoreData[]): void {
+    this.logFeedbackScores(scores, this.spanFeedbackScoresBatchQueue);
+  }
 
   public flush = async () => {
     logger.debug("Starting flush operation");

@@ -23,7 +23,7 @@ import {
   ColumnData,
 } from "@/types/shared";
 import { EvaluatorsRule } from "@/types/automations";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -57,15 +57,16 @@ const getRowId = (d: EvaluatorsRule) => d.id;
 
 const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
   {
+    id: COLUMN_NAME_ID,
+    label: "Name",
+    type: COLUMN_TYPE.string,
+    sortable: true,
+  },
+  {
     id: COLUMN_ID_ID,
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
-  },
-  {
-    id: COLUMN_NAME_ID,
-    label: "Name",
-    type: COLUMN_TYPE.string,
   },
   {
     id: "projects",
@@ -114,11 +115,12 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
 ];
 
 const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
+  COLUMN_NAME_ID,
   "last_updated_at",
   "created_by",
   "created_at",
@@ -129,6 +131,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 ];
 
 const SELECTED_COLUMNS_KEY = "workspace-rules-selected-columns";
+const SELECTED_COLUMNS_KEY_V2 = `${SELECTED_COLUMNS_KEY}-v2`;
 const COLUMNS_WIDTH_KEY = "workspace-rules-columns-width";
 const COLUMNS_ORDER_KEY = "workspace-rules-columns-order";
 const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
@@ -183,7 +186,7 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = useRulesList(
+  const { data, isPending, isPlaceholderData, isFetching } = useRulesList(
     {
       page: page as number,
       size: size as number,
@@ -216,9 +219,13 @@ export const OnlineEvaluationPage: React.FC = () => {
   const dialogMode = editingRule ? "edit" : cloningRule ? "clone" : "create";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
-    SELECTED_COLUMNS_KEY,
+    SELECTED_COLUMNS_KEY_V2,
     {
-      defaultValue: DEFAULT_SELECTED_COLUMNS,
+      defaultValue: migrateSelectedColumns(
+        SELECTED_COLUMNS_KEY,
+        DEFAULT_SELECTED_COLUMNS,
+        [COLUMN_NAME_ID],
+      ),
     },
   );
 
@@ -258,12 +265,6 @@ export const OnlineEvaluationPage: React.FC = () => {
   const columns = useMemo(() => {
     return [
       generateSelectColumDef<EvaluatorsRule>(),
-      mapColumnDataFields<EvaluatorsRule, EvaluatorsRule>({
-        id: COLUMN_NAME_ID,
-        label: "Name",
-        type: COLUMN_TYPE.string,
-        sortable: sortableBy.includes("name"),
-      }),
       ...convertColumnDataToColumn<EvaluatorsRule, EvaluatorsRule>(
         DEFAULT_COLUMNS,
         {
@@ -391,6 +392,7 @@ export const OnlineEvaluationPage: React.FC = () => {
             columns={filterableColumns}
             filters={filters}
             onChange={setFilters}
+            layout="icon"
           ></FiltersButton>
         </div>
         <div className="flex items-center gap-2">
@@ -420,6 +422,7 @@ export const OnlineEvaluationPage: React.FC = () => {
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={<DataTableNoData title={noDataText} />}
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

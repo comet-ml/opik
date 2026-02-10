@@ -8,6 +8,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
+import com.comet.opik.api.TokenUsageNames;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.metrics.ProjectMetricRequest;
@@ -307,6 +308,25 @@ public class ProjectsResource {
                 projectStatisticsSummary.content().size(), workspaceId);
 
         return Response.ok().entity(projectStatisticsSummary).build();
+    }
+
+    @GET
+    @Path("/{id}/token-usage/names")
+    @Operation(operationId = "findTokenUsageNames", summary = "Find Token Usage names", description = "Find Token Usage names", responses = {
+            @ApiResponse(responseCode = "200", description = "Token Usage names resource", content = @Content(schema = @Schema(implementation = TokenUsageNames.class)))
+    })
+    public Response findTokenUsageNames(@PathParam("id") UUID projectId) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Find token usage names by project_id '{}', on workspaceId '{}'", projectId, workspaceId);
+        List<String> tokenUsageNames = projectMetricsService.getProjectTokenUsageNames(workspaceId, projectId)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+        log.info("Found token usage names '{}' by project_id '{}', on workspaceId '{}'",
+                tokenUsageNames.size(), projectId, workspaceId);
+
+        return Response.ok(TokenUsageNames.builder().names(tokenUsageNames).build()).build();
     }
 
 }

@@ -4,6 +4,7 @@ import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
 import { z } from "zod";
 import { capitalizeFirstLetter } from "@/lib/utils";
+import { WORKSPACE_USERS_ROLES_QUERY_KEY } from "./useWorkspaceUsersRoles";
 
 export type InviteUsersVariables = {
   workspaceId: string;
@@ -106,6 +107,12 @@ export function useInviteUsersMutation() {
       queryClient.invalidateQueries({
         queryKey: [
           "workspace-permissions",
+          { workspaceId: variables.workspaceId },
+        ],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [
+          WORKSPACE_USERS_ROLES_QUERY_KEY,
           { workspaceId: variables.workspaceId },
         ],
       });

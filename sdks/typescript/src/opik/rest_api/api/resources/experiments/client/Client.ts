@@ -137,9 +137,12 @@ export class ExperimentsClient {
             name,
             datasetDeleted,
             promptId,
+            projectId,
+            projectDeleted,
             sorting,
             filters,
             experimentIds,
+            forceSorting,
         } = request;
         const _queryParams: Record<string, unknown> = {
             page,
@@ -150,9 +153,12 @@ export class ExperimentsClient {
             name,
             dataset_deleted: datasetDeleted,
             prompt_id: promptId,
+            project_id: projectId,
+            project_deleted: projectDeleted,
             sorting,
             filters,
             experiment_ids: experimentIds,
+            force_sorting: forceSorting,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
@@ -682,11 +688,13 @@ export class ExperimentsClient {
         request: OpikApi.FindExperimentGroupsRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ExperimentGroupResponse>> {
-        const { groups, types, name, filters } = request;
+        const { groups, types, name, projectId, projectDeleted, filters } = request;
         const _queryParams: Record<string, unknown> = {
             groups,
             types,
             name,
+            project_id: projectId,
+            project_deleted: projectDeleted,
             filters,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
@@ -769,11 +777,13 @@ export class ExperimentsClient {
         request: OpikApi.FindExperimentGroupsAggregationsRequest = {},
         requestOptions?: ExperimentsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.ExperimentGroupAggregationsResponse>> {
-        const { groups, types, name, filters } = request;
+        const { groups, types, name, projectId, projectDeleted, filters } = request;
         const _queryParams: Record<string, unknown> = {
             groups,
             types,
             name,
+            project_id: projectId,
+            project_deleted: projectDeleted,
             filters,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(

@@ -60,6 +60,9 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
+    Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId,
+            @NonNull List<DatasetItemFilter> filters);
+
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
     Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
@@ -144,6 +147,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
+            <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY id DESC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit
@@ -695,8 +699,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                              AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
                                          (dateDiff('microsecond', start_time, end_time) / 1000.0),
                                          NULL) AS duration,
-                        <if(truncate)> substring(replaceRegexpAll(input, '<truncate>', '"[image]"'), 1, <truncationSize>) as input <else> input <endif>,
-                        <if(truncate)> substring(replaceRegexpAll(output, '<truncate>', '"[image]"'), 1, <truncationSize>) as output <else> output <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(input_slim), input_slim, truncated_input), '<truncate>', '"[image]"') as input <else> input <endif>,
+                        <if(truncate)> replaceRegexpAll(if(notEmpty(output_slim), output_slim, truncated_output), '<truncate>', '"[image]"') as output <else> output <endif>,
                         metadata,
                         visibility_mode
                     FROM traces
@@ -1142,8 +1146,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @Override
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId) {
-        log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}'",
-                datasetId, limit, lastRetrievedId);
+        return getItems(datasetId, limit, lastRetrievedId, List.of());
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItem> getItems(@NonNull UUID datasetId, int limit, UUID lastRetrievedId,
+            @NonNull List<DatasetItemFilter> filters) {
 
         return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
             var template = getSTWithLogComment(SELECT_DATASET_ITEMS_STREAM, "select_dataset_items_stream", workspaceId,
@@ -1153,6 +1162,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 template.add("lastRetrievedId", lastRetrievedId);
             }
 
+            // Add filter support
+            if (CollectionUtils.isNotEmpty(filters)) {
+                FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                        .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+            }
+
             var statement = connection.createStatement(template.render())
                     .bind("datasetId", datasetId)
                     .bind("limit", limit)
@@ -1160,6 +1175,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             if (lastRetrievedId != null) {
                 statement.bind("lastRetrievedId", lastRetrievedId);
+            }
+
+            // Bind filter parameters
+            if (CollectionUtils.isNotEmpty(filters)) {
+                FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
             }
 
             Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_stream");

@@ -110,7 +110,9 @@ def test_process_attachment_support_message_with_no_attachments(
     assert getattr(requeued_message, constants.MARKER_ATTRIBUTE_NAME) is True
 
 
-def test_process_span_message_extracts_from_input(processor, mock_streamer):
+def test_process_span_message_extracts_from_input(
+    processor, mock_streamer, temp_file_15kb
+):
     """Test extraction of attachments from span input."""
     # Create a span message with input containing base64
     original_message = messages.CreateSpanMessage(
@@ -138,9 +140,9 @@ def test_process_span_message_extracts_from_input(processor, mock_streamer):
         original_message=original_message
     )
 
-    # Mock extracted attachment
+    # Mock extracted attachment - use actual temp file
     mock_attachment = attachment.Attachment(
-        data="/tmp/image.png",
+        data=temp_file_15kb.name,
         file_name="input-attachment-123.png",
         content_type="image/png",
         create_temp_copy=False,
@@ -182,7 +184,9 @@ def test_process_span_message_extracts_from_input(processor, mock_streamer):
     assert hasattr(second_call, constants.MARKER_ATTRIBUTE_NAME)
 
 
-def test_process_span_message_extracts_from_output(processor, mock_streamer):
+def test_process_span_message_extracts_from_output(
+    processor, mock_streamer, temp_file_15kb
+):
     """Test extraction of attachments from the span output."""
     original_message = messages.CreateSpanMessage(
         span_id="span-789",
@@ -210,7 +214,7 @@ def test_process_span_message_extracts_from_output(processor, mock_streamer):
     )
 
     mock_attachment = attachment.Attachment(
-        data="/tmp/output.png",
+        data=temp_file_15kb.name,
         file_name="output-attachment-456.png",
         content_type="image/png",
         create_temp_copy=False,
@@ -239,7 +243,9 @@ def test_process_span_message_extracts_from_output(processor, mock_streamer):
     assert isinstance(attachment_msg, messages.CreateAttachmentMessage)
 
 
-def test_process_span_message_extracts_from_metadata(processor, mock_streamer):
+def test_process_span_message_extracts_from_metadata(
+    processor, mock_streamer, temp_file_15kb
+):
     """Test extraction of attachments from span metadata."""
     original_message = messages.CreateSpanMessage(
         span_id="span-999",
@@ -267,7 +273,7 @@ def test_process_span_message_extracts_from_metadata(processor, mock_streamer):
     )
 
     mock_attachment = attachment.Attachment(
-        data="/tmp/doc.pdf",
+        data=temp_file_15kb.name,
         file_name="metadata-attachment-789.pdf",
         content_type="application/pdf",
         create_temp_copy=False,
@@ -296,7 +302,9 @@ def test_process_span_message_extracts_from_metadata(processor, mock_streamer):
     assert isinstance(attachment_msg, messages.CreateAttachmentMessage)
 
 
-def test_process_trace_message_extracts_attachments(processor, mock_streamer):
+def test_process_trace_message_extracts_attachments(
+    processor, mock_streamer, temp_file_15kb
+):
     """Test extraction from trace messages."""
     original_message = messages.CreateTraceMessage(
         trace_id="trace-123",
@@ -318,7 +326,7 @@ def test_process_trace_message_extracts_attachments(processor, mock_streamer):
     )
 
     mock_attachment = attachment.Attachment(
-        data="/tmp/trace-data.png",
+        data=temp_file_15kb.name,
         file_name="input-attachment-trace.png",
         content_type="image/png",
         create_temp_copy=False,
@@ -358,7 +366,7 @@ def test_process_trace_message_extracts_attachments(processor, mock_streamer):
     assert hasattr(second_call, constants.MARKER_ATTRIBUTE_NAME)
 
 
-def test_process_update_span_message(processor, mock_streamer):
+def test_process_update_span_message(processor, mock_streamer, temp_file_15kb):
     """Test extraction from UpdateSpanMessage."""
     original_message = messages.UpdateSpanMessage(
         span_id="span-update-123",
@@ -382,7 +390,7 @@ def test_process_update_span_message(processor, mock_streamer):
     )
 
     mock_attachment = attachment.Attachment(
-        data="/tmp/update.png",
+        data=temp_file_15kb.name,
         file_name="input-attachment.png",
         content_type="image/png",
         create_temp_copy=False,
@@ -412,7 +420,7 @@ def test_process_update_span_message(processor, mock_streamer):
     assert isinstance(attachment_msg, messages.CreateAttachmentMessage)
 
 
-def test_process_update_trace_message(processor, mock_streamer):
+def test_process_update_trace_message(processor, mock_streamer, temp_file_15kb):
     """Test extraction from UpdateTraceMessage."""
     original_message = messages.UpdateTraceMessage(
         trace_id="trace-update-123",
@@ -431,7 +439,7 @@ def test_process_update_trace_message(processor, mock_streamer):
     )
 
     mock_attachment = attachment.Attachment(
-        data="/tmp/result.png",
+        data=temp_file_15kb.name,
         file_name="output-attachment.png",
         content_type="image/png",
         create_temp_copy=False,
@@ -461,7 +469,9 @@ def test_process_update_trace_message(processor, mock_streamer):
     assert isinstance(attachment_msg, messages.CreateAttachmentMessage)
 
 
-def test_process_multiple_attachments_from_different_contexts(processor, mock_streamer):
+def test_process_multiple_attachments_from_different_contexts(
+    processor, mock_streamer, temp_file_15kb
+):
     """Test extraction of multiple attachments from input, output, and metadata."""
     original_message = messages.CreateSpanMessage(
         span_id="span-multi",
@@ -493,7 +503,7 @@ def test_process_multiple_attachments_from_different_contexts(processor, mock_st
         "input": [
             attachment_context.AttachmentWithContext(
                 attachment_data=attachment.Attachment(
-                    data="/tmp/input.png",
+                    data=temp_file_15kb.name,
                     file_name="input-att.png",
                     content_type="image/png",
                     create_temp_copy=False,
@@ -507,7 +517,7 @@ def test_process_multiple_attachments_from_different_contexts(processor, mock_st
         "output": [
             attachment_context.AttachmentWithContext(
                 attachment_data=attachment.Attachment(
-                    data="/tmp/output.png",
+                    data=temp_file_15kb.name,
                     file_name="output-att.png",
                     content_type="image/png",
                     create_temp_copy=False,
@@ -521,7 +531,7 @@ def test_process_multiple_attachments_from_different_contexts(processor, mock_st
         "metadata": [
             attachment_context.AttachmentWithContext(
                 attachment_data=attachment.Attachment(
-                    data="/tmp/meta.pdf",
+                    data=temp_file_15kb.name,
                     file_name="meta-att.pdf",
                     content_type="application/pdf",
                     create_temp_copy=False,

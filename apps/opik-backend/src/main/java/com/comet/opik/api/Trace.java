@@ -74,7 +74,9 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "List of unique provider names from all spans in this trace, sorted alphabetically") List<String> providers,
         @JsonView({
-                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Integer attachmentCount){
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Integer attachmentCount,
+        @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Experiment associated with this trace") ExperimentItemReference experiment){
 
     @Builder(toBuilder = true)
     public record TracePage(
@@ -118,6 +120,7 @@ public record Trace(
         VISIBILITY_MODE("visibility_mode"),
         PROVIDERS("providers"),
         ATTACHMENT_COUNT("attachment_count"),
+        EXPERIMENT("experiment"),
         ;
 
         @JsonValue

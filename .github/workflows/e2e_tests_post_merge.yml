@@ -1,0 +1,606 @@
+name: E2E Tests - Post Merge
+run-name: "E2E Tests (${{ github.event.inputs.suite || 'happypaths' }}) - ${{ github.event_name == 'push' && format('Post-merge {0}', github.sha) || format('Manual run by @{0}', github.actor) }}"
+
+on:
+  push:
+    branches:
+      - 'main'
+    # Skip workflow if only documentation or unrelated files changed
+    paths-ignore:
+      - '**.md'
+      - 'apps/opik-documentation/**'
+
+  workflow_dispatch:
+    inputs:
+      suite:
+        type: choice
+        description: 'Test suite to run'
+        required: true
+        default: 'happypaths'
+        options:
+          - sanity
+          - happypaths
+          - fullregression
+          - projects
+          - tracing
+          - threads
+          - attachments
+          - datasets
+          - experiments
+          - prompts
+          - playground
+          - feedbackscores
+          - onlinescores
+      notify_on_success:
+        type: boolean
+        description: 'Send Slack notification even on success'
+        required: false
+        default: false
+      ALLURE_JOB_RUN_ID:
+        description: 'ALLURE_JOB_RUN_ID service parameter. Leave blank.'
+        required: false
+
+env:
+  ALLURE_TOKEN: ${{ secrets.ALLURE_TOKEN }}
+  ALLURE_ENDPOINT: https://comet.testops.cloud/
+  ALLURE_PROJECT_ID: 1
+  ALLURE_RESULTS: allure-results
+  ALLURE_JOB_RUN_ID: ${{ github.event.inputs.ALLURE_JOB_RUN_ID }}
+  
+  OPIK_SENTRY_ENABLE: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  e2e-tests:
+    name: "🧪 E2E Tests (${{ github.event.inputs.suite || 'happypaths' }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    outputs:
+      test_result: ${{ steps.run-tests.outcome }}
+      testops_url: ${{ steps.set-outputs.outputs.testops_url }}
+      total_tests: ${{ steps.parse-results.outputs.total }}
+      passed_tests: ${{ steps.parse-results.outputs.passed }}
+      failed_tests: ${{ steps.parse-results.outputs.failed }}
+      skipped_tests: ${{ steps.parse-results.outputs.skipped }}
+      pr_author: ${{ steps.get-pr-info.outputs.author }}
+
+    steps:
+      # ========================================
+      # PHASE 1: Checkout & Environment Setup
+      # ========================================
+      - name: "📥 Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "🔍 Get PR/commit information"
+        id: get-pr-info
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            # For push events, get the author from the commit
+            AUTHOR="${{ github.event.head_commit.author.username }}"
+            if [ -z "$AUTHOR" ]; then
+              AUTHOR="${{ github.actor }}"
+            fi
+          else
+            AUTHOR="${{ github.actor }}"
+          fi
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "📝 Author: $AUTHOR"
+
+      - name: "📦 Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tests_end_to_end/typescript-tests/package-lock.json
+
+      - name: "🐍 Setup Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: "📚 Install Opik Python SDK"
+        run: pip install ${{ github.workspace }}/sdks/python
+
+      - name: "📚 Install Test Helper Service dependencies"
+        run: pip install -r ${{ github.workspace }}/tests_end_to_end/test-helper-service/requirements.txt
+
+      - name: "📚 Install TypeScript test dependencies"
+        working-directory: tests_end_to_end/typescript-tests
+        run: |
+          npm ci
+          npx playwright install chromium
+
+      - name: "📊 Install allurectl"
+        uses: allure-framework/setup-allurectl@v1
+
+      # ========================================
+      # PHASE 2: Build & Start Opik
+      # ========================================
+      - name: "🔨 Build and start Opik server"
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
+        run: |
+          echo "::group::Building Opik from branch: ${{ github.ref_name }}"
+          cd ${{ github.workspace }}
+          TOGGLE_WELCOME_WIZARD_ENABLED="false" ./opik.sh --build
+          echo "::endgroup::"
+          echo "✅ Opik build complete"
+
+      - name: "🔍 Verify Docker pods are running"
+        run: |
+          echo "::group::Checking Docker pods"
+          chmod +x ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          ./tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          echo "::endgroup::"
+          echo "✅ All Docker pods are running"
+
+      - name: "🏥 Verify backend health"
+        run: |
+          echo "::group::Checking backend health"
+          chmod +x ./tests_end_to_end/installer_utils/check_backend.sh
+          ./tests_end_to_end/installer_utils/check_backend.sh
+          echo "::endgroup::"
+          echo "✅ Backend is healthy"
+
+      # ========================================
+      # PHASE 3: Run E2E Tests
+      # ========================================
+      - name: "🔍 Smoke test - Verify UI accessibility"
+        working-directory: tests_end_to_end/typescript-tests
+        env:
+          OPIK_BASE_URL: http://localhost:5173
+          OPIK_TEST_WORKSPACE: default
+          OPIK_TEST_PROJECT_NAME: automated_tests_project
+        run: |
+          echo "Running quick smoke test to verify UI is accessible..."
+          npx playwright test --grep "Projects created via SDK are visible" --reporter=list
+          echo "✅ UI is accessible and responding"
+
+      - name: "🧪 Run E2E test suite"
+        id: run-tests
+        working-directory: tests_end_to_end/typescript-tests
+        env:
+          OPIK_BASE_URL: http://localhost:5173
+          OPIK_TEST_WORKSPACE: default
+          OPIK_TEST_PROJECT_NAME: automated_tests_project
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TEST_SUITE: ${{ github.event.inputs.suite || 'happypaths' }}
+        run: |
+          echo "========================================"
+          echo "🧪 Running test suite: $TEST_SUITE"
+          echo "========================================"
+          echo ""
+          
+          # Configure Allure results directory
+          export ALLURE_RESULTS="${{ github.workspace }}/tests_end_to_end/typescript-tests/${{ env.ALLURE_RESULTS }}"
+          
+          # Create .allure directory to prevent testplan.json error
+          mkdir -p .allure
+          
+          # Run tests with allurectl for TestOps integration
+          # Capture output to extract the direct report URL
+          set +e
+          allurectl watch -- npx playwright test 2>&1 | tee allure_output.log
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+          
+          # Extract the direct job run URL from allurectl output
+          if grep -q "Report link:" allure_output.log; then
+            REPORT_URL=$(grep "Report link:" allure_output.log | head -1 | sed 's/.*Report link:[[:space:]]*//' | awk '{print $1}')
+            echo "allure_report_url=${REPORT_URL}" >> $GITHUB_OUTPUT
+            echo "📊 Captured Allure TestOps report URL: ${REPORT_URL}"
+          else
+            echo "allure_report_url=" >> $GITHUB_OUTPUT
+            echo "⚠️ Could not capture direct report URL from allurectl output"
+          fi
+          
+          echo ""
+          echo "========================================"
+          echo "Test run completed with exit code: $TEST_EXIT_CODE"
+          echo "========================================"
+          
+          # Exit with the test exit code to properly report success/failure
+          exit $TEST_EXIT_CODE
+
+      # ========================================
+      # PHASE 4: Process Results
+      # ========================================
+      - name: "📊 Parse test results"
+        id: parse-results
+        if: always()
+        working-directory: tests_end_to_end/typescript-tests
+        run: |
+          echo "::group::Parsing test results"
+          
+          if [ -f "test-results/results.json" ]; then
+            echo "Found results.json, parsing..."
+            TOTAL=$(jq '.stats.expected + .stats.unexpected + .stats.flaky + .stats.skipped' test-results/results.json 2>/dev/null || echo "0")
+            PASSED=$(jq '.stats.expected' test-results/results.json 2>/dev/null || echo "0")
+            FAILED=$(jq '.stats.unexpected' test-results/results.json 2>/dev/null || echo "0")
+            SKIPPED=$(jq '.stats.skipped' test-results/results.json 2>/dev/null || echo "0")
+            FLAKY=$(jq '.stats.flaky' test-results/results.json 2>/dev/null || echo "0")
+            
+            echo "Results: Total=$TOTAL, Passed=$PASSED, Failed=$FAILED, Skipped=$SKIPPED, Flaky=$FLAKY"
+          else
+            echo "⚠️ results.json not found, using defaults"
+            TOTAL="0"
+            PASSED="0"
+            FAILED="0"
+            SKIPPED="0"
+            FLAKY="0"
+          fi
+          
+          echo "total=$TOTAL" >> $GITHUB_OUTPUT
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+          echo "failed=$FAILED" >> $GITHUB_OUTPUT
+          echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
+          echo "flaky=$FLAKY" >> $GITHUB_OUTPUT
+          
+          echo "::endgroup::"
+
+      - name: "🔗 Set output URLs"
+        id: set-outputs
+        if: always()
+        run: |
+          # Use direct report URL if captured, otherwise fall back to launches page
+          DIRECT_URL="${{ steps.run-tests.outputs.allure_report_url }}"
+          
+          if [ -n "$DIRECT_URL" ]; then
+            TESTOPS_URL="$DIRECT_URL"
+            echo "📊 Using direct TestOps report URL"
+          else
+            TESTOPS_URL="${{ env.ALLURE_ENDPOINT }}project/${{ env.ALLURE_PROJECT_ID }}/launches"
+            echo "📊 Using fallback launches page URL"
+          fi
+          
+          echo "testops_url=$TESTOPS_URL" >> $GITHUB_OUTPUT
+
+      # ========================================
+      # PHASE 5: Generate Summary
+      # ========================================
+      - name: "📋 Generate job summary"
+        if: always()
+        run: |
+          SUITE="${{ github.event.inputs.suite || 'happypaths' }}"
+          TESTOPS_URL="${{ steps.set-outputs.outputs.testops_url }}"
+          
+          TOTAL="${{ steps.parse-results.outputs.total }}"
+          PASSED="${{ steps.parse-results.outputs.passed }}"
+          FAILED="${{ steps.parse-results.outputs.failed }}"
+          SKIPPED="${{ steps.parse-results.outputs.skipped }}"
+          
+          # Header
+          echo "# 🧪 E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Status banner
+          if [ "${{ steps.run-tests.outcome }}" == "success" ]; then
+            echo "> ✅ **All tests passed!**" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.run-tests.outcome }}" == "failure" ]; then
+            echo "> ❌ **$FAILED test(s) failed** - Please review the results below" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "> ⚠️ **Test run status: ${{ steps.run-tests.outcome }}**" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Configuration table
+          echo "## 📝 Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Suite** | \`$SUITE\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | [\`${GITHUB_SHA:0:7}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | ${{ github.event_name == 'push' && 'Post-merge (push to main)' || 'Manual dispatch' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Author** | @${{ steps.get-pr-info.outputs.author }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Results table
+          echo "## 📊 Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Status | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------:|" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+          echo "| ❌ Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⏭️ Skipped | $SKIPPED |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total** | **$TOTAL** |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Links section
+          echo "## 🔗 Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Link |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 📊 **TestOps Dashboard** | [View detailed results, traces & history]($TESTOPS_URL) |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📄 **Playwright Report** | [Download from Artifacts below](#artifacts) |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📚 **E2E Test Guide** | [Quickstart documentation](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Debugging section (only on failure)
+          if [ "${{ steps.run-tests.outcome }}" == "failure" ]; then
+            echo "## 🔧 Debugging Guide" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Quick steps to investigate failures:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "1. **Open TestOps** → Click the link above to see detailed failure traces, screenshots, and video recordings" >> $GITHUB_STEP_SUMMARY
+            echo "2. **Download Playwright Report** → The HTML report includes step-by-step traces for each test" >> $GITHUB_STEP_SUMMARY
+            echo "3. **Check test logs** → Expand the 'Run E2E test suite' step above for console output" >> $GITHUB_STEP_SUMMARY
+            echo "4. **Run locally** → See the [Quickstart Guide](https://github.com/${{ github.repository }}/blob/main/tests_end_to_end/QUICKSTART.md) for local debugging" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Common failure causes:" >> $GITHUB_STEP_SUMMARY
+            echo "- UI element selectors changed" >> $GITHUB_STEP_SUMMARY
+            echo "- API response format changed" >> $GITHUB_STEP_SUMMARY
+            echo "- Timing/race conditions" >> $GITHUB_STEP_SUMMARY
+            echo "- New feature requiring test updates" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      # ========================================
+      # PHASE 6: Upload Artifacts
+      # ========================================
+      - name: "📤 Upload Allure results"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: tests_end_to_end/typescript-tests/allure-results
+          retention-days: 14
+
+      - name: "📤 Upload Playwright report"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests_end_to_end/typescript-tests/playwright-report
+          retention-days: 14
+
+      - name: "📤 Upload test results JSON"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-json
+          path: tests_end_to_end/typescript-tests/test-results/results.json
+          retention-days: 14
+          if-no-files-found: ignore
+          
+      - name: "🧹 Stop Opik server"
+        if: always()
+        run: |
+          echo "Stopping Opik server..."
+          ./opik.sh --stop || true
+          echo "✅ Cleanup complete"
+
+  notify-slack:
+    name: "📢 Slack Notification"
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    if: |
+      always() && 
+      needs.e2e-tests.result != 'cancelled' &&
+      (needs.e2e-tests.result == 'failure' || github.event.inputs.notify_on_success == 'true')
+
+    steps:
+      - name: "🔍 Check Slack configuration"
+        id: check-slack
+        run: |
+          if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::SLACK_WEBHOOK_URL not configured - Slack notification will be skipped"
+          else
+            echo "configured=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "🔍 Resolve Slack mentions"
+        id: resolve-slack-mentions
+        if: steps.check-slack.outputs.configured == 'true'
+        env:
+          SLACK_USER_MAPPING: ${{ secrets.SLACK_USER_MAPPING }}
+          SLACK_QA_LEAD_ID: ${{ secrets.SLACK_QA_LEAD_ID }}
+        run: |
+          AUTHOR="${{ needs.e2e-tests.outputs.pr_author }}"
+          IS_FAILURE="${{ needs.e2e-tests.result == 'failure' }}"
+          
+          # Only resolve mentions for failures
+          if [ "$IS_FAILURE" == "true" ]; then
+            # Build QA lead mention
+            if [ -n "$SLACK_QA_LEAD_ID" ]; then
+              QA_MENTION="<@$SLACK_QA_LEAD_ID>"
+            else
+              QA_MENTION=""
+            fi
+            
+            # Look up author's Slack ID from the mapping
+            AUTHOR_MENTION=""
+            if [ -n "$SLACK_USER_MAPPING" ]; then
+              AUTHOR_SLACK_ID=$(echo "$SLACK_USER_MAPPING" | jq -r --arg user "$AUTHOR" '.[$user] // empty' 2>/dev/null || echo "")
+              if [ -n "$AUTHOR_SLACK_ID" ]; then
+                # Don't duplicate mention if author IS the QA lead
+                if [ "$AUTHOR_SLACK_ID" != "$SLACK_QA_LEAD_ID" ]; then
+                  AUTHOR_MENTION="<@$AUTHOR_SLACK_ID>"
+                fi
+              fi
+            fi
+            
+            # Build combined mention string
+            if [ -n "$QA_MENTION" ] && [ -n "$AUTHOR_MENTION" ]; then
+              MENTIONS="$QA_MENTION $AUTHOR_MENTION"
+            elif [ -n "$QA_MENTION" ]; then
+              MENTIONS="$QA_MENTION"
+            elif [ -n "$AUTHOR_MENTION" ]; then
+              MENTIONS="$AUTHOR_MENTION"
+            else
+              MENTIONS=""
+            fi
+            
+            echo "mentions=$MENTIONS" >> $GITHUB_OUTPUT
+            echo "has_mentions=true" >> $GITHUB_OUTPUT
+          else
+            echo "mentions=" >> $GITHUB_OUTPUT
+            echo "has_mentions=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # Always output author for display
+          echo "author_display=$AUTHOR" >> $GITHUB_OUTPUT
+
+      - name: "📢 Send Slack notification"
+        if: steps.check-slack.outputs.configured == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          # Gather information
+          SUITE="${{ github.event.inputs.suite || 'happypaths' }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT_SHA="${{ github.sha }}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TESTOPS_URL="${{ needs.e2e-tests.outputs.testops_url }}"
+          AUTHOR="${{ steps.resolve-slack-mentions.outputs.author_display }}"
+          MENTIONS="${{ steps.resolve-slack-mentions.outputs.mentions }}"
+          
+          PASSED="${{ needs.e2e-tests.outputs.passed_tests }}"
+          FAILED="${{ needs.e2e-tests.outputs.failed_tests }}"
+          
+          # Determine status
+          if [ "${{ needs.e2e-tests.result }}" == "success" ]; then
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="Passed"
+            COLOR="good"
+          else
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="Failed"
+            COLOR="danger"
+          fi
+          
+          # Build the mention block (only for failures with mentions)
+          if [ "${{ needs.e2e-tests.result }}" == "failure" ] && [ -n "$MENTIONS" ]; then
+            MENTION_BLOCK=',
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "🚨 '"$MENTIONS"' - Tests need attention!"
+                    }
+                  }'
+          else
+            MENTION_BLOCK=""
+          fi
+          
+          # Build payload
+          cat << EOF > payload.json
+          {
+            "attachments": [
+              {
+                "color": "$COLOR",
+                "blocks": [
+                  {
+                    "type": "header",
+                    "text": {
+                      "type": "plain_text",
+                      "text": "$STATUS_EMOJI E2E Tests $STATUS_TEXT - Post Merge",
+                      "emoji": true
+                    }
+                  }$MENTION_BLOCK,
+                  {
+                    "type": "section",
+                    "fields": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Suite:*\n\`$SUITE\`"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Branch:*\n\`$BRANCH\`"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Results:*\n✅ $PASSED passed, ❌ $FAILED failed"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Commit:*\n<https://github.com/${{ github.repository }}/commit/$COMMIT_SHA|\`$SHORT_SHA\`>"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "context",
+                    "elements": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "👤 *Author:* $AUTHOR"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "actions",
+                    "elements": [
+                      {
+                        "type": "button",
+                        "text": {
+                          "type": "plain_text",
+                          "text": "📊 TestOps",
+                          "emoji": true
+                        },
+                        "url": "$TESTOPS_URL",
+                        "style": "primary"
+                      },
+                      {
+                        "type": "button",
+                        "text": {
+                          "type": "plain_text",
+                          "text": "🔍 Workflow",
+                          "emoji": true
+                        },
+                        "url": "$WORKFLOW_URL"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          
+          # Send notification
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H 'Content-type: application/json' \
+            --data @payload.json \
+            "$SLACK_WEBHOOK_URL")
+          
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Slack notification sent successfully"
+          else
+            echo "⚠️ Slack notification failed with HTTP code: $HTTP_CODE"
+          fi
+
+      - name: "ℹ️ Slack not configured"
+        if: steps.check-slack.outputs.configured != 'true'
+        run: |
+          echo "## 📢 Slack Notification Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Slack notifications are not configured. To enable them:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Required: Create a Slack Incoming Webhook" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to your Slack workspace's App Directory" >> $GITHUB_STEP_SUMMARY
+          echo "2. Search for 'Incoming Webhooks' and create a new app" >> $GITHUB_STEP_SUMMARY
+          echo "3. Create a new webhook for your desired channel" >> $GITHUB_STEP_SUMMARY
+          echo "4. Add the webhook URL as a repository secret named \`SLACK_WEBHOOK_URL\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Optional: Enable @mentions on failures" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To ping users when tests fail, add these additional secrets:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- \`SLACK_QA_LEAD_ID\`: Your Slack user ID (always notified on failures)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`SLACK_USER_MAPPING\`: JSON mapping of GitHub usernames to Slack IDs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Example SLACK_USER_MAPPING format:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          echo '{"github-user": "USLACKID1", "another-user": "USLACKID2"}' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See: scripts/slack-user-mapping/README.md for detailed setup instructions." >> $GITHUB_STEP_SUMMARY

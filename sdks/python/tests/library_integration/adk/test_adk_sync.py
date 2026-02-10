@@ -1,13 +1,10 @@
 import pickle
-from typing import Optional, Iterator, Dict
+from typing import Dict
 
 import google.adk
 import pydantic
 import pytest
 from google.adk import agents as adk_agents
-from google.adk import events as adk_events
-from google.adk import runners as adk_runners
-from google.adk import sessions as adk_sessions
 from google.adk.agents import run_config
 from google.adk.models import lite_llm as adk_lite_llm
 from google.adk.tools import agent_tool as adk_agent_tool
@@ -19,6 +16,7 @@ from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
 from opik.integrations.adk import helpers as opik_adk_helpers
 from opik.integrations.adk import opik_tracer, legacy_opik_tracer
 from . import agent_tools
+from . import constants, helpers
 from .constants import (
     APP_NAME,
     USER_ID,
@@ -36,46 +34,8 @@ from ...testlib import (
     assert_equal,
 )
 
-pytest_skip_for_adk_older_than_1_3_0 = pytest.mark.skipif(
-    semantic_version.SemanticVersion.parse(google.adk.__version__) < "1.3.0",
-    reason="Test only applies to ADK versions >= 1.3.0",
-)
-
 # Maximum reasonable time-to-first-token in seconds for test assertions
 MAX_REASONABLE_TTFT_SECONDS = 60
-
-
-def _build_runner(root_agent: adk_agents.Agent) -> adk_runners.Runner:
-    session_service = adk_sessions.InMemorySessionService()
-    _ = session_service.create_session_sync(
-        app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID
-    )
-    runner = adk_runners.Runner(
-        agent=root_agent, app_name=APP_NAME, session_service=session_service
-    )
-    return runner
-
-
-def _extract_final_response_text(
-    events_generator: Iterator[adk_events.Event],
-) -> Optional[str]:
-    """
-    Exhausts the iterator of ADK events and returns the response text
-    from the last event (presumably the final root agent response).
-    """
-    events_generator = list(events_generator)
-    if len(events_generator) == 0:
-        # As the error might occur in the background, we raise an exception here
-        raise Exception("Agent failed to execute.")
-
-    last_event: adk_events.Event = events_generator[-1]
-    # Don't use only event.is_final_response() because it may be true for nested agents as well!
-    assert (
-        last_event.is_final_response()
-        and last_event.content
-        and last_event.content.parts
-    )
-    return last_event.content.parts[0].text
 
 
 @pytest.mark.skipif(
@@ -87,7 +47,7 @@ def test_adk__public_name_OpikTracer_is_legacy_implementation_for_old_adk_versio
     assert OpikTracer is legacy_opik_tracer.LegacyOpikTracer
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__public_name_OpikTracer_is_new_implementation_for_new_adk_versions():
     """Test that OpikTracer maps to OpikTracer for ADK versions >= 1.3.0"""
     assert OpikTracer is opik_tracer.OpikTracer
@@ -118,7 +78,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -128,7 +88,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -239,7 +199,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -249,7 +209,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    weather_question_response = _extract_final_response_text(events_generator)
+    weather_question_response = helpers.extract_final_response_text(events_generator)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -258,7 +218,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             role="user", parts=[genai_types.Part(text="What is the time in New York?")]
         ),
     )
-    time_question_response = _extract_final_response_text(events_generator)
+    time_question_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -420,61 +380,19 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
     fake_backend,
 ):
     opik_tracer = OpikTracer()
-
-    translator_to_english = adk_agents.Agent(
-        name="Translator",
-        model=MODEL_NAME,
-        description="Translates text to English.",
-        before_agent_callback=opik_tracer.before_agent_callback,
-        after_agent_callback=opik_tracer.after_agent_callback,
-        before_model_callback=opik_tracer.before_model_callback,
-        after_model_callback=opik_tracer.after_model_callback,
+    root_agent = helpers.root_agent_sequential_with_translator_and_summarizer(
+        opik_tracer
     )
-
-    summarizer = adk_agents.Agent(
-        name="Summarizer",
-        model=MODEL_NAME,
-        description="Summarizes text to 1 sentence.",
-        before_agent_callback=opik_tracer.before_agent_callback,
-        after_agent_callback=opik_tracer.after_agent_callback,
-        before_model_callback=opik_tracer.before_model_callback,
-        after_model_callback=opik_tracer.after_model_callback,
-    )
-
-    root_agent = adk_agents.SequentialAgent(
-        name="TextProcessingAssistant",
-        sub_agents=[translator_to_english, summarizer],
-        description="Runs translator to english then summarizer, in order.",
-        before_agent_callback=opik_tracer.before_agent_callback,
-        after_agent_callback=opik_tracer.after_agent_callback,
-        # before_model_callback=opik_tracer.before_model_callback,
-        # after_model_callback=opik_tracer.after_model_callback,
-    )
-
-    runner = _build_runner(root_agent)
-
-    INPUT_GERMAN_TEXT = (
-        "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
-        "Große Sprachmodelle (LLMs) werden mit riesigen Mengen an Text trainiert,\n"
-        "um Muster in der Sprache zu erkennen. Sie verwenden eine Art neuronales Netzwerk,\n"
-        "das Transformer genannt wird. Dieses ermöglicht es ihnen, den Kontext und die Beziehungen\n"
-        "zwischen Wörtern zu verstehen.\n"
-        "Wenn man einem LLM eine Eingabe gibt, sagt es die wahrscheinlichsten nächsten Wörter\n"
-        "voraus – basierend auf allem, was es während des Trainings gelernt hat.\n"
-        "Es „versteht“ nicht im menschlichen Sinne, aber es erzeugt Antworten, die oft intelligent wirken,\n"
-        "weil es so viele Daten gesehen hat.\n"
-        "Je mehr Daten und Training ein Modell hat, desto besser kann es Aufgaben wie das Beantworten von Fragen,\n"
-        "das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen.\n"
-    )
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
-            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+            role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -498,7 +416,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
         ),
         input={
             "role": "user",
-            "parts": [{"text": INPUT_GERMAN_TEXT}],
+            "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
         },
         thread_id=SESSION_ID,
         spans=[
@@ -605,7 +523,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -615,7 +533,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -711,7 +629,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
 def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
     fake_backend,
 ):
-    model_name = "openai/gpt-4o-mini"
+    model_name = "openai/gpt-5-nano"
 
     opik_tracer = OpikTracer(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
@@ -735,7 +653,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -745,7 +663,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -841,7 +759,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
 def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged_in_openai_format(
     fake_backend,
 ):
-    model_name = "openai/gpt-4o-mini"
+    model_name = "openai/gpt-5-nano"
 
     opik_tracer = OpikTracer(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
@@ -865,7 +783,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -876,7 +794,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -993,30 +911,16 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
 
     track_adk_agent_recursive(root_agent, opik_tracer)
 
-    runner = _build_runner(root_agent)
-
-    INPUT_GERMAN_TEXT = (
-        "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
-        "Große Sprachmodelle (LLMs) werden mit riesigen Mengen an Text trainiert,\n"
-        "um Muster in der Sprache zu erkennen. Sie verwenden eine Art neuronales Netzwerk,\n"
-        "das Transformer genannt wird. Dieses ermöglicht es ihnen, den Kontext und die Beziehungen\n"
-        "zwischen Wörtern zu verstehen.\n"
-        "Wenn man einem LLM eine Eingabe gibt, sagt es die wahrscheinlichsten nächsten Wörter\n"
-        "voraus – basierend auf allem, was es während des Trainings gelernt hat.\n"
-        "Es „versteht“ nicht im menschlichen Sinne, aber es erzeugt Antworten, die oft intelligent wirken,\n"
-        "weil es so viele Daten gesehen hat.\n"
-        "Je mehr Daten und Training ein Modell hat, desto besser kann es Aufgaben wie das Beantworten von Fragen,\n"
-        "das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen.\n"
-    )
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
-            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+            role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -1040,7 +944,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
         ),
         input={
             "role": "user",
-            "parts": [{"text": INPUT_GERMAN_TEXT}],
+            "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
         },
         thread_id=SESSION_ID,
         spans=[
@@ -1106,6 +1010,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
     assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_tracked(
     fake_backend,
 ):
@@ -1126,18 +1031,16 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
 
     track_adk_agent_recursive(root_agent, opik_tracer)
 
-    runner = _build_runner(root_agent)
-
-    INPUT_GERMAN_TEXT = "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
-            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+            role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -1161,7 +1064,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
         ),
         input={
             "role": "user",
-            "parts": [{"text": INPUT_GERMAN_TEXT}],
+            "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
         },
         thread_id=SESSION_ID,
         spans=[
@@ -1340,7 +1243,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1350,7 +1253,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1454,30 +1357,16 @@ def test_adk__agent_with_response_schema__happyflow(
         output_schema=SummaryResult,
     )
 
-    runner = _build_runner(summarizer)
-
-    INPUT_GERMAN_TEXT = (
-        "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
-        "Große Sprachmodelle (LLMs) werden mit riesigen Mengen an Text trainiert,\n"
-        "um Muster in der Sprache zu erkennen. Sie verwenden eine Art neuronales Netzwerk,\n"
-        "das Transformer genannt wird. Dieses ermöglicht es ihnen, den Kontext und die Beziehungen\n"
-        "zwischen Wörtern zu verstehen.\n"
-        "Wenn man einem LLM eine Eingabe gibt, sagt es die wahrscheinlichsten nächsten Wörter\n"
-        "voraus – basierend auf allem, was es während des Trainings gelernt hat.\n"
-        "Es „versteht“ nicht im menschlichen Sinne, aber es erzeugt Antworten, die oft intelligent wirken,\n"
-        "weil es so viele Daten gesehen hat.\n"
-        "Je mehr Daten und Training ein Modell hat, desto besser kann es Aufgaben wie das Beantworten von Fragen,\n"
-        "das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen.\n"
-    )
+    runner = helpers.build_sync_runner(summarizer)
 
     events_generator = runner.run(
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
-            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+            role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = _extract_final_response_text(events_generator)
+    final_response = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -1501,7 +1390,7 @@ def test_adk__agent_with_response_schema__happyflow(
         ),
         input={
             "role": "user",
-            "parts": [{"text": INPUT_GERMAN_TEXT}],
+            "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
         },
         thread_id=SESSION_ID,
         spans=[
@@ -1526,7 +1415,7 @@ def test_adk__agent_with_response_schema__happyflow(
     assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
     opik_tracer = OpikTracer(
         project_name="adk-test",
@@ -1552,7 +1441,7 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1568,7 +1457,7 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
         # `_extract_final_response_text` will raise an exception because it is
         # programmed to do so when there are no events (we still have to try to exhaust the generator though,
         # because it is necessary for agent to actuallyexecute)
-        _ = _extract_final_response_text(events_generator)
+        _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1629,7 +1518,7 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
     opik_tracer = OpikTracer(
         project_name="adk-test",
@@ -1659,7 +1548,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1675,7 +1564,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
         # `_extract_final_response_text` will raise an exception because it is
         # programmed to do so when there are no events (we still have to try to exhaust the generator though,
         # because it is necessary for agent to actuallyexecute)
-        _ = _extract_final_response_text(events_generator)
+        _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1780,30 +1669,16 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
         after_model_callback=opik_tracer.after_model_callback,
     )
 
-    runner = _build_runner(root_agent)
-
-    INPUT_GERMAN_TEXT = (
-        "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
-        "Große Sprachmodelle (LLMs) werden mit riesigen Mengen an Text trainiert,\n"
-        "um Muster in der Sprache zu erkennen. Sie verwenden eine Art neuronales Netzwerk,\n"
-        "das Transformer genannt wird. Dieses ermöglicht es ihnen, den Kontext und die Beziehungen\n"
-        "zwischen Wörtern zu verstehen.\n"
-        "Wenn man einem LLM eine Eingabe gibt, sagt es die wahrscheinlichsten nächsten Wörter\n"
-        "voraus – basierend auf allem, was es während des Trainings gelernt hat.\n"
-        "Es „versteht“ nicht im menschlichen Sinne, aber es erzeugt Antworten, die oft intelligent wirken,\n"
-        "weil es so viele Daten gesehen hat.\n"
-        "Je mehr Daten und Training ein Modell hat, desto besser kann es Aufgaben wie das Beantworten von Fragen,\n"
-        "das Schreiben von Texten oder das Zusammenfassen von Inhalten erfüllen.\n"
-    )
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
-            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+            role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1847,7 +1722,10 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
                 name="Translator",
-                input={"parts": [{"text": INPUT_GERMAN_TEXT}], "role": "user"},
+                input={
+                    "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
+                    "role": "user",
+                },
                 output=ANY_DICT,
                 metadata=ANY_DICT,
                 type="general",
@@ -1917,7 +1795,7 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1927,7 +1805,7 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1935,7 +1813,7 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
     assert len(fake_backend.span_trees) == 0
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
     """Test that time-to-first-token is tracked and stored in LLM span metadata."""
     opik_tracer = OpikTracer(
@@ -1962,7 +1840,7 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -1972,7 +1850,7 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1985,20 +1863,20 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
 
     for llm_span in llm_spans:
         assert llm_span.metadata is not None, "LLM span should have metadata"
-        assert (
-            "time_to_first_token" in llm_span.metadata
-        ), f"LLM span metadata should contain 'time_to_first_token', got: {llm_span.metadata.keys()}"
+        assert "time_to_first_token" in llm_span.metadata, (
+            f"LLM span metadata should contain 'time_to_first_token', got: {llm_span.metadata.keys()}"
+        )
         ttft = llm_span.metadata["time_to_first_token"]
-        assert isinstance(
-            ttft, (int, float)
-        ), f"time_to_first_token should be a number, got {type(ttft)}"
+        assert isinstance(ttft, (int, float)), (
+            f"time_to_first_token should be a number, got {type(ttft)}"
+        )
         assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
-        assert (
-            ttft < MAX_REASONABLE_TTFT_SECONDS
-        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        assert ttft < MAX_REASONABLE_TTFT_SECONDS, (
+            f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        )
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
     fake_backend,
 ):
@@ -2027,7 +1905,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -2038,7 +1916,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -2051,20 +1929,20 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
 
     for llm_span in llm_spans:
         assert llm_span.metadata is not None, "LLM span should have metadata"
-        assert (
-            "time_to_first_token" in llm_span.metadata
-        ), f"LLM span metadata should contain 'time_to_first_token' for streaming responses, got: {llm_span.metadata.keys()}"
+        assert "time_to_first_token" in llm_span.metadata, (
+            f"LLM span metadata should contain 'time_to_first_token' for streaming responses, got: {llm_span.metadata.keys()}"
+        )
         ttft = llm_span.metadata["time_to_first_token"]
-        assert isinstance(
-            ttft, (int, float)
-        ), f"time_to_first_token should be a number, got {type(ttft)}"
+        assert isinstance(ttft, (int, float)), (
+            f"time_to_first_token should be a number, got {type(ttft)}"
+        )
         assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
-        assert (
-            ttft < MAX_REASONABLE_TTFT_SECONDS
-        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        assert ttft < MAX_REASONABLE_TTFT_SECONDS, (
+            f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        )
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
     fake_backend,
 ):
@@ -2093,7 +1971,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -2103,7 +1981,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -2112,33 +1990,33 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
 
     # Check that all LLM spans have time_to_first_token in metadata
     llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
-    assert (
-        len(llm_spans) >= 2
-    ), "Expected at least two LLM spans (one before tool, one after)"
+    assert len(llm_spans) >= 2, (
+        "Expected at least two LLM spans (one before tool, one after)"
+    )
 
     for llm_span in llm_spans:
         assert llm_span.metadata is not None, "LLM span should have metadata"
-        assert (
-            "time_to_first_token" in llm_span.metadata
-        ), f"All LLM spans should have 'time_to_first_token', got: {llm_span.metadata.keys()}"
+        assert "time_to_first_token" in llm_span.metadata, (
+            f"All LLM spans should have 'time_to_first_token', got: {llm_span.metadata.keys()}"
+        )
         ttft = llm_span.metadata["time_to_first_token"]
-        assert isinstance(
-            ttft, (int, float)
-        ), f"time_to_first_token should be a number, got {type(ttft)}"
+        assert isinstance(ttft, (int, float)), (
+            f"time_to_first_token should be a number, got {type(ttft)}"
+        )
         assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
-        assert (
-            ttft < MAX_REASONABLE_TTFT_SECONDS
-        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        assert ttft < MAX_REASONABLE_TTFT_SECONDS, (
+            f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        )
 
     # Verify that different LLM calls have distinct TTFT values when possible
     # They might be similar in magnitude but should be tracked independently per call
     ttft_values = [span.metadata["time_to_first_token"] for span in llm_spans]
-    assert (
-        len(set(ttft_values)) >= 2
-    ), "Expected at least two distinct TTFT values for multiple LLM calls"
+    assert len(set(ttft_values)) >= 2, (
+        "Expected at least two distinct TTFT values for multiple LLM calls"
+    )
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_backend):
     """Test that time-to-first-token is not tracked when response has no content."""
     opik_tracer = OpikTracer(
@@ -2165,7 +2043,7 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
         after_tool_callback=opik_tracer.after_tool_callback,
     )
 
-    runner = _build_runner(root_agent)
+    runner = helpers.build_sync_runner(root_agent)
 
     # Use a simple query that should generate a response
     events_generator = runner.run(
@@ -2176,7 +2054,7 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
             parts=[genai_types.Part(text="Hello")],
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -2195,12 +2073,12 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
             # The test verifies that when content exists, TTFT is present
             if "time_to_first_token" in llm_span.metadata:
                 ttft = llm_span.metadata["time_to_first_token"]
-                assert isinstance(
-                    ttft, (int, float)
-                ), f"time_to_first_token should be a number, got {type(ttft)}"
-                assert (
-                    ttft >= 0
-                ), f"time_to_first_token should be non-negative, got {ttft}"
+                assert isinstance(ttft, (int, float)), (
+                    f"time_to_first_token should be a number, got {type(ttft)}"
+                )
+                assert ttft >= 0, (
+                    f"time_to_first_token should be non-negative, got {ttft}"
+                )
         else:
             # When span has no output or no usage, TTFT should not be present
             assert not (
@@ -2211,54 +2089,25 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
             )
 
 
-@pytest_skip_for_adk_older_than_1_3_0
+@helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_backend):
     """Test that time-to-first-token is tracked for each LLM call in sequential agents."""
     opik_tracer = OpikTracer()
 
-    translator_to_english = adk_agents.Agent(
-        name="Translator",
-        model=MODEL_NAME,
-        description="Translates text to English.",
-        before_agent_callback=opik_tracer.before_agent_callback,
-        after_agent_callback=opik_tracer.after_agent_callback,
-        before_model_callback=opik_tracer.before_model_callback,
-        after_model_callback=opik_tracer.after_model_callback,
+    root_agent = helpers.root_agent_sequential_with_translator_and_summarizer(
+        opik_tracer
     )
 
-    summarizer = adk_agents.Agent(
-        name="Summarizer",
-        model=MODEL_NAME,
-        description="Summarizes text to 1 sentence.",
-        before_agent_callback=opik_tracer.before_agent_callback,
-        after_agent_callback=opik_tracer.after_agent_callback,
-        before_model_callback=opik_tracer.before_model_callback,
-        after_model_callback=opik_tracer.after_model_callback,
-    )
-
-    root_agent = adk_agents.SequentialAgent(
-        name="TextProcessingAssistant",
-        sub_agents=[translator_to_english, summarizer],
-        description="Runs translator to english then summarizer, in order.",
-        before_agent_callback=opik_tracer.before_agent_callback,
-        after_agent_callback=opik_tracer.after_agent_callback,
-    )
-
-    runner = _build_runner(root_agent)
-
-    INPUT_GERMAN_TEXT = (
-        "Wie große Sprachmodelle (LLMs) funktionieren\n\n"
-        "Große Sprachmodelle (LLMs) werden mit riesigen Mengen an Text trainiert."
-    )
+    runner = helpers.build_sync_runner(root_agent)
 
     events_generator = runner.run(
         user_id=USER_ID,
         session_id=SESSION_ID,
         new_message=genai_types.Content(
-            role="user", parts=[genai_types.Part(text=INPUT_GERMAN_TEXT)]
+            role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    _ = _extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -2279,20 +2128,20 @@ def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_b
     for span in trace_tree.spans:
         all_llm_spans.extend(collect_llm_spans(span))
 
-    assert (
-        len(all_llm_spans) >= 2
-    ), "Expected at least two LLM spans (one per sub-agent)"
+    assert len(all_llm_spans) >= 2, (
+        "Expected at least two LLM spans (one per sub-agent)"
+    )
 
     for llm_span in all_llm_spans:
         assert llm_span.metadata is not None, "LLM span should have metadata"
-        assert (
-            "time_to_first_token" in llm_span.metadata
-        ), f"All LLM spans in sequential agents should have 'time_to_first_token', got: {llm_span.metadata.keys()}"
+        assert "time_to_first_token" in llm_span.metadata, (
+            f"All LLM spans in sequential agents should have 'time_to_first_token', got: {llm_span.metadata.keys()}"
+        )
         ttft = llm_span.metadata["time_to_first_token"]
-        assert isinstance(
-            ttft, (int, float)
-        ), f"time_to_first_token should be a number, got {type(ttft)}"
+        assert isinstance(ttft, (int, float)), (
+            f"time_to_first_token should be a number, got {type(ttft)}"
+        )
         assert ttft >= 0, f"time_to_first_token should be non-negative, got {ttft}"
-        assert (
-            ttft < MAX_REASONABLE_TTFT_SECONDS
-        ), f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        assert ttft < MAX_REASONABLE_TTFT_SECONDS, (
+            f"time_to_first_token should be reasonable (< {MAX_REASONABLE_TTFT_SECONDS}s), got {ttft}"
+        )

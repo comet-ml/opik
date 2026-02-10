@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 
 import pydantic
 
@@ -8,7 +8,10 @@ class Attachment(pydantic.BaseModel):
     Represents an Attachment to be added to the Trace or Span.
 
     Args:
-        data: The data to be added to the Attachment as a path to the file.
+        data: The data to be added to the Attachment. Can be:
+            - A file path (str) to an existing file
+            - A base64-encoded string (str) representing file content
+            - Raw bytes content
         file_name: The custom filename to assign to the data in the attachment.
             If not provided, the original filename of the data will be used.
         content_type: The MIME type of the data to be added to the attachment.
@@ -19,7 +22,7 @@ class Attachment(pydantic.BaseModel):
             Default is True.
     """
 
-    data: str
+    data: Union[str, bytes]
     file_name: Optional[str] = None
     content_type: Optional[str] = None
     create_temp_copy: bool = True

@@ -31,6 +31,8 @@ const CompareOptimizationsPage: React.FC = () => {
     sortableBy,
     isOptimizationPending,
     isExperimentsPending,
+    isExperimentsPlaceholderData,
+    isExperimentsFetching,
     search,
     setSearch,
     sortedColumns,
@@ -49,7 +51,6 @@ const CompareOptimizationsPage: React.FC = () => {
 
   const { columnsDef, columns } = useCompareOptimizationsColumns({
     optimization,
-    optimizationId,
     scoreMap,
     columnsOrder,
     selectedColumns,
@@ -96,6 +97,7 @@ const CompareOptimizationsPage: React.FC = () => {
           optimizationId={optimization?.id}
           isStudioOptimization={isStudioOptimization}
           canRerun={canRerun}
+          bestExperiment={bestExperiment}
         />
       </PageBodyStickyContainer>
 
@@ -160,6 +162,9 @@ const CompareOptimizationsPage: React.FC = () => {
           onColumnsWidthChange={setColumnsWidth}
           highlightedTrialId={bestExperiment?.id}
           bestExperiment={bestExperiment}
+          showLoadingOverlay={
+            isExperimentsPlaceholderData && isExperimentsFetching
+          }
         />
         <CompareOptimizationsSidebar
           optimization={optimization}

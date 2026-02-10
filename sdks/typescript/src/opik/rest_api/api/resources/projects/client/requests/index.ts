@@ -1,6 +1,7 @@
 export type { DeleteProjectByIdRequest } from "./DeleteProjectByIdRequest.js";
 export type { FindFeedbackScoreNamesByProjectIdsRequest } from "./FindFeedbackScoreNamesByProjectIdsRequest.js";
 export type { FindProjectsRequest } from "./FindProjectsRequest.js";
+export type { FindTokenUsageNamesRequest } from "./FindTokenUsageNamesRequest.js";
 export type { GetProjectByIdRequest } from "./GetProjectByIdRequest.js";
 export type { GetProjectStatsRequest } from "./GetProjectStatsRequest.js";
 export type { ProjectMetricRequestPublic } from "./ProjectMetricRequestPublic.js";

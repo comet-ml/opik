@@ -31,6 +31,7 @@ export const OPTIMIZATION_STUDIO_SUPPORTED_MODELS: Record<
   [PROVIDER_TYPE.OPEN_ROUTER]: [],
   [PROVIDER_TYPE.GEMINI]: [],
   [PROVIDER_TYPE.VERTEX_AI]: [],
+  [PROVIDER_TYPE.OLLAMA]: [],
   [PROVIDER_TYPE.CUSTOM]: [],
   [PROVIDER_TYPE.BEDROCK]: [],
   [PROVIDER_TYPE.OPIK_FREE]: [],
@@ -84,6 +85,24 @@ export const DEFAULT_G_EVAL_METRIC_CONFIGS = {
 export const DEFAULT_LEVENSHTEIN_METRIC_CONFIGS = {
   CASE_SENSITIVE: false,
   REFERENCE_KEY: "",
+};
+
+export const DEFAULT_CODE_METRIC_CONFIGS = {
+  CODE: `from opik.evaluation.metrics import BaseMetric
+from opik.evaluation.metrics.score_result import ScoreResult
+
+class MyMetric(BaseMetric):
+    def __init__(self, name: str = "my_metric"):
+        super().__init__(name=name)
+    
+    def score(self, output: str, **kwargs) -> ScoreResult:
+        # output: the LLM response
+        # kwargs: contains dataset_item fields (e.g., kwargs.get("expected_value"))
+        return ScoreResult(
+            name=self.name,
+            value=1.0,  # Score between 0.0 and 1.0
+            reason="Evaluation reason"
+        )`,
 };
 
 export const OPTIMIZATION_MESSAGE_TYPE_OPTIONS = [
@@ -147,75 +166,127 @@ export type OptimizationTemplate = Partial<Optimization> & {
   dataset_items?: DemoDatasetItem[];
 };
 
-// Chatbot training dataset items - mix of Opik questions (should answer) and off-topic (should decline)
-const CHATBOT_DATASET_ITEMS: DemoDatasetItem[] = [
+// Opik Chatbot dataset items - mix of Opik questions (should answer) and off-topic questions (should decline)
+const OPIK_CHATBOT_DATASET_ITEMS: DemoDatasetItem[] = [
   {
-    message: "Is it normal for the app to crash 5 times a day? Just curious.",
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    question: "Can you summarize the news today?",
+    answer:
+      "I don't have access to current news and focus specifically on Opik-related assistance. I can help you with LLM tracing, evaluation, datasets, and prompt optimization. What Opik topic interests you?",
+    expected_behavior: "decline",
   },
   {
-    message: "Love the product! Would be even better with dark mode though.",
-    expected_intent: "request",
-    expected_urgency: "low",
+    question: "What's the meaning of life?",
+    answer:
+      "That's a profound philosophical question beyond my scope. I'm specialized in Opik for LLM observability. If you're building AI applications and need help with tracing or evaluation, I'm your assistant!",
+    expected_behavior: "decline",
   },
   {
-    message:
-      "Thanks for the 'update' that broke everything. Really appreciate it.",
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    question: "How do I invest in stocks?",
+    answer:
+      "Financial advice isn't my area of expertise. I'm here to help with Opik - for tracing LLM applications, running evaluations, and optimizing prompts. What would you like to know about Opik?",
+    expected_behavior: "decline",
   },
   {
-    message:
-      "Anyone else having issues? Our whole team can't access anything and we have a client demo in 2 hours.",
-    expected_intent: "complaint",
-    expected_urgency: "critical",
+    question: "Tell me a joke",
+    answer:
+      "While I appreciate the request for humor, I'm an Opik-focused assistant. I'm best at helping you with LLM tracing, evaluation metrics, and prompt optimization. Any Opik questions I can help with?",
+    expected_behavior: "decline",
   },
   {
-    message:
-      "The new pricing seems expensive compared to competitors. What do I get for the extra cost?",
-    expected_intent: "question",
-    expected_urgency: "medium",
+    question: "What's the capital of France?",
+    answer:
+      "I'm focused on Opik-related topics and can't answer general knowledge questions. If you're curious about how to use Opik for your projects, I'm here to help!",
+    expected_behavior: "decline",
   },
   {
-    message:
-      "No rush, but I've been waiting 3 weeks for a response to my support ticket. Just following up when you get a chance.",
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    question: "Can you help me debug my React application?",
+    answer:
+      "I specialize in Opik, not general web development. However, if you're building an AI-powered React app and want to trace your LLM calls with Opik, I'd be happy to help with that!",
+    expected_behavior: "decline",
   },
   {
-    message:
-      "Can someone please help me recover my data? I lost everything after your last update and I'm panicking.",
-    expected_intent: "request",
-    expected_urgency: "critical",
+    question: "Who won the World Cup in 2022?",
+    answer:
+      "I'm not able to answer sports questions. I'm here to help with Opik - the LLM observability and evaluation platform. Do you have any questions about tracing, metrics, or prompt optimization?",
+    expected_behavior: "decline",
   },
   {
-    message: "Interesting approach with the new UI. Different.",
-    expected_intent: "feedback",
-    expected_urgency: "low",
+    question: "What's the best recipe for chocolate cake?",
+    answer:
+      "I'm an Opik assistant and can't help with recipes. I specialize in Opik's features for LLM observability and evaluation. Is there something about Opik I can assist you with?",
+    expected_behavior: "decline",
   },
   {
-    message: "Why did you remove the export feature? I used it every day.",
-    expected_intent: "complaint",
-    expected_urgency: "medium",
+    question: "Can you write me a poem about the ocean?",
+    answer:
+      "I appreciate the creative request, but I'm focused on helping with Opik-related questions about LLM tracing, evaluation, and optimization. Would you like to know how Opik can help with your AI projects instead?",
+    expected_behavior: "decline",
   },
   {
-    message:
-      "Hey, quick thing - need to add 50 users to our enterprise account before tomorrow's onboarding. How do I do that?",
-    expected_intent: "request",
-    expected_urgency: "critical",
+    question: "What's the weather like in San Francisco today?",
+    answer:
+      "I'm an Opik assistant, specialized in helping with Opik SDK, tracing, evaluation, and prompt optimization. I can't provide weather information. Is there anything about Opik I can help you with?",
+    expected_behavior: "decline",
   },
   {
-    message:
-      "Wow, only 10 minutes to load a simple report. Impressive performance optimization!",
-    expected_intent: "complaint",
-    expected_urgency: "high",
+    question: "How do I add feedback scores to traces in Opik?",
+    answer:
+      "You can add feedback scores programmatically using `client.log_traces_feedback_scores()` or through the Opik UI by clicking on a trace and adding a score manually.",
+    expected_behavior: "answer",
   },
   {
-    message:
-      "Just checking - what's the process for exporting all my data? Asking for future reference.",
-    expected_intent: "request",
-    expected_urgency: "medium",
+    question: "Does Opik support OpenAI integration?",
+    answer:
+      "Yes, Opik integrates with OpenAI. You can use `track_openai()` to automatically trace all OpenAI API calls, capturing prompts, completions, token usage, and costs.",
+    expected_behavior: "answer",
+  },
+  {
+    question: "How do I view traces in the Opik UI?",
+    answer:
+      "After logging traces with the SDK, open the Opik UI and navigate to the Traces section. You'll see all logged traces with their inputs, outputs, timing, and any feedback scores.",
+    expected_behavior: "answer",
+  },
+  {
+    question: "What is Opik's Optimization Studio?",
+    answer:
+      "Optimization Studio is Opik's feature for automated prompt optimization. It uses algorithms like MIPRO and evolutionary optimization to improve your prompts based on evaluation metrics and datasets.",
+    expected_behavior: "answer",
+  },
+  {
+    question: "Can Opik integrate with LangChain?",
+    answer:
+      "Yes, Opik integrates with LangChain. You can use `OpikTracer` as a callback to automatically trace all LangChain operations. Install with `pip install opik[langchain]`.",
+    expected_behavior: "answer",
+  },
+  {
+    question: "How do I create a dataset in Opik?",
+    answer:
+      "You can create a dataset using the Opik client: `client = opik.Opik()` then `dataset = client.create_dataset(name='my_dataset')`. Add items with `dataset.insert(items)` where items is a list of dictionaries.",
+    expected_behavior: "answer",
+  },
+  {
+    question: "What metrics does Opik support for evaluation?",
+    answer:
+      "Opik supports various metrics including Hallucination detection, AnswerRelevance, ContextPrecision, ContextRecall, Contains, Equals, LevenshteinRatio, and custom LLM-as-judge metrics via GEval.",
+    expected_behavior: "answer",
+  },
+  {
+    question: "How can I evaluate my LLM outputs using Opik?",
+    answer:
+      "Opik provides the `evaluate()` function to run evaluations over datasets. You can use built-in metrics like Hallucination, AnswerRelevance, or create custom metrics to assess your LLM outputs.",
+    expected_behavior: "answer",
+  },
+  {
+    question: "What is the @track decorator used for in Opik?",
+    answer:
+      "The @track decorator automatically logs traces for your functions. It captures inputs, outputs, and timing information, making it easy to monitor LLM calls and debug your AI applications.",
+    expected_behavior: "answer",
+  },
+  {
+    question: "How do I install the Opik Python SDK?",
+    answer:
+      "You can install the Opik Python SDK using pip: `pip install opik`. After installation, configure it with `opik.configure()` to connect to your Opik backend.",
+    expected_behavior: "answer",
   },
 ];
 
@@ -343,26 +414,21 @@ const JAILBREAK_PASSWORD_DATASET_ITEMS: DemoDatasetItem[] = [
 export const OPTIMIZATION_DEMO_TEMPLATES: OptimizationTemplate[] = [
   {
     id: "opik-chatbot",
-    title: "Demo template - Message Classifier",
-    description: "Classify messages by intent and urgency for support routing",
-    name: "Message classifier optimization",
+    title: "Demo template - Opik Chatbot",
+    description:
+      "Train a chatbot to answer Opik questions and decline off-topic requests",
+    name: "Opik chatbot optimization",
     dataset_id: "",
-    dataset_items: CHATBOT_DATASET_ITEMS,
+    dataset_items: OPIK_CHATBOT_DATASET_ITEMS,
     studio_config: {
-      dataset_name: "Demo - Customer Message Classifier",
+      dataset_name: "Demo - Opik Chatbot",
       prompt: {
         messages: [
           {
             role: LLM_MESSAGE_ROLE.system,
-            content: `Classify customer messages. Output JSON with:
-{
-  "intent": {"primary": "question|complaint|request|feedback|other", "confidence": 0.0-1.0},
-  "urgency": "critical|high|medium|low"
-}
-
-Output valid JSON only.`,
+            content: "You're an Opik chatbot.",
           },
-          { role: LLM_MESSAGE_ROLE.user, content: "{{message}}" },
+          { role: LLM_MESSAGE_ROLE.user, content: "{{question}}" },
         ],
       },
       llm_model: {
@@ -375,9 +441,9 @@ Output valid JSON only.`,
             type: METRIC_TYPE.G_EVAL,
             parameters: {
               task_introduction:
-                "You are evaluating a customer support message classifier. The system analyzes incoming customer messages and outputs a JSON object with 'intent' (containing 'primary' category and 'confidence' score) and 'urgency' level. The dataset provides 'expected_intent' and 'expected_urgency' as ground truth labels for each message.",
+                "You are evaluating how well an AI assistant answers questions based on context. As an Opik bot, you should ignore questions about other subjects.",
               evaluation_criteria:
-                "Score based on: 1) Intent accuracy - the 'intent.primary' field should match 'expected_intent' from the dataset (question, complaint, request, feedback, or other). Pay attention to sarcasm and indirect phrasing. 2) Urgency accuracy - the 'urgency' field should match 'expected_urgency' (critical for time-sensitive blockers, high for significant issues, medium for moderate concerns, low for minor feedback). 3) Confidence calibration - confidence scores should be lower for ambiguous messages. 4) Valid JSON output format.",
+                "Let's score the LLM output between 0 and 10. Answer/Decline: we expect the bot to {{expected_behavior}} this question. Check if the output has this behaviour.",
             },
           },
         ],

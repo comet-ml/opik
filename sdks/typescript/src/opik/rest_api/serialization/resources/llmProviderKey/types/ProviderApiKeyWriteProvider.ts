@@ -14,6 +14,7 @@ export const ProviderApiKeyWriteProvider: core.serialization.Schema<
     "openrouter",
     "vertex-ai",
     "bedrock",
+    "ollama",
     "custom-llm",
     "opik-free",
 ]);
@@ -26,6 +27,7 @@ export declare namespace ProviderApiKeyWriteProvider {
         | "openrouter"
         | "vertex-ai"
         | "bedrock"
+        | "ollama"
         | "custom-llm"
         | "opik-free";
 }
