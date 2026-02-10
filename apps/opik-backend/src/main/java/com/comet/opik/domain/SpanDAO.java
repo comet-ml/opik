@@ -2466,7 +2466,7 @@ class SpanDAO {
                 <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
                 <if(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
                 """
-            + SqlFragments.tagUpdateFragment("s.tags")
+            + TagOperations.tagUpdateFragment("s.tags")
             + """
                     as tags,
                                    <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> s.usage <endif> as usage,
@@ -2482,7 +2482,7 @@ class SpanDAO {
                                WHERE s.id IN :ids AND s.workspace_id = :workspace_id
                                ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
                                LIMIT 1 BY s.id
-                               SETTINGS log_comment = '<log_comment>'
+                               SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
                                ;
                                """;
 
@@ -2525,22 +2525,7 @@ class SpanDAO {
         Optional.ofNullable(spanUpdate.output())
                 .ifPresent(output -> template.add("output", output.toString()));
 
-        // Tag update strategy, two approaches (if both are provided, tagsToAdd/tagsToRemove takes precedence):
-        // 1. tagsToAdd/tagsToRemove: Used by frontend. Allows efficient atomic add/remove in single call.
-        // 2. tags + mergeTags: Used by SDK clients for backwards compatibility.
-        //    - mergeTags=true: Merge provided tags with existing tags
-        //    - mergeTags=false: Replace all tags with provided tags
-        if (spanUpdate.tagsToAdd() != null || spanUpdate.tagsToRemove() != null) {
-            if (spanUpdate.tagsToAdd() != null) {
-                template.add("tags_to_add", spanUpdate.tagsToAdd().toString());
-            }
-            if (spanUpdate.tagsToRemove() != null) {
-                template.add("tags_to_remove", spanUpdate.tagsToRemove().toString());
-            }
-        } else if (spanUpdate.tags() != null) {
-            template.add("tags", spanUpdate.tags().toString());
-            template.add("merge_tags", mergeTags);
-        }
+        TagOperations.configureTagTemplate(template, spanUpdate, mergeTags);
 
         Optional.ofNullable(spanUpdate.metadata())
                 .ifPresent(metadata -> template.add("metadata", metadata.toString()));
@@ -2585,17 +2570,7 @@ class SpanDAO {
                     statement.bind("output_slim", TruncationUtils.createSlimJsonString(outputValue));
                 });
 
-        // Tag update strategy (see above for full explanation)
-        if (spanUpdate.tagsToAdd() != null || spanUpdate.tagsToRemove() != null) {
-            if (spanUpdate.tagsToAdd() != null) {
-                statement.bind("tags_to_add", spanUpdate.tagsToAdd().toArray(String[]::new));
-            }
-            if (spanUpdate.tagsToRemove() != null) {
-                statement.bind("tags_to_remove", spanUpdate.tagsToRemove().toArray(String[]::new));
-            }
-        } else if (spanUpdate.tags() != null) {
-            statement.bind("tags", spanUpdate.tags().toArray(String[]::new));
-        }
+        TagOperations.bindTagParams(statement, spanUpdate);
 
         Optional.ofNullable(spanUpdate.usage())
                 .ifPresent(usage -> {

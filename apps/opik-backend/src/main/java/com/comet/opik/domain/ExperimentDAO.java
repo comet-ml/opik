@@ -1148,7 +1148,7 @@ class ExperimentDAO {
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
                 <if(metadata)> :metadata <else> metadata <endif> as metadata,
-                """ + SqlFragments.tagUpdateFragment("tags")
+                """ + TagOperations.tagUpdateFragment("tags")
             + """
                     as tags,
                                    created_by,
@@ -1167,7 +1167,7 @@ class ExperimentDAO {
                                AND workspace_id = :workspace_id
                                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                                LIMIT 1 BY id
-                               SETTINGS log_comment = '<log_comment>'
+                               SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable'
                                ;
                                """;
 
@@ -2049,22 +2049,7 @@ class ExperimentDAO {
             template.add("metadata", experimentUpdate.metadata().toString());
         }
 
-        // Tag update strategy, two approaches (if both are provided, tagsToAdd/tagsToRemove takes precedence):
-        // 1. tagsToAdd/tagsToRemove: Used by frontend. Allows efficient atomic add/remove in single call.
-        // 2. tags + mergeTags: Used by SDK clients for backwards compatibility.
-        //    - mergeTags=true: Merge provided tags with existing tags
-        //    - mergeTags=false: Replace all tags with provided tags
-        if (experimentUpdate.tagsToAdd() != null || experimentUpdate.tagsToRemove() != null) {
-            if (experimentUpdate.tagsToAdd() != null) {
-                template.add("tags_to_add", true);
-            }
-            if (experimentUpdate.tagsToRemove() != null) {
-                template.add("tags_to_remove", true);
-            }
-        } else if (experimentUpdate.tags() != null) {
-            template.add("tags", true);
-            template.add("merge_tags", mergeTags);
-        }
+        TagOperations.configureTagTemplate(template, experimentUpdate, mergeTags);
 
         if (experimentUpdate.type() != null) {
             template.add("type", experimentUpdate.type().getValue());
@@ -2090,17 +2075,7 @@ class ExperimentDAO {
             statement.bind("metadata", experimentUpdate.metadata().toString());
         }
 
-        // Tag update strategy (see above for full explanation)
-        if (experimentUpdate.tagsToAdd() != null || experimentUpdate.tagsToRemove() != null) {
-            if (experimentUpdate.tagsToAdd() != null) {
-                statement.bind("tags_to_add", experimentUpdate.tagsToAdd().toArray(String[]::new));
-            }
-            if (experimentUpdate.tagsToRemove() != null) {
-                statement.bind("tags_to_remove", experimentUpdate.tagsToRemove().toArray(String[]::new));
-            }
-        } else if (experimentUpdate.tags() != null) {
-            statement.bind("tags", experimentUpdate.tags().toArray(String[]::new));
-        }
+        TagOperations.bindTagParams(statement, experimentUpdate);
 
         if (experimentUpdate.type() != null) {
             statement.bind("type", experimentUpdate.type().getValue());

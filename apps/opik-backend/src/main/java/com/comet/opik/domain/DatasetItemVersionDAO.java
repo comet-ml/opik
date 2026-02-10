@@ -1184,8 +1184,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                """ + SqlFragments.tagUpdateFragment("src.tags") + """
-                as tags,
+                """ + TagOperations.tagUpdateFragment("src.tags") + """
+            as tags,
                 <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
                 <if(clear_execution_policy)> '' <else><if(execution_policy)> :execution_policy <else> src.execution_policy <endif><endif> as execution_policy,
                 src.item_created_at,
@@ -1212,6 +1212,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY dataset_item_id
             ) AS src
+            SETTINGS short_circuit_function_evaluation = 'force_enable'
             """;
 
     private static final String EDIT_ITEM_VIA_SELECT_INSERT = """
@@ -2532,24 +2533,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().description() != null) {
                     template.add("description", true);
                 }
-                // Tag update strategy, two approaches (if both are provided, tagsToAdd/tagsToRemove takes precedence):
-                // 1. tagsToAdd/tagsToRemove: Used by frontend. Allows efficient atomic add/remove in single call.
-                // 2. tags + mergeTags: Used by SDK clients for backwards compatibility.
-                //    - mergeTags=true: Merge provided tags with existing tags
-                //    - mergeTags=false: Replace all tags with provided tags
-                if (batchUpdate.update().tagsToAdd() != null || batchUpdate.update().tagsToRemove() != null) {
-                    if (batchUpdate.update().tagsToAdd() != null) {
-                        template.add("tags_to_add", true);
-                    }
-                    if (batchUpdate.update().tagsToRemove() != null) {
-                        template.add("tags_to_remove", true);
-                    }
-                } else if (batchUpdate.update().tags() != null) {
-                    template.add("tags", true);
-                    if (Boolean.TRUE.equals(batchUpdate.mergeTags())) {
-                        template.add("merge_tags", true);
-                    }
-                }
+
+                TagOperations.configureTagTemplate(template, batchUpdate.update(),
+                        Boolean.TRUE.equals(batchUpdate.mergeTags()));
+
                 if (batchUpdate.update().evaluators() != null) {
                     template.add("evaluators", true);
                 }
@@ -2604,17 +2591,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().description() != null) {
                     statement.bind("description", batchUpdate.update().description());
                 }
-                // Tag update strategy (see above for full explanation)
-                if (batchUpdate.update().tagsToAdd() != null || batchUpdate.update().tagsToRemove() != null) {
-                    if (batchUpdate.update().tagsToAdd() != null) {
-                        statement.bind("tags_to_add", batchUpdate.update().tagsToAdd().toArray(new String[0]));
-                    }
-                    if (batchUpdate.update().tagsToRemove() != null) {
-                        statement.bind("tags_to_remove", batchUpdate.update().tagsToRemove().toArray(new String[0]));
-                    }
-                } else if (batchUpdate.update().tags() != null) {
-                    statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
-                }
+
+                TagOperations.bindTagParams(statement, batchUpdate.update());
+
                 if (batchUpdate.update().evaluators() != null) {
                     statement.bind("evaluators", serializeEvaluators(batchUpdate.update().evaluators()));
                 }

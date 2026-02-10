@@ -50,6 +50,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.DatasetItemVersionDAO.DatasetItemIdMapping;
@@ -522,7 +523,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.datasetId(), batchUpdate.filters(),
                     batchUpdate.update(),
                     batchUpdate.mergeTags());
-        });
+        }).onErrorResume(TagOperations::mapTagLimitError);
     }
 
     /**
@@ -1545,6 +1546,22 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         List<UUID> addedUuids = generateUuidPool(idGenerator, addedItems.size());
 
                         List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
+
+                        // Validate tag limits on all items being inserted or edited
+                        Stream.concat(
+                                addedItemsWithIds.stream().map(DatasetItem::tags),
+                                editedItemEdits.stream().map(DatasetItemEdit::tags))
+                                .filter(tags -> tags != null && tags.size() > TagOperations.MAX_TAGS_PER_ITEM)
+                                .findFirst()
+                                .ifPresent(tags -> {
+                                    throw new ClientErrorException(
+                                            Response.status(422)
+                                                    .entity(new ErrorMessage(List.of(
+                                                            "Tag limit exceeded: maximum "
+                                                                    + TagOperations.MAX_TAGS_PER_ITEM
+                                                                    + " tags per item")))
+                                                    .build());
+                                });
 
                         // Edit items via INSERT...SELECT (merge happens in SQL, not Java)
                         Mono<Long> editedCountMono = versionDao.editItemsViaSelectInsert(

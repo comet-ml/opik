@@ -4,7 +4,7 @@ import com.comet.opik.api.TraceThreadSampling;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
-import com.comet.opik.domain.SqlFragments;
+import com.comet.opik.domain.TagOperations;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
@@ -621,14 +621,15 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.last_updated_by,
                 tt.created_at,
                 now64(6) as last_updated_at,
-                """ + SqlFragments.tagUpdateFragment("tt.tags") + """
+                """ + TagOperations.tagUpdateFragment("tt.tags") + """
             as tags,
                            tt.sampling_per_rule,
                            tt.scored_at
                        FROM trace_threads tt
                        WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
                        ORDER BY (tt.workspace_id, tt.project_id, tt.thread_id, tt.id) DESC, tt.last_updated_at DESC
-                       LIMIT 1 BY tt.id;
+                       LIMIT 1 BY tt.id
+                       SETTINGS short_circuit_function_evaluation = 'force_enable';
                        """;
 
     @Override
@@ -658,37 +659,12 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
     private ST newBulkUpdateTemplate(TraceThreadUpdate update, String sql, boolean mergeTags) {
         var template = TemplateUtils.newST(sql);
 
-        // Tag update strategy, two approaches (if both are provided, tagsToAdd/tagsToRemove takes precedence):
-        // 1. tagsToAdd/tagsToRemove: Used by frontend. Allows efficient atomic add/remove in single call.
-        // 2. tags + mergeTags: Used by SDK clients for backwards compatibility.
-        //    - mergeTags=true: Merge provided tags with existing tags
-        //    - mergeTags=false: Replace all tags with provided tags
-        if (update.tagsToAdd() != null || update.tagsToRemove() != null) {
-            if (update.tagsToAdd() != null) {
-                template.add("tags_to_add", update.tagsToAdd().toString());
-            }
-            if (update.tagsToRemove() != null) {
-                template.add("tags_to_remove", update.tagsToRemove().toString());
-            }
-        } else if (update.tags() != null) {
-            template.add("tags", update.tags().toString());
-            template.add("merge_tags", mergeTags);
-        }
+        TagOperations.configureTagTemplate(template, update, mergeTags);
 
         return template;
     }
 
     private void bindBulkUpdateParams(TraceThreadUpdate update, Statement statement) {
-        // Tag update strategy (see above for full explanation)
-        if (update.tagsToAdd() != null || update.tagsToRemove() != null) {
-            if (update.tagsToAdd() != null) {
-                statement.bind("tags_to_add", update.tagsToAdd().toArray(String[]::new));
-            }
-            if (update.tagsToRemove() != null) {
-                statement.bind("tags_to_remove", update.tagsToRemove().toArray(String[]::new));
-            }
-        } else if (update.tags() != null) {
-            statement.bind("tags", update.tags().toArray(String[]::new));
-        }
+        TagOperations.bindTagParams(statement, update);
     }
 }

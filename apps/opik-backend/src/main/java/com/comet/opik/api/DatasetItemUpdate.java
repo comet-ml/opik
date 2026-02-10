@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.domain.TagOperations.TagUpdatable;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -32,5 +33,6 @@ public record DatasetItemUpdate(
         @Valid @Size(max = 50, message = "Cannot have more than 50 tags to remove") @Schema(description = "Tags to remove") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tagsToRemove,
         @Schema(description = "Evaluators") List<@Valid EvaluatorItem> evaluators,
         @Schema(description = "Execution policy") @Valid ExecutionPolicy executionPolicy,
-        @Schema(description = "When true, clears the item-level execution policy (falls back to dataset-level)") Boolean clearExecutionPolicy) {
+        @Schema(description = "When true, clears the item-level execution policy (falls back to dataset-level)") Boolean clearExecutionPolicy) implements
+            TagUpdatable {
 }
