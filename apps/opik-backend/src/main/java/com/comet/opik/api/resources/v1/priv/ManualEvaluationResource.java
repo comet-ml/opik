@@ -26,6 +26,10 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+
+import java.util.List;
+import java.util.UUID;
 
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
@@ -42,6 +46,8 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 @RequiredArgsConstructor(onConstructor_ = @jakarta.inject.Inject)
 @Tag(name = "Manual Evaluation", description = "Manual evaluation resources for traces, threads, and spans")
 public class ManualEvaluationResource {
+
+    private static final int EXPERIMENT_EVALUATION_TRACE_BATCH_SIZE = 1000;
 
     private final @NonNull ManualEvaluationService manualEvaluationService;
     private final @NonNull ExperimentItemService experimentItemService;
@@ -151,27 +157,31 @@ public class ManualEvaluationResource {
                 "Manual evaluation request for '{}' experiments with '{}' rules in project '{}', workspace '{}' by user '{}'",
                 request.entityIds().size(), request.ruleIds().size(), request.projectId(), workspaceId, userName);
 
-        var traceIds = request.entityIds().stream()
-                .flatMap(experimentId -> experimentItemService.getTraceIdsByExperimentId(experimentId)
-                        .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                        .toStream())
-                .toList();
+        Flux<UUID> traceIdsFlux = Flux.fromIterable(request.entityIds())
+                .flatMap(experimentId -> experimentItemService.getTraceIdsByExperimentId(experimentId, workspaceId)
+                        .contextWrite(ctx -> setRequestContext(ctx, requestContext)));
 
-        log.info("Found '{}' traces for '{}' experiments", traceIds.size(), request.entityIds().size());
-
-        var traceRequest = ManualEvaluationRequest.builder()
-                .projectId(request.projectId())
-                .entityIds(traceIds)
-                .ruleIds(request.ruleIds())
-                .entityType(ManualEvaluationEntityType.TRACE)
-                .build();
-
-        var response = manualEvaluationService.evaluate(traceRequest, request.projectId(), workspaceId, userName)
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+        var response = traceIdsFlux
+                .buffer(EXPERIMENT_EVALUATION_TRACE_BATCH_SIZE)
+                .flatMap((List<UUID> batch) -> {
+                    var batchRequest = ManualEvaluationRequest.builder()
+                            .projectId(request.projectId())
+                            .entityIds(batch)
+                            .ruleIds(request.ruleIds())
+                            .entityType(ManualEvaluationEntityType.TRACE)
+                            .build();
+                    return manualEvaluationService.evaluate(batchRequest, request.projectId(), workspaceId, userName)
+                            .contextWrite(ctx -> setRequestContext(ctx, requestContext));
+                })
+                .reduce(
+                        new ManualEvaluationResponse(0, request.ruleIds().size()),
+                        (acc, next) -> new ManualEvaluationResponse(
+                                acc.entitiesQueued() + next.entitiesQueued(),
+                                next.rulesApplied()))
                 .block();
 
-        log.info("Manual evaluation request accepted for '{}' experiments ({} traces) in project '{}', workspace '{}'",
-                request.entityIds().size(), traceIds.size(), request.projectId(), workspaceId);
+        log.info("Manual evaluation request accepted for '{}' experiments in project '{}', workspace '{}'",
+                request.entityIds().size(), request.projectId(), workspaceId);
 
         return Response.status(Response.Status.ACCEPTED)
                 .entity(response)

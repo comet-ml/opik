@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import get from "lodash/get";
-import api, { AUTOMATIONS_KEY } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
+import api, { AUTOMATIONS_KEY } from "@/api/api";
+import get from "lodash/get";
 
 const EXPERIMENT_EVALUATION_REST_ENDPOINT =
   "/v1/private/manual-evaluation/experiments";
@@ -55,11 +55,9 @@ const useExperimentEvaluationMutation = () => {
       });
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        get(error, ["response", "data", "message"]) ??
+        "An unknown error occurred while queueing experiment evaluation; please try again later.";
 
       toast({
         title: "Error",

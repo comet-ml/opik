@@ -155,9 +155,25 @@ public class ExperimentItemService {
         return experimentItemDAO.delete(ids).then();
     }
 
-    public Flux<UUID> getTraceIdsByExperimentId(@NonNull UUID experimentId) {
-        log.info("Getting trace IDs for experiment '{}'", experimentId);
-        return experimentItemDAO.getItems(Set.of(experimentId), ExperimentItemSearchCriteria.builder().build())
+    /**
+     * Returns trace IDs for the given experiment, scoped to the given workspace.
+     * Callers must pass the current workspace ID to enforce tenant isolation.
+     *
+     * @param experimentId the experiment ID
+     * @param workspaceId  the workspace ID (from request context); must be non-null
+     * @return Flux of trace IDs belonging to the experiment in the workspace
+     */
+    public Flux<UUID> getTraceIdsByExperimentId(@NonNull UUID experimentId, @NonNull String workspaceId) {
+        if (workspaceId == null || workspaceId.isBlank()) {
+            throw new IllegalArgumentException("workspaceId is required for getTraceIdsByExperimentId");
+        }
+        log.info("Getting trace IDs for experiment '{}' in workspace '{}'", experimentId, workspaceId);
+        var criteria = ExperimentItemSearchCriteria.builder()
+                .limit(10_000)
+                .truncate(false)
+                .build();
+        return experimentItemDAO.getItems(Set.of(experimentId), criteria)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
                 .map(ExperimentItem::traceId);
     }
 }

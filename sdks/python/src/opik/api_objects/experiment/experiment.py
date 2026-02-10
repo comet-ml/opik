@@ -1,5 +1,6 @@
 import functools
 import logging
+import os
 import time
 from typing import Callable, List, Optional, TYPE_CHECKING
 
@@ -16,6 +17,12 @@ if TYPE_CHECKING:
     from opik.evaluation.metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
+
+# Default poll interval (seconds) for wait_for_evaluation_trigger. Overridable via
+# OPIK_EXPERIMENT_EVALUATION_POLL_INTERVAL_SECONDS (default: 5.0).
+DEFAULT_POLL_INTERVAL_SECONDS = float(
+    os.getenv("OPIK_EXPERIMENT_EVALUATION_POLL_INTERVAL_SECONDS", "5.0")
+)
 
 
 class Experiment:
@@ -162,7 +169,7 @@ class Experiment:
         self,
         callback: Optional[Callable[[], None]] = None,
         timeout: Optional[float] = None,
-        poll_interval: float = 5.0,
+        poll_interval: Optional[float] = None,
     ) -> None:
         """
         Wait for an evaluation to be triggered from the UI.
@@ -175,7 +182,9 @@ class Experiment:
         Args:
             callback: Optional function to execute when evaluation is triggered.
             timeout: Maximum time in seconds to wait. If None, waits indefinitely.
-            poll_interval: Time in seconds between status checks. Default is 5.0.
+            poll_interval: Time in seconds between status checks. Defaults to
+                :const:`DEFAULT_POLL_INTERVAL_SECONDS` (configurable via
+                ``OPIK_EXPERIMENT_EVALUATION_POLL_INTERVAL_SECONDS``, default 5.0 s).
 
         Returns:
             None
@@ -183,6 +192,8 @@ class Experiment:
         Raises:
             TimeoutError: If timeout is reached before evaluation completes.
         """
+        if poll_interval is None:
+            poll_interval = DEFAULT_POLL_INTERVAL_SECONDS
         LOGGER.info(
             "Waiting for evaluation trigger on experiment '%s' (ID: %s)",
             self.name,
