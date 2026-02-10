@@ -21,7 +21,8 @@ describe("calculateIntervalStartAndEnd", () => {
 
   describe("when end date is today", () => {
     it("should use current time as end and calculate start based on difference for <= 1 day range", () => {
-      const today = new Date("2024-01-15");
+      // Use same instant as mocked "now" so isEndDateToday is true in any timezone
+      const today = new Date(mockCurrentDate);
       const dateRange: DateRangeValue = {
         from: today,
         to: today, // Same day
@@ -41,8 +42,8 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should use current time as end and calculate start based on difference for 1 day range", () => {
-      const today = new Date("2024-01-15");
-      const yesterday = new Date("2024-01-14");
+      const today = new Date(mockCurrentDate);
+      const yesterday = new Date("2024-01-14T12:00:00.000Z");
       const dateRange: DateRangeValue = {
         from: yesterday,
         to: today,
@@ -62,8 +63,8 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should use current time as end and calculate start based on difference for > 1 day range", () => {
-      const today = new Date("2024-01-15");
-      const threeDaysAgo = new Date("2024-01-12");
+      const today = new Date(mockCurrentDate);
+      const threeDaysAgo = new Date("2024-01-12T12:00:00.000Z");
       const dateRange: DateRangeValue = {
         from: threeDaysAgo,
         to: today,
@@ -83,8 +84,8 @@ describe("calculateIntervalStartAndEnd", () => {
     });
 
     it("should handle week-long range ending today", () => {
-      const today = new Date("2024-01-15");
-      const weekAgo = new Date("2024-01-08");
+      const today = new Date(mockCurrentDate);
+      const weekAgo = new Date("2024-01-08T12:00:00.000Z");
       const dateRange: DateRangeValue = {
         from: weekAgo,
         to: today,
@@ -183,8 +184,8 @@ describe("calculateIntervalStartAndEnd", () => {
 
   describe("edge cases", () => {
     it("should handle exact boundary of 1 day difference with today", () => {
-      const today = new Date("2024-01-15");
-      const oneDayAgo = new Date("2024-01-14");
+      const today = new Date(mockCurrentDate);
+      const oneDayAgo = new Date("2024-01-14T12:00:00.000Z");
       const dateRange: DateRangeValue = {
         from: oneDayAgo,
         to: today,
