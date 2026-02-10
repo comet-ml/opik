@@ -83,11 +83,15 @@ class Settings(BaseSettings):
     )
     sentry_traces_sample_rate: float = Field(
         default=1.0,
+        ge=0.0,
+        le=1.0,
         description="Sample rate for performance traces (0.0 to 1.0)",
         alias="SENTRY_TRACES_SAMPLE_RATE",
     )
     sentry_profiles_sample_rate: float = Field(
         default=1.0,
+        ge=0.0,
+        le=1.0,
         description="Sample rate for profiling (0.0 to 1.0)",
         alias="SENTRY_PROFILES_SAMPLE_RATE",
     )
@@ -156,6 +160,11 @@ class Settings(BaseSettings):
         default=2.0,
         description="Initial retry delay in seconds for session service DB initialization",
         alias="SESSION_SERVICE_RETRY_DELAY",
+    )
+    session_pool_recycle: int = Field(
+        default=3600,
+        description="DB connection pool recycle interval in seconds",
+        alias="SESSION_POOL_RECYCLE",
     )
 
     class Config:

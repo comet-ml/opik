@@ -516,7 +516,7 @@ def get_fast_api_app(
                 session_service = DatabaseSessionService(
                     db_url=session_service_uri,
                     pool_pre_ping=True,
-                    pool_recycle=3600,
+                    pool_recycle=settings.session_pool_recycle,
                 )
                 break
             except Exception as e:
