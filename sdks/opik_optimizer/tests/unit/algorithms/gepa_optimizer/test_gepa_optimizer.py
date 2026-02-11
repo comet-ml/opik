@@ -135,6 +135,54 @@ class TestGepaOptimizerOptimizePrompt:
             max_trials=1,
         )
 
+    def test_uses_validation_dataset_for_gepa_valset(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_metric,
+    ) -> None:
+        mock_optimization_context()
+
+        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        prompt = simple_chat_prompt
+        train_items = [{"id": "train-1", "question": "Q1", "answer": "A1"}]
+        validation_items = [{"id": "val-1", "question": "QV1", "answer": "AV1"}]
+        dataset = mock_dataset(train_items, name="train-dataset", dataset_id="train-123")
+        validation_dataset = mock_dataset(
+            validation_items, name="val-dataset", dataset_id="val-123"
+        )
+
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
+
+        captured: dict[str, Any] = {}
+
+        def _fake_gepa_optimize(**kwargs: Any) -> MagicMock:
+            captured.update(kwargs)
+            mock_gepa_result = MagicMock()
+            mock_gepa_result.best_prompt = prompt.copy()
+            mock_gepa_result.best_score = 0.85
+            mock_gepa_result.history = []
+            mock_gepa_result.pareto_front = []
+            mock_gepa_result.total_metric_calls = 1
+            return mock_gepa_result
+
+        monkeypatch.setattr("gepa.optimize", _fake_gepa_optimize)
+
+        optimizer.optimize_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            validation_dataset=validation_dataset,
+            metric=sample_metric,
+            max_trials=2,
+        )
+
+        trainset = captured["trainset"]
+        valset = captured["valset"]
+        assert [inst.opik_item["id"] for inst in trainset] == ["train-1"]
+        assert [inst.opik_item["id"] for inst in valset] == ["val-1"]
+
 
 class TestGepaOptimizerEarlyStop:
     def test_skips_on_perfect_score(

@@ -164,6 +164,7 @@ class GepaOptimizer(BaseOptimizer):
         self,
         prompt_obj: chat_prompt.ChatPrompt,
         dataset: Dataset,
+        validation_dataset: Dataset | None,
         metric: Callable[[dict[str, Any], str], Any],
         experiment_config: dict[str, Any] | None,
         system_fallback: str,
@@ -183,6 +184,7 @@ class GepaOptimizer(BaseOptimizer):
             metric=metric,
             system_fallback=system_fallback,
             dataset=dataset,
+            validation_dataset=validation_dataset,
             experiment_config=experiment_config,
             allow_tool_use=allow_tool_use,
             candidate_selection_policy=(
@@ -295,6 +297,17 @@ class GepaOptimizer(BaseOptimizer):
         if n_samples and 0 < n_samples < len(items):
             items = items[:n_samples]
 
+        validation_dataset: Dataset | None = None
+        maybe_validation_dataset = kwargs.get("validation_dataset")
+        validation_items = items
+        if maybe_validation_dataset is not None and hasattr(
+            maybe_validation_dataset, "get_items"
+        ):
+            validation_dataset = maybe_validation_dataset
+            validation_items = validation_dataset.get_items()
+            if n_samples and 0 < n_samples < len(validation_items):
+                validation_items = validation_items[:n_samples]
+
         # Calculate max_metric_calls from max_trials and effective samples
         effective_n_samples = len(items)
         max_metric_calls = max_trials * effective_n_samples
@@ -319,6 +332,7 @@ class GepaOptimizer(BaseOptimizer):
             )
 
         data_insts = self._build_data_insts(items, input_key, output_key)
+        val_data_insts = self._build_data_insts(validation_items, input_key, output_key)
 
         self._gepa_live_metric_calls = 0
 
@@ -417,6 +431,7 @@ class GepaOptimizer(BaseOptimizer):
             adapter = self._build_gepa_adapter(
                 prompt_obj=adapter_prompt,
                 dataset=dataset,
+                validation_dataset=validation_dataset,
                 metric=metric,
                 experiment_config=experiment_config,
                 system_fallback=seed_prompt_text,
@@ -446,7 +461,7 @@ class GepaOptimizer(BaseOptimizer):
                 kwargs_gepa: dict[str, Any] = {
                     "seed_candidate": {"system_prompt": seed_prompt_text},
                     "trainset": data_insts,
-                    "valset": data_insts,
+                    "valset": val_data_insts,
                     "adapter": adapter,
                     "task_lm": None,
                     "reflection_lm": self.model,
