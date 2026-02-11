@@ -1,22 +1,7 @@
 import React, { useState } from "react";
 import { Link } from "@tanstack/react-router";
 
-import {
-  Bell,
-  Database,
-  FlaskConical,
-  LayoutGrid,
-  FileTerminal,
-  LucideHome,
-  Blocks,
-  Bolt,
-  Brain,
-  ChevronLeft,
-  ChevronRight,
-  SparklesIcon,
-  UserPen,
-  ChartLine,
-} from "lucide-react";
+import { Bolt, ChevronLeft, ChevronRight } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import useAppStore from "@/store/AppStore";
@@ -44,8 +29,8 @@ import SidebarMenuItem, {
   MenuItem,
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
+import useMenuItems from "@/components/layout/SideBar/hooks/useMenuItems";
 
 const HOME_PATH = "/$workspaceName/home";
 
@@ -58,132 +43,6 @@ const CONFIGURATION_ITEM: MenuItem = {
   icon: Bolt,
   label: "Configuration",
 };
-
-const MENU_ITEMS: MenuItemGroup[] = [
-  {
-    id: "home",
-    items: [
-      {
-        id: "home",
-        path: "/$workspaceName/home",
-        type: MENU_ITEM_TYPE.router,
-        icon: LucideHome,
-        label: "Home",
-      },
-      {
-        id: "dashboards",
-        path: "/$workspaceName/dashboards",
-        type: MENU_ITEM_TYPE.router,
-        icon: ChartLine,
-        label: "Dashboards",
-        count: "dashboards",
-      },
-    ],
-  },
-  {
-    id: "observability",
-    label: "Observability",
-    items: [
-      {
-        id: "projects",
-        path: "/$workspaceName/projects",
-        type: MENU_ITEM_TYPE.router,
-        icon: LayoutGrid,
-        label: "Projects",
-        count: "projects",
-      },
-    ],
-  },
-  {
-    id: "evaluation",
-    label: "Evaluation",
-    items: [
-      {
-        id: "experiments",
-        path: "/$workspaceName/experiments",
-        type: MENU_ITEM_TYPE.router,
-        icon: FlaskConical,
-        label: "Experiments",
-        count: "experiments",
-      },
-      {
-        id: "datasets",
-        path: "/$workspaceName/datasets",
-        type: MENU_ITEM_TYPE.router,
-        icon: Database,
-        label: "Datasets",
-        count: "datasets",
-      },
-      {
-        id: "annotation_queues",
-        path: "/$workspaceName/annotation-queues",
-        type: MENU_ITEM_TYPE.router,
-        icon: UserPen,
-        label: "Annotation queues",
-        count: "annotation_queues",
-      },
-    ],
-  },
-  {
-    id: "prompt_engineering",
-    label: "Prompt engineering",
-    items: [
-      {
-        id: "prompts",
-        path: "/$workspaceName/prompts",
-        type: MENU_ITEM_TYPE.router,
-        icon: FileTerminal,
-        label: "Prompt library",
-        count: "prompts",
-      },
-      {
-        id: "playground",
-        path: "/$workspaceName/playground",
-        type: MENU_ITEM_TYPE.router,
-        icon: Blocks,
-        label: "Playground",
-      },
-    ],
-  },
-  {
-    id: "optimization",
-    label: "Optimization",
-    items: [
-      {
-        id: "optimizations",
-        path: "/$workspaceName/optimizations",
-        type: MENU_ITEM_TYPE.router,
-        icon: SparklesIcon,
-        label: "Optimization studio",
-        count: "optimizations",
-        showIndicator: "optimizations_running",
-      },
-    ],
-  },
-  {
-    id: "production",
-    label: "Production",
-    items: [
-      {
-        id: "online_evaluation",
-        path: "/$workspaceName/online-evaluation",
-        type: MENU_ITEM_TYPE.router,
-        icon: Brain,
-        label: "Online evaluation",
-        count: "rules",
-      },
-      {
-        id: "alerts",
-        path: "/$workspaceName/alerts",
-        type: MENU_ITEM_TYPE.router,
-        icon: Bell,
-        label: "Alerts",
-        count: "alerts",
-        featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
-      },
-    ],
-  },
-];
 
 type SideBarProps = {
   expanded: boolean;
@@ -202,6 +61,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
   );
+  const menuItems = useMenuItems();
 
   const { data: projectData } = useProjectsList(
     {
@@ -397,7 +257,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
               </div>
             )}
 
-            <ul>{renderItems(group.items)}</ul>
+            <ul>{renderItems(group.items.filter((item) => item !== null))}</ul>
           </div>
         </li>
       );
@@ -435,7 +295,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
           {renderExpandCollapseButton()}
           <div className="flex min-h-0 grow flex-col justify-between overflow-auto px-3 py-4">
             <ul className="flex flex-col gap-1 pb-2">
-              {renderGroups(MENU_ITEMS)}
+              {renderGroups(menuItems)}
             </ul>
             <div className="flex flex-col gap-3">
               <Separator />

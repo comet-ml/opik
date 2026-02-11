@@ -58,7 +58,18 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [workspacePermissions, isWorkspaceOwner],
   );
 
-  return { canInviteMembers, isWorkspaceOwner };
+  const canViewExperiments = useMemo(
+    () =>
+      isWorkspaceOwner ||
+      getUserPermissionValue(
+        workspacePermissions,
+        ManagementPermissionsNames.EXPERIMENT_VIEW,
+        // should default to true if the permission is not found
+      ) !== false,
+    [workspacePermissions, isWorkspaceOwner],
+  );
+
+  return { canInviteMembers, isWorkspaceOwner, canViewExperiments };
 };
 
 export default useUserPermission;
