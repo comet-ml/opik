@@ -204,14 +204,15 @@ jobs:
       needs.set-version.result == 'success' &&
       needs.build-backend.result == 'success' &&
       needs.build-frontend.result == 'success' &&
-      needs.build-python-backend.result == 'success' &&
-      needs.build-ai-backend.result == 'success'
+      needs.build-python-backend.result == 'success'
+#      needs.build-python-backend.result == 'success' &&
+#      needs.build-ai-backend.result == 'success'
     needs:
       - set-version
       - build-backend
       - build-frontend
       - build-python-backend
-      - build-ai-backend
+      # - build-ai-backend
     runs-on: ubuntu-latest
     permissions:
       contents: write
