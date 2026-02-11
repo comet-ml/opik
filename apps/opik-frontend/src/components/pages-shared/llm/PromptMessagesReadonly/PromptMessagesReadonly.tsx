@@ -70,7 +70,7 @@ const getTextAndMedia = (
       }
 
       if (item.type === "audio_url" || item.type === "input_audio") {
-        const url = item.audio_url?.url || item.input_audio?.data || item.url;
+        const url = item.audio_url?.url || item.url;
         if (url) audios.push(url);
       }
     });
