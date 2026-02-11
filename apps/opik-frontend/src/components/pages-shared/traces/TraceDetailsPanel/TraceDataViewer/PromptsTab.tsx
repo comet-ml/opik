@@ -140,7 +140,7 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
         <div className="comet-body-s-accented">
           {isChatPrompt ? "Chat messages" : "Prompt"}
         </div>
-        {isChatPrompt && hasMessages && (
+        {hasMessages && (
           <Button
             variant="ghost"
             size="sm"
@@ -161,7 +161,7 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
         )}
       </div>
 
-      {showRawView || !isChatPrompt || !hasMessages ? (
+      {showRawView || !hasMessages ? (
         <SyntaxHighlighter
           withSearch
           data={
