@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 from opik.evaluation.metrics import LevenshteinRatio
@@ -26,6 +27,7 @@ from opik_optimizer.utils.toolcalling.runtime.mcp import ToolCallingDependencyEr
 
 CONTEXT7_URL = "https://mcp.context7.com/mcp"
 MODEL = "openai/gpt-4o-mini"
+SLEEP_BETWEEN_OPTIMIZERS_SECONDS = float(os.getenv("MCP_SMOKE_SLEEP_SECONDS", "12.0"))
 api_key = os.getenv("CONTEXT7_API_KEY", "").strip()
 headers = {"CONTEXT7_API_KEY": api_key} if api_key else {}
 
@@ -39,6 +41,7 @@ except ToolCallingDependencyError as exc:
 print(
     f"Discovered remote MCP tools: {[getattr(t, 'name', '') for t in remote_tools[:10]]}"
 )
+print(f"Sleep between optimizer runs: {SLEEP_BETWEEN_OPTIMIZERS_SECONDS:.1f}s")
 
 cursor_config = {
     "mcpServers": {
@@ -154,3 +157,4 @@ for optimizer_name, optimizer_cls, extra_kwargs, supports_tool_opt in optimizer_
         f"score {result.initial_score:.4f} -> {result.score:.4f} | "
         f"tool_descriptions_changed={changed}"
     )
+    time.sleep(SLEEP_BETWEEN_OPTIMIZERS_SECONDS)
