@@ -144,6 +144,17 @@ class DatasetEvaluatorsResourceTest {
         }
 
         @Test
+        @DisplayName("Create evaluators for non-existent dataset returns 404")
+        void createEvaluatorsForNonExistentDatasetReturns404() {
+            var nonExistentDatasetId = UUID.randomUUID();
+
+            var request = datasetEvaluatorClient.createBatchRequest(1);
+
+            datasetEvaluatorClient.createBatch(nonExistentDatasetId, request, API_KEY, TEST_WORKSPACE_NAME,
+                    HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
         @DisplayName("Create dataset evaluator with custom config")
         void createDatasetEvaluatorWithCustomConfig() {
             var datasetId = createDataset();
@@ -194,6 +205,15 @@ class DatasetEvaluatorsResourceTest {
             var page3 = datasetEvaluatorClient.get(datasetId, API_KEY, TEST_WORKSPACE_NAME, 3, 2);
             assertThat(page3.content()).hasSize(1);
             assertThat(page3.total()).isEqualTo(5);
+        }
+
+        @Test
+        @DisplayName("Get evaluators for non-existent dataset returns 404")
+        void getEvaluatorsForNonExistentDatasetReturns404() {
+            var nonExistentDatasetId = UUID.randomUUID();
+
+            datasetEvaluatorClient.get(nonExistentDatasetId, API_KEY, TEST_WORKSPACE_NAME, 1, 10,
+                    HttpStatus.SC_NOT_FOUND);
         }
 
         @Test
@@ -249,6 +269,17 @@ class DatasetEvaluatorsResourceTest {
             var remaining = datasetEvaluatorClient.get(datasetId, API_KEY, TEST_WORKSPACE_NAME, 1, 10);
             assertThat(remaining.content()).isEmpty();
             assertThat(remaining.total()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("Delete from non-existent dataset returns 404")
+        void deleteFromNonExistentDatasetReturns404() {
+            var nonExistentDatasetId = UUID.randomUUID();
+
+            Set<UUID> ids = Set.of(UUID.randomUUID());
+
+            datasetEvaluatorClient.deleteBatch(nonExistentDatasetId, ids, API_KEY, TEST_WORKSPACE_NAME,
+                    HttpStatus.SC_NOT_FOUND);
         }
 
         @Test
