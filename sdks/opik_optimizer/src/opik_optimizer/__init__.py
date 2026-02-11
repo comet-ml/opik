@@ -1,6 +1,7 @@
 import importlib.metadata
 import os
 import warnings
+from typing import Any
 
 from opik.evaluation.models.litellm import warning_filters
 
@@ -17,20 +18,6 @@ from .core.results import (
 )
 from .core.state import AlgorithmResult, OptimizationContext
 from .core.llm_calls import build_llm_call_metadata, requested_multiple_candidates
-from .algorithms import (
-    GepaOptimizer,
-    MetaPromptOptimizer,
-    EvolutionaryOptimizer,
-    HierarchicalReflectiveOptimizer,
-    HRPO,
-    FewShotBayesianOptimizer,
-    ParameterOptimizer,
-)
-from .algorithms.parameter_optimizer import (
-    ParameterSearchSpace,
-    ParameterSpec,
-    ParameterType,
-)
 from .utils.logging import setup_logging
 from .core.results import OptimizationResult
 from .metrics.multi_metric_objective import MultiMetricObjective
@@ -55,6 +42,41 @@ warnings.filterwarnings(
     message=r"(?s)Pydantic serializer warnings:.*PydanticSerializationUnexpectedValue",
     category=UserWarning,
 )
+
+_LAZY_ALGORITHM_EXPORTS = {
+    "GepaOptimizer": ("opik_optimizer.algorithms", "GepaOptimizer"),
+    "MetaPromptOptimizer": ("opik_optimizer.algorithms", "MetaPromptOptimizer"),
+    "EvolutionaryOptimizer": ("opik_optimizer.algorithms", "EvolutionaryOptimizer"),
+    "HierarchicalReflectiveOptimizer": (
+        "opik_optimizer.algorithms",
+        "HierarchicalReflectiveOptimizer",
+    ),
+    "HRPO": ("opik_optimizer.algorithms", "HRPO"),
+    "FewShotBayesianOptimizer": (
+        "opik_optimizer.algorithms",
+        "FewShotBayesianOptimizer",
+    ),
+    "ParameterOptimizer": ("opik_optimizer.algorithms", "ParameterOptimizer"),
+    "ParameterSearchSpace": (
+        "opik_optimizer.algorithms.parameter_optimizer",
+        "ParameterSearchSpace",
+    ),
+    "ParameterSpec": ("opik_optimizer.algorithms.parameter_optimizer", "ParameterSpec"),
+    "ParameterType": ("opik_optimizer.algorithms.parameter_optimizer", "ParameterType"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Lazily load heavy algorithm exports to keep base imports stable."""
+    target = _LAZY_ALGORITHM_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module_name, attr_name = target
+    module = __import__(module_name, fromlist=[attr_name])
+    value = getattr(module, attr_name)
+    globals()[name] = value
+    return value
 
 __all__ = [
     # Algorithms
