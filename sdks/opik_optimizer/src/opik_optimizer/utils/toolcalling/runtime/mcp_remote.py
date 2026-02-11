@@ -21,28 +21,39 @@ _toolcalling_limiter = _throttle.get_toolcalling_rate_limiter()
 _POOL = SessionPool()
 
 
-def _remote_key(url: str, headers: Mapping[str, str]) -> str:
+def _remote_key(
+    url: str, headers: Mapping[str, str], auth: Mapping[str, Any] | None
+) -> str:
     """Return a stable cache key for remote MCP sessions."""
-    payload = {"url": url, "headers": dict(headers)}
+    payload = {"url": url, "headers": dict(headers), "auth": dict(auth or {})}
     return json.dumps(payload, sort_keys=True, default=str)
 
 
 async def _get_or_create_client(
-    url: str, headers: Mapping[str, str]
+    url: str, headers: Mapping[str, str], auth: Mapping[str, Any] | None
 ) -> tuple[Any, Any]:
     """Return a cached remote client session or create one."""
-    key = _remote_key(url, headers)
+    key = _remote_key(url, headers, auth)
     return await _POOL.get_or_create(
         key,
-        lambda: _start_client(url, headers),
+        lambda: _start_client(url, headers, auth),
     )
 
 
-async def _start_client(url: str, headers: Mapping[str, str]) -> tuple[Any, Any]:
+async def _start_client(
+    url: str, headers: Mapping[str, str], auth: Mapping[str, Any] | None
+) -> tuple[Any, Any]:
     """Start a remote MCP client session and return session + transport."""
     ClientSession, streamablehttp_client = _load_remote_sdk()
     safe_headers = {str(k): "" if v is None else str(v) for k, v in headers.items()}
-    transport_cm = streamablehttp_client(url, headers=safe_headers)
+    transport_kwargs: dict[str, Any] = {"headers": safe_headers}
+    if auth is not None:
+        transport_kwargs["auth"] = dict(auth)
+    try:
+        transport_cm = streamablehttp_client(url, **transport_kwargs)
+    except TypeError:
+        # Older SDK variants may not accept an `auth` argument.
+        transport_cm = streamablehttp_client(url, headers=safe_headers)
     read_stream, write_stream, _get_session_id = await transport_cm.__aenter__()
     session = cast(type[Any], ClientSession)(read_stream, write_stream)
     if hasattr(session, "__aenter__"):
@@ -85,13 +96,17 @@ def _run_sync(coro: Coroutine[Any, Any, _T]) -> _T:
     return asyncio.run(coro)
 
 
-def list_tools_from_remote(url: str, headers: Mapping[str, str]) -> Any:
+def list_tools_from_remote(
+    url: str,
+    headers: Mapping[str, str],
+    auth: Mapping[str, Any] | None = None,
+) -> Any:
     """List tools from a remote MCP server over StreamableHTTP."""
     _toolcalling_limiter.acquire()
 
     async def _inner() -> Any:
         """Async inner to list tools over a remote session."""
-        session, _transport = await _get_or_create_client(url, headers)
+        session, _transport = await _get_or_create_client(url, headers, auth)
         if hasattr(session, "list_tools"):
             response = await session.list_tools()
             return getattr(response, "tools", response)
@@ -105,6 +120,7 @@ def list_tools_from_remote(url: str, headers: Mapping[str, str]) -> Any:
 def call_tool_from_remote(
     url: str,
     headers: Mapping[str, str],
+    auth: Mapping[str, Any] | None,
     tool_name: str,
     arguments: dict[str, Any],
 ) -> Any:
@@ -113,7 +129,7 @@ def call_tool_from_remote(
 
     async def _inner() -> Any:
         """Async inner to call a tool over a remote session."""
-        session, _transport = await _get_or_create_client(url, headers)
+        session, _transport = await _get_or_create_client(url, headers, auth)
         return await session.call_tool(name=tool_name, arguments=arguments)
 
     return _POOL.run(_inner())

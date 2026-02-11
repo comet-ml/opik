@@ -452,7 +452,7 @@ def _normalize_openai_mcp_tool(entry: Mapping[str, Any]) -> dict[str, Any]:
     require_approval = _normalize_optional_bool(
         entry.get("require_approval"), field_name="require_approval"
     )
-    if require_approval is not None:
+    if require_approval is True:
         _warn_require_approval()
 
     headers = _coerce_optional_string_mapping(
@@ -535,11 +535,13 @@ def _build_approval_required_callable(function_name: str) -> Callable[..., Any]:
 
 
 def _collect_function_names(
-    tools: list[dict[str, Any]], function_map: dict[str, Callable]
+    tools: list[Any], function_map: dict[str, Callable]
 ) -> set[str]:
     """Collect function names from tools and an existing function map."""
     names = set(function_map.keys())
     for tool in tools:
+        if not isinstance(tool, Mapping):
+            continue
         if tool.get("type") == "function" or "function" in tool:
             function_block = tool.get("function", {})
             name = function_block.get("name")
@@ -575,7 +577,9 @@ def _list_tool_names(server: Mapping[str, Any]) -> list[str]:
         url = server.get("url")
         if not url:
             raise ValueError("Remote MCP server missing 'url'.")
-        tools = list_tools_from_remote(url, server.get("headers") or {})
+        tools = list_tools_from_remote(
+            url, server.get("headers") or {}, server.get("auth")
+        )
     else:
         raise ValueError("MCP server type must be 'stdio' or 'remote'")
 
@@ -600,10 +604,11 @@ def _load_remote_tool_signature(
     """Fetch a tool signature from a remote MCP server."""
     url = server.get("url")
     headers = server.get("headers") or {}
+    auth = server.get("auth")
     if not url:
         raise ValueError("Remote MCP server missing 'url'")
 
-    tools = list_tools_from_remote(url, headers)
+    tools = list_tools_from_remote(url, headers, auth)
     tool = next(
         (tool for tool in tools if getattr(tool, "name", None) == tool_name), None
     )
@@ -631,9 +636,10 @@ def _call_remote_tool(
     """Invoke a remote MCP tool with provided arguments."""
     url = server.get("url")
     headers = server.get("headers") or {}
+    auth = server.get("auth")
     if not url:
         raise ValueError("Remote MCP server missing 'url'")
-    response = call_tool_from_remote(url, headers, tool_name, arguments)
+    response = call_tool_from_remote(url, headers, auth, tool_name, arguments)
     _log_remote_tool_response(tool_name, response)
     return response
 
@@ -703,21 +709,29 @@ def _snippet(text: str, max_length: int = 160) -> str:
     return cleaned if len(cleaned) <= max_length else f"{cleaned[:max_length]}..."
 
 
-def list_tools_from_remote(url: str, headers: Mapping[str, str]) -> Any:
+def list_tools_from_remote(
+    url: str,
+    headers: Mapping[str, str],
+    auth: Mapping[str, Any] | None = None,
+) -> Any:
     """List tools from a remote MCP server using StreamableHTTP."""
     try:
         from ..runtime.mcp_remote import list_tools_from_remote as _list
     except ToolCallingDependencyError:
         raise
-    return _list(url, dict(headers))
+    return _list(url, dict(headers), auth)
 
 
 def call_tool_from_remote(
-    url: str, headers: Mapping[str, str], tool_name: str, arguments: dict[str, Any]
+    url: str,
+    headers: Mapping[str, str],
+    auth: Mapping[str, Any] | None,
+    tool_name: str,
+    arguments: dict[str, Any],
 ) -> Any:
-    """Call a remote MCP tool via StreamableHTTP."""
+    """Call a remote MCP tool via StreamableHTTP, forwarding optional auth."""
     try:
         from ..runtime.mcp_remote import call_tool_from_remote as _call
     except ToolCallingDependencyError:
         raise
-    return _call(url, dict(headers), tool_name, arguments)
+    return _call(url, dict(headers), auth, tool_name, arguments)

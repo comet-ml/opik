@@ -1,10 +1,12 @@
 from typing import Any
+import warnings
 
 import pytest
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer.utils.toolcalling.runtime.mcp import ToolSignature
 from opik_optimizer.utils.toolcalling.normalize.tool_factory import (
+    _collect_function_names,
     ToolCallingFactory,
     _log_remote_tool_response,
     cursor_mcp_config_to_tools,
@@ -134,6 +136,28 @@ def test_tool_factory__rejects_non_boolean_require_approval() -> None:
 
     with pytest.raises(ValueError, match="require_approval must be a boolean"):
         resolve_toolcalling_tools(tools, {})
+
+
+def test_tool_factory__does_not_warn_when_require_approval_false() -> None:
+    tools: list[dict[str, Any]] = [
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "allowed_tools": [],
+            "require_approval": False,
+        }
+    ]
+
+    with warnings.catch_warnings(record=True) as warning_records:
+        warnings.simplefilter("always")
+        with pytest.raises(ValueError, match="did not return any tools"):
+            resolve_toolcalling_tools(tools, {})
+    assert not [
+        record
+        for record in warning_records
+        if "blocked from execution until approved" in str(record.message)
+    ]
 
 
 def test_tool_factory__rejects_non_mapping_headers() -> None:
@@ -288,9 +312,12 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch: Any) -> None:
                 "annotations": {},
             }
 
-    def _fake_list_tools(url: str, headers: dict[str, str]) -> list[FakeTool]:
+    def _fake_list_tools(
+        url: str, headers: dict[str, str], auth: dict[str, str] | None
+    ) -> list[FakeTool]:
         assert url == "https://mcp.context7.com/mcp"
         assert headers == {"CONTEXT7_API_KEY": "YOUR_API_KEY"}
+        assert auth == {"token": "abc123"}
         return [
             FakeTool(
                 name="get-library-docs",
@@ -307,10 +334,15 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch: Any) -> None:
             self.output = output
 
     def _fake_call_tool(
-        url: str, headers: dict[str, str], tool_name: str, arguments: dict[str, Any]
+        url: str,
+        headers: dict[str, str],
+        auth: dict[str, str] | None,
+        tool_name: str,
+        arguments: dict[str, Any],
     ) -> FakeResponse:
         assert tool_name == "get-library-docs"
         assert arguments == {"query": "opik"}
+        assert auth == {"token": "abc123"}
         return FakeResponse("docs response")
 
     monkeypatch.setattr(
@@ -330,6 +362,7 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch: Any) -> None:
                     "type": "remote",
                     "url": "https://mcp.context7.com/mcp",
                     "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+                    "auth": {"token": "abc123"},
                 },
                 "tool": {"name": "get-library-docs"},
             }
@@ -343,3 +376,14 @@ def test_tool_factory__resolves_remote_mcp_tool(monkeypatch: Any) -> None:
 
     _, function_map = resolve_toolcalling_tools(resolved_prompt.tools, {})
     assert function_map["context7.get-library-docs"](query="opik") == "docs response"
+
+
+def test_tool_factory__collect_names_skips_non_mapping_tools() -> None:
+    names = _collect_function_names(
+        [
+            "not-a-dict",
+            {"type": "function", "function": {"name": "search"}},
+        ],
+        {"existing": lambda: None},
+    )
+    assert names == {"existing", "search"}

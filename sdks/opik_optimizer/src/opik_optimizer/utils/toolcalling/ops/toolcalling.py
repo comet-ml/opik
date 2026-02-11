@@ -227,7 +227,7 @@ class ToolDescriptionCandidatesResponse(BaseModel):
                                 },
                             },
                             "parameter_descriptions": {
-                                "type": "array",
+                                "type": ["array", "null"],
                                 "items": {
                                     "type": "object",
                                     "additionalProperties": False,
@@ -387,7 +387,15 @@ def _resolve_tool_segments(
     current_prompt: chat_prompt.ChatPrompt,
     tool_names: list[str] | None,
 ) -> list[prompt_segments.PromptSegment]:
-    """Return tool-related prompt segments filtered by allowed tools."""
+    """Return tool segments filtered by ``tool_names``.
+
+    Returns all tool segments when ``tool_names`` is ``None``.
+
+    Raises:
+        ValueError: ``"Prompt has no tools to optimize"`` when no tool segments exist.
+        ValueError: ``"Tool '<name>' not found in prompt tools. Available: ..."``
+            when a requested tool name is missing.
+    """
     segments = prompt_segments.extract_prompt_segments(current_prompt)
     tool_segments = [segment for segment in segments if segment.is_tool()]
     if not tool_segments:
