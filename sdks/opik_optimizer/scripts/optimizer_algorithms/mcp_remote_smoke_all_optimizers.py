@@ -113,35 +113,31 @@ for optimizer_name, optimizer_cls, extra_kwargs, supports_tool_opt in optimizer_
 
     optimize_tools_value: bool | None = True if supports_tool_opt else None
 
-    try:
-        if optimizer_name == "ParameterOptimizer":
-            result = optimizer.optimize_parameter(
-                prompt=prompt,
-                dataset=dataset,
-                metric=context7_metric,
-                parameter_space={
-                    "temperature": {
-                        "type": "float",
-                        "min": 0.0,
-                        "max": 0.4,
-                    }
-                },
-                max_trials=2,
-                n_samples=2,
-            )
-        else:
-            result = optimizer.optimize_prompt(
-                prompt=prompt,
-                dataset=dataset,
-                metric=context7_metric,
-                max_trials=2,
-                n_samples=2,
-                allow_tool_use=True,
-                optimize_tools=optimize_tools_value,
-            )
-    except Exception as exc:
-        print(f"FAILED: {exc}")
-        continue
+    if optimizer_name == "ParameterOptimizer":
+        result = optimizer.optimize_parameter(
+            prompt=prompt,
+            dataset=dataset,
+            metric=context7_metric,
+            parameter_space={
+                "temperature": {
+                    "type": "float",
+                    "min": 0.0,
+                    "max": 0.4,
+                }
+            },
+            max_trials=2,
+            n_samples=2,
+        )
+    else:
+        result = optimizer.optimize_prompt(
+            prompt=prompt,
+            dataset=dataset,
+            metric=context7_metric,
+            max_trials=2,
+            n_samples=2,
+            allow_tool_use=True,
+            optimize_tools=optimize_tools_value,
+        )
 
     optimized_prompt = result.prompt
     if isinstance(optimized_prompt, dict):
