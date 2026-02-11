@@ -308,6 +308,13 @@ class GepaOptimizer(BaseOptimizer):
             if n_samples and 0 < n_samples < len(validation_items):
                 validation_items = validation_items[:n_samples]
 
+        requested_batch_sampler = kwargs.get("batch_sampler")
+        if requested_batch_sampler is not None and requested_batch_sampler != "epoch_shuffled":
+            raise ValueError(
+                "GepaOptimizer currently supports only batch_sampler='epoch_shuffled' for "
+                "native GEPA integration."
+            )
+
         # Calculate max_metric_calls from max_trials and effective samples
         effective_n_samples = len(items)
         max_metric_calls = max_trials * effective_n_samples
@@ -462,6 +469,10 @@ class GepaOptimizer(BaseOptimizer):
                     "seed_candidate": {"system_prompt": seed_prompt_text},
                     "trainset": data_insts,
                     "valset": val_data_insts,
+                    # Keep GEPA as the single owner of minibatch sampling in this integration.
+                    # FIXME(opik-gepa-sampling): map custom Opik sampling plans once a stable
+                    # cross-framework sampler contract exists.
+                    "batch_sampler": "epoch_shuffled",
                     "adapter": adapter,
                     "task_lm": None,
                     "reflection_lm": self.model,

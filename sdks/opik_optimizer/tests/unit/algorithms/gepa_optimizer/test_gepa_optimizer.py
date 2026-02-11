@@ -183,6 +183,70 @@ class TestGepaOptimizerOptimizePrompt:
         assert [inst.opik_item["id"] for inst in trainset] == ["train-1"]
         assert [inst.opik_item["id"] for inst in valset] == ["val-1"]
 
+    def test_passes_epoch_shuffled_batch_sampler_to_gepa(
+        self,
+        mock_optimization_context,
+        monkeypatch,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        mock_optimization_context()
+
+        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **kwargs: 0.5)
+
+        captured: dict[str, Any] = {}
+
+        def _fake_gepa_optimize(**kwargs: Any) -> MagicMock:
+            captured.update(kwargs)
+            mock_gepa_result = MagicMock()
+            mock_gepa_result.best_prompt = simple_chat_prompt.copy()
+            mock_gepa_result.best_score = 0.85
+            mock_gepa_result.history = []
+            mock_gepa_result.pareto_front = []
+            mock_gepa_result.total_metric_calls = 1
+            return mock_gepa_result
+
+        monkeypatch.setattr("gepa.optimize", _fake_gepa_optimize)
+
+        optimizer.optimize_prompt(
+            prompt=simple_chat_prompt,
+            dataset=dataset,
+            metric=sample_metric,
+            max_trials=2,
+        )
+
+        assert captured["batch_sampler"] == "epoch_shuffled"
+
+    def test_rejects_non_epoch_batch_sampler(
+        self,
+        mock_optimization_context,
+        simple_chat_prompt,
+        mock_dataset,
+        sample_dataset_items,
+        sample_metric,
+    ) -> None:
+        mock_optimization_context()
+
+        optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        dataset = mock_dataset(
+            sample_dataset_items, name="test-dataset", dataset_id="dataset-123"
+        )
+
+        with pytest.raises(ValueError, match="epoch_shuffled"):
+            optimizer.optimize_prompt(
+                prompt=simple_chat_prompt,
+                dataset=dataset,
+                metric=sample_metric,
+                max_trials=2,
+                batch_sampler="custom_sampler",
+            )
+
 
 class TestGepaOptimizerEarlyStop:
     def test_skips_on_perfect_score(
