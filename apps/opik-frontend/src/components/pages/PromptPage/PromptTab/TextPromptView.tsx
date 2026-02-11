@@ -6,7 +6,7 @@ interface TextPromptViewProps {
 }
 
 const TextPromptView: React.FC<TextPromptViewProps> = ({ template }) => {
-  return <PromptTemplateView template={template} />;
+  return <PromptTemplateView template={template} templateStructure="text" />;
 };
 
 export default TextPromptView;
