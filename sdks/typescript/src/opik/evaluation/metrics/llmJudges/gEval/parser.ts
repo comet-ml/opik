@@ -54,11 +54,7 @@ interface LogprobEntry {
   top_logprobs?: Array<{ token?: string; logprob?: number }>;
 }
 
-interface LogprobsContent {
-  content?: LogprobEntry[];
-}
-
-function extractLogprobs(response: unknown): LogprobsContent | undefined {
+function extractLogprobs(response: unknown): LogprobEntry[][] | undefined {
   if (!response || typeof response !== "object") return undefined;
 
   const resp = response as Record<string, unknown>;
@@ -72,7 +68,7 @@ function extractLogprobs(response: unknown): LogprobsContent | undefined {
       | Record<string, unknown>
       | undefined;
     if (providerData && providerData.logprobs) {
-      return providerData.logprobs as LogprobsContent;
+      return providerData.logprobs as LogprobEntry[][];
     }
   }
 
@@ -101,7 +97,7 @@ export function parseProviderResponse(
 ): EvaluationScoreResult {
   try {
     const logprobs = extractLogprobs(response);
-    const entries = logprobs?.content;
+    const entries = logprobs?.[0];
 
     if (!entries || entries.length <= SCORE_TOKEN_POSITION) {
       const text = extractTextFromResponse(response);

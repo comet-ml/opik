@@ -217,12 +217,15 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   });
 
   describe("GEval Metric", () => {
-    it("should score high quality output with custom task", async () => {
+    it("should score high quality output with custom task and use logprobs", async () => {
+      const consoleDebugSpy = vi.spyOn(console, "debug");
+
       const metric = new GEval({
         taskIntroduction:
           "You evaluate how well a response answers a factual question.",
         evaluationCriteria:
           "Score from 0 (incorrect) to 10 (correct and complete).",
+        model: "gpt-4o", // This model supports logprobs
       });
 
       const result = await metric.score({
@@ -237,6 +240,13 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
         expect(typeof result.reason).toBe("string");
         expect(result.reason.length).toBeGreaterThan(0);
       }
+
+      // Verify that logprobs were used
+      expect(consoleDebugSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("failed to use logprobs")
+      );
+
+      consoleDebugSpy.mockRestore();
     }, 60000);
 
     it("should score using QARelevanceJudge", async () => {

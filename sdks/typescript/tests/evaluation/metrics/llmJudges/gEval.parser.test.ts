@@ -220,8 +220,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 7, reason: "Good quality" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -235,7 +235,7 @@ describe("GEval Parser", () => {
                     ],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -253,8 +253,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 9, reason: "Excellent" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -264,7 +264,7 @@ describe("GEval Parser", () => {
                     top_logprobs: [{ token: "9", logprob: -0.1 }],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -279,8 +279,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 5, reason: "Average" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -294,7 +294,7 @@ describe("GEval Parser", () => {
                     ],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -309,8 +309,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 8, reason: "Good" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -323,7 +323,7 @@ describe("GEval Parser", () => {
                     ],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -351,12 +351,12 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 4, reason: "Below average" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                 ],
-              },
+              ],
             },
           },
         };
@@ -386,8 +386,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 7, reason: "Good" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -397,7 +397,7 @@ describe("GEval Parser", () => {
                     top_logprobs: [{ token: "abc", logprob: -0.3 }],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -428,8 +428,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 7, reason: "Good" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -439,7 +439,7 @@ describe("GEval Parser", () => {
                     top_logprobs: [{ token: "xyz", logprob: -0.3 }],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -456,8 +456,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 10, reason: "Perfect" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -467,7 +467,7 @@ describe("GEval Parser", () => {
                     top_logprobs: [{ token: "10", logprob: 0.0 }],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -482,8 +482,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 4, reason: "Below average" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -493,7 +493,7 @@ describe("GEval Parser", () => {
                     top_logprobs: [],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -508,8 +508,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 6, reason: "Decent" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -522,7 +522,7 @@ describe("GEval Parser", () => {
                     ],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -537,8 +537,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 0, reason: "Very poor" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -551,7 +551,7 @@ describe("GEval Parser", () => {
                     ],
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -567,8 +567,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 3, reason: "Low" }),
           providerMetadata: {
             openai: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -577,7 +577,7 @@ describe("GEval Parser", () => {
                     logprob: -0.5,
                   },
                 ],
-              },
+              ],
             },
           },
         };
@@ -594,8 +594,8 @@ describe("GEval Parser", () => {
           text: JSON.stringify({ score: 5, reason: "Average" }),
           providerMetadata: {
             anthropic: {
-              logprobs: {
-                content: [
+              logprobs: [
+                [
                   { token: '{"', logprob: -0.01 },
                   { token: "score", logprob: -0.01 },
                   { token: '":', logprob: -0.01 },
@@ -605,7 +605,7 @@ describe("GEval Parser", () => {
                     top_logprobs: [{ token: "5", logprob: -0.1 }],
                   },
                 ],
-              },
+              ],
             },
           },
         };

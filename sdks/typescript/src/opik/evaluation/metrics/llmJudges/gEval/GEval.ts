@@ -6,10 +6,12 @@ import {
 import { EvaluationScoreResult } from "@/evaluation/types";
 import type { SupportedModelId } from "@/evaluation/models/providerDetection";
 import type { LanguageModel } from "ai";
+import { Output } from "ai";
 import type { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
 import { generateCoTPrompt, generateQueryPrompt } from "./template";
 import { parseProviderResponse, parseModelOutputString } from "./parser";
 import { GEVAL_PRESETS } from "./presets";
+import { logger } from "@/utils/logger";
 
 const validationSchema = z.object({
   output: z.string(),
@@ -166,7 +168,9 @@ export class GEval extends BaseLLMJudgeMetric {
         [{ role: "user", content: llmQuery }],
         {
           ...modelOptions,
-          output: { schema: responseSchema },
+          output: Output.object({
+            schema: responseSchema,
+          }),
           providerOptions: {
             openai: { logprobs: true, top_logprobs: 20 },
           },
@@ -174,7 +178,11 @@ export class GEval extends BaseLLMJudgeMetric {
       );
 
       return parseProviderResponse(providerResponse, this.name);
-    } catch {
+    } catch (error) {
+      logger.debug(
+        `GEval failed to use logprobs for weighted scoring, falling back to text-based parsing. ` +
+        `This may result in less accurate scores. Error: ${error instanceof Error ? error.message : String(error)}`
+      );
       const modelOutput = await this.model.generateString(
         llmQuery,
         responseSchema,
