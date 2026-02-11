@@ -112,4 +112,49 @@ class OpenTelemetryMapperTest {
         assertThat(span.metadata().has("thread_id")).isTrue();
         assertThat(span.metadata().get("thread_id").asLong()).isEqualTo(12345L);
     }
+
+    @Test
+    void testOpenInferenceAttributesMapping() {
+        var attributes = List.of(
+                KeyValue.newBuilder()
+                        .setKey("llm.model_name")
+                        .setValue(AnyValue.newBuilder().setStringValue("gpt-4o"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("llm.provider")
+                        .setValue(AnyValue.newBuilder().setStringValue("openai"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("llm.token_count.prompt")
+                        .setValue(AnyValue.newBuilder().setIntValue(12))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("llm.output_messages.0.content")
+                        .setValue(AnyValue.newBuilder().setStringValue("hello"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("input.value")
+                        .setValue(AnyValue.newBuilder().setStringValue("request"))
+                        .build(),
+                KeyValue.newBuilder()
+                        .setKey("output.value")
+                        .setValue(AnyValue.newBuilder().setStringValue("response"))
+                        .build());
+
+        var spanBuilder = Span.builder()
+                .id(UUID.randomUUID())
+                .traceId(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .startTime(Instant.now());
+
+        OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
+
+        var span = spanBuilder.build();
+        assertThat(span.model()).isEqualTo("gpt-4o");
+        assertThat(span.provider()).isEqualTo("openai");
+        assertThat(span.usage()).containsEntry("prompt", 12);
+        assertThat(span.input().get("input.value").asText()).isEqualTo("request");
+        assertThat(span.output().get("output.value").asText()).isEqualTo("response");
+        assertThat(span.output().get("llm.output_messages.0.content").asText()).isEqualTo("hello");
+    }
 }
