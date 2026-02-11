@@ -95,6 +95,7 @@ const CompareOptimizationsPage: React.FC = () => {
           title={title}
           status={optimization?.status}
           optimizationId={optimization?.id}
+          optimizationName={optimization?.name}
           isStudioOptimization={isStudioOptimization}
           canRerun={canRerun}
           bestExperiment={bestExperiment}
