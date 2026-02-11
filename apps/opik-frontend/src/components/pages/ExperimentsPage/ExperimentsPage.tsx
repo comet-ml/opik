@@ -553,33 +553,26 @@ const ExperimentsPage: React.FC = () => {
           name: group.name,
           data: [],
           lines: [],
+          labelsMap: {},
         };
       }
 
       const createScoresMap = (
         scores: Array<{ name: string; value: number }> | undefined,
-        addAvgSuffix: boolean,
       ): Record<string, number> =>
         (scores || []).reduce<Record<string, number>>((acc, score) => {
-          const key = addAvgSuffix ? `${score.name} (avg)` : score.name;
-          acc[key] = score.value;
+          acc[score.name] = score.value;
           return acc;
         }, {});
 
       const getScoreNames = (
         scores: Array<{ name: string }> | undefined,
-        addAvgSuffix: boolean,
-      ): string[] =>
-        (scores || []).map((s) => (addAvgSuffix ? `${s.name} (avg)` : s.name));
+      ): string[] => (scores || []).map((s) => s.name);
 
       groupExperiments.forEach((experiment) => {
-        const feedbackScoresMap = createScoresMap(
-          experiment.feedback_scores,
-          true,
-        );
+        const feedbackScoresMap = createScoresMap(experiment.feedback_scores);
         const experimentScoresMap = createScoresMap(
           experiment.experiment_scores,
-          false,
         );
 
         groupsMap[groupKey].data.unshift({
@@ -589,19 +582,19 @@ const ExperimentsPage: React.FC = () => {
           scores: { ...feedbackScoresMap, ...experimentScoresMap },
         });
 
-        const feedbackScoreNames = getScoreNames(
-          experiment.feedback_scores,
-          true,
-        );
+        const feedbackScoreNames = getScoreNames(experiment.feedback_scores);
         const experimentScoreNames = getScoreNames(
           experiment.experiment_scores,
-          false,
         );
         groupsMap[groupKey].lines = uniq([
           ...groupsMap[groupKey].lines,
           ...feedbackScoreNames,
           ...experimentScoreNames,
         ]);
+
+        (experiment.feedback_scores || []).forEach((score) => {
+          groupsMap[groupKey].labelsMap![score.name] = `${score.name} (avg)`;
+        });
       });
     });
 

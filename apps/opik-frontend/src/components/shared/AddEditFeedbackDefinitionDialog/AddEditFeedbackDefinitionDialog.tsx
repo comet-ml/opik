@@ -1,9 +1,11 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { MessageCircleWarning } from "lucide-react";
+import uniqid from "uniqid";
 
 import useFeedbackDefinitionCreateMutation from "@/api/feedback-definitions/useFeedbackDefinitionCreateMutation";
 import useFeedbackDefinitionUpdateMutation from "@/api/feedback-definitions/useFeedbackDefinitionUpdateMutation";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
+import ColorPicker from "@/components/shared/ColorPicker/ColorPicker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +18,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { DEFAULT_HEX_COLOR } from "@/constants/colorVariants";
+import { resolveHexColor } from "@/lib/colorVariants";
+import useUpdateColorMapping from "@/hooks/useUpdateColorMapping";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 import useAppStore from "@/store/AppStore";
 import {
   CreateFeedbackDefinition,
@@ -89,6 +100,9 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
   const feedbackDefinitionUpdateMutation =
     useFeedbackDefinitionUpdateMutation();
 
+  const { getColor } = useWorkspaceColorMap();
+  const { updateColor } = useUpdateColorMapping();
+
   const [name, setName] = useState<CreateFeedbackDefinition["name"]>(
     mode === "clone" && feedbackDefinition
       ? `${feedbackDefinition.name} (Copy)`
@@ -103,6 +117,11 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
   const [details, setDetails] = useState<
     CreateFeedbackDefinition["details"] | undefined
   >(feedbackDefinition?.details ?? undefined);
+
+  const resolvedColor = resolveHexColor(getColor(name || uniqid()));
+  const [localColor, setLocalColor] = useState<string>(
+    resolvedColor ?? DEFAULT_HEX_COLOR,
+  );
 
   const isEdit = mode === "edit";
   const title =
@@ -144,9 +163,24 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
       onCreated?.(composedFeedbackDefinition);
     }
 
+    const defaultColor = resolveHexColor(
+      getColor(composedFeedbackDefinition.name),
+    );
+    if (localColor !== defaultColor) {
+      updateColor(composedFeedbackDefinition.name, localColor);
+    }
+
     setOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [composedFeedbackDefinition, workspaceName, feedbackDefinition, isEdit]);
+  }, [
+    composedFeedbackDefinition,
+    workspaceName,
+    feedbackDefinition,
+    isEdit,
+    localColor,
+    getColor,
+    updateColor,
+  ]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -167,12 +201,27 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
           )}
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="feedbackDefinitionName">Name</Label>
-            <Input
-              id="feedbackDefinitionName"
-              placeholder="Feedback definition name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id="feedbackDefinitionName"
+                className="flex-1"
+                placeholder="Feedback definition name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="size-9 shrink-0 rounded-md border border-border"
+                    style={{ backgroundColor: localColor }}
+                  />
+                </PopoverTrigger>
+                <PopoverContent className="w-auto" align="end">
+                  <ColorPicker value={localColor} onChange={setLocalColor} />
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="feedbackDefinitionDescription">Description</Label>
