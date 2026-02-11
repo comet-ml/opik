@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import json
 from typing import Any
 from collections.abc import Mapping
 
@@ -43,6 +44,11 @@ REQUIRE_TOOL_ATTEMPT = os.getenv("MCP_SMOKE_REQUIRE_TOOL_ATTEMPT", "1").strip() 
     "true",
     "True",
 }
+REQUIRE_PROMPT_CHANGE = os.getenv("MCP_SMOKE_REQUIRE_PROMPT_CHANGE", "1").strip() in {
+    "1",
+    "true",
+    "True",
+}
 api_key = os.getenv("CONTEXT7_API_KEY", "").strip()
 headers = {"CONTEXT7_API_KEY": api_key} if api_key else {}
 
@@ -59,11 +65,12 @@ logger.info(
 )
 logger.info("Sleep between optimizer runs: %.1fs", SLEEP_BETWEEN_OPTIMIZERS_SECONDS)
 logger.info(
-    "Smoke config: opt_rounds=%s max_trials=%s n_samples=%s require_tool_attempt=%s",
+    "Smoke config: opt_rounds=%s max_trials=%s n_samples=%s require_tool_attempt=%s require_prompt_change=%s",
     OPTIMIZATION_ROUNDS,
     MAX_TRIALS,
     N_SAMPLES,
     REQUIRE_TOOL_ATTEMPT,
+    REQUIRE_PROMPT_CHANGE,
 )
 
 cursor_config = {
@@ -75,8 +82,29 @@ cursor_config = {
     }
 }
 tools = cursor_mcp_config_to_tools(cursor_config)
-dataset = load_context7_dataset(test_mode=True)
+base_dataset = load_context7_dataset(test_mode=True)
 scorer = LevenshteinRatio()
+
+
+class _SingleItemDataset:
+    """Dataset wrapper that exposes only one item from the source dataset."""
+
+    def __init__(self, source: Any) -> None:
+        self._source = source
+        self._items = list(source.get_items(nb_samples=1))
+        if not self._items:
+            raise ValueError("Context7 dataset is empty; cannot run smoke test.")
+        self.name = getattr(source, "name", "context7_smoke_single")
+        self.id = getattr(source, "id", self.name)
+
+    def get_items(self, nb_samples: int | None = None) -> list[dict[str, Any]]:
+        if nb_samples is None:
+            return list(self._items)
+        return list(self._items[:nb_samples])
+
+
+dataset = _SingleItemDataset(base_dataset)
+logger.info("Using dataset sample size: %s item(s)", len(dataset.get_items()))
 
 
 def context7_metric(dataset_item: dict[str, Any], llm_output: str) -> Any:
@@ -114,6 +142,18 @@ def build_prompt() -> ChatPrompt:
         user="{user_query}",
         tools=tools,
     )
+
+
+def _prompt_payload(prompt: ChatPrompt) -> dict[str, Any]:
+    """Return a deterministic payload for prompt-equality checks."""
+    return prompt.to_dict()
+
+
+def _prompts_equal(left: ChatPrompt, right: ChatPrompt) -> bool:
+    """Return whether two prompts have equivalent serialized payloads."""
+    left_payload = json.dumps(_prompt_payload(left), sort_keys=True, default=str)
+    right_payload = json.dumps(_prompt_payload(right), sort_keys=True, default=str)
+    return left_payload == right_payload
 
 
 def _tool_description_map_from_tools_payload(tools_payload: Any) -> dict[str, str]:
@@ -196,6 +236,7 @@ optimizer_specs: list[tuple[str, Any, dict[str, Any], bool]] = [
 for optimizer_name, optimizer_cls, extra_kwargs, supports_tool_opt in optimizer_specs:
     logger.info("===== %s =====", optimizer_name)
     prompt = build_prompt()
+    prompt_before = prompt.copy()
     before = extract_tool_descriptions(prompt)
 
     optimizer = optimizer_cls(
@@ -242,18 +283,24 @@ for optimizer_name, optimizer_cls, extra_kwargs, supports_tool_opt in optimizer_
 
     after = extract_tool_descriptions(optimized_prompt)
     changed = sum(1 for name in after if after.get(name, "") != before.get(name, ""))
+    prompt_changed = not _prompts_equal(prompt_before, optimized_prompt)
     history_entries = optimizer.get_history_entries()
     attempted_tool_change = _history_contains_tool_description_attempt(
         history_entries, before
     )
     logger.info(
-        "%s score %.4f -> %.4f | tool_descriptions_changed=%s | tool_change_attempted=%s",
+        "%s score %.4f -> %.4f | prompt_changed=%s | tool_descriptions_changed=%s | tool_change_attempted=%s",
         optimizer_name,
         result.initial_score,
         result.score,
+        prompt_changed,
         changed,
         attempted_tool_change,
     )
+    if supports_tool_opt and REQUIRE_PROMPT_CHANGE and not prompt_changed:
+        raise RuntimeError(
+            f"{optimizer_name}: expected optimized prompt to change, but it did not."
+        )
     if supports_tool_opt and REQUIRE_TOOL_ATTEMPT and not attempted_tool_change:
         raise RuntimeError(
             f"{optimizer_name}: expected tool-description mutation attempt, but none detected."
