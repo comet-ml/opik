@@ -320,9 +320,8 @@ class DatasetEvaluatorsResourceTest {
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), otherApiKey, otherWorkspaceName, otherWorkspaceId,
                     USER);
 
-            var page = datasetEvaluatorClient.get(datasetId, otherApiKey, otherWorkspaceName, 1, 10);
-            assertThat(page.content()).isEmpty();
-            assertThat(page.total()).isEqualTo(0);
+            datasetEvaluatorClient.get(datasetId, otherApiKey, otherWorkspaceName, 1, 10,
+                    HttpStatus.SC_NOT_FOUND);
         }
     }
 }
