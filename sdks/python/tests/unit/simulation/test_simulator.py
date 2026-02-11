@@ -173,6 +173,33 @@ class TestRunSimulation:
 
         assert result["project_name"] == "test_project"
 
+    def test_run_simulation_with_tags(self):
+        """Test simulation propagates trace tags through opik_args."""
+
+        captured_opik_args = []
+
+        def mock_app(message, *, thread_id, **kwargs):
+            captured_opik_args.append(kwargs["opik_args"])
+            return {"role": "assistant", "content": "Response"}
+
+        # Prevent auto-decoration so we can inspect kwargs directly.
+        mock_app.opik_tracked = True
+
+        user_simulator = SimulatedUser(persona="Test user", fixed_responses=["Message"])
+
+        result = run_simulation(
+            app=mock_app,
+            user_simulator=user_simulator,
+            tags=["simulation", "customer_service"],
+            max_turns=1,
+        )
+
+        assert result["tags"] == ["simulation", "customer_service"]
+        assert captured_opik_args[0]["trace"]["tags"] == [
+            "simulation",
+            "customer_service",
+        ]
+
     def test_run_simulation_max_turns_zero(self):
         """Test simulation with zero max_turns."""
 

@@ -1,6 +1,7 @@
 """Tests for SimulatedUser class."""
 
 from unittest.mock import Mock, patch
+import pytest
 from opik.simulation.simulated_user import SimulatedUser
 
 
@@ -14,6 +15,7 @@ class TestSimulatedUser:
         assert user.persona == "You are a helpful assistant"
         assert user.model == "gpt-4o-mini"
         assert user.fixed_responses == []
+        assert user.max_history_messages == 10
         assert user._response_index == 0
         assert user._llm is not None
 
@@ -95,7 +97,7 @@ class TestSimulatedUser:
 
     @patch("opik.simulation.simulated_user.get_model")
     def test_generate_response_with_long_history(self, mock_get_model):
-        """Test that long conversation history is handled correctly."""
+        """Test that long conversation history is truncated by default."""
         mock_llm_instance = Mock()
         mock_llm_instance.generate_string.return_value = "Response"
         mock_get_model.return_value = mock_llm_instance
@@ -118,12 +120,48 @@ class TestSimulatedUser:
         mock_llm_instance.generate_string.assert_called_once()
         call_args = mock_llm_instance.generate_string.call_args[1]["input"]
 
-        # Should contain system message and all conversation messages
+        # Should contain system message and only the last 10 messages
         assert (
             "You are a simulated user with the following persona: Test persona"
             in call_args
         )
-        assert "User: Message 0" in call_args
-        assert "Assistant: Response 0" in call_args
+        assert "User: Message 0" not in call_args
+        assert "Assistant: Response 0" not in call_args
+        assert "User: Message 10" in call_args
+        assert "Assistant: Response 10" in call_args
         assert "User: Message 14" in call_args
         assert "Assistant: Response 14" in call_args
+
+    @patch("opik.simulation.simulated_user.get_model")
+    def test_generate_response_with_long_history_no_limit(self, mock_get_model):
+        """Test that history limit can be disabled."""
+        mock_llm_instance = Mock()
+        mock_llm_instance.generate_string.return_value = "Response"
+        mock_get_model.return_value = mock_llm_instance
+
+        user = SimulatedUser(
+            persona="Test persona", model="gpt-4o-mini", max_history_messages=None
+        )
+
+        long_history = []
+        for i in range(15):
+            long_history.extend(
+                [
+                    {"role": "user", "content": f"Message {i}"},
+                    {"role": "assistant", "content": f"Response {i}"},
+                ]
+            )
+
+        user.generate_response(long_history)
+        call_args = mock_llm_instance.generate_string.call_args[1]["input"]
+        assert "User: Message 0" in call_args
+        assert "Assistant: Response 0" in call_args
+
+    def test_init_with_invalid_max_history_messages(self):
+        """Test validation for max_history_messages."""
+        with pytest.raises(ValueError) as exc_info:
+            SimulatedUser(persona="Test persona", max_history_messages=0)
+
+        assert "max_history_messages must be greater than 0 or None" in str(
+            exc_info.value
+        )
