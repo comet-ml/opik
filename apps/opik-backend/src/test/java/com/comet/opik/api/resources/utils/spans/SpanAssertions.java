@@ -49,11 +49,13 @@ public class SpanAssertions {
         EXCLUDE_FUNCTIONS.put(Span.SpanField.TOTAL_ESTIMATED_COST_VERSION,
                 it -> it.toBuilder().totalEstimatedCostVersion(null).build());
         EXCLUDE_FUNCTIONS.put(Span.SpanField.DURATION, it -> it.toBuilder().duration(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.ATTACHMENT_COUNT,
+                it -> it.toBuilder().attachmentCount(null).build());
     }
 
     public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "duration",
-            "totalEstimatedCostVersion", "comments"};
+            "totalEstimatedCostVersion", "comments", "attachmentCount"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
             "valueByAuthor"};
