@@ -243,9 +243,9 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
         expect(result.reason.length).toBeGreaterThan(0);
       }
 
-      // Verify that logprobs were used (logger.debug should not have been called with failure message)
+      // Verify that logprobs were used (logger.debug should not have been called with fallback messages)
       expect(loggerDebugSpy).not.toHaveBeenCalledWith(
-        expect.stringContaining("failed to use logprobs")
+        expect.stringMatching(/No logprobs found|failed to use logprobs/)
       );
 
       loggerDebugSpy.mockRestore();
@@ -277,9 +277,9 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
           expect(result.reason.length).toBeGreaterThan(0);
         }
 
-        // Verify that logprobs failed (expected for Anthropic models)
+        // Verify that logprobs fallback occurred (expected for Anthropic models)
         expect(loggerDebugSpy).toHaveBeenCalledWith(
-          expect.stringContaining("failed to use logprobs")
+          expect.stringMatching(/No logprobs found|failed to use logprobs/)
         );
 
         loggerDebugSpy.mockRestore();

@@ -100,6 +100,7 @@ export function parseProviderResponse(
     const entries = logprobs?.[0];
 
     if (!entries || entries.length <= SCORE_TOKEN_POSITION) {
+      logger.debug("No logprobs found, falling back to text-based parsing");
       const text = extractTextFromResponse(response);
       return parseModelOutputString(text, name);
     }
