@@ -50,7 +50,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
             messages.CreateExperimentItemsBatchMessage: self._process_create_experiment_items_batch_message,  # type: ignore
-            messages.CreateAttachmentMessage: self._process_create_attachment,
+            messages.CreateAttachmentMessage: self._process_create_attachment,  # type: ignore
             messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
         }
 
@@ -321,7 +321,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self, message: messages.CreateAttachmentMessage
     ) -> None:
         LOGGER.debug("Processing create attachment message")
-        self._file_uploader.upload_attachment(message)
+        self._file_uploader.upload(message)
         LOGGER.debug("Uploaded attachment with %s", message.file_name)
 
     def _noop_handler(self, message: messages.BaseMessage) -> None:
