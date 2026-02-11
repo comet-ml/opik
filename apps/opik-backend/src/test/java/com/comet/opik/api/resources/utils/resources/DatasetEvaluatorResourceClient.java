@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.DatasetEvaluator;
-import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchRequest;
+import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchCreateRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorCreate;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorPage;
 import com.comet.opik.api.EvaluatorType;
@@ -32,12 +32,12 @@ public class DatasetEvaluatorResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
-    public List<DatasetEvaluator> createBatch(UUID datasetId, DatasetEvaluatorBatchRequest request,
+    public List<DatasetEvaluator> createBatch(UUID datasetId, DatasetEvaluatorBatchCreateRequest request,
             String apiKey, String workspaceName) {
         return createBatch(datasetId, request, apiKey, workspaceName, HttpStatus.SC_OK);
     }
 
-    public List<DatasetEvaluator> createBatch(UUID datasetId, DatasetEvaluatorBatchRequest request,
+    public List<DatasetEvaluator> createBatch(UUID datasetId, DatasetEvaluatorBatchCreateRequest request,
             String apiKey, String workspaceName, int expectedStatus) {
         try (var response = callCreateBatch(datasetId, request, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
@@ -49,7 +49,7 @@ public class DatasetEvaluatorResourceClient {
         }
     }
 
-    public Response callCreateBatch(UUID datasetId, DatasetEvaluatorBatchRequest request,
+    public Response callCreateBatch(UUID datasetId, DatasetEvaluatorBatchCreateRequest request,
             String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI, datasetId))
                 .path("batch")
@@ -107,11 +107,11 @@ public class DatasetEvaluatorResourceClient {
                 .post(Entity.json(request));
     }
 
-    public DatasetEvaluatorBatchRequest createBatchRequest(int count) {
+    public DatasetEvaluatorBatchCreateRequest createBatchRequest(int count) {
         var evaluators = IntStream.range(0, count)
                 .mapToObj(i -> createEvaluator("evaluator-" + i, EvaluatorType.LLM_JUDGE))
                 .toList();
-        return DatasetEvaluatorBatchRequest.builder()
+        return DatasetEvaluatorBatchCreateRequest.builder()
                 .evaluators(evaluators)
                 .build();
     }

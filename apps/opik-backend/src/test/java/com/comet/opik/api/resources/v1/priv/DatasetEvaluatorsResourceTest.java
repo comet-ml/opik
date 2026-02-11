@@ -2,7 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetEvaluator;
-import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchRequest;
+import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchCreateRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorCreate;
 import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
@@ -165,7 +165,7 @@ class DatasetEvaluatorsResourceTest {
                     .config(datasetEvaluatorClient.createValidMetricConfig())
                     .build();
 
-            var request = DatasetEvaluatorBatchRequest.builder()
+            var request = DatasetEvaluatorBatchCreateRequest.builder()
                     .evaluators(List.of(evaluatorCreate))
                     .build();
 

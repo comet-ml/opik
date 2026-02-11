@@ -1,7 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetEvaluator;
-import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchRequest;
+import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchCreateRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorPage;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -26,7 +26,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(DatasetEvaluatorServiceImpl.class)
 public interface DatasetEvaluatorService {
 
-    List<DatasetEvaluator> createBatch(UUID datasetId, DatasetEvaluatorBatchRequest request);
+    List<DatasetEvaluator> createBatch(UUID datasetId, DatasetEvaluatorBatchCreateRequest request);
 
     DatasetEvaluatorPage getByDatasetId(UUID datasetId, int page, int size);
 
@@ -46,7 +46,8 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
     private final @NonNull DatasetService datasetService;
 
     @Override
-    public List<DatasetEvaluator> createBatch(@NonNull UUID datasetId, @NonNull DatasetEvaluatorBatchRequest request) {
+    public List<DatasetEvaluator> createBatch(@NonNull UUID datasetId,
+            @NonNull DatasetEvaluatorBatchCreateRequest request) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 

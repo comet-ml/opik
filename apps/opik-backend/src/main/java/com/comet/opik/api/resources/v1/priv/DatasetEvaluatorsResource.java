@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.DatasetEvaluator;
-import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchRequest;
+import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchCreateRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorPage;
 import com.comet.opik.domain.DatasetEvaluatorService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -59,7 +59,7 @@ public class DatasetEvaluatorsResource {
     @JsonView(DatasetEvaluator.View.Public.class)
     public Response createBatch(
             @PathParam("datasetId") UUID datasetId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetEvaluatorBatchRequest.class))) @NotNull @Valid DatasetEvaluatorBatchRequest request) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetEvaluatorBatchCreateRequest.class))) @NotNull @Valid DatasetEvaluatorBatchCreateRequest request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

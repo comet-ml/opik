@@ -57,7 +57,7 @@ public record DatasetEvaluator(
     @Builder
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record DatasetEvaluatorBatchRequest(
+    public record DatasetEvaluatorBatchCreateRequest(
             @NotNull @Size(min = 1, max = 1000) List<@NotNull @Valid DatasetEvaluatorCreate> evaluators) {
     }
 
