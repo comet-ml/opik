@@ -19,6 +19,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
@@ -62,6 +63,7 @@ import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
 import static com.comet.opik.api.TraceCountResponse.WorkspaceTraceCount;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.DatabaseUtils.bindTraceThreadSearchCriteria;
 import static com.comet.opik.infrastructure.DatabaseUtils.getLogComment;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
@@ -347,21 +349,26 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    // Query to get target project_ids from traces (executed separately to reduce table scans)
+    private static final String SELECT_TARGET_PROJECTS_FOR_TRACES = """
+            SELECT DISTINCT project_id
+            FROM traces
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     // Build value_by_author map with composite keys (author_spanId) for span feedback scores.
     // The composite key format ensures uniqueness when multiple spans have the same author.
     // Format: if span_id exists, use 'author_spanId', otherwise use 'author'.
     // The tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
     private static final String SELECT_BY_IDS = """
-            WITH target_projects AS (
-                SELECT DISTINCT project_id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                AND id IN :ids
-            ), target_spans AS (
+            WITH target_spans AS (
                 SELECT id, trace_id, type
                 FROM spans FINAL
                 WHERE workspace_id = :workspace_id
-                AND project_id IN (SELECT project_id FROM target_projects)
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
             ),
             feedback_scores_combined_raw AS (
@@ -484,7 +491,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM feedback_scores FINAL
                 WHERE entity_type = 'span'
                 AND workspace_id = :workspace_id
-                AND project_id IN (SELECT project_id FROM target_projects)
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -502,7 +509,7 @@ class TraceDAOImpl implements TraceDAO {
                 FROM authored_feedback_scores FINAL
                 WHERE entity_type = 'span'
                 AND workspace_id = :workspace_id
-                AND project_id IN (SELECT project_id FROM target_projects)
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
             ), span_feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -648,7 +655,7 @@ class TraceDAOImpl implements TraceDAO {
                     duration
                 FROM traces
                 WHERE workspace_id = :workspace_id
-                AND project_id IN (SELECT project_id FROM target_projects)
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND id IN :ids
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -663,7 +670,7 @@ class TraceDAOImpl implements TraceDAO {
                     provider
                 FROM spans
                 WHERE workspace_id = :workspace_id
-                AND project_id IN (SELECT project_id FROM target_projects)
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 AND trace_id IN :ids
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -684,7 +691,7 @@ class TraceDAOImpl implements TraceDAO {
                         entity_id
                     FROM comments
                     WHERE workspace_id = :workspace_id
-                    AND project_id IN (SELECT project_id FROM target_projects)
+                    <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                     AND entity_id IN :ids
                     ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -2653,6 +2660,29 @@ class TraceDAOImpl implements TraceDAO {
         });
     }
 
+    /**
+     * Get target project IDs from traces for the given trace IDs.
+     * This is executed as a separate query to reduce traces table scans in the main query.
+     */
+    private Mono<List<UUID>> getTargetProjectIdsForTraces(List<UUID> ids) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.from(connectionFactory.create())
+                    .flatMap(connection -> {
+                        var template = getSTWithLogComment(SELECT_TARGET_PROJECTS_FOR_TRACES,
+                                "get_target_project_ids_for_traces", workspaceId, ids.size());
+
+                        var statement = connection.createStatement(template.render())
+                                .bind("ids", ids.toArray(UUID[]::new));
+
+                        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+                    })
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("project_id", UUID.class)))
+                    .collectList();
+        });
+    }
+
     @Override
     @WithSpan
     public Mono<Trace> findById(@NonNull UUID id, @NonNull Connection connection) {
@@ -2666,19 +2696,29 @@ class TraceDAOImpl implements TraceDAO {
         Preconditions.checkArgument(!ids.isEmpty(), "ids must not be empty");
         log.info("Finding traces by IDs in batch, count '{}'", ids.size());
 
-        return makeFluxContextAware((userName, workspaceId) -> {
-            var template = getSTWithLogComment(SELECT_BY_IDS, "find_traces_by_ids", workspaceId, ids.size());
+        return getTargetProjectIdsForTraces(ids)
+                .flatMapMany(targetProjectIds -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            var statement = connection.createStatement(template.render())
-                    .bind("ids", ids.toArray(UUID[]::new))
-                    .bind("workspace_id", workspaceId);
+                    var template = getSTWithLogComment(SELECT_BY_IDS, "find_traces_by_ids", workspaceId, ids.size());
 
-            Segment segment = startSegment("traces", "Clickhouse", "findByIds");
+                    if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                        template.add("has_target_projects", true);
+                    }
 
-            return Flux.from(statement.execute())
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> mapToDto(result, Set.of()));
-        });
+                    var statement = connection.createStatement(template.render())
+                            .bind("ids", ids.toArray(UUID[]::new));
+
+                    if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                        statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                    }
+
+                    Segment segment = startSegment("traces", "Clickhouse", "findByIds");
+
+                    return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                            .doFinally(signalType -> endSegment(segment));
+                }))
+                .flatMap(result -> mapToDto(result, Set.of()));
     }
 
     @Override
