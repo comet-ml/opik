@@ -10,9 +10,6 @@ metadata:
     {{- with index .Values "component" "python-backend" "networkPolicy" "annotations" }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  namespaceSelector:
-    matchLabels:
-      kubernetes.io/metadata.name: {{ $.Release.Namespace }}
 spec:
   podSelector:
     matchLabels:
