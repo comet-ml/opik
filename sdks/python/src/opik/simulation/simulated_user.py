@@ -17,7 +17,7 @@ class SimulatedUser:
         persona: str,
         model: str = "gpt-4o-mini",
         fixed_responses: Optional[List[str]] = None,
-        max_history_messages: Optional[int] = 10,
+        max_history_messages: Optional[int] = None,
     ):
         """
         Initialize a simulated user.
@@ -27,7 +27,7 @@ class SimulatedUser:
             model: LLM model to use for generating responses (default: gpt-4o-mini)
             fixed_responses: Optional list of predefined responses to cycle through
             max_history_messages: Maximum number of most recent conversation messages
-                to include for LLM generation. Use None for no limit.
+                to include for LLM generation. Use None for no limit (default).
         """
         if max_history_messages is not None and max_history_messages <= 0:
             raise ValueError("max_history_messages must be greater than 0 or None")

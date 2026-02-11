@@ -29,7 +29,7 @@ Constructor
        persona: str,
        model: str = "gpt-4o-mini",
        fixed_responses: Optional[List[str]] = None,
-       max_history_messages: Optional[int] = 10
+       max_history_messages: Optional[int] = None
    )
 
 Parameters
@@ -46,7 +46,7 @@ Parameters
 
 **max_history_messages** (int, optional)
    Maximum number of recent conversation messages included when generating LLM-based responses.
-   Use ``None`` to include full history. Defaults to ``10``.
+   Use ``None`` to include full history. Defaults to ``None`` (full history).
 
 Methods
 -------
@@ -72,7 +72,7 @@ Generates a response based on the conversation history.
 
 - If ``fixed_responses`` are provided, cycles through them in order
 - Otherwise, uses the LLM to generate context-aware responses based on the persona and conversation history
-- By default, includes only the last ``10`` conversation messages for LLM generation
+- By default, includes full conversation history for LLM generation
 
 Examples
 --------
