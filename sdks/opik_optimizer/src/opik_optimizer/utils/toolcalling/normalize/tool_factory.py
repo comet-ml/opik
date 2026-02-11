@@ -255,11 +255,7 @@ def resolve_toolcalling_tools(
                 }
                 resolved_tools.append(function_entry)
                 if require_approval:
-                    logger.debug(
-                        "MCP tool requires approval before execution name=%s server=%s",
-                        function_name,
-                        server_label,
-                    )
+                    logger.debug("MCP tool requires approval before execution.")
                     resolved_map.setdefault(
                         function_name,
                         _build_approval_required_callable(function_name),
@@ -298,8 +294,7 @@ def resolve_toolcalling_tools(
                     if mcp_tool_name and isinstance(server, dict):
                         if require_approval:
                             logger.debug(
-                                "MCP pre-resolved tool requires approval before execution name=%s",
-                                function_name,
+                                "MCP pre-resolved tool requires approval before execution."
                             )
                             resolved_map[function_name] = (
                                 _build_approval_required_callable(function_name)
@@ -518,9 +513,7 @@ def _resolve_function_name(
         candidate = f"{server_label}.{tool_name}.{suffix}"
         suffix += 1
 
-    logger.warning(
-        "Tool name collision for %s; using %s instead.", tool_name, candidate
-    )
+    logger.warning("Tool name collision detected; using a namespaced fallback.")
     return candidate
 
 
