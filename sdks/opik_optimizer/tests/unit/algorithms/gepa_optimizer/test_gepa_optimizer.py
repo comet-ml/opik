@@ -710,3 +710,49 @@ def test_gepa_optimizer_passes_adapter_policy_and_tool_use(monkeypatch) -> None:
 
     assert captured["allow_tool_use"] is False
     assert captured["candidate_selection_policy"] == "max_logprob"
+
+
+def test_gepa_adapter_uses_logprob_policy_when_configured() -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 0.0
+
+    metric_fn.__name__ = "metric_fn"
+
+    context = make_optimization_context(prompt, dataset=dataset, metric=metric_fn)
+    optimizer = GepaOptimizer(
+        model="gpt-4o-mini",
+        model_parameters={"candidate_selection_policy": "max_logprob"},
+        verbose=0,
+        seed=42,
+    )
+
+    class CandidateAgent:
+        def __init__(self) -> None:
+            self._last_candidate_logprobs = [0.01, 0.9]
+
+        def invoke_agent_candidates(
+            self, prompts: dict[str, ChatPrompt], dataset_item: dict[str, Any]
+        ) -> list[str]:
+            _ = prompts, dataset_item
+            return ["low", "high"]
+
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=CandidateAgent(),  # type: ignore[arg-type]
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+    )
+
+    batch = [MagicMock(opik_item={"question": "Q", "answer": "A"})]
+    result = adapter.evaluate(batch, {"system_prompt": "You are a helpful assistant."})
+
+    assert result.outputs == [{"output": "high"}]
