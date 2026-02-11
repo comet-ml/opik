@@ -64,3 +64,24 @@ def test_simple_passing_test(user_question, expected_output):
     response = llm_application(user_question)
     assert response == expected_output
 ```
+
+### Configuration
+
+You can tune how pytest runs are stored in Opik with SDK config fields:
+
+- `pytest_experiment_enabled`
+- `pytest_experiment_dataset_name`
+- `pytest_experiment_name_prefix`
+- `pytest_passed_score_name`
+
+These can be provided through Opik configuration sources (for example environment variables or config file values).
+
+### Simulations and Trajectories
+
+For multi-turn agent testing, use `llm_unit` for lightweight pass/fail tracking and combine it with simulation/evaluation APIs for deeper quality checks:
+
+- run scenarios with `run_simulation` to produce deterministic conversation threads,
+- evaluate threads with `evaluate_threads` and conversation metrics,
+- evaluate tool and reasoning quality with trajectory-focused metrics.
+
+This pattern gives you a CI-friendly gate while still catching silent regressions in agent behavior.
