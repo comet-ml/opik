@@ -47,8 +47,9 @@ const SetupProviderDialog: React.FC<SetupProviderDialogProps> = ({
 
   const filteredOptions = useMemo(() => {
     if (!allowedProviders) return providerOptions;
+    const allowedSet = new Set(allowedProviders);
     return providerOptions.filter(
-      (opt) => opt.providerType && allowedProviders.includes(opt.providerType),
+      (opt) => opt.providerType && allowedSet.has(opt.providerType),
     );
   }, [providerOptions, allowedProviders]);
 
