@@ -177,8 +177,18 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
           }
           search={search}
         />
-      ) : (
+      ) : isChatPrompt ? (
         <PromptMessagesReadonly messages={messages} />
+      ) : (
+        <div className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground">
+          {messages
+            .map((m) =>
+              typeof m.content === "string"
+                ? m.content
+                : JSON.stringify(m.content),
+            )
+            .join("\n\n")}
+        </div>
       )}
 
       <div className="mt-2 flex items-center justify-between">
