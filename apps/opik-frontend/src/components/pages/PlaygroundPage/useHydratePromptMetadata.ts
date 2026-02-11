@@ -34,11 +34,13 @@ interface VersionData {
 }
 
 const buildMetadata = (
-  promptData: { name: string; id: string },
+  promptData: { name: string; id: string; template_structure?: string },
   versionData: VersionData,
 ): PromptLibraryMetadata => ({
   name: promptData.name,
   id: promptData.id,
+  template_structure:
+    (promptData.template_structure as "chat" | "text") ?? "text",
   version: {
     template: parseTemplateJson(versionData.template),
     id: versionData.id,
