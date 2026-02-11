@@ -27,6 +27,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED]: false,
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED]: false,
+  [FeatureToggleKeys.LLM_JUDGE_DIRECT_JSONPATH_ENABLED]: false,
   // LLM Provider feature flags - default false
   [FeatureToggleKeys.OPENAI_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED]: false,

@@ -1679,4 +1679,180 @@ class OnlineScoringEngineTest {
                 .startTime(java.time.Instant.now())
                 .build();
     }
+
+    // ==================== Tests for direct variable parsing (without mapping) ====================
+
+    @Test
+    @DisplayName("parseVariableAsPath should parse input.field correctly")
+    void testParseVariableAsPath_inputField() {
+        var mapping = OnlineScoringEngine.parseVariableAsPath("input.question");
+
+        assertThat(mapping).isNotNull();
+        assertThat(mapping.variableName()).isEqualTo("input.question");
+        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(mapping.jsonPath()).isEqualTo("$.question");
+    }
+
+    @Test
+    @DisplayName("parseVariableAsPath should parse output.field correctly")
+    void testParseVariableAsPath_outputField() {
+        var mapping = OnlineScoringEngine.parseVariableAsPath("output.answer");
+
+        assertThat(mapping).isNotNull();
+        assertThat(mapping.variableName()).isEqualTo("output.answer");
+        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.OUTPUT);
+        assertThat(mapping.jsonPath()).isEqualTo("$.answer");
+    }
+
+    @Test
+    @DisplayName("parseVariableAsPath should parse metadata.field correctly")
+    void testParseVariableAsPath_metadataField() {
+        var mapping = OnlineScoringEngine.parseVariableAsPath("metadata.model");
+
+        assertThat(mapping).isNotNull();
+        assertThat(mapping.variableName()).isEqualTo("metadata.model");
+        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.METADATA);
+        assertThat(mapping.jsonPath()).isEqualTo("$.model");
+    }
+
+    @Test
+    @DisplayName("parseVariableAsPath should parse root section (input) correctly")
+    void testParseVariableAsPath_rootInput() {
+        var mapping = OnlineScoringEngine.parseVariableAsPath("input");
+
+        assertThat(mapping).isNotNull();
+        assertThat(mapping.variableName()).isEqualTo("input");
+        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(mapping.jsonPath()).isEqualTo("$");
+    }
+
+    @Test
+    @DisplayName("parseVariableAsPath should parse nested paths correctly")
+    void testParseVariableAsPath_nestedPath() {
+        var mapping = OnlineScoringEngine.parseVariableAsPath("input.questions.question1");
+
+        assertThat(mapping).isNotNull();
+        assertThat(mapping.variableName()).isEqualTo("input.questions.question1");
+        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(mapping.jsonPath()).isEqualTo("$.questions.question1");
+    }
+
+    @Test
+    @DisplayName("parseVariableAsPath should return null for unknown section")
+    void testParseVariableAsPath_unknownSection() {
+        var mapping = OnlineScoringEngine.parseVariableAsPath("unknown.field");
+
+        assertThat(mapping).isNull();
+    }
+
+    @Test
+    @DisplayName("parseVariableAsPath should return null for blank input")
+    void testParseVariableAsPath_blankInput() {
+        assertThat(OnlineScoringEngine.parseVariableAsPath("")).isNull();
+        assertThat(OnlineScoringEngine.parseVariableAsPath("   ")).isNull();
+        assertThat(OnlineScoringEngine.parseVariableAsPath(null)).isNull();
+    }
+
+    @Test
+    @DisplayName("toReplacementsFromTemplateVariables should extract values from trace")
+    void testToReplacementsFromTemplateVariables() throws JsonProcessingException {
+        // Given
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+
+        var templateVariables = Set.of(
+                "input.questions.question1",
+                "output.output",
+                "input");
+
+        // When
+        var replacements = OnlineScoringEngine.toReplacementsFromTemplateVariables(templateVariables, trace);
+
+        // Then
+        assertThat(replacements).hasSize(3);
+        assertThat(replacements.get("input.questions.question1")).isEqualTo(SUMMARY_STR);
+        assertThat(replacements.get("output.output")).isEqualTo(OUTPUT_STR);
+        // input should contain the full input JSON
+        assertThat(replacements.get("input")).contains("questions");
+    }
+
+    @Test
+    @DisplayName("renderMessages with empty variablesMap should render templates using dot-notation variables")
+    void testRenderMessagesWithEmptyVariablesMap() throws JsonProcessingException {
+        // Given - template with dot-notation variables (no mapping needed)
+        List<LlmAsJudgeMessage> messages = List.of(
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .content("Question: {{input.questions.question1}}\nAnswer: {{output.output}}")
+                        .build());
+
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+
+        // When - pass empty map to trigger direct JSONPath mode
+        var renderedMessages = OnlineScoringEngine.renderMessages(messages, Map.of(), trace);
+
+        // Then
+        assertThat(renderedMessages).hasSize(1);
+        var userMessage = (UserMessage) renderedMessages.get(0);
+        var messageText = userMessage.singleText();
+
+        assertThat(messageText).contains("Question: " + SUMMARY_STR);
+        assertThat(messageText).contains("Answer: " + OUTPUT_STR);
+    }
+
+    @Test
+    @DisplayName("renderMessages with null variablesMap should render templates using dot-notation variables")
+    void testRenderMessagesWithNullVariablesMap() throws JsonProcessingException {
+        // Given - template with dot-notation variables (no mapping needed)
+        List<LlmAsJudgeMessage> messages = List.of(
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .content("Question: {{input.questions.question1}}\nAnswer: {{output.output}}")
+                        .build());
+
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+
+        // When - pass null to trigger direct JSONPath mode
+        var renderedMessages = OnlineScoringEngine.renderMessages(messages, null, trace);
+
+        // Then
+        assertThat(renderedMessages).hasSize(1);
+        var userMessage = (UserMessage) renderedMessages.get(0);
+        var messageText = userMessage.singleText();
+
+        assertThat(messageText).contains("Question: " + SUMMARY_STR);
+        assertThat(messageText).contains("Answer: " + OUTPUT_STR);
+    }
+
+    @Test
+    @DisplayName("renderMessages with empty variablesMap should handle root section variables")
+    void testRenderMessagesWithEmptyVariablesMap_rootSection() throws JsonProcessingException {
+        // Given - template with root section variable
+        List<LlmAsJudgeMessage> messages = List.of(
+                LlmAsJudgeMessage.builder()
+                        .role(ChatMessageType.USER)
+                        .content("Full input: {{input}}")
+                        .build());
+
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+
+        // When - pass empty map to trigger direct JSONPath mode
+        var renderedMessages = OnlineScoringEngine.renderMessages(messages, Map.of(), trace);
+
+        // Then
+        assertThat(renderedMessages).hasSize(1);
+        var userMessage = (UserMessage) renderedMessages.get(0);
+        var messageText = userMessage.singleText();
+
+        // Should contain the entire input JSON
+        assertThat(messageText).contains("Full input: {");
+        assertThat(messageText).containsAnyOf("\"questions\"", "&quot;questions&quot;");
+    }
 }
