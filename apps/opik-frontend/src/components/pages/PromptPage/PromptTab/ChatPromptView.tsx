@@ -36,13 +36,9 @@ const ChatPromptView: React.FC<ChatPromptViewProps> = ({ template }) => {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          {showRawView
-            ? "Raw JSON"
-            : `${messages.length} message${messages.length !== 1 ? "s" : ""}`}
-        </div>
+        <div className="comet-body-s-accented">Chat messages</div>
         <Button
           variant="ghost"
           size="sm"
