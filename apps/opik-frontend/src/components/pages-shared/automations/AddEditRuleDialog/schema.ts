@@ -505,6 +505,7 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     | LLMJudgeDetailsTraceFormType
     | LLMJudgeDetailsThreadFormType
     | LLMJudgeDetailsSpanFormType,
+  options?: { skipVariables?: boolean },
 ) => {
   const { temperature, seed, custom_parameters } = data.config;
   const model: LLMJudgeObject["model"] = {
@@ -520,10 +521,12 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
     model.custom_parameters = custom_parameters;
   }
 
+  const variables = options?.skipVariables ? {} : data.variables;
+
   return {
     model,
     messages: convertLLMToProviderMessages(data.messages),
-    variables: data.variables,
+    variables,
     schema: data.schema,
   };
 };

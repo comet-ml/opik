@@ -172,6 +172,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isSpanPythonCodeEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED,
   );
+  const isDirectJsonPathEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.LLM_JUDGE_DIRECT_JSONPATH_ENABLED,
+  );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const { isOpen, setIsOpen, requestConfirm, confirm, cancel } =
@@ -419,10 +422,15 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       type: ruleType,
     };
 
+    const conversionOptions = { skipVariables: isDirectJsonPathEnabled };
+
     if (ruleType === EVALUATORS_RULE_TYPE.llm_judge) {
       return {
         ...ruleData,
-        code: convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails),
+        code: convertLLMJudgeDataToLLMJudgeObject(
+          formData.llmJudgeDetails,
+          conversionOptions,
+        ),
       } as EvaluatorsRule;
     }
 
@@ -439,7 +447,10 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     if (ruleType === EVALUATORS_RULE_TYPE.span_llm_judge) {
       return {
         ...ruleData,
-        code: convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails),
+        code: convertLLMJudgeDataToLLMJudgeObject(
+          formData.llmJudgeDetails,
+          conversionOptions,
+        ),
       } as EvaluatorsRule;
     }
 
@@ -447,7 +458,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       ...ruleData,
       code: formData.pythonCodeDetails,
     } as EvaluatorsRule;
-  }, [form]);
+  }, [form, isDirectJsonPathEnabled]);
 
   const createPrompt = useCallback(() => {
     createMutate(
@@ -707,6 +718,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     form={form}
                     projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
+                    hideVariables={isDirectJsonPathEnabled}
                   />
                 ) : (
                   <PythonCodeRuleDetails

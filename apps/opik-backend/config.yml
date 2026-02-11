@@ -684,6 +684,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not LLM Judge direct JSONPath mode is enabled (skips variable mapping in UI)
+  llmJudgeDirectJsonpathEnabled: ${TOGGLE_LLM_JUDGE_DIRECT_JSONPATH_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:

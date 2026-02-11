@@ -43,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.regex.Matcher;
@@ -199,38 +200,98 @@ public class OnlineScoringEngine {
      * Render the rule evaluator message template using the values from an actual
      * trace.
      * <p>
-     * As the rule may consist in multiple messages, we check each one of them for
-     * variables to fill.
-     * Then we go through every variable template to replace them for the value from
-     * the trace.
+     * Supports two modes:
+     * 1. If variablesMap is provided (non-empty): Uses the mapping to convert template variables
+     *    to trace paths (legacy behavior for backward compatibility).
+     *    Example: variablesMap={"question": "input.question"}, template="{{question}}"
+     * 2. If variablesMap is empty/null: Treats template variables directly as JSONPath.
+     *    Example: template="{{input.question}}" extracts from trace.input().question
      *
      * @param templateMessages a list of messages with variables to fill with a
      *                         Trace value
      * @param variablesMap     a map of template variable to a path to a value into
-     *                         a Trace
+     *                         a Trace (can be null or empty for direct JSONPath mode)
      * @param trace            the trace with value to use to replace template
      *                         variables
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
-        Map<String, String> replacements = toReplacements(variablesMap, trace);
+        Map<String, String> replacements;
+        if (variablesMap == null || variablesMap.isEmpty()) {
+            // New mode: treat template variables directly as JSONPath
+            Set<String> templateVariables = extractAllVariablesFromMessages(templateMessages);
+            replacements = toReplacementsFromTemplateVariables(templateVariables, trace);
+        } else {
+            // Legacy mode: use the variables mapping
+            replacements = toReplacements(variablesMap, trace);
+        }
         return renderMessagesWithReplacements(templateMessages, replacements);
     }
 
     /**
      * Render the rule evaluator message template using the values from an actual span.
-     * Similar to renderMessages but for spans.
+     * <p>
+     * Supports two modes:
+     * 1. If variablesMap is provided (non-empty): Uses the mapping to convert template variables
+     *    to span paths (legacy behavior for backward compatibility).
+     * 2. If variablesMap is empty/null: Treats template variables directly as JSONPath.
      *
      * @param templateMessages a list of messages with variables to fill with a Span value
      * @param variablesMap     a map of template variable to a path to a value into a Span
+     *                         (can be null or empty for direct JSONPath mode)
      * @param span             the span with value to use to replace template variables
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Span span) {
-        Map<String, String> replacements = toReplacements(variablesMap, span);
+        Map<String, String> replacements;
+        if (variablesMap == null || variablesMap.isEmpty()) {
+            // New mode: treat template variables directly as JSONPath
+            Set<String> templateVariables = extractAllVariablesFromMessages(templateMessages);
+            replacements = toReplacementsFromTemplateVariables(templateVariables, span);
+        } else {
+            // Legacy mode: use the variables mapping
+            replacements = toReplacements(variablesMap, span);
+        }
         return renderMessagesWithReplacements(templateMessages, replacements);
+    }
+
+    /**
+     * Extract all Mustache variables from a list of template messages.
+     * Handles both string content and structured content (multimodal).
+     *
+     * @param templateMessages the messages to extract variables from
+     * @return a set of all variable names found in the templates
+     */
+    private static Set<String> extractAllVariablesFromMessages(List<LlmAsJudgeMessage> templateMessages) {
+        return templateMessages.stream()
+                .flatMap(message -> {
+                    if (message.isStringContent()) {
+                        return TemplateParseUtils.extractVariables(message.asString(), PromptType.MUSTACHE).stream();
+                    } else if (message.isStructuredContent()) {
+                        return message.asContentList().stream()
+                                .flatMap(content -> {
+                                    Stream.Builder<String> texts = Stream.builder();
+                                    if (content.text() != null) {
+                                        texts.add(content.text());
+                                    }
+                                    if (content.imageUrl() != null && content.imageUrl().url() != null) {
+                                        texts.add(content.imageUrl().url());
+                                    }
+                                    if (content.videoUrl() != null && content.videoUrl().url() != null) {
+                                        texts.add(content.videoUrl().url());
+                                    }
+                                    if (content.audioUrl() != null && content.audioUrl().url() != null) {
+                                        texts.add(content.audioUrl().url());
+                                    }
+                                    return texts.build();
+                                })
+                                .flatMap(text -> TemplateParseUtils.extractVariables(text, PromptType.MUSTACHE).stream());
+                    }
+                    return Stream.empty();
+                })
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -307,6 +368,109 @@ public class OnlineScoringEngine {
             case OUTPUT -> span.output();
             case METADATA -> span.metadata();
         });
+    }
+
+    /**
+     * Extract replacements directly from template variables without requiring a variables mapping.
+     * Variables in templates use dot-notation like {{input.question}}, {{output.answer}}, {{metadata.model}}.
+     * The first segment (input/output/metadata) determines the trace section, and the rest is the JSON path.
+     * <p>
+     * Examples:
+     * - {{input}} -> entire input object
+     * - {{input.question}} -> $.question from input
+     * - {{output.messages.content}} -> $.messages.content from output
+     *
+     * @param templateVariables set of variable names extracted from templates (e.g., "input.question")
+     * @param trace             the trace to extract values from
+     * @return a map of variable name to extracted value
+     */
+    public static Map<String, String> toReplacementsFromTemplateVariables(Set<String> templateVariables, Trace trace) {
+        return toReplacementsFromTemplateVariables(templateVariables, section -> switch (section) {
+            case INPUT -> trace.input();
+            case OUTPUT -> trace.output();
+            case METADATA -> trace.metadata();
+        });
+    }
+
+    /**
+     * Extract replacements directly from template variables for a Span.
+     *
+     * @param templateVariables set of variable names extracted from templates
+     * @param span              the span to extract values from
+     * @return a map of variable name to extracted value
+     */
+    public static Map<String, String> toReplacementsFromTemplateVariables(Set<String> templateVariables, Span span) {
+        return toReplacementsFromTemplateVariables(templateVariables, section -> switch (section) {
+            case INPUT -> span.input();
+            case OUTPUT -> span.output();
+            case METADATA -> span.metadata();
+        });
+    }
+
+    /**
+     * Common implementation for extracting replacements directly from template variables.
+     * Parses variable names as paths (e.g., "input.question" -> section=INPUT, jsonPath="$.question").
+     */
+    private static Map<String, String> toReplacementsFromTemplateVariables(
+            Set<String> templateVariables, JsonSectionExtractor sectionExtractor) {
+        return templateVariables.stream()
+                .map(variableName -> {
+                    var mapping = parseVariableAsPath(variableName);
+                    if (mapping == null) {
+                        return null;
+                    }
+                    var section = mapping.traceSection();
+                    var jsonSection = section != null ? sectionExtractor.extract(section) : null;
+                    if (jsonSection == null) {
+                        return null;
+                    }
+                    var valueToReplace = extractFromJson(jsonSection, mapping.jsonPath());
+                    return mapping.toBuilder()
+                            .valueToReplace(valueToReplace)
+                            .build();
+                })
+                .filter(Objects::nonNull)
+                .filter(mapping -> mapping.valueToReplace() != null)
+                .collect(Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
+    }
+
+    /**
+     * Parse a template variable name as a path to trace data.
+     * The variable name should be in dot-notation like "input.question" or "output.answer".
+     * The first segment determines the trace section (input/output/metadata).
+     *
+     * @param variableName the variable name from the template (e.g., "input.question")
+     * @return a MessageVariableMapping with the parsed section and JSON path, or null if invalid
+     */
+    static MessageVariableMapping parseVariableAsPath(String variableName) {
+        if (StringUtils.isBlank(variableName)) {
+            return null;
+        }
+
+        // Find which section this variable belongs to
+        for (TraceSection section : TraceSection.values()) {
+            String sectionName = section.prefix.substring(0, section.prefix.length() - 1); // Remove trailing dot
+            if (variableName.equals(sectionName)) {
+                // Variable is just the section name (e.g., "input") - return entire section
+                return MessageVariableMapping.builder()
+                        .variableName(variableName)
+                        .traceSection(section)
+                        .jsonPath("$")
+                        .build();
+            } else if (variableName.startsWith(section.prefix)) {
+                // Variable has a path after section (e.g., "input.question")
+                String jsonPath = "$." + variableName.substring(section.prefix.length());
+                return MessageVariableMapping.builder()
+                        .variableName(variableName)
+                        .traceSection(section)
+                        .jsonPath(jsonPath)
+                        .build();
+            }
+        }
+
+        // Variable doesn't match any section - could be a literal or invalid
+        log.debug("Variable '{}' does not match any trace section (input/output/metadata)", variableName);
+        return null;
     }
 
     /**
