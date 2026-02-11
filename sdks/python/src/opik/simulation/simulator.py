@@ -82,9 +82,7 @@ def run_simulation(
                 user_message_text,
                 thread_id=thread_id,
                 **app_kwargs,
-                opik_args={
-                    "trace": trace_opik_args
-                },
+                opik_args={"trace": trace_opik_args},
             )
         except Exception as e:
             # Handle app errors gracefully

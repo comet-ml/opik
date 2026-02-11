@@ -121,6 +121,8 @@ def make_max_turns_assertion(
     return EpisodeAssertion(name=name, passed=passed, reason=reason)
 
 
-def make_tool_call_budget(trajectory: Sequence[Dict[str, Any]], limit: int) -> EpisodeBudgetMetric:
+def make_tool_call_budget(
+    trajectory: Sequence[Dict[str, Any]], limit: int
+) -> EpisodeBudgetMetric:
     used = float(build_trajectory_summary(trajectory)["tool_calls_count"])
     return EpisodeBudgetMetric(used=used, limit=float(limit), unit="count")

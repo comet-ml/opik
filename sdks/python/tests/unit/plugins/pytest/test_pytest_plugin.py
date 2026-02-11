@@ -11,7 +11,9 @@ from opik.plugins.pytest import hooks
 from opik.simulation.episode import EpisodeResult, EpisodeAssertion
 
 
-def test_llm_unit__missing_pytest_current_test_env__does_not_track_test_run(monkeypatch):
+def test_llm_unit__missing_pytest_current_test_env__does_not_track_test_run(
+    monkeypatch,
+):
     monkeypatch.setattr(
         decorator.config,
         "get_from_user_inputs",
@@ -372,7 +374,9 @@ def test_llm_episode__extracts_scenario_id_from_positional_args__happyflow(monke
     assert episode.scenario_id == "scenario-positional"
 
 
-def test_pytest_sessionfinish__writes_episode_artifact__happyflow(monkeypatch, tmp_path):
+def test_pytest_sessionfinish__writes_episode_artifact__happyflow(
+    monkeypatch, tmp_path
+):
     nodeid = "tests/test_file.py::test_case"
     try:
         monkeypatch.chdir(tmp_path)
@@ -410,7 +414,9 @@ def test_pytest_sessionfinish__writes_episode_artifact__happyflow(monkeypatch, t
             def flush(self):
                 return None
 
-        monkeypatch.setattr(hooks.opik_client, "get_client_cached", lambda: FakeClient())
+        monkeypatch.setattr(
+            hooks.opik_client, "get_client_cached", lambda: FakeClient()
+        )
         monkeypatch.setattr(hooks.experiment_runner, "run", lambda **kwargs: None)
 
         hooks.pytest_sessionfinish(session=session, exitstatus=0)
@@ -460,7 +466,9 @@ def test_pytest_sessionfinish__invalid_artifact_path__raises_value_error(monkeyp
             def flush(self):
                 return None
 
-        monkeypatch.setattr(hooks.opik_client, "get_client_cached", lambda: FakeClient())
+        monkeypatch.setattr(
+            hooks.opik_client, "get_client_cached", lambda: FakeClient()
+        )
         monkeypatch.setattr(hooks.experiment_runner, "run", lambda **kwargs: None)
 
         try:

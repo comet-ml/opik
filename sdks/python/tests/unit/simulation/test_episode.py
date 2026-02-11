@@ -46,7 +46,9 @@ def test_episode_result_is_passing_checks_assertions_and_budgets():
 
     failing_episode = EpisodeResult(
         scenario_id="scenario-fail",
-        assertions=[EpisodeAssertion(name="hard-check", passed=False, severity="error")],
+        assertions=[
+            EpisodeAssertion(name="hard-check", passed=False, severity="error")
+        ],
     )
     assert failing_episode.is_passing() is False
 
