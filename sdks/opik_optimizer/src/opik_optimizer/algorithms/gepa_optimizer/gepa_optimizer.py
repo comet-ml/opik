@@ -9,6 +9,7 @@ from opik.evaluation.metrics.score_result import ScoreResult
 
 from ...agents import LiteLLMAgent, OptimizableAgent
 from ...base_optimizer import BaseOptimizer
+from ...core import agent as agent_core
 from ...api_objects import chat_prompt
 from ...core.evaluation import _create_metric_class
 from ...core.llm_calls import _prepare_model_params
@@ -274,7 +275,14 @@ class GepaOptimizer(BaseOptimizer):
         # Keep a single agent class for the entire optimization (baseline +
         # GEPA adapter + final evaluation) so we never downgrade to the default
         # when we use GEPAs own internal evaluator.
-        self.agent_class = self._setup_agent_class(prompt, agent_class)
+        if agent_class is None:
+            self.agent_class = LiteLLMAgent
+        elif not issubclass(agent_class, OptimizableAgent):
+            raise TypeError(
+                f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"
+            )
+        else:
+            self.agent_class = agent_class
 
         prompt = prompt.copy()
         if prompt.model is None:
@@ -857,11 +865,14 @@ class GepaOptimizer(BaseOptimizer):
             instantiate_kwargs["project_name"] = project_name
 
         try:
-            return self._instantiate_agent(
+            return agent_core.instantiate_agent(
+                self,
                 prompt_obj, agent_class=self.agent_class, **instantiate_kwargs
             )
         except TypeError:
-            return self._instantiate_agent(prompt_obj, agent_class=self.agent_class)
+            return agent_core.instantiate_agent(
+                self, prompt_obj, agent_class=self.agent_class
+            )
 
     def _build_optimization_config(self) -> dict[str, Any]:
         return self._build_optimization_metadata()
