@@ -20,16 +20,17 @@ def print(reports: List[pytest.TestReport]) -> None:
     total_tests = len(reports)
     passed_tests = len([report for report in reports if report.passed])
     failed_tests = len([report for report in reports if report.failed])
+    episode_results = test_runs_storage.TEST_RUNS_EPISODES
 
     table = rich.table.Table(show_header=False, show_lines=False, padding=(0, 1))
     table.add_column(justify="left")
     table.add_column(justify="left")
 
-    table.add_row("Passed:", f"{passed_tests}", style="green")
-    table.add_row("Failed:", f"{failed_tests}", style="red")
+    table.add_row("Passed:", f"{passed_tests}", style="green" if passed_tests > 0 else None)
+    table.add_row("Failed:", f"{failed_tests}", style="red" if failed_tests > 0 else "dim")
     table.add_row("Total:", f"{total_tests}")
 
-    episode_results = test_runs_storage.TEST_RUNS_EPISODES
+    episode_failed = 0
     if episode_results:
         episode_passed = 0
         failed_scenarios = []
@@ -42,20 +43,29 @@ def print(reports: List[pytest.TestReport]) -> None:
                 episode_passed += 1
             else:
                 failed_scenarios.append(episode.scenario_id)
+                episode_failed += 1
 
         table.add_row()
         table.add_row("Episodes:", f"{len(episode_results)}")
         table.add_row("Episodes passed:", f"{episode_passed}", style="green")
         table.add_row(
             "Episodes failed:",
-            f"{len(episode_results) - episode_passed}",
-            style="red",
+            f"{episode_failed}",
+            style="red" if episode_failed > 0 else "dim",
         )
         if failed_scenarios:
             preview = ", ".join(failed_scenarios[:5])
             if len(failed_scenarios) > 5:
                 preview += ", ..."
             table.add_row("Failed scenarios:", preview)
+
+    overall_failed = failed_tests + episode_failed
+    table.add_row()
+    table.add_row(
+        "Status:",
+        "FAIL" if overall_failed > 0 else "PASS",
+        style="red" if overall_failed > 0 else "green",
+    )
 
     table.add_row()
     table.add_row("See the results:", f"[underline blue]{opik_ui_url}[/]")
