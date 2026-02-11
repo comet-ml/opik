@@ -6,6 +6,7 @@ import types
 from opik.config import OpikConfig
 from opik.plugins.pytest import decorator, test_runs_storage
 from opik.plugins.pytest import experiment_runner
+from opik.plugins.pytest import hooks
 
 
 def test_get_test_nodeid__fallback_when_env_missing(monkeypatch):
@@ -150,3 +151,59 @@ def test_experiment_runner__uses_configurable_dataset_and_prefix(monkeypatch):
     assert client.dataset_name == "custom-tests"
     assert client.experiment_dataset_name == "custom-tests"
     assert client.experiment_name.startswith("CI-Tests-2026-02-11T00:00:00+00:00")
+
+
+def test_pytest_sessionfinish__uses_plugin_config(monkeypatch):
+    nodeid = "tests/test_file.py::test_case"
+    item = types.SimpleNamespace(
+        nodeid=nodeid, report=types.SimpleNamespace(passed=True)
+    )
+    session = types.SimpleNamespace(items=[item])
+
+    test_runs_storage.LLM_UNIT_TEST_RUNS.add(nodeid)
+    test_runs_storage.TEST_RUNS_TO_TRACE_DATA[nodeid] = types.SimpleNamespace(
+        id="trace-123"
+    )
+
+    monkeypatch.setattr(
+        hooks.config,
+        "get_from_user_inputs",
+        lambda: types.SimpleNamespace(
+            pytest_passed_score_name="Result",
+            pytest_experiment_dataset_name="pytest-ds",
+            pytest_experiment_name_prefix="Pytest-Run",
+        ),
+    )
+
+    captured = {"scores": None, "run_args": None}
+
+    class FakeClient:
+        def log_traces_feedback_scores(self, scores):
+            captured["scores"] = scores
+
+        def flush(self):
+            return None
+
+    monkeypatch.setattr(hooks.opik_client, "get_client_cached", lambda: FakeClient())
+
+    def fake_run(client, test_items, dataset_name, experiment_name_prefix):
+        captured["run_args"] = {
+            "dataset_name": dataset_name,
+            "experiment_name_prefix": experiment_name_prefix,
+            "test_items_count": len(test_items),
+        }
+
+    monkeypatch.setattr(hooks.experiment_runner, "run", fake_run)
+
+    hooks.pytest_sessionfinish(session=session, exitstatus=0)
+
+    assert captured["scores"] is not None
+    assert len(captured["scores"]) == 1
+    assert captured["scores"][0]["name"] == "Result"
+    assert captured["scores"][0]["id"] == "trace-123"
+
+    assert captured["run_args"] == {
+        "dataset_name": "pytest-ds",
+        "experiment_name_prefix": "Pytest-Run",
+        "test_items_count": 1,
+    }
