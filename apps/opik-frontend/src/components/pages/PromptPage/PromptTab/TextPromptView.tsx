@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import { Code2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
-import ChatPromptMessageReadonly from "./ChatPromptMessageReadonly";
 
 interface ChatMessage {
   role: string;
@@ -53,21 +52,20 @@ const TextPromptView: React.FC<TextPromptViewProps> = ({ template }) => {
         <div className="max-h-[600px] overflow-y-auto">
           <CodeHighlighter data={template} />
         </div>
-      ) : isJsonMessages ? (
-        <div className="flex flex-col gap-2" data-testid="prompt-text-content">
-          {messages.map((message, index) => (
-            <ChatPromptMessageReadonly
-              key={`${message.role}-${index}`}
-              message={message}
-            />
-          ))}
-        </div>
       ) : (
         <div
           className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground"
           data-testid="prompt-text-content"
         >
-          {template}
+          {isJsonMessages
+            ? messages
+                .map((m) =>
+                  typeof m.content === "string"
+                    ? m.content
+                    : JSON.stringify(m.content),
+                )
+                .join("\n\n")
+            : template}
         </div>
       )}
     </div>
