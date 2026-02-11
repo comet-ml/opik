@@ -182,6 +182,20 @@ jobs:
       comet_build_args: ${{ !inputs.is_adhoc && 'BUILD_MODE=comet' || '' }}
       is_release: ${{ inputs.is_release || false }}
       is_adhoc: ${{ inputs.is_adhoc || false }}
+
+  build-ai-backend:
+    needs:
+      - set-version
+    secrets: inherit
+    uses: ./.github/workflows/build_and_push_docker.yaml
+    with:
+      image: "opik-ai-backend"
+      version: ${{needs.set-version.outputs.version}}
+      build_from: ${{needs.set-version.outputs.build_from}}
+      build_comet_image: false
+      comet_build_args: ""
+      is_release: ${{ inputs.is_release || false }}
+      is_adhoc: ${{ inputs.is_adhoc || false }}
       
   create-git-tag:
     if: |
@@ -190,12 +204,14 @@ jobs:
       needs.set-version.result == 'success' &&
       needs.build-backend.result == 'success' &&
       needs.build-frontend.result == 'success' &&
-      needs.build-python-backend.result == 'success'
+      needs.build-python-backend.result == 'success' &&
+      needs.build-ai-backend.result == 'success'
     needs:
       - set-version
       - build-backend
       - build-frontend
       - build-python-backend
+      - build-ai-backend
     runs-on: ubuntu-latest
     permissions:
       contents: write
