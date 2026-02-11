@@ -6,13 +6,108 @@ from opik.simulation import (
     EpisodeBudgetMetric,
     EpisodeBudgets,
     EpisodeResult,
+    EpisodeScore,
     SimulatedUser,
+    build_trajectory_summary,
+    make_max_turns_assertion,
+    make_tool_call_budget,
     run_simulation,
 )
 
 
-def simple_customer_support_agent(user_message: str, *, thread_id: str, **kwargs):
-    return {"role": "assistant", "content": f"Ack: {user_message}"}
+def lookup_order(order_id: str):
+    return {"order_id": order_id, "status": "delivered", "eligible_for_refund": True}
+
+
+def create_refund(order_id: str):
+    return {"order_id": order_id, "refund_id": f"rfnd-{order_id.lower()}", "status": "submitted"}
+
+
+def get_refund_scenario():
+    return {
+        "scenario_id": "refund_flow_v1",
+        "max_turns": 3,
+        "tool_call_limit": 3,
+        "project_name": "pytest-episode-e2e",
+        "tags": ["simulation", "refund", "policy-check"],
+        "user_persona": (
+            "You are a frustrated customer requesting a refund for a damaged package. "
+            "Provide concise answers and give your order id when asked."
+        ),
+        "user_messages": [
+            "Hi, I want a refund because the package arrived damaged.",
+            "My order id is ORD-1234.",
+            "Yes, please process the refund now.",
+        ],
+    }
+
+
+class RefundAgent:
+    def __init__(self):
+        self.trajectory_by_thread = {}
+        self.state_by_thread = {}
+
+    def _record(self, thread_id, action, details):
+        self.trajectory_by_thread.setdefault(thread_id, []).append(
+            {"action": action, "details": details}
+        )
+
+    def __call__(self, user_message: str, *, thread_id: str, **kwargs):
+        state = self.state_by_thread.setdefault(
+            thread_id,
+            {
+                "asked_for_order_id": False,
+                "order_id": None,
+                "refund_submitted": False,
+            },
+        )
+
+        normalized = user_message.lower()
+
+        if state["order_id"] is None and "ord-" not in normalized:
+            state["asked_for_order_id"] = True
+            return {
+                "role": "assistant",
+                "content": (
+                    "I can help with that. Please share your order id (for example ORD-1234) "
+                    "so I can verify refund eligibility."
+                ),
+            }
+
+        if state["order_id"] is None and "ord-" in normalized:
+            order_id = user_message.upper().split("ORD-")[1].split()[0].strip(".,!?")
+            order_id = f"ORD-{order_id}"
+            order = lookup_order(order_id)
+            self._record(thread_id, "lookup_order", {"order_id": order_id, "status": order["status"]})
+            state["order_id"] = order_id
+            return {
+                "role": "assistant",
+                "content": (
+                    f"Thanks. I found order {order_id} and it is eligible for refund. "
+                    "Please confirm and I will submit it."
+                ),
+            }
+
+        if state["order_id"] is not None and "yes" in normalized and not state["refund_submitted"]:
+            refund = create_refund(state["order_id"])
+            self._record(
+                thread_id,
+                "create_refund",
+                {"order_id": state["order_id"], "refund_id": refund["refund_id"]},
+            )
+            state["refund_submitted"] = True
+            return {
+                "role": "assistant",
+                "content": (
+                    f"Done. I submitted your refund request {refund['refund_id']}. "
+                    "You will receive a confirmation email shortly."
+                ),
+            }
+
+        return {
+            "role": "assistant",
+            "content": "I can continue helping with this refund request.",
+        }
 
 
 @pytest.mark.filterwarnings(
@@ -20,44 +115,87 @@ def simple_customer_support_agent(user_message: str, *, thread_id: str, **kwargs
 )
 @llm_episode(scenario_id_key="scenario_id")
 def test_refund_episode_ci_gate(scenario_id: str = "refund_flow_v1"):
+    scenario = get_refund_scenario()
+    agent = RefundAgent()
+
     user_simulator = SimulatedUser(
-        persona="You are a customer requesting a refund",
-        fixed_responses=["I need a refund", "My order arrived damaged"],
+        persona=scenario["user_persona"],
+        fixed_responses=scenario["user_messages"],
     )
 
     simulation = run_simulation(
-        app=simple_customer_support_agent,
+        app=agent,
         user_simulator=user_simulator,
-        max_turns=2,
-        project_name="pytest-episode-e2e",
-        tags=["simulation", "refund"],
+        max_turns=scenario["max_turns"],
+        project_name=scenario["project_name"],
+        tags=scenario["tags"],
     )
+
+    conversation_history = simulation["conversation_history"]
+    thread_id = simulation["thread_id"]
+    trajectory = agent.trajectory_by_thread.get(thread_id, [])
 
     assistant_messages = [
         message["content"]
-        for message in simulation["conversation_history"]
+        for message in conversation_history
         if message["role"] == "assistant"
     ]
+    refund_submitted = any("submitted your refund request" in message for message in assistant_messages)
+    asked_for_order_id = any("Please share your order id" in message for message in assistant_messages)
+
+    turn_assertion = make_max_turns_assertion(
+        conversation_history=conversation_history,
+        max_turns=scenario["max_turns"],
+        name="max_turns_guardrail",
+    )
 
     episode = EpisodeResult(
         scenario_id=scenario_id,
-        thread_id=simulation["thread_id"],
+        thread_id=thread_id,
         assertions=[
             EpisodeAssertion(
                 name="assistant_replied_each_turn",
-                passed=len(assistant_messages) == 2,
+                passed=len(assistant_messages) == scenario["max_turns"],
                 reason=f"assistant_messages={len(assistant_messages)}",
             ),
             EpisodeAssertion(
-                name="ack_prefix_present",
-                passed=all(message.startswith("Ack:") for message in assistant_messages),
-                reason="all assistant replies start with Ack:",
+                name="policy_requires_order_id_before_refund",
+                passed=asked_for_order_id,
+                reason="assistant asked for order id before processing refund",
+            ),
+            EpisodeAssertion(
+                name="refund_submission_completed",
+                passed=refund_submitted,
+                reason="assistant completed refund submission",
+            ),
+            turn_assertion,
+        ],
+        scores=[
+            EpisodeScore(
+                name="goal_completion",
+                value=1.0 if refund_submitted else 0.0,
+                reason="refund request should be completed in this scenario",
+            ),
+            EpisodeScore(
+                name="instruction_adherence",
+                value=1.0 if asked_for_order_id and refund_submitted else 0.5,
+                reason="agent should verify order id and then process refund",
             ),
         ],
         budgets=EpisodeBudgets(
-            max_turns=EpisodeBudgetMetric(used=2, limit=2, unit="count")
+            max_turns=EpisodeBudgetMetric(
+                used=float(len(conversation_history) // 2),
+                limit=float(scenario["max_turns"]),
+                unit="count",
+            ),
+            tool_calls=make_tool_call_budget(trajectory=trajectory, limit=scenario["tool_call_limit"]),
         ),
-        metadata={"project_name": simulation.get("project_name")},
+        trajectory_summary=build_trajectory_summary(trajectory),
+        metadata={
+            "project_name": simulation.get("project_name"),
+            "tags": simulation.get("tags"),
+            "tool_actions": [step["action"] for step in trajectory],
+        },
     )
 
     # Native pytest failure signal, while still returning EpisodeResult for Opik artifacts.
