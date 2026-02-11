@@ -41,22 +41,32 @@ class SimulatedUser:
         # Initialize LLM backend using models_factory for consistency
         self._llm = get_model(model_name=model)
 
-    def generate_response(self, conversation_history: List[Dict[str, str]]) -> str:
+    def generate_response(
+        self,
+        conversation_history: List[Dict[str, str]],
+        simulation_state: Optional[Dict[str, object]] = None,
+    ) -> str:
         """
         Generate a response based on the conversation history.
 
         Args:
             conversation_history: List of message dicts with 'role' and 'content' keys
+            simulation_state: Optional shared mutable state for the current simulation run.
 
         Returns:
             String response from the simulated user
         """
         # Use fixed responses first if available
         if self.fixed_responses:
-            response = self.fixed_responses[
-                self._response_index % len(self.fixed_responses)
-            ]
-            self._response_index += 1
+            if simulation_state is not None:
+                state_index = int(simulation_state.get("user_response_index", 0))
+                response = self.fixed_responses[state_index % len(self.fixed_responses)]
+                simulation_state["user_response_index"] = state_index + 1
+            else:
+                response = self.fixed_responses[
+                    self._response_index % len(self.fixed_responses)
+                ]
+                self._response_index += 1
             return response
 
         # Generate response using LLM

@@ -213,3 +213,71 @@ class TestRunSimulation:
         )
 
         assert len(result["conversation_history"]) == 0
+
+    def test_run_simulation_passes_state_to_app(self):
+        """Test simulation_state is shared and mutable across app turns."""
+
+        def stateful_app(message, *, thread_id, simulation_state, **kwargs):
+            call_count = int(simulation_state.get("app_call_count", 0)) + 1
+            simulation_state["app_call_count"] = call_count
+            return {
+                "role": "assistant",
+                "content": f"call={call_count} message={message}",
+            }
+
+        user_simulator = SimulatedUser(
+            persona="Test user",
+            fixed_responses=["hello", "follow-up"],
+        )
+
+        result = run_simulation(
+            app=stateful_app,
+            user_simulator=user_simulator,
+            max_turns=2,
+        )
+
+        state = result["simulation_state"]
+        assert state["app_call_count"] == 2
+        assert state["turn"] == 2
+        assert state["last_user_message"] == "follow-up"
+
+    def test_run_simulation_works_with_strict_app_signature(self):
+        """Test compatibility with apps that do not accept simulation_state."""
+
+        def strict_app(message, *, thread_id, opik_args):
+            return {"role": "assistant", "content": f"strict:{message}"}
+
+        user_simulator = SimulatedUser(persona="Test user", fixed_responses=["Message"])
+
+        result = run_simulation(
+            app=strict_app,
+            user_simulator=user_simulator,
+            max_turns=1,
+        )
+
+        history = result["conversation_history"]
+        assert history[1]["content"] == "strict:Message"
+
+    def test_run_simulation_passes_state_to_user_simulator(self):
+        """Test user simulator can coordinate response indexing via simulation_state."""
+
+        class DummyStatefulUserSimulator:
+            def generate_response(self, conversation_history, simulation_state=None):
+                response_index = int(simulation_state.get("dummy_idx", 0))
+                simulation_state["dummy_idx"] = response_index + 1
+                return f"user-{response_index}"
+
+        def mock_app(message, *, thread_id, **kwargs):
+            return {"role": "assistant", "content": f"Response to {message}"}
+
+        result = run_simulation(
+            app=mock_app,
+            user_simulator=DummyStatefulUserSimulator(),
+            max_turns=3,
+        )
+
+        history = result["conversation_history"]
+        assert history[0]["content"] == "user-0"
+        assert history[2]["content"] == "user-1"
+        assert history[4]["content"] == "user-2"
+        assert result["simulation_state"]["dummy_idx"] == 3

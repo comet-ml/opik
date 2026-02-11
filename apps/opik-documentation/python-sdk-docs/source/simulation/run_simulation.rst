@@ -32,6 +32,7 @@ Function Signature
        thread_id: Optional[str] = None,
        project_name: Optional[str] = None,
        tags: Optional[List[str]] = None,
+       simulation_state: Optional[Dict[str, Any]] = None,
        **app_kwargs: Any
    ) -> Dict[str, Any]
 
@@ -62,6 +63,10 @@ Parameters
 **tags** (List[str], optional)
    Optional trace tags applied to all traces produced by the simulation.
 
+**simulation_state** (Dict[str, Any], optional)
+   Optional mutable state shared across turns. The object is updated in-place and
+   returned in ``simulation["simulation_state"]``.
+
 **app_kwargs** (Any)
    Additional keyword arguments passed to the app function.
 
@@ -75,6 +80,7 @@ Returns
    - **conversation_history** (List[Dict[str, str]]): Complete conversation as message dictionaries
    - **project_name** (str, optional): Project name if provided
    - **tags** (List[str], optional): Tags if provided
+   - **simulation_state** (Dict[str, Any]): Run-level mutable state with turn metadata
 
 App Function Requirements
 -------------------------
@@ -246,6 +252,43 @@ Advanced Usage with Tags and Custom App Parameters
            print(f"Running simulation: {simulation_id}")
        
        return {"role": "assistant", "content": "Response"}
+
+Stateful Simulation Pattern
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   from opik import track
+   from opik.simulation import run_simulation, SimulatedUser
+
+   @track
+   def stateful_agent(
+       user_message: str,
+       *,
+       thread_id: str,
+       simulation_state: dict | None = None,
+       **kwargs
+   ):
+       # run_simulation keeps this object across turns
+       turns = int(simulation_state.get("agent_turns", 0)) + 1
+       simulation_state["agent_turns"] = turns
+       simulation_state["last_intent"] = "billing" if "invoice" in user_message.lower() else "support"
+
+       return {"role": "assistant", "content": f"Handled turn {turns}"}
+
+   shared_state = {"scenario_id": "billing_recovery_v1"}
+   simulation = run_simulation(
+       app=stateful_agent,
+       user_simulator=SimulatedUser(
+           persona="You ask account and billing follow-ups",
+           fixed_responses=["I need account help", "What is your invoice dispute policy?"],
+       ),
+       max_turns=2,
+       simulation_state=shared_state,
+   )
+
+   # The same object is updated in-place and returned
+   assert simulation["simulation_state"]["agent_turns"] == 2
 
 Error Handling
 ~~~~~~~~~~~~~~
