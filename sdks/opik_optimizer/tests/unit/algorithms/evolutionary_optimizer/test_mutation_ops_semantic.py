@@ -73,7 +73,8 @@ class TestRadicalInnovationMutation:
             prompts=evo_prompts,
         )
 
-        assert result is prompt
+        assert result is not prompt
+        assert result.get_messages() == prompt.get_messages()
 
     def test_returns_original_on_llm_error(
         self, monkeypatch: pytest.MonkeyPatch, evo_prompts: Any
@@ -95,7 +96,8 @@ class TestRadicalInnovationMutation:
             prompts=evo_prompts,
         )
 
-        assert result is prompt
+        assert result is not prompt
+        assert result.get_messages() == prompt.get_messages()
 
 
 class TestSemanticMutation:
@@ -164,7 +166,8 @@ class TestSemanticMutation:
             rng=rng,
         )
 
-        assert result is prompt
+        assert result is not prompt
+        assert result.get_messages() == prompt.get_messages()
         assert captured.get("called") is True
 
 
@@ -195,7 +198,7 @@ def test_semantic_mutation_invalid_json_response(
     rng = force_random(monkeypatch, random_value=0.5)
     monkeypatch.setattr(
         "opik_optimizer.algorithms.evolutionary_optimizer.helpers.get_task_description_for_llm",
-        lambda initial_prompt: "Summarize task",
+        lambda initial_prompt, optimize_tools=False: "Summarize task",
     )
 
     captured: dict[str, object] = {}

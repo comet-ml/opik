@@ -13,6 +13,7 @@ from ..constants import resolve_project_name, tool_call_max_iterations
 from ..utils.opik_env import set_project_name_env
 from ..utils import throttle as _throttle
 from ..utils.logging import debug_tool_call
+from ..utils.toolcalling.normalize.tool_factory import resolve_toolcalling_tools
 from ..utils import prompt_tracing
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -243,17 +244,30 @@ class OptimizableAgent(ABC):
         prompt = self.prompt
         if prompt is None:
             raise ValueError("prompt must be set before tool-enabled invocation")
+        if prompt.tools is None:
+            raise ValueError("prompt.tools must be set before tool-enabled invocation")
+        # Normalize MCP tool entries into function-calling tools + callables.
+        tools_for_call, function_map = resolve_toolcalling_tools(
+            prompt.tools, prompt.function_map
+        )
         final_response = "I was unable to find the desired information."
         count = 0
         max_iterations = tool_call_max_iterations()
         while count < max_iterations:
             count += 1
-            response = self._llm_complete(self.model, messages, prompt.tools, seed)
+            response = self._llm_complete(self.model, messages, tools_for_call, seed)
             self._increment_llm_counter()
             msg = response.choices[0].message
-            messages.append(msg.to_dict())
+            # Tool-call turns often arrive with content=None and only tool_calls;
+            # normalize to empty string so downstream Pydantic schemas don't warn.
+            if getattr(msg, "content", None) is None:
+                msg.content = ""
+            msg_dict = msg.to_dict()
+            if msg_dict.get("content") is None:
+                msg_dict["content"] = ""
+            messages.append(msg_dict)
             if msg.tool_calls:
-                self._handle_tool_calls(msg["tool_calls"], messages)
+                self._handle_tool_calls(msg["tool_calls"], messages, function_map)
             else:
                 final_response = msg["content"]
                 break
@@ -272,14 +286,21 @@ class OptimizableAgent(ABC):
         self,
         tool_calls: list[dict[str, Any]],
         messages: list[dict[str, str]],
+        function_map: dict[str, Any] | None = None,
     ) -> None:
         prompt = self.prompt
         if prompt is None:
             raise ValueError("prompt must be set before handling tool calls")
+        if prompt.tools is None:
+            raise ValueError("prompt.tools must be set before handling tool calls")
+        if function_map is None:
+            _, function_map = resolve_toolcalling_tools(
+                prompt.tools, prompt.function_map
+            )
         for tool_call in tool_calls:
             tool_name = tool_call["function"]["name"]
             arguments = json.loads(tool_call["function"]["arguments"])
-            tool_func = prompt.function_map.get(tool_name)
+            tool_func = function_map.get(tool_name)
             tool_result = (
                 tool_func(**arguments) if tool_func is not None else "Unknown tool"
             )

@@ -41,6 +41,7 @@ from . import types
 from . import prompts as few_shot_prompts
 from .ops.columnarsearch_ops import ColumnarSearchSpace, build_columnar_search_space
 from collections.abc import Callable
+from ...utils.toolcalling.ops import toolcalling as toolcalling_utils
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -48,6 +49,9 @@ logger = logging.getLogger(__name__)
 
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
+    supports_tool_optimization: bool = False
+    supports_prompt_optimization: bool = True
+    supports_multimodal: bool = True
     """
     Few-Shot Bayesian Optimizer that adds few-shot examples to prompts using Bayesian optimization.
 
@@ -314,7 +318,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         # During this step we update the system prompt to include few-shot examples.
         user_message = {
             "prompts": [
-                {"name": name, "messages": value.get_messages()}
+                {
+                    "name": name,
+                    "messages": value.get_messages(),
+                    # pass-tru for tools in final output for evaluation if included
+                    "tools": toolcalling_utils.build_tool_blocks_from_prompt(value),
+                }
                 for name, value in prompts.items()
             ],
             "examples": few_shot_examples,

@@ -121,3 +121,8 @@ def get_rate_limiter_for_current_opik_installation() -> RateLimiter:
     opik_config = opik.config.OpikConfig()
     max_calls_per_second = 10 if opik_config.is_cloud_installation else 50
     return RateLimiter(max_calls_per_second=max_calls_per_second)
+
+
+def get_toolcalling_rate_limiter() -> RateLimiter:
+    """Get a rate limiter for toolcalling operations."""
+    return get_rate_limiter_for_current_opik_installation()

@@ -8,12 +8,12 @@ ALLOWED_PROMPT_ROLES = {"system", "user", "assistant"}
 
 
 def normalize_optimizable_roles(
-    optimize_prompt: bool | str | Iterable[str] | None,
+    optimize_prompts: bool | str | Iterable[str] | None,
 ) -> set[str]:
-    """Normalize optimize_prompt into a set of allowed roles.
+    """Normalize optimize_prompts into a set of allowed roles.
 
     Args:
-        optimize_prompt:
+        optimize_prompts:
             - True: allow all roles
             - False: allow none
             - None: default to system-only
@@ -23,24 +23,24 @@ def normalize_optimizable_roles(
     Returns:
         Set of allowed roles (possibly empty).
     """
-    if optimize_prompt is None:
+    if optimize_prompts is None:
         return {"system"}
-    if isinstance(optimize_prompt, bool):
-        return set(ALLOWED_PROMPT_ROLES) if optimize_prompt else set()
-    if isinstance(optimize_prompt, str):
-        role = optimize_prompt.strip().lower()
+    if isinstance(optimize_prompts, bool):
+        return set(ALLOWED_PROMPT_ROLES) if optimize_prompts else set()
+    if isinstance(optimize_prompts, str):
+        role = optimize_prompts.strip().lower()
         if role == "all":
             return set(ALLOWED_PROMPT_ROLES)
         if role not in ALLOWED_PROMPT_ROLES:
             raise ValueError(
-                f"optimize_prompt must be one of {sorted(ALLOWED_PROMPT_ROLES)}"
+                f"optimize_prompts must be one of {sorted(ALLOWED_PROMPT_ROLES)}"
             )
         return {role}
-    roles = {str(role).strip().lower() for role in optimize_prompt}
+    roles = {str(role).strip().lower() for role in optimize_prompts}
     unknown = [role for role in roles if role not in ALLOWED_PROMPT_ROLES]
     if unknown:
         raise ValueError(
-            f"optimize_prompt roles must be from {sorted(ALLOWED_PROMPT_ROLES)}"
+            f"optimize_prompts roles must be from {sorted(ALLOWED_PROMPT_ROLES)}"
         )
     return roles
 

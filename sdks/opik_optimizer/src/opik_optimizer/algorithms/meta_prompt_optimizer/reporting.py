@@ -13,6 +13,7 @@ from ...utils.display import (
     display_messages,
     display_prefixed_block,
     display_text_block,
+    display_tools_panel,
 )
 from ...utils.display import format as display_format
 from ...utils.logging import compact_debug_text, debug_log
@@ -274,6 +275,17 @@ def display_prompt_candidate_scoring_report(
                 for name, prompt in prompts.items():
                     display_text_block(f"│         {name}:")
                     display_messages(prompt.get_messages(), "│         ")
+                    if getattr(prompt, "tools", None):
+                        tool_use_allowed = True
+                        if isinstance(prompt.model_kwargs, dict):
+                            tool_use_allowed = bool(
+                                prompt.model_kwargs.get("allow_tool_use", True)
+                            )
+                        display_tools_panel(
+                            prompt.tools,
+                            prefix="│         ",
+                            tool_use_allowed=tool_use_allowed,
+                        )
                     display_text_block("│")
 
         def set_final_score(self, best_score: float, score: float) -> None:

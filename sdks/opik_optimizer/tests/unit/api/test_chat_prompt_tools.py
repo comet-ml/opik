@@ -45,3 +45,41 @@ class TestChatPromptWithTools:
         prompt = ChatPrompt(system="Test", function_map={"my_tool": my_tracked_tool})
 
         assert prompt.function_map["my_tool"] is my_tracked_tool
+
+    def test_accepts_mcp_stdio_tool(self) -> None:
+        prompt = ChatPrompt(
+            system="System",
+            tools=[
+                {
+                    "mcp": {
+                        "name": "context7_docs",
+                        "server": {
+                            "type": "stdio",
+                            "command": "npx",
+                            "args": [],
+                            "env": {},
+                        },
+                        "tool": {"name": "get-library-docs"},
+                    }
+                }
+            ],
+        )
+        assert prompt.tools is not None
+
+    def test_accepts_mcp_remote_tool(self) -> None:
+        prompt = ChatPrompt(
+            system="System",
+            tools=[
+                {
+                    "mcp": {
+                        "name": "remote_docs",
+                        "server": {
+                            "type": "remote",
+                            "url": "https://mcp.example.com",
+                        },
+                        "tool": {"name": "search-docs"},
+                    }
+                }
+            ],
+        )
+        assert prompt.tools is not None

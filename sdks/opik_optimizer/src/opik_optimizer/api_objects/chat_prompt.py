@@ -338,7 +338,7 @@ class ChatPrompt:
                 model_parameters = copy.deepcopy(self.model_kwargs)
             except Exception:
                 model_parameters = dict(self.model_kwargs)
-        return ChatPrompt(
+        cloned = ChatPrompt(
             name=self.name,
             system=self.system,
             user=self.user,
@@ -348,6 +348,9 @@ class ChatPrompt:
             model=self.model,
             model_parameters=model_parameters,
         )
+        if hasattr(self, "tools_original"):
+            setattr(cloned, "tools_original", copy.deepcopy(self.tools_original))
+        return cloned
 
     def set_messages(self, messages: list[dict[str, Any]]) -> None:
         self.system = None

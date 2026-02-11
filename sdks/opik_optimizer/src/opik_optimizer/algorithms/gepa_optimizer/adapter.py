@@ -16,6 +16,9 @@ from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
 from ...core import runtime
 from ...core.state import prepare_experiment_config
+from ...utils.toolcalling.core import components as tool_components
+from ...utils.toolcalling.core import metadata as tool_metadata
+from ...utils.toolcalling.core import segment_updates
 from ...utils.candidate_selection import select_candidate
 from .types import OpikDataInst
 
@@ -159,18 +162,22 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         dataset_item: dict[str, Any],
     ) -> list[str]:
         has_tools = any(bool(p.tools) for p in prompt_variants.values())
-        allow_tool_use = self._allow_tool_use and has_tools
+        allow_tool_use = bool(getattr(self._context, "allow_tool_use", False))
+        allow_tool_use = (self._allow_tool_use or allow_tool_use) and has_tools
 
         candidates: list[str] = []
         if hasattr(self._agent, "invoke_agent_candidates"):
+            invoke_candidates = self._agent.invoke_agent_candidates
             try:
-                raw_candidates = self._agent.invoke_agent_candidates(
+                raw_candidates = invoke_candidates(
                     prompts=prompt_variants,
                     dataset_item=dataset_item,
                     allow_tool_use=allow_tool_use,
                 )
-            except TypeError:
-                raw_candidates = self._agent.invoke_agent_candidates(
+            except TypeError as exc:
+                if "allow_tool_use" not in str(exc):
+                    raise
+                raw_candidates = invoke_candidates(
                     prompts=prompt_variants,
                     dataset_item=dataset_item,
                 )
@@ -323,6 +330,14 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
             new_prompt = prompt_obj.copy()
             new_prompt.set_messages(new_messages)
+            new_prompt = segment_updates.apply_tool_updates_from_candidate(
+                candidate=candidate,
+                prompt=new_prompt,
+                tool_component_prefix=f"{prompt_name}{tool_components.TOOL_COMPONENT_PREFIX}",
+                tool_param_component_prefix=(
+                    f"{prompt_name}{tool_components.TOOL_PARAM_COMPONENT_PREFIX}"
+                ),
+            )
             rebuilt[prompt_name] = new_prompt
 
         if dropped_components:
@@ -516,13 +531,21 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             components_to_update = ["system_prompt"]
 
         trajectories = eval_batch.trajectories or []
+        tool_metadata_by_component: dict[str, str] = {}
+        if self._context.extra_params.get("optimize_tools"):
+            tool_metadata_by_component = tool_metadata.build_tool_metadata_by_component(
+                base_prompts=self._base_prompts
+            )
 
-        def _records() -> Iterable[dict[str, Any]]:
+        def _records(component_key: str) -> Iterable[dict[str, Any]]:
+            component_tool_metadata = tool_metadata_by_component.get(component_key)
             for traj in trajectories:
                 dataset_item = traj.get("input", {})
                 output_text = traj.get("output", "")
                 score = traj.get("score", 0.0)
                 feedback = f"Observed score={score:.4f}. Expected answer: {dataset_item.get('answer', '')}"
+                if component_tool_metadata:
+                    feedback += f" Tool metadata: {component_tool_metadata}"
                 yield {
                     "Inputs": {
                         "text": dataset_item.get("input")
@@ -533,8 +556,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                     "Feedback": feedback,
                 }
 
-        reflective_records = list(_records())
-        if not reflective_records:
-            logger.debug("No trajectories captured for candidate; returning empty reflective dataset")
+        if not trajectories:
+            logger.debug(
+                "No trajectories captured for candidate; returning empty reflective dataset"
+            )
+            return {component: [] for component in components_to_update}
 
-        return {component: reflective_records for component in components_to_update}
+        return {
+            component: list(_records(component)) for component in components_to_update
+        }

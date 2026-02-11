@@ -83,6 +83,7 @@ result.display()
 - GEPA’s seed is forwarded directly to the underlying `gepa.optimize` call, but any non-determinism in your prompt (tool calls, non-zero temperature, external APIs) will still introduce variance. To test seeding in isolation, disable tools or substitute cached responses.
 - GEPA emits its own baseline evaluation inside the optimization loop. You’ll see one baseline score from Opik’s wrapper and another from GEPA before the first trial; this is expected and does not double-charge the metric budget.
 - Reflection only triggers after GEPA accepts at least `reflection_minibatch_size` unique prompts. If the minibatch is larger than the trial budget, the optimizer logs a warning and skips reflection.
+- GEPA supports **tool use during evaluation** (`allow_tool_use=True`) but does **not** support `optimize_tools=True` yet. Tool-description optimization requests are currently degraded/blocked until the adapter supports it.
 
 ### GEPA scores vs. Opik scores
 
