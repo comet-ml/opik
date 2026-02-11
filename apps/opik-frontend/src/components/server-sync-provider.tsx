@@ -7,6 +7,8 @@ import {
   useMemo,
   useState,
 } from "react";
+import noop from "lodash/noop";
+
 import useWorkspaceConfig from "@/api/workspaces/useWorkspaceConfig";
 import useAppStore from "@/store/AppStore";
 import { WorkspaceConfig } from "@/types/workspaces";
@@ -23,8 +25,6 @@ type ServerSyncState = {
   previewColor: Record<string, string>;
   setPreviewColor: Dispatch<SetStateAction<Record<string, string>>>;
 };
-
-const noop = () => {};
 
 const initialState: ServerSyncState = {
   config: null,
