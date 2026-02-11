@@ -389,3 +389,80 @@ def test_gepa_adapter_falls_back_for_legacy_agent_signature() -> None:
 
     result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
     assert result == ["legacy"]
+
+
+def test_gepa_optimizer_passes_epoch_shuffled_batch_sampler(monkeypatch) -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:2], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 0.5
+
+    metric_fn.__name__ = "metric_fn"
+
+    context = make_optimization_context(prompt, dataset=dataset, metric=metric_fn)
+    context.max_trials = 2
+    context.baseline_score = 0.1
+
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    optimizer.pre_optimize(context)
+
+    captured: dict[str, Any] = {}
+
+    def _fake_gepa_optimize(**kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        mock_gepa_result = MagicMock()
+        mock_gepa_result.candidates = []
+        mock_gepa_result.val_aggregate_scores = []
+        mock_gepa_result.best_idx = 0
+        mock_gepa_result.total_metric_calls = 1
+        mock_gepa_result.parents = []
+        return mock_gepa_result
+
+    monkeypatch.setattr("gepa.optimize", _fake_gepa_optimize)
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.gepa_optimizer.ops.scoring_ops.rescore_candidates",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.gepa_optimizer.ops.result_ops.build_algorithm_result",
+        lambda **kwargs: MagicMock(),
+    )
+
+    optimizer.run_optimization(context)
+
+    assert captured.get("batch_sampler") == "epoch_shuffled"
+
+
+def test_gepa_optimizer_rejects_unsupported_batch_sampler() -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:2], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 0.5
+
+    metric_fn.__name__ = "metric_fn"
+
+    context = make_optimization_context(
+        prompt,
+        dataset=dataset,
+        metric=metric_fn,
+    )
+    context.extra_params["batch_sampler"] = "head"
+    context.max_trials = 2
+    context.baseline_score = 0.1
+
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    optimizer.pre_optimize(context)
+
+    with pytest.raises(
+        ValueError,
+        match="supports only batch_sampler='epoch_shuffled'",
+    ):
+        optimizer.run_optimization(context)

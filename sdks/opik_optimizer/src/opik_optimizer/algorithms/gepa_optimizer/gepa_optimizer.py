@@ -193,6 +193,17 @@ class GepaOptimizer(BaseOptimizer):
             if context.extra_params
             else None
         )
+        requested_batch_sampler = (
+            context.extra_params.get("batch_sampler") if context.extra_params else None
+        )
+        if (
+            requested_batch_sampler is not None
+            and requested_batch_sampler != "epoch_shuffled"
+        ):
+            raise ValueError(
+                "GepaOptimizer currently supports only batch_sampler='epoch_shuffled' for "
+                "native GEPA integration."
+            )
         if optimizable_roles is not None and "user" in optimizable_roles:
             logger.warning(
                 "Opik Optimizer with GEPA currently uses a non-native adapter; optimizing user messages may drop candidate edits when constraints apply."
@@ -310,6 +321,10 @@ class GepaOptimizer(BaseOptimizer):
                 "seed_candidate": seed_candidate,
                 "trainset": train_insts,
                 "valset": val_insts,
+                # Keep GEPA as the owner of minibatch ordering in this integration.
+                # FIXME(opik-gepa-sampling): map custom Opik sampling plans once the
+                # cross-framework sampler contract is stable.
+                "batch_sampler": "epoch_shuffled",
                 "adapter": adapter,
                 "task_lm": None,
                 "reflection_lm": self.model,
