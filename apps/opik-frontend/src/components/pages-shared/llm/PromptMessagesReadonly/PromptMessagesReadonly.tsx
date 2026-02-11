@@ -84,7 +84,10 @@ const getTextAndMedia = (
 export const PromptMessageCard: React.FC<PromptMessageCardProps> = ({
   message,
 }) => {
-  const { text, images, videos, audios } = getTextAndMedia(message.content);
+  const { text, images, videos, audios } = React.useMemo(
+    () => getTextAndMedia(message.content),
+    [message.content],
+  );
   const hasMedia = images.length > 0 || videos.length > 0 || audios.length > 0;
 
   return (
