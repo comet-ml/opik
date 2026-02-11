@@ -86,7 +86,7 @@ def resolve_prompt_tools(
         Tuple of (normalized prompt(s), tool_names for optimization or None).
     """
     if isinstance(prompt_or_prompts, dict):
-        if optimize_tools:
+        if optimize_tools is not None:
             raise ValueError(
                 "Tool description optimization only supports single prompts."
             )

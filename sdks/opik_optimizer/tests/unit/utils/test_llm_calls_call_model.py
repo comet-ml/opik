@@ -64,14 +64,11 @@ class TestCallModelSync:
         response_format = captured_kwargs.get("response_format", {})
         schema = response_format.get("json_schema", {}).get("schema", {})
         assert schema.get("additionalProperties") is False
-        assert schema.get("required") == ["inner", "note"]
+        assert schema.get("required") == ["inner"]
         assert schema.get("$defs", {}).get("Inner", {}).get("additionalProperties") is (
             False
         )
-        assert schema.get("$defs", {}).get("Inner", {}).get("required") == [
-            "value",
-            "detail",
-        ]
+        assert schema.get("$defs", {}).get("Inner", {}).get("required") == ["value"]
 
     def test_call_model_increments_counter(self) -> None:
         mock_response = make_mock_response("response")
@@ -164,14 +161,11 @@ class TestCallModelAsync:
         response_format = captured_kwargs.get("response_format", {})
         schema = response_format.get("json_schema", {}).get("schema", {})
         assert schema.get("additionalProperties") is False
-        assert schema.get("required") == ["inner", "note"]
+        assert schema.get("required") == ["inner"]
         assert schema.get("$defs", {}).get("Inner", {}).get("additionalProperties") is (
             False
         )
-        assert schema.get("$defs", {}).get("Inner", {}).get("required") == [
-            "value",
-            "detail",
-        ]
+        assert schema.get("$defs", {}).get("Inner", {}).get("required") == ["value"]
 
     @pytest.mark.asyncio
     async def test_call_model_async_increments_counter(self) -> None:

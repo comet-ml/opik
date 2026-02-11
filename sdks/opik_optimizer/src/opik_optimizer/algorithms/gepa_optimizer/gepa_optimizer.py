@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 class GepaOptimizer(BaseOptimizer):
-    supports_tool_optimization: bool = True
+    # FIXME(opik_optimizer/#gepa-tool-optimization): Re-enable when GEPA adapter
+    # can mutate and score tool descriptions end-to-end.
+    supports_tool_optimization: bool = False
     supports_prompt_optimization: bool = True
     supports_multimodal: bool = True
     """

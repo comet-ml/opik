@@ -428,15 +428,16 @@ class BaseOptimizer(ABC):
             supports_tool_optimization=self.supports_tool_optimization,
             warn_unsupported=True,
         )
-        if optimize_tools and not is_single_prompt_optimization:
+        optimize_tools_provided = optimize_tools is not None
+        if optimize_tools_provided and not is_single_prompt_optimization:
             raise ValueError(
                 "Tool description optimization only supports single prompts."
             )
-        if optimize_tools:
+        if optimize_tools_provided:
             extra_params["optimize_tools"] = optimize_tools
 
         tool_names: list[str] | None = None
-        if optimize_tools and is_single_prompt_optimization:
+        if optimize_tools_provided and is_single_prompt_optimization:
             single_prompt = next(iter(optimizable_prompts.values()))
             resolved_prompt, tool_names = self._resolve_toolcalling(
                 single_prompt, optimize_tools=optimize_tools
