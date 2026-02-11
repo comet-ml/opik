@@ -839,7 +839,7 @@ def get_fast_api_app(
         root_agent = await get_agent(
             opik_client=opik_client,
             trace_id=trace_id,
-            user_context=current_user,
+            current_user=current_user,
             opik_metadata=None,
         )
         runner = get_runner(agent=root_agent, session_service=session_service)

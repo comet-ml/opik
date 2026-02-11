@@ -257,7 +257,7 @@ def get_runner(agent: Agent, session_service: BaseSessionService) -> Runner:
 async def get_agent(
     opik_client: OpikBackendClient,
     trace_id: str,
-    user_context: UserContext,
+    current_user: UserContext,
     opik_metadata: Optional[dict[str, Any]] = None,
 ) -> Agent:
     """Build an ADK Agent configured with trace-analysis tools and a pre-loaded system prompt.
@@ -269,7 +269,7 @@ async def get_agent(
     Args:
         opik_client: Client for fetching trace/span data from Opik backend
         trace_id: The trace ID to analyze
-        user_context: User authentication context (session token + workspace) to forward to AI proxy
+        current_user: User authentication context (session token + workspace) to forward to AI proxy
         opik_metadata: Optional metadata for internal Opik tracking
     """
     from .config import settings
@@ -315,10 +315,10 @@ async def get_agent(
     # Forward user's auth credentials to the Opik AI proxy (same pattern as Playground)
     # The proxy will authenticate the user and use their configured provider API key
     extra_headers = {}
-    if user_context.workspace_name:
-        extra_headers["Comet-Workspace"] = user_context.workspace_name
-    if user_context.session_token:
-        extra_headers["Cookie"] = f"sessionToken={user_context.session_token}"
+    if current_user.workspace_name:
+        extra_headers["Comet-Workspace"] = current_user.workspace_name
+    if current_user.session_token:
+        extra_headers["Cookie"] = f"sessionToken={current_user.session_token}"
 
     # Point LiteLLM at the Opik backend's ChatCompletions proxy at /v1/private/chat/completions
     # LiteLLM has two transport paths:
@@ -329,8 +329,8 @@ async def get_agent(
     proxy_base_url = f"{settings.agent_opik_url}/v1/private"
     logger.info(
         f"Configuring LiteLLM with proxy: model={model_name}, "
-        f"api_base={proxy_base_url}, workspace={user_context.workspace_name}, "
-        f"has_session_token={user_context.session_token is not None}"
+        f"api_base={proxy_base_url}, workspace={current_user.workspace_name}, "
+        f"has_session_token={current_user.session_token is not None}"
     )
     
     import litellm
