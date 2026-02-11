@@ -12,5 +12,6 @@ TEST_RUNS_CONTENTS: Dict[str, "test_run_content.TestRunContent"] = {}
 
 
 def clear() -> None:
+    LLM_UNIT_TEST_RUNS.clear()
     TEST_RUNS_CONTENTS.clear()
     TEST_RUNS_TO_TRACE_DATA.clear()

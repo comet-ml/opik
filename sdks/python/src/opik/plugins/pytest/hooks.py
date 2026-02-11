@@ -14,6 +14,11 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
+def pytest_sessionstart(session: "pytest.Session") -> None:
+    # Ensure no in-memory data leaks between local repeated runs in the same process.
+    test_runs_storage.clear()
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item: "pytest.Item") -> Generator:
     """
@@ -41,36 +46,47 @@ def pytest_runtest_makereport(item: "pytest.Item") -> Generator:
     logging_level=logging.ERROR,
 )
 def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
-    llm_test_items: List["pytest.Item"] = [
-        test_item
-        for test_item in session.items
-        if test_item.nodeid in test_runs_storage.LLM_UNIT_TEST_RUNS
-    ]
-    if len(llm_test_items) == 0:
-        return
-
     try:
+        llm_test_items: List["pytest.Item"] = [
+            test_item
+            for test_item in session.items
+            if test_item.nodeid in test_runs_storage.LLM_UNIT_TEST_RUNS
+        ]
+        if len(llm_test_items) == 0:
+            return
+
         traces_feedback_scores: List[BatchFeedbackScoreDict] = []
+        valid_items: List["pytest.Item"] = []
 
         for item in llm_test_items:
-            report: "pytest.TestReport" = item.report
-            trace_id = test_runs_storage.TEST_RUNS_TO_TRACE_DATA[item.nodeid].id
+            report = getattr(item, "report", None)
+            trace_data = test_runs_storage.TEST_RUNS_TO_TRACE_DATA.get(item.nodeid)
+
+            if report is None or trace_data is None:
+                continue
+
+            valid_items.append(item)
             traces_feedback_scores.append(
                 BatchFeedbackScoreDict(
-                    id=trace_id, name="Passed", value=float(report.passed)
+                    id=trace_data.id, name="Passed", value=float(report.passed)
                 )
             )
+
+        if len(valid_items) == 0:
+            return
 
         client = opik_client.get_client_cached()
         client.log_traces_feedback_scores(traces_feedback_scores)
 
-        experiment_runner.run(client=client, test_items=llm_test_items)
+        experiment_runner.run(client=client, test_items=valid_items)
         client.flush()
     except Exception:
         LOGGER.error(
             "Unexpected exception occured while trying to log LLM unit tests experiment results",
             exc_info=True,
         )
+    finally:
+        test_runs_storage.clear()
 
 
 @_logging.convert_exception_to_log_message(
