@@ -939,10 +939,16 @@ class WorkspacesResourceTest {
                                     " at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 39] (through reference chain: com.comet.opik.api.WorkspaceConfiguration[\"timeout_to_mark_thread_as_inactive\"])"));
         }
 
-        @Test
-        @DisplayName("when upserting workspace configuration with color map, then return success")
-        void upsertWorkspaceConfiguration__whenColorMap__thenReturnSuccess() {
-            var colorMap = Map.of("accuracy", "#FF0000", "hallucination", "#00FF00");
+        static Stream<Arguments> colorMapProvider() {
+            return Stream.of(
+                    Arguments.of(Map.of("accuracy", "#FF0000", "hallucination", "#00FF00")),
+                    Arguments.of((Map<String, String>) null));
+        }
+
+        @ParameterizedTest
+        @MethodSource("colorMapProvider")
+        @DisplayName("when upserting workspace configuration with various color map values, then return success")
+        void upsertWorkspaceConfiguration__whenColorMap__thenReturnSuccess(Map<String, String> colorMap) {
             var configuration = WorkspaceConfiguration.builder()
                     .colorMap(colorMap)
                     .build();
@@ -951,19 +957,6 @@ class WorkspacesResourceTest {
 
             var result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
             assertThat(result.colorMap()).isEqualTo(colorMap);
-        }
-
-        @Test
-        @DisplayName("when upserting workspace configuration with null color map, then return success")
-        void upsertWorkspaceConfiguration__whenNullColorMap__thenReturnSuccess() {
-            var configuration = WorkspaceConfiguration.builder()
-                    .colorMap(null)
-                    .build();
-
-            workspaceResourceClient.upsertWorkspaceConfiguration(configuration, API_KEY, WORKSPACE_NAME);
-
-            var result = workspaceResourceClient.getWorkspaceConfiguration(API_KEY, WORKSPACE_NAME);
-            assertThat(result.colorMap()).isNull();
         }
 
         @Test

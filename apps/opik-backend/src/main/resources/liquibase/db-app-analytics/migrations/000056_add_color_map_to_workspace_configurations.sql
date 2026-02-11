@@ -6,3 +6,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.workspace_configurations ON CLUSTER '{
     ADD COLUMN IF NOT EXISTS color_map String DEFAULT '';
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.workspace_configurations ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS color_map;
+
