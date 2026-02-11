@@ -62,8 +62,8 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
                             .id(id)
                             .datasetId(datasetId)
                             .name(create.name())
-                            .metricType(create.metricType())
-                            .metricConfig(create.metricConfig())
+                            .type(create.type())
+                            .config(create.config())
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();

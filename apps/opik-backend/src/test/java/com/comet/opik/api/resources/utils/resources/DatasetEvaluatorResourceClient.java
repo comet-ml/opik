@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetEvaluator;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorCreate;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorPage;
+import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.client.Entity;
@@ -107,18 +108,18 @@ public class DatasetEvaluatorResourceClient {
 
     public DatasetEvaluatorBatchRequest createBatchRequest(int count) {
         var evaluators = java.util.stream.IntStream.range(0, count)
-                .mapToObj(i -> createEvaluator("evaluator-" + i, "metric_type_" + i))
+                .mapToObj(i -> createEvaluator("evaluator-" + i, EvaluatorType.LLM_JUDGE))
                 .toList();
         return DatasetEvaluatorBatchRequest.builder()
                 .evaluators(evaluators)
                 .build();
     }
 
-    public DatasetEvaluatorCreate createEvaluator(String name, String metricType) {
+    public DatasetEvaluatorCreate createEvaluator(String name, EvaluatorType type) {
         return DatasetEvaluatorCreate.builder()
                 .name(name)
-                .metricType(metricType)
-                .metricConfig(createValidMetricConfig())
+                .type(type)
+                .config(createValidMetricConfig())
                 .build();
     }
 

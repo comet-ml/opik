@@ -4,6 +4,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetEvaluator;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorBatchRequest;
 import com.comet.opik.api.DatasetEvaluator.DatasetEvaluatorCreate;
+import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -149,8 +150,8 @@ class DatasetEvaluatorsResourceTest {
 
             var evaluatorCreate = factory.manufacturePojo(DatasetEvaluatorCreate.class).toBuilder()
                     .name("hallucination-check")
-                    .metricType("hallucination")
-                    .metricConfig(datasetEvaluatorClient.createValidMetricConfig())
+                    .type(EvaluatorType.LLM_JUDGE)
+                    .config(datasetEvaluatorClient.createValidMetricConfig())
                     .build();
 
             var request = DatasetEvaluatorBatchRequest.builder()
@@ -162,9 +163,9 @@ class DatasetEvaluatorsResourceTest {
             assertThat(created).hasSize(1);
             var evaluator = created.get(0);
             assertThat(evaluator.name()).isEqualTo("hallucination-check");
-            assertThat(evaluator.metricType()).isEqualTo("hallucination");
-            assertThat(evaluator.metricConfig()).isNotNull();
-            assertThat(evaluator.metricConfig().get("threshold").asDouble()).isEqualTo(0.8);
+            assertThat(evaluator.type()).isEqualTo(EvaluatorType.LLM_JUDGE);
+            assertThat(evaluator.config()).isNotNull();
+            assertThat(evaluator.config().get("threshold").asDouble()).isEqualTo(0.8);
         }
     }
 

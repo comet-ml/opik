@@ -24,8 +24,8 @@ public record DatasetEvaluator(
                 View.Public.class, View.Write.class}) UUID id,
         @JsonView({View.Public.class, View.Write.class}) @NotNull UUID datasetId,
         @JsonView({View.Public.class, View.Write.class}) @NotBlank @Size(max = 255) String name,
-        @JsonView({View.Public.class, View.Write.class}) @NotBlank @Size(max = 100) String metricType,
-        @JsonView({View.Public.class, View.Write.class}) @NotNull JsonNode metricConfig,
+        @JsonView({View.Public.class, View.Write.class}) @NotNull EvaluatorType type,
+        @JsonView({View.Public.class, View.Write.class}) @NotNull JsonNode config,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
@@ -66,7 +66,7 @@ public record DatasetEvaluator(
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record DatasetEvaluatorCreate(
             @NotBlank @Size(max = 255) String name,
-            @NotBlank @Size(max = 100) String metricType,
-            @NotNull JsonNode metricConfig) {
+            @NotNull EvaluatorType type,
+            @NotNull JsonNode config) {
     }
 }
