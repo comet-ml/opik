@@ -99,7 +99,7 @@ def _normalize_schema_for_openai_strict(schema: Any) -> Any:
             if "additionalProperties" not in normalized:
                 normalized["additionalProperties"] = False
             properties = normalized.get("properties")
-            if isinstance(properties, dict) and "required" not in normalized:
+            if isinstance(properties, dict):
                 normalized["required"] = list(properties.keys())
         return normalized
     if isinstance(schema, list):
