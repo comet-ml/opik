@@ -1,12 +1,14 @@
 import asyncio
 import datetime
 import inspect
+import json
 import types
 
 from opik.config import OpikConfig
 from opik.plugins.pytest import decorator, test_runs_storage
 from opik.plugins.pytest import experiment_runner
 from opik.plugins.pytest import hooks
+from opik.simulation.episode import EpisodeResult, EpisodeAssertion
 
 
 def test_get_test_nodeid__fallback_when_env_missing(monkeypatch):
@@ -84,12 +86,14 @@ def test_test_runs_storage_clear__clears_all_storages():
     test_runs_storage.LLM_UNIT_TEST_RUNS.add("nodeid")
     test_runs_storage.TEST_RUNS_TO_TRACE_DATA["nodeid"] = object()
     test_runs_storage.TEST_RUNS_CONTENTS["nodeid"] = object()
+    test_runs_storage.TEST_RUNS_EPISODES["nodeid"] = EpisodeResult(scenario_id="s1")
 
     test_runs_storage.clear()
 
     assert test_runs_storage.LLM_UNIT_TEST_RUNS == set()
     assert test_runs_storage.TEST_RUNS_TO_TRACE_DATA == {}
     assert test_runs_storage.TEST_RUNS_CONTENTS == {}
+    assert test_runs_storage.TEST_RUNS_EPISODES == {}
 
 
 def test_pytest_plugin_config_defaults():
@@ -99,6 +103,8 @@ def test_pytest_plugin_config_defaults():
     assert config.pytest_experiment_dataset_name == "tests"
     assert config.pytest_experiment_name_prefix == "Test-Suite"
     assert config.pytest_passed_score_name == "Passed"
+    assert config.pytest_episode_artifact_enabled is True
+    assert config.pytest_episode_artifact_path == ".opik/pytest_episode_report.json"
 
 
 def test_experiment_runner__uses_configurable_dataset_and_prefix(monkeypatch):
@@ -172,6 +178,7 @@ def test_pytest_sessionfinish__uses_plugin_config(monkeypatch):
             pytest_passed_score_name="Result",
             pytest_experiment_dataset_name="pytest-ds",
             pytest_experiment_name_prefix="Pytest-Run",
+            pytest_episode_artifact_enabled=False,
         ),
     )
 
@@ -207,3 +214,134 @@ def test_pytest_sessionfinish__uses_plugin_config(monkeypatch):
         "experiment_name_prefix": "Pytest-Run",
         "test_items_count": 1,
     }
+
+
+def test_llm_episode__returns_original_function_when_disabled(monkeypatch):
+    monkeypatch.setattr(
+        decorator.config,
+        "get_from_user_inputs",
+        lambda: types.SimpleNamespace(pytest_experiment_enabled=False),
+    )
+
+    def f():
+        return "ok"
+
+    wrapped = decorator.llm_episode()(f)
+    assert wrapped is f
+
+
+def test_llm_episode__stores_episode_result(monkeypatch):
+    monkeypatch.setattr(
+        decorator.config,
+        "get_from_user_inputs",
+        lambda: types.SimpleNamespace(pytest_experiment_enabled=True),
+    )
+    monkeypatch.setattr(decorator.opik, "track", lambda **kwargs: (lambda fn: fn))
+    monkeypatch.setattr(
+        decorator.opik_context,
+        "get_current_trace_data",
+        lambda: types.SimpleNamespace(id="trace-1"),
+    )
+    monkeypatch.setattr(
+        decorator.opik_context,
+        "get_current_span_data",
+        lambda: types.SimpleNamespace(id="span-1"),
+    )
+    monkeypatch.setattr(
+        decorator.opik_context,
+        "update_current_trace",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        decorator.opik_context,
+        "update_current_span",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setenv(
+        "PYTEST_CURRENT_TEST", "tests/test_ep.py::test_episode[param] (call)"
+    )
+
+    @decorator.llm_episode()
+    def test_episode(scenario_id):
+        return {
+            "scenario_id": scenario_id,
+            "assertions": [{"name": "schema", "passed": True}],
+        }
+
+    nodeid = "tests/test_ep.py::test_episode[param]"
+    try:
+        test_episode("scenario-123")
+        episode = test_runs_storage.TEST_RUNS_EPISODES[nodeid]
+    finally:
+        test_runs_storage.clear()
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    assert episode.scenario_id == "scenario-123"
+    assert episode.assertions[0].name == "schema"
+    assert episode.assertions[0].passed is True
+
+
+def test_pytest_sessionfinish__writes_episode_artifact(monkeypatch, tmp_path):
+    nodeid = "tests/test_file.py::test_case"
+    item = types.SimpleNamespace(
+        nodeid=nodeid, report=types.SimpleNamespace(passed=True)
+    )
+    session = types.SimpleNamespace(items=[item])
+
+    test_runs_storage.LLM_UNIT_TEST_RUNS.add(nodeid)
+    test_runs_storage.TEST_RUNS_TO_TRACE_DATA[nodeid] = types.SimpleNamespace(
+        id="trace-episode-123"
+    )
+    test_runs_storage.TEST_RUNS_EPISODES[nodeid] = EpisodeResult(
+        scenario_id="refund_flow_v1",
+        assertions=[EpisodeAssertion(name="policy", passed=True)],
+    )
+
+    artifact_path = tmp_path / "episode-report.json"
+    monkeypatch.setattr(
+        hooks.config,
+        "get_from_user_inputs",
+        lambda: types.SimpleNamespace(
+            pytest_passed_score_name="Result",
+            pytest_experiment_dataset_name="pytest-ds",
+            pytest_experiment_name_prefix="Pytest-Run",
+            pytest_episode_artifact_enabled=True,
+            pytest_episode_artifact_path=str(artifact_path),
+        ),
+    )
+
+    class FakeClient:
+        def log_traces_feedback_scores(self, scores):
+            return None
+
+        def flush(self):
+            return None
+
+    monkeypatch.setattr(hooks.opik_client, "get_client_cached", lambda: FakeClient())
+    monkeypatch.setattr(hooks.experiment_runner, "run", lambda **kwargs: None)
+
+    hooks.pytest_sessionfinish(session=session, exitstatus=0)
+
+    assert artifact_path.exists()
+    payload = json.loads(artifact_path.read_text())
+    assert payload["episodes_total"] == 1
+    assert payload["episodes_passed"] == 1
+    assert payload["episodes_failed"] == 0
+    assert payload["results"][0]["nodeid"] == nodeid
+    assert payload["results"][0]["episode"]["scenario_id"] == "refund_flow_v1"
+
+    test_runs_storage.clear()
+
+
+def test_pytest_unconfigure__clears_in_memory_state():
+    test_runs_storage.LLM_UNIT_TEST_RUNS.add("nodeid")
+    test_runs_storage.TEST_RUNS_TO_TRACE_DATA["nodeid"] = object()
+    test_runs_storage.TEST_RUNS_CONTENTS["nodeid"] = object()
+    test_runs_storage.TEST_RUNS_EPISODES["nodeid"] = EpisodeResult(scenario_id="s1")
+
+    hooks.pytest_unconfigure(config=types.SimpleNamespace())
+
+    assert test_runs_storage.LLM_UNIT_TEST_RUNS == set()
+    assert test_runs_storage.TEST_RUNS_TO_TRACE_DATA == {}
+    assert test_runs_storage.TEST_RUNS_CONTENTS == {}
+    assert test_runs_storage.TEST_RUNS_EPISODES == {}

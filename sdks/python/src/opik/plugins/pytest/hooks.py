@@ -5,7 +5,7 @@ from opik.types import BatchFeedbackScoreDict
 
 from opik.api_objects import opik_client
 import opik.config as config
-from . import test_runs_storage, experiment_runner, summary
+from . import test_runs_storage, experiment_runner, summary, episode_artifact
 
 import pytest
 
@@ -89,13 +89,25 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
             experiment_name_prefix=config_.pytest_experiment_name_prefix,
         )
         client.flush()
+
+        if config_.pytest_episode_artifact_enabled:
+            reports_by_nodeid = {
+                item.nodeid: item.report
+                for item in valid_items
+                if getattr(item, "report", None) is not None
+            }
+            artifact_path = episode_artifact.write_episode_artifact(
+                path=config_.pytest_episode_artifact_path,
+                reports_by_nodeid=reports_by_nodeid,
+                episodes_by_nodeid=test_runs_storage.TEST_RUNS_EPISODES,
+            )
+            if artifact_path is not None:
+                LOGGER.info("Wrote pytest episode artifact to %s", artifact_path)
     except Exception:
         LOGGER.error(
             "Unexpected exception occured while trying to log LLM unit tests experiment results",
             exc_info=True,
         )
-    finally:
-        test_runs_storage.clear()
 
 
 @_logging.convert_exception_to_log_message(
@@ -121,3 +133,8 @@ def pytest_terminal_summary(
         return
 
     summary.print(llm_reports)
+
+
+def pytest_unconfigure(config: "pytest.Config") -> None:
+    # Avoid memory leakage for repeated pytest runs in long-lived processes.
+    test_runs_storage.clear()

@@ -175,6 +175,16 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Feedback score name used by the pytest plugin to store pass/fail status.
     """
 
+    pytest_episode_artifact_enabled: bool = True
+    """
+    If enabled, the pytest plugin writes a JSON artifact summarizing episode results.
+    """
+
+    pytest_episode_artifact_path: str = ".opik/pytest_episode_report.json"
+    """
+    Output path for the pytest episode summary artifact JSON file.
+    """
+
     check_tls_certificate: bool = True
     """
     If enabled, TLS verification is enabled for all HTTP requests.
