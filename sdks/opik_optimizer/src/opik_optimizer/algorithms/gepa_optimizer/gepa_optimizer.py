@@ -159,6 +159,11 @@ class GepaOptimizer(BaseOptimizer):
 
         Returns:
             AlgorithmResult with best prompts, score, history, and metadata.
+
+        Notes:
+            This native GEPA bridge currently enforces `batch_sampler="epoch_shuffled"`.
+            Other sampler strategies are rejected until Opik and GEPA sampler contracts
+            are mapped one-to-one.
         """
         # Initialize progress tracking for display
         self._current_round = 0
@@ -279,6 +284,8 @@ class GepaOptimizer(BaseOptimizer):
                 return items[: plan.nb_samples]
             return items
 
+        # TODO(opik_optimizer/#gepa-streaming): page dataset reads once GEPA accepts
+        # streaming/batched iterables for trainset/valset to avoid full materialization.
         train_items = _apply_plan(dataset.get_items(), train_plan)
         val_items = _apply_plan(val_source.get_items(), val_plan)
 
