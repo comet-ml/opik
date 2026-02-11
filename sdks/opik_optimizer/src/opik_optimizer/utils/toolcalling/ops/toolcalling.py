@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import warnings
 from typing import Any
@@ -12,23 +11,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from ....api_objects import chat_prompt
 from ....api_objects.types import MetricFunction
 from ....utils import prompt_segments
-from .... import constants
 from ....utils.display import format as display_format
 from ....utils.display import display_text_block
 from . import prompts as toolcalling_prompts
 from ..normalize.tool_factory import ToolCallingFactory
+from .rendering_ops import (
+    ToolDescriptionReporter,
+    build_tool_blocks_from_segments,
+    build_tool_blocks_from_prompt as _build_tool_blocks_from_prompt,
+    make_tool_description_reporter as _make_tool_description_reporter,
+    report_tool_descriptions as _report_tool_descriptions,
+)
+from .selector_ops import prepare_tool_optimization as _prepare_tool_optimization
 
 logger = logging.getLogger(__name__)
-_SENSITIVE_METADATA_KEYS = (
-    "mcp",
-    "server",
-    "authorization",
-    "auth",
-    "headers",
-    "env",
-)
-
-ToolDescriptionReporter = Callable[[str, str, dict[str, Any]], None]
 
 
 class CandidateGenerationReporter:
@@ -100,7 +96,7 @@ def resolve_prompt_tools(
         return resolved, None
 
     if optimize_tools is not None:
-        return prepare_tool_optimization(prompt_or_prompts, optimize_tools)
+        return _prepare_tool_optimization(prompt_or_prompts, optimize_tools)
 
     resolved_prompt = ToolCallingFactory().resolve_prompt(prompt_or_prompts)
     return resolved_prompt, None
@@ -268,99 +264,6 @@ class ToolDescriptionCandidatesResponse(BaseModel):
         }
 
 
-def prepare_tool_optimization(
-    prompt: chat_prompt.ChatPrompt,
-    optimize_tools: bool | dict[str, bool] | None,
-) -> tuple[chat_prompt.ChatPrompt, list[str] | None]:
-    """Resolve MCP tools and return selected tool names for optimization."""
-    if optimize_tools is None:
-        return prompt, None
-
-    resolved_prompt = ToolCallingFactory().resolve_prompt(prompt)
-    if not resolved_prompt.tools:
-        raise ValueError("Prompt must include tools for tool description optimization.")
-
-    segments = prompt_segments.extract_prompt_segments(resolved_prompt)
-    tool_segments = [segment for segment in segments if segment.is_tool()]
-    if not tool_segments:
-        raise ValueError("Prompt tools are missing tool descriptions to optimize.")
-
-    tool_names: list[str] | None = None
-    if isinstance(optimize_tools, dict):
-        requested_names = [name for name, enabled in optimize_tools.items() if enabled]
-        if not requested_names:
-            raise ValueError("optimize_tools dict did not enable any tools.")
-        available_segment_ids = [segment.segment_id for segment in tool_segments]
-        tool_names = _resolve_requested_tool_names(
-            requested_names=requested_names,
-            available_segment_ids=available_segment_ids,
-        )
-    elif optimize_tools is True:
-        tool_names = [
-            segment.segment_id.replace(
-                prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
-            )
-            for segment in tool_segments
-        ]
-    # Limit the number of tools to optimize at once
-    max_tools = constants.DEFAULT_TOOL_CALL_MAX_TOOLS_TO_OPTIMIZE
-    if tool_names is not None and len(tool_names) > max_tools:
-        raise ValueError(
-            "optimize_tools supports at most "
-            f"{max_tools} tools (requested {len(tool_names)}). "
-            "Pass optimize_tools as a dict to select tools or reduce MCP tools."
-        )
-    return resolved_prompt, tool_names
-
-
-def _resolve_requested_tool_names(
-    *,
-    requested_names: list[str],
-    available_segment_ids: list[str],
-) -> list[str]:
-    """Resolve optimize_tools selectors to unique tool names."""
-    available_lookup = {segment_id: segment_id for segment_id in available_segment_ids}
-    suffix_lookup: dict[str, list[str]] = {}
-    for segment_id in available_segment_ids:
-        suffix = segment_id.rsplit(".", 1)[-1]
-        suffix_lookup.setdefault(suffix, []).append(segment_id)
-
-    resolved_names: list[str] = []
-    missing_inputs: list[str] = []
-    ambiguous_inputs: dict[str, list[str]] = {}
-    for requested in requested_names:
-        direct_match = available_lookup.get(requested)
-        prefixed_match = available_lookup.get(
-            f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{requested}"
-        )
-        suffix_matches = suffix_lookup.get(requested, [])
-        suffix_match = suffix_matches[0] if len(suffix_matches) == 1 else None
-        if direct_match is None and prefixed_match is None and len(suffix_matches) > 1:
-            ambiguous_inputs[requested] = sorted(suffix_matches)
-            continue
-        resolved_segment = direct_match or prefixed_match or suffix_match
-        if resolved_segment is None:
-            missing_inputs.append(requested)
-            continue
-        resolved_tool_name = resolved_segment.replace(
-            prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
-        )
-        if resolved_tool_name not in resolved_names:
-            resolved_names.append(resolved_tool_name)
-
-    if ambiguous_inputs:
-        raise ValueError(
-            "Ambiguous optimize_tools entries: "
-            f"{ambiguous_inputs}. Use full function names or prefixed segment IDs."
-        )
-    if missing_inputs:
-        raise ValueError(
-            "Tools not found in prompt for optimize_tools entries: "
-            f"{missing_inputs}. Available segment IDs: {sorted(available_segment_ids)}"
-        )
-    return resolved_names
-
-
 def generate_tool_description_candidates(
     optimizer: Any,
     current_prompt: chat_prompt.ChatPrompt,
@@ -399,7 +302,7 @@ def generate_tool_description_candidates(
             )
             tool_description_reporter(segment.content, tool_name, segment.metadata)
     history_context = build_history_context_fn(previous_rounds)
-    tool_blocks_str = _build_tool_blocks(tool_segments)
+    tool_blocks_str = build_tool_blocks_from_segments(tool_segments)
 
     tool_description_user_template = optimizer.get_prompt("tool_description_user")
     tool_description_system_template = optimizer.get_prompt("tool_description_system")
@@ -506,113 +409,8 @@ def _resolve_tool_segments(
     return tool_segments
 
 
-def report_tool_descriptions(
-    prompt: chat_prompt.ChatPrompt,
-    tool_names: list[str] | None,
-    reporter: ToolDescriptionReporter,
-) -> None:
-    """Report tool descriptions using a caller-provided reporter."""
-    segments = prompt_segments.extract_prompt_segments(prompt)
-    tool_segments = [segment for segment in segments if segment.is_tool()]
-    if tool_names:
-        allowed = {
-            f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{name}" for name in tool_names
-        }
-        tool_segments = [
-            segment for segment in tool_segments if segment.segment_id in allowed
-        ]
-    for segment in tool_segments:
-        tool_name = segment.segment_id.replace(
-            prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
-        )
-        reporter(segment.content, tool_name, segment.metadata)
-
-
-def make_tool_description_reporter(
-    display_fn: Callable[[str, str], None],
-) -> ToolDescriptionReporter:
-    """Return a reporter that appends tool parameters before display."""
-
-    def _reporter(
-        description: str,
-        name: str,
-        metadata: dict[str, Any],
-    ) -> None:
-        """Format tool descriptions and parameters for display."""
-        signature = ""
-        raw_tool = metadata.get("raw_tool") or {}
-        parameters = (
-            raw_tool.get("function", {}).get("parameters")
-            if isinstance(raw_tool, dict)
-            else None
-        )
-        if parameters:
-            signature = "\n\nTool parameters:\n" + json.dumps(
-                parameters,
-                indent=2,
-                sort_keys=True,
-                default=str,
-            )
-        text = f"{description}{signature}"
-        display_fn(text, name)
-
-    return _reporter
-
-
-def _build_tool_blocks(segments: list[prompt_segments.PromptSegment]) -> str:
-    """Return formatted tool blocks for a list of tool segments."""
-    blocks: list[str] = []
-    for segment in segments:
-        tool_name = segment.segment_id.replace(
-            prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
-        )
-        tool_metadata = _sanitize_tool_metadata(segment.metadata.get("raw_tool", {}))
-        tool_metadata_json = json.dumps(
-            tool_metadata, indent=2, sort_keys=True, default=str
-        )
-        block = (
-            f"Tool name: {tool_name}\n"
-            f"Tool description:\n{segment.content}\n"
-            f"Tool metadata (JSON):\n{tool_metadata_json}"
-        )
-        blocks.append(block)
-    return "\n\n".join(blocks)
-
-
-def _sanitize_tool_metadata(raw_tool: Any) -> Any:
-    """Remove sensitive MCP/server/auth metadata before sending to model prompts."""
-    if isinstance(raw_tool, dict):
-        sanitized: dict[str, Any] = {}
-        for key, value in raw_tool.items():
-            key_text = str(key)
-            if any(secret in key_text.lower() for secret in _SENSITIVE_METADATA_KEYS):
-                sanitized[key_text] = "***REDACTED***"
-                continue
-            sanitized[key_text] = _sanitize_tool_metadata(value)
-        return sanitized
-    if isinstance(raw_tool, list):
-        return [_sanitize_tool_metadata(item) for item in raw_tool]
-    return raw_tool
-
-
-def build_tool_blocks_from_prompt(
-    prompt: chat_prompt.ChatPrompt,
-    tool_names: list[str] | None = None,
-) -> str:
-    """Return formatted tool blocks for a prompt.
-
-    Example:
-        blocks = build_tool_blocks_from_prompt(prompt, tool_names=["search"])
-    """
-    segments = prompt_segments.extract_prompt_segments(prompt)
-    tool_segments = [segment for segment in segments if segment.is_tool()]
-    if tool_names:
-        allowed = {
-            f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{name}" for name in tool_names
-        }
-        tool_segments = [
-            segment for segment in tool_segments if segment.segment_id in allowed
-        ]
-    if not tool_segments:
-        return ""
-    return _build_tool_blocks(tool_segments)
+# Backward-compatible exports from extracted ops modules.
+prepare_tool_optimization = _prepare_tool_optimization
+build_tool_blocks_from_prompt = _build_tool_blocks_from_prompt
+report_tool_descriptions = _report_tool_descriptions
+make_tool_description_reporter = _make_tool_description_reporter
