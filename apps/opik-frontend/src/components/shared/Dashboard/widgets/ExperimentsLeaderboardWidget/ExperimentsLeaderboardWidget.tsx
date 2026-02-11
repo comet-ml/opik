@@ -279,6 +279,7 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
     return selectedScoreColumns.map((scoreCol) => {
       const actualType = scoreCol.type || SCORE_TYPE_FEEDBACK;
       const isRankingMetric = enableRanking && scoreCol.id === rankingMetric;
+      const scoreName = parseScoreColumnId(scoreCol.id)?.scoreName;
 
       return {
         id: scoreCol.id,
@@ -288,19 +289,22 @@ const ExperimentsLeaderboardWidget: React.FunctionComponent<
         accessorFn: (row: Experiment) => getExperimentScore(scoreCol.id, row),
         header: FeedbackScoreHeader as never,
         cell: FeedbackScoreCell as never,
-        customMeta: isRankingMetric
-          ? {
-              prefixIcon: (
-                <TooltipWrapper
-                  content={`Ranking metric (${
-                    rankingDirection ? "higher is better" : "lower is better"
-                  })`}
-                >
-                  <Trophy className="mr-1 size-3.5 shrink-0 text-yellow-500" />
-                </TooltipWrapper>
-              ),
-            }
-          : undefined,
+        customMeta: {
+          scoreName,
+          ...(isRankingMetric
+            ? {
+                prefixIcon: (
+                  <TooltipWrapper
+                    content={`Ranking metric (${
+                      rankingDirection ? "higher is better" : "lower is better"
+                    })`}
+                  >
+                    <Trophy className="mr-1 size-3.5 shrink-0 text-yellow-500" />
+                  </TooltipWrapper>
+                ),
+              }
+            : {}),
+        },
       };
     });
   }, [selectedScoreColumns, enableRanking, rankingMetric, rankingDirection]);

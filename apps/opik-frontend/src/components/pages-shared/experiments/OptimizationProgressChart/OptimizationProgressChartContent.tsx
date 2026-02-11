@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
+import useChartConfig from "@/hooks/useChartConfig";
 import { Dot, XAxis, CartesianGrid, YAxis, AreaChart, Area } from "recharts";
 import { LineDot } from "recharts/types/cartesian/Line";
 import debounce from "lodash/debounce";
@@ -62,18 +62,12 @@ const OptimizationProgressChartContent: React.FC<
   );
 
   // Generate distinct color map for all scores
-  const colorMap = useMemo(
+  const customColorMap = useMemo(
     () => generateDistinctColorMap(objectiveName, secondaryScoreNames),
     [objectiveName, secondaryScoreNames],
   );
 
-  const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig(
-      allScoreNames,
-      undefined,
-      colorMap,
-    );
-  }, [allScoreNames, colorMap]);
+  const config = useChartConfig(allScoreNames, undefined, customColorMap);
 
   const mainObjectiveColor = config[objectiveName].color as string;
 

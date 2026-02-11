@@ -2,10 +2,10 @@ import React, { useMemo, useState } from "react";
 import isFunction from "lodash/isFunction";
 import { CircleX, MessageSquareMore } from "lucide-react";
 
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
-import { generateTagVariant } from "@/lib/traces";
 import { cn } from "@/lib/utils";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
+import ColorIndicator from "@/components/shared/ColorIndicator/ColorIndicator";
 import FeedbackScoreReasonTooltip from "./FeedbackScoreReasonTooltip";
 import MultiValueFeedbackScoreHoverCard from "./MultiValueFeedbackScoreHoverCard";
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
@@ -17,6 +17,7 @@ import {
 
 type FeedbackScoreTagProps = {
   label: string;
+  colorKey?: string;
   value: number | string;
   onDelete?: (name: string) => void;
   className?: string;
@@ -31,6 +32,7 @@ type FeedbackScoreTagProps = {
 
 const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   label,
+  colorKey,
   value,
   reason,
   onDelete,
@@ -42,10 +44,13 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   color: customColor,
 }) => {
   const [openHoverCard, setOpenHoverCard] = useState(false);
+  const { getColor } = useWorkspaceColorMap();
+
+  const effectiveColorKey = colorKey ?? label;
 
   const color = useMemo(
-    () => customColor || TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!],
-    [customColor, label],
+    () => customColor || getColor(effectiveColorKey),
+    [customColor, effectiveColorKey, getColor],
   );
 
   const isRemovable = isFunction(onDelete);
@@ -81,9 +86,11 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   const tagContent = (
     <div className="flex max-w-full items-center gap-1.5">
       {/* Icon - rounded div for all feedback scores */}
-      <div
-        className="rounded-[0.15rem] bg-[var(--bg-color)] p-1"
-        style={{ "--bg-color": color } as React.CSSProperties}
+      <ColorIndicator
+        label={label}
+        colorKey={effectiveColorKey}
+        color={color}
+        variant="square"
       />
 
       {/* Label */}

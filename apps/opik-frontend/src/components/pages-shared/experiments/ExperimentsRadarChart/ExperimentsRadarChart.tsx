@@ -1,8 +1,8 @@
-import React, { useMemo } from "react";
+import React from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import { RadarDataPoint } from "@/types/chart";
+import useChartConfig from "@/hooks/useChartConfig";
 import { ExperimentLabelsMap } from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData";
 import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
 
@@ -17,9 +17,7 @@ interface ExperimentsRadarChartProps {
 const ExperimentsRadarChart: React.FunctionComponent<
   ExperimentsRadarChartProps
 > = ({ name, chartId, data, keys, experimentLabelsMap }) => {
-  const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig(keys, experimentLabelsMap);
-  }, [keys, experimentLabelsMap]);
+  const config = useChartConfig(keys, experimentLabelsMap);
 
   return (
     <Card>

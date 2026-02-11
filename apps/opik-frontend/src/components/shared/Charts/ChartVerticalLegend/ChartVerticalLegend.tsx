@@ -3,6 +3,8 @@ import * as RechartsPrimitive from "recharts";
 import { cn } from "@/lib/utils";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ColorIndicator from "@/components/shared/ColorIndicator/ColorIndicator";
+import { useChart } from "@/components/ui/chart";
 
 type ChartVerticalLegendProps = React.ComponentProps<
   typeof RechartsPrimitive.Legend
@@ -16,6 +18,8 @@ const ChartVerticalLegend = React.forwardRef<
   HTMLDivElement,
   ChartVerticalLegendProps
 >(({ payload, color, setActiveLine }, ref) => {
+  const { config } = useChart();
+
   const handleMouseEnter = (id: string) => {
     setActiveLine(id);
   };
@@ -37,6 +41,8 @@ const ChartVerticalLegend = React.forwardRef<
       {payload.map((item) => {
         const key = `${item.value || "value"}`;
         const indicatorColor = color || item.color;
+        const configEntry = config[item.value as string];
+        const displayLabel = (configEntry?.label as string) ?? item.value;
 
         return (
           <div
@@ -46,19 +52,16 @@ const ChartVerticalLegend = React.forwardRef<
             )}
             onMouseEnter={() => handleMouseEnter(item.value)}
           >
-            <TooltipWrapper content={item.value}>
+            <TooltipWrapper content={displayLabel}>
               <div className="comet-body-xs truncate font-light text-foreground">
-                {item.value}
+                {displayLabel}
               </div>
             </TooltipWrapper>
-            <div
-              className="absolute left-[20px] top-[5px] size-1.5 shrink-0 rounded-full border-[--color-border] bg-[--color-bg]"
-              style={
-                {
-                  "--color-bg": indicatorColor,
-                  "--color-border": indicatorColor,
-                } as React.CSSProperties
-              }
+            <ColorIndicator
+              label={item.value ?? ""}
+              color={indicatorColor ?? ""}
+              variant="dot"
+              className="absolute left-[20px] top-[5px] shrink-0"
             />
           </div>
         );

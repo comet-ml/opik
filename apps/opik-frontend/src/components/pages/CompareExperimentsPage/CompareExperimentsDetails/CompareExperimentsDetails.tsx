@@ -53,6 +53,7 @@ const ExperimentScoreTags: React.FunctionComponent<
         <FeedbackScoreTag
           key={score.name + score.value}
           label={score.isFeedbackScore ? `${score.name} (avg)` : score.name}
+          colorKey={score.name}
           value={score.value}
         />
       ))}
@@ -100,6 +101,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
     barChartData,
     barChartKeys,
     experimentLabelsMap,
+    scoreLabelsMap,
   } = useCompareExperimentsChartsData({
     isCompare,
     experiments,
@@ -191,6 +193,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
                 chartId="feedback-scores-bar-chart"
                 data={barChartData}
                 keys={barChartKeys}
+                labelsMap={scoreLabelsMap}
               />
             </div>
           </div>

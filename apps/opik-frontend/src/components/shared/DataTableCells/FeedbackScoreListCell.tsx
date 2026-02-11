@@ -32,6 +32,7 @@ type RowWithScores = {
 
 type ScoreWithType = TraceFeedbackScore & {
   scoreType: ScoreType;
+  colorKey?: string;
 };
 
 const FeedbackScoreListCell = <TData,>(
@@ -42,6 +43,7 @@ const FeedbackScoreListCell = <TData,>(
   const scoreList: ScoreWithType[] = [
     ...(rowData.feedback_scores ?? []).map((score) => ({
       ...score,
+      colorKey: score.name,
       name: `${score.name} (avg)`,
       scoreType: SCORE_TYPE_FEEDBACK,
     })),
@@ -85,6 +87,7 @@ const FeedbackScoreListCell = <TData,>(
                     <div key={item.name}>
                       <FeedbackScoreTag
                         label={item.name}
+                        colorKey={item.colorKey}
                         value={item.value}
                         reason={item.reason}
                       />
@@ -95,6 +98,7 @@ const FeedbackScoreListCell = <TData,>(
                   <FeedbackScoreTag
                     key={item.name}
                     label={item.name}
+                    colorKey={item.colorKey}
                     value={item.value}
                     className="min-w-0"
                   />
@@ -138,6 +142,7 @@ const FeedbackScoreListAggregationCell = <TData,>(
     isArray(feedbackScores) ? feedbackScores : []
   ).map((score: TraceFeedbackScore) => ({
     ...score,
+    colorKey: score.name,
     name: `${score.name} (avg)`,
     scoreType: SCORE_TYPE_FEEDBACK,
   }));

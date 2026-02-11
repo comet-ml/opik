@@ -16,6 +16,7 @@ type CompareExperimentsChartsData = {
   barChartData: BarDataPoint[];
   barChartKeys: string[];
   experimentLabelsMap: ExperimentLabelsMap;
+  scoreLabelsMap: Record<string, string>;
 };
 
 const MAX_VISIBLE_ENTITIES = 10;
@@ -28,20 +29,24 @@ const useCompareExperimentsChartsData = ({
     return experiments.slice(0, MAX_VISIBLE_ENTITIES);
   }, [experiments]);
 
-  const scoreMap = useMemo(() => {
-    if (!isCompare) return {};
+  const { scoreMap, scoreLabelsMap } = useMemo(() => {
+    if (!isCompare) return { scoreMap: {}, scoreLabelsMap: {} };
+
+    const labelsMap: Record<string, string> = {};
 
     const createScoresMap = (
       scores: AggregatedFeedbackScore[] | undefined,
       addAvgSuffix: boolean,
     ): Record<string, number> =>
       (scores || []).reduce<Record<string, number>>((acc, score) => {
-        const key = addAvgSuffix ? `${score.name} (avg)` : score.name;
-        acc[key] = score.value;
+        acc[score.name] = score.value;
+        if (addAvgSuffix) {
+          labelsMap[score.name] = `${score.name} (avg)`;
+        }
         return acc;
       }, {});
 
-    return experimentsList.reduce<Record<string, Record<string, number>>>(
+    const map = experimentsList.reduce<Record<string, Record<string, number>>>(
       (acc, e) => {
         const feedbackScoresMap = createScoresMap(e.feedback_scores, true);
         const experimentScoresMap = createScoresMap(e.experiment_scores, false);
@@ -50,6 +55,8 @@ const useCompareExperimentsChartsData = ({
       },
       {},
     );
+
+    return { scoreMap: map, scoreLabelsMap: labelsMap };
   }, [experimentsList, isCompare]);
 
   const scoreColumns = useMemo(() => {
@@ -104,6 +111,7 @@ const useCompareExperimentsChartsData = ({
     barChartData,
     barChartKeys,
     experimentLabelsMap,
+    scoreLabelsMap,
   };
 };
 

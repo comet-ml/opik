@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
+import useChartConfig from "@/hooks/useChartConfig";
 import { Dot, LineChart } from "recharts";
 
 import { DropdownOption } from "@/types/shared";
@@ -35,6 +35,7 @@ export type ChartData = {
   name: string | DropdownOption<string>[];
   data: DataRecord[];
   lines: string[];
+  labelsMap?: Record<string, string>;
 };
 
 type FeedbackScoresChartContentProps = {
@@ -50,9 +51,7 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
 }) => {
   const [activeLine, setActiveLine] = useState<string | null>(null);
 
-  const config = useMemo(() => {
-    return getDefaultHashedColorsChartConfig(chartData.lines);
-  }, [chartData.lines]);
+  const config = useChartConfig(chartData.lines, chartData.labelsMap);
 
   const values = useMemo(() => {
     return chartData.data.reduce<number[]>((acc, data) => {
@@ -182,7 +181,7 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
               type="linear"
               key={line}
               dataKey={(record) => record.scores[line]}
-              name={config[line].label as string}
+              name={line}
               stroke={config[line].color as string}
               dot={renderDot}
               activeDot={{ strokeWidth: 1.5, r: 4, stroke: "white" }}

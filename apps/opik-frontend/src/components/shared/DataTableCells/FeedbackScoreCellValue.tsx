@@ -1,10 +1,9 @@
-import { generateTagVariant } from "@/lib/traces";
 import MultiValueFeedbackScoreHoverCard from "../FeedbackScoreTag/MultiValueFeedbackScoreHoverCard";
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { TraceFeedbackScore } from "@/types/traces";
 import { useState } from "react";
 import FeedbackScoreEditDropdown from "./FeedbackScoreEditDropdown";
 import CellTooltipWrapper from "./CellTooltipWrapper";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 
 const FeedbackScoreCellValue = ({
   isUserFeedbackColumn = false,
@@ -17,6 +16,7 @@ const FeedbackScoreCellValue = ({
   color?: string;
   onValueChange?: (name: string, value: number) => void;
 }) => {
+  const { getColor } = useWorkspaceColorMap();
   const [openHoverCard, setOpenHoverCard] = useState(false);
 
   // If no feedback score and not editable, show dash
@@ -41,8 +41,7 @@ const FeedbackScoreCellValue = ({
 
   // Feedback score exists, show it with optional edit button
   const label = feedbackScore.name;
-  const color =
-    customColor || TAG_VARIANTS_COLOR_MAP[generateTagVariant(label)!];
+  const color = customColor || getColor(label);
   const valueByAuthor = feedbackScore.value_by_author;
   const value = feedbackScore.value;
   const category = feedbackScore.category_name;

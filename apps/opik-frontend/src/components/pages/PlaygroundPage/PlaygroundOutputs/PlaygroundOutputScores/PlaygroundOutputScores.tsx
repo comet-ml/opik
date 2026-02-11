@@ -6,8 +6,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
-import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
-import { generateTagVariant } from "@/lib/traces";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
 import MetricTag from "./MetricTag";
 
@@ -36,13 +35,12 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
   stale = false,
   className,
 }) => {
+  const { getColor } = useWorkspaceColorMap();
+
   const { metricColors, visibleMetrics, hiddenMetrics, remainingCount } =
     useMemo(() => {
       const colors = Object.fromEntries(
-        metricNames.map((name) => {
-          const variant = generateTagVariant(name);
-          return [name, TAG_VARIANTS_COLOR_MAP[variant ?? "gray"]];
-        }),
+        metricNames.map((name) => [name, getColor(name)]),
       );
 
       const visible = metricNames.slice(0, MAX_VISIBLE_METRICS);
@@ -54,7 +52,7 @@ const PlaygroundOutputScores: React.FC<PlaygroundOutputScoresProps> = ({
         hiddenMetrics: hidden,
         remainingCount: hidden.length,
       };
-    }, [metricNames]);
+    }, [metricNames, getColor]);
 
   if (metricNames.length === 0) {
     return null;
