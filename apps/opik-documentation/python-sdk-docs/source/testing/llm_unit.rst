@@ -71,6 +71,12 @@ Configuration
 Use ``pytest_experiment_enabled`` to disable/enable experiment logging for decorated tests.
 This setting can be configured via Opik config sources (environment/config file/runtime config).
 
+Additional pytest plugin settings:
+
+- ``pytest_experiment_dataset_name`` (default: ``"tests"``)
+- ``pytest_experiment_name_prefix`` (default: ``"Test-Suite"``)
+- ``pytest_passed_score_name`` (default: ``"Passed"``)
+
 Notes
 -----
 
