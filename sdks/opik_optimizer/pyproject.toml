@@ -11,11 +11,7 @@ requires-python = ">=3.10,<3.14"
 dependencies = [
     "datasets",
     "deap>=1.4.3",
-    #"gepa>=0.0.7",
-    #
-    # GEPA now depends on the Opik adapter branch published from vincentkoc/gepa
-    # THIS IS FOR TESTING PURPOSES
-    "gepa @ git+https://github.com/vincentkoc/gepa.git@vk/gepa-opik-adapter",
+    "gepa>=0.0.7",
     "hf_xet",
     # LiteLLM dependency comments:
     # - Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
