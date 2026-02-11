@@ -3,25 +3,33 @@ import sys
 from typing import Any, Literal, overload
 from collections.abc import Callable
 
+import opik
 from opik import Dataset, opik_context
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from ...agents import LiteLLMAgent, OptimizableAgent
 from ...base_optimizer import BaseOptimizer
-from ...core import agent as agent_core
+from ...reporting_utils import (
+    display_configuration,
+    suppress_opik_logs,
+)
 from ...api_objects import chat_prompt
-from ...core.evaluation import _create_metric_class
-from ...core.llm_calls import _prepare_model_params
-from ...core.results import OptimizationResult
-from ...core import evaluation as task_evaluator
-from ...utils.candidate import unique_ordered_by_key
-from ...utils.display import display_configuration
-from ...utils.reporting import suppress_opik_logs
-from ... import helpers
+from ...optimization_result import OptimizationResult
+from ...agents import OptimizableAgent
+from ...core.state import build_optimization_metadata
+from ...utils import (
+    optimization_context,
+    create_litellm_agent_class,
+    disable_experiment_reporting,
+    enable_experiment_reporting,
+    unique_ordered_by_key,
+)
+from ...task_evaluator import _create_metric_class
+from ... import task_evaluator, helpers
 from . import reporting as gepa_reporting
 from gepa.core.adapter import GEPAAdapter
 from .adapter import OpikGEPAAdapter, OpikDataInst
+from ...core.llm_calls import _prepare_model_params
 
 logger = logging.getLogger(__name__)
 
@@ -275,14 +283,7 @@ class GepaOptimizer(BaseOptimizer):
         # Keep a single agent class for the entire optimization (baseline +
         # GEPA adapter + final evaluation) so we never downgrade to the default
         # when we use GEPAs own internal evaluator.
-        if agent_class is None:
-            self.agent_class = LiteLLMAgent
-        elif not issubclass(agent_class, OptimizableAgent):
-            raise TypeError(
-                f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"
-            )
-        else:
-            self.agent_class = agent_class
+        self.agent_class = self._setup_agent_class(prompt, agent_class)
 
         prompt = prompt.copy()
         if prompt.model is None:
@@ -351,14 +352,33 @@ class GepaOptimizer(BaseOptimizer):
         opt_id: str | None = None
         ds_id: str | None = getattr(dataset, "id", None)
 
-        optimization = self._create_optimization_run(
-            dataset=dataset,
-            metric=metric,
+        opik_client = opik.Opik(project_name=self.project_name)
+
+        disable_experiment_reporting()
+
+        # Hold the optimization context open for the entire run (other optimizers already
+        # behave like this). The original `with ...` block exited immediately, which
+        # marked GEPA optimizations as completed before any work happened.
+        optimization_cm = optimization_context(
+            client=opik_client,
+            dataset_name=dataset.name,
+            objective_name=metric.__name__,
+            name=self.name,
+            metadata=self._build_optimization_config(),
             optimization_id=optimization_id,
         )
-        opt_id = self.current_optimization_id
+        optimization_cm_entered = False
 
         try:
+            optimization = optimization_cm.__enter__()
+            optimization_cm_entered = True
+            try:
+                opt_id = optimization.id if optimization is not None else None
+                self.current_optimization_id = opt_id
+            except Exception:
+                opt_id = None
+                self.current_optimization_id = None
+
             gepa_reporting.display_header(
                 algorithm=self.__class__.__name__,
                 optimization_id=opt_id,
@@ -489,17 +509,16 @@ class GepaOptimizer(BaseOptimizer):
                     opt_id = None
 
         finally:
-            exc_type = sys.exc_info()[0]
-            if optimization is not None:
-                status = "completed" if exc_type is None else "error"
-                try:
-                    self._update_optimization(optimization, status)
-                except Exception:
-                    logger.debug(
-                        "Failed to update GEPA optimization status to %s",
-                        status,
-                        exc_info=True,
-                    )
+            exc_type, exc_val, exc_tb = sys.exc_info()
+            if optimization_cm_entered:
+                # Manually closing the optimization context ensures its status is updated
+                # exactly once (completed/cancelled) after the entire GEPA run finishes.
+                # We capture the exception tuple so the context manager can surface failures
+                # just like a regular `with` block. This is admittedly a temporary workaround
+                # until we put GEPA behind a native Opik adapter that can manage its lifecycle
+                # without manual enter/exit plumbing.
+                optimization_cm.__exit__(exc_type, exc_val, exc_tb)
+            enable_experiment_reporting()
 
         # ------------------------------------------------------------------
         # Rescoring & result assembly
@@ -859,23 +878,22 @@ class GepaOptimizer(BaseOptimizer):
         # NOTE: OptimizableAgent defaults to LiteLLM. We cache whichever agent class the
         # user provided so GEPA never downgrades to LiteLLM (which breaks tracing).
         if not hasattr(self, "agent_class") or self.agent_class is None:
-            self.agent_class = LiteLLMAgent
+            self.agent_class = create_litellm_agent_class(
+                prompt_obj, optimizer_ref=self
+            )
         instantiate_kwargs: dict[str, Any] = {}
         if project_name is not None:
             instantiate_kwargs["project_name"] = project_name
 
         try:
-            return agent_core.instantiate_agent(
-                self,
+            return self._instantiate_agent(
                 prompt_obj, agent_class=self.agent_class, **instantiate_kwargs
             )
         except TypeError:
-            return agent_core.instantiate_agent(
-                self, prompt_obj, agent_class=self.agent_class
-            )
+            return self._instantiate_agent(prompt_obj, agent_class=self.agent_class)
 
     def _build_optimization_config(self) -> dict[str, Any]:
-        return self._build_optimization_metadata()
+        return build_optimization_metadata(self)
 
     @overload
     def _evaluate_prompt_logged(

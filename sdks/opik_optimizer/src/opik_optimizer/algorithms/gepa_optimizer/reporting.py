@@ -8,6 +8,7 @@ from rich.text import Text
 from rich.panel import Panel
 from ...utils.reporting import convert_tqdm_to_rich, suppress_opik_logs
 from ...utils.display import (
+    display_header as display_global_header,
     display_text_block,
     format_prompt_snippet,
     display_renderable,
@@ -206,6 +207,21 @@ class RichGEPAOptimizerLogger:
             return True
 
         return False
+
+
+def display_header(
+    algorithm: str,
+    optimization_id: str | None = None,
+    dataset_id: str | None = None,
+    verbose: int = 1,
+) -> None:
+    """Compatibility shim: GEPA optimizer expects reporting.display_header."""
+    display_global_header(
+        algorithm=algorithm,
+        optimization_id=optimization_id,
+        dataset_id=dataset_id,
+        verbose=verbose,
+    )
 
     def _handle_candidate_messages(self, first: str) -> bool:
         if "Proposed new text" in first and "system_prompt:" in first:

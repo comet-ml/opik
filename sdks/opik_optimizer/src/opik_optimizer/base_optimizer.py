@@ -22,6 +22,7 @@ from opik.evaluation.evaluation_result import (
 
 from .core import evaluation as task_evaluator
 from .core import runtime
+from .core import agent as agent_core
 from .utils.display.run import OptimizationRunDisplay, RunDisplay
 from .utils.reporting import convert_tqdm_to_rich
 from .api_objects import chat_prompt
@@ -311,6 +312,53 @@ class BaseOptimizer(ABC):
                 "Unable to set trace_phase on agent instance of %s",
                 agent.__class__.__name__,
             )
+
+    def _setup_agent_class(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        agent_class: type[OptimizableAgent] | None = None,
+    ) -> type[OptimizableAgent]:
+        """Backward-compatible wrapper used by legacy optimizer implementations."""
+        return agent_core.setup_agent_class(self, prompt, agent_class)
+
+    def _instantiate_agent(
+        self,
+        *args: Any,
+        agent_class: type[OptimizableAgent] | None = None,
+        **kwargs: Any,
+    ) -> OptimizableAgent:
+        """Backward-compatible wrapper used by legacy optimizer implementations."""
+        return agent_core.instantiate_agent(
+            self, *args, agent_class=agent_class, **kwargs
+        )
+
+    def _build_optimization_metadata(self) -> dict[str, Any]:
+        """Backward-compatible alias used by legacy optimizers."""
+        return build_optimization_metadata(self)
+
+    def _prepare_experiment_config(
+        self,
+        *,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        metric: MetricFunction,
+        experiment_config: dict[str, Any] | None,
+        configuration_updates: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Backward-compatible alias used by legacy optimizers."""
+        return prepare_experiment_config(
+            optimizer=self,
+            prompt=prompt,
+            dataset=dataset,
+            metric=metric,
+            agent=None,
+            validation_dataset=None,
+            experiment_config=experiment_config,
+            is_single_prompt_optimization=not isinstance(prompt, dict),
+            configuration_updates=configuration_updates,
+            additional_metadata=None,
+            build_optimizer_version=_OPTIMIZER_VERSION,
+        )
 
     # ------------------------------------------------------------------
     # Input normalization & validation
