@@ -47,6 +47,8 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         dataset: Dataset,
         experiment_config: dict[str, Any] | None,
         validation_dataset: Dataset | None = None,
+        allow_tool_use: bool | None = None,
+        candidate_selection_policy: str | None = None,
     ) -> None:
         self._base_prompts = base_prompts
         self._agent = agent
@@ -57,6 +59,8 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         self._validation_dataset = validation_dataset
         self._experiment_config = experiment_config
         self._metric_name = metric.__name__
+        self._allow_tool_use_override = allow_tool_use
+        self._candidate_selection_policy = candidate_selection_policy
         self._allowed_roles = (
             context.extra_params.get("optimizable_roles")
             if context.extra_params
@@ -99,7 +103,13 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         dataset_item: dict[str, Any],
     ) -> list[str]:
         """Invoke the agent and normalize candidate outputs for scoring."""
-        allow_tool_use = bool(getattr(self._context, "allow_tool_use", False))
+        has_tools = any(bool(p.tools) for p in prompt_variants.values())
+        if self._allow_tool_use_override is not None:
+            allow_tool_use = bool(self._allow_tool_use_override)
+        else:
+            allow_tool_use = bool(getattr(self._context, "allow_tool_use", False))
+        if not has_tools:
+            allow_tool_use = False
         if hasattr(self._agent, "invoke_agent_candidates"):
             invoke_candidates = self._agent.invoke_agent_candidates
             try:
@@ -132,6 +142,39 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 )
             candidates = [single_candidate]
         return [str(c).strip() for c in candidates if c is not None and str(c).strip()]
+
+    def _resolve_selection_policy(
+        self, prompt_variants: dict[str, chat_prompt.ChatPrompt]
+    ) -> str:
+        if isinstance(self._candidate_selection_policy, str):
+            policy = self._candidate_selection_policy.strip()
+            if policy:
+                return policy
+        model_params = getattr(self._optimizer, "model_parameters", {}) or {}
+        model_policy = model_params.get("candidate_selection_policy") or model_params.get(
+            "selection_policy"
+        )
+        if isinstance(model_policy, str) and model_policy.strip():
+            return model_policy
+        prompt = next(iter(prompt_variants.values()))
+        model_kwargs = prompt.model_kwargs or {}
+        prompt_policy = model_kwargs.get("candidate_selection_policy") or model_kwargs.get(
+            "selection_policy"
+        )
+        if isinstance(prompt_policy, str) and prompt_policy.strip():
+            return prompt_policy
+        return "best_by_metric"
+
+    def _extract_candidate_logprobs(self, candidates: list[str]) -> list[float] | None:
+        logprobs = getattr(self._agent, "_last_candidate_logprobs", None)
+        if not isinstance(logprobs, list):
+            return None
+        if len(logprobs) != len(candidates):
+            return None
+        try:
+            return [float(v) for v in logprobs]
+        except Exception:
+            return None
 
     def _record_adapter_metric_call(self) -> None:
         """Increment adapter metric counters while tolerating missing attributes."""
@@ -287,13 +330,13 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 dataset_item: dict[str, Any], candidates: list[str]
             ) -> tuple[str, float]:
                 """Pick the best candidate using the optimizer metric for pass@k evaluation."""
-                # FIXME: Align this selection with GEPA's Pareto/multi-metric scoring once integrated.
+                policy = self._resolve_selection_policy(prompt_variants)
                 selection = select_candidate(
                     candidates=candidates,
-                    policy="best_by_metric",
+                    policy=policy,
                     metric=lambda item, output: self._metric(item, output),
                     dataset_item=dataset_item,
-                    candidate_logprobs=None,
+                    candidate_logprobs=self._extract_candidate_logprobs(candidates),
                     rng=random.Random(0),
                 )
                 if (
@@ -353,21 +396,16 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             if not candidates:
                 raise RuntimeError("No candidates produced by agent")
 
-            best_output = candidates[0]
-            best_score = float("-inf")
-            for candidate in candidates:
-                metric_result = self._metric(dataset_item, candidate)
-                if hasattr(metric_result, "value"):
-                    score = float(metric_result.value)  # type: ignore[arg-type]
-                elif hasattr(metric_result, "score"):
-                    score = float(metric_result.score)  # type: ignore[arg-type]
-                else:
-                    score = float(metric_result)  # type: ignore[arg-type]
-                if score > best_score:
-                    best_score = score
-                    best_output = candidate
+            selection = select_candidate(
+                candidates=candidates,
+                policy=self._resolve_selection_policy(prompt_variants),
+                metric=lambda item, output: self._metric(item, output),
+                dataset_item=dataset_item,
+                candidate_logprobs=self._extract_candidate_logprobs(candidates),
+                rng=random.Random(0),
+            )
 
-            return {"llm_output": best_output}
+            return {"llm_output": selection.output}
 
         try:
             _, eval_result = task_evaluator.evaluate_with_result(

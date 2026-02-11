@@ -310,6 +310,20 @@ def test_gepa_adapter_passes_allow_tool_use_to_candidate_agent() -> None:
         STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
     )
     prompt = make_baseline_prompt()
+    prompt.tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search",
+                "description": "Search docs",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"q": {"type": "string"}},
+                    "required": ["q"],
+                },
+            },
+        }
+    ]
 
     def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
         _ = dataset_item, llm_output
@@ -389,6 +403,60 @@ def test_gepa_adapter_falls_back_for_legacy_agent_signature() -> None:
 
     result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
     assert result == ["legacy"]
+
+
+def test_gepa_adapter_allow_tool_use_override_disables_tools() -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+    prompt.tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search",
+                "description": "Search docs",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"q": {"type": "string"}},
+                    "required": ["q"],
+                },
+            },
+        }
+    ]
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 1.0
+
+    metric_fn.__name__ = "metric_fn"
+    context = make_optimization_context(prompt, dataset=dataset, metric=metric_fn)
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+
+    captured: dict[str, Any] = {}
+
+    class AgentWithTools:
+        def invoke_agent_candidates(
+            self, prompts, dataset_item, allow_tool_use=False
+        ) -> list[str]:
+            _ = prompts, dataset_item
+            captured["allow_tool_use"] = allow_tool_use
+            return ["ok"]
+
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=AgentWithTools(),  # type: ignore[arg-type]
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+        allow_tool_use=False,
+    )
+
+    result = adapter._collect_candidates(context.prompts, STANDARD_DATASET_ITEMS[0])
+    assert result == ["ok"]
+    assert captured["allow_tool_use"] is False
 
 
 def test_gepa_optimizer_passes_epoch_shuffled_batch_sampler(monkeypatch) -> None:
@@ -577,3 +645,68 @@ def test_gepa_optimizer_uses_model_selection_policy_fallback(monkeypatch) -> Non
     optimizer.run_optimization(context)
 
     assert captured.get("candidate_selection_strategy") == "best_by_metric"
+
+
+def test_gepa_optimizer_passes_adapter_policy_and_tool_use(monkeypatch) -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:2], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 0.5
+
+    metric_fn.__name__ = "metric_fn"
+
+    context = make_optimization_context(prompt, dataset=dataset, metric=metric_fn)
+    context.max_trials = 2
+    context.baseline_score = 0.1
+
+    optimizer = GepaOptimizer(
+        model="gpt-4o-mini",
+        model_parameters={
+            "allow_tool_use": False,
+            "candidate_selection_policy": "max_logprob",
+        },
+        verbose=0,
+        seed=42,
+    )
+    optimizer.pre_optimize(context)
+
+    captured: dict[str, Any] = {}
+
+    class FakeAdapter:
+        def __init__(self, **kwargs: Any) -> None:
+            captured["allow_tool_use"] = kwargs.get("allow_tool_use")
+            captured["candidate_selection_policy"] = kwargs.get(
+                "candidate_selection_policy"
+            )
+
+    def _fake_gepa_optimize(**kwargs: Any) -> MagicMock:
+        mock_gepa_result = MagicMock()
+        mock_gepa_result.candidates = []
+        mock_gepa_result.val_aggregate_scores = []
+        mock_gepa_result.best_idx = 0
+        mock_gepa_result.total_metric_calls = 1
+        mock_gepa_result.parents = []
+        return mock_gepa_result
+
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer.OpikGEPAAdapter",
+        FakeAdapter,
+    )
+    monkeypatch.setattr("gepa.optimize", _fake_gepa_optimize)
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.gepa_optimizer.ops.scoring_ops.rescore_candidates",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.gepa_optimizer.ops.result_ops.build_algorithm_result",
+        lambda **kwargs: MagicMock(),
+    )
+
+    optimizer.run_optimization(context)
+
+    assert captured["allow_tool_use"] is False
+    assert captured["candidate_selection_policy"] == "max_logprob"

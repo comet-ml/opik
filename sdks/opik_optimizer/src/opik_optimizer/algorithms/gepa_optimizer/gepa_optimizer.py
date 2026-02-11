@@ -181,6 +181,11 @@ class GepaOptimizer(BaseOptimizer):
         requested_selection_strategy = context.extra_params.get(
             "candidate_selection_strategy"
         )
+        adapter_policy = (
+            self.model_parameters.get("candidate_selection_policy")
+            or self.model_parameters.get("selection_policy")
+        )
+        adapter_allow_tool_use = bool(self.model_parameters.get("allow_tool_use", True))
         model_selection_strategy = (
             self.model_parameters.get("candidate_selection_policy")
             or self.model_parameters.get("selection_policy")
@@ -312,6 +317,10 @@ class GepaOptimizer(BaseOptimizer):
             dataset=dataset,
             experiment_config=experiment_config,
             validation_dataset=validation_dataset,
+            allow_tool_use=adapter_allow_tool_use,
+            candidate_selection_policy=(
+                str(adapter_policy) if isinstance(adapter_policy, str) else None
+            ),
         )
 
         try:
