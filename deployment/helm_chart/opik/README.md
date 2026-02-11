@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.10](https://img.shields.io/badge/Version-1.10.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.10](https://img.shields.io/badge/AppVersion-1.10.10-informational?style=flat-square)
+![Version: 1.10.11](https://img.shields.io/badge/Version-1.10.11-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.11](https://img.shields.io/badge/AppVersion-1.10.11-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -229,6 +229,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
 | component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
+| component.backend.env.TEST | string | `"Clear Env Test"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
