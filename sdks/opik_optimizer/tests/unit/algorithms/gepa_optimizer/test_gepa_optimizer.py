@@ -466,3 +466,63 @@ def test_gepa_optimizer_rejects_unsupported_batch_sampler() -> None:
         match="supports only batch_sampler='epoch_shuffled'",
     ):
         optimizer.run_optimization(context)
+
+
+def test_gepa_optimizer_uses_validation_dataset_for_valset(monkeypatch) -> None:
+    train_items = [{"id": "train-1", "question": "Q1", "answer": "A1"}]
+    val_items = [{"id": "val-1", "question": "Q2", "answer": "A2"}]
+    train_dataset = make_mock_dataset(
+        train_items, name="train-dataset", dataset_id="train-123"
+    )
+    validation_dataset = make_mock_dataset(
+        val_items, name="val-dataset", dataset_id="val-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 0.5
+
+    metric_fn.__name__ = "metric_fn"
+
+    context = make_optimization_context(
+        prompt,
+        dataset=train_dataset,
+        evaluation_dataset=validation_dataset,
+        validation_dataset=validation_dataset,
+        metric=metric_fn,
+    )
+    context.max_trials = 2
+    context.baseline_score = 0.1
+
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    optimizer.pre_optimize(context)
+
+    captured: dict[str, Any] = {}
+
+    def _fake_gepa_optimize(**kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        mock_gepa_result = MagicMock()
+        mock_gepa_result.candidates = []
+        mock_gepa_result.val_aggregate_scores = []
+        mock_gepa_result.best_idx = 0
+        mock_gepa_result.total_metric_calls = 1
+        mock_gepa_result.parents = []
+        return mock_gepa_result
+
+    monkeypatch.setattr("gepa.optimize", _fake_gepa_optimize)
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.gepa_optimizer.ops.scoring_ops.rescore_candidates",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.gepa_optimizer.ops.result_ops.build_algorithm_result",
+        lambda **kwargs: MagicMock(),
+    )
+
+    optimizer.run_optimization(context)
+
+    trainset = captured.get("trainset") or []
+    valset = captured.get("valset") or []
+    assert [inst.opik_item["id"] for inst in trainset] == ["train-1"]
+    assert [inst.opik_item["id"] for inst in valset] == ["val-1"]
