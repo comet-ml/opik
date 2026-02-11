@@ -44,8 +44,8 @@ result = optimizer.optimize_prompt(
 )
 ```
 
-Tool optimization is supported by all optimizers **except** `FewShotBayesianOptimizer`
-and `ParameterOptimizer`.
+Tool optimization is supported by all optimizers **except** `FewShotBayesianOptimizer`,
+`ParameterOptimizer`, and `GepaOptimizer` (for now).
 
 ## Tool calling + MCP formats
 
@@ -107,6 +107,36 @@ prompt = ChatPrompt(
     tools=cursor_mcp_config_to_tools(cursor_config),
 )
 ```
+
+### Cursor vs OpenAI ChatPrompt styles
+
+`ChatPrompt.tools` accepts OpenAI-style MCP entries directly. Cursor configs use a different
+shape (`mcpServers`) and must be converted first:
+
+```python
+# OpenAI-style MCP tool entry (directly supported by ChatPrompt.tools)
+openai_tools = [
+    {
+        "type": "mcp",
+        "server_label": "context7",
+        "server_url": "https://mcp.context7.com/mcp",
+        "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+        "allowed_tools": ["resolve-library-id", "query-docs"],
+    }
+]
+
+# Cursor-style config (convert before assigning to ChatPrompt.tools)
+cursor_config = {
+    "mcpServers": {
+        "context7": {
+            "url": "https://mcp.context7.com/mcp",
+            "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"},
+        }
+    }
+}
+```
+
+After normalization, both styles execute the same way during evaluation and optimization.
 
 ### Mixed function + MCP tools
 
@@ -197,7 +227,7 @@ result = optimizer.optimize_prompt(
 ## Limitations
 
 - Tool optimization only supports **single prompts**.
-- Not supported in `FewShotBayesianOptimizer` or `ParameterOptimizer`.
+- Not supported in `FewShotBayesianOptimizer`, `ParameterOptimizer`, or `GepaOptimizer`.
 
 ## Troubleshooting
 

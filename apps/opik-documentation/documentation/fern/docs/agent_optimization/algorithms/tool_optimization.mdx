@@ -10,7 +10,7 @@ subtitle: Optimize prompts that use external tools and function calls
 title: Tool Optimization (MCP & Function Calling)
 ---
 
-Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is supported by all optimizers **except** `FewShotBayesianOptimizer` and `ParameterOptimizer`.
+Tool optimization is a specialized feature that allows you to optimize prompts that use external tools and the Model Context Protocol (MCP). This capability is supported by all optimizers **except** `FewShotBayesianOptimizer`, `ParameterOptimizer`, and `GepaOptimizer`.
 
 ## What is Tool Optimization?
 
@@ -106,13 +106,13 @@ from opik_optimizer import MetaPromptOptimizer
 # MCP tools are configured as OpenAI-style entries (local or remote)
 optimizer = MetaPromptOptimizer(model="gpt-4o-mini")
 
-# Any supported optimizer works here (e.g., HRPO, Evolutionary, GEPA).
+# Any supported optimizer works here (e.g., HRPO, Evolutionary, MetaPrompt).
 ```
 
 <Note>
 MCP Tool Optimization:
 
-    - Supported by all optimizers **except** FewShotBayesianOptimizer and ParameterOptimizer
+    - Supported by all optimizers **except** FewShotBayesianOptimizer, ParameterOptimizer, and GepaOptimizer
     - Working examples available in `scripts/litellm_metaprompt_context7_remote_example.py`
 
 </Note>
