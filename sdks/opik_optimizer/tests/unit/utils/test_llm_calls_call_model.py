@@ -61,6 +61,9 @@ class TestCallModelSync:
             )
 
         assert isinstance(result, Outer)
+        assert result.inner.value == 1
+        assert result.inner.detail is None
+        assert result.note is None
         response_format = captured_kwargs.get("response_format", {})
         schema = response_format.get("json_schema", {}).get("schema", {})
         assert schema.get("additionalProperties") is False
@@ -161,6 +164,9 @@ class TestCallModelAsync:
             )
 
         assert isinstance(result, Outer)
+        assert result.inner.value == 1
+        assert result.inner.detail is None
+        assert result.note is None
         response_format = captured_kwargs.get("response_format", {})
         schema = response_format.get("json_schema", {}).get("schema", {})
         assert schema.get("additionalProperties") is False
