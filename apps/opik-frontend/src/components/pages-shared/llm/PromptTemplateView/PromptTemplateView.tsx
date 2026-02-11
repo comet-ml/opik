@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Code2, MessageSquare } from "lucide-react";
+import { Code2, MessageSquare, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import PromptMessagesReadonly, {
@@ -35,8 +35,16 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
     [template],
   );
 
-  const isChatPrompt = templateStructure === "chat";
   const hasMessages = messages.length > 0;
+
+  // Infer type when templateStructure is not explicitly set
+  const isChatPrompt =
+    templateStructure === "chat" ||
+    (templateStructure === undefined && hasMessages);
+  const isTextPrompt =
+    templateStructure === "text" ||
+    (templateStructure === undefined && !hasMessages);
+  const showToggle = (isChatPrompt && hasMessages) || isTextPrompt;
 
   const parsedTemplate = useMemo(() => {
     try {
@@ -46,15 +54,90 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
     }
   }, [template]);
 
-  const serializedMessages = useMemo(
-    () =>
-      messages
-        .map((m) =>
-          typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-        )
-        .join("\n\n"),
-    [messages],
-  );
+  const textContent = useMemo(() => {
+    if (typeof template === "string") {
+      return template;
+    }
+    return JSON.stringify(template, null, 2);
+  }, [template]);
+
+  const renderToggleButton = () => {
+    if (!showToggle) return null;
+
+    if (isChatPrompt) {
+      return (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowRawView(!showRawView)}
+        >
+          {showRawView ? (
+            <>
+              <MessageSquare className="mr-1.5 size-3.5" />
+              Message view
+            </>
+          ) : (
+            <>
+              <Code2 className="mr-1.5 size-3.5" />
+              Raw view
+            </>
+          )}
+        </Button>
+      );
+    }
+
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setShowRawView(!showRawView)}
+      >
+        {showRawView ? (
+          <>
+            <Type className="mr-1.5 size-3.5" />
+            Pretty view
+          </>
+        ) : (
+          <>
+            <Code2 className="mr-1.5 size-3.5" />
+            Raw view
+          </>
+        )}
+      </Button>
+    );
+  };
+
+  const renderContent = () => {
+    if (showRawView) {
+      return (
+        <SyntaxHighlighter
+          withSearch={Boolean(search)}
+          data={parsedTemplate as object}
+          search={search}
+        />
+      );
+    }
+
+    if (isChatPrompt && hasMessages) {
+      return <PromptMessagesReadonly messages={messages} />;
+    }
+
+    if (isTextPrompt) {
+      return (
+        <div className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground">
+          {textContent}
+        </div>
+      );
+    }
+
+    return (
+      <SyntaxHighlighter
+        withSearch={Boolean(search)}
+        data={parsedTemplate as object}
+        search={search}
+      />
+    );
+  };
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -62,40 +145,10 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
         <div className="comet-body-s-accented">
           {isChatPrompt ? "Chat messages" : "Prompt"}
         </div>
-        {hasMessages && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowRawView(!showRawView)}
-          >
-            {showRawView ? (
-              <>
-                <MessageSquare className="mr-1.5 size-3.5" />
-                Message view
-              </>
-            ) : (
-              <>
-                <Code2 className="mr-1.5 size-3.5" />
-                Raw view
-              </>
-            )}
-          </Button>
-        )}
+        {renderToggleButton()}
       </div>
 
-      {showRawView || !hasMessages ? (
-        <SyntaxHighlighter
-          withSearch={Boolean(search)}
-          data={parsedTemplate as object}
-          search={search}
-        />
-      ) : isChatPrompt ? (
-        <PromptMessagesReadonly messages={messages} />
-      ) : (
-        <div className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground">
-          {serializedMessages}
-        </div>
-      )}
+      {renderContent()}
 
       {children}
     </div>
