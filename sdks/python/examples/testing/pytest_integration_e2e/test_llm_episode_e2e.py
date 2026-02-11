@@ -39,7 +39,7 @@ def test_refund_episode_ci_gate(scenario_id: str = "refund_flow_v1"):
         if message["role"] == "assistant"
     ]
 
-    return EpisodeResult(
+    episode = EpisodeResult(
         scenario_id=scenario_id,
         thread_id=simulation["thread_id"],
         assertions=[
@@ -59,3 +59,7 @@ def test_refund_episode_ci_gate(scenario_id: str = "refund_flow_v1"):
         ),
         metadata={"project_name": simulation.get("project_name")},
     )
+
+    # Native pytest failure signal, while still returning EpisodeResult for Opik artifacts.
+    assert episode.is_passing(), episode.model_dump_json(indent=2)
+    return episode
