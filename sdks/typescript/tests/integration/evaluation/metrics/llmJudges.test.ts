@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { Opik } from "@/index";
 import { AnswerRelevance } from "@/evaluation/metrics/llmJudges/answerRelevance/AnswerRelevance";
 import { GEval } from "@/evaluation/metrics/llmJudges/gEval/GEval";
@@ -11,6 +11,7 @@ import {
   getIntegrationTestStatus,
   hasAnthropicApiKey,
 } from "../../api/shouldRunIntegrationTests";
+import { logger } from "@/utils/logger";
 
 const shouldRunApiTests = shouldRunIntegrationTests();
 
@@ -219,7 +220,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
 
   describe("GEval Metric", () => {
     it("should score high quality output with custom task and use logprobs", async () => {
-      const consoleDebugSpy = vi.spyOn(console, "debug");
+      const loggerDebugSpy = vi.spyOn(logger, "debug");
 
       const metric = new GEval({
         taskIntroduction:
@@ -242,18 +243,18 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
         expect(result.reason.length).toBeGreaterThan(0);
       }
 
-      // Verify that logprobs were used
-      expect(consoleDebugSpy).not.toHaveBeenCalledWith(
+      // Verify that logprobs were used (logger.debug should not have been called with failure message)
+      expect(loggerDebugSpy).not.toHaveBeenCalledWith(
         expect.stringContaining("failed to use logprobs")
       );
 
-      consoleDebugSpy.mockRestore();
+      loggerDebugSpy.mockRestore();
     }, 60000);
 
     it.skipIf(!hasAnthropicApiKey())(
       "should score high quality output with Anthropic model",
       async () => {
-        const consoleDebugSpy = vi.spyOn(console, "debug");
+        const loggerDebugSpy = vi.spyOn(logger, "debug");
 
         const metric = new GEval({
           taskIntroduction:
@@ -277,11 +278,11 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
         }
 
         // Verify that logprobs failed (expected for Anthropic models)
-        expect(consoleDebugSpy).toHaveBeenCalledWith(
+        expect(loggerDebugSpy).toHaveBeenCalledWith(
           expect.stringContaining("failed to use logprobs")
         );
 
-        consoleDebugSpy.mockRestore();
+        loggerDebugSpy.mockRestore();
       },
       60000
     );
@@ -302,7 +303,6 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
         expect(result.reason.length).toBeGreaterThan(0);
       }
     }, 60000);
-  });
 
   describe("Metric Configuration", () => {
     it("should work with custom model configuration", async () => {
