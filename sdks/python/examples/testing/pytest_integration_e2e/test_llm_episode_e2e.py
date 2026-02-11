@@ -15,6 +15,43 @@ from opik.simulation import (
 )
 
 
+def print_episode_debug(
+    scenario_id: str,
+    simulation: dict,
+    trajectory: list[dict],
+    episode: EpisodeResult,
+) -> None:
+    print(f"\n[episode] scenario={scenario_id} thread_id={simulation['thread_id']}")
+    print("[episode] conversation:")
+    for index, message in enumerate(simulation["conversation_history"], start=1):
+        print(f"  {index:02d}. {message['role']}: {message['content']}")
+
+    print("[episode] trajectory actions:")
+    if not trajectory:
+        print("  (none)")
+    for index, step in enumerate(trajectory, start=1):
+        print(f"  {index:02d}. action={step.get('action')} details={step.get('details')}")
+
+    print("[episode] assertions:")
+    for assertion in episode.assertions:
+        status = "PASS" if assertion.passed else "FAIL"
+        print(f"  - {status} {assertion.name}: {assertion.reason}")
+
+    print("[episode] scores:")
+    for score in episode.scores:
+        print(f"  - {score.name}: {score.value} ({score.reason})")
+
+    if episode.budgets is not None:
+        print("[episode] budgets:")
+        for budget_name, metric in episode.budgets.all_metrics().items():
+            status = "PASS" if metric.passed else "FAIL"
+            print(f"  - {status} {budget_name}: used={metric.used}, limit={metric.limit}")
+
+    print(
+        f"[episode] final_status={'PASS' if episode.is_passing() else 'FAIL'}"
+    )
+
+
 def lookup_order(order_id: str):
     return {"order_id": order_id, "status": "delivered", "eligible_for_refund": True}
 
@@ -247,6 +284,12 @@ def test_refund_episode_ci_gate(scenario):
             "tags": simulation.get("tags"),
             "tool_actions": [step["action"] for step in trajectory],
         },
+    )
+    print_episode_debug(
+        scenario_id=scenario_id,
+        simulation=simulation,
+        trajectory=trajectory,
+        episode=episode,
     )
 
     # Native pytest failure signal, while still returning EpisodeResult for Opik artifacts.
