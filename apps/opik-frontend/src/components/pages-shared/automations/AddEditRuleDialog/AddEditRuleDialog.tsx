@@ -90,6 +90,7 @@ import {
 } from "./helpers";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useConfirmAction } from "@/components/shared/ConfirmDialog/useConfirmAction";
+import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
 
 export const DEFAULT_LLM_AS_JUDGE_DATA = {
   [EVALUATORS_RULE_SCOPE.trace]: {
@@ -380,10 +381,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     workspaceName,
                   },
                   search: {
-                    type: {
-                      [EVALUATORS_RULE_SCOPE.trace]: "traces",
-                      [EVALUATORS_RULE_SCOPE.thread]: "threads",
-                      [EVALUATORS_RULE_SCOPE.span]: "spans",
+                    tab: PROJECT_TAB.logs,
+                    logsType: {
+                      [EVALUATORS_RULE_SCOPE.trace]: LOGS_TYPE.traces,
+                      [EVALUATORS_RULE_SCOPE.thread]: LOGS_TYPE.threads,
+                      [EVALUATORS_RULE_SCOPE.span]: LOGS_TYPE.spans,
                     }[scope],
                   },
                 });
