@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
+import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
 import useAppStore from "@/store/AppStore";
 import { useUserApiKey } from "@/store/AppStore";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
@@ -92,7 +93,7 @@ const IntegrationDetailsDialog: React.FunctionComponent<
           </div>
 
           <IntegrationStep
-            title="1. Install Opik using pip from the command line."
+            title={`${INSTALL_OPIK_SECTION_TITLE}.`}
             description="Install Opik from the command line using pip."
             className="mb-6"
           >
