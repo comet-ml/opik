@@ -24,22 +24,44 @@ def create_refund(order_id: str):
 
 
 def get_refund_scenario():
-    return {
-        "scenario_id": "refund_flow_v1",
-        "max_turns": 3,
-        "tool_call_limit": 3,
-        "project_name": "pytest-episode-e2e",
-        "tags": ["simulation", "refund", "policy-check"],
-        "user_persona": (
-            "You are a frustrated customer requesting a refund for a damaged package. "
-            "Provide concise answers and give your order id when asked."
-        ),
-        "user_messages": [
-            "Hi, I want a refund because the package arrived damaged.",
-            "My order id is ORD-1234.",
-            "Yes, please process the refund now.",
-        ],
-    }
+    return [
+        {
+            "scenario_id": "refund_flow_v1",
+            "max_turns": 3,
+            "tool_call_limit": 3,
+            "project_name": "pytest-episode-e2e",
+            "tags": ["simulation", "refund", "policy-check"],
+            "user_persona": (
+                "You are a frustrated customer requesting a refund for a damaged package. "
+                "Provide concise answers and give your order id when asked."
+            ),
+            "user_messages": [
+                "Hi, I want a refund because the package arrived damaged.",
+                "My order id is ORD-1234.",
+                "Yes, please process the refund now.",
+            ],
+            "expect_refund_submitted": True,
+            "expect_order_id_prompt": True,
+        },
+        {
+            "scenario_id": "shipping_only_v1",
+            "max_turns": 3,
+            "tool_call_limit": 1,
+            "project_name": "pytest-episode-e2e",
+            "tags": ["simulation", "shipping", "policy-check"],
+            "user_persona": (
+                "You are a customer asking for shipping updates only. "
+                "Do not ask for a refund."
+            ),
+            "user_messages": [
+                "Where is my package?",
+                "I only need tracking details.",
+                "Thanks, no refund needed.",
+            ],
+            "expect_refund_submitted": False,
+            "expect_order_id_prompt": True,
+        },
+    ]
 
 
 class RefundAgent:
@@ -113,9 +135,10 @@ class RefundAgent:
 @pytest.mark.filterwarnings(
     "ignore:Test functions should return None:pytest.PytestReturnNotNoneWarning"
 )
+@pytest.mark.parametrize("scenario", get_refund_scenario())
 @llm_episode(scenario_id_key="scenario_id")
-def test_refund_episode_ci_gate(scenario_id: str = "refund_flow_v1"):
-    scenario = get_refund_scenario()
+def test_refund_episode_ci_gate(scenario):
+    scenario_id = scenario["scenario_id"]
     agent = RefundAgent()
 
     user_simulator = SimulatedUser(
@@ -160,26 +183,36 @@ def test_refund_episode_ci_gate(scenario_id: str = "refund_flow_v1"):
             ),
             EpisodeAssertion(
                 name="policy_requires_order_id_before_refund",
-                passed=asked_for_order_id,
-                reason="assistant asked for order id before processing refund",
+                passed=asked_for_order_id == scenario["expect_order_id_prompt"],
+                reason=(
+                    "assistant order-id prompt behavior matched scenario expectation: "
+                    f"expected={scenario['expect_order_id_prompt']}, observed={asked_for_order_id}"
+                ),
             ),
             EpisodeAssertion(
                 name="refund_submission_completed",
-                passed=refund_submitted,
-                reason="assistant completed refund submission",
+                passed=refund_submitted == scenario["expect_refund_submitted"],
+                reason=(
+                    "refund completion matched scenario expectation: "
+                    f"expected={scenario['expect_refund_submitted']}, observed={refund_submitted}"
+                ),
             ),
             turn_assertion,
         ],
         scores=[
             EpisodeScore(
                 name="goal_completion",
-                value=1.0 if refund_submitted else 0.0,
-                reason="refund request should be completed in this scenario",
+                value=1.0
+                if refund_submitted == scenario["expect_refund_submitted"]
+                else 0.0,
+                reason="scenario goal reached according to expected outcome",
             ),
             EpisodeScore(
                 name="instruction_adherence",
-                value=1.0 if asked_for_order_id and refund_submitted else 0.5,
-                reason="agent should verify order id and then process refund",
+                value=1.0
+                if asked_for_order_id == scenario["expect_order_id_prompt"]
+                else 0.5,
+                reason="agent followed scenario-specific policy behavior",
             ),
         ],
         budgets=EpisodeBudgets(
