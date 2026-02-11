@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import { Check, Pipette } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -39,6 +39,15 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
     [onChange],
   );
 
+  const handleHexKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter" && HEX_COLOR_REGEX.test(hexInput)) {
+        onPresetSelect?.(hexInput);
+      }
+    },
+    [hexInput, onPresetSelect],
+  );
+
   const handleNativeChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const color = e.target.value;
@@ -51,35 +60,30 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
   const isValidHex = HEX_COLOR_REGEX.test(hexInput);
 
   return (
-    <div className="flex w-52 flex-col gap-3">
-      <div className="grid grid-cols-5 gap-2">
-        {PRESET_HEX_COLORS.map((color) => (
-          <button
-            key={color}
-            type="button"
-            className={cn(
-              "flex size-8 items-center justify-center rounded-md border-2 transition-colors",
-              value.toLowerCase() === color.toLowerCase()
-                ? "border-foreground"
-                : "border-transparent hover:border-border",
-            )}
-            style={{ backgroundColor: color }}
-            onClick={() => handlePresetClick(color)}
-          >
-            {value.toLowerCase() === color.toLowerCase() && (
-              <Check className="size-4 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]" />
-            )}
-          </button>
-        ))}
+    <div className="flex flex-col">
+      <div className="grid w-[144px] grid-cols-5 gap-1.5">
+        {PRESET_HEX_COLORS.map((color) => {
+          const isSelected = value.toLowerCase() === color.toLowerCase();
+          return (
+            <button
+              key={color}
+              type="button"
+              className="flex size-6 items-center justify-center rounded transition-[filter] hover:brightness-90"
+              style={{ backgroundColor: color }}
+              onClick={() => handlePresetClick(color)}
+            >
+              {isSelected && <Check className="size-3 text-white" />}
+            </button>
+          );
+        })}
       </div>
-      <Separator />
-      <div className="flex items-center gap-2">
+      <Separator className="my-3" />
+      <div className="flex w-[144px] items-center gap-1.5">
         <div
-          className="relative size-8 shrink-0 cursor-pointer rounded-md border border-border"
+          className="size-6 shrink-0 cursor-pointer rounded"
           style={{ backgroundColor: isValidHex ? hexInput : value }}
           onClick={() => nativeInputRef.current?.click()}
         >
-          <Pipette className="absolute inset-0 m-auto size-4 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]" />
           <input
             ref={nativeInputRef}
             type="color"
@@ -91,10 +95,13 @@ const ColorPicker: React.FC<ColorPickerProps> = ({
         <Input
           value={hexInput}
           onChange={handleHexInputChange}
+          onKeyDown={handleHexKeyDown}
           placeholder="#000000"
           className={cn(
-            "h-8 font-mono text-xs",
-            !isValidHex && hexInput !== "" && "border-destructive",
+            "h-6 font-mono text-xs",
+            !isValidHex &&
+              hexInput !== "" &&
+              "border-destructive focus-visible:border-destructive",
           )}
         />
       </div>
