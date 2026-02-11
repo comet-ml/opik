@@ -150,12 +150,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             policy = self._candidate_selection_policy.strip()
             if policy:
                 return policy
-        model_params = getattr(self._optimizer, "model_parameters", {}) or {}
-        model_policy = model_params.get("candidate_selection_policy") or model_params.get(
-            "selection_policy"
-        )
-        if isinstance(model_policy, str) and model_policy.strip():
-            return model_policy
         prompt = next(iter(prompt_variants.values()))
         model_kwargs = prompt.model_kwargs or {}
         prompt_policy = model_kwargs.get("candidate_selection_policy") or model_kwargs.get(
@@ -163,6 +157,12 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         )
         if isinstance(prompt_policy, str) and prompt_policy.strip():
             return prompt_policy
+        model_params = getattr(self._optimizer, "model_parameters", {}) or {}
+        model_policy = model_params.get("candidate_selection_policy") or model_params.get(
+            "selection_policy"
+        )
+        if isinstance(model_policy, str) and model_policy.strip():
+            return model_policy
         return "best_by_metric"
 
     def _extract_candidate_logprobs(self, candidates: list[str]) -> list[float] | None:

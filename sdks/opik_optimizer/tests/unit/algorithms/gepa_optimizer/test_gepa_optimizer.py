@@ -832,6 +832,52 @@ def test_gepa_adapter_uses_logprob_policy_when_configured() -> None:
     assert result.outputs == [{"output": "high"}]
 
 
+def test_gepa_adapter_prefers_prompt_selection_policy_over_model_default() -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+    prompt.model_kwargs = {"selection_policy": "best_by_metric"}
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        return 1.0 if llm_output == "metric_best" else 0.0
+
+    metric_fn.__name__ = "metric_fn"
+
+    context = make_optimization_context(prompt, dataset=dataset, metric=metric_fn)
+    optimizer = GepaOptimizer(
+        model="gpt-4o-mini",
+        model_parameters={"selection_policy": "max_logprob"},
+        verbose=0,
+        seed=42,
+    )
+
+    class CandidateAgent:
+        def __init__(self) -> None:
+            self._last_candidate_logprobs = [0.01, 0.9]
+
+        def invoke_agent_candidates(
+            self, prompts: dict[str, ChatPrompt], dataset_item: dict[str, Any]
+        ) -> list[str]:
+            _ = prompts, dataset_item
+            return ["metric_best", "logprob_best"]
+
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=CandidateAgent(),  # type: ignore[arg-type]
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+    )
+
+    batch = [MagicMock(opik_item={"question": "Q", "answer": "A"})]
+    result = adapter.evaluate(batch, {"system_prompt": "You are a helpful assistant."})
+
+    assert result.outputs == [{"output": "metric_best"}]
+
+
 def test_gepa_optimizer_ignores_blank_selection_strategy(monkeypatch) -> None:
     dataset = make_mock_dataset(
         STANDARD_DATASET_ITEMS[:2], name="test-dataset", dataset_id="dataset-123"
