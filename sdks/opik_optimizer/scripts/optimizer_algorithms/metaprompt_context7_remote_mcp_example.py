@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 from opik.evaluation.metrics import LevenshteinRatio
+from opik.evaluation.metrics.score_result import ScoreResult
 
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
@@ -70,10 +72,29 @@ dataset = load_context7_dataset(test_mode=False)
 scorer = LevenshteinRatio()
 
 
-def context7_metric(dataset_item: dict, llm_output: str):  # type: ignore[no-untyped-def]
-    return scorer.score(
+def context7_metric(dataset_item: dict[str, Any], llm_output: str) -> Any:
+    """Compute Levenshtein similarity between reference_answer and model output.
+
+    Args:
+        dataset_item: Dataset row dict with optional ``reference_answer`` text.
+        llm_output: Model output text to compare.
+
+    Returns:
+        ScoreResult with ``name='context7_metric'``, ``value`` as a float similarity
+        score, and a human-readable reason.
+
+    Notes:
+        Missing/None ``reference_answer`` values are treated as ``""``, so the score
+        compares output against an empty string in that edge case.
+    """
+    base_score = scorer.score(
         reference=str(dataset_item.get("reference_answer", "")),
         output=llm_output,
+    )
+    return ScoreResult(
+        name="context7_metric",
+        value=float(base_score.value),
+        reason="Levenshtein similarity to reference_answer.",
     )
 
 

@@ -62,6 +62,20 @@ scorer = LevenshteinRatio()
 
 
 def context7_metric(dataset_item: dict[str, Any], llm_output: str) -> Any:
+    """Compute Levenshtein similarity between reference_answer and model output.
+
+    Args:
+        dataset_item: Dataset row dict with optional ``reference_answer`` text.
+        llm_output: Model output text to compare.
+
+    Returns:
+        ScoreResult with ``name='context7_metric'``, ``value`` as a float similarity
+        score, and a human-readable reason.
+
+    Notes:
+        Missing/None ``reference_answer`` values are treated as ``""``, so the score
+        compares output against an empty string in that edge case.
+    """
     base_score = scorer.score(
         reference=str(dataset_item.get("reference_answer", "")),
         output=llm_output,
