@@ -366,7 +366,25 @@ class OpenTelemetryResourceTest {
                     KeyValue.newBuilder().setKey("opik.metadata")
                             .setValue(AnyValue.newBuilder().setStringValue("{\"foo\": \"bar\"}").build()).build(),
                     KeyValue.newBuilder().setKey("opik.metadata.inline")
-                            .setValue(AnyValue.newBuilder().setStringValue("inline_value").build()).build());
+                            .setValue(AnyValue.newBuilder().setStringValue("inline_value").build()).build(),
+
+                    // OpenInference/OpenLLMetry common attributes
+                    KeyValue.newBuilder().setKey("llm.invocation_parameters.temperature")
+                            .setValue(AnyValue.newBuilder().setDoubleValue(0.3)).build(),
+                    KeyValue.newBuilder().setKey("llm.prompts.0.content")
+                            .setValue(AnyValue.newBuilder().setStringValue("You are a helpful assistant")).build(),
+                    KeyValue.newBuilder().setKey("llm.output_messages.0.content")
+                            .setValue(AnyValue.newBuilder().setStringValue("Hello from OpenInference")).build(),
+                    KeyValue.newBuilder().setKey("llm.provider")
+                            .setValue(AnyValue.newBuilder().setStringValue("openai")).build(),
+                    KeyValue.newBuilder().setKey("llm.token_count.prompt")
+                            .setValue(AnyValue.newBuilder().setIntValue(12)).build(),
+                    KeyValue.newBuilder().setKey("llm.token_count.completion")
+                            .setValue(AnyValue.newBuilder().setIntValue(8)).build(),
+                    KeyValue.newBuilder().setKey("input.value")
+                            .setValue(AnyValue.newBuilder().setStringValue("raw_input_value")).build(),
+                    KeyValue.newBuilder().setKey("output.value")
+                            .setValue(AnyValue.newBuilder().setStringValue("raw_output_value")).build());
 
             var spanBuilder = com.comet.opik.api.Span.builder()
                     .id(UUID.randomUUID())
@@ -396,12 +414,23 @@ class OpenTelemetryResourceTest {
             assertThat(span.input().get("input").get("key").asText()).isEqualTo("value");
             assertThat(span.input().get("tools").isArray()).isEqualTo(Boolean.TRUE);
             assertThat(span.input().get("all_messages").isArray()).isEqualTo(Boolean.TRUE);
+            assertThat(span.input().get("llm.invocation_parameters.temperature").asDouble()).isEqualTo(0.3);
+            assertThat(span.input().get("llm.prompts.0.content").asText()).isEqualTo("You are a helpful assistant");
+            assertThat(span.input().get("input.value").asText()).isEqualTo("raw_input_value");
 
             assertThat(span.output().get("tool_responses").isArray()).isEqualTo(Boolean.TRUE);
+            assertThat(span.output().get("llm.output_messages.0.content").asText())
+                    .isEqualTo("Hello from OpenInference");
+            assertThat(span.output().get("output.value").asText()).isEqualTo("raw_output_value");
 
             // checks key-values for tags
             assertThat(span.tags()).isNotEmpty();
             assertThat(span.tags()).contains("machine-learning", "nlp", "chatbot");
+
+            // checks usage fields from OpenInference
+            assertThat(span.usage()).isNotEmpty();
+            assertThat(span.usage().get("prompt")).isEqualTo(12);
+            assertThat(span.usage().get("completion")).isEqualTo(8);
 
             // check metadata
             assertThat(span.metadata()).isNotEmpty();
