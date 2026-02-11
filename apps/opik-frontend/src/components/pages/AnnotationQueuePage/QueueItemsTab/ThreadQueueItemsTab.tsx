@@ -27,7 +27,6 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { Thread } from "@/types/traces";
-import { ThreadStatus } from "@/types/thread";
 import { AnnotationQueue } from "@/types/annotation-queues";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
@@ -50,7 +49,6 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
-import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -98,12 +96,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     type: COLUMN_TYPE.number,
     accessorFn: (row) =>
       isNumber(row.number_of_messages) ? `${row.number_of_messages}` : "-",
-  },
-  {
-    id: "status",
-    label: "Status",
-    type: COLUMN_TYPE.category,
-    cell: ThreadStatusCell as never,
   },
   {
     id: "created_at",
@@ -286,7 +278,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     [annotationQueue.id, filters],
   );
 
-  const { data, isPending } = useThreadsList(
+  const { data, isPending, isPlaceholderData, isFetching } = useThreadsList(
     {
       projectId: annotationQueue.project_id,
       sorting: sortedColumns,
@@ -320,15 +312,6 @@ const ThreadQueueItemsTab: React.FunctionComponent<
               .sort()
               .map((key) => ({ value: key, label: key })),
             placeholder: "Select score",
-          },
-        },
-        status: {
-          keyComponentProps: {
-            options: [
-              { value: ThreadStatus.INACTIVE, label: "Inactive" },
-              { value: ThreadStatus.ACTIVE, label: "Active" },
-            ],
-            placeholder: "Select value",
           },
         },
       },
@@ -553,6 +536,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

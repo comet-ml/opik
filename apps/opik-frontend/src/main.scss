@@ -29,6 +29,7 @@
 
     --background: 0 0% 100%;
     --foreground: 224 17% 26%;
+    --loading-overlay: 0 0% 100%;
 
     --soft-background: 240 20% 99%;
 
@@ -218,6 +219,7 @@
 
     --background: 0, 0%, 7%;
     --foreground: 214, 32%, 91%;
+    --loading-overlay: 0 0% 5%;
 
     --soft-background: 0, 0%, 7%;
     --accent-background: 0, 0%, 9%;
@@ -609,6 +611,29 @@
   td:last-child [data-cell-wrapper="true"],
   th:last-child [data-header-wrapper="true"] {
     padding-right: 24px;
+  }
+}
+
+.comet-table-body-loading-overlay {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background-color: hsl(var(--loading-overlay) / 0.7);
+    animation: pulse 5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
   }
 }
 

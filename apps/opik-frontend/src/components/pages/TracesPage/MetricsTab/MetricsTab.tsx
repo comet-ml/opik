@@ -5,6 +5,7 @@ import RequestChartDialog from "@/components/pages/TracesPage/MetricsTab/Request
 import useTracesList from "@/api/traces/useTracesList";
 import useThreadList from "@/api/traces/useThreadsList";
 import NoTracesPage from "@/components/pages/TracesPage/NoTracesPage";
+import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import {
   useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
@@ -34,7 +35,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     key: METRICS_TAB_DATE_RANGE_QUERY_KEY,
   });
 
-  const { data: traces } = useTracesList(
+  const { data: traces, isPending: tracesIsPending } = useTracesList(
     {
       projectId,
       page: 1,
@@ -46,7 +47,7 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
     },
   );
 
-  const { data: threads } = useThreadList(
+  const { data: threads, isPending: threadsIsPending } = useThreadList(
     {
       projectId,
       page: 1,
@@ -61,15 +62,13 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
   const resetKeyRef = useRef(0);
   const hasTraces = Boolean(traces?.total);
   const hasThreads = Boolean(threads?.total);
+  const isLoading = tracesIsPending || threadsIsPending;
+  const showEmptyState = !isLoading && !hasTraces && !hasThreads;
 
   const handleRequestChartOpen = (val: boolean) => {
     setRequestChartOpen(val);
     resetKeyRef.current += 1;
   };
-
-  if (!hasTraces && !hasThreads) {
-    return <NoTracesPage />;
-  }
 
   return (
     <div className="px-6 pb-6">
@@ -91,29 +90,35 @@ const MetricsTab = ({ projectId }: MetricsTabProps) => {
         />
       </div>
 
-      <ProjectMetricsSection
-        projectId={projectId}
-        interval={interval}
-        intervalStart={intervalStart}
-        intervalEnd={intervalEnd}
-        hasTraces={hasTraces}
-      />
+      <DataTableStateHandler
+        isLoading={isLoading}
+        isEmpty={showEmptyState}
+        emptyState={<NoTracesPage type="metrics" />}
+      >
+        <ProjectMetricsSection
+          projectId={projectId}
+          interval={interval}
+          intervalStart={intervalStart}
+          intervalEnd={intervalEnd}
+          hasTraces={hasTraces}
+        />
 
-      <ThreadMetricsSection
-        projectId={projectId}
-        interval={interval}
-        intervalStart={intervalStart}
-        intervalEnd={intervalEnd}
-        hasThreads={hasThreads}
-      />
+        <ThreadMetricsSection
+          projectId={projectId}
+          interval={interval}
+          intervalStart={intervalStart}
+          intervalEnd={intervalEnd}
+          hasThreads={hasThreads}
+        />
 
-      <TraceMetricsSection
-        projectId={projectId}
-        interval={interval}
-        intervalStart={intervalStart}
-        intervalEnd={intervalEnd}
-        hasTraces={hasTraces}
-      />
+        <TraceMetricsSection
+          projectId={projectId}
+          interval={interval}
+          intervalStart={intervalStart}
+          intervalEnd={intervalEnd}
+          hasTraces={hasTraces}
+        />
+      </DataTableStateHandler>
 
       <RequestChartDialog
         key={`request-chart-${resetKeyRef.current}`}

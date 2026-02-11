@@ -197,7 +197,7 @@ const DatasetsPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending } = useDatasetsList(
+  const { data, isPending, isPlaceholderData, isFetching } = useDatasetsList(
     {
       workspaceName,
       filters,
@@ -365,6 +365,7 @@ const DatasetsPage: React.FunctionComponent = () => {
             )}
           </DataTableNoData>
         }
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

@@ -233,6 +233,7 @@ def verify_experiment(
     prompts: Optional[List[Prompt]] = None,
     experiment_scores: Optional[Dict[str, float]] = None,
     experiment_tags: Optional[List[str]] = None,
+    dataset_version_id: Optional[str] = mock.ANY,  # type: ignore
 ):
     rest_client = (
         opik_client._rest_client
@@ -275,6 +276,12 @@ def verify_experiment(
     _verify_experiment_scores(experiment_content, experiment_scores)
 
     testlib.assert_equal(expected=experiment_tags, actual=experiment_content.tags)
+
+    if dataset_version_id is not mock.ANY:
+        assert experiment_content.dataset_version_id == dataset_version_id, (
+            f"Expected dataset_version_id {dataset_version_id}, "
+            f"got {experiment_content.dataset_version_id}"
+        )
 
 
 def verify_attachments(
@@ -718,3 +725,49 @@ def verify_dataset_filtered_items(
         assert inputs == expected_inputs, (
             f"Input mismatch: {inputs} != {expected_inputs}"
         )
+
+
+def verify_traces_annotation_queue(
+    opik_client: opik.Opik,
+    queue_id: str,
+    name: str = mock.ANY,  # type: ignore
+    scope: str = mock.ANY,  # type: ignore
+    description: Optional[str] = mock.ANY,  # type: ignore
+    instructions: Optional[str] = mock.ANY,  # type: ignore
+) -> None:
+    if not synchronization.until(
+        lambda: (opik_client.get_traces_annotation_queue(queue_id) is not None),
+        allow_errors=True,
+    ):
+        raise AssertionError(f"Failed to get annotation queue with id {queue_id}.")
+
+    queue = opik_client.get_traces_annotation_queue(queue_id)
+
+    assert queue.id is not None, "Queue id should not be None"
+    testlib.assert_equal(name, queue.name)
+    testlib.assert_equal(scope, queue.scope)
+    testlib.assert_equal(description, queue.description)
+    testlib.assert_equal(instructions, queue.instructions)
+
+
+def verify_threads_annotation_queue(
+    opik_client: opik.Opik,
+    queue_id: str,
+    name: str = mock.ANY,  # type: ignore
+    scope: str = mock.ANY,  # type: ignore
+    description: Optional[str] = mock.ANY,  # type: ignore
+    instructions: Optional[str] = mock.ANY,  # type: ignore
+) -> None:
+    if not synchronization.until(
+        lambda: (opik_client.get_threads_annotation_queue(queue_id) is not None),
+        allow_errors=True,
+    ):
+        raise AssertionError(f"Failed to get annotation queue with id {queue_id}.")
+
+    queue = opik_client.get_threads_annotation_queue(queue_id)
+
+    assert queue.id is not None, "Queue id should not be None"
+    testlib.assert_equal(name, queue.name)
+    testlib.assert_equal(scope, queue.scope)
+    testlib.assert_equal(description, queue.description)
+    testlib.assert_equal(instructions, queue.instructions)
