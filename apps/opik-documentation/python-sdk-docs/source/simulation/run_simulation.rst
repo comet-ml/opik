@@ -216,25 +216,26 @@ Integration with Evaluation
        metrics=[ConversationThreadMetric()]
    )
 
-Advanced Usage with Tags
-~~~~~~~~~~~~~~~~~~~~~~~~
+Advanced Usage with Custom App Parameters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
-   # Add custom tags and metadata to traces
+   # Pass additional app kwargs for scenario-level behavior.
+   # These parameters are available inside your app callable.
    simulation = run_simulation(
        app=customer_service_agent,
        user_simulator=user_simulator,
        max_turns=5,
        project_name="tagged_simulation",
        simulation_id="test_001",  # Custom parameter
-       tags=["simulation", "customer_service"]  # Custom parameter
+       scenario_label="customer_service"  # Custom parameter
    )
 
    # Your app can access these parameters
    @track
-   def tagged_agent(user_message: str, *, thread_id: str, simulation_id: str = None, tags: List[str] = None, **kwargs):
-       # Use simulation_id and tags for custom logic
+   def tagged_agent(user_message: str, *, thread_id: str, simulation_id: str = None, scenario_label: str = None, **kwargs):
+       # Use custom parameters for scenario-specific logic
        if simulation_id:
            print(f"Running simulation: {simulation_id}")
        

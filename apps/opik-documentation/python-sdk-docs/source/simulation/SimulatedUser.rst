@@ -67,7 +67,6 @@ Generates a response based on the conversation history.
 
 - If ``fixed_responses`` are provided, cycles through them in order
 - Otherwise, uses the LLM to generate context-aware responses based on the persona and conversation history
-- Automatically limits conversation history to last 10 messages to avoid token limits
 
 Examples
 --------
