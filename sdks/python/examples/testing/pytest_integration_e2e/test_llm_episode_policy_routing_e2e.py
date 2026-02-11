@@ -1,4 +1,6 @@
 import logging
+import json
+import os
 
 import pytest
 
@@ -25,7 +27,7 @@ if not LOGGER.handlers:
     )
     handler.setFormatter(formatter)
     LOGGER.addHandler(handler)
-LOGGER.setLevel(logging.INFO)
+LOGGER.setLevel(getattr(logging, os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "INFO").upper(), logging.INFO))
 LOGGER.propagate = False
 
 
@@ -194,6 +196,10 @@ def test_policy_and_routing_episode_ci_gate(scenario):
         thread_id,
         sorted(trajectory_actions),
         "PASS" if episode.is_passing() else "FAIL",
+    )
+    LOGGER.debug(
+        "policy_routing_episode=%s",
+        json.dumps(episode.model_dump(), indent=2, sort_keys=True),
     )
     assert episode.is_passing(), episode.model_dump_json(indent=2)
     return episode

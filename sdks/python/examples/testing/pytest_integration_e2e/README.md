@@ -28,6 +28,9 @@ This runs:
 pytest -vv -s -rA test_*.py
 ```
 
+Example diagnostic logging defaults to concise `INFO` summaries.
+Set `OPIK_EXAMPLE_LOG_LEVEL=DEBUG` to print full JSON dumps of simulation/trajectory/episode objects.
+
 ## Outputs
 
 - Standard pytest output

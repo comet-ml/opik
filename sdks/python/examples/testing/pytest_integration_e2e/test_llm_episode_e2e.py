@@ -1,4 +1,6 @@
 import logging
+import json
+import os
 import pytest
 
 from opik import llm_episode
@@ -24,7 +26,7 @@ if not LOGGER.handlers:
     )
     handler.setFormatter(formatter)
     LOGGER.addHandler(handler)
-LOGGER.setLevel(logging.INFO)
+LOGGER.setLevel(getattr(logging, os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "INFO").upper(), logging.INFO))
 LOGGER.propagate = False
 
 
@@ -34,50 +36,38 @@ def print_episode_debug(
     trajectory: list[dict],
     episode: EpisodeResult,
 ) -> None:
+    assertions_passed = sum(1 for assertion in episode.assertions if assertion.passed)
+    assertions_total = len(episode.assertions)
+    budget_metrics = episode.budgets.all_metrics() if episode.budgets is not None else {}
+    budgets_passed = sum(1 for metric in budget_metrics.values() if metric.passed)
+    budgets_total = len(budget_metrics)
+    trajectory_summary = build_trajectory_summary(trajectory)
+
     LOGGER.info(
-        "episode scenario=%s thread_id=%s",
+        "episode scenario=%s thread_id=%s status=%s turns=%s tool_calls=%s assertions=%s/%s budgets=%s/%s",
         scenario_id,
         simulation["thread_id"],
-    )
-    LOGGER.info("conversation:")
-    for index, message in enumerate(simulation["conversation_history"], start=1):
-        LOGGER.info("  %02d. %s: %s", index, message["role"], message["content"])
-
-    LOGGER.info("trajectory actions:")
-    if not trajectory:
-        LOGGER.info("  (none)")
-    for index, step in enumerate(trajectory, start=1):
-        LOGGER.info(
-            "  %02d. action=%s details=%s",
-            index,
-            step.get("action"),
-            step.get("details"),
-        )
-
-    LOGGER.info("assertions:")
-    for assertion in episode.assertions:
-        status = "PASS" if assertion.passed else "FAIL"
-        LOGGER.info("  - %s %s: %s", status, assertion.name, assertion.reason)
-
-    LOGGER.info("scores:")
-    for score in episode.scores:
-        LOGGER.info("  - %s: %s (%s)", score.name, score.value, score.reason)
-
-    if episode.budgets is not None:
-        LOGGER.info("budgets:")
-        for budget_name, metric in episode.budgets.all_metrics().items():
-            status = "PASS" if metric.passed else "FAIL"
-            LOGGER.info(
-                "  - %s %s: used=%s, limit=%s",
-                status,
-                budget_name,
-                metric.used,
-                metric.limit,
-            )
-
-    LOGGER.info(
-        "final_status=%s",
         "PASS" if episode.is_passing() else "FAIL",
+        len(simulation["conversation_history"]) // 2,
+        trajectory_summary["tool_calls_count"],
+        assertions_passed,
+        assertions_total,
+        budgets_passed,
+        budgets_total,
+    )
+    LOGGER.info("set OPIK_EXAMPLE_LOG_LEVEL=DEBUG for full simulation/trajectory/episode dumps")
+
+    LOGGER.debug(
+        "conversation_history=%s",
+        json.dumps(simulation["conversation_history"], indent=2, sort_keys=True),
+    )
+    LOGGER.debug(
+        "trajectory=%s",
+        json.dumps(trajectory, indent=2, sort_keys=True),
+    )
+    LOGGER.debug(
+        "episode=%s",
+        json.dumps(episode.model_dump(), indent=2, sort_keys=True),
     )
 
 
