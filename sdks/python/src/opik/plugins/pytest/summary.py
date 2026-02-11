@@ -26,8 +26,12 @@ def print(reports: List[pytest.TestReport]) -> None:
     table.add_column(justify="left")
     table.add_column(justify="left")
 
-    table.add_row("Passed:", f"{passed_tests}", style="green" if passed_tests > 0 else None)
-    table.add_row("Failed:", f"{failed_tests}", style="red" if failed_tests > 0 else "dim")
+    table.add_row(
+        "Passed:", f"{passed_tests}", style="green" if passed_tests > 0 else None
+    )
+    table.add_row(
+        "Failed:", f"{failed_tests}", style="red" if failed_tests > 0 else "dim"
+    )
     table.add_row("Total:", f"{total_tests}")
 
     episode_failed = 0

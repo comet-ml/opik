@@ -20,7 +20,11 @@ def lookup_order(order_id: str):
 
 
 def create_refund(order_id: str):
-    return {"order_id": order_id, "refund_id": f"rfnd-{order_id.lower()}", "status": "submitted"}
+    return {
+        "order_id": order_id,
+        "refund_id": f"rfnd-{order_id.lower()}",
+        "status": "submitted",
+    }
 
 
 def get_refund_scenario():
@@ -100,7 +104,11 @@ class RefundAgent:
             order_id = user_message.upper().split("ORD-")[1].split()[0].strip(".,!?")
             order_id = f"ORD-{order_id}"
             order = lookup_order(order_id)
-            self._record(thread_id, "lookup_order", {"order_id": order_id, "status": order["status"]})
+            self._record(
+                thread_id,
+                "lookup_order",
+                {"order_id": order_id, "status": order["status"]},
+            )
             state["order_id"] = order_id
             return {
                 "role": "assistant",
@@ -110,7 +118,11 @@ class RefundAgent:
                 ),
             }
 
-        if state["order_id"] is not None and "yes" in normalized and not state["refund_submitted"]:
+        if (
+            state["order_id"] is not None
+            and "yes" in normalized
+            and not state["refund_submitted"]
+        ):
             refund = create_refund(state["order_id"])
             self._record(
                 thread_id,
@@ -163,8 +175,12 @@ def test_refund_episode_ci_gate(scenario):
         for message in conversation_history
         if message["role"] == "assistant"
     ]
-    refund_submitted = any("submitted your refund request" in message for message in assistant_messages)
-    asked_for_order_id = any("Please share your order id" in message for message in assistant_messages)
+    refund_submitted = any(
+        "submitted your refund request" in message for message in assistant_messages
+    )
+    asked_for_order_id = any(
+        "Please share your order id" in message for message in assistant_messages
+    )
 
     turn_assertion = make_max_turns_assertion(
         conversation_history=conversation_history,
@@ -221,7 +237,9 @@ def test_refund_episode_ci_gate(scenario):
                 limit=float(scenario["max_turns"]),
                 unit="count",
             ),
-            tool_calls=make_tool_call_budget(trajectory=trajectory, limit=scenario["tool_call_limit"]),
+            tool_calls=make_tool_call_budget(
+                trajectory=trajectory, limit=scenario["tool_call_limit"]
+            ),
         ),
         trajectory_summary=build_trajectory_summary(trajectory),
         metadata={
