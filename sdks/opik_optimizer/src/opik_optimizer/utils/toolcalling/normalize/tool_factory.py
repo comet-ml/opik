@@ -44,6 +44,18 @@ from ..runtime.mcp import (
 
 logger = logging.getLogger(__name__)
 _REQUIRE_APPROVAL_WARNED = False
+_SENSITIVE_LOG_KEYS = (
+    "authorization",
+    "auth",
+    "headers",
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "api_key",
+    "key",
+    "cookie",
+)
 
 
 @dataclass(frozen=True)
@@ -286,10 +298,16 @@ def resolve_toolcalling_tools(
                     )
                     mcp_tool_name = tool_block.get("name")
                     server = mcp_block.get("server")
-                    require_approval = (
-                        bool(mcp_block.get("require_approval"))
+                    require_approval_raw = (
+                        mcp_block.get("require_approval")
                         if isinstance(mcp_block, dict)
-                        else False
+                        else None
+                    )
+                    require_approval = bool(
+                        _normalize_optional_bool(
+                            require_approval_raw,
+                            field_name="mcp.require_approval",
+                        )
                     )
                     if mcp_tool_name and isinstance(server, dict):
                         if require_approval:
@@ -431,7 +449,9 @@ def _normalize_openai_mcp_tool(entry: Mapping[str, Any]) -> dict[str, Any]:
     if not server_url and not command:
         raise ValueError("MCP tool entry must include either server_url or command.")
 
-    require_approval = entry.get("require_approval")
+    require_approval = _normalize_optional_bool(
+        entry.get("require_approval"), field_name="require_approval"
+    )
     if require_approval is not None:
         _warn_require_approval()
 
@@ -473,6 +493,15 @@ def _warn_require_approval() -> None:
         stacklevel=2,
     )
     _REQUIRE_APPROVAL_WARNED = True
+
+
+def _normalize_optional_bool(value: Any, *, field_name: str) -> bool | None:
+    """Normalize an optional boolean field and reject non-boolean values."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    raise ValueError(f"{field_name} must be a boolean.")
 
 
 def _build_approval_required_callable(function_name: str) -> Callable[..., Any]:
@@ -601,17 +630,18 @@ def _log_remote_tool_response(tool_name: str, response: Any) -> None:
 
     meta = _extract_response_meta(response)
     if meta:
+        sanitized_meta = _sanitize_meta_for_logging(meta)
         status = (
-            meta.get("status")
-            or meta.get("status_code")
-            or meta.get("http_status")
-            or meta.get("httpStatus")
+            sanitized_meta.get("status")
+            or sanitized_meta.get("status_code")
+            or sanitized_meta.get("http_status")
+            or sanitized_meta.get("httpStatus")
         )
         logger.debug(
             "MCP remote tool meta name=%s status=%s meta=%s",
             tool_name,
             status,
-            meta,
+            sanitized_meta,
         )
 
 
@@ -627,6 +657,25 @@ def _extract_response_meta(response: Any) -> dict[str, Any] | None:
             if isinstance(item_meta, dict) and item_meta:
                 return item_meta
     return None
+
+
+def _sanitize_meta_for_logging(value: Any) -> Any:
+    """Redact sensitive key paths in response metadata before logging."""
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, nested_value in value.items():
+            key_text = str(key)
+            lowered = key_text.lower()
+            if any(token in lowered for token in _SENSITIVE_LOG_KEYS):
+                sanitized[key_text] = "***REDACTED***"
+                continue
+            sanitized[key_text] = _sanitize_meta_for_logging(nested_value)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_meta_for_logging(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_meta_for_logging(item) for item in value)
+    return value
 
 
 def _snippet(text: str, max_length: int = 160) -> str:

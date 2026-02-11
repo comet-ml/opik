@@ -6,6 +6,7 @@ from opik_optimizer import ChatPrompt
 from opik_optimizer.utils.toolcalling.runtime.mcp import ToolSignature
 from opik_optimizer.utils.toolcalling.normalize.tool_factory import (
     ToolCallingFactory,
+    _log_remote_tool_response,
     cursor_mcp_config_to_tools,
     resolve_toolcalling_tools,
 )
@@ -118,6 +119,41 @@ def test_tool_factory__require_approval_blocks_execution(monkeypatch: Any) -> No
 
     with pytest.raises(PermissionError, match="requires approval before execution"):
         function_map[blocked_name]()
+
+
+def test_tool_factory__rejects_non_boolean_require_approval() -> None:
+    tools: list[dict[str, Any]] = [
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "allowed_tools": ["search"],
+            "require_approval": "false",
+        }
+    ]
+
+    with pytest.raises(ValueError, match="require_approval must be a boolean"):
+        resolve_toolcalling_tools(tools, {})
+
+
+def test_tool_factory__redacts_sensitive_meta_in_debug_log(caplog: Any) -> None:
+    class FakeResponse:
+        meta = {
+            "status": 429,
+            "headers": {"authorization": "Bearer secret-token"},
+            "auth": {"password": "p@ss"},
+            "request_id": "req-123",
+        }
+        content: list[Any] = []
+
+    with caplog.at_level(
+        "DEBUG", logger="opik_optimizer.utils.toolcalling.normalize.tool_factory"
+    ):
+        _log_remote_tool_response("search", FakeResponse())
+
+    assert "secret-token" not in caplog.text
+    assert "p@ss" not in caplog.text
+    assert "***REDACTED***" in caplog.text
 
 
 def test_tool_factory__cursor_env_mapping_coerces_values_to_strings(

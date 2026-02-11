@@ -103,6 +103,34 @@ def test_toolcalling__prepare_tool_optimization_maps_suffix_name() -> None:
     assert tool_names == ["context7.get-library-docs"]
 
 
+def test_toolcalling__prepare_tool_optimization_rejects_ambiguous_suffix() -> None:
+    prompt = ChatPrompt(
+        system="sys",
+        user="hi",
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "context7.get-library-docs",
+                    "description": "docs",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "alt.get-library-docs",
+                    "description": "alt docs",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+        ],
+    )
+
+    with pytest.raises(ValueError, match="Ambiguous optimize_tools entries"):
+        toolcalling.prepare_tool_optimization(prompt, {"get-library-docs": True})
+
+
 def test_toolcalling__build_tool_blocks_redacts_sensitive_metadata() -> None:
     prompt = ChatPrompt(
         system="sys",

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from opik_optimizer import ChatPrompt
-from opik_optimizer.utils.toolcalling.normalize.tool_factory import ToolCallingFactory
+from ...api_objects.chat_prompt import ChatPrompt
+from .normalize.tool_factory import ToolCallingFactory
 
 
 def extract_tool_descriptions(prompt: ChatPrompt) -> dict[str, str]:

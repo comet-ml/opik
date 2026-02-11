@@ -291,36 +291,10 @@ def prepare_tool_optimization(
         if not requested_names:
             raise ValueError("optimize_tools dict did not enable any tools.")
         available_segment_ids = [segment.segment_id for segment in tool_segments]
-        available_lookup = {
-            segment_id: segment_id for segment_id in available_segment_ids
-        }
-        suffix_lookup = {
-            segment_id.rsplit(".", 1)[-1]: segment_id
-            for segment_id in available_segment_ids
-        }
-        resolved_names: list[str] = []
-        missing_inputs: list[str] = []
-        for requested in requested_names:
-            direct_match = available_lookup.get(requested)
-            prefixed_match = available_lookup.get(
-                f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{requested}"
-            )
-            suffix_match = suffix_lookup.get(requested)
-            resolved_segment = direct_match or prefixed_match or suffix_match
-            if resolved_segment is None:
-                missing_inputs.append(requested)
-                continue
-            resolved_tool_name = resolved_segment.replace(
-                prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
-            )
-            if resolved_tool_name not in resolved_names:
-                resolved_names.append(resolved_tool_name)
-        if missing_inputs:
-            raise ValueError(
-                "Tools not found in prompt for optimize_tools entries: "
-                f"{missing_inputs}. Available segment IDs: {sorted(available_segment_ids)}"
-            )
-        tool_names = resolved_names
+        tool_names = _resolve_requested_tool_names(
+            requested_names=requested_names,
+            available_segment_ids=available_segment_ids,
+        )
     elif optimize_tools is True:
         tool_names = [
             segment.segment_id.replace(
@@ -337,6 +311,54 @@ def prepare_tool_optimization(
             "Pass optimize_tools as a dict to select tools or reduce MCP tools."
         )
     return resolved_prompt, tool_names
+
+
+def _resolve_requested_tool_names(
+    *,
+    requested_names: list[str],
+    available_segment_ids: list[str],
+) -> list[str]:
+    """Resolve optimize_tools selectors to unique tool names."""
+    available_lookup = {segment_id: segment_id for segment_id in available_segment_ids}
+    suffix_lookup: dict[str, list[str]] = {}
+    for segment_id in available_segment_ids:
+        suffix = segment_id.rsplit(".", 1)[-1]
+        suffix_lookup.setdefault(suffix, []).append(segment_id)
+
+    resolved_names: list[str] = []
+    missing_inputs: list[str] = []
+    ambiguous_inputs: dict[str, list[str]] = {}
+    for requested in requested_names:
+        direct_match = available_lookup.get(requested)
+        prefixed_match = available_lookup.get(
+            f"{prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL}{requested}"
+        )
+        suffix_matches = suffix_lookup.get(requested, [])
+        suffix_match = suffix_matches[0] if len(suffix_matches) == 1 else None
+        if direct_match is None and prefixed_match is None and len(suffix_matches) > 1:
+            ambiguous_inputs[requested] = sorted(suffix_matches)
+            continue
+        resolved_segment = direct_match or prefixed_match or suffix_match
+        if resolved_segment is None:
+            missing_inputs.append(requested)
+            continue
+        resolved_tool_name = resolved_segment.replace(
+            prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
+        )
+        if resolved_tool_name not in resolved_names:
+            resolved_names.append(resolved_tool_name)
+
+    if ambiguous_inputs:
+        raise ValueError(
+            "Ambiguous optimize_tools entries: "
+            f"{ambiguous_inputs}. Use full function names or prefixed segment IDs."
+        )
+    if missing_inputs:
+        raise ValueError(
+            "Tools not found in prompt for optimize_tools entries: "
+            f"{missing_inputs}. Available segment IDs: {sorted(available_segment_ids)}"
+        )
+    return resolved_names
 
 
 def generate_tool_description_candidates(
