@@ -191,7 +191,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
               </div>
             </div>
           </AccordionTrigger>
-          <AccordionContent>
+          <AccordionContent className="px-3">
             <PromptContentView
               template={rawTemplate}
               promptInfo={promptInfo}
