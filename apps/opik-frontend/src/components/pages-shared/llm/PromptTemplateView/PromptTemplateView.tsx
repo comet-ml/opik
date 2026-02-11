@@ -46,6 +46,16 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
     }
   }, [template]);
 
+  const serializedMessages = useMemo(
+    () =>
+      messages
+        .map((m) =>
+          typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+        )
+        .join("\n\n"),
+    [messages],
+  );
+
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
@@ -83,13 +93,7 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
         <PromptMessagesReadonly messages={messages} />
       ) : (
         <div className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground">
-          {messages
-            .map((m) =>
-              typeof m.content === "string"
-                ? m.content
-                : JSON.stringify(m.content),
-            )
-            .join("\n\n")}
+          {serializedMessages}
         </div>
       )}
 
