@@ -178,8 +178,22 @@ class GepaOptimizer(BaseOptimizer):
             "reflection_minibatch_size",
             context.n_samples_minibatch or 3,
         )
-        candidate_selection_strategy = context.extra_params.get(
-            "candidate_selection_strategy", "pareto"
+        requested_selection_strategy = context.extra_params.get(
+            "candidate_selection_strategy"
+        )
+        model_selection_strategy = (
+            self.model_parameters.get("candidate_selection_policy")
+            or self.model_parameters.get("selection_policy")
+        )
+        candidate_selection_strategy = (
+            str(requested_selection_strategy)
+            if requested_selection_strategy is not None
+            else (
+                str(model_selection_strategy)
+                if isinstance(model_selection_strategy, str)
+                and model_selection_strategy.strip()
+                else "pareto"
+            )
         )
         use_merge = context.extra_params.get("use_merge", False)
         max_merge_invocations = context.extra_params.get("max_merge_invocations", 5)
