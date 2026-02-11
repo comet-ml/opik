@@ -9,6 +9,7 @@ import { Usefulness } from "@/evaluation/metrics/llmJudges/usefulness/Usefulness
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasAnthropicApiKey,
 } from "../../api/shouldRunIntegrationTests";
 
 const shouldRunApiTests = shouldRunIntegrationTests();
@@ -248,6 +249,42 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
 
       consoleDebugSpy.mockRestore();
     }, 60000);
+
+    it.skipIf(!hasAnthropicApiKey())(
+      "should score high quality output with Anthropic model",
+      async () => {
+        const consoleDebugSpy = vi.spyOn(console, "debug");
+
+        const metric = new GEval({
+          taskIntroduction:
+            "You evaluate how well a response answers a factual question.",
+          evaluationCriteria:
+            "Score from 0 (incorrect) to 10 (correct and complete).",
+          model: "claude-3-5-haiku-latest",
+        });
+
+        const result = await metric.score({
+          output: "The capital of France is Paris.",
+        });
+
+        expect(result.value).toBeGreaterThanOrEqual(0.0);
+        expect(result.value).toBeLessThanOrEqual(1.0);
+        expect(result.value).toBeGreaterThan(0.5);
+        expect(result.reason).toBeDefined();
+        if (result.reason) {
+          expect(typeof result.reason).toBe("string");
+          expect(result.reason.length).toBeGreaterThan(0);
+        }
+
+        // Verify that logprobs failed (expected for Anthropic models)
+        expect(consoleDebugSpy).toHaveBeenCalledWith(
+          expect.stringContaining("failed to use logprobs")
+        );
+
+        consoleDebugSpy.mockRestore();
+      },
+      60000
+    );
 
     it("should score using QARelevanceJudge", async () => {
       const metric = new QARelevanceJudge();
