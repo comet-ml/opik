@@ -127,9 +127,17 @@ def _ensure_openai_response_format(
     response_model: type[BaseModel] | None,
     model: str,
     call_time_params: dict[str, Any],
+    model_parameters: dict[str, Any] | None = None,
 ) -> None:
-    """Attach strict OpenAI response_format when structured output is requested."""
+    """Attach strict OpenAI response_format when structured output is requested.
+
+    Caller-provided response_format values are preserved. Automatic strict
+    response_format is only injected when neither call-time parameters nor
+    model_parameters specify one.
+    """
     if response_model is None or "response_format" in call_time_params:
+        return
+    if isinstance(model_parameters, dict) and "response_format" in model_parameters:
         return
     if model.startswith("openai/") or model.startswith("gpt-"):
         call_time_params["response_format"] = _build_openai_response_format(
@@ -615,10 +623,12 @@ def call_model(
         frequency_penalty=frequency_penalty,
         metadata=metadata,
     )
-    _ensure_openai_response_format(response_model, model, call_time_params)
 
     if model_parameters is None:
         model_parameters = {}
+    _ensure_openai_response_format(
+        response_model, model, call_time_params, model_parameters
+    )
 
     effective_project_name = project_name or _get_project_name_from_optimizer()
 
@@ -793,10 +803,12 @@ async def call_model_async(
         frequency_penalty=frequency_penalty,
         metadata=metadata,
     )
-    _ensure_openai_response_format(response_model, model, call_time_params)
 
     if model_parameters is None:
         model_parameters = {}
+    _ensure_openai_response_format(
+        response_model, model, call_time_params, model_parameters
+    )
 
     effective_project_name = project_name or _get_project_name_from_optimizer()
 

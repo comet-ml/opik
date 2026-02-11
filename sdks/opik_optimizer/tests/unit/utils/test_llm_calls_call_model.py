@@ -131,6 +131,27 @@ class TestCallModelSync:
             assert result.name == "retry"
             _assert_json_retry_instructions_injected(captured_messages)
 
+    def test_call_model_preserves_model_parameter_response_format(self) -> None:
+        mock_response = make_mock_response('{"name": "test", "score": 0.9}')
+        captured_kwargs: dict[str, Any] = {}
+        custom_response_format = {"type": "json_object"}
+
+        def capture_completion(**kwargs: Any) -> Any:
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda x: capture_completion
+            result = _llm_calls.call_model(
+                messages=[user_message("test")],
+                model="gpt-4o",
+                response_model=SampleResponseModel,
+                model_parameters={"response_format": custom_response_format},
+            )
+
+        assert isinstance(result, SampleResponseModel)
+        assert captured_kwargs.get("response_format") == custom_response_format
+
 
 class TestCallModelAsync:
     @pytest.mark.asyncio
@@ -237,6 +258,30 @@ class TestCallModelAsync:
             assert isinstance(result, SampleResponseModel)
             assert result.name == "retry"
             _assert_json_retry_instructions_injected(captured_messages)
+
+    @pytest.mark.asyncio
+    async def test_call_model_async_preserves_model_parameter_response_format(
+        self,
+    ) -> None:
+        mock_response = make_mock_response('{"name": "test", "score": 0.9}')
+        captured_kwargs: dict[str, Any] = {}
+        custom_response_format = {"type": "json_object"}
+
+        async def capture_completion(**kwargs: Any) -> Any:
+            captured_kwargs.update(kwargs)
+            return mock_response
+
+        with patch("opik_optimizer.core.llm_calls.track_completion") as mock_track:
+            mock_track.return_value = lambda x: capture_completion
+            result = await _llm_calls.call_model_async(
+                messages=[user_message("test")],
+                model="gpt-4o",
+                response_model=SampleResponseModel,
+                model_parameters={"response_format": custom_response_format},
+            )
+
+        assert isinstance(result, SampleResponseModel)
+        assert captured_kwargs.get("response_format") == custom_response_format
 
     @pytest.mark.asyncio
     async def test_call_model_async_passes_model_parameters(self) -> None:

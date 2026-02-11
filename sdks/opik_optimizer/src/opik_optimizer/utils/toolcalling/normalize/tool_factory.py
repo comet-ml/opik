@@ -455,12 +455,17 @@ def _normalize_openai_mcp_tool(entry: Mapping[str, Any]) -> dict[str, Any]:
     if require_approval is not None:
         _warn_require_approval()
 
+    headers = _coerce_optional_string_mapping(
+        entry.get("headers"), field_name="headers"
+    )
+    auth = _coerce_optional_string_mapping(entry.get("auth"), field_name="auth")
+
     if server_url:
         server = {
             "type": "remote",
             "url": server_url,
-            "headers": entry.get("headers", {}),
-            "auth": entry.get("auth"),
+            "headers": headers or {},
+            "auth": auth,
         }
     else:
         server = {
@@ -502,6 +507,20 @@ def _normalize_optional_bool(value: Any, *, field_name: str) -> bool | None:
     if isinstance(value, bool):
         return value
     raise ValueError(f"{field_name} must be a boolean.")
+
+
+def _coerce_optional_string_mapping(
+    value: Any, *, field_name: str
+) -> dict[str, str] | None:
+    """Normalize optional mapping values to string key/value pairs."""
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{field_name} must be a mapping of string keys/values.")
+    coerced: dict[str, str] = {}
+    for key, item in value.items():
+        coerced[str(key)] = "" if item is None else str(item)
+    return coerced
 
 
 def _build_approval_required_callable(function_name: str) -> Callable[..., Any]:

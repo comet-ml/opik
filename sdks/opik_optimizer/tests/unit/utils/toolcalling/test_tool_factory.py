@@ -136,6 +136,57 @@ def test_tool_factory__rejects_non_boolean_require_approval() -> None:
         resolve_toolcalling_tools(tools, {})
 
 
+def test_tool_factory__rejects_non_mapping_headers() -> None:
+    tools: list[dict[str, Any]] = [
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "headers": "bad-headers",
+            "allowed_tools": ["search"],
+        }
+    ]
+
+    with pytest.raises(ValueError, match="headers must be a mapping"):
+        resolve_toolcalling_tools(tools, {})
+
+
+def test_tool_factory__coerces_openai_style_headers_and_auth_to_strings(
+    monkeypatch: Any,
+) -> None:
+    def _fake_get_signature(
+        self: ToolCallingFactory,
+        server: dict[str, Any],
+        tool_name: str,
+        _signature_override: dict[str, Any] | None,
+    ) -> ToolSignature:
+        assert server["headers"] == {"X-NUM": "123", "X-NONE": ""}
+        assert server["auth"] == {"token": "456"}
+        return ToolSignature(
+            name=tool_name,
+            description="mcp tool",
+            parameters={"type": "object", "properties": {}},
+        )
+
+    monkeypatch.setattr(ToolCallingFactory, "_get_signature", _fake_get_signature)
+
+    tools: list[dict[str, Any]] = [
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "headers": {"X-NUM": 123, "X-NONE": None},
+            "auth": {"token": 456},
+            "allowed_tools": ["search"],
+        }
+    ]
+
+    resolved_tools, _function_map = resolve_toolcalling_tools(tools, {})
+    assert resolved_tools[0]["mcp"]["server"]["headers"]["X-NUM"] == "123"
+    assert resolved_tools[0]["mcp"]["server"]["headers"]["X-NONE"] == ""
+    assert resolved_tools[0]["mcp"]["server"]["auth"]["token"] == "456"
+
+
 def test_tool_factory__redacts_sensitive_meta_in_debug_log(caplog: Any) -> None:
     class FakeResponse:
         meta = {
