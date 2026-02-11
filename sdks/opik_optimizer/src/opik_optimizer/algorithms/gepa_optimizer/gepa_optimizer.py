@@ -134,8 +134,18 @@ class GepaOptimizer(BaseOptimizer):
         Normalize model kwargs using the shared LiteLLM prep helper to ensure
         consistent behavior (token limits, monitoring metadata) with other optimizers.
         """
+        adapter_only_keys = {
+            "candidate_selection_policy",
+            "selection_policy",
+            "allow_tool_use",
+            "num_prompts_per_round",
+            "rounds",
+        }
+        filtered_kwargs = {
+            k: v for k, v in model_kwargs.items() if k not in adapter_only_keys
+        }
         normalized = _prepare_model_params(
-            model_kwargs,
+            filtered_kwargs,
             {},
             response_model=None,
             is_reasoning=False,
@@ -158,6 +168,11 @@ class GepaOptimizer(BaseOptimizer):
         experiment_config: dict[str, Any] | None,
         system_fallback: str,
     ) -> GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]]:
+        adapter_policy = (
+            self.model_parameters.get("candidate_selection_policy")
+            or self.model_parameters.get("selection_policy")
+        )
+        allow_tool_use = bool(self.model_parameters.get("allow_tool_use", True))
         prompt_obj.model_kwargs = self._normalize_model_kwargs(
             self.model_parameters or {},
             optimization_id=self.current_optimization_id,
@@ -169,6 +184,10 @@ class GepaOptimizer(BaseOptimizer):
             system_fallback=system_fallback,
             dataset=dataset,
             experiment_config=experiment_config,
+            allow_tool_use=allow_tool_use,
+            candidate_selection_policy=(
+                str(adapter_policy) if isinstance(adapter_policy, str) else None
+            ),
         )
 
     def _apply_system_text(

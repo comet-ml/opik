@@ -303,3 +303,106 @@ def test_gepa_adapter_records_per_item_metrics() -> None:
     assert trials[0].get("extra", {}).get("score_label") == "per_item"
     # This confirms that adapter creation in run_optimization
     # can access self.agent successfully
+
+
+def test_gepa_adapter_selects_best_sampled_candidate() -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        return 1.0 if llm_output == "best" else 0.0
+
+    metric_fn.__name__ = "metric_fn"
+
+    context = make_optimization_context(prompt, dataset=dataset, metric=metric_fn)
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+    agent = MagicMock()
+    agent.invoke_agent_candidates.return_value = ["bad", "best"]
+    agent._last_candidate_logprobs = [0.1, 0.9]
+
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=agent,
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+        candidate_selection_policy="best_by_metric",
+    )
+
+    batch = [
+        MagicMock(
+            opik_item={
+                "input": STANDARD_DATASET_ITEMS[0]["question"],
+                "answer": STANDARD_DATASET_ITEMS[0]["answer"],
+            }
+        )
+    ]
+    result = adapter.evaluate(batch, {"system_prompt": "You are a helpful assistant."})
+    assert result.outputs == [{"output": "best"}]
+    assert result.scores == [1.0]
+
+
+def test_gepa_adapter_passes_tool_use_flag_to_agent() -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:1], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+    prompt.tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search",
+                "description": "Search docs",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"q": {"type": "string"}},
+                    "required": ["q"],
+                },
+            },
+        }
+    ]
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        return 1.0
+
+    metric_fn.__name__ = "metric_fn"
+    context = make_optimization_context(prompt, dataset=dataset, metric=metric_fn)
+    optimizer = GepaOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+
+    captured: dict[str, Any] = {}
+
+    class AgentWithTools:
+        def invoke_agent_candidates(
+            self, prompts, dataset_item, allow_tool_use=False
+        ) -> list[str]:
+            captured["allow_tool_use"] = allow_tool_use
+            return ["ok"]
+
+        def invoke_agent(self, prompts, dataset_item, allow_tool_use=False) -> str:
+            return "ok"
+
+    adapter = OpikGEPAAdapter(
+        base_prompts=context.prompts,
+        agent=AgentWithTools(),
+        optimizer=optimizer,
+        context=context,
+        metric=metric_fn,
+        dataset=dataset,
+        experiment_config=None,
+        allow_tool_use=True,
+    )
+
+    batch = [
+        MagicMock(
+            opik_item={
+                "input": STANDARD_DATASET_ITEMS[0]["question"],
+                "answer": STANDARD_DATASET_ITEMS[0]["answer"],
+            }
+        )
+    ]
+    adapter.evaluate(batch, {"system_prompt": "You are a helpful assistant."})
+    assert captured["allow_tool_use"] is True
