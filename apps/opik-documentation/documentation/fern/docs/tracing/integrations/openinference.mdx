@@ -1,0 +1,80 @@
+---
+description: Send OpenInference semantic attributes to Opik over OpenTelemetry/OTLP.
+headline: OpenInference | Opik Documentation
+og:description: Use OpenInference instrumentation with Opik via the OpenTelemetry
+  endpoint for vendor-neutral tracing.
+og:site_name: Opik Documentation
+og:title: OpenInference Integration - Opik
+title: Observability for OpenInference with Opik
+---
+
+[OpenInference](https://github.com/Arize-ai/openinference) defines semantic conventions and instrumentation packages for LLM applications. Since it emits OpenTelemetry spans, you can route OpenInference traces directly to Opik.
+
+## Prerequisites
+
+- OpenInference instrumentation package(s) for your framework (for example, LangChain or LlamaIndex)
+- OpenTelemetry SDK + OTLP exporter
+- Access to an Opik Cloud, Enterprise, or self-hosted endpoint
+
+## Configure OTLP export to Opik
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+        ```
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+    </Tab>
+</Tabs>
+
+## Example (Python + LangChain instrumentation)
+
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+from openinference.instrumentation.langchain import LangChainInstrumentor
+
+# Configure OpenTelemetry exporter
+provider = TracerProvider()
+provider.add_span_processor(SimpleSpanProcessor(OTLPSpanExporter()))
+trace.set_tracer_provider(provider)
+
+# Enable OpenInference instrumentation
+LangChainInstrumentor().instrument(tracer_provider=provider)
+
+# Run your app as usual (LangChain calls now emit OTEL spans)
+```
+
+## What Opik maps
+
+For OpenInference/OpenLLMetry style spans, Opik maps common attributes into native fields:
+
+- model/provider (for LLM spans)
+- usage/token counters
+- input/output payloads
+- tool span input/output (when present)
+
+Any unsupported attributes are still preserved in span input/metadata.
+
+## Troubleshooting
+
+- Use the HTTP OTLP exporter (`opentelemetry.exporter.otlp.proto.http.trace_exporter`)
+- Verify `OTEL_EXPORTER_OTLP_HEADERS` are set exactly
+- Set `projectName` in headers to avoid data landing in the default project
+
+If you would like deeper mapping for a specific OpenInference package, open an issue on [GitHub](https://github.com/comet-ml/opik/issues).
