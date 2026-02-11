@@ -532,7 +532,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           supportsPercentiles: true,
           customMeta: {
             experimentsIds,
-            feedbackKey: label,
+            scoreName: label,
           },
         }) as ColumnData<ExperimentsCompare>,
     );
