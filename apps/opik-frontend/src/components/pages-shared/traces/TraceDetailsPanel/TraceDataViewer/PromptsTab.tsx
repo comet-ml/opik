@@ -8,7 +8,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
+import PromptTemplateView from "@/components/pages-shared/llm/PromptTemplateView/PromptTemplateView";
 import get from "lodash/get";
 import { ExternalLink, FileTerminal, GitCommitVertical } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -91,6 +91,53 @@ const CustomUseInPlaygroundButton: React.FC<{
   );
 };
 
+interface PromptContentViewProps {
+  template: unknown;
+  promptInfo: PromptWithLatestVersion;
+  promptId?: string;
+  activeVersionId?: string;
+  workspaceName: string;
+  search?: string;
+  templateStructure?: "chat" | "text";
+}
+
+const PromptContentView: React.FC<PromptContentViewProps> = ({
+  template,
+  promptInfo,
+  promptId,
+  activeVersionId,
+  workspaceName,
+  search,
+  templateStructure,
+}) => {
+  return (
+    <PromptTemplateView
+      template={template}
+      templateStructure={templateStructure}
+      search={search}
+    >
+      <div className="mt-2 flex items-center justify-between">
+        {promptId && (
+          <Button variant="ghost" size="sm" asChild>
+            <Link
+              to="/$workspaceName/prompts/$promptId"
+              params={{ workspaceName, promptId }}
+              search={{ activeVersionId }}
+              className="inline-flex items-center"
+            >
+              View in Prompt library
+            </Link>
+          </Button>
+        )}
+        <TryInPlaygroundButton
+          prompt={promptInfo}
+          ButtonComponent={CustomUseInPlaygroundButton}
+        />
+      </div>
+    </PromptTemplateView>
+  );
+};
+
 const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   data,
   search,
@@ -120,9 +167,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
 
     return prompts.map((promptInfo: PromptWithLatestVersion, index: number) => {
       const promptName = promptInfo?.name || `Prompt ${index + 1}`;
-      // Use raw template (object) for JSON display, fallback to promptInfo for edge cases
       const rawTemplate = rawPrompts[index]?.version?.template;
-      const promptContent = rawTemplate ?? promptInfo;
       const commitHash = promptInfo?.latest_version?.commit;
       const promptId = promptInfo?.id;
 
@@ -147,33 +192,15 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
             </div>
           </AccordionTrigger>
           <AccordionContent>
-            <div className="space-x-1 space-y-2">
-              <SyntaxHighlighter
-                withSearch
-                data={promptContent as object}
-                search={search}
-              />
-              <div className="flex items-center justify-between text-xs text-muted-slate">
-                {promptId && (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link
-                      to="/$workspaceName/prompts/$promptId"
-                      params={{ workspaceName, promptId }}
-                      search={{
-                        activeVersionId: rawPrompts[index]?.version?.id,
-                      }}
-                      className="inline-flex items-center"
-                    >
-                      View in Prompt library
-                    </Link>
-                  </Button>
-                )}
-                <TryInPlaygroundButton
-                  prompt={promptInfo}
-                  ButtonComponent={CustomUseInPlaygroundButton}
-                />
-              </div>
-            </div>
+            <PromptContentView
+              template={rawTemplate}
+              promptInfo={promptInfo}
+              promptId={promptId}
+              activeVersionId={rawPrompts[index]?.version?.id}
+              workspaceName={workspaceName}
+              search={search}
+              templateStructure={rawPrompts[index]?.template_structure}
+            />
           </AccordionContent>
         </AccordionItem>
       );

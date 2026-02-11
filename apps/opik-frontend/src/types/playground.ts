@@ -12,6 +12,7 @@ import { SPAN_TYPE } from "@/types/traces";
 export interface PromptLibraryMetadata {
   name: string;
   id: string;
+  template_structure?: "chat" | "text";
   version: {
     template: unknown;
     commit?: string;
