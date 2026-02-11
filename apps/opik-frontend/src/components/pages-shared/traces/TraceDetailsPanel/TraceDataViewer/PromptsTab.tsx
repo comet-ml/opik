@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
+import { PromptLibraryMetadata } from "@/types/playground";
 import {
   Accordion,
   AccordionContent,
@@ -17,15 +18,16 @@ import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlayground
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 
-type RawPromptData = {
-  id: string;
-  name: string;
-  version: {
-    commit: string;
-    id: string;
-    template: string;
-    metadata?: object;
-  };
+// Helper to ensure template is always a string for PromptVersion
+// The template from trace metadata can be either a string (legacy) or parsed JSON object (new format)
+const normalizeTemplate = (template: unknown): string => {
+  if (typeof template === "string") {
+    return template;
+  }
+  if (template !== null && template !== undefined) {
+    return JSON.stringify(template, null, 2);
+  }
+  return "";
 };
 
 type PromptsTabProps = {
@@ -34,15 +36,20 @@ type PromptsTabProps = {
 };
 
 const convertRawPromptToPromptWithLatestVersion = (
-  rawPrompt: RawPromptData,
+  rawPrompt: PromptLibraryMetadata,
 ): PromptWithLatestVersion => {
   const date = new Date().toISOString();
 
+  // Use existing metadata if available, otherwise use empty object
+  // Empty object causes isMessagesJsonFormat() to return false, so the template
+  // is treated as plain text (correct for SDK text prompts without metadata)
+  const metadata = rawPrompt.version.metadata ?? {};
+
   const promptVersion: PromptVersion = {
     id: rawPrompt.version.id,
-    template: rawPrompt.version.template,
-    metadata: rawPrompt.version.metadata ?? {},
-    commit: rawPrompt.version.commit,
+    template: normalizeTemplate(rawPrompt.version.template),
+    metadata,
+    commit: rawPrompt.version.commit ?? "",
     prompt_id: rawPrompt.id,
     created_at: date, // We don't have this in raw data, using current time
   };
@@ -92,7 +99,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
     data.metadata as Record<string, unknown>,
     "opik_prompts",
     null,
-  ) as RawPromptData[] | null;
+  ) as PromptLibraryMetadata[] | null;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const showOptimizerPrompts = useIsFeatureEnabled(
     FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
@@ -101,7 +108,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   const prompts = useMemo(() => {
     if (!showOptimizerPrompts) return [];
     if (Array.isArray(rawPrompts) && rawPrompts.length > 0) {
-      return (rawPrompts as RawPromptData[]).map(
+      return (rawPrompts as PromptLibraryMetadata[]).map(
         convertRawPromptToPromptWithLatestVersion,
       );
     }
@@ -109,11 +116,13 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
   }, [rawPrompts, showOptimizerPrompts]);
 
   const renderPrompts = () => {
-    if (!prompts || prompts.length === 0) return null;
+    if (!prompts || prompts.length === 0 || !rawPrompts) return null;
 
     return prompts.map((promptInfo: PromptWithLatestVersion, index: number) => {
       const promptName = promptInfo?.name || `Prompt ${index + 1}`;
-      const promptContent = promptInfo?.latest_version?.template || promptInfo;
+      // Use raw template (object) for JSON display, fallback to promptInfo for edge cases
+      const rawTemplate = rawPrompts[index]?.version?.template;
+      const promptContent = rawTemplate ?? promptInfo;
       const commitHash = promptInfo?.latest_version?.commit;
       const promptId = promptInfo?.id;
 
@@ -150,6 +159,9 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
                     <Link
                       to="/$workspaceName/prompts/$promptId"
                       params={{ workspaceName, promptId }}
+                      search={{
+                        activeVersionId: rawPrompts[index]?.version?.id,
+                      }}
                       className="inline-flex items-center"
                     >
                       View in Prompt library

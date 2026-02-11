@@ -15,6 +15,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -57,6 +58,7 @@ import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Span.SpanField;
 import static com.comet.opik.api.Span.SpanPage;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
+import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
@@ -533,13 +535,18 @@ class SpanDAO {
             ;
             """;
 
+    // Query to get target project_ids from spans (executed separately to reduce table scans)
+    private static final String SELECT_TARGET_PROJECTS_FOR_SPANS = """
+            SELECT DISTINCT project_id
+            FROM spans
+            WHERE workspace_id = :workspace_id
+            AND id IN :ids
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_BY_IDS = """
-            WITH target_projects AS (
-                SELECT DISTINCT project_id
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND id IN :ids
-            ), feedback_scores_combined_raw AS (
+            WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -557,6 +564,7 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND entity_id IN :ids
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -575,6 +583,7 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND entity_id IN :ids
+                  <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -658,14 +667,11 @@ class SpanDAO {
             FROM (
                 SELECT
                     *,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                            NULL) AS duration
+                    duration
                 FROM spans
                 WHERE id IN :ids
                 AND workspace_id = :workspace_id
-                AND project_id IN (SELECT project_id FROM target_projects)
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS s
@@ -681,7 +687,7 @@ class SpanDAO {
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND entity_id IN :ids
-                AND project_id IN (SELECT project_id FROM target_projects)
+                <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS c ON s.id = c.entity_id
@@ -714,10 +720,7 @@ class SpanDAO {
     private static final String SELECT_ONLY_SPAN_BY_ID = """
             SELECT
                 *,
-                if(end_time IS NOT NULL AND start_time IS NOT NULL
-                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                        (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                        NULL) AS duration
+                duration
             FROM spans
             WHERE id = :id
             AND project_id = :project_id
@@ -749,10 +752,7 @@ class SpanDAO {
             )
             SELECT
                 s.*,
-                if(end_time IS NOT NULL AND start_time IS NOT NULL
-                    AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                    (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                    NULL) AS duration
+                duration
             FROM spans s
             WHERE workspace_id = :workspace_id
             AND project_id IN (SELECT project_id FROM target_projects)
@@ -933,12 +933,7 @@ class SpanDAO {
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores_final
-                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
+                 FROM feedback_scores_final
                  GROUP BY entity_id
                  HAVING <feedback_scores_empty_filters>
             )
@@ -950,10 +945,7 @@ class SpanDAO {
                       truncated_output,
                       input_length,
                       output_length,
-                      if(end_time IS NOT NULL AND start_time IS NOT NULL
-                               AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                           (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                           NULL) AS duration
+                      duration
                 FROM spans s
                 <if(sort_has_feedback_scores)>
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = s.id
@@ -970,12 +962,7 @@ class SpanDAO {
                 AND id in (
                   SELECT
                       entity_id
-                  FROM (
-                      SELECT *
-                      FROM feedback_scores_final
-                      ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                      LIMIT 1 BY entity_id, name
-                  )
+                  FROM feedback_scores_final
                   GROUP BY entity_id
                   HAVING <feedback_scores_filters>
                 )
@@ -1016,16 +1003,7 @@ class SpanDAO {
             """;
 
     private static final String COUNT_BY_PROJECT_ID = """
-            WITH target_spans AS (
-                SELECT DISTINCT id
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                <if(trace_id)> AND trace_id = :trace_id <endif>
-            ),
-            feedback_scores_combined_raw AS (
+            WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1037,7 +1015,6 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -1050,7 +1027,6 @@ class SpanDAO {
                  WHERE entity_type = 'span'
                    AND workspace_id = :workspace_id
                    AND project_id = :project_id
-                   AND entity_id IN (SELECT id FROM target_spans)
              ), feedback_scores_with_ranking AS (
                  SELECT workspace_id,
                         project_id,
@@ -1086,12 +1062,7 @@ class SpanDAO {
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores_final
-                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
+                 FROM feedback_scores_final
                  GROUP BY entity_id
                  HAVING <feedback_scores_empty_filters>
             )
@@ -1102,10 +1073,7 @@ class SpanDAO {
             (
                SELECT
                     id,
-                    if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                         AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                     (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                     NULL) AS duration
+                    duration
                 FROM spans
                 <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = spans.id
@@ -1121,12 +1089,7 @@ class SpanDAO {
                 AND id in (
                     SELECT
                         entity_id
-                    FROM (
-                        SELECT *
-                        FROM feedback_scores_final
-                        ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                        LIMIT 1 BY entity_id, name
-                    )
+                    FROM feedback_scores_final
                     GROUP BY entity_id
                     HAVING <feedback_scores_filters>
                 )
@@ -1170,16 +1133,7 @@ class SpanDAO {
             """;
 
     private static final String SELECT_SPANS_STATS = """
-            WITH target_spans AS (
-                SELECT DISTINCT id
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                <if(trace_id)> AND trace_id = :trace_id <endif>
-            ),
-            feedback_scores_combined_raw AS (
+            WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -1197,7 +1151,6 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND entity_id IN (SELECT id FROM target_spans)
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -1216,7 +1169,6 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND entity_id IN (SELECT id FROM target_spans)
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,
@@ -1305,12 +1257,7 @@ class SpanDAO {
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                 FROM (
-                    SELECT *
-                    FROM feedback_scores_final
-                    ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                    LIMIT 1 BY entity_id, name
-                 )
+                 FROM feedback_scores_final
                  GROUP BY entity_id
                  HAVING <feedback_scores_empty_filters>
             )
@@ -1320,10 +1267,7 @@ class SpanDAO {
                      workspace_id,
                      project_id,
                      id,
-                     if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                 AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                             (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                             NULL) AS duration,
+                     duration,
                      if(input_length > 0, 1, 0) as input_count,
                      if(output_length > 0, 1, 0) as output_count,
                      if(metadata_length > 0, 1, 0) as metadata_count,
@@ -1346,12 +1290,7 @@ class SpanDAO {
                 AND id in (
                     SELECT
                         entity_id
-                    FROM (
-                        SELECT *
-                        FROM feedback_scores_final
-                        ORDER BY (workspace_id, project_id, entity_id, name) DESC, last_updated_at DESC
-                        LIMIT 1 BY entity_id, name
-                    )
+                    FROM feedback_scores_final
                     GROUP BY entity_id
                     HAVING <feedback_scores_filters>
                 )
@@ -1860,6 +1799,29 @@ class SpanDAO {
                 .flatMap(this::mapToDto);
     }
 
+    /**
+     * Get target project IDs from spans for the given span IDs.
+     * This is executed as a separate query to reduce spans table scans in the main query.
+     */
+    private Mono<List<UUID>> getTargetProjectIdsForSpans(Set<UUID> ids) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            return Mono.from(connectionFactory.create())
+                    .flatMap(connection -> {
+                        var template = getSTWithLogComment(SELECT_TARGET_PROJECTS_FOR_SPANS,
+                                "get_target_project_ids_for_spans", workspaceId, ids.size());
+
+                        var statement = connection.createStatement(template.render())
+                                .bind("ids", ids.toArray(UUID[]::new));
+
+                        return makeMonoContextAware(bindWorkspaceIdToMono(statement));
+                    })
+                    .flatMapMany(result -> result.map((row, metadata) -> row.get("project_id", UUID.class)))
+                    .collectList();
+        });
+    }
+
     @WithSpan
     public Flux<Span> getByIds(@NonNull Set<UUID> ids) {
         if (ids.isEmpty()) {
@@ -1868,17 +1830,31 @@ class SpanDAO {
 
         log.info("Getting '{}' spans by IDs", ids.size());
 
-        return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> makeFluxContextAware((userName, workspaceId) -> {
-                    var template = getSTWithLogComment(SELECT_BY_IDS, "get_spans_by_ids", workspaceId, ids.size());
-                    var statement = connection.createStatement(template.render())
-                            .bind("ids", ids.toArray(new UUID[0]))
-                            .bind("workspace_id", workspaceId);
+        return getTargetProjectIdsForSpans(ids)
+                .flatMapMany(targetProjectIds -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-                    Segment segment = startSegment("spans", "Clickhouse", "get_by_ids");
+                    return Mono.from(connectionFactory.create())
+                            .flatMap(connection -> {
+                                var template = getSTWithLogComment(SELECT_BY_IDS, "get_spans_by_ids", workspaceId,
+                                        ids.size());
 
-                    return Flux.from(statement.execute())
-                            .doFinally(signalType -> endSegment(segment));
+                                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                                    template.add("has_target_projects", true);
+                                }
+
+                                var statement = connection.createStatement(template.render())
+                                        .bind("ids", ids.toArray(new UUID[0]));
+
+                                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                                    statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                                }
+
+                                Segment segment = startSegment("spans", "Clickhouse", "get_by_ids");
+
+                                return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                                        .doFinally(signalType -> endSegment(segment));
+                            });
                 }))
                 .flatMap(this::mapToDto);
     }

@@ -86,7 +86,6 @@ component:
     image:
       repository: opik-backend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -192,7 +191,6 @@ component:
     image:
       repository: opik-python-backend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false
@@ -203,7 +201,7 @@ component:
     env:
       PYTHON_CODE_EXECUTOR_IMAGE_REGISTRY: *registry
       PYTHON_CODE_EXECUTOR_IMAGE_NAME: "opik-sandbox-executor-python"
-      PYTHON_CODE_EXECUTOR_IMAGE_TAG: "latest"
+      # PYTHON_CODE_EXECUTOR_IMAGE_TAG defaults to Chart.AppVersion when not specified
       PYTHON_CODE_EXECUTOR_STRATEGY: "process"
       PYTHON_CODE_EXECUTOR_PARALLEL_NUM: "5"
       PYTHON_CODE_EXECUTOR_EXEC_TIMEOUT_IN_SECS: "3"
@@ -272,16 +270,29 @@ component:
     securityContext:
       privileged: true
     networkPolicy:
-      enabled: true
+      enabled: false
+      annotations: {}
       engineEgress:
         ipBlock: 0.0.0.0/0
-        except:
-          - 10.0.0.0/8
-          - 100.64.0.0/10
-          - 172.16.0.0/12
-          - 192.0.0.0/24
-          - 198.18.0.0/15
-          - 192.168.0.0/16
+        except: []
+          # example networks to block
+          # # Standard RFC1918 Private Ranges
+          # - 10.0.0.0/8
+          # - 172.16.0.0/12
+          # - 192.168.0.0/16
+          # # EKS / Carrier Grade NAT
+          # - 100.64.0.0/10
+          # # AWS Metadata & Link Local (Very Important)
+          # - 169.254.0.0/16
+          # # Loopback range
+          # - 127.0.0.0/8
+          # # Reserved / Protocol Ranges
+          # - 192.0.0.0/24
+          # - 198.18.0.0/15
+          # Multicast ranges
+          # - 224.0.0.0/4
+          # Broadcast address
+          # - 255.255.255.255/32
 
     service:
       type: ClusterIP
@@ -311,7 +322,6 @@ component:
     image:
       repository: opik-frontend
       pullPolicy: IfNotPresent
-      tag: latest
     replicaCount: 1
     autoscaling:
       enabled: false

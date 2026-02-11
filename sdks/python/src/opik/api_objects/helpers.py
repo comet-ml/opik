@@ -18,6 +18,7 @@ generate_id = id_helpers.generate_id
 
 LOGGER = logging.getLogger(__name__)
 
+
 FilterParsedItemT = TypeVar(
     "FilterParsedItemT",
     bound=Union[
