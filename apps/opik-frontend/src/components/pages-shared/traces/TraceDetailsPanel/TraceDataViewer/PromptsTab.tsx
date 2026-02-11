@@ -1,6 +1,10 @@
 import React, { useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
-import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
+import {
+  PROMPT_TEMPLATE_STRUCTURE,
+  PromptWithLatestVersion,
+  PromptVersion,
+} from "@/types/prompts";
 import { PromptLibraryMetadata } from "@/types/playground";
 import {
   Accordion,
@@ -98,7 +102,7 @@ interface PromptContentViewProps {
   activeVersionId?: string;
   workspaceName: string;
   search?: string;
-  templateStructure?: "chat" | "text";
+  templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
 }
 
 const PromptContentView: React.FC<PromptContentViewProps> = ({

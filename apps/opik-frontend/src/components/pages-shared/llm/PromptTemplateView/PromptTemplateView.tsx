@@ -5,6 +5,7 @@ import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighl
 import PromptMessagesReadonly, {
   ChatMessage,
 } from "@/components/pages-shared/llm/PromptMessagesReadonly/PromptMessagesReadonly";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 export const parseMessagesFromTemplate = (template: unknown): ChatMessage[] => {
   try {
@@ -17,7 +18,7 @@ export const parseMessagesFromTemplate = (template: unknown): ChatMessage[] => {
 
 interface PromptTemplateViewProps {
   template: unknown;
-  templateStructure?: "chat" | "text";
+  templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   search?: string;
   children?: React.ReactNode;
 }
@@ -39,10 +40,10 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
 
   // Infer type when templateStructure is not explicitly set
   const isChatPrompt =
-    templateStructure === "chat" ||
+    templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT ||
     (templateStructure === undefined && hasMessages);
   const isTextPrompt =
-    templateStructure === "text" ||
+    templateStructure === PROMPT_TEMPLATE_STRUCTURE.TEXT ||
     (templateStructure === undefined && !hasMessages);
   const showToggle = (isChatPrompt && hasMessages) || isTextPrompt;
 
