@@ -1,18 +1,22 @@
 from __future__ import annotations
 
+import logging
 import os
 
 from opik.evaluation.metrics import LevenshteinRatio
 
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
+from opik_optimizer.utils.toolcalling.optimizer_helpers import extract_tool_descriptions
 from opik_optimizer.utils.toolcalling.normalize.tool_factory import (
-    ToolCallingFactory,
     cursor_mcp_config_to_tools,
 )
 from opik_optimizer.utils.toolcalling.runtime import mcp_remote
 from opik_optimizer.utils.toolcalling.runtime.mcp import ToolCallingDependencyError
 
+logger = logging.getLogger(__name__)
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 CONTEXT7_URL = "https://mcp.context7.com/mcp"
 ALLOWED_TOOLS = ["resolve-library-id", "query-docs"]
@@ -22,27 +26,15 @@ context7_api_key = os.getenv("CONTEXT7_API_KEY", "").strip()
 headers = {"CONTEXT7_API_KEY": context7_api_key} if context7_api_key else {}
 
 try:
-    tools_live = mcp_remote.list_tools_from_remote(url=CONTEXT7_URL, headers={})
-    print(
-        f"Discovered remote MCP tools: {[getattr(t, 'name', '') for t in tools_live[:10]]}"
+    tools_live = mcp_remote.list_tools_from_remote(url=CONTEXT7_URL, headers=headers)
+    logger.info(
+        "Discovered remote MCP tools: %s",
+        [getattr(t, "name", "") for t in tools_live[:10]],
     )
 except ToolCallingDependencyError as exc:
     raise RuntimeError(
         "MCP SDK is not installed. Install optional dependency `mcp` first."
     ) from exc
-
-
-def extract_tool_descriptions(prompt: ChatPrompt) -> dict[str, str]:
-    """Return function-name -> description for tool entries."""
-    resolved_prompt = ToolCallingFactory().resolve_prompt(prompt)
-    descriptions: dict[str, str] = {}
-    for tool in resolved_prompt.tools or []:
-        function = tool.get("function", {})
-        name = function.get("name")
-        if isinstance(name, str):
-            descriptions[name] = str(function.get("description", ""))
-    return descriptions
-
 
 # ---------------------------------------------------------------------------
 # Cursor-style MCP config (active path)
@@ -94,10 +86,10 @@ prompt = ChatPrompt(
     tools=tools,
 )
 before_descriptions = extract_tool_descriptions(prompt)
-print(f"Dataset size: {len(dataset.get_items())}")
-print("Initial tool descriptions:")
+logger.info("Dataset size: %s", len(dataset.get_items()))
+logger.info("Initial tool descriptions:")
 for name, description in sorted(before_descriptions.items()):
-    print(f"- {name}: {description[:140]}")
+    logger.debug("- %s: %s", name, description[:140])
 
 optimizer = MetaPromptOptimizer(
     model="openai/gpt-4o-mini",
@@ -128,15 +120,15 @@ if optimized_prompt is None:
     raise RuntimeError("No optimized prompt returned.")
 
 after_descriptions = extract_tool_descriptions(optimized_prompt)
-print("\nTool description changes:")
+logger.info("Tool description changes:")
 changed = 0
 for name in sorted(after_descriptions):
     before = before_descriptions.get(name, "")
     after = after_descriptions[name]
     if before != after:
         changed += 1
-        print(f"- CHANGED {name}")
-        print(f"  before: {before[:180]}")
-        print(f"  after:  {after[:180]}")
+        logger.info("- CHANGED %s", name)
+        logger.debug("  before: %s", before[:180])
+        logger.debug("  after:  %s", after[:180])
 if changed == 0:
-    print("- No signature description changes detected.")
+    logger.info("- No signature description changes detected.")

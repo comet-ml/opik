@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Any
@@ -17,13 +18,16 @@ from opik_optimizer import (
     ParameterOptimizer,
 )
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
+from opik_optimizer.utils.toolcalling.optimizer_helpers import extract_tool_descriptions
 from opik_optimizer.utils.toolcalling.normalize.tool_factory import (
-    ToolCallingFactory,
     cursor_mcp_config_to_tools,
 )
 from opik_optimizer.utils.toolcalling.runtime import mcp_remote
 from opik_optimizer.utils.toolcalling.runtime.mcp import ToolCallingDependencyError
 
+logger = logging.getLogger(__name__)
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
 CONTEXT7_URL = "https://mcp.context7.com/mcp"
 MODEL = "openai/gpt-4o-mini"
@@ -32,16 +36,17 @@ api_key = os.getenv("CONTEXT7_API_KEY", "").strip()
 headers = {"CONTEXT7_API_KEY": api_key} if api_key else {}
 
 try:
-    remote_tools = mcp_remote.list_tools_from_remote(url=CONTEXT7_URL, headers={})
+    remote_tools = mcp_remote.list_tools_from_remote(url=CONTEXT7_URL, headers=headers)
 except ToolCallingDependencyError as exc:
     raise RuntimeError(
         "MCP SDK is not installed. Install optional dependency `mcp` first."
     ) from exc
 
-print(
-    f"Discovered remote MCP tools: {[getattr(t, 'name', '') for t in remote_tools[:10]]}"
+logger.info(
+    "Discovered remote MCP tools: %s",
+    [getattr(t, "name", "") for t in remote_tools[:10]],
 )
-print(f"Sleep between optimizer runs: {SLEEP_BETWEEN_OPTIMIZERS_SECONDS:.1f}s")
+logger.info("Sleep between optimizer runs: %.1fs", SLEEP_BETWEEN_OPTIMIZERS_SECONDS)
 
 cursor_config = {
     "mcpServers": {
@@ -79,17 +84,6 @@ def build_prompt() -> ChatPrompt:
     )
 
 
-def tool_description_map(prompt: ChatPrompt) -> dict[str, str]:
-    resolved = ToolCallingFactory().resolve_prompt(prompt)
-    descriptions: dict[str, str] = {}
-    for tool in resolved.tools or []:
-        function = tool.get("function", {})
-        name = function.get("name")
-        if isinstance(name, str):
-            descriptions[name] = str(function.get("description", ""))
-    return descriptions
-
-
 optimizer_specs: list[tuple[str, Any, dict[str, Any], bool]] = [
     ("MetaPromptOptimizer", MetaPromptOptimizer, {"prompts_per_round": 2}, True),
     ("EvolutionaryOptimizer", EvolutionaryOptimizer, {"population_size": 4}, True),
@@ -100,9 +94,9 @@ optimizer_specs: list[tuple[str, Any, dict[str, Any], bool]] = [
 ]
 
 for optimizer_name, optimizer_cls, extra_kwargs, supports_tool_opt in optimizer_specs:
-    print(f"\n===== {optimizer_name} =====")
+    logger.info("===== %s =====", optimizer_name)
     prompt = build_prompt()
-    before = tool_description_map(prompt)
+    before = extract_tool_descriptions(prompt)
 
     optimizer = optimizer_cls(
         model=MODEL,
@@ -144,13 +138,15 @@ for optimizer_name, optimizer_cls, extra_kwargs, supports_tool_opt in optimizer_
         optimized_prompt = next(iter(optimized_prompt.values()))
 
     if optimized_prompt is None:
-        print("FAILED: no optimized prompt returned")
-        continue
+        raise RuntimeError(f"{optimizer_name}: no optimized prompt returned")
 
-    after = tool_description_map(optimized_prompt)
+    after = extract_tool_descriptions(optimized_prompt)
     changed = sum(1 for name in after if after.get(name, "") != before.get(name, ""))
-    print(
-        f"score {result.initial_score:.4f} -> {result.score:.4f} | "
-        f"tool_descriptions_changed={changed}"
+    logger.info(
+        "%s score %.4f -> %.4f | tool_descriptions_changed=%s",
+        optimizer_name,
+        result.initial_score,
+        result.score,
+        changed,
     )
     time.sleep(SLEEP_BETWEEN_OPTIMIZERS_SECONDS)
