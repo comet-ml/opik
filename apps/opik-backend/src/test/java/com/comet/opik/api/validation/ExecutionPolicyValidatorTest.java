@@ -69,8 +69,9 @@ class ExecutionPolicyValidatorTest {
         return Stream.of(
                 Arguments.of(1, 1),
                 Arguments.of(5, 3),
-                Arguments.of(10, 10),
-                Arguments.of(10, 1),
+                Arguments.of(50, 30),
+                Arguments.of(100, 100),
+                Arguments.of(100, 1),
                 Arguments.of(3, 2));
     }
 
@@ -91,8 +92,8 @@ class ExecutionPolicyValidatorTest {
 
     private static Stream<Arguments> invalidMaxCases() {
         return Stream.of(
-                Arguments.of(11, 1),
-                Arguments.of(1, 11),
-                Arguments.of(11, 11));
+                Arguments.of(101, 1),
+                Arguments.of(1, 101),
+                Arguments.of(101, 101));
     }
 }

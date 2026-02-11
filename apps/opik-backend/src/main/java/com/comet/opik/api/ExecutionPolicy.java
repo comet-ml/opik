@@ -13,8 +13,8 @@ import lombok.Builder;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @ExecutionPolicyValidation
 public record ExecutionPolicy(
-        @Min(1) @Max(10) int runsPerItem,
-        @Min(1) @Max(10) int passThreshold) {
+        @Min(1) @Max(100) int runsPerItem,
+        @Min(1) @Max(100) int passThreshold) {
 
     public static final ExecutionPolicy DEFAULT = new ExecutionPolicy(1, 1);
 }
