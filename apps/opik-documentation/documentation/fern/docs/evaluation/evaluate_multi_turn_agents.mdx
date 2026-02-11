@@ -134,7 +134,7 @@ Now that we have a way to simulate the user, we can create multiple simulations:
         <Tip>
         The `run_simulation` function keeps track of the internal conversation state by constructing
         a list of messages with the result of the `run_agent` function as an assistant message and
-        the `UserSimulator`'s response as a user message.
+        the `SimulatedUser`'s response as a user message.
 
         If you need more complex conversation state, you can create threads using the `SimulatedUser`'s
         `generate_response` method directly.
