@@ -155,6 +155,7 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
+      TEST: "Clear Env Test"
     envFrom:
       - configMapRef:
           name: opik-backend
