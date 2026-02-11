@@ -1,0 +1,37 @@
+---
+description: Send Prompt Flow traces to Opik via OpenTelemetry OTLP.
+headline: Prompt Flow | Opik Documentation
+og:description: Configure Prompt Flow OpenTelemetry export for Opik-based trace analysis.
+og:site_name: Opik Documentation
+og:title: Prompt Flow Integration - Opik
+title: Observability for Prompt Flow with Opik
+---
+
+[Prompt Flow](https://microsoft.github.io/promptflow/) supports OpenTelemetry-based tracing that can be exported to Opik.
+
+## OTLP configuration
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+```
+
+## Example (Python)
+
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+trace.set_tracer_provider(provider)
+
+# Run prompt flow pipeline as usual.
+```
+
+## Notes
+
+- Keep OTLP transport on HTTP/protobuf for Opik compatibility
+- Include `projectName` in OTEL headers if you want a non-default Opik project

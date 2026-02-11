@@ -1,0 +1,38 @@
+---
+description: Send LangServe traces to Opik using OpenTelemetry-compatible instrumentation.
+headline: LangServe | Opik Documentation
+og:description: Add OpenTelemetry tracing to LangServe deployments and inspect them in
+  Opik.
+og:site_name: Opik Documentation
+og:title: LangServe Integration - Opik
+title: Observability for LangServe with Opik
+---
+
+[LangServe](https://github.com/langchain-ai/langserve) apps can be traced with OpenTelemetry and sent to Opik's OTLP endpoint.
+
+## OTLP configuration
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+```
+
+## Example (Python FastAPI + LangServe)
+
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+trace.set_tracer_provider(provider)
+
+# Register your LangServe routes and run FastAPI as usual.
+```
+
+## Notes
+
+- If you instrument LangChain/LangGraph underneath, spans will appear in the same trace
+- Use `projectName` in OTEL headers for project routing

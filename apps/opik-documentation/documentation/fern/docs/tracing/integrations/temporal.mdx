@@ -1,0 +1,45 @@
+---
+description: Monitor Temporal AI workflows in Opik using OpenTelemetry OTLP export.
+headline: Temporal | Opik Documentation
+og:description: Send Temporal workflow traces to Opik with OpenTelemetry for durable
+  workflow observability.
+og:site_name: Opik Documentation
+og:title: Temporal Integration - Opik
+title: Observability for Temporal with Opik
+---
+
+[Temporal](https://temporal.io/) workflows can emit OpenTelemetry spans from workers and activities. Route those spans to Opik to inspect end-to-end LLM workflows and tool execution.
+
+## OTLP configuration
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+```
+
+For self-hosted Opik:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+```
+
+## Example (Python worker)
+
+```python
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry import trace
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+trace.set_tracer_provider(provider)
+
+# Start your Temporal worker/client as usual.
+```
+
+## Notes
+
+- Use HTTP/protobuf OTLP exporter for Opik ingestion
+- Include `projectName` in headers so workflow traces land in the expected project
