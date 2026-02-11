@@ -1,0 +1,38 @@
+---
+description: Trace Claude Agent SDK executions in Opik through OpenTelemetry.
+headline: Claude Agent SDK | Opik Documentation
+og:description: Export Claude Agent SDK OpenTelemetry traces to Opik for debugging and
+  analysis.
+og:site_name: Opik Documentation
+og:title: Claude Agent SDK Integration - Opik
+title: Observability for Claude Agent SDK with Opik
+---
+
+The Claude Agent SDK can be instrumented with OpenTelemetry and exported to Opik over OTLP.
+
+## OTLP configuration
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
+```
+
+## Example (Python)
+
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+trace.set_tracer_provider(provider)
+
+# Initialize and run Claude Agent SDK as usual.
+```
+
+## Notes
+
+- Use OTLP HTTP/protobuf exporter for Opik
+- Add `projectName` in `OTEL_EXPORTER_OTLP_HEADERS` for deterministic project routing
