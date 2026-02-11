@@ -28,14 +28,10 @@ const TextPromptView: React.FC<TextPromptViewProps> = ({ template }) => {
   const isJsonMessages = messages.length > 0;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          {showRawView
-            ? "Raw text"
-            : isJsonMessages
-              ? `${messages.length} message${messages.length !== 1 ? "s" : ""}`
-              : "Text prompt"}
+        <div className="comet-body-s-accented">
+          {isJsonMessages ? "Chat messages" : "Prompt"}
         </div>
         <Button
           variant="ghost"

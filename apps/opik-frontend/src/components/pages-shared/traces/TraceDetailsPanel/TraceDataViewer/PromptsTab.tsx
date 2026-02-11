@@ -132,9 +132,12 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="space-y-2">
-      {hasMessages && (
-        <div className="flex items-center justify-end">
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <div className="comet-body-s-accented">
+          {hasMessages ? "Chat messages" : "Prompt"}
+        </div>
+        {hasMessages && (
           <Button
             variant="ghost"
             size="sm"
@@ -152,8 +155,8 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
               </>
             )}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {showRawView || !hasMessages ? (
         <SyntaxHighlighter
@@ -175,9 +178,9 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
         <PromptMessagesReadonly messages={messages} />
       )}
 
-      <div className="flex items-center justify-between text-xs text-muted-slate">
+      <div className="mt-2 flex items-center justify-between">
         {promptId && (
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="ghost" size="sm" asChild>
             <Link
               to="/$workspaceName/prompts/$promptId"
               params={{ workspaceName, promptId }}
