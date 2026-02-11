@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import { PromptLibraryMetadata } from "@/types/playground";
@@ -8,18 +8,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
-import PromptMessagesReadonly, {
-  ChatMessage,
-} from "@/components/pages-shared/llm/PromptMessagesReadonly/PromptMessagesReadonly";
+import PromptTemplateView from "@/components/pages-shared/llm/PromptTemplateView/PromptTemplateView";
 import get from "lodash/get";
-import {
-  Code2,
-  ExternalLink,
-  FileTerminal,
-  GitCommitVertical,
-  MessageSquare,
-} from "lucide-react";
+import { ExternalLink, FileTerminal, GitCommitVertical } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
@@ -119,78 +110,12 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
   search,
   templateStructure,
 }) => {
-  const [showRawView, setShowRawView] = useState(false);
-
-  const messages = useMemo<ChatMessage[]>(() => {
-    try {
-      const data =
-        typeof template === "string" ? JSON.parse(template) : template;
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
-    }
-  }, [template]);
-
-  const isChatPrompt = templateStructure === "chat";
-  const hasMessages = messages.length > 0;
-
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <div className="comet-body-s-accented">
-          {isChatPrompt ? "Chat messages" : "Prompt"}
-        </div>
-        {hasMessages && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowRawView(!showRawView)}
-          >
-            {showRawView ? (
-              <>
-                <MessageSquare className="mr-1.5 size-3.5" />
-                Message view
-              </>
-            ) : (
-              <>
-                <Code2 className="mr-1.5 size-3.5" />
-                Raw view
-              </>
-            )}
-          </Button>
-        )}
-      </div>
-
-      {showRawView || !hasMessages ? (
-        <SyntaxHighlighter
-          withSearch
-          data={
-            (() => {
-              try {
-                return typeof template === "string"
-                  ? JSON.parse(template)
-                  : template;
-              } catch {
-                return template;
-              }
-            })() as object
-          }
-          search={search}
-        />
-      ) : isChatPrompt ? (
-        <PromptMessagesReadonly messages={messages} />
-      ) : (
-        <div className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground">
-          {messages
-            .map((m) =>
-              typeof m.content === "string"
-                ? m.content
-                : JSON.stringify(m.content),
-            )
-            .join("\n\n")}
-        </div>
-      )}
-
+    <PromptTemplateView
+      template={template}
+      templateStructure={templateStructure}
+      search={search}
+    >
       <div className="mt-2 flex items-center justify-between">
         {promptId && (
           <Button variant="ghost" size="sm" asChild>
@@ -209,7 +134,7 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
           ButtonComponent={CustomUseInPlaygroundButton}
         />
       </div>
-    </div>
+    </PromptTemplateView>
   );
 };
 
