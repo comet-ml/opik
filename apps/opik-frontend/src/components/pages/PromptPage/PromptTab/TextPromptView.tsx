@@ -30,9 +30,7 @@ const TextPromptView: React.FC<TextPromptViewProps> = ({ template }) => {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <div className="comet-body-s-accented">
-          {isJsonMessages ? "Chat messages" : "Prompt"}
-        </div>
+        <div className="comet-body-s-accented">Prompt</div>
         <Button
           variant="ghost"
           size="sm"
