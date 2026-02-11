@@ -19,6 +19,7 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -107,7 +108,7 @@ public class DatasetEvaluatorResourceClient {
     }
 
     public DatasetEvaluatorBatchRequest createBatchRequest(int count) {
-        var evaluators = java.util.stream.IntStream.range(0, count)
+        var evaluators = IntStream.range(0, count)
                 .mapToObj(i -> createEvaluator("evaluator-" + i, EvaluatorType.LLM_JUDGE))
                 .toList();
         return DatasetEvaluatorBatchRequest.builder()

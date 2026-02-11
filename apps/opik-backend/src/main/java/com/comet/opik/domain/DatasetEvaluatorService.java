@@ -18,6 +18,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -74,7 +75,7 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
             var dao = handle.attach(DatasetEvaluatorDAO.class);
             dao.batchInsert(evaluators, workspaceId);
 
-            Set<UUID> ids = evaluators.stream().map(DatasetEvaluator::id).collect(java.util.stream.Collectors.toSet());
+            Set<UUID> ids = evaluators.stream().map(DatasetEvaluator::id).collect(Collectors.toSet());
             List<DatasetEvaluator> created = dao.findByIds(workspaceId, ids);
 
             log.info("Created '{}' dataset evaluators for dataset '{}' in workspace '{}'",
@@ -111,6 +112,8 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
     @Override
     public void deleteBatch(@NonNull UUID datasetId, @NonNull Set<UUID> ids) {
         String workspaceId = requestContext.get().getWorkspaceId();
+
+        datasetService.findById(datasetId, workspaceId, Visibility.PRIVATE);
 
         log.info("Deleting '{}' dataset evaluators for dataset '{}' in workspace '{}'",
                 ids.size(), datasetId, workspaceId);
