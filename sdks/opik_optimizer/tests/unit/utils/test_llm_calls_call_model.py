@@ -131,7 +131,9 @@ class TestCallModelSync:
 
 class TestCallModelAsync:
     @pytest.mark.asyncio
-    async def test_call_model_async_uses_strict_response_schema_for_openai(self) -> None:
+    async def test_call_model_async_uses_strict_response_schema_for_openai(
+        self,
+    ) -> None:
         captured_kwargs: dict[str, Any] = {}
         mock_response = make_mock_response(
             '{"inner": {"value": 1, "detail": null}, "note": null}'

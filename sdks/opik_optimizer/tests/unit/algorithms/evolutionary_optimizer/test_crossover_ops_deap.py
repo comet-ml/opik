@@ -1,6 +1,8 @@
 import random
 from typing import Any
 
+import pytest
+
 
 from tests.unit.algorithms.evolutionary_optimizer._crossover_test_helpers import (
     make_deap_individual,
@@ -81,7 +83,9 @@ class TestDeapCrossover:
         assert "prompt_a" in child2
         assert "prompt_b" in child2
 
-    def test_crossover_applies_tool_updates_per_child(self, monkeypatch) -> None:
+    def test_crossover_applies_tool_updates_per_child(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from opik_optimizer.algorithms.evolutionary_optimizer.ops.crossover_ops import (
             deap_crossover,
         )
