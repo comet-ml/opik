@@ -12,6 +12,7 @@ def run_simulation(
     max_turns: int = 5,
     thread_id: Optional[str] = None,
     project_name: Optional[str] = None,
+    tags: Optional[List[str]] = None,
     **app_kwargs: Any,
 ) -> Dict[str, Any]:
     """
@@ -30,6 +31,7 @@ def run_simulation(
         max_turns: Maximum number of conversation turns (default: 5)
         thread_id: Optional thread ID for grouping traces. Generated if not provided
         project_name: Optional project name for trace logging
+        tags: Optional list of tags to apply to simulation traces
         **app_kwargs: Additional keyword arguments passed to the app
 
     Returns:
@@ -37,6 +39,7 @@ def run_simulation(
         - thread_id: The thread ID used for this simulation
         - conversation_history: List of message dicts from the simulation
         - project_name: Project name if provided
+        - tags: Trace tags if provided
     """
     # Generate thread_id if not provided
     if thread_id is None:
@@ -68,15 +71,19 @@ def run_simulation(
 
         # Call app with SINGLE message string, thread_id parameter, and opik_args for tracing
         try:
+            trace_opik_args = {
+                "thread_id": thread_id,
+                "metadata": {"turn": turn + 1, "project_name": project_name},
+            }
+            if tags:
+                trace_opik_args["tags"] = tags
+
             assistant_message = app(
                 user_message_text,
                 thread_id=thread_id,
                 **app_kwargs,
                 opik_args={
-                    "trace": {
-                        "thread_id": thread_id,
-                        "metadata": {"turn": turn + 1, "project_name": project_name},
-                    }
+                    "trace": trace_opik_args
                 },
             )
         except Exception as e:
@@ -105,4 +112,5 @@ def run_simulation(
         "thread_id": thread_id,
         "conversation_history": conversation_history,
         "project_name": project_name,
+        "tags": tags,
     }

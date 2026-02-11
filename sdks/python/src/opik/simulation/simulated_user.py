@@ -17,6 +17,7 @@ class SimulatedUser:
         persona: str,
         model: str = "gpt-4o-mini",
         fixed_responses: Optional[List[str]] = None,
+        max_history_messages: Optional[int] = 10,
     ):
         """
         Initialize a simulated user.
@@ -25,10 +26,16 @@ class SimulatedUser:
             persona: Description of the user's personality and behavior
             model: LLM model to use for generating responses (default: gpt-4o-mini)
             fixed_responses: Optional list of predefined responses to cycle through
+            max_history_messages: Maximum number of most recent conversation messages
+                to include for LLM generation. Use None for no limit.
         """
+        if max_history_messages is not None and max_history_messages <= 0:
+            raise ValueError("max_history_messages must be greater than 0 or None")
+
         self.persona = persona
         self.model = model
         self.fixed_responses = fixed_responses or []
+        self.max_history_messages = max_history_messages
         self._response_index = 0
 
         # Initialize LLM backend using models_factory for consistency
@@ -67,8 +74,8 @@ Generate a single user message that fits your persona and the conversation conte
         # Convert conversation history to messages format expected by LLM
         messages = [{"role": "system", "content": system_prompt}]
 
-        # Add all conversation history
-        messages.extend(conversation_history)
+        # Add recent conversation history (optionally truncated to prevent context blowups)
+        messages.extend(self._truncate_history(conversation_history))
 
         # Convert messages to string format for generate_string
         conversation_text = self._format_messages_as_text(messages)
@@ -97,3 +104,12 @@ Generate a single user message that fits your persona and the conversation conte
                 formatted_messages.append(f"{role.title()}: {content}")
 
         return "\n".join(formatted_messages)
+
+    def _truncate_history(
+        self, conversation_history: List[Dict[str, str]]
+    ) -> List[Dict[str, str]]:
+        """Return recent history according to max_history_messages."""
+        if self.max_history_messages is None:
+            return conversation_history
+
+        return conversation_history[-self.max_history_messages :]
