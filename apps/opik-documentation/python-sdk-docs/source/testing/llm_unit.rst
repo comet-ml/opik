@@ -76,6 +76,8 @@ Additional pytest plugin settings:
 - ``pytest_experiment_dataset_name`` (default: ``"tests"``)
 - ``pytest_experiment_name_prefix`` (default: ``"Test-Suite"``)
 - ``pytest_passed_score_name`` (default: ``"Passed"``)
+- ``pytest_episode_artifact_enabled`` (default: ``True``)
+- ``pytest_episode_artifact_path`` (default: ``".opik/pytest_episode_report.json"``)
 
 Notes
 -----
