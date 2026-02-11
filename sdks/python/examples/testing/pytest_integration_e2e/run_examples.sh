@@ -20,7 +20,7 @@ echo "Project: ${OPIK_PROJECT_NAME}"
 echo "Episode artifact: ${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}"
 echo "Pytest args: -vv -s -rA ${*:-}"
 
-pytest -vv -s -rA test_llm_unit_e2e.py test_llm_episode_e2e.py "$@"
+pytest -vv -s -rA test_*.py "$@"
 
 if [[ -f "${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}" ]]; then
   echo

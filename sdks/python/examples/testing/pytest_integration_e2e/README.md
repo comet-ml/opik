@@ -3,7 +3,9 @@
 This folder provides a simple end-to-end smoke test for the Opik pytest integration:
 
 - `test_llm_unit_e2e.py`: basic `@llm_unit` tracking with parametrized tests
-- `test_llm_episode_e2e.py`: scenario-based `@llm_episode` tracking with simulation output
+- `test_llm_unit_contract_e2e.py`: contract-style `@llm_unit` validation with schema checks
+- `test_llm_episode_e2e.py`: scenario-based `@llm_episode` tracking with simulation output, budgets, scores, and detailed timestamped logs
+- `test_llm_episode_policy_routing_e2e.py`: policy/routing episode scenarios with tool-action expectations
 - `run_examples.sh`: one-command runner
 
 ## Prerequisites
@@ -23,7 +25,7 @@ cd sdks/python/examples/testing/pytest_integration_e2e
 This runs:
 
 ```bash
-pytest -q -s test_llm_unit_e2e.py test_llm_episode_e2e.py
+pytest -vv -s -rA test_*.py
 ```
 
 ## Outputs

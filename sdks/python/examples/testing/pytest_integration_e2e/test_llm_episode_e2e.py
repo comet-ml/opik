@@ -1,3 +1,4 @@
+import logging
 import pytest
 
 from opik import llm_episode
@@ -14,6 +15,18 @@ from opik.simulation import (
     run_simulation,
 )
 
+LOGGER = logging.getLogger("pytest_integration_e2e.episode")
+if not LOGGER.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    handler.setFormatter(formatter)
+    LOGGER.addHandler(handler)
+LOGGER.setLevel(logging.INFO)
+LOGGER.propagate = False
+
 
 def print_episode_debug(
     scenario_id: str,
@@ -21,34 +34,50 @@ def print_episode_debug(
     trajectory: list[dict],
     episode: EpisodeResult,
 ) -> None:
-    print(f"\n[episode] scenario={scenario_id} thread_id={simulation['thread_id']}")
-    print("[episode] conversation:")
+    LOGGER.info(
+        "episode scenario=%s thread_id=%s",
+        scenario_id,
+        simulation["thread_id"],
+    )
+    LOGGER.info("conversation:")
     for index, message in enumerate(simulation["conversation_history"], start=1):
-        print(f"  {index:02d}. {message['role']}: {message['content']}")
+        LOGGER.info("  %02d. %s: %s", index, message["role"], message["content"])
 
-    print("[episode] trajectory actions:")
+    LOGGER.info("trajectory actions:")
     if not trajectory:
-        print("  (none)")
+        LOGGER.info("  (none)")
     for index, step in enumerate(trajectory, start=1):
-        print(f"  {index:02d}. action={step.get('action')} details={step.get('details')}")
+        LOGGER.info(
+            "  %02d. action=%s details=%s",
+            index,
+            step.get("action"),
+            step.get("details"),
+        )
 
-    print("[episode] assertions:")
+    LOGGER.info("assertions:")
     for assertion in episode.assertions:
         status = "PASS" if assertion.passed else "FAIL"
-        print(f"  - {status} {assertion.name}: {assertion.reason}")
+        LOGGER.info("  - %s %s: %s", status, assertion.name, assertion.reason)
 
-    print("[episode] scores:")
+    LOGGER.info("scores:")
     for score in episode.scores:
-        print(f"  - {score.name}: {score.value} ({score.reason})")
+        LOGGER.info("  - %s: %s (%s)", score.name, score.value, score.reason)
 
     if episode.budgets is not None:
-        print("[episode] budgets:")
+        LOGGER.info("budgets:")
         for budget_name, metric in episode.budgets.all_metrics().items():
             status = "PASS" if metric.passed else "FAIL"
-            print(f"  - {status} {budget_name}: used={metric.used}, limit={metric.limit}")
+            LOGGER.info(
+                "  - %s %s: used=%s, limit=%s",
+                status,
+                budget_name,
+                metric.used,
+                metric.limit,
+            )
 
-    print(
-        f"[episode] final_status={'PASS' if episode.is_passing() else 'FAIL'}"
+    LOGGER.info(
+        "final_status=%s",
+        "PASS" if episode.is_passing() else "FAIL",
     )
 
 
