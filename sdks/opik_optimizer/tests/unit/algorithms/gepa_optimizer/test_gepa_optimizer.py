@@ -830,3 +830,55 @@ def test_gepa_adapter_uses_logprob_policy_when_configured() -> None:
     result = adapter.evaluate(batch, {"system_prompt": "You are a helpful assistant."})
 
     assert result.outputs == [{"output": "high"}]
+
+
+def test_gepa_optimizer_ignores_blank_selection_strategy(monkeypatch) -> None:
+    dataset = make_mock_dataset(
+        STANDARD_DATASET_ITEMS[:2], name="test-dataset", dataset_id="dataset-123"
+    )
+    prompt = make_baseline_prompt()
+
+    def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+        _ = dataset_item, llm_output
+        return 0.5
+
+    metric_fn.__name__ = "metric_fn"
+
+    context = make_optimization_context(prompt, dataset=dataset, metric=metric_fn)
+    context.extra_params["candidate_selection_strategy"] = "   "
+    context.max_trials = 2
+    context.baseline_score = 0.1
+
+    optimizer = GepaOptimizer(
+        model="gpt-4o-mini",
+        model_parameters={"selection_policy": "best_by_metric"},
+        verbose=0,
+        seed=42,
+    )
+    optimizer.pre_optimize(context)
+
+    captured: dict[str, Any] = {}
+
+    def _fake_gepa_optimize(**kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        mock_gepa_result = MagicMock()
+        mock_gepa_result.candidates = []
+        mock_gepa_result.val_aggregate_scores = []
+        mock_gepa_result.best_idx = 0
+        mock_gepa_result.total_metric_calls = 1
+        mock_gepa_result.parents = []
+        return mock_gepa_result
+
+    monkeypatch.setattr("gepa.optimize", _fake_gepa_optimize)
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.gepa_optimizer.ops.scoring_ops.rescore_candidates",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "opik_optimizer.algorithms.gepa_optimizer.ops.result_ops.build_algorithm_result",
+        lambda **kwargs: MagicMock(),
+    )
+
+    optimizer.run_optimization(context)
+
+    assert captured.get("candidate_selection_strategy") == "best_by_metric"

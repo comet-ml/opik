@@ -193,16 +193,18 @@ class GepaOptimizer(BaseOptimizer):
             self.model_parameters.get("candidate_selection_policy")
             or self.model_parameters.get("selection_policy")
         )
-        candidate_selection_strategy = (
-            str(requested_selection_strategy)
-            if requested_selection_strategy is not None
-            else (
-                str(model_selection_strategy)
-                if isinstance(model_selection_strategy, str)
-                and model_selection_strategy.strip()
-                else "pareto"
-            )
-        )
+        if (
+            requested_selection_strategy is not None
+            and str(requested_selection_strategy).strip()
+        ):
+            candidate_selection_strategy = str(requested_selection_strategy).strip()
+        elif (
+            isinstance(model_selection_strategy, str)
+            and model_selection_strategy.strip()
+        ):
+            candidate_selection_strategy = model_selection_strategy.strip()
+        else:
+            candidate_selection_strategy = "pareto"
         use_merge = context.extra_params.get("use_merge", False)
         max_merge_invocations = context.extra_params.get("max_merge_invocations", 5)
         run_dir = context.extra_params.get("run_dir", None)
