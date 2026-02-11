@@ -35,7 +35,6 @@ vi.mock("@/hooks/useWorkspaceColorMap", () => ({
 vi.mock("@/hooks/useUpdateColorMapping", () => ({
   default: () => ({
     updateColor: vi.fn(),
-    resetColor: vi.fn(),
     isPending: false,
   }),
 }));

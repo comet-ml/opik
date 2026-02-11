@@ -201,26 +201,26 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
           )}
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="feedbackDefinitionName">Name</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="feedbackDefinitionName"
-                className="flex-1"
-                placeholder="Feedback definition name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
+            <div className="flex items-center">
               <Popover>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="size-9 shrink-0 rounded-md border border-border"
+                    className="size-10 shrink-0 rounded-l-md focus-visible:outline-none"
                     style={{ backgroundColor: localColor }}
                   />
                 </PopoverTrigger>
-                <PopoverContent className="w-auto" align="end">
+                <PopoverContent className="w-auto" align="start">
                   <ColorPicker value={localColor} onChange={setLocalColor} />
                 </PopoverContent>
               </Popover>
+              <Input
+                id="feedbackDefinitionName"
+                className="flex-1 rounded-l-none"
+                placeholder="Feedback definition name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
             </div>
           </div>
           <div className="flex flex-col gap-2 pb-4">

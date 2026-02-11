@@ -1,5 +1,4 @@
 import React, { useCallback, useState } from "react";
-import { RotateCcw } from "lucide-react";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import {
@@ -14,9 +13,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import ColorPicker from "@/components/shared/ColorPicker/ColorPicker";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { useServerSync } from "@/components/server-sync-provider";
 import useUpdateColorMapping from "@/hooks/useUpdateColorMapping";
 import { resolveHexColor } from "@/lib/colorVariants";
 import { cn } from "@/lib/utils";
@@ -47,12 +43,10 @@ const ColorIndicator: React.FC<ColorIndicatorProps> = ({
   readOnly = false,
 }) => {
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const { config } = useServerSync();
-  const { updateColor, resetColor, previewColor, setPreviewColor } =
+  const { updateColor, previewColor, setPreviewColor } =
     useUpdateColorMapping();
 
   const effectiveColorKey = colorKey ?? label;
-  const hasCustomColor = Boolean(config?.color_map?.[effectiveColorKey]);
 
   const handleColorChange = useCallback(
     (hex: string) => {
@@ -78,11 +72,6 @@ const ColorIndicator: React.FC<ColorIndicatorProps> = ({
     },
     [color, effectiveColorKey, updateColor, previewColor],
   );
-
-  const handleReset = useCallback(() => {
-    resetColor(effectiveColorKey);
-    setPopoverOpen(false);
-  }, [effectiveColorKey, resetColor]);
 
   const colorStyle = {
     "--bg-color": color,
@@ -115,7 +104,7 @@ const ColorIndicator: React.FC<ColorIndicatorProps> = ({
       <PopoverContent
         side="bottom"
         align="start"
-        className="w-auto p-3"
+        className="w-auto p-4"
         onPointerMove={(e) => e.stopPropagation()}
         onMouseMove={(e) => e.stopPropagation()}
         onMouseEnter={(e) => e.stopPropagation()}
@@ -127,20 +116,6 @@ const ColorIndicator: React.FC<ColorIndicatorProps> = ({
           onChange={handleColorChange}
           onPresetSelect={handlePresetSelect}
         />
-        {hasCustomColor && (
-          <>
-            <Separator className="my-3" />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start gap-2"
-              onClick={handleReset}
-            >
-              <RotateCcw className="size-3.5" />
-              Reset to default
-            </Button>
-          </>
-        )}
       </PopoverContent>
     </Popover>
   );
