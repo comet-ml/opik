@@ -2,6 +2,7 @@ from typing import Callable, Any, Dict, Tuple
 import os
 import functools
 import logging
+import inspect
 import opik
 import opik.opik_context as opik_context
 from . import test_runs_storage, test_run_content
@@ -40,9 +41,7 @@ def llm_unit(
         if not config_.pytest_experiment_enabled:
             return func
 
-        @opik.track(capture_input=False)
-        @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def _capture_test_run_content(*args: Any, **kwargs: Any) -> None:
             try:
                 test_trace_data = opik_context.get_current_trace_data()
                 test_span_data = opik_context.get_current_span_data()
@@ -80,8 +79,21 @@ def llm_unit(
                     exc_info=True,
                 )
 
-            result = func(*args, **kwargs)
-            return result
+        if inspect.iscoroutinefunction(func):
+
+            @opik.track(capture_input=False)
+            @functools.wraps(func)
+            async def wrapper(*args: Any, **kwargs: Any) -> Any:
+                _capture_test_run_content(*args, **kwargs)
+                return await func(*args, **kwargs)
+
+        else:
+
+            @opik.track(capture_input=False)
+            @functools.wraps(func)
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
+                _capture_test_run_content(*args, **kwargs)
+                return func(*args, **kwargs)
 
         return wrapper
 
@@ -94,7 +106,12 @@ def _get_test_nodeid() -> str:
     # 'sdks/python/tests/tests_sandbox/test_things.py::TestGroup::test_example (call)'
     # 'sdks/python/tests/tests_sandbox/test_things.py::test_example (call)'
 
-    return os.environ["PYTEST_CURRENT_TEST"].rpartition(" ")[0]
+    current_test = os.environ.get("PYTEST_CURRENT_TEST")
+    if current_test is None:
+        return "<unknown_test>"
+
+    nodeid, _, _ = current_test.rpartition(" ")
+    return nodeid or current_test
 
 
 def _get_test_run_content(
