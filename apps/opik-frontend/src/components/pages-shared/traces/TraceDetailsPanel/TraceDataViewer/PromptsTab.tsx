@@ -107,6 +107,7 @@ interface PromptContentViewProps {
   activeVersionId?: string;
   workspaceName: string;
   search?: string;
+  templateStructure?: "chat" | "text";
 }
 
 const PromptContentView: React.FC<PromptContentViewProps> = ({
@@ -116,6 +117,7 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
   activeVersionId,
   workspaceName,
   search,
+  templateStructure,
 }) => {
   const [showRawView, setShowRawView] = useState(false);
 
@@ -129,15 +131,16 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
     }
   }, [template]);
 
+  const isChatPrompt = templateStructure === "chat";
   const hasMessages = messages.length > 0;
 
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
         <div className="comet-body-s-accented">
-          {hasMessages ? "Chat messages" : "Prompt"}
+          {isChatPrompt ? "Chat messages" : "Prompt"}
         </div>
-        {hasMessages && (
+        {isChatPrompt && hasMessages && (
           <Button
             variant="ghost"
             size="sm"
@@ -158,7 +161,7 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
         )}
       </div>
 
-      {showRawView || !hasMessages ? (
+      {showRawView || !isChatPrompt || !hasMessages ? (
         <SyntaxHighlighter
           withSearch
           data={
@@ -261,6 +264,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
               activeVersionId={rawPrompts[index]?.version?.id}
               workspaceName={workspaceName}
               search={search}
+              templateStructure={rawPrompts[index]?.template_structure}
             />
           </AccordionContent>
         </AccordionItem>
