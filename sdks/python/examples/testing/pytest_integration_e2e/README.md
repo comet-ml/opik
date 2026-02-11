@@ -6,6 +6,7 @@ This folder provides a simple end-to-end smoke test for the Opik pytest integrat
 - `test_llm_unit_contract_e2e.py`: contract-style `@llm_unit` validation with schema checks
 - `test_llm_episode_e2e.py`: scenario-based `@llm_episode` tracking with simulation output, budgets, scores, and detailed timestamped logs
 - `test_llm_episode_policy_routing_e2e.py`: policy/routing episode scenarios with tool-action expectations
+- `test_llm_episode_judges_e2e.py`: episode scoring with LLM-as-a-judge (`gpt-5-nano`) using one built-in metric (`AnswerRelevance`) and one custom `GEval` rubric
 - `run_examples.sh`: one-command runner
 
 ## Prerequisites
@@ -14,6 +15,7 @@ This folder provides a simple end-to-end smoke test for the Opik pytest integrat
 - Configure Opik access:
   - Cloud: set `OPIK_API_KEY` (and optional `OPIK_WORKSPACE`)
   - Local Opik: set `OPIK_URL_OVERRIDE` (API key optional depending on setup)
+- For `test_llm_episode_judges_e2e.py`, set `OPENAI_API_KEY` to run `gpt-5-nano` judge calls
 
 ## Run
 
