@@ -4,6 +4,7 @@ from typing import List, Any, Generator, TYPE_CHECKING
 from opik.types import BatchFeedbackScoreDict
 
 from opik.api_objects import opik_client
+import opik.config as config
 from . import test_runs_storage, experiment_runner, summary
 
 import pytest
@@ -47,6 +48,7 @@ def pytest_runtest_makereport(item: "pytest.Item") -> Generator:
 )
 def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
     try:
+        config_ = config.get_from_user_inputs()
         llm_test_items: List["pytest.Item"] = [
             test_item
             for test_item in session.items
@@ -68,7 +70,9 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
             valid_items.append(item)
             traces_feedback_scores.append(
                 BatchFeedbackScoreDict(
-                    id=trace_data.id, name="Passed", value=float(report.passed)
+                    id=trace_data.id,
+                    name=config_.pytest_passed_score_name,
+                    value=float(report.passed),
                 )
             )
 
@@ -78,7 +82,12 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
         client = opik_client.get_client_cached()
         client.log_traces_feedback_scores(traces_feedback_scores)
 
-        experiment_runner.run(client=client, test_items=valid_items)
+        experiment_runner.run(
+            client=client,
+            test_items=valid_items,
+            dataset_name=config_.pytest_experiment_dataset_name,
+            experiment_name_prefix=config_.pytest_experiment_name_prefix,
+        )
         client.flush()
     except Exception:
         LOGGER.error(

@@ -38,21 +38,27 @@ def get_dataset_item_id_finder(
     return callback
 
 
-def run(client: opik_client.Opik, test_items: List[Item]) -> None:
+def run(
+    client: opik_client.Opik,
+    test_items: List[Item],
+    dataset_name: str = "tests",
+    experiment_name_prefix: str = "Test-Suite",
+) -> None:
     timestamp = datetime_helpers.datetime_to_iso8601(datetime_helpers.local_timestamp())
-    experiment_name = f"Test-Suite-{timestamp}"
+    experiment_name = f"{experiment_name_prefix}-{timestamp}"
+
 
     try:
-        dataset = client.get_dataset("tests")
+        dataset = client.get_dataset(dataset_name)
     except Exception:
-        dataset = client.create_dataset("tests")
+        dataset = client.create_dataset(dataset_name)
 
     dataset_items = list(dataset.__internal_api__stream_items_as_dataclasses__())
     dataset_item_id_finder = get_dataset_item_id_finder(
         existing_dataset_items=dataset_items
     )
 
-    experiment = client.create_experiment(name=experiment_name, dataset_name="tests")
+    experiment = client.create_experiment(name=experiment_name, dataset_name=dataset_name)
 
     experiment_items: List[experiment_item.ExperimentItemReferences] = []
     dataset_items_to_create: List[dataset_item.DatasetItem] = []
