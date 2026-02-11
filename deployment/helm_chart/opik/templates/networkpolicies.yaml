@@ -1,8 +1,15 @@
-{{- if and (index .Values.component "python-backend" "enabled") (index .Values.component "python-backend" "networkPolicy" "enabled") }}
+{{- if and (index .Values "component" "python-backend" "enabled") (index .Values "component" "python-backend" "networkPolicy" "enabled") }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ include "opik.name" $ }}-python-backend-egress
+  labels:
+    {{- include "opik.labels" $  | nindent 4 }}
+    component: {{ include "opik.name" $ }}-python-backend
+  annotations:
+    {{- with index .Values "component" "python-backend" "networkPolicy" "annotations" }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   podSelector:
     matchLabels:
@@ -26,9 +33,11 @@ spec:
     # Allow traffic to external destinations (outside the cluster)
     - to:
       - ipBlock:
-          cidr: {{ index .Values "component" "python-backend" "networkPolicy" "engineEgress" "ipBlock" }}
+          cidr: {{ index .Values "component" "python-backend" "networkPolicy" "engineEgress" "ipBlock" | default "0.0.0.0/0" }}
+          {{- if index .Values "component" "python-backend" "networkPolicy" "engineEgress" "except" }}
           except:
             {{- range index .Values "component" "python-backend" "networkPolicy" "engineEgress" "except" }}
-          - {{ . }}
+            - {{ . }}
+            {{- end }}
           {{- end }}
 {{- end }}
