@@ -13,7 +13,6 @@ import pytest
 from opik import context_storage
 from opik.api_objects import opik_client
 from opik.message_processing import streamer_constructors
-from opik.message_processing.preprocessing import file_upload_preprocessor
 
 from . import testlib
 from .testlib import (
@@ -38,29 +37,28 @@ def shutdown_cached_client_after_test():
 
 
 @pytest.fixture
-def fake_file_upload_preprocessor():
+def fake_file_upload_manager():
     upload_manager_emulator = noop_file_upload_manager.FileUploadManagerEmulator()
-    yield file_upload_preprocessor.FileUploadPreprocessor(upload_manager_emulator)
+    yield upload_manager_emulator
 
 
 @pytest.fixture
 def patch_streamer(
-    fake_file_upload_preprocessor: file_upload_preprocessor.FileUploadPreprocessor,
+    fake_file_upload_manager: noop_file_upload_manager.FileUploadManagerEmulator,
 ):
     streamer = None
     try:
-        # Create upload manager first
-        # Pass upload manager to emulator so it can access attachments
+        # Pass the upload manager to the emulator so it can access attachments
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor(
-                file_upload_manager=fake_file_upload_preprocessor.file_upload_manager
+                file_upload_manager=fake_file_upload_manager
             )
         )
         streamer = streamer_constructors.construct_streamer(
             message_processor=fake_message_processor_,
             n_consumers=1,
             use_batching=True,
-            upload_preprocessor=fake_file_upload_preprocessor,
+            file_uploader=fake_file_upload_manager,
             max_queue_size=None,
             use_attachment_extraction=False,
         )
@@ -75,12 +73,9 @@ def patch_streamer(
 def patch_streamer_without_batching():
     streamer = None
     try:
-        # Create upload manager first
+        # Create an upload manager first
         fake_upload_manager = noop_file_upload_manager.FileUploadManagerEmulator()
-        upload_preprocessor = file_upload_preprocessor.FileUploadPreprocessor(
-            fake_upload_manager
-        )
-        # Pass upload manager to emulator so it can access attachments
+        # Pass the upload manager to the emulator so it can access attachments
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor(
                 file_upload_manager=fake_upload_manager
@@ -90,7 +85,7 @@ def patch_streamer_without_batching():
             message_processor=fake_message_processor_,
             n_consumers=1,
             use_batching=False,
-            upload_preprocessor=upload_preprocessor,
+            file_uploader=fake_upload_manager,
             max_queue_size=None,
             use_attachment_extraction=False,
         )

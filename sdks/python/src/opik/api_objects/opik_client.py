@@ -68,6 +68,7 @@ from ..types import (
     LLMProvider,
     SpanType,
 )
+from ..file_upload import upload_manager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -181,19 +182,24 @@ class Opik:
             batch_factor=self._config.maximal_queue_size_batch_factor,
         )
 
+        file_uploader = upload_manager.FileUploadManager(
+            rest_client=self._rest_client,
+            httpx_client=self._httpx_client,
+            worker_count=self._config.file_upload_background_workers,
+        )
+
         self.__internal_api__message_processor__ = (
             message_processors_chain.create_message_processors_chain(
-                rest_client=self._rest_client
+                rest_client=self._rest_client,
+                file_upload_manager=file_uploader,
             )
         )
         self._streamer = streamer_constructors.construct_online_streamer(
+            file_uploader=file_uploader,
             n_consumers=self._config.background_workers,
-            rest_client=self._rest_client,
-            httpx_client=self._httpx_client,
             use_batching=use_batching,
             use_attachment_extraction=self._config.is_attachment_extraction_active,
             min_base64_embedded_attachment_size=self._config.min_base64_embedded_attachment_size,
-            file_upload_worker_count=self._config.file_upload_background_workers,
             max_queue_size=max_queue_size,
             message_processor=self.__internal_api__message_processor__,
             url_override=self._config.url_override,

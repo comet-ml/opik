@@ -3,13 +3,13 @@ import logging
 import time
 from typing import List, Optional
 
+from opik.file_upload import base_upload_manager
 from . import messages, message_queue, queue_consumer
 from .. import _logging
 from .. import synchronization
 from .preprocessing import (
     attachments_preprocessor,
     batching_preprocessor,
-    file_upload_preprocessor,
 )
 
 
@@ -23,14 +23,14 @@ class Streamer:
         queue_consumers: List[queue_consumer.QueueConsumer],
         attachments_preprocessor: attachments_preprocessor.AttachmentsPreprocessor,
         batch_preprocessor: batching_preprocessor.BatchingPreprocessor,
-        upload_preprocessor: file_upload_preprocessor.FileUploadPreprocessor,
+        file_uploader: base_upload_manager.BaseFileUploadManager,
     ) -> None:
         self._lock = threading.RLock()
         self._message_queue = queue
         self._queue_consumers = queue_consumers
         self._attachments_preprocessor = attachments_preprocessor
         self._batch_preprocessor = batch_preprocessor
-        self._upload_preprocessor = upload_preprocessor
+        self._file_upload_manager = file_uploader
 
         self._drain = False
 
@@ -49,11 +49,6 @@ class Streamer:
                 # do embedded attachments pre-processing first (MUST ALWAYS BE DONE FIRST)
                 preprocessed_message = self._attachments_preprocessor.preprocess(
                     message
-                )
-
-                # do file uploads pre-processing second
-                preprocessed_message = self._upload_preprocessor.preprocess(
-                    preprocessed_message
                 )
 
                 # do batching pre-processing third
@@ -123,7 +118,7 @@ class Streamer:
                 timeout = 1.0
 
         # flushing upload manager is blocking operation
-        upload_flushed = self._upload_preprocessor.flush(
+        upload_flushed = self._file_upload_manager.flush(
             timeout=timeout, sleep_time=upload_sleep_time
         )
 

@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from opik.file_upload import base_upload_manager
 from opik.rest_api import client as rest_api_client
 
 from . import (
@@ -15,6 +16,7 @@ LOGGER = logging.getLogger(__name__)
 
 def create_message_processors_chain(
     rest_client: rest_api_client.OpikApi,
+    file_upload_manager: base_upload_manager.BaseFileUploadManager,
 ) -> message_processors.ChainedMessageProcessor:
     """
     Creates a chain of message processors by combining an online processor and a
@@ -29,11 +31,15 @@ def create_message_processors_chain(
     Args:
         rest_client: REST API client instance used to configure the online message
             processor.
+        file_upload_manager: File upload manager instance used to configure the online message
+            processor.
 
     Returns:
         A chained message processor containing the online and local emulator processors.
     """
-    online = online_message_processor.OpikMessageProcessor(rest_client=rest_client)
+    online = online_message_processor.OpikMessageProcessor(
+        rest_client=rest_client, file_upload_manager=file_upload_manager
+    )
     # is not active by default - will be activated during evaluation
     local = local_emulator_message_processor.LocalEmulatorMessageProcessor(active=False)
 

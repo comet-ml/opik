@@ -1,10 +1,12 @@
 import logging
 from typing import Callable, Dict, Type, Any
 
+import httpx
 import pydantic
 import tenacity
 
 from opik import dict_utils, exceptions, logging_messages
+from opik.file_upload import base_upload_manager
 from opik.rate_limit import rate_limit
 from opik.rest_api import client as rest_api_client, core as rest_api_core
 from opik.rest_api.types import (
@@ -27,10 +29,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
     def __init__(
         self,
         rest_client: rest_api_client.OpikApi,
+        file_upload_manager: base_upload_manager.BaseFileUploadManager,
         batch_memory_limit_mb: int = 50,
         active: bool = True,
     ):
         self._rest_client = rest_client
+        self._file_uploader = file_upload_manager
         self._batch_memory_limit_mb = batch_memory_limit_mb
         self._is_active = active
 
@@ -46,6 +50,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
             messages.CreateExperimentItemsBatchMessage: self._process_create_experiment_items_batch_message,  # type: ignore
+            messages.CreateAttachmentMessage: self._process_create_attachment,
             messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
         }
 
@@ -62,8 +67,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             LOGGER.debug("Unknown type of message - %s", message_type.__name__)
             return
 
+        # TODO: insert here adding new messages to the reply manager
+
         try:
             handler(message)
+
+            # TODO: insert here marking message as delivered
         except rest_api_core.ApiError as exception:
             if exception.status_code == 409:
                 # sometimes a retry mechanism works in a way that it sends the same request 2 times.
@@ -106,6 +115,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 exc_info=True,
                 extra={"error_tracking_extra": error_tracking_extra},
             )
+        except (httpx.ConnectError, httpx.TimeoutException):
+            LOGGER.warning(
+                "Failed to process message: '%s' due to connection error. Retrying...",
+                message_type.__name__,
+            )
+            # TODO: insert here marking message as failed
         except Exception as exception:
             error_tracking_extra = _generate_error_tracking_extra(exception, message)
             LOGGER.error(
@@ -301,6 +316,13 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         LOGGER.debug(
             "Sent experiment items batch of size %d", len(experiment_items_batch)
         )
+
+    def _process_create_attachment(
+        self, message: messages.CreateAttachmentMessage
+    ) -> None:
+        LOGGER.debug("Processing create attachment message")
+        self._file_uploader.upload_attachment(message)
+        LOGGER.debug("Uploaded attachment with %s", message.file_name)
 
     def _noop_handler(self, message: messages.BaseMessage) -> None:
         # just ignore the message
