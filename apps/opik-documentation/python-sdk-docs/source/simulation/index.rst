@@ -8,6 +8,7 @@ The Opik simulation module provides tools for creating multi-turn conversation s
    
    SimulatedUser
    run_simulation
+   episode
 
 Overview
 --------
@@ -83,7 +84,7 @@ Simulations work seamlessly with Opik's evaluation framework:
    # Evaluate the threads
    results = evaluate_threads(
        project_name="my_project",
-       filter_string='tags contains "simulation"',
+       filter_string=f'thread_id = "{simulations[0]["thread_id"]}"',
        metrics=[ConversationThreadMetric()]
    )
 
