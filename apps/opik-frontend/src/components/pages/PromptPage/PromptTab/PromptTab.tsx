@@ -45,6 +45,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const editPromptResetKeyRef = useRef(0);
   const promptUpdateMutation = usePromptUpdateMutation();
 
+  const updateTags = (tags: string[]) => {
+    if (!prompt) return;
+    promptUpdateMutation.mutate({
+      prompt: { ...prompt, id: prompt.id, tags },
+    });
+  };
+
   const { data } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
@@ -156,26 +163,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           <TagListRenderer
             tags={prompt?.tags || []}
             onAddTag={(newTag) => {
-              const updatedTags = [...(prompt?.tags || []), newTag];
-              promptUpdateMutation.mutate({
-                prompt: {
-                  ...prompt,
-                  id: prompt.id,
-                  tags: updatedTags,
-                },
-              });
+              updateTags([...(prompt?.tags || []), newTag]);
             }}
             onDeleteTag={(tagToDelete) => {
-              const updatedTags = (prompt?.tags || []).filter(
-                (t) => t !== tagToDelete,
-              );
-              promptUpdateMutation.mutate({
-                prompt: {
-                  ...prompt,
-                  id: prompt.id,
-                  tags: updatedTags,
-                },
-              });
+              updateTags((prompt?.tags || []).filter((t) => t !== tagToDelete));
             }}
             align="start"
           />
