@@ -75,6 +75,7 @@ Simulations work seamlessly with Opik's evaluation framework:
        simulation = run_simulation(
            app=my_agent,
            user_simulator=simulator,
+           tags=["simulation", persona],
            max_turns=5
        )
        simulations.append(simulation)
@@ -82,7 +83,7 @@ Simulations work seamlessly with Opik's evaluation framework:
    # Evaluate the threads
    results = evaluate_threads(
        project_name="my_project",
-       filter_string=f'thread_id = "{simulations[0]["thread_id"]}"',
+       filter_string='tags contains "simulation"',
        metrics=[ConversationThreadMetric()]
    )
 

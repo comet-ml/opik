@@ -31,6 +31,7 @@ Function Signature
        max_turns: int = 5,
        thread_id: Optional[str] = None,
        project_name: Optional[str] = None,
+       tags: Optional[List[str]] = None,
        **app_kwargs: Any
    ) -> Dict[str, Any]
 
@@ -58,6 +59,9 @@ Parameters
 **project_name** (str, optional)
    Project name for trace logging. Included in trace metadata.
 
+**tags** (List[str], optional)
+   Optional trace tags applied to all traces produced by the simulation.
+
 **app_kwargs** (Any)
    Additional keyword arguments passed to the app function.
 
@@ -70,6 +74,7 @@ Returns
    - **thread_id** (str): The thread ID used for this simulation
    - **conversation_history** (List[Dict[str, str]]): Complete conversation as message dictionaries
    - **project_name** (str, optional): Project name if provided
+   - **tags** (List[str], optional): Tags if provided
 
 App Function Requirements
 -------------------------
@@ -216,8 +221,8 @@ Integration with Evaluation
        metrics=[ConversationThreadMetric()]
    )
 
-Advanced Usage with Custom App Parameters
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Advanced Usage with Tags and Custom App Parameters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -228,6 +233,7 @@ Advanced Usage with Custom App Parameters
        user_simulator=user_simulator,
        max_turns=5,
        project_name="tagged_simulation",
+       tags=["simulation", "customer_service"],  # Trace tags
        simulation_id="test_001",  # Custom parameter
        scenario_label="customer_service"  # Custom parameter
    )
