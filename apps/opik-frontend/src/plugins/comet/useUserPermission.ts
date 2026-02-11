@@ -4,10 +4,7 @@ import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import useCurrentOrganization from "./useCurrentOrganization";
 import useUserPermissions from "./useUserPermissions";
 import { ManagementPermissionsNames, ORGANIZATION_ROLE_TYPE } from "./types";
-import {
-  getPermissionByType,
-  isUserPermissionValid,
-} from "@/plugins/comet/lib/permissions";
+import { getUserPermissionValue } from "@/plugins/comet/lib/permissions";
 
 const useUserPermission = (config?: { enabled?: boolean }) => {
   const configEnabled = config?.enabled ?? true;
@@ -44,11 +41,9 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   const isWorkspaceOwner = useMemo(
     () =>
       isAdmin ||
-      isUserPermissionValid(
-        getPermissionByType(
-          workspacePermissions,
-          ManagementPermissionsNames.MANAGEMENT,
-        )?.permissionValue,
+      !!getUserPermissionValue(
+        workspacePermissions,
+        ManagementPermissionsNames.MANAGEMENT,
       ),
     [workspacePermissions, isAdmin],
   );
@@ -56,11 +51,9 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   const canInviteMembers = useMemo(
     () =>
       isWorkspaceOwner ||
-      isUserPermissionValid(
-        getPermissionByType(
-          workspacePermissions,
-          ManagementPermissionsNames.INVITE_USERS,
-        )?.permissionValue,
+      !!getUserPermissionValue(
+        workspacePermissions,
+        ManagementPermissionsNames.INVITE_USERS,
       ),
     [workspacePermissions, isWorkspaceOwner],
   );
