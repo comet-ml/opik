@@ -16,6 +16,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 def pytest_sessionstart(session: "pytest.Session") -> None:
+    """Reset in-memory pytest plugin state before executing tests.
+
+    This avoids leaking test run data between repeated local pytest sessions
+    in the same Python process.
+    """
     # Ensure no in-memory data leaks between local repeated runs in the same process.
     test_runs_storage.clear()
 
@@ -40,45 +45,44 @@ def pytest_runtest_makereport(item: "pytest.Item") -> Generator:
         )
 
 
-@_logging.convert_exception_to_log_message(
-    "Unexpected failure during opik pytest_sessionfinish hook",
-    logger=LOGGER,
-    exc_info=True,
-    logging_level=logging.ERROR,
-)
 def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
-    try:
-        config_ = config.get_from_user_inputs()
-        llm_test_items: List["pytest.Item"] = [
-            test_item
-            for test_item in session.items
-            if test_item.nodeid in test_runs_storage.LLM_UNIT_TEST_RUNS
-        ]
-        if len(llm_test_items) == 0:
-            return
+    """Log llm_* pytest results to Opik and emit optional episode artifacts.
 
-        traces_feedback_scores: List[BatchFeedbackScoreDict] = []
-        valid_items: List["pytest.Item"] = []
+    Skips logging when there are no tracked llm tests or when no valid report/trace
+    pairs are available. Exceptions are logged and re-raised so CI can fail fast.
+    """
+    config_ = config.get_from_user_inputs()
+    llm_test_items: List["pytest.Item"] = [
+        test_item
+        for test_item in session.items
+        if test_item.nodeid in test_runs_storage.LLM_UNIT_TEST_RUNS
+    ]
+    if len(llm_test_items) == 0:
+        return
 
-        for item in llm_test_items:
-            report = getattr(item, "report", None)
-            trace_data = test_runs_storage.TEST_RUNS_TO_TRACE_DATA.get(item.nodeid)
+    traces_feedback_scores: List[BatchFeedbackScoreDict] = []
+    valid_items: List["pytest.Item"] = []
 
-            if report is None or trace_data is None:
-                continue
+    for item in llm_test_items:
+        report = getattr(item, "report", None)
+        trace_data = test_runs_storage.TEST_RUNS_TO_TRACE_DATA.get(item.nodeid)
 
-            valid_items.append(item)
-            traces_feedback_scores.append(
-                BatchFeedbackScoreDict(
-                    id=trace_data.id,
-                    name=config_.pytest_passed_score_name,
-                    value=float(report.passed),
-                )
+        if report is None or trace_data is None:
+            continue
+
+        valid_items.append(item)
+        traces_feedback_scores.append(
+            BatchFeedbackScoreDict(
+                id=trace_data.id,
+                name=config_.pytest_passed_score_name,
+                value=float(report.passed),
             )
+        )
 
-        if len(valid_items) == 0:
-            return
+    if len(valid_items) == 0:
+        return
 
+    try:
         client = opik_client.get_client_cached()
         client.log_traces_feedback_scores(traces_feedback_scores)
 
@@ -108,6 +112,7 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
             "Unexpected exception occured while trying to log LLM unit tests experiment results",
             exc_info=True,
         )
+        raise
 
 
 @_logging.convert_exception_to_log_message(

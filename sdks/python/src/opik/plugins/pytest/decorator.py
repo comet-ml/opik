@@ -125,6 +125,8 @@ def llm_episode(
         if not config_.pytest_experiment_enabled:
             return func
 
+        signature = inspect.signature(func)
+
         def _capture_test_run_content(*args: Any, **kwargs: Any) -> str:
             node_id = _get_test_nodeid()
             try:
@@ -162,13 +164,23 @@ def llm_episode(
                     func.__name__,
                     exc_info=True,
                 )
+                raise
             return node_id
 
         def _capture_episode_result(
-            node_id: str, result_candidate: Any, kwargs: Dict[str, Any]
+            node_id: str,
+            result_candidate: Any,
+            args: Tuple[Any, ...],
+            kwargs: Dict[str, Any],
         ) -> None:
-            scenario_id_fallback = str(kwargs.get(scenario_id_key, node_id))
-            thread_id_fallback = kwargs.get(thread_id_key)
+            try:
+                bound_arguments = signature.bind_partial(*args, **kwargs)
+                call_arguments = dict(bound_arguments.arguments)
+            except Exception:
+                call_arguments = dict(kwargs)
+
+            scenario_id_fallback = str(call_arguments.get(scenario_id_key, node_id))
+            thread_id_fallback = call_arguments.get(thread_id_key)
 
             try:
                 episode_result = EpisodeResult.from_any(
@@ -194,7 +206,12 @@ def llm_episode(
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
                 node_id = _capture_test_run_content(*args, **kwargs)
                 result = await func(*args, **kwargs)
-                _capture_episode_result(node_id=node_id, result_candidate=result, kwargs=kwargs)
+                _capture_episode_result(
+                    node_id=node_id,
+                    result_candidate=result,
+                    args=args,
+                    kwargs=kwargs,
+                )
                 return result
 
         else:
@@ -204,7 +221,12 @@ def llm_episode(
             def wrapper(*args: Any, **kwargs: Any) -> Any:
                 node_id = _capture_test_run_content(*args, **kwargs)
                 result = func(*args, **kwargs)
-                _capture_episode_result(node_id=node_id, result_candidate=result, kwargs=kwargs)
+                _capture_episode_result(
+                    node_id=node_id,
+                    result_candidate=result,
+                    args=args,
+                    kwargs=kwargs,
+                )
                 return result
 
         return wrapper
@@ -219,8 +241,8 @@ def _get_test_nodeid() -> str:
     # 'sdks/python/tests/tests_sandbox/test_things.py::test_example (call)'
 
     current_test = os.environ.get("PYTEST_CURRENT_TEST")
-    if current_test is None:
-        return "<unknown_test>"
+    if not current_test:
+        raise KeyError("PYTEST_CURRENT_TEST is not set")
 
     nodeid, _, _ = current_test.rpartition(" ")
     return nodeid or current_test

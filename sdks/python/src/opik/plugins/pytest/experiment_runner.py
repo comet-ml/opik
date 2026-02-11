@@ -1,8 +1,8 @@
-from typing import List, Callable, Optional
-from pytest import Item
-
-import json
 import dataclasses
+import json
+from typing import Callable, List, Optional
+
+from pytest import Item
 
 from opik.api_objects import opik_client
 from opik.api_objects.experiment import experiment_item
@@ -44,14 +44,16 @@ def run(
     dataset_name: str = "tests",
     experiment_name_prefix: str = "Test-Suite",
 ) -> None:
+    """Create/update pytest experiment artifacts for tracked llm tests.
+
+    Uses ``client.get_or_create_dataset`` and creates an experiment scoped to this run,
+    deduplicates dataset items by serialized content, inserts missing dataset/experiment
+    items, and flushes. Exceptions from client operations are propagated.
+    """
     timestamp = datetime_helpers.datetime_to_iso8601(datetime_helpers.local_timestamp())
     experiment_name = f"{experiment_name_prefix}-{timestamp}"
 
-
-    try:
-        dataset = client.get_dataset(dataset_name)
-    except Exception:
-        dataset = client.create_dataset(dataset_name)
+    dataset = client.get_or_create_dataset(dataset_name)
 
     dataset_items = list(dataset.__internal_api__stream_items_as_dataclasses__())
     dataset_item_id_finder = get_dataset_item_id_finder(
