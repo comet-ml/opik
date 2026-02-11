@@ -118,14 +118,13 @@ class DatasetEvaluatorServiceImpl implements DatasetEvaluatorService {
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(DatasetEvaluatorDAO.class);
 
-            long matchingCount = dao.countByIdsAndDatasetId(workspaceId, datasetId, ids);
-            if (matchingCount != ids.size()) {
+            int deleted = dao.deleteByIdsAndDatasetId(workspaceId, datasetId, ids);
+            if (deleted != ids.size()) {
                 throw new BadRequestException(
                         "Some evaluator IDs do not belong to dataset '%s'. Requested: %d, found: %d"
-                                .formatted(datasetId, ids.size(), matchingCount));
+                                .formatted(datasetId, ids.size(), deleted));
             }
 
-            int deleted = dao.deleteByIdsAndDatasetId(workspaceId, datasetId, ids);
             log.info("Deleted '{}' dataset evaluators for dataset '{}' in workspace '{}'",
                     deleted, datasetId, workspaceId);
             return null;
