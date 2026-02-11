@@ -124,13 +124,14 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   }, [prompt, promptData, promptId]);
 
   useEffect(() => {
-    if (!isPending) {
+    if (!isPending && metadata === "") {
       const promptMetadata = extractMetadata(selectedPrompt);
       setMetadata(
         promptMetadata ||
           (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPending, selectedPrompt, providedMetadata]);
 
   const hasValidTemplate = template.length > 0;
