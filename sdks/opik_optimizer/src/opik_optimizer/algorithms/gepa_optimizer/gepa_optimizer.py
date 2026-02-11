@@ -185,7 +185,10 @@ class GepaOptimizer(BaseOptimizer):
             self.model_parameters.get("candidate_selection_policy")
             or self.model_parameters.get("selection_policy")
         )
-        adapter_allow_tool_use = bool(self.model_parameters.get("allow_tool_use", True))
+        adapter_allow_tool_use = bool(
+            getattr(context, "allow_tool_use", True)
+            and self.model_parameters.get("allow_tool_use", True)
+        )
         model_selection_strategy = (
             self.model_parameters.get("candidate_selection_policy")
             or self.model_parameters.get("selection_policy")
