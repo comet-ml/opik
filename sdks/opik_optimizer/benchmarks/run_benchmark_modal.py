@@ -40,7 +40,7 @@ except ModuleNotFoundError:
     )
     sys.exit(1)
 
-from benchmarks.configs import registry as benchmark_config
+from benchmarks.packages import registry as benchmark_config
 from benchmarks.core.results import TaskSpec
 from benchmarks.engines.modal import engine as modal_engine
 from benchmarks.utils.budgeting import resolve_optimize_params

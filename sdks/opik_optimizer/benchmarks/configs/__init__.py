@@ -1,5 +1,1 @@
-"""Benchmark configs and manifest parsing."""
-
-from benchmarks.configs import registry
-
-__all__ = ["registry"]
+"""Benchmark configuration data files (schemas and examples)."""

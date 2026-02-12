@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from benchmarks.configs.manifest import load_manifest, manifest_to_task_specs
-from benchmarks.configs import registry as benchmark_config
+from benchmarks.core.manifest import load_manifest, manifest_to_task_specs
+from benchmarks.packages import registry as benchmark_config
 from benchmarks.core.results import TaskSpec
 
 

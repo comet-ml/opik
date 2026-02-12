@@ -7,7 +7,7 @@ import opik_optimizer
 
 import pytest
 
-from benchmarks.configs import registry as benchmark_config
+from benchmarks.packages import registry as benchmark_config
 from benchmarks.core.results import TaskSpec
 from benchmarks.engines.local import engine as local_engine
 from tests.e2e.optimizers.utils import system_message

@@ -1,4 +1,4 @@
-from benchmarks.configs import registry as benchmark_config
+from benchmarks.packages import registry as benchmark_config
 from benchmarks.utils.task_runner import _resolve_metrics
 
 

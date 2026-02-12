@@ -306,9 +306,12 @@ The benchmark system is organized into several modules:
 
 ### Configuration & Core Logic
 
-- **`configs/registry.py`** - Dataset and optimizer configurations
+- **`configs/`** - Manifest schema and example task/generator json files
+- **`packages/registry.py`** - Dataset/optimizer/model config registry and package resolution
+- **`core/manifest.py`** - Manifest parsing and task-spec compilation
 - **`core/results.py`** - Result/task models and preflight report schema
 - **`core/state.py`** - Run state and checkpoint persistence
+- **`core/runtime.py`** - Engine run/deploy dispatch
 - **`utils/task_runner.py`** - Core benchmark task execution logic shared by local + Modal runners
 
 ### Packages (`packages/`)
@@ -317,7 +320,7 @@ The benchmark system is organized into several modules:
 - **`packages/hover/`** - HoVer benchmark package wiring
 - **`packages/ifbench/`** - IFBench benchmark package wiring
 - **`packages/pupa/`** - PUPA benchmark package wiring
-- **`packages/registry.py`** - Package resolution by dataset key
+- **`packages/registry.py`** - Package resolution + central benchmark registry configuration
 
 ### Engines (`engines/`)
 

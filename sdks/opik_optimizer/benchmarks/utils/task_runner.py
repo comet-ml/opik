@@ -16,8 +16,8 @@ from datetime import datetime
 import importlib.metadata
 import hashlib
 
-from benchmarks.configs import registry as benchmark_config
-from benchmarks.configs.registry import BenchmarkDatasetConfig
+from benchmarks.packages import registry as benchmark_config
+from benchmarks.packages.registry import BenchmarkDatasetConfig
 import opik_optimizer.datasets
 from benchmarks.core.results import (
     DatasetMetadata,

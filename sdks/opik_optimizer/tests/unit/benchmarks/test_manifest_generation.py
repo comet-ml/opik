@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmarks.configs.manifest import load_manifest, manifest_to_task_specs
+from benchmarks.core.manifest import load_manifest, manifest_to_task_specs
 from tests.unit.fixtures import system_message, user_message
 
 
