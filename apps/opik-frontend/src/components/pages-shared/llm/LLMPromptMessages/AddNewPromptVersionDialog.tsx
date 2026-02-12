@@ -85,7 +85,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   const [metadata, setMetadata] = useState(
     extractMetadata(prompt) ||
-    (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
+      (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
   );
   const [description, setDescription] = useState("");
   const [name, setName] = useState(defaultName);
@@ -135,7 +135,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
       const promptMetadata = extractMetadata(selectedPrompt);
       setMetadata(
         promptMetadata ||
-        (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
+          (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
