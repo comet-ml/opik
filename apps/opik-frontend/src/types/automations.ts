@@ -46,7 +46,7 @@ export interface LLMJudgeDetails {
 
 export interface PythonCodeDetailsTraceForm {
   metric: string;
-  arguments: Record<string, string>;
+  arguments?: Record<string, string>;
   parsingArgumentsError?: boolean;
 }
 
@@ -56,7 +56,7 @@ export interface PythonCodeDetailsThreadForm {
 
 export interface PythonCodeDetailsSpanForm {
   metric: string;
-  arguments: Record<string, string>;
+  arguments?: Record<string, string>;
   parsingArgumentsError?: boolean;
 }
 
