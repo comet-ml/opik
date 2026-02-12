@@ -45,10 +45,17 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 type SaveMode = "update" | "new";
 
-const extractMetadata = (prompt?: PromptWithLatestVersion) => {
-  return prompt?.latest_version?.metadata
-    ? JSON.stringify(prompt.latest_version.metadata, null, 2)
-    : "";
+const getInitialMetadata = (
+  prompt?: PromptWithLatestVersion,
+  fallbackMetadata?: object,
+): string => {
+  if (prompt?.latest_version?.metadata) {
+    return JSON.stringify(prompt.latest_version.metadata, null, 2);
+  }
+  if (fallbackMetadata) {
+    return JSON.stringify(fallbackMetadata, null, 2);
+  }
+  return "";
 };
 
 type AddNewPromptVersionDialogProps = {
@@ -84,8 +91,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   const isEdit = saveMode === "update" && Boolean(promptId);
 
   const [metadata, setMetadata] = useState(
-    extractMetadata(prompt) ||
-      (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
+    getInitialMetadata(prompt, providedMetadata),
   );
   const [description, setDescription] = useState("");
   const [name, setName] = useState(defaultName);
@@ -132,11 +138,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   useEffect(() => {
     if (!isPending && metadata === "") {
-      const promptMetadata = extractMetadata(selectedPrompt);
-      setMetadata(
-        promptMetadata ||
-          (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
-      );
+      setMetadata(getInitialMetadata(selectedPrompt, providedMetadata));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPending, selectedPrompt, providedMetadata]);
