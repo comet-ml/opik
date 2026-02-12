@@ -15,7 +15,7 @@ class SimulatedUser:
     def __init__(
         self,
         persona: str,
-        model: str = "gpt-4o-mini",
+        model: str = "openai/gpt-5-nano",
         fixed_responses: Optional[List[str]] = None,
     ):
         """
@@ -23,7 +23,7 @@ class SimulatedUser:
 
         Args:
             persona: Description of the user's personality and behavior
-            model: LLM model to use for generating responses (default: gpt-4o-mini)
+            model: LLM model to use for generating responses (default: openai/gpt-5-nano)
             fixed_responses: Optional list of predefined responses to cycle through
         """
         self.persona = persona
