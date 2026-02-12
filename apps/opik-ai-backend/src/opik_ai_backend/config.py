@@ -49,8 +49,8 @@ class Settings(BaseSettings):
 
     # Agent LLM configuration
     agent_model: str = Field(
-        default="openai/gpt-4.1",
-        description="LLM model name for the agent (e.g., openai/gpt-4.1)",
+        default="openai/gpt-5-nano",
+        description="LLM model name for the agent (e.g., openai/gpt-5-nano)",
         alias="AGENT_MODEL",
     )
     agent_reasoning_effort: Optional[str] = Field(
