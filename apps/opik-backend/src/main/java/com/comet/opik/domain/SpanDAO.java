@@ -2445,7 +2445,8 @@ class SpanDAO {
                 last_updated_by,
                 truncation_threshold,
                 input_slim,
-                output_slim
+                output_slim,
+                ttft
             )
             SELECT
                 s.id,
@@ -2472,7 +2473,8 @@ class SpanDAO {
                 :user_name as last_updated_by,
                 :truncation_threshold,
                 <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> s.output_slim <endif> as output_slim
+                <if(output)> :output_slim <else> s.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> s.ttft <endif> as ttft
             FROM spans s
             WHERE s.id IN :ids AND s.workspace_id = :workspace_id
             ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
@@ -2543,6 +2545,8 @@ class SpanDAO {
             template.add("total_estimated_cost", "total_estimated_cost");
             template.add("total_estimated_cost_version", "total_estimated_cost_version");
         }
+        Optional.ofNullable(spanUpdate.ttft())
+                .ifPresent(ttft -> template.add("ttft", ttft));
         return template;
     }
 
@@ -2594,6 +2598,8 @@ class SpanDAO {
             statement.bind("total_estimated_cost", spanUpdate.totalEstimatedCost().toString());
             statement.bind("total_estimated_cost_version", "");
         }
+        Optional.ofNullable(spanUpdate.ttft())
+                .ifPresent(ttft -> statement.bind("ttft", ttft));
     }
 
     private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {
