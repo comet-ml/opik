@@ -29,7 +29,9 @@ def test_local_engine_aborts_when_user_declines_confirmation(
     )
     monkeypatch.setattr(
         "benchmarks.engines.local.engine.BenchmarkRunner",
-        lambda *_args, **_kwargs: pytest.fail("BenchmarkRunner should not be constructed"),
+        lambda *_args, **_kwargs: pytest.fail(
+            "BenchmarkRunner should not be constructed"
+        ),
     )
 
     result = LocalEngine().run(_plan(test_mode=False, auto_confirm=False))
