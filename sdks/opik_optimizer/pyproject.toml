@@ -55,6 +55,14 @@ dev = [
     "PyStemmer",
     "scikit-learn",
 ]
+benchmarks = [ # Extras - pip install opik_optimizer[benchmarks]
+    "modal",
+    "bm25s[full]",
+    "PyStemmer",
+    "huggingface-hub",
+    "ujson",
+    "pyarrow",  # For optimized Parquet format
+]
 bm25 = [ # Extras - pip install opik_optimizer[bm25]
     "bm25s[full]",
     "PyStemmer",
