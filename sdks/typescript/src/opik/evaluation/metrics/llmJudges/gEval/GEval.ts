@@ -8,6 +8,7 @@ import type { SupportedModelId } from "@/evaluation/models/providerDetection";
 import type { LanguageModel } from "ai";
 import { Output } from "ai";
 import type { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
+import { VercelAIChatModel } from "@/evaluation/models/VercelAIChatModel";
 import { generateCoTPrompt, generateQueryPrompt } from "./template";
 import { parseProviderResponse, parseModelOutputString } from "./parser";
 import { GEVAL_PRESETS } from "./presets";
@@ -164,6 +165,8 @@ export class GEval extends BaseLLMJudgeMetric {
     const modelOptions = this.buildModelOptions();
 
     try {
+      const isVercelModel = this.model instanceof VercelAIChatModel;
+
       const providerResponse = await this.model.generateProviderResponse(
         [{ role: "user", content: llmQuery }],
         {
@@ -171,9 +174,11 @@ export class GEval extends BaseLLMJudgeMetric {
           output: Output.object({
             schema: responseSchema,
           }),
-          providerOptions: {
-            openai: { logprobs: true, top_logprobs: 20 },
-          },
+          ...(isVercelModel && {
+            providerOptions: {
+              openai: { logprobs: true, top_logprobs: 20 },
+            },
+          }),
         }
       );
 

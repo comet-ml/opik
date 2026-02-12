@@ -1,11 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { GEval } from "@/evaluation/metrics/llmJudges/gEval/GEval";
 import { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
+import { VercelAIChatModel } from "@/evaluation/models/VercelAIChatModel";
+import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { logger } from "@/utils/logger";
 
 class MockModel extends OpikBaseModel {
   private mockResponse: string;
   private shouldFailLogprobs: boolean;
+  public lastProviderResponseOptions: Record<string, unknown> | undefined;
 
   constructor(mockResponse: string, shouldFailLogprobs = false) {
     super("mock-model");
@@ -17,7 +21,11 @@ class MockModel extends OpikBaseModel {
     return this.mockResponse;
   }
 
-  async generateProviderResponse(): Promise<unknown> {
+  async generateProviderResponse(
+    _messages: unknown,
+    options?: Record<string, unknown>
+  ): Promise<unknown> {
+    this.lastProviderResponseOptions = options;
     if (this.shouldFailLogprobs) {
       throw new Error("Logprobs not supported");
     }
@@ -203,5 +211,104 @@ describe("GEval with custom OpikBaseModel implementation", () => {
       const expectedNormalized = score / 10;
       expect(result.value).toBeCloseTo(expectedNormalized, 2);
     }
+  });
+
+  it("should NOT pass providerOptions to generateProviderResponse for custom OpikBaseModel", async () => {
+    const mockModel = new MockModel(
+      '{"score": 7, "reason": "Good response."}',
+      false
+    );
+
+    const metric = new GEval({
+      taskIntroduction: "Evaluate the response.",
+      evaluationCriteria: "Score from 0 to 10.",
+      model: mockModel,
+    });
+
+    await metric.score({ output: "Test output" });
+
+    expect(mockModel.lastProviderResponseOptions).toBeDefined();
+    expect(mockModel.lastProviderResponseOptions).not.toHaveProperty("providerOptions");
+  });
+});
+
+describe("GEval providerOptions with Vercel models", () => {
+  const mockProviderResponse = {
+    text: JSON.stringify({ score: 7, reason: "Good quality" }),
+    providerMetadata: {},
+  };
+
+  function spyOnVercelModel(model: VercelAIChatModel) {
+    vi.spyOn(model, "generateString").mockResolvedValue("CoT steps");
+    const providerSpy = vi
+      .spyOn(model, "generateProviderResponse")
+      .mockResolvedValue(mockProviderResponse);
+    return providerSpy;
+  }
+
+  it("should pass providerOptions when using openai() wrapper", async () => {
+    const model = new VercelAIChatModel(openai("gpt-4o"), {
+      trackGenerations: false,
+    });
+    const providerSpy = spyOnVercelModel(model);
+
+    const metric = new GEval({
+      taskIntroduction: "Evaluate quality.",
+      evaluationCriteria: "Score from 0 to 10.",
+      model,
+      trackMetric: false,
+    });
+
+    await metric.score({ output: "Test output" });
+
+    const options = providerSpy.mock.calls[0][1] as Record<string, unknown>;
+    expect(options).toHaveProperty("providerOptions");
+    expect(options.providerOptions).toEqual({
+      openai: { logprobs: true, top_logprobs: 20 },
+    });
+  });
+
+  it("should pass providerOptions when using anthropic() wrapper", async () => {
+    const model = new VercelAIChatModel(anthropic("claude-3-5-haiku-latest"), {
+      trackGenerations: false,
+    });
+    const providerSpy = spyOnVercelModel(model);
+
+    const metric = new GEval({
+      taskIntroduction: "Evaluate quality.",
+      evaluationCriteria: "Score from 0 to 10.",
+      model,
+      trackMetric: false,
+    });
+
+    await metric.score({ output: "Test output" });
+
+    const options = providerSpy.mock.calls[0][1] as Record<string, unknown>;
+    expect(options).toHaveProperty("providerOptions");
+    expect(options.providerOptions).toEqual({
+      openai: { logprobs: true, top_logprobs: 20 },
+    });
+  });
+
+  it("should pass providerOptions when using string model ID (defaults to Vercel)", async () => {
+    const model = new VercelAIChatModel("gpt-4o", {
+      trackGenerations: false,
+    });
+    const providerSpy = spyOnVercelModel(model);
+
+    const metric = new GEval({
+      taskIntroduction: "Evaluate quality.",
+      evaluationCriteria: "Score from 0 to 10.",
+      model,
+      trackMetric: false,
+    });
+
+    await metric.score({ output: "Test output" });
+
+    const options = providerSpy.mock.calls[0][1] as Record<string, unknown>;
+    expect(options).toHaveProperty("providerOptions");
+    expect(options.providerOptions).toEqual({
+      openai: { logprobs: true, top_logprobs: 20 },
+    });
   });
 });
