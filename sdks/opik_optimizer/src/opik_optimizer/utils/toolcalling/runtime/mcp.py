@@ -183,6 +183,179 @@ def validate_tool_arguments(
     return True, ""
 
 
+def validate_tool_output(
+    signature: ToolSignature,
+    response: object,
+) -> tuple[bool, str]:
+    """Validate tool output against optional ``output_schema`` in the signature."""
+    raw_schema = signature.extra.get("output_schema")
+    if not isinstance(raw_schema, Mapping):
+        return True, ""
+    output_data = _extract_tool_output_for_validation(response)
+    return _validate_json_schema_value(output_data, raw_schema, path="$")
+
+
+def _extract_tool_output_for_validation(response: object) -> Any:
+    """Extract structured data from MCP responses for output-schema validation."""
+    if hasattr(response, "output"):
+        output = getattr(response, "output")
+        if output is not None:
+            return output
+    if hasattr(response, "content"):
+        content = getattr(response, "content")
+        if isinstance(content, list):
+            if len(content) == 1:
+                item = content[0]
+                if hasattr(item, "json"):
+                    json_value = getattr(item, "json")
+                    if json_value is not None:
+                        return json_value
+                text_value = getattr(item, "text", None)
+                if isinstance(text_value, str):
+                    try:
+                        return json.loads(text_value)
+                    except json.JSONDecodeError:
+                        return text_value
+            return response_to_text(response)
+        return content
+    return response
+
+
+def _validate_json_schema_value(
+    value: Any,
+    schema: Mapping[str, Any],
+    *,
+    path: str,
+) -> tuple[bool, str]:
+    """Validate a value against a lightweight JSON-schema subset."""
+    ok, err = _validate_any_of(value, schema, path=path)
+    if not ok:
+        return False, err
+
+    ok, err = _validate_type_constraint(value, schema, path=path)
+    if not ok:
+        return False, err
+
+    if isinstance(value, Mapping):
+        ok, err = _validate_object_schema(value, schema, path=path)
+        if not ok:
+            return False, err
+
+    if isinstance(value, list):
+        ok, err = _validate_array_schema(value, schema, path=path)
+        if not ok:
+            return False, err
+
+    return True, ""
+
+
+def _validate_any_of(
+    value: Any, schema: Mapping[str, Any], *, path: str
+) -> tuple[bool, str]:
+    """Validate ``anyOf`` clauses when present."""
+    any_of = schema.get("anyOf")
+    if not isinstance(any_of, list) or not any_of:
+        return True, ""
+    errors: list[str] = []
+    for candidate in any_of:
+        if not isinstance(candidate, Mapping):
+            continue
+        ok, err = _validate_json_schema_value(value, candidate, path=path)
+        if ok:
+            return True, ""
+        errors.append(err)
+    return False, errors[0] if errors else f"{path} did not match anyOf schema"
+
+
+def _validate_type_constraint(
+    value: Any, schema: Mapping[str, Any], *, path: str
+) -> tuple[bool, str]:
+    """Validate ``type`` constraints for a schema node."""
+    allowed_types = _allowed_types_from_schema(schema)
+    if not allowed_types:
+        return True, ""
+    if value is None and "null" in allowed_types:
+        return True, ""
+    value_type = _json_type_name(value)
+    if value_type == "integer" and "number" in allowed_types:
+        return True, ""
+    if value_type in allowed_types:
+        return True, ""
+    return False, f"{path} expected type {sorted(allowed_types)} but got {value_type}"
+
+
+def _allowed_types_from_schema(schema: Mapping[str, Any]) -> set[str]:
+    """Return normalized allowed type names from schema."""
+    raw_type = schema.get("type")
+    if isinstance(raw_type, str):
+        return {raw_type}
+    if isinstance(raw_type, list):
+        return {item for item in raw_type if isinstance(item, str)}
+    return set()
+
+
+def _json_type_name(value: Any) -> str:
+    """Return the JSON-schema type name for a value."""
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, Mapping):
+        return "object"
+    return "unknown"
+
+
+def _validate_object_schema(
+    value: Mapping[str, Any], schema: Mapping[str, Any], *, path: str
+) -> tuple[bool, str]:
+    """Validate object-specific schema keys."""
+    required = schema.get("required")
+    if isinstance(required, list):
+        for key in required:
+            if isinstance(key, str) and key not in value:
+                return False, f"{path}.{key} is required"
+
+    properties = schema.get("properties")
+    additional = schema.get("additionalProperties", True)
+    if not isinstance(properties, Mapping):
+        return True, ""
+    for key, prop_schema in properties.items():
+        if key not in value:
+            continue
+        if not isinstance(prop_schema, Mapping):
+            continue
+        ok, err = _validate_json_schema_value(
+            value[key], prop_schema, path=f"{path}.{key}"
+        )
+        if not ok:
+            return False, err
+    if additional is False:
+        unknown_keys = [key for key in value if key not in properties]
+        if unknown_keys:
+            return False, f"{path} contains unexpected keys {sorted(unknown_keys)}"
+    return True, ""
+
+
+def _validate_array_schema(
+    value: list[Any], schema: Mapping[str, Any], *, path: str
+) -> tuple[bool, str]:
+    """Validate array-specific schema keys."""
+    items = schema.get("items")
+    if not isinstance(items, Mapping):
+        return True, ""
+    for idx, item in enumerate(value):
+        ok, err = _validate_json_schema_value(item, items, path=f"{path}[{idx}]")
+        if not ok:
+            return False, err
+    return True, ""
+
+
 # ---------------------------------------------------------------------------
 # MCP runtime helpers using the official Python SDK
 
@@ -493,6 +666,7 @@ def load_tool_signature_from_manifest(
     entry = tool.model_dump(by_alias=True)
     annotations = entry.get("annotations") or {}
     examples = annotations.get("examples")
+    output_schema = entry.get("outputSchema") or entry.get("output_schema")
     return ToolSignature.from_tool_entry(
         {
             "type": "function",
@@ -502,6 +676,7 @@ def load_tool_signature_from_manifest(
                 "parameters": entry.get("inputSchema", {}),
                 "examples": examples,
             },
+            "output_schema": output_schema,
         }
     )
 

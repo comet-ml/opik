@@ -40,6 +40,7 @@ from ..runtime.mcp import (
     list_tools_from_manifest,
     load_tool_signature_from_manifest,
     response_to_text,
+    validate_tool_output,
 )
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,9 @@ class ToolCallingFactory:
             "mcp": copy.deepcopy(dict(mcp_block)),
         }
 
-        _callable = self._build_callable(server, tool_name)
+        _callable = self._build_callable(
+            server, tool_name, signature.extra.get("output_schema")
+        )
 
         return ToolCallingResolvedTool(
             function_entry=function_entry,
@@ -144,13 +147,31 @@ class ToolCallingFactory:
         )
 
     def _build_callable(
-        self, server: Mapping[str, Any], tool_name: str
+        self,
+        server: Mapping[str, Any],
+        tool_name: str,
+        output_schema: Mapping[str, Any] | None = None,
     ) -> Callable[..., str]:
         """Build a callable that executes the MCP tool and returns text output."""
 
         def _callable(**arguments: Any) -> str:
             """Execute the MCP tool and return a text response."""
             response = self._call_tool(server, tool_name, arguments)
+            if output_schema is not None:
+                validation_signature = ToolSignature(
+                    name=tool_name,
+                    description="",
+                    parameters={},
+                    extra={"output_schema": output_schema},
+                )
+                is_valid, error_message = validate_tool_output(
+                    validation_signature, response
+                )
+                if not is_valid:
+                    raise ValueError(
+                        f"Tool `{tool_name}` output failed schema validation: "
+                        f"{error_message}"
+                    )
             return response_to_text(response)
 
         return _callable
@@ -168,6 +189,9 @@ class ToolCallingFactory:
     ) -> ToolSignature:
         """Load or override the tool signature for the given server/tool."""
         if signature_override is not None:
+            output_schema = signature_override.get(
+                "output_schema"
+            ) or signature_override.get("outputSchema")
             return ToolSignature.from_tool_entry(
                 {
                     "type": "function",
@@ -176,6 +200,7 @@ class ToolCallingFactory:
                         "description": signature_override.get("description", ""),
                         "parameters": signature_override.get("parameters", {}),
                     },
+                    "output_schema": output_schema,
                 }
             )
 
@@ -227,57 +252,13 @@ def resolve_toolcalling_tools(
             continue
 
         if tool.get("type") == "mcp":
-            normalized = _normalize_openai_mcp_tool(tool)
-            server = normalized["server"]
-            server_label = normalized["server_label"]
-            allowed_tools = normalized["allowed_tools"]
-            require_approval = normalized["require_approval"]
-
-            if allowed_tools is None:
-                allowed_tools = _list_tool_names(server)
-            if not allowed_tools:
-                raise ValueError(
-                    f"MCP server '{server_label}' did not return any tools."
-                )
-
-            existing_names = occupied_names
-            for tool_name in allowed_tools:
-                signature = factory._get_signature(server, tool_name, None)
-                function_name = _resolve_function_name(
-                    tool_name, server_label, existing_names
-                )
-                existing_names.add(function_name)
-                occupied_names.add(function_name)
-                parameters = _strip_schema_field(signature.parameters)
-                function_entry = {
-                    "type": "function",
-                    "function": {
-                        "name": function_name,
-                        "description": signature.description,
-                        "parameters": parameters,
-                    },
-                    "mcp": {
-                        "server_label": server_label,
-                        "server": copy.deepcopy(server),
-                        "tool": {"name": tool_name},
-                        "name": function_name,
-                        "allowed_tools": allowed_tools,
-                        "require_approval": require_approval,
-                    },
-                }
-                resolved_tools.append(function_entry)
-                if require_approval:
-                    callable_for_tool = _build_approval_required_callable(function_name)
-                    logger.debug("MCP tool requires approval before execution.")
-                else:
-                    callable_for_tool = factory._build_callable(server, tool_name)
-                resolved_map.setdefault(function_name, callable_for_tool)
-                if function_name != tool_name:
-                    had_tool_name = tool_name in resolved_map
-                    resolved_map.setdefault(tool_name, callable_for_tool)
-                    if not had_tool_name and tool_name not in occupied_names:
-                        occupied_names.add(tool_name)
-                    logger.debug("Registered MCP base-name alias for renamed tool.")
+            _resolve_openai_mcp_tool_entries(
+                tool=tool,
+                factory=factory,
+                resolved_tools=resolved_tools,
+                resolved_map=resolved_map,
+                occupied_names=occupied_names,
+            )
             continue
 
         if "mcp" not in tool:
@@ -312,6 +293,11 @@ def resolve_toolcalling_tools(
                         )
                     )
                     if mcp_tool_name and isinstance(server, dict):
+                        output_schema = (
+                            mcp_block.get("output_schema")
+                            if isinstance(mcp_block.get("output_schema"), Mapping)
+                            else None
+                        )
                         if require_approval:
                             logger.debug(
                                 "MCP pre-resolved tool requires approval before execution."
@@ -321,7 +307,7 @@ def resolve_toolcalling_tools(
                             )
                         else:
                             resolved_map[function_name] = factory._build_callable(
-                                server, mcp_tool_name
+                                server, mcp_tool_name, output_schema
                             )
                 continue
 
@@ -331,6 +317,68 @@ def resolve_toolcalling_tools(
         occupied_names.add(resolved.function_name)
 
     return resolved_tools, resolved_map
+
+
+def _resolve_openai_mcp_tool_entries(
+    *,
+    tool: Mapping[str, Any],
+    factory: ToolCallingFactory,
+    resolved_tools: list[dict[str, Any]],
+    resolved_map: dict[str, Callable],
+    occupied_names: set[str],
+) -> None:
+    """Resolve one OpenAI-style MCP entry into callable function tools."""
+    normalized = _normalize_openai_mcp_tool(tool)
+    server = normalized["server"]
+    server_label = normalized["server_label"]
+    allowed_tools = normalized["allowed_tools"]
+    require_approval = normalized["require_approval"]
+
+    if allowed_tools is None:
+        allowed_tools = _list_tool_names(server)
+    if not allowed_tools:
+        raise ValueError(f"MCP server '{server_label}' did not return any tools.")
+
+    existing_names = occupied_names
+    for tool_name in allowed_tools:
+        signature = factory._get_signature(server, tool_name, None)
+        function_name = _resolve_function_name(tool_name, server_label, existing_names)
+        existing_names.add(function_name)
+        occupied_names.add(function_name)
+
+        function_entry = {
+            "type": "function",
+            "function": {
+                "name": function_name,
+                "description": signature.description,
+                "parameters": _strip_schema_field(signature.parameters),
+            },
+            "mcp": {
+                "server_label": server_label,
+                "server": copy.deepcopy(server),
+                "tool": {"name": tool_name},
+                "name": function_name,
+                "allowed_tools": allowed_tools,
+                "require_approval": require_approval,
+                "output_schema": signature.extra.get("output_schema"),
+            },
+        }
+        resolved_tools.append(function_entry)
+        if require_approval:
+            callable_for_tool = _build_approval_required_callable(function_name)
+            logger.debug("MCP tool requires approval before execution.")
+        else:
+            output_schema = signature.extra.get("output_schema")
+            callable_for_tool = factory._build_callable(
+                server, tool_name, output_schema
+            )
+        resolved_map.setdefault(function_name, callable_for_tool)
+        if function_name != tool_name:
+            had_tool_name = tool_name in resolved_map
+            resolved_map.setdefault(tool_name, callable_for_tool)
+            if not had_tool_name and tool_name not in occupied_names:
+                occupied_names.add(tool_name)
+            logger.debug("Registered MCP base-name alias for renamed tool.")
 
 
 def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -619,6 +667,7 @@ def _load_remote_tool_signature(
     entry = tool.model_dump(by_alias=True)
     annotations = entry.get("annotations") or {}
     examples = annotations.get("examples")
+    output_schema = entry.get("outputSchema") or entry.get("output_schema")
     return ToolSignature.from_tool_entry(
         {
             "type": "function",
@@ -628,6 +677,7 @@ def _load_remote_tool_signature(
                 "parameters": entry.get("inputSchema", {}),
                 "examples": examples,
             },
+            "output_schema": output_schema,
         }
     )
 

@@ -406,9 +406,12 @@ def test_tool_factory__registers_base_alias_for_renamed_mcp_tool(
         )
 
     def _fake_build_callable(
-        self: ToolCallingFactory, server: dict[str, Any], tool_name: str
+        self: ToolCallingFactory,
+        server: dict[str, Any],
+        tool_name: str,
+        output_schema: dict[str, Any] | None = None,
     ) -> Any:
-        _ = self, server
+        _ = self, server, output_schema
         return lambda **_kwargs: f"called:{tool_name}"
 
     monkeypatch.setattr(ToolCallingFactory, "_get_signature", _fake_get_signature)
@@ -436,3 +439,108 @@ def test_tool_factory__registers_base_alias_for_renamed_mcp_tool(
     assert "search" in function_map
     assert function_map["context7.search"]() == "called:search"
     assert function_map["search"]() == "called:search"
+
+
+def test_tool_factory__validates_tool_output_schema_override_success(
+    monkeypatch: Any,
+) -> None:
+    def _fake_get_signature(
+        self: ToolCallingFactory,
+        server: dict[str, Any],
+        tool_name: str,
+        _signature_override: dict[str, Any] | None,
+    ) -> ToolSignature:
+        _ = self, server, _signature_override
+        return ToolSignature(
+            name=tool_name,
+            description="mcp tool",
+            parameters={"type": "object", "properties": {}},
+            extra={
+                "output_schema": {
+                    "type": "object",
+                    "required": ["answer"],
+                    "properties": {"answer": {"type": "string"}},
+                    "additionalProperties": False,
+                }
+            },
+        )
+
+    def _fake_call_tool(
+        self: ToolCallingFactory,
+        server: dict[str, Any],
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        _ = self, server, tool_name, arguments
+        return {"answer": "ok"}
+
+    monkeypatch.setattr(ToolCallingFactory, "_get_signature", _fake_get_signature)
+    monkeypatch.setattr(ToolCallingFactory, "_call_tool", _fake_call_tool)
+
+    tools: list[dict[str, Any]] = [
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "allowed_tools": ["search"],
+        }
+    ]
+    resolved_tools, function_map = resolve_toolcalling_tools(tools, {})
+
+    assert (
+        resolved_tools[0].get("mcp", {}).get("output_schema", {}).get("type")
+        == "object"
+    )
+    assert function_map["search"]() == "{'answer': 'ok'}"
+
+
+def test_tool_factory__validates_tool_output_schema_override_failure(
+    monkeypatch: Any,
+) -> None:
+    def _fake_get_signature(
+        self: ToolCallingFactory,
+        server: dict[str, Any],
+        tool_name: str,
+        _signature_override: dict[str, Any] | None,
+    ) -> ToolSignature:
+        _ = self, server, _signature_override
+        return ToolSignature(
+            name=tool_name,
+            description="mcp tool",
+            parameters={"type": "object", "properties": {}},
+            extra={
+                "output_schema": {
+                    "type": "object",
+                    "required": ["answer"],
+                    "properties": {"answer": {"type": "string"}},
+                    "additionalProperties": False,
+                }
+            },
+        )
+
+    def _fake_call_tool(
+        self: ToolCallingFactory,
+        server: dict[str, Any],
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        _ = self, server, tool_name, arguments
+        return {"wrong": 1}
+
+    monkeypatch.setattr(ToolCallingFactory, "_get_signature", _fake_get_signature)
+    monkeypatch.setattr(ToolCallingFactory, "_call_tool", _fake_call_tool)
+
+    tools: list[dict[str, Any]] = [
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "allowed_tools": ["search"],
+        }
+    ]
+    _, function_map = resolve_toolcalling_tools(tools, {})
+
+    with pytest.raises(
+        ValueError, match="output failed schema validation: \\$.answer is required"
+    ):
+        function_map["search"]()
