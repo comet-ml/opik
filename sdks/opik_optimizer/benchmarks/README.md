@@ -10,7 +10,7 @@ Run benchmarks on your local machine:
 
 ```bash
  # Single dataset, single optimizer (test mode)
- python runners/run_benchmark.py \
+ python benchmarks/runners/run_benchmark.py \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --models openai/gpt-4o-mini \
@@ -18,7 +18,7 @@ Run benchmarks on your local machine:
   --max-concurrent 1
 
  # Multiple datasets and optimizers
- python runners/run_benchmark.py \
+ python benchmarks/runners/run_benchmark.py \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt \
   --max-concurrent 4
@@ -71,7 +71,7 @@ modal run benchmarks/check_results.py --run-id <RUN_ID> --raw       # full JSON
 Use CLI arguments for quick, interactive benchmarking:
 
 ```bash
-python runners/run_benchmark.py \
+python benchmarks/runners/run_benchmark.py \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt \
   --models openai/gpt-4o-mini \
@@ -83,7 +83,7 @@ python runners/run_benchmark.py \
 Use JSON manifest files for reproducible, complex benchmark configurations:
 
 ```bash
-python runners/run_benchmark.py --config manifest.json
+python benchmarks/runners/run_benchmark.py --config manifest.json
 ```
 
 **Example Manifest** (`manifest.example.json`):
@@ -281,27 +281,28 @@ modal deploy benchmarks/runners/run_benchmark_modal.py
 
 The benchmark system is organized into several modules:
 
-### Entry Points
+### Entry Points (`runners/`)
 
-- **`run_benchmark.py`** - Main unified entry point (routes to local or Modal execution based on `--modal` flag)
-  - Calls `run_benchmark_local.py` for local execution
-  - Calls `run_benchmark_modal.py` for Modal execution
-- **`run_benchmark_local.py`** - Local execution logic
+- **`runners/run_benchmark.py`** - Main unified entry point (routes to local or Modal execution based on `--modal` flag)
+  - Calls `runners/run_benchmark_local.py` for local execution
+  - Calls `runners/run_benchmark_modal.py` for Modal execution
+- **`runners/run_benchmark_local.py`** - Local execution logic
   - Imports `local.runner.BenchmarkRunner`
   - Imports `utils.validation.ask_for_input_confirmation`
-- **`run_benchmark_modal.py`** - Modal submission and coordination logic
-  - Submits tasks to deployed `benchmark_worker.py` function
-- **`benchmark_worker.py`** - Modal worker function (deploy with `modal deploy benchmark_worker.py`)
+- **`runners/run_benchmark_modal.py`** - Modal submission and coordination logic
+  - Submits tasks to deployed `runners/benchmark_worker.py` function
+- **`runners/benchmark_worker.py`** - Modal worker function (deploy with `modal deploy benchmarks/runners/benchmark_worker.py`)
   - Imports `modal_utils.worker_core.run_optimization_task`
   - Imports `modal_utils.storage.save_result_to_volume`
-- **`check_results.py`** - View Modal results with clickable logs links
+- **`check_results.py`** - View Modal results with clickable log links
   - Imports `modal_utils.storage` for loading results
   - Imports `modal_utils.display` for formatting
 
 ### Configuration & Core Logic
 
-- **`benchmark_config.py`** - Dataset and optimizer configurations
-- **`benchmark_task.py`** - Core task execution logic
+- **`core/benchmark_config.py`** - Dataset and optimizer configurations
+- **`core/benchmark_task.py`** - Result/task payload models
+- **`utils/task_runner.py`** - Core benchmark task execution logic shared by local + Modal runners
 
 ### Local Execution (`local/`)
 
@@ -313,9 +314,9 @@ The benchmark system is organized into several modules:
 ### Modal Execution (`modal_utils/`)
 
 - **`modal_utils/coordinator.py`** - Task coordination utilities (helper functions for task generation)
-- **`modal_utils/worker_core.py`** - Core worker execution logic (called by `benchmark_worker.py`)
+- **`modal_utils/worker_core.py`** - Core worker execution logic (called by `runners/benchmark_worker.py`)
 - **`modal_utils/storage.py`** - Modal Volume storage operations
-  - Used by `benchmark_worker.py` and `check_results.py`
+  - Used by `runners/benchmark_worker.py` and `check_results.py`
   - Imports `utils.serialization.make_serializable`
 - **`modal_utils/display.py`** - Results display and formatting (used by `check_results.py`)
 
@@ -331,4 +332,4 @@ The benchmark system is organized into several modules:
 - **Modal execution** runs tasks in parallel on cloud infrastructure (controlled by `--max-concurrent`)
 - Your machine can disconnect after Modal submission - tasks continue in the cloud
 - Results are persisted in Modal Volume indefinitely
-- The unified `run_benchmark.py` entry point automatically routes to the appropriate execution mode
+- The unified `benchmarks/runners/run_benchmark.py` entry point automatically routes to the appropriate execution mode
