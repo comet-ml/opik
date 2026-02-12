@@ -31,12 +31,8 @@ from benchmarks.core.results import (
 from benchmarks.core.results import TaskSpec
 from opik_optimizer import BaseOptimizer, ChatPrompt
 from opik_optimizer.utils import reporting as reporting_utils
+from benchmarks.utils.display import display_preflight_report
 from benchmarks.utils.logging import console
-from rich.table import Table
-from rich.panel import Panel
-from rich.console import Group
-from rich import box
-from rich.text import Text
 from benchmarks.core.results import (
     PreflightContext,
     PreflightEntry,
@@ -284,10 +280,7 @@ def preflight_tasks(
         f"[bold blue]Preflight:[/bold blue] validating {len(task_specs)} tasks"
     )
 
-    info_table = Table(show_header=False, padding=(0, 1))
     now_iso = datetime.now().isoformat(timespec="seconds")
-    info_table.add_row("System time", now_iso)
-    info_table.add_row("CWD", os.getcwd())
     manifest_path = None
     checkpoint_dir = None
     run_id = None
@@ -295,13 +288,6 @@ def preflight_tasks(
         manifest_path = info.get("manifest_path")
         checkpoint_dir = info.get("checkpoint_dir")
         run_id = info.get("run_id")
-    info_table.add_row("Manifest", manifest_path or "[dim]N/A[/dim]")
-    info_table.add_row("Checkpoint", checkpoint_dir or "[dim]N/A[/dim]")
-    info_table.add_row("Run ID", run_id or "[dim]N/A[/dim]")
-    info_table.add_row("opik", _safe_version("opik") or "[dim]unknown[/dim]")
-    info_table.add_row(
-        "opik_optimizer", _safe_version("opik-optimizer") or "[dim]unknown[/dim]"
-    )
 
     def _role_display(
         role: str,
@@ -457,54 +443,7 @@ def preflight_tasks(
         entries=entries,
     )
 
-    # Render lines (two-line per entry)
-    task_lines: list[Text] = [Text("Tasks Preflight:", style="bold"), Text("")]
-    for idx, entry in enumerate(entries, 1):
-        icon = "[green]✓[/green]" if entry.status == "ok" else "[red]✗[/red]"
-        line1 = Text.from_markup(
-            f"{icon} ([dim]#[bold]{idx}[/bold] {entry.short_id}[/dim]) "
-            f"[bold]{entry.dataset_name}[/bold] | "
-            f"[cyan]{entry.optimizer_name}[/cyan] | "
-            f"[magenta]{entry.model_name}[/magenta]"
-        )
-        splits_text = entry.splits or "train=None, val=None, test=None"
-        line2 = Text.from_markup(f"    {splits_text}")
-        if entry.error:
-            line2.append(f" • {entry.error}", style="red")
-        task_lines.append(line1)
-        task_lines.append(line2)
-
-    summary_table = Table(
-        show_header=False,
-        padding=(0, 1),
-        box=box.SIMPLE,
-        expand=True,
-    )
-    summary_table.add_row(
-        "Status",
-        "[green]Preflight passed[/green]"
-        if not had_error
-        else "[red]Preflight failed[/red]",
-    )
-    summary_table.add_row("Tasks", str(summary.total_tasks))
-    summary_table.add_row(
-        "Datasets",
-        ", ".join(summary.datasets) if summary.datasets else "[dim]-[/dim]",
-    )
-    summary_table.add_row(
-        "Optimizers",
-        ", ".join(summary.optimizers) if summary.optimizers else "[dim]-[/dim]",
-    )
-    summary_table.add_row(
-        "Models", ", ".join(summary.models) if summary.models else "[dim]-[/dim]"
-    )
-    console.print(
-        Panel(
-            Group(info_table, *task_lines, summary_table),
-            title="Preflight",
-            border_style="green" if not had_error else "red",
-        )
-    )
+    display_preflight_report(report, had_error=had_error, console=console)
 
     if had_error:
         raise ValueError("Benchmark preflight checks failed:\n- " + "\n- ".join(errors))

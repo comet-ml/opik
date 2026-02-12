@@ -8,8 +8,12 @@ from typing import Any
 
 from rich import box
 from rich.console import Console
+from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
+
+from benchmarks.core.results import PreflightReport
 
 _CONFIRM_CONSOLE = Console(width=120)
 
@@ -253,4 +257,76 @@ def generate_results_display(
         title=f"Benchmark Results: {run_id}",
         border_style="green" if summary["failed_count"] == 0 else "yellow",
         padding=(1, 2),
+    )
+
+
+def display_preflight_report(
+    report: PreflightReport,
+    *,
+    had_error: bool,
+    console: Console,
+) -> None:
+    info_table = Table(show_header=False, padding=(0, 1))
+    info_table.add_row("System time", report.context.system_time)
+    info_table.add_row("CWD", report.context.cwd)
+    info_table.add_row("Manifest", report.context.manifest_path or "[dim]N/A[/dim]")
+    info_table.add_row("Checkpoint", report.context.checkpoint_dir or "[dim]N/A[/dim]")
+    info_table.add_row("Run ID", report.context.run_id or "[dim]N/A[/dim]")
+    info_table.add_row("opik", report.context.opik_version or "[dim]unknown[/dim]")
+    info_table.add_row(
+        "opik_optimizer",
+        report.context.opik_optimizer_version or "[dim]unknown[/dim]",
+    )
+
+    task_lines: list[Text] = [Text("Tasks Preflight:", style="bold"), Text("")]
+    for idx, entry in enumerate(report.entries, 1):
+        icon = "[green]✓[/green]" if entry.status == "ok" else "[red]✗[/red]"
+        line1 = Text.from_markup(
+            f"{icon} ([dim]#[bold]{idx}[/bold] {entry.short_id}[/dim]) "
+            f"[bold]{entry.dataset_name}[/bold] | "
+            f"[cyan]{entry.optimizer_name}[/cyan] | "
+            f"[magenta]{entry.model_name}[/magenta]"
+        )
+        splits_text = entry.splits or "train=None, val=None, test=None"
+        line2 = Text.from_markup(f"    {splits_text}")
+        if entry.error:
+            line2.append(f" • {entry.error}", style="red")
+        task_lines.append(line1)
+        task_lines.append(line2)
+
+    summary_table = Table(
+        show_header=False,
+        padding=(0, 1),
+        box=box.SIMPLE,
+        expand=True,
+    )
+    summary_table.add_row(
+        "Status",
+        "[green]Preflight passed[/green]"
+        if not had_error
+        else "[red]Preflight failed[/red]",
+    )
+    summary_table.add_row("Tasks", str(report.summary.total_tasks))
+    summary_table.add_row(
+        "Datasets",
+        ", ".join(report.summary.datasets)
+        if report.summary.datasets
+        else "[dim]-[/dim]",
+    )
+    summary_table.add_row(
+        "Optimizers",
+        ", ".join(report.summary.optimizers)
+        if report.summary.optimizers
+        else "[dim]-[/dim]",
+    )
+    summary_table.add_row(
+        "Models",
+        ", ".join(report.summary.models) if report.summary.models else "[dim]-[/dim]",
+    )
+    console.print(
+        Panel(
+            Group(info_table, *task_lines, summary_table),
+            title="Preflight",
+            border_style="green" if not had_error else "red",
+        )
     )
