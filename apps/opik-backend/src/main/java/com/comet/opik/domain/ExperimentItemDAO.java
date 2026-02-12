@@ -259,6 +259,8 @@ class ExperimentItemDAO {
                         fs.category_name,
                         fs.value,
                         fs.reason,
+                        fs.error,
+                        fs.error_reason,
                         fs.source,
                         fs.created_at,
                         fs.last_updated_at,

@@ -27,7 +27,7 @@ public record FeedbackScore(
         String categoryName,
         @NotNull @DecimalMax(MAX_FEEDBACK_SCORE_VALUE) @DecimalMin(MIN_FEEDBACK_SCORE_VALUE) BigDecimal value,
         String reason,
-        @Min(0) @Max(1) @Schema(description = "Error flag encoded as 0/1", defaultValue = "0") Integer error,
+        @Min(0) @Max(1) @Schema(description = "Error flag encoded as 0/1", defaultValue = "0") int error,
         String errorReason,
         @NotNull ScoreSource source,
         @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
