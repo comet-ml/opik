@@ -2,8 +2,6 @@ import json
 
 import pytest
 
-from opik import llm_unit
-
 
 def structured_answer(user_message: str):
     normalized = user_message.lower()
@@ -36,11 +34,6 @@ def is_schema_valid(payload):
     return True
 
 
-@llm_unit(
-    input_key="test_input",
-    expected_output_key="expected_output",
-    metadata_key="test_metadata",
-)
 @pytest.mark.parametrize(
     "test_input,expected_output,test_metadata",
     [
@@ -56,14 +49,14 @@ def is_schema_valid(payload):
         ),
     ],
 )
-def test_structured_contract_and_policy_flags(
+def test_structured_answer__contract_schema_and_confidence__happyflow(
     test_input,
     expected_output,
     test_metadata,
 ):
+    _ = test_metadata
     result = structured_answer(test_input["question"])
     assert is_schema_valid(result)
     assert result["answer"] == expected_output["expected_answer"]
     assert result["confidence"] >= expected_output["min_confidence"]
-    # Useful debugging pattern for CI logs.
     assert json.dumps(result, sort_keys=True)

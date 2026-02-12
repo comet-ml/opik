@@ -1,6 +1,3 @@
-import logging
-import json
-import os
 import pytest
 
 from opik import llm_episode
@@ -16,18 +13,9 @@ from opik.simulation import (
     make_tool_call_budget,
     run_simulation,
 )
+from demo_helpers import get_demo_logger, log_episode_panel, log_json_debug
 
-LOGGER = logging.getLogger("pytest_integration_e2e.episode")
-if not LOGGER.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    handler.setFormatter(formatter)
-    LOGGER.addHandler(handler)
-LOGGER.setLevel(getattr(logging, os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "INFO").upper(), logging.INFO))
-LOGGER.propagate = False
+LOGGER = get_demo_logger("pytest_integration_e2e.episode")
 
 
 def print_episode_debug(
@@ -36,39 +24,24 @@ def print_episode_debug(
     trajectory: list[dict],
     episode: EpisodeResult,
 ) -> None:
-    assertions_passed = sum(1 for assertion in episode.assertions if assertion.passed)
-    assertions_total = len(episode.assertions)
-    budget_metrics = episode.budgets.all_metrics() if episode.budgets is not None else {}
-    budgets_passed = sum(1 for metric in budget_metrics.values() if metric.passed)
-    budgets_total = len(budget_metrics)
     trajectory_summary = build_trajectory_summary(trajectory)
 
+    log_episode_panel(
+        LOGGER,
+        scenario_id=scenario_id,
+        thread_id=simulation.get("thread_id"),
+        episode=episode,
+        turns=len(simulation["conversation_history"]) // 2,
+        tool_calls=trajectory_summary["tool_calls_count"],
+        extras={"Project": simulation.get("project_name")},
+    )
     LOGGER.info(
-        "episode scenario=%s thread_id=%s status=%s turns=%s tool_calls=%s assertions=%s/%s budgets=%s/%s",
-        scenario_id,
-        simulation["thread_id"],
-        "PASS" if episode.is_passing() else "FAIL",
-        len(simulation["conversation_history"]) // 2,
-        trajectory_summary["tool_calls_count"],
-        assertions_passed,
-        assertions_total,
-        budgets_passed,
-        budgets_total,
+        "set OPIK_EXAMPLE_LOG_LEVEL=DEBUG for full simulation/trajectory/episode dumps"
     )
-    LOGGER.info("set OPIK_EXAMPLE_LOG_LEVEL=DEBUG for full simulation/trajectory/episode dumps")
 
-    LOGGER.debug(
-        "conversation_history=%s",
-        json.dumps(simulation["conversation_history"], indent=2, sort_keys=True),
-    )
-    LOGGER.debug(
-        "trajectory=%s",
-        json.dumps(trajectory, indent=2, sort_keys=True),
-    )
-    LOGGER.debug(
-        "episode=%s",
-        json.dumps(episode.model_dump(), indent=2, sort_keys=True),
-    )
+    log_json_debug(LOGGER, "conversation_history", simulation["conversation_history"])
+    log_json_debug(LOGGER, "trajectory", trajectory)
+    log_json_debug(LOGGER, "episode", episode.model_dump())
 
 
 def lookup_order(order_id: str):

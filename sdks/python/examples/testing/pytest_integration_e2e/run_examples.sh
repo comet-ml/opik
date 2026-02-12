@@ -14,15 +14,15 @@ export OPIK_PYTEST_EXPERIMENT_NAME_PREFIX="${OPIK_PYTEST_EXPERIMENT_NAME_PREFIX:
 export OPIK_PYTEST_PASSED_SCORE_NAME="${OPIK_PYTEST_PASSED_SCORE_NAME:-Passed}"
 export OPIK_PYTEST_EPISODE_ARTIFACT_ENABLED="${OPIK_PYTEST_EPISODE_ARTIFACT_ENABLED:-true}"
 export OPIK_PYTEST_EPISODE_ARTIFACT_PATH="${OPIK_PYTEST_EPISODE_ARTIFACT_PATH:-.opik/pytest_episode_report.json}"
-export OPIK_EXAMPLE_LOG_LEVEL="${OPIK_EXAMPLE_LOG_LEVEL:-INFO}"
+export OPIK_EXAMPLE_LOG_LEVEL="DEBUG"
 
 echo "Running pytest integration E2E examples..."
 echo "Project: ${OPIK_PROJECT_NAME}"
 echo "Episode artifact: ${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}"
 echo "Example logger level: ${OPIK_EXAMPLE_LOG_LEVEL}"
-echo "Pytest args: -vv -s -rA ${*:-}"
+echo "Pytest args: -vv -s -rA --show-capture=no ${*:-}"
 
-pytest -vv -s -rA test_*.py "$@"
+pytest -vv -s -rA --show-capture=no test_*.py "$@"
 
 if [[ -f "${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}" ]]; then
   echo

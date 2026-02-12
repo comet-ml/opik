@@ -2,12 +2,15 @@
 
 This folder provides a simple end-to-end smoke test for the Opik pytest integration:
 
-- `test_llm_unit_e2e.py`: basic `@llm_unit` tracking with parametrized tests
-- `test_llm_unit_contract_e2e.py`: contract-style `@llm_unit` validation with schema checks
 - `test_llm_episode_e2e.py`: scenario-based `@llm_episode` tracking with simulation output, budgets, scores, and detailed timestamped logs
 - `test_llm_episode_policy_routing_e2e.py`: policy/routing episode scenarios with tool-action expectations
 - `test_llm_episode_judges_e2e.py`: episode scoring with LLM-as-a-judge (`gpt-5-nano`) using one built-in metric (`AnswerRelevance`) and one custom `GEval` rubric
+- `test_llm_episode_observability_budgets_e2e.py`: thread-level telemetry rollups (`search_spans` by `thread_id`) feeding token/latency/cost episode budgets
 - `run_examples.sh`: one-command runner
+
+`@llm_unit` deterministic examples were moved to fast unit tests:
+- `sdks/python/tests/unit/plugins/pytest/test_llm_unit_contract_examples.py`
+- `sdks/python/tests/unit/plugins/pytest/test_llm_unit_intent_examples.py`
 
 ## Prerequisites
 
@@ -16,6 +19,8 @@ This folder provides a simple end-to-end smoke test for the Opik pytest integrat
   - Cloud: set `OPIK_API_KEY` (and optional `OPIK_WORKSPACE`)
   - Local Opik: set `OPIK_URL_OVERRIDE` (API key optional depending on setup)
 - For `test_llm_episode_judges_e2e.py`, set `OPENAI_API_KEY` to run `gpt-5-nano` judge calls
+- `test_llm_episode_observability_budgets_e2e.py` is deterministic and does not require external model keys
+  - Set `OPIK_EXAMPLE_REQUIRE_TELEMETRY=true` to make telemetry discovery (trace/span search) a hard CI failure instead of a warning
 
 ## Run
 
@@ -27,11 +32,11 @@ cd sdks/python/examples/testing/pytest_integration_e2e
 This runs:
 
 ```bash
-pytest -vv -s -rA test_*.py
+pytest -vv -s -rA --show-capture=no test_*.py
 ```
 
-Example diagnostic logging defaults to concise `INFO` summaries.
-Set `OPIK_EXAMPLE_LOG_LEVEL=DEBUG` to print full JSON dumps of simulation/trajectory/episode objects.
+Example diagnostic logging defaults to `DEBUG` in `run_examples.sh` for demo visibility.
+Set `OPIK_EXAMPLE_LOG_LEVEL=INFO` to keep only panel summaries.
 
 ## Outputs
 

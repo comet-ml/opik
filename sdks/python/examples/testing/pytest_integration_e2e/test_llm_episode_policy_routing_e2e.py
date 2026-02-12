@@ -1,7 +1,3 @@
-import logging
-import json
-import os
-
 import pytest
 
 from opik import llm_episode
@@ -17,18 +13,9 @@ from opik.simulation import (
     make_tool_call_budget,
     run_simulation,
 )
+from demo_helpers import get_demo_logger, log_episode_panel, log_json_debug
 
-LOGGER = logging.getLogger("pytest_integration_e2e.policy_routing")
-if not LOGGER.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    handler.setFormatter(formatter)
-    LOGGER.addHandler(handler)
-LOGGER.setLevel(getattr(logging, os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "INFO").upper(), logging.INFO))
-LOGGER.propagate = False
+LOGGER = get_demo_logger("pytest_integration_e2e.policy_routing")
 
 
 class PolicyRoutingAgent:
@@ -169,7 +156,9 @@ def test_policy_and_routing_episode_ci_gate(scenario):
             ),
             EpisodeScore(
                 name="tool_efficiency",
-                value=1.0 if trajectory_summary["tool_calls_count"] <= scenario["tool_call_limit"] else 0.0,
+                value=1.0
+                if trajectory_summary["tool_calls_count"] <= scenario["tool_call_limit"]
+                else 0.0,
                 reason="tool usage within scenario budget",
             ),
         ],
@@ -190,16 +179,15 @@ def test_policy_and_routing_episode_ci_gate(scenario):
         },
     )
 
-    LOGGER.info(
-        "episode=%s thread=%s tools=%s status=%s",
-        scenario["scenario_id"],
-        thread_id,
-        sorted(trajectory_actions),
-        "PASS" if episode.is_passing() else "FAIL",
+    log_episode_panel(
+        LOGGER,
+        scenario_id=scenario["scenario_id"],
+        thread_id=thread_id,
+        episode=episode,
+        turns=len(simulation["conversation_history"]) // 2,
+        tool_calls=trajectory_summary["tool_calls_count"],
+        extras={"Tool actions": sorted(trajectory_actions)},
     )
-    LOGGER.debug(
-        "policy_routing_episode=%s",
-        json.dumps(episode.model_dump(), indent=2, sort_keys=True),
-    )
+    log_json_debug(LOGGER, "policy_routing_episode", episode.model_dump())
     assert episode.is_passing(), episode.model_dump_json(indent=2)
     return episode

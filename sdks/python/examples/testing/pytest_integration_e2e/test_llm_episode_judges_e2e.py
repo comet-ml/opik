@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 
 import pytest
@@ -18,25 +17,15 @@ from opik.simulation import (
     make_tool_call_budget,
     run_simulation,
 )
+from demo_helpers import get_demo_logger, log_episode_panel, log_json_debug
 
-LOGGER = logging.getLogger("pytest_integration_e2e.judges")
-if not LOGGER.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    handler.setFormatter(formatter)
-    LOGGER.addHandler(handler)
-LOGGER.setLevel(
-    getattr(logging, os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "INFO").upper(), logging.INFO)
-)
-LOGGER.propagate = False
+LOGGER = get_demo_logger("pytest_integration_e2e.judges")
 
 
 class SupportResolutionAgent:
     def __init__(self):
         self.trajectory_by_thread = {}
+        self.state_by_thread = {}
 
     def _record(self, thread_id: str, action: str, details: dict) -> None:
         self.trajectory_by_thread.setdefault(thread_id, []).append(
@@ -45,8 +34,10 @@ class SupportResolutionAgent:
 
     def __call__(self, user_message: str, *, thread_id: str, **kwargs):
         normalized = user_message.lower()
+        state = self.state_by_thread.setdefault(thread_id, {"workflow": None})
 
         if "reset" in normalized and "password" in normalized:
+            state["workflow"] = "password_reset"
             self._record(
                 thread_id, "lookup_help_article", {"article_id": "KB-RESET-02"}
             )
@@ -60,6 +51,7 @@ class SupportResolutionAgent:
             }
 
         if "billing" in normalized or "charged" in normalized:
+            state["workflow"] = "billing_dispute"
             self._record(thread_id, "open_billing_ticket", {"priority": "normal"})
             return {
                 "role": "assistant",
@@ -67,6 +59,26 @@ class SupportResolutionAgent:
                     "I can help with that billing issue. Please confirm the last 4 digits of "
                     "the payment method and I will submit a dispute ticket for review within "
                     "24 hours."
+                ),
+            }
+
+        if state["workflow"] == "password_reset":
+            return {
+                "role": "assistant",
+                "content": (
+                    "Next step: click 'Forgot password', enter your account email, then use "
+                    "the reset code from email to set a new password. If no code arrives in "
+                    "5 minutes, I can escalate to support and open a recovery ticket."
+                ),
+            }
+
+        if state["workflow"] == "billing_dispute":
+            return {
+                "role": "assistant",
+                "content": (
+                    "To dispute the duplicate charge: confirm the last 4 digits and charge "
+                    "date, then I will submit a billing dispute ticket. Billing Support reviews "
+                    "it within 24 hours and emails next steps."
                 ),
             }
 
@@ -249,35 +261,36 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
         },
     )
 
-    LOGGER.info(
-        "episode=%s thread=%s builtin=%.3f custom=%.3f status=%s",
-        scenario["scenario_id"],
-        thread_id,
-        built_in_result.value,
-        custom_result.value,
-        "PASS" if episode.is_passing() else "FAIL",
+    log_episode_panel(
+        LOGGER,
+        scenario_id=scenario["scenario_id"],
+        thread_id=thread_id,
+        episode=episode,
+        turns=len(simulation["conversation_history"]) // 2,
+        tool_calls=trajectory_summary["tool_calls_count"],
+        extras={
+            "Built-in judge": f"{built_in_result.name}={built_in_result.value:.3f}",
+            "Custom judge": f"{custom_result.name}={custom_result.value:.3f}",
+        },
     )
-    LOGGER.debug(
-        "judge_results=%s",
-        json.dumps(
-            {
-                "built_in": {
-                    "name": built_in_result.name,
-                    "value": built_in_result.value,
-                    "reason": built_in_result.reason,
-                    "scoring_failed": built_in_result.scoring_failed,
-                },
-                "custom": {
-                    "name": custom_result.name,
-                    "value": custom_result.value,
-                    "reason": custom_result.reason,
-                    "scoring_failed": custom_result.scoring_failed,
-                },
-                "episode": episode.model_dump(),
+    log_json_debug(
+        LOGGER,
+        "judge_results",
+        {
+            "built_in": {
+                "name": built_in_result.name,
+                "value": built_in_result.value,
+                "reason": built_in_result.reason,
+                "scoring_failed": built_in_result.scoring_failed,
             },
-            indent=2,
-            sort_keys=True,
-        ),
+            "custom": {
+                "name": custom_result.name,
+                "value": custom_result.value,
+                "reason": custom_result.reason,
+                "scoring_failed": custom_result.scoring_failed,
+            },
+            "episode": episode.model_dump(),
+        },
     )
 
     assert episode.is_passing(), episode.model_dump_json(indent=2)
