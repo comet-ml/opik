@@ -95,7 +95,6 @@ const CompareOptimizationsPage: React.FC = () => {
           title={title}
           status={optimization?.status}
           optimizationId={optimization?.id}
-          optimizationName={optimization?.name}
           isStudioOptimization={isStudioOptimization}
           canRerun={canRerun}
           bestExperiment={bestExperiment}
@@ -172,6 +171,7 @@ const CompareOptimizationsPage: React.FC = () => {
           bestExperiment={bestExperiment}
           baselineExperiment={baselineExperiment}
           scoreMap={scoreMap}
+          status={optimization?.status}
         />
       </PageBodyStickyContainer>
 

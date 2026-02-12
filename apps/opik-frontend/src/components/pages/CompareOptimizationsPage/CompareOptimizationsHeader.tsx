@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Play, RotateCw, Save, X } from "lucide-react";
+import { Play, RotateCw, X } from "lucide-react";
 import { Tag } from "@/components/ui/tag";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "@tanstack/react-router";
@@ -14,21 +14,14 @@ import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
 import get from "lodash/get";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import { PROMPT_TEMPLATE_STRUCTURE, PromptVersion } from "@/types/prompts";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import {
-  useSaveToPromptLibrary,
-  convertMessages,
-} from "./useSaveToPromptLibrary";
-import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
-import { useToast } from "@/components/ui/use-toast";
-import { ToastAction } from "@/components/ui/toast";
+import { convertMessages } from "./useSaveToPromptLibrary";
 
 type CompareOptimizationsHeaderProps = {
   title: string;
   status?: OPTIMIZATION_STATUS;
   optimizationId?: string;
-  optimizationName?: string;
   isStudioOptimization?: boolean;
   canRerun?: boolean;
   bestExperiment?: Experiment | null;
@@ -38,14 +31,12 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
   title,
   status,
   optimizationId,
-  optimizationName,
   isStudioOptimization,
   canRerun,
   bestExperiment,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
-  const { toast } = useToast();
   const { mutate: stopOptimization, isPending: isStoppingOptimization } =
     useOptimizationStopMutation();
   const [confirmDeployOpen, setConfirmDeployOpen] = useState(false);
@@ -70,66 +61,6 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
   );
 
   const canDeploy = Boolean(extractedPrompt) && !isInProgress;
-
-  const {
-    canSaveToLibrary,
-    saveDialogOpen,
-    openSaveDialog,
-    closeSaveDialog,
-    dialogKey,
-    existingPrompt,
-    saveTemplate,
-    saveMetadata,
-  } = useSaveToPromptLibrary({
-    promptName: optimizationName || title,
-    extractedPrompt,
-    optimizationId: optimizationId || "",
-    optimizationName: optimizationName || title,
-    experimentId: bestExperiment?.id || "",
-  });
-
-  const canSave = canSaveToLibrary && !isInProgress;
-
-  const handlePromptSaved = useCallback(
-    (_version: PromptVersion, promptName?: string, promptId?: string) => {
-      closeSaveDialog();
-
-      if (promptId && promptName) {
-        const isNewPrompt = promptId !== existingPrompt?.id;
-        const message = isNewPrompt ? (
-          <span>
-            New prompt <b>{promptName}</b> created
-          </span>
-        ) : (
-          <span>
-            New version saved to <b>{promptName}</b>
-          </span>
-        );
-
-        toast({
-          description: message,
-          actions: [
-            <ToastAction
-              key="save-new-prompt-version"
-              altText="Go to prompt"
-              variant="link"
-              size="sm"
-              className="px-0"
-              onClick={() =>
-                navigate({
-                  to: "/$workspaceName/prompts/$promptId",
-                  params: { workspaceName, promptId },
-                })
-              }
-            >
-              Go to prompt
-            </ToastAction>,
-          ],
-        });
-      }
-    },
-    [closeSaveDialog, toast, workspaceName, navigate, existingPrompt?.id],
-  );
 
   const handleStop = () => {
     if (!optimizationId) return;
@@ -192,16 +123,8 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
             </Tag>
           )}
         </div>
-        {(canStop || canRerun || canDeploy || canSave) && (
+        {(canStop || canRerun || canDeploy) && (
           <div className="flex items-center gap-2">
-            {canSave && (
-              <TooltipWrapper content="Save best prompt to Prompt library">
-                <Button variant="outline" size="sm" onClick={openSaveDialog}>
-                  <Save className="mr-2 size-4" />
-                  Save to Prompt library
-                </Button>
-              </TooltipWrapper>
-            )}
             {canDeploy && (
               <TooltipWrapper content="Deploy best prompt to Playground">
                 <Button
@@ -244,20 +167,6 @@ const CompareOptimizationsHeader: React.FC<CompareOptimizationsHeaderProps> = ({
         description="Loading the best prompt into the Playground will replace any unsaved changes. This action cannot be undone."
         confirmText="Run in Playground"
       />
-
-      {canSave && (
-        <AddNewPromptVersionDialog
-          key={dialogKey}
-          open={saveDialogOpen}
-          setOpen={closeSaveDialog}
-          prompt={existingPrompt}
-          template={saveTemplate}
-          templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-          defaultName={optimizationName || title}
-          metadata={saveMetadata}
-          onSave={handlePromptSaved}
-        />
-      )}
     </>
   );
 };
