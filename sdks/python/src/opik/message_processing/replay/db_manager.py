@@ -40,7 +40,7 @@ class MessageStatus(IntEnum):
 
 
 @unique
-class ManagerStatus(IntEnum):
+class DBManagerStatus(IntEnum):
     """Represents various status values for a manager.
 
     Defines a set of distinct states that a manager can occupy during its lifecycle.
@@ -78,7 +78,7 @@ class DBMessage(NamedTuple):
 ReplayCallback = Callable[[messages.BaseMessage], None]
 
 
-class ReplayManager:
+class DBManager:
     """
     Manages message storage, batch processing, and database operations within a replay
     system.
@@ -111,7 +111,7 @@ class ReplayManager:
         """
         self.batch_size = batch_size
         self.batch_replay_delay = batch_replay_delay
-        self.status = ManagerStatus.undefined
+        self.status = DBManagerStatus.undefined
         self.tmp_dir = tempfile.mkdtemp()
         if db_file is None:
             db_file = os.path.join(self.tmp_dir, DEFAULT_DB_FILE)
@@ -138,7 +138,7 @@ class ReplayManager:
                                             message_type TEXT NOT NULL,
                                             message_json TEXT NOT NULL)"""
                     )
-                    self.status = ManagerStatus.initialized
+                    self.status = DBManagerStatus.initialized
         except Exception as ex:
             msg = f"Database schema creation failed, reason: {ex}"
             self._mark_as_db_failed(msg)
@@ -157,7 +157,7 @@ class ReplayManager:
             return
 
         with self.__lock__:
-            self.status = ManagerStatus.closed
+            self.status = DBManagerStatus.closed
 
             try:
                 LOGGER.debug("Closing messages DB connection")
@@ -564,7 +564,7 @@ class ReplayManager:
         Returns:
             bool: True if the manager's status is `ManagerStatus.closed`, False otherwise.
         """
-        return self.status == ManagerStatus.closed
+        return self.status == DBManagerStatus.closed
 
     @property
     def initialized(self) -> bool:
@@ -577,7 +577,7 @@ class ReplayManager:
         Returns:
             bool: True if the manager's status is 'initialized', False otherwise.
         """
-        return self.status == ManagerStatus.initialized
+        return self.status == DBManagerStatus.initialized
 
     @property
     def failed(self) -> bool:
@@ -591,7 +591,7 @@ class ReplayManager:
         Returns:
             bool: True if the status is `ManagerStatus.error`, otherwise False.
         """
-        return self.status == ManagerStatus.error
+        return self.status == DBManagerStatus.error
 
     def fetch_failed_messages_batched(
         self, batch_size: int
@@ -626,7 +626,7 @@ class ReplayManager:
             yield batch
 
     def _mark_as_db_failed(self, message: str) -> None:
-        self.status = ManagerStatus.error
+        self.status = DBManagerStatus.error
         LOGGER.error(
             "Due to an internal error, some network resiliency features were disabled "
             "which could lead to data loss. Contact us at support@comet.com. Error details: %r",
