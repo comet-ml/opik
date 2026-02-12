@@ -279,8 +279,8 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
         }
 
         @Test
-        @DisplayName("Should use span context for variable replacements")
-        void shouldUseSpanContextForVariableReplacements() {
+        @DisplayName("Should pass full span sections as objects to Python evaluator")
+        void shouldPassFullSpanSectionsAsObjects() {
             // Given
             JsonNode inputNode = JsonUtils.getMapper().valueToTree(Map.of("key", "value"));
             JsonNode outputNode = JsonUtils.getMapper().valueToTree(Map.of("result", "success"));
@@ -299,7 +299,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
             SpanUserDefinedMetricPythonCode code = new SpanUserDefinedMetricPythonCode(
                     "def score(input, output): return [...]",
-                    Map.of("input", "input.key", "output", "output.result"));
+                    Map.of("input", "input", "output", "output"));
 
             SpanToScoreUserDefinedMetricPython message = SpanToScoreUserDefinedMetricPython.builder()
                     .span(span)
@@ -320,15 +320,18 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
             // Then
             @SuppressWarnings("unchecked")
-            ArgumentCaptor<Map<String, String>> dataCaptor = ArgumentCaptor.forClass(Map.class);
+            ArgumentCaptor<Map<String, Object>> dataCaptor = ArgumentCaptor.forClass(Map.class);
             @SuppressWarnings("unchecked")
             ArgumentCaptor<String> metricCaptor = ArgumentCaptor.forClass(String.class);
             verify(pythonEvaluatorService).evaluate(metricCaptor.capture(), dataCaptor.capture());
 
-            // Verify that OnlineScoringEngine.toReplacements was called with span
-            // The actual replacement logic is tested in OnlineScoringEngineTest
-            // Here we just verify the scorer calls the service with the correct metric code
-            assertThat(dataCaptor.getValue()).isNotNull();
+            Map<String, Object> data = dataCaptor.getValue();
+            assertThat(data).containsKey("input");
+            assertThat(data).containsKey("output");
+            assertThat(data).containsKey("metadata");
+            assertThat(data.get("input")).isEqualTo(Map.of("key", "value"));
+            assertThat(data.get("output")).isEqualTo(Map.of("result", "success"));
+            assertThat(data.get("metadata")).isEqualTo(Map.of("meta", "data"));
         }
     }
 }

@@ -39,6 +39,7 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -287,7 +288,8 @@ public class OnlineScoringEngine {
                                     }
                                     return texts.build();
                                 })
-                                .flatMap(text -> TemplateParseUtils.extractVariables(text, PromptType.MUSTACHE).stream());
+                                .flatMap(text -> TemplateParseUtils.extractVariables(text, PromptType.MUSTACHE)
+                                        .stream());
                     }
                     return Stream.empty();
                 })
@@ -352,6 +354,34 @@ public class OnlineScoringEngine {
     @FunctionalInterface
     private interface JsonSectionExtractor {
         JsonNode extract(TraceSection section);
+    }
+
+    public static Map<String, Object> toFullSectionObjectData(Trace trace) {
+        return toFullSectionObjectData(section -> switch (section) {
+            case INPUT -> trace.input();
+            case OUTPUT -> trace.output();
+            case METADATA -> trace.metadata();
+        });
+    }
+
+    public static Map<String, Object> toFullSectionObjectData(Span span) {
+        return toFullSectionObjectData(section -> switch (section) {
+            case INPUT -> span.input();
+            case OUTPUT -> span.output();
+            case METADATA -> span.metadata();
+        });
+    }
+
+    private static Map<String, Object> toFullSectionObjectData(JsonSectionExtractor sectionExtractor) {
+        Map<String, Object> data = new HashMap<>();
+        for (TraceSection section : TraceSection.values()) {
+            JsonNode jsonSection = sectionExtractor.extract(section);
+            if (jsonSection != null && !jsonSection.isNull()) {
+                String key = section.prefix.substring(0, section.prefix.length() - 1);
+                data.put(key, OBJECT_MAPPER.convertValue(jsonSection, Object.class));
+            }
+        }
+        return data;
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
@@ -431,7 +461,8 @@ public class OnlineScoringEngine {
                 })
                 .filter(Objects::nonNull)
                 .filter(mapping -> mapping.valueToReplace() != null)
-                .collect(Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
+                .collect(
+                        Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
     }
 
     /**
