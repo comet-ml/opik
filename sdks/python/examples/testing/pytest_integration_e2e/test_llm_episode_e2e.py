@@ -11,19 +11,7 @@ import os
 
 import pytest
 
-from opik import llm_episode
-from opik.simulation import (
-    EpisodeAssertion,
-    EpisodeBudgetMetric,
-    EpisodeBudgets,
-    EpisodeResult,
-    EpisodeScore,
-    SimulatedUser,
-    build_trajectory_summary,
-    make_max_turns_assertion,
-    make_tool_call_budget,
-    run_simulation,
-)
+from opik import llm_episode, simulation
 from demo_helpers import (
     get_demo_logger,
     log_conversation_turns_debug,
@@ -37,28 +25,28 @@ LOGGER = get_demo_logger("pytest_integration_e2e.episode")
 
 def print_episode_debug(
     scenario_id: str,
-    simulation: dict,
+    simulation_run: dict,
     trajectory: list[dict],
-    episode: EpisodeResult,
+    episode: simulation.EpisodeResult,
 ) -> None:
     """Log episode output in two tiers: concise info and full debug payloads."""
-    trajectory_summary = build_trajectory_summary(trajectory)
+    trajectory_summary = simulation.build_trajectory_summary(trajectory)
 
     log_episode_panel(
         LOGGER,
         scenario_id=scenario_id,
-        thread_id=simulation.get("thread_id"),
+        thread_id=simulation_run.get("thread_id"),
         episode=episode,
-        turns=len(simulation["conversation_history"]) // 2,
+        turns=len(simulation_run["conversation_history"]) // 2,
         tool_calls=trajectory_summary["tool_calls_count"],
-        extras={"Project": simulation.get("project_name")},
+        extras={"Project": simulation_run.get("project_name")},
     )
     if os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "DEBUG").upper() != "DEBUG":
         LOGGER.info(
             "set OPIK_EXAMPLE_LOG_LEVEL=DEBUG for full simulation/trajectory/episode dumps"
         )
 
-    log_conversation_turns_debug(LOGGER, simulation["conversation_history"])
+    log_conversation_turns_debug(LOGGER, simulation_run["conversation_history"])
     log_trajectory_steps_debug(LOGGER, trajectory)
     log_json_debug(LOGGER, "episode", episode.model_dump())
 
@@ -209,13 +197,13 @@ def test_refund_episode_ci_gate(scenario):
     agent = RefundAgent()
 
     # Fixed responses keep the simulation deterministic across local and CI runs.
-    user_simulator = SimulatedUser(
+    user_simulator = simulation.SimulatedUser(
         persona=scenario["user_persona"],
         fixed_responses=scenario["user_messages"],
     )
 
     # run_simulation drives the full multi-turn episode and returns traceable artifacts.
-    simulation = run_simulation(
+    simulation_run = simulation.run_simulation(
         app=agent,
         user_simulator=user_simulator,
         max_turns=scenario["max_turns"],
@@ -224,8 +212,8 @@ def test_refund_episode_ci_gate(scenario):
         track_app_calls=False,
     )
 
-    conversation_history = simulation["conversation_history"]
-    thread_id = simulation["thread_id"]
+    conversation_history = simulation_run["conversation_history"]
+    thread_id = simulation_run["thread_id"]
     trajectory = agent.trajectory_by_thread.get(thread_id, [])
 
     assistant_messages = [
@@ -240,23 +228,23 @@ def test_refund_episode_ci_gate(scenario):
         "Please share your order id" in message for message in assistant_messages
     )
 
-    turn_assertion = make_max_turns_assertion(
+    turn_assertion = simulation.make_max_turns_assertion(
         conversation_history=conversation_history,
         max_turns=scenario["max_turns"],
         name="max_turns_guardrail",
     )
 
-    episode = EpisodeResult(
+    episode = simulation.EpisodeResult(
         scenario_id=scenario_id,
         thread_id=thread_id,
         assertions=[
             # Assertions: hard constraints that should gate PRs.
-            EpisodeAssertion(
+            simulation.EpisodeAssertion(
                 name="assistant_replied_each_turn",
                 passed=len(assistant_messages) == scenario["max_turns"],
                 reason=f"assistant_messages={len(assistant_messages)}",
             ),
-            EpisodeAssertion(
+            simulation.EpisodeAssertion(
                 name="policy_requires_order_id_before_refund",
                 passed=asked_for_order_id == scenario["expect_order_id_prompt"],
                 reason=(
@@ -264,7 +252,7 @@ def test_refund_episode_ci_gate(scenario):
                     f"expected={scenario['expect_order_id_prompt']}, observed={asked_for_order_id}"
                 ),
             ),
-            EpisodeAssertion(
+            simulation.EpisodeAssertion(
                 name="refund_submission_completed",
                 passed=refund_submitted == scenario["expect_refund_submitted"],
                 reason=(
@@ -276,14 +264,14 @@ def test_refund_episode_ci_gate(scenario):
         ],
         scores=[
             # Scores: softer quality signals for trend tracking.
-            EpisodeScore(
+            simulation.EpisodeScore(
                 name="goal_completion",
                 value=1.0
                 if refund_submitted == scenario["expect_refund_submitted"]
                 else 0.0,
                 reason="scenario goal reached according to expected outcome",
             ),
-            EpisodeScore(
+            simulation.EpisodeScore(
                 name="instruction_adherence",
                 value=1.0
                 if asked_for_order_id == scenario["expect_order_id_prompt"]
@@ -291,27 +279,27 @@ def test_refund_episode_ci_gate(scenario):
                 reason="agent followed scenario-specific policy behavior",
             ),
         ],
-        budgets=EpisodeBudgets(
+        budgets=simulation.EpisodeBudgets(
             # Budgets capture resource and control-plane constraints.
-            max_turns=EpisodeBudgetMetric(
+            max_turns=simulation.EpisodeBudgetMetric(
                 used=float(len(conversation_history) // 2),
                 limit=float(scenario["max_turns"]),
                 unit="count",
             ),
-            tool_calls=make_tool_call_budget(
+            tool_calls=simulation.make_tool_call_budget(
                 trajectory=trajectory, limit=scenario["tool_call_limit"]
             ),
         ),
-        trajectory_summary=build_trajectory_summary(trajectory),
+        trajectory_summary=simulation.build_trajectory_summary(trajectory),
         metadata={
-            "project_name": simulation.get("project_name"),
-            "tags": simulation.get("tags"),
+            "project_name": simulation_run.get("project_name"),
+            "tags": simulation_run.get("tags"),
             "tool_actions": [step["action"] for step in trajectory],
         },
     )
     print_episode_debug(
         scenario_id=scenario_id,
-        simulation=simulation,
+        simulation_run=simulation_run,
         trajectory=trajectory,
         episode=episode,
     )

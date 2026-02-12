@@ -174,7 +174,7 @@ def test_test_runs_storage_clear__clears_all_storages():
     assert test_runs_storage.TEST_RUNS_EPISODES == {}
 
 
-def test_pytest_plugin_config_defaults():
+def test_pytest_plugin_config__defaults__happyflow():
     config = OpikConfig()
 
     assert config.pytest_experiment_enabled is True

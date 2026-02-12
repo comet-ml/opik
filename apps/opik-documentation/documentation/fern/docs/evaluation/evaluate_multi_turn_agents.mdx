@@ -196,9 +196,21 @@ def scripted_user(
     return "Thank you."
 
 
+class ScriptedUserAdapter:
+    def generate_response(
+        self,
+        conversation_history: list[dict],
+        simulation_state: dict | None = None,
+    ) -> str:
+        return scripted_user(
+            conversation_history=conversation_history,
+            simulation_state=simulation_state or {},
+        )
+
+
 simulation = run_simulation(
     app=run_agent,
-    user_simulator=scripted_user,
+    user_simulator=ScriptedUserAdapter(),
     max_turns=3,
     project_name="multi_turn_evaluation",
     simulation_state={"scenario_id": "refund_flow_v2"},
