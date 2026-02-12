@@ -9,7 +9,7 @@ import pytest
 
 from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
-from benchmarks.local import runner as local_runner
+from benchmarks.engines.local import engine as local_engine
 from tests.e2e.optimizers.utils import system_message
 from ._benchmark_test_helpers import InlineExecutor
 
@@ -127,9 +127,9 @@ def test_run_benchmark_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("HOME", str(tmp_path))
 
     # Inline executor to avoid multiprocessing in tests
-    monkeypatch.setattr(local_runner, "ProcessPoolExecutor", InlineExecutor)
+    monkeypatch.setattr(local_engine, "ProcessPoolExecutor", InlineExecutor)
 
-    runner = local_runner.BenchmarkRunner(
+    runner = local_engine.BenchmarkRunner(
         max_workers=1,
         seed=42,
         test_mode=True,

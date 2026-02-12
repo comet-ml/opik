@@ -9,7 +9,7 @@ from opik.evaluation.metrics.heuristics.equals import Equals
 
 from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
-from benchmarks.local import runner as local_runner
+from benchmarks.engines.local import engine as local_engine
 from tests.e2e.optimizers.utils import system_message, user_message
 from ._benchmark_test_helpers import InlineExecutor
 
@@ -117,9 +117,9 @@ def test_dual_optimizer_run_live(
     _skip_without_openai()
     _patch_benchmark_config(monkeypatch)
     _patch_dataset_loader(monkeypatch)
-    monkeypatch.setattr(local_runner, "ProcessPoolExecutor", InlineExecutor)
+    monkeypatch.setattr(local_engine, "ProcessPoolExecutor", InlineExecutor)
 
-    runner = local_runner.BenchmarkRunner(
+    runner = local_engine.BenchmarkRunner(
         max_workers=1,
         seed=42,
         test_mode=True,

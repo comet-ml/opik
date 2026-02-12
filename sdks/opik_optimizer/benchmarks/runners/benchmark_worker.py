@@ -121,9 +121,9 @@ def run_optimization_modal(
 
     # Import core logic modules
     import time
-    from benchmarks.core.benchmark_task import TaskResult, TASK_STATUS_RUNNING
-    from benchmarks.modal_utils.worker_core import run_optimization_task
-    from benchmarks.modal_utils.storage import save_result_to_volume
+    from benchmarks.core.benchmark_task import TASK_STATUS_RUNNING, TaskResult
+    from benchmarks.engines.modal.engine import run_optimization_task
+    from benchmarks.engines.modal.volume import save_result_to_volume
 
     # Save "Running" status at the start (before any long-running work)
     timestamp_start = time.time()

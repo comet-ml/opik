@@ -295,22 +295,20 @@ The benchmark system is organized into several modules:
 - **`runners/run_benchmark.py`** - Main unified engine-driven entry point
   - Compiles CLI/manifest into a canonical plan (`core/planning.py`)
   - Runs/deploys via engine registry (`engines/registry.py`)
-- **`runners/run_benchmark_local.py`** - Local execution logic
-  - Imports `local.runner.BenchmarkRunner`
-  - Imports `utils.validation.ask_for_input_confirmation`
 - **`runners/run_benchmark_modal.py`** - Modal submission and coordination logic
   - Submits tasks to deployed `runners/benchmark_worker.py` function
 - **`runners/benchmark_worker.py`** - Modal worker function (deploy with `modal deploy benchmarks/runners/benchmark_worker.py`)
-  - Imports `modal_utils.worker_core.run_optimization_task`
-  - Imports `modal_utils.storage.save_result_to_volume`
+  - Imports `engines.modal.engine.run_optimization_task`
+  - Imports `engines.modal.volume.save_result_to_volume`
 - **`check_results.py`** - View Modal results with clickable log links
-  - Imports `modal_utils.storage` for loading results
-  - Imports `modal_utils.display` for formatting
+  - Imports `engines.modal.volume` for loading results
+  - Imports `utils.display` for formatting
 
 ### Configuration & Core Logic
 
 - **`core/benchmark_config.py`** - Dataset and optimizer configurations
 - **`core/benchmark_task.py`** - Result/task payload models
+- **`core/state.py`** - Run state and checkpoint persistence
 - **`utils/task_runner.py`** - Core benchmark task execution logic shared by local + Modal runners
 
 ### Packages (`packages/`)
@@ -321,26 +319,19 @@ The benchmark system is organized into several modules:
 - **`packages/pupa/`** - PUPA benchmark package wiring
 - **`packages/registry.py`** - Package resolution by dataset key
 
-### Local Execution (`local/`)
+### Engines (`engines/`)
 
-- **`local/runner.py`** - Local benchmark runner implementation
-  - Imports `local.checkpoint` and `local.logging`
-- **`local/checkpoint.py`** - Checkpoint management for local runs
-- **`local/logging.py`** - Local logging utilities
-
-### Modal Execution (`modal_utils/`)
-
-- **`modal_utils/coordinator.py`** - Task coordination utilities (helper functions for task generation)
-- **`modal_utils/worker_core.py`** - Core worker execution logic (called by `runners/benchmark_worker.py`)
-- **`modal_utils/storage.py`** - Modal Volume storage operations
-  - Used by `runners/benchmark_worker.py` and `check_results.py`
-  - Imports `utils.serialization.make_serializable`
-- **`modal_utils/display.py`** - Results display and formatting (used by `check_results.py`)
+- **`engines/local/engine.py`** - Local execution engine and runner implementation
+- **`engines/local/volume.py`** - Local engine volume adapter placeholder
+- **`engines/modal/engine.py`** - Modal engine + worker task execution logic
+- **`engines/modal/volume.py`** - Modal Volume storage operations
 
 ### Shared Utilities (`utils/`)
 
-- **`utils/validation.py`** - Input validation and confirmation (used by `run_benchmark_local.py`)
-- **`utils/serialization.py`** - Serialization helpers for results (used by `modal_utils/storage.py`)
+- **`utils/logging.py`** - Benchmark run logging and rich console display
+- **`utils/display.py`** - Shared display helpers for runtime and result views
+- **`utils/sinks.py`** - Event sink interfaces
+- **`utils/serialization.py`** - Serialization helpers for run outputs
 
 ## Notes
 
