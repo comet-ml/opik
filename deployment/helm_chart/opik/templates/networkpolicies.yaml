@@ -33,10 +33,10 @@ spec:
     - to:
       - podSelector:
           matchLabels:
-            component: opik-backend
-        ports:
-          - protocol: TCP
-            port: 8080 
+            component: {{ include "opik.name" $ }}-backend
+      ports:
+        - protocol: TCP
+          port: 8080
     {{- if index .Values "component" "python-backend" "networkPolicy" "engineEgress" }}
     # Legacy engineEgress support (deprecated, use additionalRules instead)
     - to:
