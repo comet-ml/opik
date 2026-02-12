@@ -178,6 +178,7 @@ class Prompt(base_prompt.BasePrompt):
         """
         info_dict: Dict[str, Any] = {
             "name": self.name,
+            "template_structure": "text",
             "version": {
                 "template": self.prompt,
             },

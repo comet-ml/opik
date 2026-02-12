@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo, useEffect } from "react";
 import { Info, Pencil } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
@@ -22,12 +22,10 @@ import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPl
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
-import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
-import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
-import usePromptVersionsUpdateMutation from "@/api/prompts/usePromptVersionsUpdateMutation";
+import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -45,7 +43,21 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   );
 
   const editPromptResetKeyRef = useRef(0);
-  const updateVersionsMutation = usePromptVersionsUpdateMutation();
+  const promptUpdateMutation = usePromptUpdateMutation();
+
+  const [localTags, setLocalTags] = useState<string[]>(prompt?.tags || []);
+
+  useEffect(() => {
+    setLocalTags(prompt?.tags || []);
+  }, [prompt?.tags]);
+
+  const updateTags = (tags: string[]) => {
+    if (!prompt) return;
+    setLocalTags(tags);
+    promptUpdateMutation.mutate({
+      prompt: { ...prompt, id: prompt.id, tags },
+    });
+  };
 
   const { data } = usePromptVersionsById(
     {
@@ -89,15 +101,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
   const displayText = activeVersion?.template || "";
 
-  const {
-    images: extractedImages,
-    videos: extractedVideos,
-    audios: extractedAudios,
-  } = useMemo(() => {
-    const content = parsePromptVersionContent(activeVersion);
-    return parseLLMMessageContent(content);
-  }, [activeVersion]);
-
   const isChatPrompt = useMemo(() => {
     return prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
   }, [prompt?.template_structure]);
@@ -136,58 +139,10 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
-          <TagListRenderer
-            tags={activeVersion?.tags || []}
-            onAddTag={(newTag) => {
-              if (!activeVersion?.id) return;
-              const updatedTags = [...(activeVersion.tags || []), newTag];
-              updateVersionsMutation.mutate({
-                versionIds: [activeVersion.id],
-                tags: updatedTags,
-                mergeTags: false,
-              });
-            }}
-            onDeleteTag={(tagToDelete) => {
-              if (!activeVersion?.id) return;
-              const updatedTags = (activeVersion.tags || []).filter(
-                (t) => t !== tagToDelete,
-              );
-              updateVersionsMutation.mutate({
-                versionIds: [activeVersion.id],
-                tags: updatedTags,
-                mergeTags: false,
-              });
-            }}
-            align="start"
-            tooltipText="Version tags list"
-            placeholderText="New version tag"
-            addButtonText="Add version tag"
-            tagType="version tag"
-          />
-
-          <div className="mt-4 flex items-center gap-2">
-            <p className="comet-body-s-accented text-foreground">
-              {isChatPrompt ? "Chat messages" : "Prompt"}
-            </p>
-            {!isChatPrompt && (
-              <CopyButton
-                text={displayText}
-                message="Prompt copied to clipboard"
-                tooltipText="Copy prompt"
-                variant="ghost"
-                size="icon-xs"
-              />
-            )}
-          </div>
           {isChatPrompt ? (
             <ChatPromptView template={activeVersion?.template || ""} />
           ) : (
-            <TextPromptView
-              template={displayText}
-              extractedImages={extractedImages}
-              extractedVideos={extractedVideos}
-              extractedAudios={extractedAudios}
-            />
+            <TextPromptView template={displayText} />
           )}
           {activeVersion?.metadata && (
             <>
@@ -211,6 +166,17 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               </div>
             </>
           )}
+
+          <TagListRenderer
+            tags={localTags}
+            onAddTag={(newTag) => {
+              updateTags([...localTags, newTag]);
+            }}
+            onDeleteTag={(tagToDelete) => {
+              updateTags(localTags.filter((t) => t !== tagToDelete));
+            }}
+            align="start"
+          />
         </div>
         <div className="w-[380px] shrink-0">
           <div className="comet-body-s-accented mb-2 flex items-center gap-1 text-foreground">

@@ -7,11 +7,13 @@ import {
   PROVIDER_MODEL_TYPE,
   COMPOSED_PROVIDER_TYPE,
 } from "@/types/providers";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { SPAN_TYPE } from "@/types/traces";
 
 export interface PromptLibraryMetadata {
   name: string;
   id: string;
+  template_structure?: PROMPT_TEMPLATE_STRUCTURE;
   version: {
     template: unknown;
     commit?: string;
