@@ -62,7 +62,10 @@ class SimulatedUser:
             if simulation_state is not None:
                 state_index_raw = simulation_state.get("user_response_index", 0)
                 try:
-                    state_index = int(state_index_raw)
+                    if isinstance(state_index_raw, (int, float, str)):
+                        state_index = int(state_index_raw)
+                    else:
+                        state_index = 0
                 except (TypeError, ValueError):
                     state_index = 0
                 response = self.fixed_responses[state_index % len(self.fixed_responses)]
