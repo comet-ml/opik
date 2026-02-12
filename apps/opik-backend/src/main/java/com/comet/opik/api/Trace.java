@@ -64,6 +64,8 @@ public record Trace(
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int spanCount,
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
+        @JsonView({Trace.View.Public.class,
+                Trace.View.Write.class}) @Schema(description = "Time to first token in milliseconds") Double ttft,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String threadId,
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode visibilityMode,
@@ -114,6 +116,7 @@ public record Trace(
         LLM_SPAN_COUNT("llm_span_count"),
         HAS_TOOL_SPANS("has_tool_spans"),
         DURATION("duration"),
+        TTFT("ttft"),
         THREAD_ID("thread_id"),
         VISIBILITY_MODE("visibility_mode"),
         PROVIDERS("providers"),

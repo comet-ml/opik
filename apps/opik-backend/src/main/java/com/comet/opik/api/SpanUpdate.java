@@ -39,5 +39,6 @@ public record SpanUpdate(
         Set<String> tags,
         Map<String, Integer> usage,
         @DecimalMin("0.0") BigDecimal totalEstimatedCost,
-        ErrorInfo errorInfo) {
+        ErrorInfo errorInfo,
+        Double ttft) {
 }
