@@ -53,9 +53,47 @@ def get_demo_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
+def _format_field_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return f"{value}"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=True)
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=True, sort_keys=True)
+    if isinstance(value, list):
+        return json.dumps(value, ensure_ascii=True)
+    return json.dumps(str(value), ensure_ascii=True)
+
+
+def _normalize_field_name(name: str) -> str:
+    normalized = "".join(
+        character.lower() if character.isalnum() else "_"
+        for character in name
+    ).strip("_")
+    while "__" in normalized:
+        normalized = normalized.replace("__", "_")
+    return normalized
+
+
+def log_event(
+    logger: logging.Logger, event: str, *, level: int = logging.INFO, **fields: Any
+) -> None:
+    parts = [f"event={event}"]
+    for key, value in fields.items():
+        if value is None:
+            continue
+        normalized_key = _normalize_field_name(key)
+        if not normalized_key:
+            continue
+        parts.append(f"{normalized_key}={_format_field_value(value)}")
+    logger.log(level, " ".join(parts))
+
+
 def log_json_debug(logger: logging.Logger, key: str, payload: Any) -> None:
-    """Emit sorted JSON payload at debug level."""
-    logger.debug("%s=%s", key, json.dumps(payload, indent=2, sort_keys=True))
+    """Emit sorted JSON payload at debug level as a structured event."""
+    log_event(logger, "payload", level=logging.DEBUG, payload_key=key, payload=payload)
 
 
 def log_episode_panel(
@@ -71,22 +109,42 @@ def log_episode_panel(
     """Render a compact episode summary."""
     assertions_passed = sum(1 for assertion in episode.assertions if assertion.passed)
     assertions_total = len(episode.assertions)
+    failed_assertions = [a.name for a in episode.assertions if not a.passed]
     budgets = episode.budgets.all_metrics() if episode.budgets is not None else {}
     budgets_passed = sum(1 for metric in budgets.values() if metric.passed)
     budgets_total = len(budgets)
+    failed_budgets = [name for name, metric in budgets.items() if not metric.passed]
 
     status = "PASS" if episode.is_passing() else "FAIL"
-    summary_parts = [
-        f"scenario={scenario_id}",
-        f"thread={thread_id or '-'}",
-        f"status={status}",
-        f"assertions={assertions_passed}/{assertions_total}",
-        f"budgets={budgets_passed}/{budgets_total}",
-    ]
-    if turns is not None:
-        summary_parts.append(f"turns={turns}")
-    if tool_calls is not None:
-        summary_parts.append(f"tool_calls={tool_calls}")
-    for key, value in (extras or {}).items():
-        summary_parts.append(f"{key}={value}")
-    logger.info("episode_summary %s", " ".join(summary_parts))
+    log_event(
+        logger,
+        "episode_summary",
+        scenario_id=scenario_id,
+        thread_id=thread_id or "-",
+        status=status,
+        assertions_passed=assertions_passed,
+        assertions_total=assertions_total,
+        budgets_passed=budgets_passed,
+        budgets_total=budgets_total,
+        turns=turns,
+        tool_calls=tool_calls,
+        **(extras or {}),
+    )
+
+    if failed_assertions:
+        log_event(
+            logger,
+            "episode_assertions_failed",
+            level=logging.WARNING,
+            scenario_id=scenario_id,
+            failed_assertions=failed_assertions,
+        )
+
+    if failed_budgets:
+        log_event(
+            logger,
+            "episode_budgets_failed",
+            level=logging.WARNING,
+            scenario_id=scenario_id,
+            failed_budgets=failed_budgets,
+        )
