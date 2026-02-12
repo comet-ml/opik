@@ -27,7 +27,7 @@ from benchmarks.utils.logging import (
     console,
     log_console_output_to_file,
 )
-from benchmarks.utils.serialization import make_serializable
+from benchmarks.utils.helpers import make_serializable
 from benchmarks.utils.task_runner import execute_task, preflight_tasks
 
 

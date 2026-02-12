@@ -3,7 +3,7 @@
 """
 Utility helpers used across benchmark runners.
 
-By importing budgeting/display/serialization/task_runner through this
+By importing budgeting/display/helpers/task_runner through this
 package (``from benchmarks.utils import budgeting``) we keep module names stable
 for mypy. Avoid importing these modules via a top-level ``utils`` module name
 to prevent duplicate-module warnings.
@@ -12,7 +12,7 @@ to prevent duplicate-module warnings.
 __all__ = [
     "budgeting",
     "display",
-    "serialization",
+    "helpers",
     "sinks",
     "task_runner",
     "logging",

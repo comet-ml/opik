@@ -288,7 +288,7 @@ The benchmark system is organized into several modules:
 - **`core/`** - Engine-agnostic runtime flow (`planning`, `runtime`, `state`, `evaluation`, `deploy`, `results`)
 - **`engines/`** - Execution backends (`local`, `modal`) with capabilities and storage adapters
 - **`packages/`** - Dataset/package-specific wiring (agents/prompts/metrics)
-- **`utils/`** - Shared sinks/display/logging/serialization helpers
+- **`utils/`** - Shared sinks/display/logging/helper modules
 
 ### Entry Points
 
@@ -331,7 +331,7 @@ The benchmark system is organized into several modules:
 - **`utils/logging.py`** - Benchmark run logging and rich console display
 - **`utils/display.py`** - Shared display helpers for runtime and result views
 - **`utils/sinks.py`** - Event sink interfaces
-- **`utils/serialization.py`** - Serialization helpers for run outputs
+- **`utils/helpers.py`** - Generic helpers (including run-output serialization)
 
 ## Notes
 

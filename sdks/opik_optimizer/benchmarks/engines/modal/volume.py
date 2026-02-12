@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmarks.core.results import TaskResult
-from benchmarks.utils.serialization import make_serializable
+from benchmarks.utils.helpers import make_serializable
 
 
 def volume_name() -> str:
