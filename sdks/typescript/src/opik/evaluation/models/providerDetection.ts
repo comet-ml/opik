@@ -14,6 +14,8 @@ import { type LanguageModel } from "ai";
 import { ModelConfigurationError } from "./errors";
 
 type PrefixedOpenAIModelId = `openai/${OpenAIChatModelId}`;
+type PrefixedAnthropicModelId = `anthropic/${AnthropicMessagesModelId}`;
+type PrefixedGoogleModelId = `google/${GoogleGenerativeAIModelId}`;
 
 /**
  * Union type of all supported model IDs from OpenAI, Anthropic, and Google Gemini.
@@ -30,7 +32,9 @@ export type SupportedModelId =
   | OpenAIChatModelId
   | PrefixedOpenAIModelId
   | AnthropicMessagesModelId
-  | GoogleGenerativeAIModelId;
+  | PrefixedAnthropicModelId
+  | GoogleGenerativeAIModelId
+  | PrefixedGoogleModelId;
 
 /**
  * OpenAI provider-specific options.
@@ -91,9 +95,9 @@ export type AllProviderOptions =
 export type ProviderOptionsForModel<T extends SupportedModelId> =
   T extends OpenAIChatModelId | PrefixedOpenAIModelId
     ? OpenAIProviderOptions
-    : T extends AnthropicMessagesModelId
+    : T extends AnthropicMessagesModelId | PrefixedAnthropicModelId
       ? AnthropicProviderOptions
-      : T extends GoogleGenerativeAIModelId
+      : T extends GoogleGenerativeAIModelId | PrefixedGoogleModelId
         ? GoogleProviderOptions
         : never;
 
@@ -126,7 +130,7 @@ function isAnthropicModelId(
   modelId: string,
   options?: AllProviderOptions
 ): options is AnthropicProviderOptions {
-  return modelId.startsWith("claude-");
+  return modelId.startsWith("anthropic/") || modelId.startsWith("claude-");
 }
 
 /**
@@ -139,7 +143,11 @@ function isGeminiModelId(
   modelId: string,
   options?: AllProviderOptions
 ): options is GoogleProviderOptions {
-  return modelId.startsWith("gemini-") || modelId.startsWith("gemma-");
+  return (
+    modelId.startsWith("google/") ||
+    modelId.startsWith("gemini-") ||
+    modelId.startsWith("gemma-")
+  );
 }
 
 /**
@@ -212,27 +220,33 @@ export function detectProvider(
   if (isAnthropicModelId(modelId, options)) {
     const apiKey = (options?.apiKey as string) || process.env.ANTHROPIC_API_KEY;
     validateApiKey("Anthropic", apiKey, "ANTHROPIC_API_KEY");
+    const normalizedModelId = modelId.startsWith("anthropic/")
+      ? (modelId.slice("anthropic/".length) as AnthropicMessagesModelId)
+      : (modelId as AnthropicMessagesModelId);
 
     return createAnthropic({
       apiKey,
       ...options,
-    })(modelId);
+    })(normalizedModelId);
   }
 
   if (isGeminiModelId(modelId, options)) {
     const apiKey = (options?.apiKey as string) || process.env.GOOGLE_API_KEY;
     validateApiKey("Google Gemini", apiKey, "GOOGLE_API_KEY");
+    const normalizedModelId = modelId.startsWith("google/")
+      ? (modelId.slice("google/".length) as GoogleGenerativeAIModelId)
+      : (modelId as GoogleGenerativeAIModelId);
 
     return createGoogleGenerativeAI({
       apiKey,
       ...options,
-    })(modelId);
+    })(normalizedModelId);
   }
 
   // If no provider matches, throw error
   throw new ModelConfigurationError(
     `Unable to detect provider for model ID: ${modelId}. ` +
       `Supported providers are OpenAI (openai/*, gpt-*, o1*, o3*, chatgpt-*), ` +
-      `Anthropic (claude-*), and Google Gemini (gemini-*, gemma-*).`
+      `Anthropic (anthropic/*, claude-*), and Google Gemini (google/*, gemini-*, gemma-*).`
   );
 }
