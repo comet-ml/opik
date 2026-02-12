@@ -9,7 +9,7 @@ Usage:
     python run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
 
     # Alternative: Direct Modal execution (from benchmarks directory)
-    modal run --detach benchmarks/run_benchmark_modal.py --test-mode
+    modal run --detach benchmarks/runners/run_benchmark_modal.py --test-mode
 
     # Submit specific configuration
     python run_benchmark.py --modal \
@@ -281,7 +281,7 @@ def submit_benchmark_tasks(
             "\nPlease deploy the worker and ensure it exists in your active workspace:"
         )
         print("  pip install modal")
-        print("  modal deploy benchmarks/benchmark_worker.py")
+        print("  modal deploy benchmarks/runners/benchmark_worker.py")
         sys.exit(1)
 
     # Update worker's max_containers to control concurrency
@@ -294,7 +294,7 @@ def submit_benchmark_tasks(
         print(
             "\n❌ ERROR: Worker function not found in your current Modal environment."
             "\nDeploy (or redeploy) the worker then retry:"
-            "\n  modal deploy benchmarks/benchmark_worker.py\n"
+            "\n  modal deploy benchmarks/runners/benchmark_worker.py\n"
         )
         sys.exit(1)
     except Exception as e:
@@ -626,7 +626,7 @@ Examples:
   python run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
 
   # Alternative: Direct Modal execution (use --detach to disconnect)
-  modal run --detach benchmarks/run_benchmark_modal.py --test-mode
+  modal run --detach benchmarks/runners/run_benchmark_modal.py --test-mode
 
   # Submit specific configuration
   python run_benchmark.py --modal \\

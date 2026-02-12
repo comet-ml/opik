@@ -2,7 +2,7 @@
 Modal worker function for running opik_optimizer benchmarks.
 
 This module contains the deployable Modal function that runs individual benchmark tasks.
-Deploy this with: modal deploy benchmarks/benchmark_worker.py
+Deploy this with: modal deploy benchmarks/runners/benchmark_worker.py
 
 Once deployed, the worker can be triggered by run_benchmark.py --modal without requiring
 your local machine to stay running.
