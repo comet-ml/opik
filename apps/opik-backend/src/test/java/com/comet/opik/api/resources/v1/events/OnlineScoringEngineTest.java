@@ -4,6 +4,7 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LogItem.LogLevel;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
@@ -1854,5 +1855,242 @@ class OnlineScoringEngineTest {
         // Should contain the entire input JSON
         assertThat(messageText).contains("Full input: {");
         assertThat(messageText).containsAnyOf("\"questions\"", "&quot;questions&quot;");
+    }
+
+    @Test
+    @DisplayName("toFullSectionObjectData should extract all sections as objects from trace with dict input/output")
+    void testToFullSectionObjectData_dictInputOutput() {
+        // Given
+        var input = JsonUtils.getMapper().valueToTree(Map.of("question", "What is AI?", "context", "tech"));
+        var output = JsonUtils.getMapper().valueToTree(Map.of("answer", "Artificial Intelligence", "confidence", 0.95));
+        var metadata = JsonUtils.getMapper().valueToTree(Map.of("model", "gpt-4", "tokens", 150));
+
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .input(input)
+                .output(output)
+                .metadata(metadata)
+                .build();
+
+        // When
+        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+
+        // Then
+        assertThat(data).hasSize(3);
+        assertThat(data.get("input")).isEqualTo(Map.of("question", "What is AI?", "context", "tech"));
+        assertThat(data.get("output")).isEqualTo(Map.of("answer", "Artificial Intelligence", "confidence", 0.95));
+        assertThat(data.get("metadata")).isEqualTo(Map.of("model", "gpt-4", "tokens", 150));
+    }
+
+    @Test
+    @DisplayName("toFullSectionObjectData should handle string input/output")
+    void testToFullSectionObjectData_stringInputOutput() {
+        // Given
+        var input = JsonUtils.getMapper().valueToTree("What is AI?");
+        var output = JsonUtils.getMapper().valueToTree("Artificial Intelligence");
+
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .input(input)
+                .output(output)
+                .build();
+
+        // When
+        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+
+        // Then
+        assertThat(data).hasSize(2);
+        assertThat(data.get("input")).isEqualTo("What is AI?");
+        assertThat(data.get("output")).isEqualTo("Artificial Intelligence");
+        assertThat(data).doesNotContainKey("metadata");
+    }
+
+    @Test
+    @DisplayName("toFullSectionObjectData should handle nested dict input/output")
+    void testToFullSectionObjectData_nestedDictInputOutput() {
+        // Given
+        var input = JsonUtils.getMapper().valueToTree(
+                Map.of("messages", List.of(
+                        Map.of("role", "user", "content", "hello"),
+                        Map.of("role", "assistant", "content", "hi there"))));
+        var output = JsonUtils.getMapper().valueToTree(
+                Map.of("result", Map.of("answer", "hello", "metadata", Map.of("score", 0.9))));
+
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .input(input)
+                .output(output)
+                .build();
+
+        // When
+        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+
+        // Then
+        assertThat(data).hasSize(2);
+
+        @SuppressWarnings("unchecked")
+        var inputMap = (Map<String, Object>) data.get("input");
+        assertThat(inputMap).containsKey("messages");
+        @SuppressWarnings("unchecked")
+        var messages = (List<Map<String, Object>>) inputMap.get("messages");
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(0).get("role")).isEqualTo("user");
+
+        @SuppressWarnings("unchecked")
+        var outputMap = (Map<String, Object>) data.get("output");
+        @SuppressWarnings("unchecked")
+        var resultMap = (Map<String, Object>) outputMap.get("result");
+        assertThat(resultMap.get("answer")).isEqualTo("hello");
+    }
+
+    @Test
+    @DisplayName("toFullSectionObjectData should handle array input/output")
+    void testToFullSectionObjectData_arrayInputOutput() {
+        // Given
+        var input = JsonUtils.getMapper().valueToTree(List.of("item1", "item2", "item3"));
+        var output = JsonUtils.getMapper().valueToTree(List.of(Map.of("score", 0.8), Map.of("score", 0.9)));
+
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .input(input)
+                .output(output)
+                .build();
+
+        // When
+        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+
+        // Then
+        assertThat(data).hasSize(2);
+        assertThat(data.get("input")).isEqualTo(List.of("item1", "item2", "item3"));
+
+        @SuppressWarnings("unchecked")
+        var outputList = (List<Map<String, Object>>) data.get("output");
+        assertThat(outputList).hasSize(2);
+        assertThat(outputList.get(0).get("score")).isEqualTo(0.8);
+    }
+
+    @Test
+    @DisplayName("toFullSectionObjectData should skip null sections")
+    void testToFullSectionObjectData_nullSections() {
+        // Given - only output, no input or metadata
+        var output = JsonUtils.getMapper().valueToTree(Map.of("result", "success"));
+
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .output(output)
+                .build();
+
+        // When
+        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+
+        // Then
+        assertThat(data).hasSize(1);
+        assertThat(data).containsKey("output");
+        assertThat(data).doesNotContainKey("input");
+        assertThat(data).doesNotContainKey("metadata");
+    }
+
+    @Test
+    @DisplayName("toFullSectionObjectData should handle mixed types - string input, dict output")
+    void testToFullSectionObjectData_mixedTypes() {
+        // Given
+        var input = JsonUtils.getMapper().valueToTree("plain text input");
+        var output = JsonUtils.getMapper().valueToTree(Map.of("answer", "hello", "confidence", 0.9));
+        var metadata = JsonUtils.getMapper().valueToTree(Map.of("model", "gpt-4"));
+
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .input(input)
+                .output(output)
+                .metadata(metadata)
+                .build();
+
+        // When
+        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+
+        // Then
+        assertThat(data).hasSize(3);
+        assertThat(data.get("input")).isEqualTo("plain text input");
+        assertThat(data.get("output")).isEqualTo(Map.of("answer", "hello", "confidence", 0.9));
+        assertThat(data.get("metadata")).isEqualTo(Map.of("model", "gpt-4"));
+    }
+
+    @Test
+    @DisplayName("toFullSectionObjectData should work with Span")
+    void testToFullSectionObjectData_span() {
+        // Given
+        var input = JsonUtils.getMapper().valueToTree(Map.of("prompt", "tell me a joke"));
+        var output = JsonUtils.getMapper().valueToTree(Map.of("response", "Why did the chicken cross the road?"));
+
+        var span = Span.builder()
+                .id(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .traceId(UUID.randomUUID())
+                .name("test-span")
+                .input(input)
+                .output(output)
+                .build();
+
+        // When
+        var data = OnlineScoringEngine.toFullSectionObjectData(span);
+
+        // Then
+        assertThat(data).hasSize(2);
+        assertThat(data.get("input")).isEqualTo(Map.of("prompt", "tell me a joke"));
+        assertThat(data.get("output")).isEqualTo(Map.of("response", "Why did the chicken cross the road?"));
+        assertThat(data).doesNotContainKey("metadata");
+    }
+
+    @Test
+    @DisplayName("toFullSectionObjectData should handle numeric and boolean values in objects")
+    void testToFullSectionObjectData_numericAndBooleanValues() {
+        // Given
+        var input = JsonUtils.getMapper().valueToTree(Map.of(
+                "temperature", 0.7,
+                "max_tokens", 100,
+                "stream", true));
+        var output = JsonUtils.getMapper().valueToTree(Map.of(
+                "score", 0.95,
+                "passed", true,
+                "count", 42));
+
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectName(PROJECT_NAME)
+                .projectId(UUID.randomUUID())
+                .input(input)
+                .output(output)
+                .build();
+
+        // When
+        var data = OnlineScoringEngine.toFullSectionObjectData(trace);
+
+        // Then
+        assertThat(data).hasSize(2);
+
+        @SuppressWarnings("unchecked")
+        var inputMap = (Map<String, Object>) data.get("input");
+        assertThat(inputMap.get("temperature")).isEqualTo(0.7);
+        assertThat(inputMap.get("max_tokens")).isEqualTo(100);
+        assertThat(inputMap.get("stream")).isEqualTo(true);
+
+        @SuppressWarnings("unchecked")
+        var outputMap = (Map<String, Object>) data.get("output");
+        assertThat(outputMap.get("score")).isEqualTo(0.95);
+        assertThat(outputMap.get("passed")).isEqualTo(true);
+        assertThat(outputMap.get("count")).isEqualTo(42);
     }
 }

@@ -79,9 +79,9 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
 
             userFacingLogger.info("Evaluating spanId '{}' sampled by rule '{}'", span.id(), message.ruleName());
 
-            Map<String, String> data;
+            Map<String, Object> data;
             try {
-                data = OnlineScoringEngine.toReplacements(message.code().arguments(), span);
+                data = OnlineScoringEngine.toFullSectionObjectData(span);
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing Python request for spanId '{}': \n\n{}",
                         span.id(), exception.getMessage());
