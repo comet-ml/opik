@@ -13,7 +13,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from benchmarks.core.results import PreflightReport
+from benchmarks.core.types import PreflightReport
 
 _CONFIRM_CONSOLE = Console(width=120)
 

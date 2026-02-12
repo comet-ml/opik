@@ -12,8 +12,8 @@ from collections.abc import Iterable
 from typing import Any
 
 import opik
-from benchmarks.core.results import TASK_STATUS_FAILED, TaskResult
-from benchmarks.core.results import TASK_STATUS_RUNNING
+from benchmarks.core.types import TASK_STATUS_FAILED, TaskResult
+from benchmarks.core.types import TASK_STATUS_RUNNING
 from benchmarks.core.evaluation import run_task_evaluation
 from benchmarks.core.planning import TaskPlan
 from benchmarks.engines.base import BenchmarkEngine, EngineCapabilities, EngineRunResult

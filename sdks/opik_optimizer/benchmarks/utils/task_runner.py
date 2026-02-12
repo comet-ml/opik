@@ -19,7 +19,7 @@ import hashlib
 from benchmarks.packages import registry as benchmark_config
 from benchmarks.packages.registry import BenchmarkDatasetConfig
 import opik_optimizer.datasets
-from benchmarks.core.results import (
+from benchmarks.core.types import (
     DatasetMetadata,
     TaskEvaluationResult,
     EvaluationSet,
@@ -28,12 +28,12 @@ from benchmarks.core.results import (
     TASK_STATUS_FAILED,
     TASK_STATUS_SUCCESS,
 )
-from benchmarks.core.results import TaskSpec
+from benchmarks.core.types import TaskSpec
 from opik_optimizer import BaseOptimizer, ChatPrompt
 from opik_optimizer.utils import reporting as reporting_utils
 from benchmarks.utils.display import display_preflight_report
 from benchmarks.utils.logging import console
-from benchmarks.core.results import (
+from benchmarks.core.types import (
     PreflightContext,
     PreflightEntry,
     PreflightReport,

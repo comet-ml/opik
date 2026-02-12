@@ -4,7 +4,7 @@ import pytest
 
 from benchmarks import run_benchmark as benchmark_cli
 from benchmarks.core.planning import TaskPlan
-from benchmarks.core.results import RunSummary
+from benchmarks.core.types import RunSummary
 
 
 def _empty_plan() -> TaskPlan:

@@ -32,7 +32,7 @@ from benchmarks.utils.sinks import BenchmarkEvent, EventSink, NullSink
 from opik_optimizer.utils.reporting import get_console
 
 if TYPE_CHECKING:
-    from benchmarks.core.results import TaskResult
+    from benchmarks.core.types import TaskResult
 
 console = get_console(width=120, soft_wrap=True)
 

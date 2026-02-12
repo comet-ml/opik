@@ -6,8 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from benchmarks.core.results import TaskResult
-from benchmarks.core.results import TaskSpec
+from benchmarks.core.types import TaskResult
+from benchmarks.core.types import TaskSpec
 from opik_optimizer import ChatPrompt
 
 

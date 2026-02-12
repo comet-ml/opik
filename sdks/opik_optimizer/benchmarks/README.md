@@ -309,7 +309,7 @@ The benchmark system is organized into several modules:
 - **`configs/`** - Manifest schema and example task/generator json files
 - **`packages/registry.py`** - Dataset/optimizer/model config registry and package resolution
 - **`core/manifest.py`** - Manifest parsing and task-spec compilation
-- **`core/results.py`** - Result/task models and preflight report schema
+- **`core/types.py`** - Result/task models and preflight report schema
 - **`core/state.py`** - Run state and checkpoint persistence
 - **`core/runtime.py`** - Engine run/deploy dispatch
 - **`utils/task_runner.py`** - Core benchmark task execution logic shared by local + Modal runners

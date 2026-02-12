@@ -10,14 +10,14 @@ from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wai
 from datetime import datetime
 from typing import Any
 
-from benchmarks.core.results import BenchmarkRunResult
-from benchmarks.core.results import (
+from benchmarks.core.types import BenchmarkRunResult
+from benchmarks.core.types import (
     TASK_STATUS_FAILED,
     TASK_STATUS_PENDING,
     TASK_STATUS_RUNNING,
     TaskResult,
 )
-from benchmarks.core.results import TaskSpec
+from benchmarks.core.types import TaskSpec
 from benchmarks.core.planning import TaskPlan
 from benchmarks.core.state import BenchmarkCheckpointManager
 from benchmarks.engines.base import BenchmarkEngine, EngineCapabilities, EngineRunResult

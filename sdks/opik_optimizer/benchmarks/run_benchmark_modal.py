@@ -41,7 +41,7 @@ except ModuleNotFoundError:
     sys.exit(1)
 
 from benchmarks.packages import registry as benchmark_config
-from benchmarks.core.results import TaskSpec
+from benchmarks.core.types import TaskSpec
 from benchmarks.engines.modal import engine as modal_engine
 from benchmarks.utils.budgeting import resolve_optimize_params
 from benchmarks.utils.task_runner import preflight_tasks

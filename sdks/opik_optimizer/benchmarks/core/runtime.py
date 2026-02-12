@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from benchmarks.core.planning import TaskPlan
-from benchmarks.core.results import RunSummary
+from benchmarks.core.types import RunSummary
 from benchmarks.engines.base import DeployNotSupportedError
 from benchmarks.engines.registry import get_engine
 

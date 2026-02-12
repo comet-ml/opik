@@ -4,7 +4,7 @@ import pytest
 
 from benchmarks.utils import task_runner
 from benchmarks.packages import registry as benchmark_config
-from benchmarks.core.results import TaskResult
+from benchmarks.core.types import TaskResult
 from opik_optimizer import ChatPrompt
 from tests.unit.fixtures import user_message
 

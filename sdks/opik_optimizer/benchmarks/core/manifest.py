@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from benchmarks.core.results import TaskSpec
+from benchmarks.core.types import TaskSpec
 
 
 class PromptMessage(BaseModel):

@@ -5,7 +5,7 @@ from typing import Any
 
 from benchmarks.core.manifest import load_manifest, manifest_to_task_specs
 from benchmarks.packages import registry as benchmark_config
-from benchmarks.core.results import TaskSpec
+from benchmarks.core.types import TaskSpec
 
 
 @dataclass(frozen=True)
