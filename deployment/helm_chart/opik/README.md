@@ -82,7 +82,7 @@ Call opik api on http://localhost:5173/api
 | Repository | Name | Version |
 |------------|------|---------|
 | https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.7 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.26.0 |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
 | oci://registry-1.docker.io/cloudpirates | zookeeper | 0.5.4 |
@@ -153,7 +153,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
-| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.3.8.10041.altinitystable"` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
