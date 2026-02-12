@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo, useEffect } from "react";
 import { Info, Pencil } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
@@ -45,8 +45,15 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   const editPromptResetKeyRef = useRef(0);
   const promptUpdateMutation = usePromptUpdateMutation();
 
+  const [localTags, setLocalTags] = useState<string[]>(prompt?.tags || []);
+
+  useEffect(() => {
+    setLocalTags(prompt?.tags || []);
+  }, [prompt?.tags]);
+
   const updateTags = (tags: string[]) => {
     if (!prompt) return;
+    setLocalTags(tags);
     promptUpdateMutation.mutate({
       prompt: { ...prompt, id: prompt.id, tags },
     });
@@ -161,12 +168,12 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           )}
 
           <TagListRenderer
-            tags={prompt?.tags || []}
+            tags={localTags}
             onAddTag={(newTag) => {
-              updateTags([...(prompt?.tags || []), newTag]);
+              updateTags([...localTags, newTag]);
             }}
             onDeleteTag={(tagToDelete) => {
-              updateTags((prompt?.tags || []).filter((t) => t !== tagToDelete));
+              updateTags(localTags.filter((t) => t !== tagToDelete));
             }}
             align="start"
           />

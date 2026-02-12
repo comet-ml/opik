@@ -122,7 +122,7 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
           </AccordionTrigger>
           <AccordionContent className="px-3">
             <PromptContentView
-              template={rawTemplate}
+              template={rawTemplate ?? promptInfo?.latest_version?.template}
               promptId={promptId}
               activeVersionId={rawPrompts[index]?.version?.id}
               workspaceName={workspaceName}

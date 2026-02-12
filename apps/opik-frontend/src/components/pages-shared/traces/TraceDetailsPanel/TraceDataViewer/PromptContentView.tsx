@@ -20,7 +20,7 @@ export const CustomUseInPlaygroundButton: React.FC<{
       onClick={onClick}
       size="sm"
       disabled={disabled}
-      className="inline-flex items-center gap-1"
+      className="inline-flex items-center gap-2"
       {...props}
     >
       Use in Playground
