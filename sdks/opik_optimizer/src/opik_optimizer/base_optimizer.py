@@ -898,6 +898,27 @@ class BaseOptimizer(ABC):
         evaluation_result: EvaluationResult | EvaluationResultOnDictItems | None,
         objective_metric_name: str,
     ) -> None:
+        """Store a summary report for the latest objective-metric evaluation.
+
+        This helper updates ``self._last_evaluation_report`` with a compact payload
+        consumed by trial extras/history. Report fields:
+
+        - ``objective_metric``: Objective metric name used for extraction.
+        - ``evaluated_items``: Number of evaluated test rows.
+        - ``objective_scores``: Number of objective metric results found.
+        - ``failed_objective_scores``: Count of objective scores with
+          ``scoring_failed=True``.
+        - ``failed_ratio``: ``failed_objective_scores / objective_scores`` when
+          objective scores exist, otherwise ``0.0``.
+        - ``failed_objective_samples``: Up to 5 failed objective score samples with
+          ``name``, ``value``, ``reason``, and ``metadata``.
+
+        Edge cases:
+        - When ``evaluation_result`` is ``None``, the method records an empty report
+          (0 items, 0 objective scores, empty failed samples).
+        - ``failed_ratio`` is intentionally ``0.0`` when no objective scores are
+          present to avoid divide-by-zero and to keep the payload numeric.
+        """
         if evaluation_result is None:
             report = {
                 "objective_metric": objective_metric_name,
