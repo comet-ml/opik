@@ -13,7 +13,10 @@ import { FileTerminal, GitCommitVertical } from "lucide-react";
 import useAppStore from "@/store/AppStore";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import PromptContentView from "./PromptContentView";
+import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
+import PromptContentView, {
+  CustomUseInPlaygroundButton,
+} from "./PromptContentView";
 
 // Helper to ensure template is always a string for PromptVersion
 // The template from trace metadata can be either a string (legacy) or parsed JSON object (new format)
@@ -119,12 +122,17 @@ const PromptsTab: React.FunctionComponent<PromptsTabProps> = ({
           <AccordionContent className="px-3">
             <PromptContentView
               template={rawTemplate}
-              promptInfo={promptInfo}
               promptId={promptId}
               activeVersionId={rawPrompts[index]?.version?.id}
               workspaceName={workspaceName}
               search={search}
               templateStructure={rawPrompts[index]?.template_structure}
+              playgroundButton={
+                <TryInPlaygroundButton
+                  prompt={promptInfo}
+                  ButtonComponent={CustomUseInPlaygroundButton}
+                />
+              }
             />
           </AccordionContent>
         </AccordionItem>

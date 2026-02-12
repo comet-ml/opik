@@ -3,13 +3,9 @@ import { ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import PromptTemplateView from "@/components/pages-shared/llm/PromptTemplateView/PromptTemplateView";
-import TryInPlaygroundButton from "@/components/pages/PromptPage/TryInPlaygroundButton";
-import {
-  PROMPT_TEMPLATE_STRUCTURE,
-  PromptWithLatestVersion,
-} from "@/types/prompts";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
-const CustomUseInPlaygroundButton: React.FC<{
+export const CustomUseInPlaygroundButton: React.FC<{
   variant?: string;
   size?: string;
   disabled?: boolean;
@@ -35,22 +31,22 @@ const CustomUseInPlaygroundButton: React.FC<{
 
 interface PromptContentViewProps {
   template: unknown;
-  promptInfo: PromptWithLatestVersion;
   promptId?: string;
   activeVersionId?: string;
   workspaceName: string;
   search?: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
+  playgroundButton: React.ReactNode;
 }
 
 const PromptContentView: React.FC<PromptContentViewProps> = ({
   template,
-  promptInfo,
   promptId,
   activeVersionId,
   workspaceName,
   search,
   templateStructure,
+  playgroundButton,
 }) => {
   return (
     <PromptTemplateView
@@ -71,10 +67,7 @@ const PromptContentView: React.FC<PromptContentViewProps> = ({
             </Link>
           </Button>
         )}
-        <TryInPlaygroundButton
-          prompt={promptInfo}
-          ButtonComponent={CustomUseInPlaygroundButton}
-        />
+        {playgroundButton}
       </div>
     </PromptTemplateView>
   );
