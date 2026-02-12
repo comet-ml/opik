@@ -352,7 +352,7 @@ class ModalEngine(BenchmarkEngine):
                 manifest_path=plan.manifest_path,
             )
 
-        return EngineRunResult(engine=self.name)
+        return EngineRunResult(engine=self.name, status="succeeded")
 
     def deploy(self) -> EngineRunResult:
         subprocess.run(
@@ -361,5 +361,6 @@ class ModalEngine(BenchmarkEngine):
         )
         return EngineRunResult(
             engine=self.name,
+            status="succeeded",
             metadata={"deployed": ["modal_engine"]},
         )

@@ -22,6 +22,7 @@ from benchmarks.core.planning import TaskPlan
 from benchmarks.core.state import BenchmarkCheckpointManager
 from benchmarks.engines.base import BenchmarkEngine, EngineCapabilities, EngineRunResult
 from benchmarks.utils.budgeting import resolve_optimize_params
+from benchmarks.utils.display import ask_for_input_confirmation
 from benchmarks.utils.logging import (
     BenchmarkLogger,
     console,
@@ -102,7 +103,7 @@ class BenchmarkRunner:
         resume_run_id: str | None,
         task_specs: list[TaskSpec] | None = None,
         preflight_info: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> dict[str, Any]:
         if resume_run_id and retry_failed_run_id:
             raise ValueError("Cannot resume and retry at the same time")
         if resume_run_id:
@@ -371,6 +372,19 @@ class BenchmarkRunner:
             preflight_report=preflight_report,
         )
         console.print(f"[dim]Saved results to {results_path}[/dim]")
+        successful_tasks = len(
+            [x for x in checkpoint_manager.task_results if x.status == "Success"]
+        )
+        failed_tasks = len(
+            [x for x in checkpoint_manager.task_results if x.status == "Failed"]
+        )
+        return {
+            "status": "failed" if failed_tasks > 0 else "succeeded",
+            "successful_tasks": successful_tasks,
+            "failed_tasks": failed_tasks,
+            "total_tasks": len(checkpoint_manager.task_results),
+            "results_path": results_path,
+        }
 
 
 class LocalEngine(BenchmarkEngine):
@@ -384,13 +398,29 @@ class LocalEngine(BenchmarkEngine):
     )
 
     def run(self, plan: TaskPlan) -> EngineRunResult:
+        if not plan.test_mode and not plan.auto_confirm:
+            try:
+                ask_for_input_confirmation(
+                    demo_datasets=plan.demo_datasets,
+                    optimizers=plan.optimizers,
+                    test_mode=plan.test_mode,
+                    retry_failed_run_id=plan.retry_failed_run_id,
+                    resume_run_id=plan.resume_run_id,
+                )
+            except SystemExit:
+                return EngineRunResult(
+                    engine=self.name,
+                    status="aborted",
+                    metadata={"reason": "user_declined_confirmation"},
+                )
+
         runner = BenchmarkRunner(
             max_workers=plan.max_concurrent,
             seed=plan.seed,
             test_mode=plan.test_mode,
             checkpoint_dir=plan.checkpoint_dir,
         )
-        runner.run_benchmarks(
+        run_outcome = runner.run_benchmarks(
             demo_datasets=plan.demo_datasets,
             optimizers=plan.optimizers,
             models=plan.models,
@@ -406,11 +436,19 @@ class LocalEngine(BenchmarkEngine):
         return EngineRunResult(
             engine=self.name,
             run_id=runner.run_id,
-            metadata={"checkpoint_dir": plan.checkpoint_dir},
+            status=str(run_outcome.get("status", "succeeded")),
+            metadata={
+                "checkpoint_dir": plan.checkpoint_dir,
+                "successful_tasks": run_outcome.get("successful_tasks", 0),
+                "failed_tasks": run_outcome.get("failed_tasks", 0),
+                "total_tasks": run_outcome.get("total_tasks", 0),
+                "results_path": run_outcome.get("results_path"),
+            },
         )
 
     def deploy(self) -> EngineRunResult:
         return EngineRunResult(
             engine=self.name,
+            status="succeeded",
             metadata={"message": "Local engine does not require deployment."},
         )

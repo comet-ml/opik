@@ -13,7 +13,7 @@ def run_plan(engine_name: str, plan: TaskPlan) -> RunSummary:
     return RunSummary(
         engine=result.engine,
         run_id=result.run_id,
-        status="succeeded",
+        status=result.status,
         metadata=result.metadata or {},
     )
 

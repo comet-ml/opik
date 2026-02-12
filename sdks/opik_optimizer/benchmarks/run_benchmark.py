@@ -202,6 +202,12 @@ def main() -> None:
     parser.add_argument("--retry-failed-run-id", type=str, default=None)
     parser.add_argument("--resume-run-id", type=str, default=None)
     parser.add_argument("--config", type=str, default=None)
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        default=False,
+        help="Skip interactive confirmation prompts for large local runs",
+    )
     parser.add_argument("--list-registries", action="store_true")
     args = parser.parse_args()
 
@@ -221,6 +227,7 @@ def main() -> None:
             test_mode=args.test_mode,
             max_concurrent=args.max_concurrent,
             checkpoint_dir=args.checkpoint_dir,
+            auto_confirm=args.yes,
             config_path=args.config,
             retry_failed_run_id=args.retry_failed_run_id,
             resume_run_id=args.resume_run_id,

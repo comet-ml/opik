@@ -98,6 +98,11 @@ class BenchmarkManifest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_has_tasks_or_generators(self) -> BenchmarkManifest:
+        """Ensure the manifest defines at least one task or generator.
+
+        Raises:
+            ValueError: If both ``tasks`` and ``generators`` are empty.
+        """
         if not self.tasks and not self.generators:
             raise ValueError("Manifest must include at least one task or generator.")
         return self

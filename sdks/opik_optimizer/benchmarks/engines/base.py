@@ -19,6 +19,7 @@ class EngineCapabilities:
 class EngineRunResult:
     engine: str
     run_id: str | None = None
+    status: str = "succeeded"
     metadata: dict[str, Any] | None = None
 
 

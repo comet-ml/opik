@@ -18,6 +18,7 @@ class TaskPlan:
     test_mode: bool
     max_concurrent: int
     checkpoint_dir: str
+    auto_confirm: bool = False
     manifest_path: str | None = None
     retry_failed_run_id: str | None = None
     resume_run_id: str | None = None
@@ -35,6 +36,7 @@ class PlanInput:
     config_path: str | None
     retry_failed_run_id: str | None
     resume_run_id: str | None
+    auto_confirm: bool = False
 
 
 def compile_task_plan(data: PlanInput) -> TaskPlan:
@@ -43,6 +45,11 @@ def compile_task_plan(data: PlanInput) -> TaskPlan:
     test_mode = data.test_mode
 
     if data.config_path:
+        if data.demo_datasets or data.optimizers or data.models:
+            raise ValueError(
+                "Cannot combine --config with demo_datasets/optimizers/models filters; "
+                "remove filters or the config flag."
+            )
         manifest = load_manifest(data.config_path)
         manifest_tasks = manifest_to_task_specs(
             manifest, fallback_test_mode=data.test_mode
@@ -86,6 +93,7 @@ def compile_task_plan(data: PlanInput) -> TaskPlan:
         test_mode=test_mode,
         max_concurrent=data.max_concurrent,
         checkpoint_dir=data.checkpoint_dir,
+        auto_confirm=data.auto_confirm,
         manifest_path=data.config_path,
         retry_failed_run_id=data.retry_failed_run_id,
         resume_run_id=data.resume_run_id,
