@@ -272,28 +272,31 @@ component:
     networkPolicy:
       enabled: false
       annotations: {}
-      engineEgress:
-        ipBlock: 0.0.0.0/0
-        except: []
-          # example networks to block
-          # # Standard RFC1918 Private Ranges
-          # - 10.0.0.0/8
-          # - 172.16.0.0/12
-          # - 192.168.0.0/16
-          # # EKS / Carrier Grade NAT
-          # - 100.64.0.0/10
-          # # AWS Metadata & Link Local (Very Important)
-          # - 169.254.0.0/16
-          # # Loopback range
-          # - 127.0.0.0/8
-          # # Reserved / Protocol Ranges
-          # - 192.0.0.0/24
-          # - 198.18.0.0/15
-          # Multicast ranges
-          # - 224.0.0.0/4
-          # Broadcast address
-          # - 255.255.255.255/32
-
+      additionalRules: 
+      # example networks to block
+      # Allow egress to public internet, excluding private / reserved ranges
+        - to:
+          - ipBlock:
+              cidr: 0.0.0.0/0
+              except:
+                # Standard RFC1918 Private Ranges
+                - 10.0.0.0/8
+                - 172.16.0.0/12
+                - 192.168.0.0/16
+                # EKS / Carrier Grade NAT
+                - 100.64.0.0/10
+                # AWS Metadata & Link Local (Very Important)
+                - 169.254.0.0/16
+                # Loopback range
+                - 127.0.0.0/8
+                # Reserved / Protocol Ranges
+                - 192.0.0.0/24
+                - 198.18.0.0/15
+                # Multicast ranges
+                - 224.0.0.0/4
+                # Broadcast address
+                - 255.255.255.255/32
+      
     service:
       type: ClusterIP
       ports:
