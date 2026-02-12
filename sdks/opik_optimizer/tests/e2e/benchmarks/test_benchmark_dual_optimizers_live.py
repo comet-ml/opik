@@ -8,7 +8,7 @@ import pytest
 from opik.evaluation.metrics.heuristics.equals import Equals
 
 from benchmarks.configs import registry as benchmark_config
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.results import TaskSpec
 from benchmarks.engines.local import engine as local_engine
 from tests.e2e.optimizers.utils import system_message, user_message
 from ._benchmark_test_helpers import InlineExecutor
@@ -127,14 +127,14 @@ def test_dual_optimizer_run_live(
     )
 
     tasks = [
-        BenchmarkTaskSpec(
+        TaskSpec(
             dataset_name="tiny_test",
             optimizer_name="few_shot",
             model_name="openai/gpt-4o-mini",
             test_mode=True,
             optimizer_prompt_params={"max_trials": 1, "n_samples": 1},
         ),
-        BenchmarkTaskSpec(
+        TaskSpec(
             dataset_name="tiny_test",
             optimizer_name="evolutionary_optimizer",
             model_name="openai/gpt-4o-mini",

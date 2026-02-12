@@ -19,7 +19,7 @@ import hashlib
 from benchmarks.configs import registry as benchmark_config
 from benchmarks.configs.registry import BenchmarkDatasetConfig
 import opik_optimizer.datasets
-from benchmarks.core.benchmark_task import (
+from benchmarks.core.results import (
     DatasetMetadata,
     TaskEvaluationResult,
     EvaluationSet,
@@ -28,7 +28,7 @@ from benchmarks.core.benchmark_task import (
     TASK_STATUS_FAILED,
     TASK_STATUS_SUCCESS,
 )
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.results import TaskSpec
 from opik_optimizer import BaseOptimizer, ChatPrompt
 from opik_optimizer.utils import reporting as reporting_utils
 from benchmarks.utils.logging import console
@@ -37,7 +37,7 @@ from rich.panel import Panel
 from rich.console import Group
 from rich import box
 from rich.text import Text
-from benchmarks.core.benchmark_results import (
+from benchmarks.core.results import (
     PreflightContext,
     PreflightEntry,
     PreflightReport,
@@ -269,7 +269,7 @@ def _safe_version(pkg: str) -> str | None:
 
 
 def preflight_tasks(
-    task_specs: list[BenchmarkTaskSpec], info: dict[str, Any] | None = None
+    task_specs: list[TaskSpec], info: dict[str, Any] | None = None
 ) -> PreflightReport:
     """Validate datasets/metrics/optimizers before scheduling to fail fast."""
     errors: list[str] = []
@@ -323,7 +323,7 @@ def preflight_tasks(
             return f"{role}=None"
         return f"{role}={base or 'None'}"
 
-    def _format_splits(bundle: DatasetBundle, task: BenchmarkTaskSpec) -> str:
+    def _format_splits(bundle: DatasetBundle, task: TaskSpec) -> str:
         """Human-friendly split summary with dataset names and counts."""
         tokens: list[str] = []
         train_spec = task.datasets.get("train") if task.datasets else None

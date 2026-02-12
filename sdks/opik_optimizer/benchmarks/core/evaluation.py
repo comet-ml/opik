@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from benchmarks.core.benchmark_task import TaskResult
+from benchmarks.core.results import TaskResult
 from benchmarks.utils.task_runner import execute_task
 
 

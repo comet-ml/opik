@@ -6,8 +6,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from benchmarks.core.benchmark_task import TaskResult
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.results import TaskResult
+from benchmarks.core.results import TaskSpec
 from opik_optimizer import ChatPrompt
 
 
@@ -57,7 +57,7 @@ class BenchmarkCheckpointManager:
         demo_datasets: list[str],
         optimizers: list[str],
         models: list[str],
-        task_specs: list[BenchmarkTaskSpec],
+        task_specs: list[TaskSpec],
     ):
         self.checkpoint_timestamp = time.time()
         self.checkpoint_folder = os.path.abspath(checkpoint_folder)
@@ -105,9 +105,7 @@ class BenchmarkCheckpointManager:
             self.models = checkpoint_data["models"]
             tasks_data = checkpoint_data.get("tasks")
             if tasks_data:
-                self.task_specs = [
-                    BenchmarkTaskSpec.from_dict(task) for task in tasks_data
-                ]
+                self.task_specs = [TaskSpec.from_dict(task) for task in tasks_data]
             else:
                 raise ValueError(
                     "Checkpoint file is missing the 'tasks' field. "

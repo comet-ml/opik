@@ -2,9 +2,9 @@
 Modal worker function for running opik_optimizer benchmarks.
 
 This module contains the deployable Modal function that runs individual benchmark tasks.
-Deploy this with: modal deploy benchmarks/runners/benchmark_worker.py
+Deploy this with: modal deploy benchmarks/engines/modal/worker.py
 
-Once deployed, the worker can be triggered by benchmarks/runners/run_benchmark.py --modal without requiring
+Once deployed, the worker can be triggered by benchmarks/run_benchmark.py --modal without requiring
 your local machine to stay running.
 """
 
@@ -121,7 +121,7 @@ def run_optimization_modal(
 
     # Import core logic modules
     import time
-    from benchmarks.core.benchmark_task import TASK_STATUS_RUNNING, TaskResult
+    from benchmarks.core.results import TASK_STATUS_RUNNING, TaskResult
     from benchmarks.engines.modal.engine import run_optimization_task
     from benchmarks.engines.modal.volume import save_result_to_volume
 

@@ -8,7 +8,7 @@ import opik_optimizer
 import pytest
 
 from benchmarks.configs import registry as benchmark_config
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.results import TaskSpec
 from benchmarks.engines.local import engine as local_engine
 from tests.e2e.optimizers.utils import system_message
 from ._benchmark_test_helpers import InlineExecutor
@@ -136,7 +136,7 @@ def test_run_benchmark_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         checkpoint_dir=str(tmp_path),
     )
 
-    task = BenchmarkTaskSpec(
+    task = TaskSpec(
         dataset_name="toy_train",
         optimizer_name="dummy",
         model_name="dummy-model",

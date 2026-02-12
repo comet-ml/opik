@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from benchmarks.core.benchmark_task import TaskResult
+from benchmarks.core.results import TaskResult
 from benchmarks.utils.serialization import make_serializable
 
 

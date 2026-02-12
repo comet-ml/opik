@@ -5,12 +5,12 @@ from typing import Any
 
 from benchmarks.configs.manifest import load_manifest, manifest_to_task_specs
 from benchmarks.configs import registry as benchmark_config
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.results import TaskSpec
 
 
 @dataclass(frozen=True)
 class TaskPlan:
-    tasks: list[BenchmarkTaskSpec]
+    tasks: list[TaskSpec]
     demo_datasets: list[str]
     optimizers: list[str]
     models: list[str]
@@ -38,7 +38,7 @@ class PlanInput:
 
 
 def compile_task_plan(data: PlanInput) -> TaskPlan:
-    manifest_tasks: list[BenchmarkTaskSpec] | None = None
+    manifest_tasks: list[TaskSpec] | None = None
     seed = data.seed
     test_mode = data.test_mode
 
@@ -66,7 +66,7 @@ def compile_task_plan(data: PlanInput) -> TaskPlan:
         optimizers = data.optimizers or list(benchmark_config.OPTIMIZER_CONFIGS.keys())
         models = data.models or list(benchmark_config.MODELS)
         tasks = [
-            BenchmarkTaskSpec(
+            TaskSpec(
                 dataset_name=dataset_name,
                 optimizer_name=optimizer_name,
                 model_name=model_name,

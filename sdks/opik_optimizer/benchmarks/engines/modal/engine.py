@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from typing import Any
 
 import opik
-from benchmarks.core.benchmark_task import TASK_STATUS_FAILED, TaskResult
+from benchmarks.core.results import TASK_STATUS_FAILED, TaskResult
 from benchmarks.core.evaluation import run_task_evaluation
 from benchmarks.core.planning import TaskPlan
 from benchmarks.engines.base import BenchmarkEngine, EngineCapabilities, EngineRunResult
@@ -225,7 +225,7 @@ class ModalEngine(BenchmarkEngine):
     )
 
     def run(self, plan: TaskPlan) -> EngineRunResult:
-        from benchmarks.runners.run_benchmark_modal import app, submit_benchmark_tasks
+        from benchmarks.run_benchmark_modal import app, submit_benchmark_tasks
 
         with app.run():
             submit_benchmark_tasks(
@@ -245,11 +245,11 @@ class ModalEngine(BenchmarkEngine):
 
     def deploy(self) -> EngineRunResult:
         subprocess.run(
-            ["modal", "deploy", "benchmarks/runners/benchmark_worker.py"],
+            ["modal", "deploy", "benchmarks/engines/modal/worker.py"],
             check=True,
         )
         subprocess.run(
-            ["modal", "deploy", "benchmarks/runners/run_benchmark_modal.py"],
+            ["modal", "deploy", "benchmarks/run_benchmark_modal.py"],
             check=True,
         )
         return EngineRunResult(

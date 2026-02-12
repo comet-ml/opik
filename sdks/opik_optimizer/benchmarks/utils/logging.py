@@ -33,7 +33,7 @@ from benchmarks.utils.display import render_active_task_line
 from benchmarks.utils.sinks import BenchmarkEvent, EventSink, NullSink
 
 if typing.TYPE_CHECKING:
-    from benchmarks.core.benchmark_task import TaskResult
+    from benchmarks.core.results import TaskResult
 
 console = Console(
     width=120,

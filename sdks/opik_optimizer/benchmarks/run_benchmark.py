@@ -16,11 +16,11 @@ from benchmarks.configs import registry as benchmark_config
 from benchmarks.core.deploy import deploy_engine
 from benchmarks.core.planning import PlanInput, compile_task_plan
 from benchmarks.core.runtime import run_plan
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.results import TaskSpec
 from benchmarks.engines.registry import list_engines
 
 
-def _print_manifest_summary(tasks: list[BenchmarkTaskSpec], console: Console) -> None:
+def _print_manifest_summary(tasks: list[TaskSpec], console: Console) -> None:
     table = Table(title="Manifest Summary", box=None, padding=(0, 1))
     table.add_column("Dataset", no_wrap=True)
     table.add_column("Splits", no_wrap=False)

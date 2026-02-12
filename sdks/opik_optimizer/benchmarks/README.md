@@ -10,7 +10,7 @@ Run benchmarks on your local machine:
 
 ```bash
  # Single dataset, single optimizer (test mode)
- python benchmarks/runners/run_benchmark.py \
+ python benchmarks/run_benchmark.py \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --models openai/gpt-4o-mini \
@@ -18,7 +18,7 @@ Run benchmarks on your local machine:
   --max-concurrent 1
 
  # Multiple datasets and optimizers
- python benchmarks/runners/run_benchmark.py \
+ python benchmarks/run_benchmark.py \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt \
   --max-concurrent 4
@@ -46,11 +46,11 @@ modal secret create opik-benchmarks \
   --force
 
 # 2. Deploy worker + coordinator (redo after code changes)
-modal deploy benchmarks/runners/benchmark_worker.py
-modal deploy benchmarks/runners/run_benchmark_modal.py
+modal deploy benchmarks/engines/modal/worker.py
+modal deploy benchmarks/run_benchmark_modal.py
 
 # 3. Submit benchmark tasks (engine can be selected explicitly)
-python benchmarks/runners/run_benchmark.py --engine modal \
+python benchmarks/run_benchmark.py --engine modal \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --models openai/gpt-4o-mini \
@@ -71,7 +71,7 @@ modal run benchmarks/check_results.py --run-id <RUN_ID> --raw       # full JSON
 Use CLI arguments for quick, interactive benchmarking:
 
 ```bash
-python benchmarks/runners/run_benchmark.py --engine local \
+python benchmarks/run_benchmark.py --engine local \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt \
   --models openai/gpt-4o-mini \
@@ -83,7 +83,7 @@ python benchmarks/runners/run_benchmark.py --engine local \
 Use JSON manifest files for reproducible, complex benchmark configurations:
 
 ```bash
-python benchmarks/runners/run_benchmark.py --config manifest.json
+python benchmarks/run_benchmark.py --config manifest.json
 ```
 
 **Example Manifest** (`manifest.example.json`):
@@ -193,35 +193,35 @@ All parameters work for both local and Modal execution:
 
 ```bash
 # Quick local test (1 task, ~5 minutes)
-python benchmarks/runners/run_benchmark.py \
+python benchmarks/run_benchmark.py \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --test-mode \
   --max-concurrent 1
 
 # Full local benchmark (multiple tasks)
-python benchmarks/runners/run_benchmark.py \
+python benchmarks/run_benchmark.py \
   --demo-datasets gsm8k hotpot_300 ai2_arc \
   --optimizers few_shot meta_prompt \
   --max-concurrent 4
 
 # Modal cloud execution (high concurrency)
-python benchmarks/runners/run_benchmark.py --engine modal \
+python benchmarks/run_benchmark.py --engine modal \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt evolutionary_optimizer \
   --max-concurrent 10
 
 # Resume interrupted run
-python benchmarks/runners/run_benchmark.py --engine modal --resume-run-id run_20250423_153045
+python benchmarks/run_benchmark.py --engine modal --resume-run-id run_20250423_153045
 
 # Retry only failed tasks
-python benchmarks/runners/run_benchmark.py --engine modal --retry-failed-run-id run_20250423_153045
+python benchmarks/run_benchmark.py --engine modal --retry-failed-run-id run_20250423_153045
 
 # Using a manifest file (local)
-python benchmarks/runners/run_benchmark.py --config manifest.json
+python benchmarks/run_benchmark.py --config manifest.json
 
 # Using a manifest file (Modal)
-python benchmarks/runners/run_benchmark.py --engine modal --config manifest.json --max-concurrent 10
+python benchmarks/run_benchmark.py --engine modal --config manifest.json --max-concurrent 10
 ```
 
 ## Results
@@ -275,8 +275,8 @@ modal secret create opik-benchmarks \
 If you modify the benchmark code, redeploy both worker and coordinator:
 
 ```bash
-modal deploy benchmarks/runners/benchmark_worker.py
-modal deploy benchmarks/runners/run_benchmark_modal.py
+modal deploy benchmarks/engines/modal/worker.py
+modal deploy benchmarks/run_benchmark_modal.py
 ```
 
 ## File Structure
@@ -290,14 +290,14 @@ The benchmark system is organized into several modules:
 - **`packages/`** - Dataset/package-specific wiring (agents/prompts/metrics)
 - **`utils/`** - Shared sinks/display/logging/serialization helpers
 
-### Entry Points (`runners/`)
+### Entry Points
 
-- **`runners/run_benchmark.py`** - Main unified engine-driven entry point
+- **`run_benchmark.py`** - Main unified engine-driven entry point
   - Compiles CLI/manifest into a canonical plan (`core/planning.py`)
   - Runs/deploys via engine registry (`engines/registry.py`)
-- **`runners/run_benchmark_modal.py`** - Modal submission and coordination logic
-  - Submits tasks to deployed `runners/benchmark_worker.py` function
-- **`runners/benchmark_worker.py`** - Modal worker function (deploy with `modal deploy benchmarks/runners/benchmark_worker.py`)
+- **`run_benchmark_modal.py`** - Modal submission and coordination logic
+  - Submits tasks to deployed `engines/modal/worker.py` function
+- **`engines/modal/worker.py`** - Modal worker function (deploy with `modal deploy benchmarks/engines/modal/worker.py`)
   - Imports `engines.modal.engine.run_optimization_task`
   - Imports `engines.modal.volume.save_result_to_volume`
 - **`check_results.py`** - View Modal results with clickable log links
@@ -307,7 +307,7 @@ The benchmark system is organized into several modules:
 ### Configuration & Core Logic
 
 - **`configs/registry.py`** - Dataset and optimizer configurations
-- **`core/benchmark_task.py`** - Result/task payload models
+- **`core/results.py`** - Result/task models and preflight report schema
 - **`core/state.py`** - Run state and checkpoint persistence
 - **`utils/task_runner.py`** - Core benchmark task execution logic shared by local + Modal runners
 
@@ -341,4 +341,4 @@ The benchmark system is organized into several modules:
 - Your machine can disconnect after Modal submission - tasks continue in the cloud
 - Results are persisted in Modal Volume indefinitely
 - Engines are pluggable via `benchmarks/engines/`; current engines are `local` and `modal`
-- The unified `benchmarks/runners/run_benchmark.py` entry point uses `--engine` (or `--modal` alias) to choose execution mode
+- The unified `benchmarks/run_benchmark.py` entry point uses `--engine` (or `--modal` alias) to choose execution mode

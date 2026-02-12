@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.results import TaskSpec
 
 
 class PromptMessage(BaseModel):
@@ -145,7 +145,7 @@ def load_manifest(path: str) -> BenchmarkManifest:
 
 def manifest_to_task_specs(
     manifest: BenchmarkManifest, fallback_test_mode: bool = False
-) -> list[BenchmarkTaskSpec]:
+) -> list[TaskSpec]:
     def _normalize_dataset_entry(
         dataset_field: str | dict[str, Any], datasets_field: dict[str, Any] | None
     ) -> tuple[str, dict[str, Any] | None]:
@@ -182,7 +182,7 @@ def manifest_to_task_specs(
     ) -> None:
         dataset_name, datasets_override = _normalize_dataset_entry(dataset, datasets)
         specs.append(
-            BenchmarkTaskSpec(
+            TaskSpec(
                 dataset_name=dataset_name,
                 optimizer_name=optimizer,
                 model_name=model,
@@ -196,7 +196,7 @@ def manifest_to_task_specs(
             )
         )
 
-    specs: list[BenchmarkTaskSpec] = []
+    specs: list[TaskSpec] = []
     default_test_mode = (
         manifest.test_mode if manifest.test_mode is not None else fallback_test_mode
     )

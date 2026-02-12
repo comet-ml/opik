@@ -5,19 +5,19 @@ Two ready-to-run manifests live in this directory. They use `tiny_test` with sin
 ## Local runs
 
 ```bash
-PYTHONPATH=. python benchmarks/runners/run_benchmark.py --config scripts/benchmarks/tasks.example.json
-PYTHONPATH=. python benchmarks/runners/run_benchmark.py --config scripts/benchmarks/generator.example.json
+PYTHONPATH=. python benchmarks/run_benchmark.py --config scripts/benchmarks/tasks.example.json
+PYTHONPATH=. python benchmarks/run_benchmark.py --config scripts/benchmarks/generator.example.json
 ```
 
 ## Modal runs
 
 ```bash
-PYTHONPATH=. python benchmarks/runners/run_benchmark.py --modal --config scripts/benchmarks/tasks.example.json
-PYTHONPATH=. python benchmarks/runners/run_benchmark.py --modal --config scripts/benchmarks/generator.example.json
+PYTHONPATH=. python benchmarks/run_benchmark.py --modal --config scripts/benchmarks/tasks.example.json
+PYTHONPATH=. python benchmarks/run_benchmark.py --modal --config scripts/benchmarks/generator.example.json
 # Deploy worker (once, after setting secrets):
-# modal deploy benchmarks/runners/benchmark_worker.py
+# modal deploy benchmarks/engines/modal/worker.py
 # Deploy coordinator (redo after coordinator code changes):
-# modal deploy benchmarks/runners/run_benchmark_modal.py
+# modal deploy benchmarks/run_benchmark_modal.py
 ```
 
 ## Manifests

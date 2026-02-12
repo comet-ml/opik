@@ -10,14 +10,14 @@ from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wai
 from datetime import datetime
 from typing import Any
 
-from benchmarks.core.benchmark_results import BenchmarkRunResult
-from benchmarks.core.benchmark_task import (
+from benchmarks.core.results import BenchmarkRunResult
+from benchmarks.core.results import (
     TASK_STATUS_FAILED,
     TASK_STATUS_PENDING,
     TASK_STATUS_RUNNING,
     TaskResult,
 )
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.results import TaskSpec
 from benchmarks.core.planning import TaskPlan
 from benchmarks.core.state import BenchmarkCheckpointManager
 from benchmarks.engines.base import BenchmarkEngine, EngineCapabilities, EngineRunResult
@@ -75,7 +75,7 @@ class BenchmarkRunner:
     def _write_run_results(
         self,
         checkpoint_folder: str,
-        task_specs: list[BenchmarkTaskSpec],
+        task_specs: list[TaskSpec],
         task_results: list[TaskResult],
         preflight_report: Any | None,
     ) -> str:
@@ -100,7 +100,7 @@ class BenchmarkRunner:
         models: list[str],
         retry_failed_run_id: str | None,
         resume_run_id: str | None,
-        task_specs: list[BenchmarkTaskSpec] | None = None,
+        task_specs: list[TaskSpec] | None = None,
         preflight_info: dict[str, Any] | None = None,
     ) -> None:
         if resume_run_id and retry_failed_run_id:
@@ -120,8 +120,8 @@ class BenchmarkRunner:
         preflight_info.setdefault("checkpoint_dir", self.checkpoint_dir)
 
         if task_specs is None:
-            tasks: list[BenchmarkTaskSpec] = [
-                BenchmarkTaskSpec(
+            tasks: list[TaskSpec] = [
+                TaskSpec(
                     dataset_name=dataset_name,
                     optimizer_name=optimizer_name,
                     model_name=model_name,
