@@ -229,7 +229,7 @@ if modal is not None:
         modal.Image.debian_slim(python_version="3.12")
         .add_local_dir(
             local_path=os.path.abspath(
-                os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
+                os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, os.pardir)
             ),
             remote_path="/root/opik_optimizer_repo",
             ignore=[
@@ -246,7 +246,7 @@ if modal is not None:
         .pip_install("/root/opik_optimizer_repo")
         .add_local_dir(
             local_path=os.path.abspath(
-                os.path.join(os.path.dirname(__file__), os.pardir)
+                os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
             ),
             remote_path="/root/benchmarks",
             ignore=["__pycache__", ".venv", "benchmark_results"],

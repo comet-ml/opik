@@ -68,9 +68,7 @@ results_volume = modal.Volume.from_name(
 coordinator_image = (
     modal.Image.debian_slim(python_version="3.12")
     .add_local_dir(
-        local_path=os.path.abspath(
-            os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
-        ),
+        local_path=os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)),
         remote_path="/root/opik_optimizer_repo",
         ignore=[
             ".venv",
