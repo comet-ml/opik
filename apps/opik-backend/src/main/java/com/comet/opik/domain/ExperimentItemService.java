@@ -18,6 +18,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -31,6 +32,7 @@ public class ExperimentItemService {
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetItemDAO datasetItemDAO;
     private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
+    private final @NonNull TraceDAO traceDAO;
     private final @NonNull FeatureFlags featureFlags;
 
     public Mono<Void> create(Set<ExperimentItem> experimentItems) {
@@ -45,9 +47,55 @@ public class ExperimentItemService {
                     userName);
 
             log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
-            return experimentItemDAO.insert(experimentItemsWithValidIds)
+
+            return populateProjectIdFromTraces(experimentItemsWithValidIds)
+                    .flatMap(experimentItemDAO::insert)
                     .then();
         });
+    }
+
+    private Mono<Set<ExperimentItem>> populateProjectIdFromTraces(Set<ExperimentItem> experimentItems) {
+
+        // Find experiment items without project_id
+        var itemsWithoutProjectId = experimentItems.stream()
+                .filter(item -> item.projectId() == null)
+                .toList();
+
+        if (itemsWithoutProjectId.isEmpty()) {
+            log.debug("All experiment items have project_id set, skipping trace lookup");
+            return Mono.just(experimentItems);
+        }
+
+        // Extract trace IDs that need project_id lookup
+        List<UUID> traceIds = itemsWithoutProjectId.stream()
+                .map(ExperimentItem::traceId)
+                .distinct()
+                .toList();
+
+        log.info("Looking up project_id for '{}' traces to populate '{}' experiment items",
+                traceIds.size(), itemsWithoutProjectId.size());
+
+        // Query traces to get their project IDs
+        return traceDAO.getProjectIdsByTraceIds(traceIds)
+                .map(traceToProjectMap -> {
+                    // Update experiment items with project_id from traces
+                    return experimentItems.stream()
+                            .map(item -> {
+                                if (item.projectId() == null && traceToProjectMap.containsKey(item.traceId())
+                                        && traceToProjectMap.getOrDefault(item.traceId(), List.of()).size() == 1) {
+                                    UUID projectId = traceToProjectMap.get(item.traceId()).getFirst();
+
+                                    log.debug("Populating project_id '{}' for experiment item with trace_id '{}'",
+                                            projectId, item.traceId());
+
+                                    return item.toBuilder()
+                                            .projectId(projectId)
+                                            .build();
+                                }
+                                return item;
+                            })
+                            .collect(Collectors.toUnmodifiableSet());
+                });
     }
 
     private Set<ExperimentItem> validateExperimentItemIdsAndWorkspace(

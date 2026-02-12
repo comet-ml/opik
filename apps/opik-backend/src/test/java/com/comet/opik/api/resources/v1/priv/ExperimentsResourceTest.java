@@ -513,9 +513,9 @@ class ExperimentsResourceTest {
                 io.dropwizard.jersey.errors.ErrorMessage errorMessage) {
             var workspaceName = UUID.randomUUID().toString();
 
-            var createRequest = createItemsWithoutTrace();
-
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var createRequest = createItemsWithoutTrace(okApikey, workspaceName);
 
             createAndAssert(createRequest, okApikey, workspaceName);
 
@@ -760,7 +760,7 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(API_KEY, workspaceName, WORKSPACE_ID);
 
-            var createRequest = createItemsWithoutTrace();
+            var createRequest = createItemsWithoutTrace(API_KEY, workspaceName);
 
             createAndAssert(createRequest, API_KEY, workspaceName);
             createRequest.experimentItems().forEach(item -> getAndAssert(item, workspaceName, API_KEY));
@@ -843,7 +843,7 @@ class ExperimentsResourceTest {
     }
 
     private ExperimentItemsBatch getExperimentItemsBatch() {
-        ExperimentItemsBatch itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+        var itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
 
         return itemsBatch.toBuilder()
                 .experimentItems(itemsBatch.experimentItems().stream()
@@ -1271,7 +1271,6 @@ class ExperimentsResourceTest {
         }
 
         private Stream<Arguments> getValidFilters() {
-            Integer random = new Random().nextInt(5);
             return Stream.of(
                     Arguments.of(
                             (Function<Experiment, ExperimentFilter>) experiment -> ExperimentFilter.builder()
@@ -4958,11 +4957,20 @@ class ExperimentsResourceTest {
     }
 
     private ExperimentItemsBatch createItemsWithoutTrace() {
+        return createItemsWithoutTrace(API_KEY, TEST_WORKSPACE);
+    }
+
+    private ExperimentItemsBatch createItemsWithoutTrace(String apiKey, String workspaceName) {
+        // Create a project to get a valid projectId (overriding PODAM's null default)
+        var project = podamFactory.manufacturePojo(Project.class);
+        var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
         ExperimentItemsBatch itemsBatch = getExperimentItemsBatch();
         return itemsBatch.toBuilder()
                 .experimentItems(itemsBatch.experimentItems().stream()
                         .map(experimentItem -> experimentItem.toBuilder()
                                 .traceVisibilityMode(null)
+                                .projectId(projectId) // Override PODAM's null default with valid projectId
                                 .build())
                         .collect(toSet()))
                 .build();
@@ -5074,9 +5082,13 @@ class ExperimentsResourceTest {
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            // Creating two traces with input, output and scores
-            var traceWithScores1 = createTraceWithScores(apiKey, workspaceName);
-            var traceWithScores2 = createTraceWithScores(apiKey, workspaceName);
+            // Create a project first
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Creating two traces with input, output and scores using the same project
+            var traceWithScores1 = createTraceWithScores(project.name(), apiKey, workspaceName);
+            var traceWithScores2 = createTraceWithScores(project.name(), apiKey, workspaceName);
 
             var traceIdToScoresMap = Stream
                     .concat(traceWithScores1.getRight().stream(), traceWithScores2.getRight().stream())
@@ -5124,6 +5136,7 @@ class ExperimentsResourceTest {
                     .map(experimentItem -> experimentItem.toBuilder()
                             .experimentId(experiment1.id())
                             .traceId(traceWithScores1.getLeft().id())
+                            .projectId(projectId)
                             .totalEstimatedCost(null)
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
@@ -5136,6 +5149,7 @@ class ExperimentsResourceTest {
             var experimentItems2 = PodamFactoryUtils.manufacturePojoList(podamFactory, ExperimentItem.class).stream()
                     .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id())
                             .traceId(traceWithScores2.getLeft().id())
+                            .projectId(projectId)
                             .totalEstimatedCost(null)
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
@@ -5267,9 +5281,13 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            // Creating two traces with input, output and scores
-            var traceWithScores1 = createTraceWithScores(apiKey, workspaceName);
-            var traceWithScores2 = createTraceWithScores(apiKey, workspaceName);
+            // Create a project first
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            // Creating two traces with input, output and scores using the same project
+            var traceWithScores1 = createTraceWithScores(project.name(), apiKey, workspaceName);
+            var traceWithScores2 = createTraceWithScores(project.name(), apiKey, workspaceName);
 
             Trace trace1 = traceWithScores1.getLeft();
             Trace trace2 = traceWithScores2.getLeft();
@@ -5290,6 +5308,7 @@ class ExperimentsResourceTest {
             var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experiment.id())
                     .traceId(trace1.id())
+                    .projectId(projectId)
                     .totalEstimatedCost(getTotalEstimatedCost(List.of(span1, span3)))
                     .usage(getUsage(List.of(span1, span3)))
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace1.startTime(),
@@ -5305,6 +5324,7 @@ class ExperimentsResourceTest {
             var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                     .experimentId(experiment.id())
                     .traceId(trace2.id())
+                    .projectId(projectId)
                     .totalEstimatedCost(getTotalEstimatedCost(List.of(span2, span4)))
                     .usage(getUsage(List.of(span2, span4)))
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace2.startTime(),
@@ -5362,6 +5382,25 @@ class ExperimentsResourceTest {
             spanResourceClient.createSpan(span, apiKey, workspaceName);
 
             return span;
+        }
+
+        private Pair<Trace, List<FeedbackScoreBatchItem>> createTraceWithScores(String projectName, String apiKey,
+                String workspaceName) {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            // Creating 5 scores peach each of the two traces above
+            return Pair.of(trace,
+                    PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
+                                    .id(trace.id())
+                                    .projectName(trace.projectName())
+                                    .value(podamFactory.manufacturePojo(BigDecimal.class))
+                                    .build())
+                            .collect(toList()));
         }
 
         private Pair<Trace, List<FeedbackScoreBatchItem>> createTraceWithScores(String apiKey,
@@ -5672,6 +5711,42 @@ class ExperimentsResourceTest {
         experimentResourceClient.createExperimentItem(request.experimentItems(), apiKey, workspaceName);
     }
 
+    private void createAndAssertWithTraces(ExperimentItemsBatch request, String apiKey, String workspaceName) {
+        // Create traces first so the fallback logic can populate projectId
+        // All traces will use the same project to ensure consistency
+        createTracesForExperimentItems(request.experimentItems(), apiKey, workspaceName);
+        experimentResourceClient.createExperimentItem(request.experimentItems(), apiKey, workspaceName);
+    }
+
+    private void createTracesForExperimentItems(Set<ExperimentItem> experimentItems, String apiKey,
+            String workspaceName) {
+        // Create a single project for all traces to ensure consistency
+        var projectName = podamFactory.manufacturePojo(Project.class).name();
+
+        // Extract unique trace IDs and create traces for them
+        var traces = experimentItems.stream()
+                .map(item -> {
+                    // Create a minimal trace with the same ID as referenced by the experiment item
+                    Instant now = Instant.now();
+                    return podamFactory.manufacturePojo(Trace.class).toBuilder()
+                            .id(item.traceId())
+                            .projectName(projectName) // Same project for all traces
+                            .startTime(now)
+                            .endTime(now.plusSeconds(1))
+                            .usage(null)
+                            .totalEstimatedCost(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .build();
+                })
+                .distinct()
+                .toList();
+
+        if (!traces.isEmpty()) {
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+        }
+    }
+
     private void getAndAssert(ExperimentItem expectedExperimentItem, String workspaceName, String apiKey) {
         var id = expectedExperimentItem.id();
         try (var actualResponse = client.target(getExperimentItemsPath())
@@ -5741,15 +5816,26 @@ class ExperimentsResourceTest {
                     .build();
 
             datasetResourceClient.createDatasetItems(
-                    DatasetItemBatch.builder().datasetName(dataset.name())
-                            .items(List.of(datasetItem)).build(),
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItem))
+                            .build(),
                     TEST_WORKSPACE,
                     API_KEY);
 
             // Create a bulk upload request with a single item
             var trace = createTrace();
+            UUID projectId = projectResourceClient.createProject(trace.projectName(), API_KEY, TEST_WORKSPACE);
 
-            var span = creatrSpan();
+            trace = trace.toBuilder()
+                    .projectId(projectId)
+                    .build();
+
+            var span = creatrSpan().toBuilder()
+                    .traceId(trace.id())
+                    .projectName(trace.projectName())
+                    .projectId(projectId)
+                    .build();
 
             var feedbackScore = createScore();
 
@@ -5788,6 +5874,7 @@ class ExperimentsResourceTest {
                     ExperimentItem.builder()
                             .datasetItemId(datasetItem.id())
                             .traceId(Optional.ofNullable(trace).map(Trace::id).orElse(null))
+                            .projectId(Optional.ofNullable(trace).map(Trace::projectId).orElse(null))
                             .duration(Optional.ofNullable(trace)
                                     .map(t -> DurationUtils.getDurationInMillisWithSubMilliPrecision(t.startTime(),
                                             t.endTime()))
@@ -5811,10 +5898,10 @@ class ExperimentsResourceTest {
         }
 
         private Span creatrSpan() {
+            Instant now = Instant.now();
             return podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .id(podamFactory.manufacturePojo(UUID.class))
-                    .startTime(Instant.now())
-                    .endTime(Instant.now().plusSeconds(1))
+                    .startTime(now)
+                    .endTime(now.plusSeconds(1))
                     .usage(null)
                     .totalEstimatedCost(null)
                     .createdBy(USER)
@@ -5823,10 +5910,10 @@ class ExperimentsResourceTest {
         }
 
         private Trace createTrace() {
+            Instant now = Instant.now();
             return podamFactory.manufacturePojo(Trace.class).toBuilder()
-                    .id(podamFactory.manufacturePojo(UUID.class))
-                    .startTime(Instant.now())
-                    .endTime(Instant.now().plusSeconds(1))
+                    .startTime(now)
+                    .endTime(now.plusSeconds(1))
                     .usage(null)
                     .totalEstimatedCost(null)
                     .createdBy(USER)

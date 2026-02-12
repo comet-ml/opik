@@ -24,6 +24,7 @@ public record ExperimentItem(
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID experimentId,
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID datasetItemId,
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID traceId,
+        @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) UUID projectId,
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, implementation = JsonListString.class) JsonNode input,
         @JsonView({
