@@ -44,7 +44,7 @@ class ChatPrompt:
         messages: list[dict[str, Any]] | None = None,
         tools: list[dict[str, Any]] | None = None,
         function_map: dict[str, Callable] | None = None,
-        model: str = "gpt-4o-mini",
+        model: str = "openai/gpt-5-nano",
         model_parameters: dict[str, Any] | None = None,
         model_kwargs: dict[str, Any] | None = None,
         **kwargs: Any,

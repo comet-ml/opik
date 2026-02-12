@@ -27,7 +27,7 @@ class AnswerCorrectnessMetric(base_metric.BaseMetric):
     def __init__(
         self,
         name: str = "answer_correctness",
-        model: str = "openai/gpt-4o-mini",
+        model: str = "openai/gpt-5-nano",
     ):
         super().__init__(name=name)
         self.model_name = model

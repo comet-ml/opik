@@ -17,7 +17,7 @@ except ImportError:
     )
 
 
-def count_tokens(text: str, model: str = "gpt-4") -> int:
+def count_tokens(text: str, model: str = "openai/gpt-5-nano") -> int:
     """Count tokens in text using litellm's token_counter or fallback approximation."""
     if LITELLM_TOKEN_COUNTER_AVAILABLE:
         try:
