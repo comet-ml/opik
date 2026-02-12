@@ -38,10 +38,14 @@ def print(reports: List[pytest.TestReport]) -> None:
     if episode_results:
         episode_passed = 0
         failed_scenarios = []
+        episode_total = 0
         reports_by_nodeid = {report.nodeid: report for report in reports}
         for nodeid, episode in episode_results.items():
             report = reports_by_nodeid.get(nodeid)
-            report_passed = bool(report.passed) if report is not None else False
+            if report is None:
+                continue
+            episode_total += 1
+            report_passed = bool(report.passed)
             is_passing = episode.is_passing() and report_passed
             if is_passing:
                 episode_passed += 1
@@ -50,7 +54,7 @@ def print(reports: List[pytest.TestReport]) -> None:
                 episode_failed += 1
 
         table.add_row()
-        table.add_row("Episodes:", f"{len(episode_results)}")
+        table.add_row("Episodes:", f"{episode_total}")
         table.add_row("Episodes passed:", f"{episode_passed}", style="green")
         table.add_row(
             "Episodes failed:",

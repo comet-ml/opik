@@ -9,7 +9,7 @@ from opik.simulation.episode import (
 )
 
 
-def test_episode_result_from_any_with_dict_uses_fallbacks():
+def test_episode_result__dict_input__uses_fallbacks__happyflow():
     episode = EpisodeResult.from_any(
         {"assertions": [{"name": "schema", "passed": True}]},
         fallback_scenario_id="fallback-scenario",
@@ -23,14 +23,14 @@ def test_episode_result_from_any_with_dict_uses_fallbacks():
     assert episode.assertions[0].passed is True
 
 
-def test_episode_result_from_any_returns_none_for_unsupported_type():
+def test_episode_result__unsupported_type_input__returns_none__happyflow():
     episode = EpisodeResult.from_any(
         42, fallback_scenario_id="fallback-scenario", fallback_thread_id="thread-123"
     )
     assert episode is None
 
 
-def test_episode_result_is_passing_checks_assertions_and_budgets():
+def test_episode_result__is_passing__checks_assertions_and_budgets__happyflow():
     passing_episode = EpisodeResult(
         scenario_id="scenario-ok",
         assertions=[
@@ -53,7 +53,7 @@ def test_episode_result_is_passing_checks_assertions_and_budgets():
     assert failing_episode.is_passing() is False
 
 
-def test_build_trajectory_summary_and_tool_budget():
+def test_build_trajectory_summary__with_tool_budget__happyflow():
     trajectory = [
         {"action": "search_docs", "observation": "ok"},
         {"observation": "no action"},
@@ -69,7 +69,7 @@ def test_build_trajectory_summary_and_tool_budget():
     assert budget.passed is True
 
 
-def test_make_max_turns_assertion():
+def test_make_max_turns_assertion__within_limit__happyflow():
     conversation_history = [
         {"role": "user", "content": "hello"},
         {"role": "assistant", "content": "hi"},

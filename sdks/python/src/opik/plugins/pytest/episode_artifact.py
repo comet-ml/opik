@@ -19,10 +19,14 @@ def build_episode_artifact(
 ) -> Dict[str, Any]:
     records: List[Dict[str, Any]] = []
     episode_passed = 0
+    episode_total = 0
 
     for nodeid, episode in episodes_by_nodeid.items():
         report = reports_by_nodeid.get(nodeid)
-        report_passed = bool(report.passed) if report is not None else False
+        if report is None:
+            continue
+        episode_total += 1
+        report_passed = bool(report.passed)
         episode_is_passing = episode.is_passing() and report_passed
         if episode_is_passing:
             episode_passed += 1
@@ -38,9 +42,9 @@ def build_episode_artifact(
 
     return {
         "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "episodes_total": len(episodes_by_nodeid),
+        "episodes_total": episode_total,
         "episodes_passed": episode_passed,
-        "episodes_failed": len(episodes_by_nodeid) - episode_passed,
+        "episodes_failed": episode_total - episode_passed,
         "results": records,
     }
 

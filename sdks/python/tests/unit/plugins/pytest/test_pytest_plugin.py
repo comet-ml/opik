@@ -78,22 +78,48 @@ def test_llm_unit__extracts_nodeid_from_pytest_env__happyflow(monkeypatch):
         test_runs_storage.clear()
 
 
-def test_get_test_run_content__wraps_non_dict_values(monkeypatch):
+def test_llm_unit__non_dict_values__wraps_input_expected_output_metadata__happyflow(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        decorator.config,
+        "get_from_user_inputs",
+        lambda: types.SimpleNamespace(pytest_experiment_enabled=True),
+    )
+    monkeypatch.setattr(decorator.opik, "track", lambda **kwargs: (lambda fn: fn))
+    monkeypatch.setattr(
+        decorator.opik_context,
+        "get_current_trace_data",
+        lambda: types.SimpleNamespace(id="trace-wrap"),
+    )
+    monkeypatch.setattr(
+        decorator.opik_context,
+        "get_current_span_data",
+        lambda: types.SimpleNamespace(id="span-wrap"),
+    )
+    monkeypatch.setattr(
+        decorator.opik_context,
+        "update_current_trace",
+        lambda **kwargs: None,
+    )
+    monkeypatch.setattr(
+        decorator.opik_context,
+        "update_current_span",
+        lambda **kwargs: None,
+    )
     monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_sample.py::test_case (call)")
 
+    @decorator.llm_unit()
     def sample_test(input, expected_output, metadata):
         return None
 
-    content = decorator._get_test_run_content(
-        func=sample_test,
-        args=("hello", "world", "meta"),
-        kwargs={},
-        argnames_mapping={
-            "input": "input",
-            "expected_output": "expected_output",
-            "metadata": "metadata",
-        },
-    )
+    nodeid = "tests/test_sample.py::test_case"
+    try:
+        sample_test("hello", "world", "meta")
+        content = test_runs_storage.TEST_RUNS_CONTENTS[nodeid]
+    finally:
+        test_runs_storage.clear()
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
 
     assert content.input == {
         "test_name": "tests/test_sample.py::test_case",
@@ -428,6 +454,69 @@ def test_pytest_sessionfinish__writes_episode_artifact__happyflow(
         assert payload["episodes_failed"] == 0
         assert payload["results"][0]["nodeid"] == nodeid
         assert payload["results"][0]["episode"]["scenario_id"] == "refund_flow_v1"
+    finally:
+        test_runs_storage.clear()
+
+
+def test_pytest_sessionfinish__episode_artifact_skips_missing_reports__happyflow(
+    monkeypatch, tmp_path
+):
+    nodeid = "tests/test_file.py::test_case"
+    missing_nodeid = "tests/test_file.py::test_case_not_run"
+    try:
+        monkeypatch.chdir(tmp_path)
+        item = types.SimpleNamespace(
+            nodeid=nodeid, report=types.SimpleNamespace(passed=True)
+        )
+        session = types.SimpleNamespace(items=[item])
+
+        test_runs_storage.LLM_UNIT_TEST_RUNS.add(nodeid)
+        test_runs_storage.TEST_RUNS_TO_TRACE_DATA[nodeid] = types.SimpleNamespace(
+            id="trace-episode-123"
+        )
+        test_runs_storage.TEST_RUNS_EPISODES[nodeid] = EpisodeResult(
+            scenario_id="reported_scenario",
+            assertions=[EpisodeAssertion(name="policy", passed=True)],
+        )
+        test_runs_storage.TEST_RUNS_EPISODES[missing_nodeid] = EpisodeResult(
+            scenario_id="not_reported_scenario",
+            assertions=[EpisodeAssertion(name="policy", passed=True)],
+        )
+
+        artifact_path = tmp_path / ".opik" / "episode-report.json"
+        monkeypatch.setattr(
+            hooks.config,
+            "get_from_user_inputs",
+            lambda: types.SimpleNamespace(
+                pytest_passed_score_name="Result",
+                pytest_experiment_dataset_name="pytest-ds",
+                pytest_experiment_name_prefix="Pytest-Run",
+                pytest_episode_artifact_enabled=True,
+                pytest_episode_artifact_path=".opik/episode-report.json",
+            ),
+        )
+
+        class FakeClient:
+            def log_traces_feedback_scores(self, scores):
+                return None
+
+            def flush(self):
+                return None
+
+        monkeypatch.setattr(
+            hooks.opik_client, "get_client_cached", lambda: FakeClient()
+        )
+        monkeypatch.setattr(hooks.experiment_runner, "run", lambda **kwargs: None)
+
+        hooks.pytest_sessionfinish(session=session, exitstatus=0)
+
+        assert artifact_path.exists()
+        payload = json.loads(artifact_path.read_text())
+        assert payload["episodes_total"] == 1
+        assert payload["episodes_passed"] == 1
+        assert payload["episodes_failed"] == 0
+        assert len(payload["results"]) == 1
+        assert payload["results"][0]["episode"]["scenario_id"] == "reported_scenario"
     finally:
         test_runs_storage.clear()
 

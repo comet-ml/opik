@@ -31,7 +31,10 @@ def get_dataset_item_id_finder(
     }
 
     def callback(content: test_run_content.TestRunContent) -> Optional[str]:
-        content_str = _serialize_content(dataclasses.asdict(content))
+        normalized_content = dict_utils.remove_none_from_dict(
+            dataclasses.asdict(content)
+        )
+        content_str = _serialize_content(normalized_content)
         result = dataset_item_content_to_ids.get(content_str, None)
         return result
 
