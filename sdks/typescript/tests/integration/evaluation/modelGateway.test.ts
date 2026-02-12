@@ -7,6 +7,7 @@ import { Hallucination } from "@/evaluation/metrics/llmJudges/hallucination/Hall
 import {
   shouldRunIntegrationTests,
   getIntegrationTestStatus,
+  hasAnthropicApiKey,
 } from "../api/shouldRunIntegrationTests";
 import { createQADataset, cleanupDatasets } from "./helpers/testData";
 
@@ -138,11 +139,12 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
   });
 
   describe("evaluatePrompt with Different Providers", () => {
-    it("should work with Anthropic model (Claude)", async () => {
-      const dataset = await createQADataset(client);
-      createdDatasetNames.push(dataset.name);
+    it.skipIf(!hasAnthropicApiKey())(
+      "should work with Anthropic model (Claude)",
+      async () => {
+        const dataset = await createQADataset(client);
+        createdDatasetNames.push(dataset.name);
 
-      try {
         const result = await evaluatePrompt({
           dataset,
           messages: [{ role: "user", content: "{{question}}" }],
@@ -152,15 +154,9 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
 
         expect(result.testResults.length).toBe(1);
         expect(result.testResults[0].testCase.taskOutput.output).toBeDefined();
-      } catch (error) {
-        // Skip if Anthropic API key not configured
-        if (error instanceof Error && error.message.includes("API key")) {
-          console.log("Skipping Anthropic test - API key not configured");
-        } else {
-          throw error;
-        }
-      }
-    }, 60000);
+      },
+      60000
+    );
 
     it("should work with Google Gemini model", async () => {
       const dataset = await createQADataset(client);
