@@ -48,8 +48,6 @@ class QueueConsumer(threading.Thread):
             message = self._message_queue.get(timeout=SLEEP_BETWEEN_LOOP_ITERATIONS)
             self.idling = False
 
-            # TODO: insert here connection restore logic with replay of collected messages
-
             if message is None:
                 return
 

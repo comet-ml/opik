@@ -6,10 +6,13 @@ import tempfile
 import threading
 import time
 from enum import unique, IntEnum
-from typing import List, NamedTuple, Callable, Optional, Dict, Iterator
+from typing import List, NamedTuple, Optional, Dict, Iterator
 
 from opik.message_processing import messages
 from opik.message_processing.replay import message_serialization
+
+from .types import ReplayCallback
+
 
 DEFAULT_DB_FILE = "opik_messages.db"
 DEFAULT_BATCH_SIZE = 100
@@ -73,9 +76,6 @@ class DBMessage(NamedTuple):
     type: str
     json: str
     status: MessageStatus
-
-
-ReplayCallback = Callable[[messages.BaseMessage], None]
 
 
 class DBManager:

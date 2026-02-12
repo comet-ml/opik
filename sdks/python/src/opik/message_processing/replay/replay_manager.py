@@ -1,0 +1,133 @@
+import logging
+import threading
+import time
+from typing import Optional
+
+from opik.healthcheck import connection_monitor
+from . import db_manager, types
+from .. import messages
+
+
+LOGGER = logging.getLogger(__name__)
+
+
+class ReplayManager(threading.Thread):
+    """
+    Manages replaying messages to the server for a connection management system.
+
+    The ReplayManager is responsible for ensuring that messages which fail to be
+    delivered due to dropped connections are replayed to the server
+    when the connection is restored. It continuously monitors the connection status
+    and triggers failed message replays as necessary. The class runs in its own
+    thread, leveraging the threading.Thread base class.
+    """
+
+    def __init__(
+        self,
+        monitor: connection_monitor.OpikConnectionMonitor,
+        tick_interval_seconds: float = 0.3,
+    ):
+        """
+        Initializes the ReplayManager instance.
+
+        Creates the replay manager thread with a specified connection monitor and tick interval.
+
+        Args:
+            monitor: An instance of OpikConnectionMonitor used for monitoring the connection.
+            tick_interval_seconds: Interval in seconds between execution ticks. Default is 0.3.
+        """
+        super().__init__(daemon=True, name="ReplayManager")
+        self._db_manager = db_manager.DBManager()
+        self._running = True
+        self._monitor = monitor
+        self._replay_callback: Optional[types.ReplayCallback] = None
+        self._tick_interval_seconds = tick_interval_seconds
+        self._next_tick_time = time.time() + self._tick_interval_seconds
+        self._in_failed_messages_replay = False
+        self._in_failed_messages_replay_repetitions = 0
+
+    def start(self) -> None:
+        self._check_replay_callback()
+        super().start()
+
+    def run(self) -> None:
+        try:
+            while self._running:
+                self._loop()
+        finally:
+            # release the database connection
+            self._db_manager.close()
+
+    @property
+    def has_server_connection(self) -> bool:
+        """Checks if SDK has a connection to the OPIK server."""
+        return self._monitor.has_server_connection
+
+    def register_message(self, message: messages.BaseMessage) -> None:
+        """Registers a message to be replayed if the connection is lost."""
+        self._db_manager.register_message(message)
+
+    def unregister_message(self, message_id: int) -> None:
+        """Unregisters a message from being replayed if the connection is lost."""
+        self._db_manager.update_message(
+            message_id, status=db_manager.MessageStatus.delivered
+        )
+
+    def message_sent_failed(
+        self, message_id: int, failure_reason: Optional[str] = None
+    ) -> None:
+        """Notifies the manager that a message was not sent due to a connection failure."""
+        self._monitor.connection_failed(failure_reason=failure_reason)
+        self._db_manager.update_message(
+            message_id, status=db_manager.MessageStatus.failed
+        )
+
+    def set_replay_callback(self, callback: types.ReplayCallback) -> None:
+        """Sets the callback to be invoked when replaying failed messages."""
+        self._replay_callback = callback
+
+    def close(self) -> None:
+        """Stop the replay manager."""
+        self._running = False
+
+    def flush(self) -> None:
+        """Force replay of all failed messages to the server."""
+        self._check_replay_callback()
+        self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore
+
+    def _loop(self) -> None:
+        now = time.time()
+        if now < self._next_tick_time:
+            return
+
+        try:
+            status = self._monitor.tick()
+            if status == connection_monitor.ConnectionStatus.connection_restored:
+                self._monitor.reset()
+                # the connection was restored, replay all failed messages
+                self._check_replay_callback()
+                if self._replay_callback is not None:
+                    self._db_manager.replay_failed_messages(self._replay_callback)
+
+            self._in_failed_messages_replay = False
+        except Exception as ex:
+            if not self._in_failed_messages_replay:
+                self._in_failed_messages_replay = True
+                log_level = logging.WARNING
+            else:
+                log_level = logging.DEBUG
+
+            LOGGER.log(
+                log_level,
+                "Failed to tick the connection monitor or replay failed messages, will repeat. Reason: %s",
+                ex,
+                exc_info=ex,
+            )
+
+        # schedule the next tick after the potential replay above
+        self._next_tick_time = time.time() + self._tick_interval_seconds
+
+    def _check_replay_callback(self) -> None:
+        assert self._replay_callback is not None, (
+            "Replay callback must be set before starting the replay manager"
+        )
