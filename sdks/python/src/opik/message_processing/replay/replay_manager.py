@@ -93,6 +93,7 @@ class ReplayManager(threading.Thread):
     def flush(self) -> None:
         """Force replay of all failed messages to the server."""
         self._check_replay_callback()
+        # ignore MyPy check because already asserted above
         self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore
 
     def _loop(self) -> None:
@@ -106,8 +107,8 @@ class ReplayManager(threading.Thread):
                 self._monitor.reset()
                 # the connection was restored, replay all failed messages
                 self._check_replay_callback()
-                if self._replay_callback is not None:
-                    self._db_manager.replay_failed_messages(self._replay_callback)
+                # ignore MyPy check because already asserted above
+                self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore
 
             self._in_failed_messages_replay = False
         except Exception as ex:
