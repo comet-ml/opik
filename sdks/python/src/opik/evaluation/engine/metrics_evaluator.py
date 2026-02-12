@@ -109,8 +109,8 @@ def _compute_metric_scores(
                     value=0.0,
                     reason=str(exception),
                     metadata={
-                        "error_type": type(exception).__name__,
-                        "error_message": str(exception),
+                        "_error_type": type(exception).__name__,
+                        "_error_message": str(exception),
                     },
                     scoring_failed=True,
                 )
