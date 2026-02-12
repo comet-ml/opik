@@ -306,7 +306,7 @@ The benchmark system is organized into several modules:
 
 ### Configuration & Core Logic
 
-- **`core/benchmark_config.py`** - Dataset and optimizer configurations
+- **`configs/registry.py`** - Dataset and optimizer configurations
 - **`core/benchmark_task.py`** - Result/task payload models
 - **`core/state.py`** - Run state and checkpoint persistence
 - **`utils/task_runner.py`** - Core benchmark task execution logic shared by local + Modal runners

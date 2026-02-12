@@ -44,11 +44,11 @@ from benchmarks.benchmark_constants import (
     DEFAULT_MAX_CONCURRENT,
     MODAL_SECRET_NAME,
 )
-from benchmarks.core import benchmark_config
+from benchmarks.configs import registry as benchmark_config
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.engines.modal import engine as modal_engine
 from benchmarks.utils.budgeting import resolve_optimize_params
 from benchmarks.utils.task_runner import preflight_tasks
-from benchmarks.utils import modal_helper
 
 from rich import box
 from rich.console import Console
@@ -192,8 +192,8 @@ def submit_benchmark_tasks(
         sys.exit(1)
 
     # Env key summary and suggested secret command
-    env_summary = modal_helper.summarize_env()
-    opik_cfg = modal_helper.read_opik_config()
+    env_summary = modal_engine.summarize_env()
+    opik_cfg = modal_engine.read_opik_config()
     missing_req = env_summary["missing_required"]
     summary_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 1))
     summary_table.add_row("Run ID", run_id)
@@ -231,10 +231,10 @@ def submit_benchmark_tasks(
     except Exception as e:
         volume_status = f"[red]{e}[/red]"
     summary_table.add_row("Volume", f"opik-benchmark-results ({volume_status})")
-    secret_cmd = modal_helper.build_secret_command(MODAL_SECRET_NAME, env_summary)
+    secret_cmd = modal_engine.build_secret_command(MODAL_SECRET_NAME, env_summary)
     summary_table.add_row("Secret from env", f"[dim]{secret_cmd}[/dim]")
     if env_summary["missing_optional"]:
-        template_cmd = modal_helper.build_placeholder_secret_command(MODAL_SECRET_NAME)
+        template_cmd = modal_engine.build_placeholder_secret_command(MODAL_SECRET_NAME)
         summary_table.add_row(
             "Template",
             f"[dim]{template_cmd}[/dim]\nInclude optional keys by exporting them, then rerun secret.",

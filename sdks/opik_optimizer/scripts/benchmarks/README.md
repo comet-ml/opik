@@ -22,5 +22,5 @@ PYTHONPATH=. python benchmarks/runners/run_benchmark.py --modal --config scripts
 
 ## Manifests
 
-- `tasks.example.json`: explicit tasks including a FewShot run on a 10-sample HotpotQA train slice using `benchmarks.metrics.hotpot.hotpot_f1`, and an Evolutionary run on `tiny_test` using `benchmarks.core.benchmark_config.create_levenshtein_ratio_metric`.
+- `tasks.example.json`: explicit tasks including a FewShot run on a 10-sample HotpotQA train slice using `benchmarks.packages.hotpot.metrics.hotpot_f1`, and an Evolutionary run on `tiny_test` using `benchmarks.configs.registry.create_levenshtein_ratio_metric`.
 - `generator.example.json`: generator that expands to 4 tasks (2 dataset variants × FewShot/Evolutionary) with a Hotpot F1 metrics override.

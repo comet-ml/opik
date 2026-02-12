@@ -1,1 +1,5 @@
-"""Benchmark manifest parsing and schemas."""
+"""Benchmark configs and manifest parsing."""
+
+from benchmarks.configs import registry
+
+__all__ = ["registry"]

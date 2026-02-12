@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
+from benchmarks.configs.manifest import load_manifest, manifest_to_task_specs
 from tests.unit.fixtures import system_message, user_message
 
 
@@ -66,7 +66,7 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
                     {"name": "few_shot", "optimizer_prompt_params": {"max_trials": 1}},
                     {"name": "evolutionary_optimizer"},
                 ],
-                "metrics": ["benchmarks.metrics.hotpot.hotpot_f1"],
+                "metrics": ["benchmarks.packages.hotpot.metrics.hotpot_f1"],
                 "test_mode": True,
                 "prompt": [
                     system_message("Answer the question briefly and correctly."),
@@ -85,7 +85,8 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
     assert len(tasks) == 8
     # Ensure metrics propagated
     assert all(
-        task.metrics == ["benchmarks.metrics.hotpot.hotpot_f1"] for task in tasks
+        task.metrics == ["benchmarks.packages.hotpot.metrics.hotpot_f1"]
+        for task in tasks
     )
     # Ensure dataset override expansion
     tiny_tasks = [t for t in tasks if t.dataset_name == "tiny_test"]

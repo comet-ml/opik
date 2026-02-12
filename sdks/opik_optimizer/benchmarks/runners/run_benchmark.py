@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from benchmarks.core import benchmark_config
+from benchmarks.configs import registry as benchmark_config
 from benchmarks.core.deploy import deploy_engine
 from benchmarks.core.planning import PlanInput, compile_task_plan
 from benchmarks.core.runtime import run_plan

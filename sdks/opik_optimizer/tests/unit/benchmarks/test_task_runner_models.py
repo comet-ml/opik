@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from benchmarks.utils import task_runner
-from benchmarks.core import benchmark_config
+from benchmarks.configs import registry as benchmark_config
 from benchmarks.core.benchmark_task import TaskResult
 from opik_optimizer import ChatPrompt
 from tests.unit.fixtures import user_message

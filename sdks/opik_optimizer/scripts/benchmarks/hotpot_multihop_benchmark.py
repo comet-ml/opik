@@ -1,7 +1,7 @@
 """HotpotQA multi-hop benchmark using shared benchmark agent components.
 
 This script is a thin runnable example that reuses the centralized benchmark
-agent implementation from `benchmarks/agents/hotpot_multihop_agent.py`.
+agent implementation from `benchmarks/packages/hotpot/agent.py`.
 """
 
 from __future__ import annotations
@@ -11,13 +11,13 @@ import os
 import random
 from typing import Any
 
-from benchmarks.metrics.hotpot import hotpot_f1
+from benchmarks.packages.hotpot.metrics import hotpot_f1
 from opik_optimizer import HierarchicalReflectiveOptimizer
 from opik_optimizer.datasets import hotpot
 from opik_optimizer.utils.logging import setup_logging
 from benchmarks.packages.hotpot.agent import build_hotpot_agent
 from benchmarks.packages.hotpot.prompts import build_hotpot_prompts
-from benchmarks.agents.hotpot_multihop_agent import bm25_wikipedia_search
+from benchmarks.packages.hotpot.agent import bm25_wikipedia_search
 
 PROJECT_HEADER = "Hotpot QA Multihop Optimization"
 SEED = 42
