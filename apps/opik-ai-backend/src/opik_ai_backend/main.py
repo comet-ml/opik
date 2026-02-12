@@ -18,6 +18,7 @@ if settings.new_relic_license_key:
     newrelic.agent.initialize()
 
 import aiohttp
+import openai
 import sentry_sdk
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
@@ -806,6 +807,10 @@ def get_fast_api_app(
                     sse_event_str = process_event_for_sse(event)
                     if sse_event_str:
                         yield sse_event_str
+            except openai.OpenAIError as e:
+                logger.exception("LLM provider error in event_generator: %s", e)
+                error_msg = json.dumps({"error": str(e)})
+                yield f"data: {error_msg}\n\n"
             except Exception as e:
                 logger.exception("Error in event_generator: %s", e)
                 error_msg = json.dumps(
