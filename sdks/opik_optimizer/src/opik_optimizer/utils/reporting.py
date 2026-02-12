@@ -125,8 +125,8 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
                     except (TypeError, ValueError):
                         pass
             postfix.update(kwargs)
-            postfix_text = "  ".join(
-                f"[dim]{key}[/]={self._format_postfix_value(value)}"
+            postfix_text = " | ".join(
+                f"[dim]{key}:[/] {self._format_postfix_value(value)}"
                 for key, value in postfix.items()
             )
             self._progress.update(self._task_id, postfix=postfix_text)

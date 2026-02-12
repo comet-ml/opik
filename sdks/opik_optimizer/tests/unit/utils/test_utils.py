@@ -145,7 +145,7 @@ def test_convert_tqdm_to_rich_adapter_supports_set_postfix() -> None:
         progress_bar.set_postfix({"score": "0.1234", "latency_ms": 90})
         assert progress_bar._progress.tasks[progress_bar._task_id].fields[
             "postfix"
-        ] == ("[dim]score[/]=0.1234  [dim]latency_ms[/]=90")
+        ] == ("[dim]score:[/] 0.1234 | [dim]latency_ms:[/] 90")
         progress_bar.update(1)
         progress_bar.close()
 
