@@ -131,6 +131,25 @@ def test_json_to_dict_handles_code_block_without_json_tag() -> None:
     assert result == [user_message("Test")]
 
 
+def test_convert_tqdm_to_rich_adapter_supports_set_postfix() -> None:
+    """Ensure tqdm adapter exposed by convert_tqdm_to_rich has set_postfix."""
+    from opik.evaluation.engine import evaluation_tasks_executor
+    from opik_optimizer.utils.reporting import convert_tqdm_to_rich
+
+    with convert_tqdm_to_rich(description="Eval", verbose=1):
+        progress_bar = evaluation_tasks_executor._tqdm(
+            disable=False,
+            desc="Eval",
+            total=2,
+        )
+        progress_bar.set_postfix({"score": "0.1234", "latency_ms": 90})
+        assert progress_bar._progress.tasks[progress_bar._task_id].fields[
+            "postfix"
+        ] == ("[dim]score:[/] 0.1234 | [dim]latency_ms:[/] 90")
+        progress_bar.update(1)
+        progress_bar.close()
+
+
 class TestConvertLiteralsToJsonCompatible:
     """Tests for _convert_literals_to_json_compatible function."""
 
