@@ -10,7 +10,6 @@ from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 _CONFIRM_CONSOLE = Console(width=120)
 
@@ -48,27 +47,6 @@ def ask_for_input_confirmation(
         except KeyboardInterrupt:
             _CONFIRM_CONSOLE.print("\nExiting due to user interruption.")
             sys.exit(0)
-
-
-def render_active_task_line(
-    dataset_name: str,
-    optimizer_name: str,
-    model_name: str,
-    short_id: str | None,
-) -> Text:
-    del model_name
-    if short_id:
-        return Text.assemble(
-            " • ",
-            (f"#{short_id} ", "dim"),
-            (f"{dataset_name}", "yellow"),
-            (f" [{optimizer_name}]", "dim"),
-        )
-    return Text.assemble(
-        " • ",
-        (f"{dataset_name}", "yellow"),
-        (f" [{optimizer_name}]", "dim"),
-    )
 
 
 def display_runs_table(runs: list[dict[str, Any]], console: Console) -> None:
