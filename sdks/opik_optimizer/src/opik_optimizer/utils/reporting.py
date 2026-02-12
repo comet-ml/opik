@@ -149,18 +149,6 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
             """Stop the progress bar."""
             self._progress.stop()
 
-        def set_postfix(
-            self, postfix: dict[str, Any] | None = None, refresh: bool = True
-        ) -> None:
-            """Support tqdm-compatible postfix updates used by Opik evaluator."""
-            _ = refresh
-            if not postfix:
-                return
-            summary = ", ".join(f"{key}={value}" for key, value in postfix.items())
-            if not summary:
-                return
-            self._progress.update(self._task_id, description=summary)
-
     def _tqdm_to_track(iterable: Any | None = None, *args: Any, **kwargs: Any) -> Any:
         """Convert tqdm to rich progress bars."""
         desc = kwargs.get("desc")
