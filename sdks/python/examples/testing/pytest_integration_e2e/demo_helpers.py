@@ -29,12 +29,38 @@ def setup_demo_logging() -> None:
 
     level_name = os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
-    handler = logging.StreamHandler()
-    handler.setLevel(level)
+    use_rich_logger = os.getenv("OPIK_EXAMPLE_USE_RICH_LOGGER", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    handler: logging.Handler
+    format_string = DEFAULT_LOG_FORMAT
+    if use_rich_logger:
+        try:
+            from rich.console import Console
+            from rich.logging import RichHandler
+
+            handler = RichHandler(
+                level=level,
+                show_time=True,
+                show_level=True,
+                show_path=False,
+                rich_tracebacks=False,
+                markup=False,
+                console=Console(stderr=True),
+            )
+            format_string = "%(message)s"
+        except Exception:
+            handler = logging.StreamHandler()
+            handler.setLevel(level)
+    else:
+        handler = logging.StreamHandler()
+        handler.setLevel(level)
 
     logging.basicConfig(
         level=level,
-        format=DEFAULT_LOG_FORMAT,
+        format=format_string,
         datefmt=DEFAULT_DATE_FORMAT,
         handlers=[handler],
         force=True,
@@ -133,7 +159,17 @@ def log_event(
 
 def log_json_debug(logger: logging.Logger, key: str, payload: Any) -> None:
     """Emit sorted JSON payload at debug level as a structured event."""
-    log_event(logger, "payload", level=logging.DEBUG, payload_key=key, payload=payload)
+    max_chars = int(os.getenv("OPIK_EXAMPLE_DEBUG_PAYLOAD_MAX_CHARS", "4000"))
+    rendered = json.dumps(payload, ensure_ascii=True, sort_keys=True)
+    if max_chars > 0 and len(rendered) > max_chars:
+        rendered = rendered[:max_chars] + "... (truncated)"
+    log_event(
+        logger,
+        "payload",
+        level=logging.DEBUG,
+        payload_key=key,
+        payload=rendered,
+    )
 
 
 def log_episode_panel(
