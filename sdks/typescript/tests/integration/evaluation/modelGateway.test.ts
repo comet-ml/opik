@@ -146,7 +146,7 @@ describe.skipIf(!shouldRunApiTests)("Model Gateway Integration", () => {
         const result = await evaluatePrompt({
           dataset,
           messages: [{ role: "user", content: "{{question}}" }],
-          model: "claude-3-5-sonnet-latest",
+          model: "claude-3-5-haiku-latest",
           nbSamples: 1,
         });
 
