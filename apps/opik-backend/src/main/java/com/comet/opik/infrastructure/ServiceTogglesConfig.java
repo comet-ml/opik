@@ -53,5 +53,5 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;
     @JsonProperty
-    @NotNull boolean llmJudgeDirectJsonpathEnabled;
+    @NotNull boolean onlineScoringDirectDataEnabled;
 }

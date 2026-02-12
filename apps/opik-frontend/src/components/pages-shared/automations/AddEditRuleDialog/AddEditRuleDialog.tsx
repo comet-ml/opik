@@ -173,7 +173,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED,
   );
   const isDirectJsonPathEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.LLM_JUDGE_DIRECT_JSONPATH_ENABLED,
+    FeatureToggleKeys.ONLINE_SCORING_DIRECT_DATA_ENABLED,
   );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
@@ -454,9 +454,13 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       } as EvaluatorsRule;
     }
 
+    const pythonCode = isDirectJsonPathEnabled
+      ? { ...formData.pythonCodeDetails, arguments: {} }
+      : formData.pythonCodeDetails;
+
     return {
       ...ruleData,
-      code: formData.pythonCodeDetails,
+      code: pythonCode,
     } as EvaluatorsRule;
   }, [form, isDirectJsonPathEnabled]);
 
@@ -725,6 +729,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     form={form}
                     projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
+                    hideVariables={isDirectJsonPathEnabled}
                   />
                 )}
 

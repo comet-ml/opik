@@ -23,12 +23,14 @@ type PythonCodeRuleDetailsProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
   projectName?: string;
   datasetColumnNames?: string[];
+  hideVariables?: boolean;
 };
 
 const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
   form,
   projectName,
   datasetColumnNames,
+  hideVariables,
 }) => {
   const theme = useCodemirrorTheme({
     editable: true,
@@ -60,8 +62,8 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                     onChange={(value) => {
                       field.onChange(value);
 
-                      // recalculate arguments (only for trace and span scope, not thread)
-                      if (!isThreadScope) {
+                      // recalculate arguments (only for trace and span scope, not thread, and not when variables are hidden)
+                      if (!isThreadScope && !hideVariables) {
                         const currentArguments = form.getValues(
                           "pythonCodeDetails.arguments",
                         );
@@ -72,7 +74,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                             .map((v) => v.name)
                             .forEach(
                               (v: string) =>
-                                (localArguments[v] = currentArguments[v] ?? ""),
+                                (localArguments[v] = currentArguments?.[v] ?? ""),
                             );
                         } catch (e) {
                           parsingArgumentsError = true;
@@ -97,7 +99,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
           );
         }}
       />
-      {!isThreadScope && (
+      {!isThreadScope && !hideVariables && (
         <FormField
           control={form.control}
           name="pythonCodeDetails.arguments"
