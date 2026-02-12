@@ -39,7 +39,7 @@ import {
   MessagesList,
   NamedPromptsList,
 } from "@/components/pages-shared/prompts/PromptMessageDisplay";
-import { useSaveToPromptLibrary } from "@/components/pages/CompareOptimizationsPage/useSaveToPromptLibrary";
+import { useSaveToPromptLibrary } from "@/components/pages-shared/shared/useSaveToPromptLibrary";
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE, PromptVersion } from "@/types/prompts";
 import { useToast } from "@/components/ui/use-toast";

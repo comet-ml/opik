@@ -16,7 +16,7 @@ import useLoadPlayground from "@/hooks/useLoadPlayground";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { convertMessages } from "./useSaveToPromptLibrary";
+import { convertMessages } from "@/components/pages-shared/shared/useSaveToPromptLibrary";
 
 type CompareOptimizationsHeaderProps = {
   title: string;
