@@ -114,6 +114,9 @@ class BatchFeedbackScoreDict(TypedDict):
     reason: NotRequired[Optional[str]]
     """An optional explanation or justification for the given score."""
 
+    metadata: NotRequired[Optional[dict[str, object]]]
+    """Optional structured metadata attached to the feedback score."""
+
 
 class ErrorInfoDict(TypedDict):
     """
