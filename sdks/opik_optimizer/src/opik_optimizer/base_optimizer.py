@@ -138,12 +138,9 @@ class BaseOptimizer(ABC):
         self._reporter: Any | None = None
         self._display: RunDisplay = display or OptimizationRunDisplay(verbose=verbose)
         self._last_evaluation_report: dict[str, Any] | None = None
-        self._evaluation_diagnostics: dict[str, Any] = {
-            "evaluations_run": 0,
-            "objective_scores": 0,
-            "objective_failed_scores": 0,
-            "failed_evaluations": [],
-        }
+        self._evaluation_diagnostics: dict[str, Any] = (
+            self._make_evaluation_diagnostics()
+        )
 
         # Initialize prompt library with overrides
         self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
@@ -219,7 +216,10 @@ class BaseOptimizer(ABC):
         """Reset all call counters for a new optimization run."""
         runtime.reset_usage(self)
         self._last_evaluation_report = None
-        self._evaluation_diagnostics = {
+        self._evaluation_diagnostics = self._make_evaluation_diagnostics()
+
+    def _make_evaluation_diagnostics(self) -> dict[str, Any]:
+        return {
             "evaluations_run": 0,
             "objective_scores": 0,
             "objective_failed_scores": 0,
@@ -920,6 +920,22 @@ class BaseOptimizer(ABC):
                 "failed_objective_samples": [],
             }
             self._last_evaluation_report = report
+            self._evaluation_diagnostics["evaluations_run"] += 1
+            self._evaluation_diagnostics["objective_failed_scores"] += 1
+            failed_evaluations = self._evaluation_diagnostics.setdefault(
+                "failed_evaluations", []
+            )
+            if isinstance(failed_evaluations, list):
+                failed_evaluations.append(
+                    {
+                        "name": objective_metric_name,
+                        "value": None,
+                        "reason": "no_result",
+                        "metadata": None,
+                    }
+                )
+                if len(failed_evaluations) > 20:
+                    del failed_evaluations[:-20]
             return
 
         objective_scores = task_evaluator._extract_objective_scores(

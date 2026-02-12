@@ -100,7 +100,9 @@ def test_evaluate_prompt_selection_policies(
                 task_output=output,
                 dataset_item_content={"id": "1", "input": "x"},
             ),
-            score_results=[score_result.ScoreResult(name=metric_func.__name__, value=1.0)],
+            score_results=[
+                score_result.ScoreResult(name=metric_func.__name__, value=1.0)
+            ],
             trial_id=0,
         )
         return (
@@ -443,3 +445,39 @@ def test_optimize_prompt_uses_injected_display(
     )
 
     assert spy.header_calls, "Injected display handler should be used"
+
+
+def test_evaluate_prompt_records_no_result_diagnostics(
+    monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
+) -> None:
+    optimizer = ConcreteOptimizer(model="gpt-4")
+    dataset = make_mock_dataset([{"id": "1", "input": "x"}])
+    metric = MagicMock()
+    metric.__name__ = "metric_fn"
+    agent = MagicMock()
+
+    def fake_evaluate_with_result(**kwargs: Any):
+        _ = kwargs
+        return 0.0, None
+
+    monkeypatch.setattr(
+        "opik_optimizer.base_optimizer.task_evaluator.evaluate_with_result",
+        fake_evaluate_with_result,
+    )
+
+    score = optimizer.evaluate_prompt(
+        prompt=simple_chat_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=agent,
+        n_threads=1,
+        verbose=0,
+    )
+
+    assert score == 0.0
+    assert optimizer._evaluation_diagnostics["evaluations_run"] == 1
+    assert optimizer._evaluation_diagnostics["objective_scores"] == 0
+    assert optimizer._evaluation_diagnostics["objective_failed_scores"] == 1
+    failed = optimizer._evaluation_diagnostics["failed_evaluations"]
+    assert isinstance(failed, list)
+    assert failed[-1]["reason"] == "no_result"
