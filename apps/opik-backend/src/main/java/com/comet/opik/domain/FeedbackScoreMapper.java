@@ -32,6 +32,8 @@ public interface FeedbackScoreMapper {
     @Mapping(target = "name", expression = "java(item.name())")
     @Mapping(target = "value", expression = "java(item.value())")
     @Mapping(target = "reason", expression = "java(item.reason())")
+    @Mapping(target = "error", expression = "java(item.error())")
+    @Mapping(target = "errorReason", expression = "java(item.errorReason())")
     @Mapping(target = "source", expression = "java(item.source())")
     FeedbackScore toFeedbackScore(FeedbackScoreItem item);
 
@@ -74,6 +76,8 @@ public interface FeedbackScoreMapper {
                         .categoryName(getIfNotEmpty(feedbackScore.get(1)))
                         .value((BigDecimal) feedbackScore.get(2))
                         .reason(getIfNotEmpty(feedbackScore.get(3)))
+                        .error(0)
+                        .errorReason(null)
                         .source(ScoreSource.fromString((String) feedbackScore.get(4)))
                         .valueByAuthor(parseValueByAuthor(feedbackScore.get(5)))
                         .createdAt(((OffsetDateTime) feedbackScore.get(6)).toInstant())
@@ -159,6 +163,8 @@ public interface FeedbackScoreMapper {
                             .value(new BigDecimal(feedbackScore.get(3).toString()))
                             .reason(Optional.ofNullable(feedbackScore.get(4)).map(Object::toString)
                                     .filter(StringUtils::isNotEmpty).orElse(null))
+                            .error(0)
+                            .errorReason(null)
                             .source(ScoreSource.fromString(feedbackScore.get(5).toString()))
                             .createdAt(Instant.parse(feedbackScore.get(6).toString()))
                             .lastUpdatedAt(Instant.parse(feedbackScore.get(7).toString()))
