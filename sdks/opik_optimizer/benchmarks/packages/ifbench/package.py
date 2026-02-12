@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from opik_optimizer import ChatPrompt
@@ -8,13 +7,11 @@ from opik_optimizer import ChatPrompt
 from benchmarks.packages.package import BenchmarkPackage
 
 
-@dataclass(frozen=True)
-class SimpleDatasetPackage(BenchmarkPackage):
-    key: str
-    prefixes: tuple[str, ...]
+class IfbenchPackage(BenchmarkPackage):
+    key = "ifbench"
 
     def matches(self, dataset_name: str) -> bool:
-        return any(dataset_name.startswith(prefix) for prefix in self.prefixes)
+        return dataset_name.startswith("ifbench")
 
     def build_initial_prompt(self) -> ChatPrompt | dict[str, ChatPrompt] | None:
         return None

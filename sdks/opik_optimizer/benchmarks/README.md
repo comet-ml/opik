@@ -283,6 +283,13 @@ modal deploy benchmarks/runners/run_benchmark_modal.py
 
 The benchmark system is organized into several modules:
 
+### Architecture Layers
+
+- **`core/`** - Engine-agnostic runtime flow (`planning`, `runtime`, `state`, `evaluation`, `deploy`, `results`)
+- **`engines/`** - Execution backends (`local`, `modal`) with capabilities and storage adapters
+- **`packages/`** - Dataset/package-specific wiring (agents/prompts/metrics)
+- **`utils/`** - Shared sinks/display/logging/serialization helpers
+
 ### Entry Points (`runners/`)
 
 - **`runners/run_benchmark.py`** - Main unified engine-driven entry point
@@ -305,6 +312,14 @@ The benchmark system is organized into several modules:
 - **`core/benchmark_config.py`** - Dataset and optimizer configurations
 - **`core/benchmark_task.py`** - Result/task payload models
 - **`utils/task_runner.py`** - Core benchmark task execution logic shared by local + Modal runners
+
+### Packages (`packages/`)
+
+- **`packages/hotpot/`** - Hotpot benchmark package (agent/prompts/metrics wiring)
+- **`packages/hover/`** - HoVer benchmark package wiring
+- **`packages/ifbench/`** - IFBench benchmark package wiring
+- **`packages/pupa/`** - PUPA benchmark package wiring
+- **`packages/registry.py`** - Package resolution by dataset key
 
 ### Local Execution (`local/`)
 

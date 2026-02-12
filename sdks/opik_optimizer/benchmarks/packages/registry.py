@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from benchmarks.packages.hover.package import HoverPackage
 from benchmarks.packages.hotpot.package import HotpotPackage
+from benchmarks.packages.ifbench.package import IfbenchPackage
 from benchmarks.packages.package import BenchmarkPackage, PackageResolution
-from benchmarks.packages.simple import SimpleDatasetPackage
+from benchmarks.packages.pupa.package import PupaPackage
 
 _PACKAGES: list[BenchmarkPackage] = [
     HotpotPackage(),
-    SimpleDatasetPackage(key="hover", prefixes=("hover",)),
-    SimpleDatasetPackage(key="ifbench", prefixes=("ifbench",)),
-    SimpleDatasetPackage(key="pupa", prefixes=("pupa",)),
+    HoverPackage(),
+    IfbenchPackage(),
+    PupaPackage(),
 ]
 
 
