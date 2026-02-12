@@ -85,7 +85,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   const [metadata, setMetadata] = useState(
     extractMetadata(prompt) ||
-      (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
+    (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
   );
   const [description, setDescription] = useState("");
   const [name, setName] = useState(defaultName);
@@ -135,7 +135,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
       const promptMetadata = extractMetadata(selectedPrompt);
       setMetadata(
         promptMetadata ||
-          (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
+        (providedMetadata ? JSON.stringify(providedMetadata, null, 2) : ""),
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -240,9 +240,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
                 filterByTemplateStructure={templateStructure}
               />
               <Description>
-                Saving your changes to {selectedPrompt?.name ?? ""} will
-                automatically create a new commit. You can view previous
-                versions anytime in the
+                Selected prompt will be updated. You can view versions in the
                 <Link
                   onClick={(event) => event.stopPropagation()}
                   to="/$workspaceName/prompts/$promptId"
