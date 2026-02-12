@@ -133,15 +133,16 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
 
         @staticmethod
         def _format_postfix_value(value: Any) -> str:
-            """Format numeric values to at most 2 decimals for compact display."""
+            """
+            Format values for postfix display.
+
+            Preformatted strings are preserved exactly so SDK-side formatting
+            (for example, score averages formatted to 4 decimals) is not lost.
+            """
             if isinstance(value, Real) and not isinstance(value, bool):
                 return f"{float(value):.2f}".rstrip("0").rstrip(".")
             if isinstance(value, str):
-                try:
-                    parsed = float(value)
-                except ValueError:
-                    return value
-                return f"{parsed:.2f}".rstrip("0").rstrip(".")
+                return value
             return str(value)
 
         def close(self) -> None:
