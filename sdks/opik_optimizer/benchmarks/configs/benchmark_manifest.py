@@ -4,12 +4,29 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 
 
+class PromptMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: str
+    content: str
+
+
+class MetricSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    args: list[Any] | None = None
+    kwargs: dict[str, Any] | None = None
+
+
 class ManifestTask(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     dataset: str | dict[str, Any]
     optimizer: str
     model: str
@@ -18,40 +35,72 @@ class ManifestTask(BaseModel):
     optimizer_params: dict[str, Any] | None = None
     optimizer_prompt_params: dict[str, Any] | None = None
     datasets: dict[str, Any] | None = None
-    metrics: list[str | dict[str, Any]] | None = None
-    prompt: list[dict[str, Any]] | None = None
+    metrics: list[str | MetricSpec] | None = None
+    prompt: list[PromptMessage] | None = None
+
+    @model_validator(mode="after")
+    def _validate_datasets(self) -> "ManifestTask":
+        if self.datasets and "train" not in self.datasets:
+            raise ValueError(
+                "datasets config must include a train split when provided."
+            )
+        return self
 
 
 class GeneratorDataset(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     dataset: str | dict[str, Any]
     datasets: dict[str, Any] | None = None
 
+    @model_validator(mode="after")
+    def _validate_datasets(self) -> "GeneratorDataset":
+        if self.datasets and "train" not in self.datasets:
+            raise ValueError(
+                "generator datasets config must include a train split when provided."
+            )
+        return self
+
 
 class GeneratorModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     model_parameters: dict[str, Any] | None = None
 
 
 class GeneratorOptimizer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str
     optimizer_params: dict[str, Any] | None = None
     optimizer_prompt_params: dict[str, Any] | None = None
 
 
 class GeneratorSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     datasets: list[GeneratorDataset]
     models: list[GeneratorModel]
     optimizers: list[GeneratorOptimizer]
-    metrics: list[str | dict[str, Any]] | None = None
+    metrics: list[str | MetricSpec] | None = None
     test_mode: bool | None = None
-    prompt: list[dict[str, Any]] | None = None
+    prompt: list[PromptMessage] | None = None
 
 
 class BenchmarkManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     seed: int | None = None
     test_mode: bool | None = None
     tasks: list[ManifestTask] = Field(default_factory=list)
     generators: list[GeneratorSpec] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_has_tasks_or_generators(self) -> "BenchmarkManifest":
+        if not self.tasks and not self.generators:
+            raise ValueError("Manifest must include at least one task or generator.")
+        return self
 
 
 def load_manifest(path: str) -> BenchmarkManifest:
@@ -69,6 +118,32 @@ def load_manifest(path: str) -> BenchmarkManifest:
 def manifest_to_task_specs(
     manifest: BenchmarkManifest, fallback_test_mode: bool = False
 ) -> list[BenchmarkTaskSpec]:
+    def _normalize_metrics(
+        metrics: list[str | MetricSpec] | None,
+    ) -> list[str | dict[str, Any]] | None:
+        if metrics is None:
+            return None
+
+        normalized: list[str | dict[str, Any]] = []
+        for metric in metrics:
+            if isinstance(metric, str):
+                normalized.append(metric)
+            else:
+                payload: dict[str, Any] = {"path": metric.path}
+                if metric.args is not None:
+                    payload["args"] = metric.args
+                if metric.kwargs is not None:
+                    payload["kwargs"] = metric.kwargs
+                normalized.append(payload)
+        return normalized
+
+    def _normalize_prompt(
+        prompt: list[PromptMessage] | None,
+    ) -> list[dict[str, Any]] | None:
+        if prompt is None:
+            return None
+        return [entry.model_dump() for entry in prompt]
+
     def _normalize_dataset_entry(
         dataset_field: str | dict[str, Any], datasets_field: dict[str, Any] | None
     ) -> tuple[str, dict[str, Any] | None]:
@@ -100,8 +175,8 @@ def manifest_to_task_specs(
         model_parameters: dict[str, Any] | None,
         optimizer_params: dict[str, Any] | None,
         optimizer_prompt_params: dict[str, Any] | None,
-        metrics: list[str | dict[str, Any]] | None,
-        prompt: list[dict[str, Any]] | None,
+        metrics: list[str | MetricSpec] | None,
+        prompt: list[PromptMessage] | None,
     ) -> None:
         dataset_name, datasets_override = _normalize_dataset_entry(dataset, datasets)
         specs.append(
@@ -114,8 +189,8 @@ def manifest_to_task_specs(
                 optimizer_params=optimizer_params,
                 optimizer_prompt_params=optimizer_prompt_params,
                 datasets=datasets_override,
-                metrics=metrics,
-                prompt_messages=prompt,
+                metrics=_normalize_metrics(metrics),
+                prompt_messages=_normalize_prompt(prompt),
             )
         )
 

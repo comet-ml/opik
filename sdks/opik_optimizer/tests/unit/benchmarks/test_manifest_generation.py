@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 
 from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
 from tests.unit.fixtures import system_message, user_message
@@ -91,3 +92,47 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
     assert tiny_tasks and tiny_tasks[0].datasets is not None
     # Prompt override propagated to all tasks
     assert all(task.prompt_messages for task in tasks)
+
+
+def test_manifest_rejects_empty_payload(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest_empty.json"
+    manifest_path.write_text(json.dumps({"seed": 1}))
+
+    with pytest.raises(ValueError, match="at least one task or generator"):
+        load_manifest(str(manifest_path))
+
+
+def test_manifest_rejects_task_datasets_without_train(tmp_path: Path) -> None:
+    data = {
+        "tasks": [
+            {
+                "dataset": "tiny_test",
+                "optimizer": "few_shot",
+                "model": "model-a",
+                "datasets": {"validation": {"loader": "tiny_test", "count": 1}},
+            }
+        ]
+    }
+    manifest_path = tmp_path / "manifest_invalid_split.json"
+    manifest_path.write_text(json.dumps(data))
+
+    with pytest.raises(ValueError, match="must include a train split"):
+        load_manifest(str(manifest_path))
+
+
+def test_manifest_rejects_unknown_task_fields(tmp_path: Path) -> None:
+    data = {
+        "tasks": [
+            {
+                "dataset": "tiny_test",
+                "optimizer": "few_shot",
+                "model": "model-a",
+                "unexpected": True,
+            }
+        ]
+    }
+    manifest_path = tmp_path / "manifest_unknown_field.json"
+    manifest_path.write_text(json.dumps(data))
+
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        load_manifest(str(manifest_path))
