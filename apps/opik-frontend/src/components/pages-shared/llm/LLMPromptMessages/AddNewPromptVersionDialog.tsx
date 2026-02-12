@@ -27,8 +27,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
+
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
@@ -40,6 +42,8 @@ import {
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+
+type SaveMode = "update" | "new";
 
 const extractMetadata = (prompt?: PromptWithLatestVersion) => {
   return prompt?.latest_version?.metadata
@@ -74,7 +78,10 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [promptId, setPromptId] = useState<string | undefined>(prompt?.id);
-  const isEdit = Boolean(promptId);
+  const [saveMode, setSaveMode] = useState<SaveMode>(
+    prompt?.id ? "update" : "new",
+  );
+  const isEdit = saveMode === "update" && Boolean(promptId);
 
   const [metadata, setMetadata] = useState(
     extractMetadata(prompt) ||
@@ -102,18 +109,18 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   useEffect(() => {
     setPromptId(prompt?.id);
+    setSaveMode(prompt?.id ? "update" : "new");
   }, [prompt?.id]);
 
   useEffect(() => {
-    // Reset name when dialog opens:
-    // - If no prompt prop was provided (creating new from scratch), use defaultName
-    // - If editing existing prompt (promptId exists), use defaultName
-    // - If prompt prop was provided but user chose "Save as new" (promptId cleared), clear name
+    // Reset name when dialog opens or save mode changes:
+    // - If "Save as new" mode is selected, clear name for user to enter new one
+    // - Otherwise use defaultName
     if (open) {
-      const shouldClearName = prompt && !promptId;
+      const shouldClearName = saveMode === "new" && prompt;
       setName(shouldClearName ? "" : defaultName);
     }
-  }, [open, defaultName, promptId, prompt]);
+  }, [open, defaultName, saveMode, prompt]);
 
   const selectedPrompt = useMemo(() => {
     return !promptId
@@ -198,22 +205,40 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg sm:max-w-[720px]">
+      <DialogContent className="max-w-lg sm:max-w-[620px]">
         <DialogHeader>
-          <DialogTitle>Save changes</DialogTitle>
+          <DialogTitle>Save to prompt library</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
-          <div className="flex flex-col gap-2 pb-4">
-            <Label>Prompt</Label>
-            <PromptsSelectBox
-              onValueChange={setPromptId}
-              value={promptId}
-              clearable={false}
-              refetchOnMount={true}
-              asNewOption={true}
-              filterByTemplateStructure={templateStructure}
-            />
-            {isEdit ? (
+          {prompt && (
+            <div className="flex flex-col gap-2 pb-4">
+              <ToggleGroup
+                type="single"
+                value={saveMode}
+                onValueChange={(val) => val && setSaveMode(val as SaveMode)}
+                variant="ghost"
+                className="w-fit"
+              >
+                <ToggleGroupItem value="update" size="sm">
+                  Update existing
+                </ToggleGroupItem>
+                <ToggleGroupItem value="new" size="sm">
+                  Save as new
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          )}
+
+          {saveMode === "update" && prompt && (
+            <div className="flex flex-col gap-2 pb-4">
+              <Label>Prompt</Label>
+              <PromptsSelectBox
+                onValueChange={setPromptId}
+                value={promptId}
+                clearable={false}
+                refetchOnMount={true}
+                filterByTemplateStructure={templateStructure}
+              />
               <Description>
                 Saving your changes to {selectedPrompt?.name ?? ""} will
                 automatically create a new commit. You can view previous
@@ -230,23 +255,8 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
                   </Button>
                 </Link>
               </Description>
-            ) : (
-              <Description>
-                A new prompt will be created in the
-                <Link
-                  onClick={(event) => event.stopPropagation()}
-                  to="/$workspaceName/prompts"
-                  params={{ workspaceName }}
-                  target="_blank"
-                >
-                  <Button variant="link" size="sm" className="px-1">
-                    Prompt library
-                    <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
-                  </Button>
-                </Link>
-              </Description>
-            )}
-          </div>
+            </div>
+          )}
 
           {isEdit ? (
             <div className="flex flex-col gap-2 pb-4">
@@ -259,15 +269,48 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
               />
             </div>
           ) : (
-            <div className="flex flex-col gap-2 pb-4">
-              <Label htmlFor="promptName">Name</Label>
-              <Input
-                id="promptName"
-                placeholder="Prompt name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </div>
+            <>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="promptName">Name</Label>
+                <Input
+                  id="promptName"
+                  placeholder="Prompt name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2 pb-4">
+                <Description>
+                  A new prompt will be created in the
+                  <Link
+                    onClick={(event) => event.stopPropagation()}
+                    to="/$workspaceName/prompts"
+                    params={{ workspaceName }}
+                    target="_blank"
+                  >
+                    <Button variant="link" size="sm" className="px-1">
+                      Prompt library
+                      <SquareArrowOutUpRight className="ml-1.5 mt-1 size-3.5 shrink-0" />
+                    </Button>
+                  </Link>
+                </Description>
+              </div>
+
+              <div className="flex flex-col gap-2 pb-4">
+                <Label htmlFor="promptDescription">
+                  Description (optional)
+                </Label>
+                <Textarea
+                  id="promptDescription"
+                  placeholder="Prompt description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  maxLength={255}
+                  className="min-h-20"
+                />
+              </div>
+            </>
           )}
 
           <div className="flex flex-col gap-2 border-t border-border pb-4">
@@ -297,19 +340,6 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
                   <AlertTitle>Metadata field is not valid</AlertTitle>
                 </Alert>
               )}
-              {!isEdit && (
-                <AccordionItem value="description">
-                  <AccordionTrigger>Description</AccordionTrigger>
-                  <AccordionContent>
-                    <Textarea
-                      placeholder="Prompt description"
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                      maxLength={255}
-                    />
-                  </AccordionContent>
-                </AccordionItem>
-              )}
             </Accordion>
           </div>
         </DialogAutoScrollBody>
@@ -322,7 +352,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
             disabled={!isValid}
             onClick={handleClickEditPrompt}
           >
-            Save changes
+            Save to library
           </Button>
         </DialogFooter>
       </DialogContent>
