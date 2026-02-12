@@ -47,16 +47,24 @@ class DummyOptimizerWithHistory(DummyOptimizer):
 
 def test_chatprompt_uses_optimizer_model(monkeypatch: pytest.MonkeyPatch) -> None:
     # Patch config to a minimal dataset/optimizer to bypass irrelevant logic
-    benchmark_config.DATASET_CONFIG = {
-        "dummy": benchmark_config.BenchmarkDatasetConfig(
-            name="dummy", display_name="Dummy", metrics=[lambda *_: 0.0]
-        )
-    }
-    benchmark_config.OPTIMIZER_CONFIGS = {
-        "dummy_opt": benchmark_config.BenchmarkOptimizerConfig(
-            class_name="DummyOptimizer", params={}
-        )
-    }
+    monkeypatch.setattr(
+        benchmark_config,
+        "DATASET_CONFIG",
+        {
+            "dummy": benchmark_config.BenchmarkDatasetConfig(
+                name="dummy", display_name="Dummy", metrics=[lambda *_: 0.0]
+            )
+        },
+    )
+    monkeypatch.setattr(
+        benchmark_config,
+        "OPTIMIZER_CONFIGS",
+        {
+            "dummy_opt": benchmark_config.BenchmarkOptimizerConfig(
+                class_name="DummyOptimizer", params={}
+            )
+        },
+    )
 
     # Stub resolve_dataset_bundle to return minimal datasets
     bundle = task_runner.DatasetBundle(
@@ -109,16 +117,24 @@ def test_chatprompt_uses_optimizer_model(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_task_result_prefers_optimizer_native_history(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    benchmark_config.DATASET_CONFIG = {
-        "dummy": benchmark_config.BenchmarkDatasetConfig(
-            name="dummy", display_name="Dummy", metrics=[lambda *_: 0.0]
-        )
-    }
-    benchmark_config.OPTIMIZER_CONFIGS = {
-        "dummy_opt": benchmark_config.BenchmarkOptimizerConfig(
-            class_name="DummyOptimizerWithHistory", params={}
-        )
-    }
+    monkeypatch.setattr(
+        benchmark_config,
+        "DATASET_CONFIG",
+        {
+            "dummy": benchmark_config.BenchmarkDatasetConfig(
+                name="dummy", display_name="Dummy", metrics=[lambda *_: 0.0]
+            )
+        },
+    )
+    monkeypatch.setattr(
+        benchmark_config,
+        "OPTIMIZER_CONFIGS",
+        {
+            "dummy_opt": benchmark_config.BenchmarkOptimizerConfig(
+                class_name="DummyOptimizerWithHistory", params={}
+            )
+        },
+    )
 
     bundle = task_runner.DatasetBundle(
         train_name="dummy",

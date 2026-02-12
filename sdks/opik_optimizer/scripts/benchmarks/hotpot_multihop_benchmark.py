@@ -99,6 +99,7 @@ def main() -> None:
         bm25_wikipedia_search("warmup", 1)
     except Exception:
         logger.exception("Wikipedia warmup failed")
+        raise
 
     agent = HotpotMultiHopAgent(
         search_fn=bm25_wikipedia_search,
