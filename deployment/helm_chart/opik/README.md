@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.10](https://img.shields.io/badge/Version-1.10.10-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.10](https://img.shields.io/badge/AppVersion-1.10.10-informational?style=flat-square)
+![Version: 1.10.12](https://img.shields.io/badge/Version-1.10.12-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.12](https://img.shields.io/badge/AppVersion-1.10.12-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -377,10 +377,19 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.ingress.tls.hosts | list | `[]` |  |
 | component.python-backend.ingress.tls.secretName | string | `""` |  |
 | component.python-backend.metrics.enabled | bool | `false` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.cidr | string | `"0.0.0.0/0"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[0] | string | `"10.0.0.0/8"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[1] | string | `"172.16.0.0/12"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[2] | string | `"192.168.0.0/16"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[3] | string | `"100.64.0.0/10"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[4] | string | `"169.254.0.0/16"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[5] | string | `"127.0.0.0/8"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[6] | string | `"192.0.0.0/24"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[7] | string | `"198.18.0.0/15"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[8] | string | `"224.0.0.0/4"` |  |
+| component.python-backend.networkPolicy.additionalRules[0].to[0].ipBlock.except[9] | string | `"255.255.255.255/32"` |  |
 | component.python-backend.networkPolicy.annotations | object | `{}` |  |
 | component.python-backend.networkPolicy.enabled | bool | `false` |  |
-| component.python-backend.networkPolicy.engineEgress.except | list | `[]` |  |
-| component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
 | component.python-backend.podDisruptionBudget.enabled | bool | `false` |  |
 | component.python-backend.replicaCount | int | `1` |  |
 | component.python-backend.secretRefs | list | `[]` |  |
