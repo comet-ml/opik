@@ -15486,6 +15486,14 @@ components:
             \ the frontend will limit pagination to prevent performance issues. Default:\
             \ true (truncation enabled)."
           example: true
+        color_map:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Workspace-level color map. Maps label names to hex color\
+              \ values (e.g. #FF0000). Max 10000 entries."
+          description: "Workspace-level color map. Maps label names to hex color values\
+            \ (e.g. #FF0000). Max 10000 entries."
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:
