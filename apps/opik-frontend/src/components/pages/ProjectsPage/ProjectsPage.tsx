@@ -202,11 +202,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback scores (avg.)",
         type: COLUMN_TYPE.numberDictionary,
-        accessorFn: (row) =>
-          get(row, "feedback_scores", []).map((score) => ({
-            ...score,
-            value: formatNumericData(score.value),
-          })),
+        accessorFn: (row) => get(row, "feedback_scores", []),
         cell: FeedbackScoreListCell as never,
         customMeta: {
           getHoverCardName: (row: ProjectWithStatistic) => row.name,

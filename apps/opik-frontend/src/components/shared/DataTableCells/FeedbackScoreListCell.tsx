@@ -4,7 +4,6 @@ import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 
-import { formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreTag from "../FeedbackScoreTag/FeedbackScoreTag";
@@ -17,6 +16,7 @@ import {
   SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { useVisibleItemsByWidth } from "@/hooks/useVisibleItemsByWidth";
+import { formatScoreDisplay, getScoreDisplayName } from "@/lib/feedback-scores";
 
 const FEEDBACK_SCORE_LIST_CONFIG = { itemGap: 6 };
 
@@ -44,11 +44,12 @@ const FeedbackScoreListCell = <TData,>(
     ...(rowData.feedback_scores ?? []).map((score) => ({
       ...score,
       colorKey: score.name,
-      name: `${score.name} (avg)`,
+      name: getScoreDisplayName(score.name, SCORE_TYPE_FEEDBACK),
       scoreType: SCORE_TYPE_FEEDBACK,
     })),
     ...(rowData.experiment_scores ?? []).map((score) => ({
       ...score,
+      name: getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT),
       scoreType: SCORE_TYPE_EXPERIMENT,
     })),
   ];
@@ -126,7 +127,7 @@ const FeedbackScoreListAggregationCell = <TData,>(
   context: CellContext<TData, string>,
 ) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { aggregationKey, dataFormatter = formatNumericData } = (custom ??
+  const { aggregationKey, dataFormatter = formatScoreDisplay } = (custom ??
     {}) as AggregationCustomMeta;
 
   const rowId = context.row.id;
@@ -143,7 +144,7 @@ const FeedbackScoreListAggregationCell = <TData,>(
   ).map((score: TraceFeedbackScore) => ({
     ...score,
     colorKey: score.name,
-    name: `${score.name} (avg)`,
+    name: getScoreDisplayName(score.name, SCORE_TYPE_FEEDBACK),
     scoreType: SCORE_TYPE_FEEDBACK,
   }));
 
@@ -151,6 +152,7 @@ const FeedbackScoreListAggregationCell = <TData,>(
     isArray(experimentScores) ? experimentScores : []
   ).map((score: TraceFeedbackScore) => ({
     ...score,
+    name: getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT),
     scoreType: SCORE_TYPE_EXPERIMENT,
   }));
 
