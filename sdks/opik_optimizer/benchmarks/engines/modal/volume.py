@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
 
 from benchmarks.modal_utils.storage import (
     list_available_runs_from_volume,

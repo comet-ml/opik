@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from benchmarks.core.planning import TaskPlan
 from benchmarks.engines.base import BenchmarkEngine, EngineCapabilities, EngineRunResult
-from benchmarks.runners.run_benchmark_local import run_benchmark
+from benchmarks.local.runner import BenchmarkRunner
 
 
 class LocalEngine(BenchmarkEngine):
@@ -16,23 +16,28 @@ class LocalEngine(BenchmarkEngine):
     )
 
     def run(self, plan: TaskPlan) -> EngineRunResult:
-        run_benchmark(
-            demo_datasets=plan.demo_datasets,
-            optimizers=plan.optimizers,
-            models=plan.models,
+        runner = BenchmarkRunner(
             max_workers=plan.max_concurrent,
             seed=plan.seed,
             test_mode=plan.test_mode,
             checkpoint_dir=plan.checkpoint_dir,
+        )
+        runner.run_benchmarks(
+            demo_datasets=plan.demo_datasets,
+            optimizers=plan.optimizers,
+            models=plan.models,
             retry_failed_run_id=plan.retry_failed_run_id,
             resume_run_id=plan.resume_run_id,
             task_specs=plan.tasks,
-            skip_confirmation=True,
-            manifest_path=plan.manifest_path,
+            preflight_info={
+                "manifest_path": plan.manifest_path,
+                "checkpoint_dir": plan.checkpoint_dir,
+                "test_mode": plan.test_mode,
+            },
         )
         return EngineRunResult(
             engine=self.name,
-            run_id=plan.resume_run_id or plan.retry_failed_run_id,
+            run_id=runner.run_id,
             metadata={"checkpoint_dir": plan.checkpoint_dir},
         )
 

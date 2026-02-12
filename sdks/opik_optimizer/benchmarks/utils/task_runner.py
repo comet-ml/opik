@@ -777,14 +777,16 @@ def execute_task(
                     model_name=model_name,
                     model_parameters=model_parameters,
                 )
-                initial_prompt = package.build_initial_prompt()
+                package_prompt = package.build_initial_prompt()
+                if package_prompt is not None:
+                    initial_prompt = package_prompt
                 logger.info(
-                    "Created %s package agent for dataset %s",
+                    "Resolved package %s for dataset %s",
                     package_resolution.key,
                     dataset_name,
                 )
-            else:
-                # Standard single-prompt benchmark
+            # Standard single-prompt benchmark fallback
+            if initial_prompt is None:
                 messages = prompt_messages or _resolve_initial_prompt(bundle.train_name)
                 # Bind the optimizer's model/model_parameters to the prompt so evaluations
                 # use the requested model instead of ChatPrompt defaults.

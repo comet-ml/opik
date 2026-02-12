@@ -60,7 +60,9 @@ def compile_task_plan(data: PlanInput) -> TaskPlan:
         optimizers = sorted({task.optimizer_name for task in tasks})
         models = sorted({task.model_name for task in tasks})
     else:
-        demo_datasets = data.demo_datasets or list(benchmark_config.DATASET_CONFIG.keys())
+        demo_datasets = data.demo_datasets or list(
+            benchmark_config.DATASET_CONFIG.keys()
+        )
         optimizers = data.optimizers or list(benchmark_config.OPTIMIZER_CONFIGS.keys())
         models = data.models or list(benchmark_config.MODELS)
         tasks = [

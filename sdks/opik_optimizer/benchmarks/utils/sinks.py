@@ -11,8 +11,7 @@ class BenchmarkEvent:
 
 
 class EventSink(Protocol):
-    def emit(self, event: BenchmarkEvent) -> None:
-        ...
+    def emit(self, event: BenchmarkEvent) -> None: ...
 
 
 class NullSink:
