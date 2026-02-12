@@ -156,6 +156,8 @@ If your `app` (and/or custom user simulator callable) accepts a `simulation_stat
 ```python title="Stateful simulation with shared run context" maxLines=1000
 from opik.simulation import run_simulation
 
+# Intent: demonstrate a stateful refund-flow simulation triggered when your app/user simulator
+# needs shared mutable run context; simulation_state can start as {} (no required keys).
 def run_agent(user_message: str, *, thread_id: str, simulation_state: dict, **kwargs) -> str:
     workflow = simulation_state.setdefault(
         "workflow", {"verified_identity": False, "refund_submitted": False}
@@ -225,6 +227,23 @@ print(simulation["simulation_state"])
 #   "last_action": "refund_submitted",
 #   "script": []
 # }
+```
+
+`simulation_state` contract for this pattern:
+
+- Required keys: none (you can start from `{}`).
+- Optional pre-seeded keys: `scenario_id`, `workflow`, `script`, or any app-specific routing flags.
+- Keys created during the run: `workflow`, `order_id`, `last_action`, `script`.
+
+Minimal valid input:
+
+```python
+simulation = run_simulation(
+    app=run_agent,
+    user_simulator=ScriptedUserAdapter(),
+    max_turns=2,
+    simulation_state={},  # valid minimal state
+)
 ```
 
 ## Scoring threads
