@@ -5,6 +5,7 @@ import subprocess
 import time
 import traceback
 import configparser
+import logging
 import sys
 from pathlib import Path
 from collections.abc import Iterable
@@ -36,6 +37,7 @@ OPTIONAL_KEYS = [
     "OPENROUTER_API_KEY",
 ]
 OPIK_HOST_KEYS = ["OPIK_URL_OVERRIDE", "OPIK_HOST"]
+logger = logging.getLogger(__name__)
 
 
 def _collect(keys: Iterable[str]) -> tuple[list[str], list[str]]:
@@ -100,11 +102,10 @@ def read_opik_config(config_path: str | None = None) -> dict[str, str]:
 
 
 def _dump_opik_configuration() -> None:
-    print("=" * 80)
-    print("OPIK CONFIGURATION (Worker)")
-    print("=" * 80)
-
-    print("\nEnvironment Variables:")
+    logger.info("=" * 80)
+    logger.info("OPIK CONFIGURATION (Worker)")
+    logger.info("=" * 80)
+    logger.info("Environment Variables:")
     env_vars = {
         "OPIK_API_KEY": os.getenv("OPIK_API_KEY"),
         "OPIK_URL_OVERRIDE": os.getenv("OPIK_URL_OVERRIDE"),
@@ -115,27 +116,27 @@ def _dump_opik_configuration() -> None:
         if value:
             if key == "OPIK_API_KEY":
                 masked = value[:8] + "..." + value[-4:] if len(value) > 12 else "***"
-                print(f"  {key}: {masked}")
+                logger.info("  %s: %s", key, masked)
             else:
-                print(f"  {key}: {value}")
+                logger.info("  %s: %s", key, value)
         else:
-            print(f"  {key}: NOT SET")
+            logger.info("  %s: NOT SET", key)
 
-    print("\nOpik SDK Configuration:")
+    logger.info("Opik SDK Configuration:")
     try:
         from opik.config import OpikConfig
 
         config = OpikConfig()
-        print(f"  API Key present: {'YES' if config.api_key else 'NO'}")
-        print(
-            f"  Base URL: {config.url_override or 'DEFAULT (https://www.comet.com/opik/api)'}"
+        logger.info("  API Key present: %s", "YES" if config.api_key else "NO")
+        logger.info(
+            "  Base URL: %s",
+            config.url_override or "DEFAULT (https://www.comet.com/opik/api)",
         )
-        print(f"  Workspace: {config.workspace or 'NOT SET'}")
+        logger.info("  Workspace: %s", config.workspace or "NOT SET")
     except Exception as e:
-        print(f"  Failed to load config: {e}")
+        logger.warning("  Failed to load config: %s", e)
 
-    print("=" * 80)
-    print()
+    logger.info("=" * 80)
 
 
 def _ensure_opik_credentials() -> None:
@@ -143,9 +144,11 @@ def _ensure_opik_credentials() -> None:
     host = os.getenv("OPIK_URL_OVERRIDE")
     is_self_hosted = bool(host and host != "https://www.comet.com/opik/api")
 
-    print(f"Opik instance type: {'Self-hosted' if is_self_hosted else 'Comet Cloud'}")
-    print(f"API key required: {'NO' if is_self_hosted else 'YES'}")
-    print(f"API key present: {'YES' if api_key else 'NO'}")
+    logger.info(
+        "Opik instance type: %s", "Self-hosted" if is_self_hosted else "Comet Cloud"
+    )
+    logger.info("API key required: %s", "NO" if is_self_hosted else "YES")
+    logger.info("API key present: %s", "YES" if api_key else "NO")
 
     if not is_self_hosted and not api_key:
         raise RuntimeError(
@@ -154,18 +157,20 @@ def _ensure_opik_credentials() -> None:
             "For self-hosted instances, set OPIK_BASE_URL or OPIK_HOST and omit OPIK_API_KEY."
         )
 
-    print("Testing Opik client connection...")
+    logger.info("Testing Opik client connection...")
     try:
         client = opik.Opik()
         if hasattr(client, "get_current_workspace"):
             client.get_current_workspace()  # type: ignore[attr-defined]
-        print("✓ Opik client connection successful")
+        logger.info("Opik client connection successful")
     except Exception as exc:
         if not is_self_hosted or api_key:
             raise RuntimeError(
                 f"Opik credential check failed (host={host or 'default'}): {exc}"
             ) from exc
-        print(f"Warning: Opik connection check failed (self-hosted, no API key): {exc}")
+        logger.warning(
+            "Opik connection check failed (self-hosted, no API key): %s", exc
+        )
 
 
 def run_optimization_task(
@@ -192,7 +197,7 @@ def run_optimization_task(
     _ensure_opik_credentials()
 
     timestamp_start = time.time()
-    print(f"[{task_id}] Starting optimization...")
+    logger.info("[%s] Starting optimization...", task_id)
     try:
         result = run_task_evaluation(
             task_id=task_id,
@@ -208,12 +213,14 @@ def run_optimization_task(
             prompt_messages=prompt_messages,
         )
         result.timestamp_start = timestamp_start
-        print(
-            f"[{task_id}] Completed successfully in {time.time() - timestamp_start:.2f}s"
+        logger.info(
+            "[%s] Completed successfully in %.2fs",
+            task_id,
+            time.time() - timestamp_start,
         )
         return result
     except Exception as e:
-        print(f"[{task_id}] Failed with error: {str(e)}")
+        logger.error("[%s] Failed with error: %s", task_id, str(e))
         return TaskResult(
             id=task_id,
             dataset_name=dataset_name,
