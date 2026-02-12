@@ -21,6 +21,7 @@ class DummyOptimizer:
             def __init__(self) -> None:
                 self.prompt = [user_message("hi")]
                 self.llm_calls = 0
+                self.history: list[dict[str, Any]] = []
 
         return Result()
 
