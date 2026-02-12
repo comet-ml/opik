@@ -1,5 +1,5 @@
 # Multi-stage build: Build stage
-FROM python:3.12.11-slim AS builder
+FROM python:3.12.12-slim AS builder
 
 WORKDIR /build
 
@@ -38,7 +38,7 @@ RUN cp -r /usr/local/lib/python3.12/site-packages /runtime-python
 
 #######################################################################
 # Multi-stage build: Runtime stage
-FROM python:3.12.11-slim AS runtime
+FROM python:3.12.12-slim AS runtime
 
 WORKDIR /opt/opik-sandbox-executor-python
 
