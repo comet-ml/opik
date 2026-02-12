@@ -103,6 +103,34 @@ class BenchmarkManifest(BaseModel):
         return self
 
 
+def _normalize_metrics(
+    metrics: list[str | MetricSpec] | None,
+) -> list[str | dict[str, Any]] | None:
+    if metrics is None:
+        return None
+
+    normalized: list[str | dict[str, Any]] = []
+    for metric in metrics:
+        if isinstance(metric, str):
+            normalized.append(metric)
+        else:
+            payload: dict[str, Any] = {"path": metric.path}
+            if metric.args is not None:
+                payload["args"] = metric.args
+            if metric.kwargs is not None:
+                payload["kwargs"] = metric.kwargs
+            normalized.append(payload)
+    return normalized
+
+
+def _normalize_prompt(
+    prompt: list[PromptMessage] | None,
+) -> list[dict[str, Any]] | None:
+    if prompt is None:
+        return None
+    return [entry.model_dump() for entry in prompt]
+
+
 def load_manifest(path: str) -> BenchmarkManifest:
     manifest_path = Path(path)
     if not manifest_path.exists():
@@ -118,32 +146,6 @@ def load_manifest(path: str) -> BenchmarkManifest:
 def manifest_to_task_specs(
     manifest: BenchmarkManifest, fallback_test_mode: bool = False
 ) -> list[BenchmarkTaskSpec]:
-    def _normalize_metrics(
-        metrics: list[str | MetricSpec] | None,
-    ) -> list[str | dict[str, Any]] | None:
-        if metrics is None:
-            return None
-
-        normalized: list[str | dict[str, Any]] = []
-        for metric in metrics:
-            if isinstance(metric, str):
-                normalized.append(metric)
-            else:
-                payload: dict[str, Any] = {"path": metric.path}
-                if metric.args is not None:
-                    payload["args"] = metric.args
-                if metric.kwargs is not None:
-                    payload["kwargs"] = metric.kwargs
-                normalized.append(payload)
-        return normalized
-
-    def _normalize_prompt(
-        prompt: list[PromptMessage] | None,
-    ) -> list[dict[str, Any]] | None:
-        if prompt is None:
-            return None
-        return [entry.model_dump() for entry in prompt]
-
     def _normalize_dataset_entry(
         dataset_field: str | dict[str, Any], datasets_field: dict[str, Any] | None
     ) -> tuple[str, dict[str, Any] | None]:
