@@ -26,9 +26,10 @@ class DummyDataset:
 class DummyOptimizationResult(dict):
     def __init__(self, prompt_messages: list[dict[str, Any]] | None) -> None:
         prompt_messages = prompt_messages or []
-        super().__init__(prompt=prompt_messages, llm_calls=1)
+        super().__init__(prompt=prompt_messages, llm_calls=1, history=[])
         self.prompt = prompt_messages
         self.llm_calls = 1
+        self.history: list[dict[str, Any]] = []
 
 
 class DummyOptimizer:
