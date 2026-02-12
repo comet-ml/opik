@@ -55,6 +55,21 @@ Configuration:
 - ``pytest_episode_artifact_enabled`` (default: ``False``)
 - ``pytest_episode_artifact_path`` (default: ``".opik/pytest_episode_report.json"``)
 
+You can publish this file in CI/CD so each run keeps a downloadable episode report.
+For GitHub Actions:
+
+.. code-block:: yaml
+
+   - name: Run pytest
+     run: pytest -q
+
+   - name: Upload episode artifact
+     if: always()
+     uses: actions/upload-artifact@v4
+     with:
+       name: pytest-episode-report
+       path: .opik/pytest_episode_report.json
+
 Notes
 -----
 

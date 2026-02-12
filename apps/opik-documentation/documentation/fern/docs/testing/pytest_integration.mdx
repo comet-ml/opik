@@ -76,6 +76,26 @@ You can tune how pytest runs are stored in Opik with SDK config fields:
 
 These can be provided through Opik configuration sources (for example environment variables or config file values).
 
+For episode-based tests, you can also enable a JSON artifact:
+
+- `pytest_episode_artifact_enabled` (default: `False`)
+- `pytest_episode_artifact_path` (default: `.opik/pytest_episode_report.json`)
+
+This artifact is useful in CI/CD because you can upload it as a build artifact for later inspection.  
+Example with GitHub Actions:
+
+```yaml
+- name: Run pytest
+  run: pytest -q
+
+- name: Upload episode artifact
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: pytest-episode-report
+    path: .opik/pytest_episode_report.json
+```
+
 ### Episode-Based Tests with Simulated Users
 
 For multi-turn agent testing, use `llm_episode` and return an `EpisodeResult`. This lets you keep native pytest assertions and, when enabled, emit structured episode artifacts (assertions, scores, budgets, trajectory summary) for CI/reporting.
