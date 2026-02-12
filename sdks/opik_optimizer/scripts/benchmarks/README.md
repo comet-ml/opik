@@ -15,7 +15,7 @@ PYTHONPATH=. python benchmarks/run_benchmark.py --config scripts/benchmarks/gene
 PYTHONPATH=. python benchmarks/run_benchmark.py --modal --config scripts/benchmarks/tasks.example.json
 PYTHONPATH=. python benchmarks/run_benchmark.py --modal --config scripts/benchmarks/generator.example.json
 # Deploy worker (once, after setting secrets):
-# modal deploy benchmarks/engines/modal/worker.py
+# modal deploy benchmarks/engines/modal/engine.py
 # Deploy coordinator (redo after coordinator code changes):
 # modal deploy benchmarks/run_benchmark_modal.py
 ```

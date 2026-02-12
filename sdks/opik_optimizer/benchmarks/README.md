@@ -46,7 +46,7 @@ modal secret create opik-benchmarks \
   --force
 
 # 2. Deploy worker + coordinator (redo after code changes)
-modal deploy benchmarks/engines/modal/worker.py
+modal deploy benchmarks/engines/modal/engine.py
 modal deploy benchmarks/run_benchmark_modal.py
 
 # 3. Submit benchmark tasks (engine can be selected explicitly)
@@ -275,7 +275,7 @@ modal secret create opik-benchmarks \
 If you modify the benchmark code, redeploy both worker and coordinator:
 
 ```bash
-modal deploy benchmarks/engines/modal/worker.py
+modal deploy benchmarks/engines/modal/engine.py
 modal deploy benchmarks/run_benchmark_modal.py
 ```
 
@@ -296,8 +296,8 @@ The benchmark system is organized into several modules:
   - Compiles CLI/manifest into a canonical plan (`core/planning.py`)
   - Runs/deploys via engine registry (`engines/registry.py`)
 - **`run_benchmark_modal.py`** - Modal submission and coordination logic
-  - Submits tasks to deployed `engines/modal/worker.py` function
-- **`engines/modal/worker.py`** - Modal worker function (deploy with `modal deploy benchmarks/engines/modal/worker.py`)
+  - Submits tasks to deployed `engines/modal/engine.py` function
+- **`engines/modal/engine.py`** - Modal worker function (deploy with `modal deploy benchmarks/engines/modal/engine.py`)
   - Imports `engines.modal.engine.run_optimization_task`
   - Imports `engines.modal.volume.save_result_to_volume`
 - **`check_results.py`** - View Modal results with clickable log links

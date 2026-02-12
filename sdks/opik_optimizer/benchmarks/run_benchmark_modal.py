@@ -281,7 +281,7 @@ def submit_benchmark_tasks(
             "\nPlease deploy the worker and ensure it exists in your active workspace:"
         )
         print("  pip install modal")
-        print("  modal deploy benchmarks/engines/modal/worker.py")
+        print("  modal deploy benchmarks/engines/modal/engine.py")
         sys.exit(1)
 
     # Update worker's max_containers to control concurrency
@@ -294,7 +294,7 @@ def submit_benchmark_tasks(
         print(
             "\n❌ ERROR: Worker function not found in your current Modal environment."
             "\nDeploy (or redeploy) the worker then retry:"
-            "\n  modal deploy benchmarks/engines/modal/worker.py\n"
+            "\n  modal deploy benchmarks/engines/modal/engine.py\n"
         )
         sys.exit(1)
     except Exception as e:

@@ -5,15 +5,24 @@ import subprocess
 import time
 import traceback
 import configparser
+import sys
 from pathlib import Path
 from collections.abc import Iterable
 from typing import Any
 
 import opik
+from benchmarks.benchmark_constants import MODAL_SECRET_NAME, WORKER_TIMEOUT_SECONDS
 from benchmarks.core.results import TASK_STATUS_FAILED, TaskResult
+from benchmarks.core.results import TASK_STATUS_RUNNING
 from benchmarks.core.evaluation import run_task_evaluation
 from benchmarks.core.planning import TaskPlan
 from benchmarks.engines.base import BenchmarkEngine, EngineCapabilities, EngineRunResult
+from benchmarks.engines.modal.volume import save_result_to_volume
+
+try:
+    import modal
+except ModuleNotFoundError:
+    modal = None  # type: ignore[assignment]
 
 REQUIRED_KEYS = ["OPIK_API_KEY"]
 OPTIONAL_KEYS = [
@@ -214,6 +223,98 @@ def run_optimization_task(
         )
 
 
+if modal is not None:
+    app = modal.App("opik-optimizer-benchmarks")
+    image = (
+        modal.Image.debian_slim(python_version="3.12")
+        .add_local_dir(
+            local_path=os.path.abspath(
+                os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
+            ),
+            remote_path="/root/opik_optimizer_repo",
+            ignore=[
+                ".venv",
+                ".git",
+                "__pycache__",
+                "benchmark_results",
+                "build",
+                "dist",
+                "node_modules",
+            ],
+            copy=True,
+        )
+        .pip_install("/root/opik_optimizer_repo")
+        .add_local_dir(
+            local_path=os.path.abspath(
+                os.path.join(os.path.dirname(__file__), os.pardir)
+            ),
+            remote_path="/root/benchmarks",
+            ignore=["__pycache__", ".venv", "benchmark_results"],
+            copy=True,
+        )
+    )
+    results_volume = modal.Volume.from_name(
+        "opik-benchmark-results", create_if_missing=True
+    )
+    modal_secrets = [modal.Secret.from_name(MODAL_SECRET_NAME)]
+
+    @app.function(
+        image=image,
+        volumes={"/results": results_volume},
+        secrets=modal_secrets,
+        timeout=WORKER_TIMEOUT_SECONDS,
+        retries=modal.Retries(
+            max_retries=2,
+            initial_delay=10.0,
+            backoff_coefficient=2.0,
+        ),
+        cpu=2.0,
+        memory=4096,
+    )
+    def run_optimization_modal(
+        task_id: str,
+        dataset_name: str,
+        optimizer_name: str,
+        model_name: str,
+        model_parameters: dict | None,
+        test_mode: bool,
+        run_id: str,
+        optimizer_params: dict | None = None,
+        optimizer_prompt_params: dict | None = None,
+        datasets: dict | None = None,
+        metrics: list[str | dict[str, Any]] | None = None,
+        prompt_messages: list[dict[str, Any]] | None = None,
+    ) -> dict:
+        sys.path.insert(0, "/root/benchmarks")
+        timestamp_start = time.time()
+        running_result = TaskResult(
+            id=task_id,
+            dataset_name=dataset_name,
+            optimizer_name=optimizer_name,
+            model_name=model_name,
+            model_parameters=model_parameters,
+            status=TASK_STATUS_RUNNING,
+            timestamp_start=timestamp_start,
+        )
+        save_result_to_volume(running_result, run_id, results_volume)
+
+        result = run_optimization_task(
+            task_id=task_id,
+            dataset_name=dataset_name,
+            optimizer_name=optimizer_name,
+            model_name=model_name,
+            model_parameters=model_parameters,
+            test_mode=test_mode,
+            optimizer_params_override=optimizer_params,
+            optimizer_prompt_params_override=optimizer_prompt_params,
+            datasets=datasets,
+            metrics=metrics,
+            prompt_messages=prompt_messages,
+        )
+        result.timestamp_start = timestamp_start
+        return save_result_to_volume(result, run_id, results_volume)
+
+
 class ModalEngine(BenchmarkEngine):
     name = "modal"
     capabilities = EngineCapabilities(
@@ -245,14 +346,10 @@ class ModalEngine(BenchmarkEngine):
 
     def deploy(self) -> EngineRunResult:
         subprocess.run(
-            ["modal", "deploy", "benchmarks/engines/modal/worker.py"],
-            check=True,
-        )
-        subprocess.run(
-            ["modal", "deploy", "benchmarks/run_benchmark_modal.py"],
+            ["modal", "deploy", "benchmarks/engines/modal/engine.py"],
             check=True,
         )
         return EngineRunResult(
             engine=self.name,
-            metadata={"deployed": ["benchmark_worker", "run_benchmark_modal"]},
+            metadata={"deployed": ["modal_engine"]},
         )
