@@ -8,12 +8,16 @@ class ExplodingMetric(base_metric.BaseMetric):
     def __init__(self) -> None:
         super().__init__(name="exploding_metric", track=False)
 
-    def score(self, output: str, reference: str, **_ignored_kwargs: Any) -> score_result.ScoreResult:
+    def score(
+        self, output: str, reference: str, **_ignored_kwargs: Any
+    ) -> score_result.ScoreResult:
         _ = output, reference
         raise ValueError("judge parse failure")
 
 
-def test_metrics_evaluator__metric_exception__marks_failed_with_error_metadata() -> None:
+def test_metrics_evaluator__metric_exception__marks_failed_with_error_metadata() -> (
+    None
+):
     evaluator = MetricsEvaluator(
         scoring_metrics=[ExplodingMetric()],
         scoring_key_mapping=None,
