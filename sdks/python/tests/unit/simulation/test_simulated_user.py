@@ -65,6 +65,32 @@ class TestSimulatedUser:
         assert response4 == "Response 1"
         assert user._response_index == 4
 
+    def test_generate_response_with_fixed_responses_and_state_index(self):
+        """Test fixed responses use and advance simulation_state response index."""
+        user = SimulatedUser(
+            persona="Test persona",
+            fixed_responses=["State 1", "State 2", "State 3"],
+        )
+        simulation_state = {"user_response_index": 1}
+
+        response = user.generate_response([], simulation_state=simulation_state)
+
+        assert response == "State 2"
+        assert simulation_state["user_response_index"] == 2
+
+    def test_generate_response_with_fixed_responses_and_invalid_state_index(self):
+        """Test invalid simulation_state index values fall back safely to 0."""
+        user = SimulatedUser(
+            persona="Test persona",
+            fixed_responses=["State 1", "State 2"],
+        )
+        simulation_state = {"user_response_index": "next"}
+
+        response = user.generate_response([], simulation_state=simulation_state)
+
+        assert response == "State 1"
+        assert simulation_state["user_response_index"] == 1
+
     @patch("opik.simulation.simulated_user.get_model")
     def test_generate_response_with_llm(self, mock_get_model):
         """Test response generation using LLM when no fixed responses."""
