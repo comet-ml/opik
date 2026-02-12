@@ -1,6 +1,8 @@
 --liquibase formatted sql
 
 --changeset liyaka:change-tables-to-replicated-01 id:create-automation-rule-evaluator-logs
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'automation_rule_evaluator_logs' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 ON CLUSTER '{cluster}'
 (
     `timestamp` DateTime64(9, 'UTC') DEFAULT now64(9),
@@ -17,12 +19,16 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-02 id:migrate-automation-rule-evaluator-logs
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'automation_rule_evaluator_logs' AND engine LIKE 'Replicated%'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs1 TO ${ANALYTICS_DB_DATABASE_NAME}.automation_rule_evaluator_logs ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-03 id:create-comments
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'comments' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.comments1 ON CLUSTER '{cluster}'
 (
     `id` FixedString(36),
@@ -42,12 +48,16 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1 ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-04 id:migrate-comments
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'comments' AND engine LIKE 'Replicated%'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.comments;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.comments1 TO ${ANALYTICS_DB_DATABASE_NAME}.comments ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-05 id:create-dataset-items
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'dataset_items' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 ON CLUSTER '{cluster}'
 (
     `workspace_id` String,
@@ -71,12 +81,16 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-06 id:migrate-dataset-items
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'dataset_items' AND engine LIKE 'Replicated%'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.dataset_items;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items1 TO ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-07 id:create-experiment-items
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'experiment_items' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 ON CLUSTER '{cluster}'
 (
     `id` FixedString(36),
@@ -95,12 +109,16 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-08 id:migrate-experiment-items
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'experiment_items' AND engine LIKE 'Replicated%'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.experiment_items;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiment_items1 TO ${ANALYTICS_DB_DATABASE_NAME}.experiment_items ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-09 id:create-experiments
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'experiments' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.experiments1 ON CLUSTER '{cluster}'
 (
     `workspace_id` String,
@@ -122,12 +140,16 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1 ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-10 id:migrate-experiments
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'experiments' AND engine LIKE 'Replicated%'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.experiments;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.experiments1 TO ${ANALYTICS_DB_DATABASE_NAME}.experiments ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-11 id:create-feedback-scores
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'feedback_scores' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 ON CLUSTER '{cluster}'
 (
     `entity_id` FixedString(36),
@@ -150,12 +172,16 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-12 id:migrate-feedback-scores
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'feedback_scores' AND engine LIKE 'Replicated%'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores1 TO ${ANALYTICS_DB_DATABASE_NAME}.feedback_scores ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-13 id:create-spans
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'spans' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.spans1 ON CLUSTER '{cluster}'
 (
     `id` FixedString(36),
@@ -188,12 +214,16 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans1 ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-14 id:migrate-spans
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'spans' AND engine LIKE 'Replicated%'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.spans;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans1 TO ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-15 id:create-traces
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.traces1 ON CLUSTER '{cluster}'
 (
     `id` FixedString(36),
@@ -219,12 +249,16 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-16 id:migrate-traces
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'traces' AND engine LIKE 'Replicated%'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.traces;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces1 TO ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-17 id:create-attachments
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'attachments' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.attachments1 ON CLUSTER '{cluster}'
 (
     `workspace_id` String,
@@ -246,12 +280,16 @@ SETTINGS index_granularity = 8192;
 --rollback DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1 ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-18 id:migrate-attachments
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = '${ANALYTICS_DB_DATABASE_NAME}' AND name = 'attachments' AND engine LIKE 'Replicated%'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM ${ANALYTICS_DB_DATABASE_NAME}.attachments;
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE ${ANALYTICS_DB_DATABASE_NAME}.attachments1 TO ${ANALYTICS_DB_DATABASE_NAME}.attachments ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-19 id:migrate-databasechangelog
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = 'default' AND name = 'DATABASECHANGELOG' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS default.DATABASECHANGELOG1 ON CLUSTER '{cluster}'
 (
     `ID` String,
@@ -276,13 +314,15 @@ SETTINGS index_granularity = 8192
 
 --changeset liyaka:change-tables-to-replicated-20 id:migrate-databasechangelog
 --preconditions onFail:MARK_RAN
---precondition-sql-check expectedResult:1 SELECT count(*) FROM system.tables WHERE database = 'default' AND name = 'DATABASECHANGELOG'
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = 'default' AND name = 'DATABASECHANGELOG' AND engine LIKE 'Replicated%'
 ALTER TABLE default.DATABASECHANGELOG1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM default.DATABASECHANGELOG;
 ALTER TABLE default.DATABASECHANGELOG ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE default.DATABASECHANGELOG ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
 RENAME TABLE default.DATABASECHANGELOG1 TO default.DATABASECHANGELOG ON CLUSTER '{cluster}';
 
 --changeset liyaka:change-tables-to-replicated-21 id:migrate-databasechangeloglock
+--preconditions onFail:MARK_RAN
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = 'default' AND name = 'DATABASECHANGELOGLOCK' AND engine LIKE 'Replicated%'
 CREATE TABLE IF NOT EXISTS default.DATABASECHANGELOGLOCK1 ON CLUSTER '{cluster}'
 (
     `ID` Int64,
@@ -297,7 +337,7 @@ SETTINGS index_granularity = 8192
 
 --changeset liyaka:change-tables-to-replicated-22 id:migrate-databasechangeloglock
 --preconditions onFail:MARK_RAN
---precondition-sql-check expectedResult:1 SELECT count(*) FROM system.tables WHERE database = 'default' AND name = 'DATABASECHANGELOGLOCK'
+--precondition-sql-check expectedResult:0 SELECT count(*) FROM system.tables WHERE database = 'default' AND name = 'DATABASECHANGELOGLOCK' AND engine LIKE 'Replicated%'
 ALTER TABLE default.DATABASECHANGELOGLOCK1 ON CLUSTER '{cluster}' ATTACH PARTITION tuple() FROM default.DATABASECHANGELOGLOCK;
 ALTER TABLE default.DATABASECHANGELOGLOCK ON CLUSTER '{cluster}' DETACH PARTITION tuple() SETTINGS max_partition_size_to_drop = 0;
 DROP TABLE default.DATABASECHANGELOGLOCK ON CLUSTER '{cluster}' SYNC SETTINGS max_table_size_to_drop = 0;
