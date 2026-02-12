@@ -50,6 +50,13 @@ To run observability/cost budgets separately:
 ./run_observability_example.sh
 ```
 
+To run any single file/nodeid with the same stable settings:
+
+```bash
+./run_safe_pytest.sh test_llm_episode_policy_routing_e2e.py
+./run_safe_pytest.sh 'test_llm_episode_e2e.py::test_refund_episode_ci_gate[scenario0]'
+```
+
 Example diagnostic logging defaults to `INFO`.
 Set `OPIK_EXAMPLE_LOG_LEVEL=DEBUG` to print full JSON dumps.
 

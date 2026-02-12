@@ -6,6 +6,16 @@ SDK_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 cd "${SCRIPT_DIR}"
 
+if [[ $# -lt 1 ]]; then
+  echo "Usage: ./run_safe_pytest.sh <test_file_or_nodeid> [additional pytest args]"
+  echo "Example: ./run_safe_pytest.sh test_llm_episode_policy_routing_e2e.py"
+  echo "Example: ./run_safe_pytest.sh test_llm_episode_e2e.py::test_refund_episode_ci_gate[scenario0]"
+  exit 1
+fi
+
+TARGET="$1"
+shift || true
+
 export PYTHONPATH="${SDK_DIR}/src:${PYTHONPATH:-}"
 export OPIK_PROJECT_NAME="${OPIK_PROJECT_NAME:-pytest-integration-e2e}"
 export OPIK_PYTEST_EXPERIMENT_ENABLED="${OPIK_PYTEST_EXPERIMENT_ENABLED:-true}"
@@ -32,20 +42,9 @@ if [[ -z "${PYTHON_BIN}" ]]; then
   fi
 fi
 
-echo "Running observability budget example..."
-echo "Project: ${OPIK_PROJECT_NAME}"
-echo "Episode artifact: ${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}"
-echo "Example logger level: ${OPIK_EXAMPLE_LOG_LEVEL}"
-echo "Flush timeout (s): ${OPIK_DEFAULT_FLUSH_TIMEOUT}"
-echo "Background workers: ${OPIK_BACKGROUND_WORKERS}"
+echo "Running safe pytest target: ${TARGET}"
 echo "Python binary: ${PYTHON_BIN}"
 echo "Pytest plugin autoload disabled: ${PYTEST_DISABLE_PLUGIN_AUTOLOAD}"
 echo "Pytest args: -m pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no ${*:-}"
 
-"${PYTHON_BIN}" -m pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no test_llm_episode_observability_budgets_e2e.py "$@"
-
-if [[ -f "${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}" ]]; then
-  echo
-  echo "Episode artifact generated:"
-  echo "  ${SCRIPT_DIR}/${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}"
-fi
+"${PYTHON_BIN}" -m pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no "${TARGET}" "$@"

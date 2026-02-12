@@ -22,6 +22,16 @@ export OPIK_FILE_UPLOAD_BACKGROUND_WORKERS="${OPIK_FILE_UPLOAD_BACKGROUND_WORKER
 export OPIK_SENTRY_ENABLE="${OPIK_SENTRY_ENABLE:-false}"
 export OPIK_ENABLE_LITELLM_MODELS_MONITORING="${OPIK_ENABLE_LITELLM_MODELS_MONITORING:-false}"
 export PYTEST_DISABLE_PLUGIN_AUTOLOAD="${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-1}"
+unset PYTEST_ADDOPTS
+
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [[ -z "${PYTHON_BIN}" ]]; then
+  if command -v pyenv >/dev/null 2>&1; then
+    PYTHON_BIN="$(pyenv which python)"
+  else
+    PYTHON_BIN="$(command -v python)"
+  fi
+fi
 
 DEFAULT_TEST_FILES=(
   "test_llm_episode_e2e.py"
@@ -39,11 +49,12 @@ echo "Example logger level: ${OPIK_EXAMPLE_LOG_LEVEL}"
 echo "Include judges: ${OPIK_INCLUDE_JUDGES}"
 echo "Flush timeout (s): ${OPIK_DEFAULT_FLUSH_TIMEOUT}"
 echo "Background workers: ${OPIK_BACKGROUND_WORKERS}"
+echo "Python binary: ${PYTHON_BIN}"
 echo "Pytest plugin autoload disabled: ${PYTEST_DISABLE_PLUGIN_AUTOLOAD}"
 echo "Included test files: ${DEFAULT_TEST_FILES[*]}"
-echo "Pytest args: -p opik.plugins.pytest -vv -s -rA --show-capture=no ${*:-}"
+echo "Pytest args: -m pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no ${*:-}"
 
-pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no "${DEFAULT_TEST_FILES[@]}" "$@"
+"${PYTHON_BIN}" -m pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no "${DEFAULT_TEST_FILES[@]}" "$@"
 
 if [[ -f "${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}" ]]; then
   echo
