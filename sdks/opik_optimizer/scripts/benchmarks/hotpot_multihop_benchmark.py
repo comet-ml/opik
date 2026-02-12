@@ -11,15 +11,13 @@ import os
 import random
 from typing import Any
 
-from benchmarks.agents.hotpot_multihop_agent import (
-    HotpotMultiHopAgent,
-    bm25_wikipedia_search,
-    get_initial_prompts,
-)
 from benchmarks.metrics.hotpot import hotpot_f1
 from opik_optimizer import HierarchicalReflectiveOptimizer
 from opik_optimizer.datasets import hotpot
 from opik_optimizer.utils.logging import setup_logging
+from benchmarks.packages.hotpot.agent import build_hotpot_agent
+from benchmarks.packages.hotpot.prompts import build_hotpot_prompts
+from benchmarks.agents.hotpot_multihop_agent import bm25_wikipedia_search
 
 PROJECT_HEADER = "Hotpot QA Multihop Optimization"
 SEED = 42
@@ -68,7 +66,7 @@ def load_datasets() -> tuple[Any, Any, Any]:
 
 def run_optimization(
     *,
-    agent: HotpotMultiHopAgent,
+    agent: Any,
     initial_prompts: dict[str, Any],
     train_dataset: Any,
     validation_dataset: Any,
@@ -101,13 +99,13 @@ def main() -> None:
         logger.exception("Wikipedia warmup failed")
         raise
 
-    agent = HotpotMultiHopAgent(
-        search_fn=bm25_wikipedia_search,
-        model=MODEL_NAME,
+    agent = build_hotpot_agent(
+        model_name=MODEL_NAME,
         model_parameters=MODEL_PARAMS,
-        num_passages_per_hop=NUM_PASSAGES,
     )
-    initial_prompts = get_initial_prompts()
+    # Keep passage count configurable in script context.
+    agent.num_passages = NUM_PASSAGES
+    initial_prompts = build_hotpot_prompts()
 
     print("=" * 80)
     print("OPTIMIZATION")

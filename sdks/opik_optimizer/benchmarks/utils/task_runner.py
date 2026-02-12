@@ -43,6 +43,7 @@ from benchmarks.core.benchmark_results import (
     PreflightReport,
     PreflightSummary,
 )
+from benchmarks.packages.registry import resolve_package
 
 
 _SPLIT_SUFFIXES = {
@@ -767,21 +768,19 @@ def execute_task(
                 **constructor_kwargs,
             )
 
-            # Check if this dataset uses a custom agent (multi-prompt / compound AI system)
+            # Check if this dataset is handled by a package-specific agent/prompt wiring.
             agent = None
-            if dataset_name.startswith("hotpot"):
-                from benchmarks.agents.hotpot_multihop_agent import (
-                    HotpotMultiHopAgent,
-                    get_initial_prompts,
-                )
-
-                agent = HotpotMultiHopAgent(
-                    model=model_name,
+            package_resolution = resolve_package(dataset_name)
+            if package_resolution is not None:
+                package = package_resolution.package
+                agent = package.build_agent(
+                    model_name=model_name,
                     model_parameters=model_parameters,
                 )
-                initial_prompt = get_initial_prompts()
+                initial_prompt = package.build_initial_prompt()
                 logger.info(
-                    "Created HotpotMultiHopAgent for dataset %s",
+                    "Created %s package agent for dataset %s",
+                    package_resolution.key,
                     dataset_name,
                 )
             else:
@@ -795,6 +794,10 @@ def execute_task(
                     model_parameters=getattr(
                         optimizer, "model_parameters", model_parameters
                     ),
+                )
+            if initial_prompt is None:
+                raise RuntimeError(
+                    f"Failed to initialize benchmark prompt for dataset '{dataset_name}'."
                 )
 
             initial_evaluation = evaluate_prompt_on_dataset(
