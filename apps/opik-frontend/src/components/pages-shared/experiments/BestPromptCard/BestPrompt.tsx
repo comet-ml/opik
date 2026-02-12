@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatNumericData, toString } from "@/lib/utils";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
@@ -152,15 +153,23 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
           </div>
           <div className="flex flex-row items-baseline gap-2">
             {!isUndefined(baselineScore) && (
-              <div className="comet-body-s text-muted-slate">
-                {formatNumericData(baselineScore)}
-              </div>
+              <TooltipWrapper content={String(baselineScore)}>
+                <div className="comet-body-s text-muted-slate">
+                  {formatScoreDisplay(baselineScore)}
+                </div>
+              </TooltipWrapper>
             )}
             {!isUndefined(baselineScore) && (
               <div className="text-muted-slate">→</div>
             )}
             <div className="comet-title-xl text-4xl leading-none text-foreground-secondary">
-              {isUndefined(score) ? "-" : formatNumericData(score)}
+              {isUndefined(score) ? (
+                "-"
+              ) : (
+                <TooltipWrapper content={String(score)}>
+                  <span>{formatScoreDisplay(score)}</span>
+                </TooltipWrapper>
+              )}
             </div>
             {!isUndefined(percentage) && (
               <div

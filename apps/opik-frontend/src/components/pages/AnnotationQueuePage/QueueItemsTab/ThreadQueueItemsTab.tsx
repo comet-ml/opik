@@ -52,6 +52,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -342,6 +343,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
             accessorFn: (row) =>
               row.feedback_scores?.find((f) => f.name === label),
             statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+            statisticDataFormater: formatScoreDisplay,
           }) as ColumnData<Thread>,
       ),
     ];

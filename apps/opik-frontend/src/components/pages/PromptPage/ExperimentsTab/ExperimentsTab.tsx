@@ -32,7 +32,7 @@ import TraceCountCell from "@/components/shared/DataTableCells/TraceCountCell";
 import DatasetVersionCell from "@/components/shared/DataTableCells/DatasetVersionCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import useAppStore from "@/store/AppStore";
-import { transformExperimentScores } from "@/lib/experimentScoreUtils";
+import { transformExperimentScores } from "@/lib/feedback-scores";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";

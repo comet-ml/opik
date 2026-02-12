@@ -31,6 +31,11 @@ import LineChart from "@/components/shared/Charts/LineChart/LineChart";
 import BarChart from "@/components/shared/Charts/BarChart/BarChart";
 import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
 import { MAX_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
+import {
+  renderScoreTooltipValue,
+  getScoreDisplayName,
+} from "@/lib/feedback-scores";
+import { SCORE_TYPE_FEEDBACK, SCORE_TYPE_EXPERIMENT } from "@/types/shared";
 
 const MAX_EXPERIMENTS_LIMIT = 100;
 const MAX_SELECTED_EXPERIMENTS = 10;
@@ -120,14 +125,21 @@ function transformGroupedExperimentsToChartData(
           if (shouldIncludeScore(score.name, feedbackScores)) {
             scores[score.name] = score.value;
             allLines.push(score.name);
-            labelsMap[score.name] = `${score.name} (avg)`;
+            labelsMap[score.name] = getScoreDisplayName(
+              score.name,
+              SCORE_TYPE_FEEDBACK,
+            );
           }
         });
 
         aggregatedExperimentScores.forEach((score) => {
+          const scoreName = getScoreDisplayName(
+            score.name,
+            SCORE_TYPE_EXPERIMENT,
+          );
           if (shouldIncludeScore(score.name, feedbackScores)) {
-            scores[score.name] = score.value;
-            allLines.push(score.name);
+            scores[scoreName] = score.value;
+            allLines.push(scoreName);
           }
         });
 
@@ -166,14 +178,18 @@ function transformUngroupedExperimentsToChartData(
       if (shouldIncludeScore(score.name, feedbackScores)) {
         scores[score.name] = score.value;
         allLines.push(score.name);
-        labelsMap[score.name] = `${score.name} (avg)`;
+        labelsMap[score.name] = getScoreDisplayName(
+          score.name,
+          SCORE_TYPE_FEEDBACK,
+        );
       }
     });
 
     (experiment.experiment_scores || []).forEach((score) => {
+      const scoreName = getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT);
       if (shouldIncludeScore(score.name, feedbackScores)) {
-        scores[score.name] = score.value;
-        allLines.push(score.name);
+        scores[scoreName] = score.value;
+        allLines.push(scoreName);
       }
     });
 
@@ -498,6 +514,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
           config={chartConfig}
           data={transformedData}
           xAxisKey="name"
+          renderTooltipValue={renderScoreTooltipValue}
           className="size-full"
         />
       );
@@ -510,6 +527,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
           config={chartConfig}
           data={transformedData}
           angleAxisKey="name"
+          renderTooltipValue={renderScoreTooltipValue}
           showLegend
           className="size-full"
         />
@@ -522,6 +540,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
         config={chartConfig}
         data={transformedData}
         xAxisKey="name"
+        renderTooltipValue={renderScoreTooltipValue}
         renderTooltipHeader={renderHeader}
         showArea={false}
         connectNulls={false}

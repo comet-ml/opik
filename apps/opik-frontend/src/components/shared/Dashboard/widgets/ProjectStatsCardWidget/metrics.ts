@@ -240,10 +240,6 @@ export const formatMetricValue = (
   return formatter(numValue);
 };
 
-export const formatFeedbackScoreValue = (value: number): string => {
-  return formatNumericData(value);
-};
-
 export const isFeedbackScoreMetric = (metricValue: string): boolean => {
   return metricValue.startsWith(`${COLUMN_FEEDBACK_SCORES_ID}.`);
 };

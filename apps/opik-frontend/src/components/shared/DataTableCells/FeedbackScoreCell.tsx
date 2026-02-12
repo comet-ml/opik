@@ -4,14 +4,16 @@ import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
 import isFunction from "lodash/isFunction";
 
-import { cn, formatNumericData } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import FeedbackScoreReasonTooltip from "../FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import { TraceFeedbackScore, Thread, Span } from "@/types/traces";
 import {
   extractReasonsFromValueByAuthor,
   getIsMultiValueFeedbackScore,
+  formatScoreDisplay,
 } from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
 import { BaseTraceData } from "@/types/traces";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
@@ -117,7 +119,7 @@ const FeedbackScoreAggregationCell = <TData,>(
   context: CellContext<TData, string>,
 ) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { accessorFn, dataFormatter = formatNumericData } = (custom ??
+  const { accessorFn, dataFormatter = formatScoreDisplay } = (custom ??
     {}) as CustomMeta;
 
   const rowId = context.row.id;
@@ -136,7 +138,13 @@ const FeedbackScoreAggregationCell = <TData,>(
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="truncate text-light-slate">{value}</span>
+      {isNumber(rawValue) ? (
+        <TooltipWrapper content={String(rawValue)}>
+          <span className="truncate text-light-slate">{value}</span>
+        </TooltipWrapper>
+      ) : (
+        <span className="truncate text-light-slate">{value}</span>
+      )}
     </CellWrapper>
   );
 };

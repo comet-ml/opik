@@ -27,11 +27,9 @@ import MetricBarChart from "./MetricBarChart";
 import { BreakdownConfig } from "@/types/dashboard";
 import { BREAKDOWN_GROUP_NAMES } from "@/components/shared/Dashboard/widgets/ProjectMetricsWidget/breakdown";
 
-const MAX_DECIMAL_PLACES = 4;
-
 const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) => {
   if (isNumber(value)) {
-    return formatNumericData(value, MAX_DECIMAL_PLACES);
+    return formatNumericData(value);
   }
   return value;
 };

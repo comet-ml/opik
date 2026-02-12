@@ -80,6 +80,7 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
@@ -722,6 +723,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
         }) as ColumnData<BaseTraceData>,
     );
 
@@ -742,6 +744,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 (f) => f.name === scoreName,
               ),
             statisticKey: `${COLUMN_SPAN_FEEDBACK_SCORES_ID}.${scoreName}`,
+            statisticDataFormater: formatScoreDisplay,
           } as ColumnData<BaseTraceData>;
         },
       );

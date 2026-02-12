@@ -5,7 +5,7 @@ import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 import useSortableHeader from "@/components/shared/DataTableHeaders/useSortableHeader";
 import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { formatNumericData } from "@/lib/utils";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 
 const FeedbackScoreHeader = <TData,>(
@@ -25,11 +25,7 @@ const FeedbackScoreHeader = <TData,>(
   });
 
   const formattedScore =
-    scoreValue !== undefined
-      ? typeof scoreValue === "number"
-        ? formatNumericData(scoreValue)
-        : scoreValue
-      : null;
+    scoreValue !== undefined ? formatScoreDisplay(scoreValue) : null;
 
   return (
     <HeaderWrapper

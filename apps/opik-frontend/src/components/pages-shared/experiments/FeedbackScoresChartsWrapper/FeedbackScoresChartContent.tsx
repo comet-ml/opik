@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import useChartConfig from "@/hooks/useChartConfig";
 import { Dot, LineChart } from "recharts";
+import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 
 import { DropdownOption } from "@/types/shared";
 import ChartTooltipContent, {
@@ -152,7 +153,12 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
         />
         <ChartTooltip
           isAnimationActive={false}
-          content={<ChartTooltipContent renderHeader={renderHeader} />}
+          content={
+            <ChartTooltipContent
+              renderHeader={renderHeader}
+              renderValue={renderScoreTooltipValue}
+            />
+          }
         />
         <ChartLegend
           verticalAlign="top"

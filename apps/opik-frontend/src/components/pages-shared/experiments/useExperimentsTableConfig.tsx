@@ -27,7 +27,7 @@ import {
   getExperimentScore,
   parseScoreColumnId,
   RowWithScores,
-} from "./scoresUtils";
+} from "@/lib/feedback-scores";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   buildGroupFieldName,

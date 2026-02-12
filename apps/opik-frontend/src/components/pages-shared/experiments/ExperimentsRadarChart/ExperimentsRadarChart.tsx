@@ -5,6 +5,7 @@ import { RadarDataPoint } from "@/types/chart";
 import useChartConfig from "@/hooks/useChartConfig";
 import { ExperimentLabelsMap } from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/useCompareExperimentsChartsData";
 import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
+import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 
 interface ExperimentsRadarChartProps {
   name: string;
@@ -31,6 +32,7 @@ const ExperimentsRadarChart: React.FunctionComponent<
           data={data}
           angleAxisKey="name"
           showLegend
+          renderTooltipValue={renderScoreTooltipValue}
         />
       </CardContent>
     </Card>

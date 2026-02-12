@@ -1,6 +1,7 @@
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
 } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
+import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DEFAULT_CHART_GRID_PROPS,
@@ -155,6 +156,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
                 content={
                   <ChartTooltipContent
                     renderHeader={renderChartTooltipHeader}
+                    renderValue={renderScoreTooltipValue}
                   />
                 }
               />

@@ -23,6 +23,7 @@ import {
   costYTickFormatter,
   tokenYTickFormatter,
 } from "@/components/pages/TracesPage/MetricsTab/utils";
+import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
@@ -308,7 +309,9 @@ const ProjectMetricsWidget: React.FunctionComponent<
               ? renderCostTooltipValue
               : isDurationMetric
                 ? renderDurationTooltipValue
-                : undefined
+                : isFeedbackScoreMetric
+                  ? renderScoreTooltipValue
+                  : undefined
           }
           customYTickFormatter={
             isCostMetric
