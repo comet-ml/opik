@@ -10,6 +10,14 @@ import svgr from "vite-plugin-svgr";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
+  // Support dynamic ports for multi-worktree development
+  // VITE_DEV_PORT: Frontend dev server port (default: 5174)
+  // VITE_BACKEND_PORT: Backend server port for proxy target (default: 8080)
+  // VITE_OPIK_AI_BACKEND_PORT: AI backend server port for proxy target (default: 8081)
+  const devPort = parseInt(env.VITE_DEV_PORT || "5174", 10);
+  const backendPort = parseInt(env.VITE_BACKEND_PORT || "8080", 10);
+  const opikAiBackendPort = parseInt(env.VITE_OPIK_AI_BACKEND_PORT || "8081", 10);
+
   return {
     base: env.VITE_BASE_URL || "/",
     plugins: [
@@ -37,20 +45,19 @@ export default defineConfig(({ mode }) => {
       sourcemap: true,
     },
     server: {
-      host: "0.0.0.0", // Allow access from network (enables mobile device testing)
-      port: 5174,
-      // Proxy configuration for local development
-      // Mirrors production nginx behavior: strips /api prefix before forwarding to backend
-      // This enables:
-      // - Mobile device testing on local network (e.g., http://192.168.1.100:5174)
-      // - No hardcoded IP addresses needed
-      // - Development environment matches production architecture
+      host: "0.0.0.0",
+      port: devPort,
+      // Proxy /api/* to backend, stripping the /api prefix (mirrors production nginx)
       // Example: /api/v1/projects -> http://localhost:8080/v1/projects
       proxy: {
         "/api": {
-          target: "http://localhost:8080", // Backend server
-          changeOrigin: true, // Handle CORS properly
-          rewrite: (path) => path.replace(/^\/api/, ""), // Strip /api prefix
+          target: `http://localhost:${backendPort}`,
+          changeOrigin: true,
+          rewrite: (requestPath) => requestPath.replace(/^\/api/, ""),
+        },
+        "/opik-ai": {
+          target: `http://localhost:${opikAiBackendPort}`,
+          changeOrigin: true,
         },
       },
     },

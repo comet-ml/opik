@@ -202,11 +202,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback scores (avg.)",
         type: COLUMN_TYPE.numberDictionary,
-        accessorFn: (row) =>
-          get(row, "feedback_scores", []).map((score) => ({
-            ...score,
-            value: formatNumericData(score.value),
-          })),
+        accessorFn: (row) => get(row, "feedback_scores", []),
         cell: FeedbackScoreListCell as never,
         customMeta: {
           getHoverCardName: (row: ProjectWithStatistic) => row.name,
@@ -292,26 +288,27 @@ const ProjectsPage: React.FunctionComponent = () => {
     },
   );
 
-  const { data, isPending } = useProjectWithStatisticsList(
-    {
-      workspaceName,
-      search: search!,
-      sorting: sortedColumns.map((column) => {
-        if (column.id === "last_updated_at") {
-          return {
-            ...column,
-            id: "last_updated_trace_at",
-          };
-        }
-        return column;
-      }),
-      page: page!,
-      size: size!,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useProjectWithStatisticsList(
+      {
+        workspaceName,
+        search: search!,
+        sorting: sortedColumns.map((column) => {
+          if (column.id === "last_updated_at") {
+            return {
+              ...column,
+              id: "last_updated_trace_at",
+            };
+          }
+          return column;
+        }),
+        page: page!,
+        size: size!,
+      },
+      {
+        placeholderData: keepPreviousData,
+      },
+    );
 
   const projects = useMemo(() => data?.content ?? [], [data?.content]);
   const total = data?.total ?? 0;
@@ -450,6 +447,7 @@ const ProjectsPage: React.FunctionComponent = () => {
             )}
           </DataTableNoData>
         }
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <div className="py-4">
         <DataTablePagination

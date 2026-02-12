@@ -78,6 +78,7 @@ import useCompareExperimentsColumns from "@/api/datasets/useCompareExperimentsCo
 import useExperimentItemsStatistic from "@/api/datasets/useExperimentItemsStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import ExperimentsFeedbackScoresSelect from "@/components/pages-shared/experiments/ExperimentsFeedbackScoresSelect/ExperimentsFeedbackScoresSelect";
 import {
   calculateHeightStyle,
@@ -280,23 +281,24 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const truncationEnabled = useTruncationEnabled();
 
-  const { data, isPending } = useCompareExperimentsList(
-    {
-      workspaceName,
-      datasetId,
-      experimentsIds,
-      filters,
-      sorting,
-      search: search as string,
-      truncate: truncationEnabled,
-      page: page as number,
-      size: size as number,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useCompareExperimentsList(
+      {
+        workspaceName,
+        datasetId,
+        experimentsIds,
+        filters,
+        sorting,
+        search: search as string,
+        truncate: truncationEnabled,
+        page: page as number,
+        size: size as number,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: REFETCH_INTERVAL,
+      },
+    );
 
   const { refetch: refetchExportData } = useCompareExperimentsList(
     {
@@ -528,10 +530,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           header: FeedbackScoreHeader as never,
           cell: CompareExperimentsFeedbackScoreCell as never,
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
           supportsPercentiles: true,
           customMeta: {
             experimentsIds,
-            feedbackKey: label,
+            scoreName: label,
           },
         }) as ColumnData<ExperimentsCompare>,
     );
@@ -884,6 +887,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         TableBody={DataTableVirtualBody}
         stickyHeader
         meta={meta}
+        showLoadingOverlay={isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

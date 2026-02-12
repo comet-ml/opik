@@ -55,6 +55,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -70,6 +73,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -299,6 +303,78 @@ class DatasetVersionResourceTest {
             // Then
             assertThat(page.content()).isEmpty();
             assertThat(page.total()).isEqualTo(0);
+        }
+    }
+
+    @Nested
+    @DisplayName("Retrieve Version by Name:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RetrieveVersion {
+
+        @Test
+        @DisplayName("Success: Retrieve version by name")
+        void retrieveVersion__whenValidVersionName__thenReturnVersion() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            final int VERSION_COUNT = 3;
+
+            // Create multiple versions
+            for (int i = 1; i <= VERSION_COUNT; i++) {
+                createDatasetItems(datasetId, 1);
+            }
+
+            // When - Retrieve v1 (first version)
+            var version = datasetResourceClient.retrieveVersion(datasetId, "v1", API_KEY, TEST_WORKSPACE);
+
+            // Then
+            assertThat(version).isNotNull();
+            assertThat(version.versionName()).isEqualTo("v1");
+            assertThat(version.datasetId()).isEqualTo(datasetId);
+        }
+
+        @Test
+        @DisplayName("Success: Retrieve latest version by name")
+        void retrieveVersion__whenLatestVersionName__thenReturnLatestVersion() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            final int VERSION_COUNT = 3;
+
+            // Create multiple versions
+            for (int i = 1; i <= VERSION_COUNT; i++) {
+                createDatasetItems(datasetId, 1);
+            }
+
+            // When - Retrieve v3 (should be latest)
+            var version = datasetResourceClient.retrieveVersion(datasetId, "v3", API_KEY, TEST_WORKSPACE);
+
+            // Then
+            assertThat(version).isNotNull();
+            assertThat(version.versionName()).isEqualTo("v3");
+            assertThat(version.isLatest()).isTrue();
+        }
+
+        static Stream<Arguments> invalidVersionScenarios() {
+            return Stream.of(
+                    Arguments.of("v999", HttpStatus.SC_NOT_FOUND, "non-existent version"),
+                    Arguments.of("invalid", HttpStatus.SC_UNPROCESSABLE_ENTITY, "invalid format"),
+                    Arguments.of("v", HttpStatus.SC_UNPROCESSABLE_ENTITY, "missing version number"),
+                    Arguments.of("1", HttpStatus.SC_UNPROCESSABLE_ENTITY, "missing 'v' prefix"));
+        }
+
+        @ParameterizedTest(name = "Error: {2}")
+        @MethodSource("invalidVersionScenarios")
+        void retrieveVersion__whenInvalidInput__thenReturnExpectedError(
+                String versionName, int expectedStatus, String scenario) {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            // When
+            try (var response = datasetResourceClient.callRetrieveVersion(datasetId, versionName, API_KEY,
+                    TEST_WORKSPACE)) {
+                // Then
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+            }
         }
     }
 

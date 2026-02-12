@@ -254,6 +254,8 @@ from .experiment_item_compare import ExperimentItemCompare
 from .experiment_item_compare_trace_visibility_mode import ExperimentItemCompareTraceVisibilityMode
 from .experiment_item_public import ExperimentItemPublic
 from .experiment_item_public_trace_visibility_mode import ExperimentItemPublicTraceVisibilityMode
+from .experiment_item_reference import ExperimentItemReference
+from .experiment_item_reference_public import ExperimentItemReferencePublic
 from .experiment_item_trace_visibility_mode import ExperimentItemTraceVisibilityMode
 from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
@@ -782,6 +784,8 @@ __all__ = [
     "ExperimentItemCompareTraceVisibilityMode",
     "ExperimentItemPublic",
     "ExperimentItemPublicTraceVisibilityMode",
+    "ExperimentItemReference",
+    "ExperimentItemReferencePublic",
     "ExperimentItemTraceVisibilityMode",
     "ExperimentPagePublic",
     "ExperimentPublic",

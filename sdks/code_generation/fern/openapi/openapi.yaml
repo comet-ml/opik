@@ -2222,6 +2222,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/datasets/{id}/versions/retrieve:
+    post:
+      tags:
+      - Datasets
+      summary: Retrieve dataset version by name
+      description: "Get a specific version by its version name (e.g., 'v1', 'v373').\
+        \ This is more efficient than paginating through all versions for large datasets."
+      operationId: retrieveDatasetVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionRetrieveRequest_Public"
+      responses:
+        "200":
+          description: Dataset version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/datasets/{id}/versions/hash/{versionHash}:
     patch:
       tags:
@@ -2531,6 +2570,10 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
       - name: filters
         in: query
         schema:
@@ -2574,6 +2617,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: project_deleted
+        in: query
+        schema:
+          type: boolean
+          description: Filter experiments by deleted projects
       - name: filters
         in: query
         schema:
@@ -10444,6 +10492,17 @@ components:
           minLength: 1
           type: string
           description: Version hash or tag to restore from
+    DatasetVersionRetrieveRequest_Public:
+      required:
+      - version_name
+      type: object
+      properties:
+        version_name:
+          minLength: 1
+          pattern: ^v\d+$
+          type: string
+          description: "Version name in format 'vN' (e.g., 'v1', 'v373')"
+          example: v1
     DatasetVersionUpdate_Public:
       type: object
       properties:
@@ -10868,6 +10927,32 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExperimentItemBulkRecord"
+    ExperimentItemReference:
+      required:
+      - dataset_id
+      - dataset_item_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+        dataset_item_id:
+          type: string
+          description: Dataset Item ID
+          format: uuid
+      description: "Experiment reference with ID, name, dataset ID, and dataset item\
+        \ ID"
+      readOnly: true
     GuardrailsValidation:
       type: object
       properties:
@@ -11090,6 +11175,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentItemReference"
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -14885,6 +14972,32 @@ components:
           enum:
           - passed
           - failed
+    ExperimentItemReference_Public:
+      required:
+      - dataset_id
+      - dataset_item_id
+      - id
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          description: Experiment ID
+          format: uuid
+        name:
+          type: string
+          description: Experiment name
+        dataset_id:
+          type: string
+          description: Dataset ID
+          format: uuid
+        dataset_item_id:
+          type: string
+          description: Dataset Item ID
+          format: uuid
+      description: "Experiment reference with ID, name, dataset ID, and dataset item\
+        \ ID"
+      readOnly: true
     GuardrailsValidation_Public:
       type: object
       properties:
@@ -15009,6 +15122,8 @@ components:
             description: "List of unique provider names from all spans in this trace,\
               \ sorted alphabetically"
             readOnly: true
+        experiment:
+          $ref: "#/components/schemas/ExperimentItemReference_Public"
     TraceThread:
       type: object
       properties:
@@ -15371,6 +15486,14 @@ components:
             \ the frontend will limit pagination to prevent performance issues. Default:\
             \ true (truncation enabled)."
           example: true
+        color_map:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Workspace-level color map. Maps label names to hex color\
+              \ values (e.g. #FF0000). Max 10000 entries."
+          description: "Workspace-level color map. Maps label names to hex color values\
+            \ (e.g. #FF0000). Max 10000 entries."
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

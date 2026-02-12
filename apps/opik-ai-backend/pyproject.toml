@@ -1,0 +1,25 @@
+[project]
+name = "opik-ai-backend"
+version = "0.1.0"
+description = "Opik AI Backend - AI-powered trace analyzer for Opik"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "google-adk>=1.9.0",
+    "litellm>=1.55.1",
+    "mysqlclient>=2.2.7",
+    "newrelic>=10.15.0",
+    "opik>=1.9.89",
+    "pydantic-settings>=2.10.1",
+    "segment-analytics-python>=2.0.0",
+    "sentry-sdk[fastapi]>=2.34.1",
+]
+
+[dependency-groups]
+dev = [
+    "deepeval>=3.4.0",
+    "langchain-openai>=0.3.30",
+    "mypy>=1.17.1",
+    "ragas>=0.3.2",
+    "ruff>=0.8.0",
+]

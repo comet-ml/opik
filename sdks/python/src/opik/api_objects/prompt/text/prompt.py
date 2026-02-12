@@ -178,6 +178,7 @@ class Prompt(base_prompt.BasePrompt):
         """
         info_dict: Dict[str, Any] = {
             "name": self.name,
+            "template_structure": "text",
             "version": {
                 "template": self.prompt,
             },
@@ -191,6 +192,9 @@ class Prompt(base_prompt.BasePrompt):
 
         if self.__internal_api__version_id__ is not None:
             info_dict["version"]["id"] = self.__internal_api__version_id__
+
+        if self._metadata is not None:
+            info_dict["version"]["metadata"] = self._metadata
 
         return info_dict
 

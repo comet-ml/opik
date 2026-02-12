@@ -39,6 +39,8 @@ interface BaseLoadableSelectBoxProps {
   align?: "start" | "end" | "center";
   emptyState?: ReactElement;
   showTooltip?: boolean;
+  autoFocus?: boolean;
+  hideSearch?: boolean;
 }
 
 interface SingleSelectProps extends BaseLoadableSelectBoxProps {
@@ -80,6 +82,8 @@ export const LoadableSelectBox = ({
   multiselect = false,
   showTooltip = false,
   emptyState,
+  autoFocus = true,
+  hideSearch = false,
   ...props
 }: LoadableSelectBoxProps) => {
   const showSelectAll =
@@ -271,19 +275,26 @@ export const LoadableSelectBox = ({
               }
             : {}
         }
-        className="relative p-1 pt-12"
+        className={cn("relative p-1", hideSearch ? "pt-1" : "pt-12")}
         hideWhenDetached
+        onOpenAutoFocus={(e) => {
+          if (!autoFocus || hideSearch) {
+            e.preventDefault();
+          }
+        }}
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <div className="absolute inset-x-1 top-0 h-12">
-          <SearchInput
-            searchText={search}
-            setSearchText={setSearch}
-            placeholder={searchPlaceholder}
-            variant="ghost"
-          ></SearchInput>
-          <Separator className="mt-1" />
-        </div>
+        {!hideSearch && (
+          <div className="absolute inset-x-1 top-0 h-12">
+            <SearchInput
+              searchText={search}
+              setSearchText={setSearch}
+              placeholder={searchPlaceholder}
+              variant="ghost"
+            ></SearchInput>
+            <Separator className="mt-1" />
+          </div>
+        )}
         <div className="max-h-[40vh] overflow-y-auto overflow-x-hidden">
           {isLoading && (
             <div className="flex items-center justify-center">
@@ -292,7 +303,12 @@ export const LoadableSelectBox = ({
           )}
           {hasFilteredOptions ? (
             <>
-              {filteredOptions.map((option) => {
+              {filteredOptions.map((option, index) => {
+                const prevGroup =
+                  index > 0 ? filteredOptions[index - 1].group : undefined;
+                const showGroupHeader =
+                  option.group && option.group !== prevGroup;
+
                 const optionContent = (
                   <div
                     key={option.value}
@@ -338,7 +354,7 @@ export const LoadableSelectBox = ({
                           {option.label}
                         </div>
                         {option.description && (
-                          <div className="comet-body-xs truncate text-muted-foreground">
+                          <div className="comet-body-xs text-muted-foreground">
                             {option.description}
                           </div>
                         )}
@@ -368,13 +384,27 @@ export const LoadableSelectBox = ({
                   </div>
                 );
 
-                return showTooltip ? (
+                const renderedOption = showTooltip ? (
                   <TooltipWrapper key={option.value} content={option.label}>
                     {optionContent}
                   </TooltipWrapper>
                 ) : (
                   optionContent
                 );
+
+                if (showGroupHeader) {
+                  return (
+                    <React.Fragment key={option.value}>
+                      {prevGroup && <Separator className="my-1" />}
+                      <div className="comet-body-s-accented px-4 pb-1 pt-3 text-foreground-secondary">
+                        {option.group}
+                      </div>
+                      {renderedOption}
+                    </React.Fragment>
+                  );
+                }
+
+                return renderedOption;
               })}
             </>
           ) : emptyState ? (

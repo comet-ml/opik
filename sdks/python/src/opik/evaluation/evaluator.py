@@ -70,7 +70,7 @@ def _compute_experiment_scores(
 
 
 def evaluate(
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
@@ -89,6 +89,7 @@ def evaluate(
     trial_count: int = 1,
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
+    dataset_filter_string: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -96,7 +97,7 @@ def evaluate(
     to receive inputs and outputs from the task.
 
     Args:
-        dataset: An Opik dataset instance
+        dataset: An Opik Dataset or DatasetVersion instance
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
@@ -159,6 +160,21 @@ def evaluate(
             metrics across the entire experiment.
 
         experiment_tags: Optional list of tags to associate with the experiment.
+
+        dataset_filter_string: Optional OQL filter string to filter dataset items.
+            Supports filtering by tags, data fields, metadata, etc.
+
+            Supported columns include:
+            - `id`, `source`, `trace_id`, `span_id`: String fields
+            - `data`: Dictionary field (use dot notation, e.g., "data.category")
+            - `tags`: List field (use "contains" operator)
+            - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
+            - `created_by`, `last_updated_by`: String fields
+
+            Examples:
+            - `tags contains "failed"` - Items with 'failed' tag
+            - `data.category = "test"` - Items with specific data field value
+            - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
@@ -182,6 +198,7 @@ def evaluate(
         experiment_config=experiment_config,
         prompts=checked_prompts,
         tags=experiment_tags,
+        dataset_version_id=getattr(dataset.get_version_info(), "id", None),
     )
 
     # wrap scoring functions if any
@@ -206,6 +223,7 @@ def evaluate(
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
+        dataset_filter_string=dataset_filter_string,
     )
 
 
@@ -213,7 +231,7 @@ def _evaluate_task(
     *,
     client: opik_client.Opik,
     experiment: experiment.Experiment,
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     scoring_metrics: List[base_metric.BaseMetric],
     project_name: Optional[str],
@@ -225,6 +243,7 @@ def _evaluate_task(
     dataset_sampler: Optional[samplers.BaseDatasetSampler],
     trial_count: int,
     experiment_scoring_functions: List[ExperimentScoreFunction],
+    dataset_filter_string: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -245,6 +264,7 @@ def _evaluate_task(
             dataset_sampler=dataset_sampler,
             trial_count=trial_count,
             experiment_=experiment,
+            dataset_filter_string=dataset_filter_string,
         )
 
     total_time = time.time() - start_time
@@ -493,7 +513,7 @@ def _build_prompt_evaluation_task(
 
 
 def evaluate_prompt(
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     messages: List[Dict[str, Any]],
     model: Optional[Union[str, base_model.OpikBaseModel]] = None,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
@@ -517,7 +537,7 @@ def evaluate_prompt(
     Performs prompt evaluation on a given dataset.
 
     Args:
-        dataset: An Opik dataset instance
+        dataset: An Opik Dataset or DatasetVersion instance
 
         messages: A list of prompt messages to evaluate.
 
@@ -617,6 +637,7 @@ def evaluate_prompt(
         experiment_config=experiment_config,
         prompts=prompts,
         tags=experiment_tags,
+        dataset_version_id=getattr(dataset.get_version_info(), "id", None),
     )
 
     # wrap scoring functions if any
@@ -698,7 +719,7 @@ def evaluate_prompt(
 
 def evaluate_optimization_trial(
     optimization_id: str,
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
@@ -717,6 +738,7 @@ def evaluate_optimization_trial(
     trial_count: int = 1,
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
+    dataset_filter_string: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -724,7 +746,7 @@ def evaluate_optimization_trial(
     Args:
         optimization_id: The ID of the optimization associated with the experiment.
 
-        dataset: An Opik dataset instance
+        dataset: An Opik Dataset or DatasetVersion instance
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
@@ -786,6 +808,21 @@ def evaluate_optimization_trial(
             metrics across the entire experiment.
 
         experiment_tags: A list of tags to associate with the experiment.
+
+        dataset_filter_string: Optional OQL filter string to filter dataset items.
+            Supports filtering by tags, data fields, metadata, etc.
+
+            Supported columns include:
+            - `id`, `source`, `trace_id`, `span_id`: String fields
+            - `data`: Dictionary field (use dot notation, e.g., "data.category")
+            - `tags`: List field (use "contains" operator)
+            - `created_at`, `last_updated_at`: DateTime fields (ISO 8601 format)
+            - `created_by`, `last_updated_by`: String fields
+
+            Examples:
+            - `tags contains "failed"` - Items with 'failed' tag
+            - `data.category = "test"` - Items with specific data field value
+            - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
@@ -821,6 +858,7 @@ def evaluate_optimization_trial(
         type="trial",
         optimization_id=optimization_id,
         tags=experiment_tags,
+        dataset_version_id=getattr(dataset.get_version_info(), "id", None),
     )
 
     return _evaluate_task(
@@ -838,6 +876,7 @@ def evaluate_optimization_trial(
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
         experiment_scoring_functions=experiment_scoring_functions,
+        dataset_filter_string=dataset_filter_string,
     )
 
 

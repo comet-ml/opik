@@ -9,6 +9,7 @@ export type DropdownOption<TDataType> = {
   description?: string;
   tooltip?: string;
   disabled?: boolean;
+  group?: string;
   action?: {
     href?: string;
   };
