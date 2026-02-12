@@ -43,6 +43,7 @@ def run_simulation(
     project_name: Optional[str] = None,
     tags: Optional[List[str]] = None,
     simulation_state: Optional[Dict[str, Any]] = None,
+    track_app_calls: bool = True,
     **app_kwargs: Any,
 ) -> Dict[str, Any]:
     """
@@ -64,6 +65,9 @@ def run_simulation(
         tags: Optional list of tags to apply to simulation traces
         simulation_state: Optional mutable dictionary shared across turns.
             If provided, it is updated in-place and also returned in the result.
+        track_app_calls: Whether to auto-decorate the app with @track and pass
+            opik trace arguments on each turn. Set to False for pure/offline
+            simulations where per-turn tracing is not required.
         **app_kwargs: Additional keyword arguments passed to the app
 
     Returns:
@@ -78,8 +82,8 @@ def run_simulation(
     if thread_id is None:
         thread_id = id_helpers.generate_id()
 
-    # Automatically decorate app if not already decorated
-    if not hasattr(app, "opik_tracked"):
+    # Automatically decorate app if not already decorated.
+    if track_app_calls and not hasattr(app, "opik_tracked"):
         app_name = app.__name__ if hasattr(app, "__name__") else "simulation_app"
         app = track(name=app_name)(app)
 
@@ -119,17 +123,15 @@ def run_simulation(
 
         # Call app with SINGLE message string, thread_id parameter, and opik_args for tracing
         try:
-            trace_opik_args = {
-                "thread_id": thread_id,
-                "metadata": {"turn": turn + 1, "project_name": project_name},
-            }
-            if tags:
-                trace_opik_args["tags"] = tags
-
-            app_call_kwargs: Dict[str, Any] = {
-                **app_kwargs,
-                "opik_args": {"trace": trace_opik_args},
-            }
+            app_call_kwargs: Dict[str, Any] = {**app_kwargs}
+            if track_app_calls:
+                trace_opik_args = {
+                    "thread_id": thread_id,
+                    "metadata": {"turn": turn + 1, "project_name": project_name},
+                }
+                if tags:
+                    trace_opik_args["tags"] = tags
+                app_call_kwargs["opik_args"] = {"trace": trace_opik_args}
             if _accepts_keyword_argument(app, "simulation_state"):
                 app_call_kwargs["simulation_state"] = state
 

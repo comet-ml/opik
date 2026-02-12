@@ -196,6 +196,7 @@ def test_refund_episode_ci_gate(scenario):
         max_turns=scenario["max_turns"],
         project_name=scenario["project_name"],
         tags=scenario["tags"],
+        track_app_calls=False,
     )
 
     conversation_history = simulation["conversation_history"]

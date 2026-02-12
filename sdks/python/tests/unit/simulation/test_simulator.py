@@ -281,3 +281,21 @@ class TestRunSimulation:
         assert history[2]["content"] == "user-1"
         assert history[4]["content"] == "user-2"
         assert result["simulation_state"]["dummy_idx"] == 3
+
+    def test_run_simulation_without_app_tracking(self):
+        """Test simulations can run without per-turn app tracking."""
+
+        def strict_app_without_opik_args(message, *, thread_id):
+            return {"role": "assistant", "content": f"No tracking: {message}"}
+
+        user_simulator = SimulatedUser(persona="Test user", fixed_responses=["Message"])
+
+        result = run_simulation(
+            app=strict_app_without_opik_args,
+            user_simulator=user_simulator,
+            track_app_calls=False,
+            max_turns=1,
+        )
+
+        history = result["conversation_history"]
+        assert history[1]["content"] == "No tracking: Message"

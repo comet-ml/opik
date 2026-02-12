@@ -143,6 +143,7 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
         max_turns=scenario["max_turns"],
         project_name=scenario["project_name"],
         tags=scenario["tags"],
+        track_app_calls=False,
     )
 
     thread_id = simulation["thread_id"]

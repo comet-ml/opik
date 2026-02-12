@@ -110,6 +110,7 @@ def test_policy_and_routing_episode_ci_gate(scenario):
         max_turns=scenario["max_turns"],
         project_name=scenario["project_name"],
         tags=scenario["tags"],
+        track_app_calls=False,
     )
     thread_id = simulation["thread_id"]
     trajectory = agent.trajectory_by_thread.get(thread_id, [])
