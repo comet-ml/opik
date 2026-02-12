@@ -7,9 +7,7 @@ import jsonschema
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SCHEMA_PATH = ROOT_DIR / "benchmarks" / "configs" / "manifest.schema.json"
 TASKS_EXAMPLE_PATH = ROOT_DIR / "scripts" / "benchmarks" / "tasks.example.json"
-GENERATOR_EXAMPLE_PATH = (
-    ROOT_DIR / "scripts" / "benchmarks" / "generator.example.json"
-)
+GENERATOR_EXAMPLE_PATH = ROOT_DIR / "scripts" / "benchmarks" / "generator.example.json"
 
 
 def _load_json(path: Path) -> dict:

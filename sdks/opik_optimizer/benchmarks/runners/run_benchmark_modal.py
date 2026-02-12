@@ -615,7 +615,8 @@ def _save_call_ids_to_volume(run_id: str, call_ids: list[dict[str, Any]]) -> Non
     results_volume.commit()
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """CLI entry point for direct coordinator invocation."""
     # Parse CLI arguments when run directly (not via modal run)
     parser = argparse.ArgumentParser(
         description="Submit benchmark tasks to Modal",
@@ -705,3 +706,7 @@ Examples:
         retry_failed_run_id=args.retry_failed_run_id,
         resume_run_id=args.resume_run_id,
     )
+
+
+if __name__ == "__main__":
+    main()

@@ -39,7 +39,7 @@ class ManifestTask(BaseModel):
     prompt: list[PromptMessage] | None = None
 
     @model_validator(mode="after")
-    def _validate_datasets(self) -> "ManifestTask":
+    def _validate_datasets(self) -> ManifestTask:
         if self.datasets and "train" not in self.datasets:
             raise ValueError(
                 "datasets config must include a train split when provided."
@@ -54,7 +54,7 @@ class GeneratorDataset(BaseModel):
     datasets: dict[str, Any] | None = None
 
     @model_validator(mode="after")
-    def _validate_datasets(self) -> "GeneratorDataset":
+    def _validate_datasets(self) -> GeneratorDataset:
         if self.datasets and "train" not in self.datasets:
             raise ValueError(
                 "generator datasets config must include a train split when provided."
@@ -97,7 +97,7 @@ class BenchmarkManifest(BaseModel):
     generators: list[GeneratorSpec] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _validate_has_tasks_or_generators(self) -> "BenchmarkManifest":
+    def _validate_has_tasks_or_generators(self) -> BenchmarkManifest:
         if not self.tasks and not self.generators:
             raise ValueError("Manifest must include at least one task or generator.")
         return self
