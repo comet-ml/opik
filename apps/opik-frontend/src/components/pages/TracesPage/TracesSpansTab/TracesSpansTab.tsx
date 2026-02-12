@@ -161,6 +161,8 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     size: 400,
     type: COLUMN_TYPE.string,
     cell: PrettyCell as never,
+    statisticKey: "input",
+    statisticDataFormater: (value: number) => `${value} non-empty`,
     customMeta: {
       fieldType: "input",
     },
@@ -171,6 +173,8 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     size: 400,
     type: COLUMN_TYPE.string,
     cell: PrettyCell as never,
+    statisticKey: "output",
+    statisticDataFormater: (value: number) => `${value} non-empty`,
     customMeta: {
       fieldType: "output",
     },
@@ -761,6 +765,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         id: COLUMN_METADATA_ID,
         label: "Metadata",
         type: COLUMN_TYPE.dictionary,
+        statisticKey: "metadata",
+        statisticDataFormater: (value: number) => `${value} non-empty`,
         accessorFn: (row) =>
           isObject(row.metadata)
             ? JSON.stringify(row.metadata, null, 2)

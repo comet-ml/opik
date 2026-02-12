@@ -938,7 +938,7 @@ class SpanDAO {
                  HAVING <feedback_scores_empty_filters>
             )
             <endif>
-            , spans_final AS (
+            , spans_deduplicated AS (
                 SELECT
                       s.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
                       truncated_input,
@@ -947,9 +947,6 @@ class SpanDAO {
                       output_length,
                       duration
                 FROM spans s
-                <if(sort_has_feedback_scores)>
-                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = s.id
-                <endif>
                 WHERE project_id = :project_id
                 AND workspace_id = :workspace_id
                 <if(last_received_span_id)> AND id \\< :last_received_span_id <endif>
@@ -970,12 +967,21 @@ class SpanDAO {
                 <if(feedback_scores_empty_filters)>
                  AND id NOT IN (SELECT entity_id FROM fsc)
                 <endif>
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            , spans_final AS (
+                SELECT
+                      s.*
+                FROM spans_deduplicated s
+                <if(sort_has_feedback_scores)>
+                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = s.id
+                <endif>
                 <if(stream)>
                 ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                 <else>
                 ORDER BY <if(sort_fields)> <sort_fields>, id DESC <else>(workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC <endif>
                 <endif>
-                LIMIT 1 BY id
                 LIMIT :limit <if(offset)>OFFSET :offset <endif>
             )
             SELECT
@@ -1316,7 +1322,7 @@ class SpanDAO {
                 sum(output_count) as output,
                 sum(metadata_count) as metadata,
                 avg(tags_count) as tags,
-                avgMap(usage) as usage,
+                sumMap(usage) as usage,
                 avgMap(feedback_scores) AS feedback_scores,
                 avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
                 toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
