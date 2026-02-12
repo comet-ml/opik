@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.13.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.8 /uv /uvx /bin/
 
@@ -22,8 +22,8 @@ RUN adduser --disabled-password --gecos "" myuser && \
 # Copy application code (changes frequently, so this layer is last)
 COPY src/opik_ai_backend/ /app/opik_ai_backend/
 
-# Warm up the import cache during build time
-RUN uv run python -c "from opik_ai_backend import _agent; print('Import cache warmed successfully')"
+# Pre-compile Python bytecode cache
+RUN .venv/bin/python -m compileall /app/opik_ai_backend/
 
 # Set build-time variables last so they don't bust the dependency cache
 ARG GIT_TAG

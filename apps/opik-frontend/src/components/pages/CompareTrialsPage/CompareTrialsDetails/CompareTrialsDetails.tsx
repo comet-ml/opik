@@ -6,10 +6,10 @@ import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { formatNumericData } from "@/lib/utils";
 import { generateDistinctColorMap } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import NavigationTag from "@/components/shared/NavigationTag";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
+import useWorkspaceColorMap from "@/hooks/useWorkspaceColorMap";
 
 type CompareTrialsDetailsProps = {
   optimization?: Optimization;
@@ -23,6 +23,7 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
   experimentsIds,
 }) => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
+  const { getColor } = useWorkspaceColorMap();
 
   const isCompare = experimentsIds.length > 1;
 
@@ -110,8 +111,8 @@ const CompareTrialsDetails: React.FC<CompareTrialsDetailsProps> = ({
           <FeedbackScoreTag
             key={score.name + score.value}
             label={score.name}
-            value={formatNumericData(score.value)}
-            color={colorMap[score.name]}
+            value={score.value}
+            color={getColor(score.name, colorMap)}
           />
         ))}
       </div>

@@ -61,8 +61,13 @@ const OptimizationsNewPromptSection: React.FC<
     (newMessages: LLMMessage[], promptName: string) => {
       setLastImportedPromptName(promptName);
       form.setValue("messages", newMessages, { shouldValidate: true });
+
+      // hack: needed to be able to save the prompt with the same name
+      if (promptName) {
+        onNameChange(promptName);
+      }
     },
-    [form],
+    [form, onNameChange],
   );
 
   const { chatPromptData, chatPromptTemplate, hasUnsavedChatPromptChanges } =
