@@ -100,7 +100,9 @@ def list_available_runs_from_volume() -> list[dict[str, Any]]:
 
     runs: list[dict[str, Any]] = []
     for run_dir in results_dir.iterdir():
-        if run_dir.is_dir() and run_dir.name.startswith("run_"):
+        if run_dir.is_dir() and (
+            run_dir.name.startswith("run_") or run_dir.name.startswith("opt_")
+        ):
             metadata_file = run_dir / "metadata.json"
             if metadata_file.exists():
                 with open(metadata_file) as f:
