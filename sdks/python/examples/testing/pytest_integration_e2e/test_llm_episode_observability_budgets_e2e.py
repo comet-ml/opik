@@ -1,3 +1,13 @@
+"""End-to-end llm_episode demo for telemetry-derived budget enforcement.
+
+This example demonstrates how to convert runtime observability data into
+episode-level budgets:
+1) Simulate a multi-turn run.
+2) Query traces/spans for that thread.
+3) Roll up token usage, latency, and estimated cost.
+4) Gate the episode with explicit budget assertions in EpisodeBudgets.
+"""
+
 import os
 import time
 from datetime import datetime
@@ -27,7 +37,11 @@ LOGGER = get_demo_logger("pytest_integration_e2e.observability")
 
 
 class ObservabilityAwareAgent:
-    """Deterministic app that attaches synthetic usage/cost on each turn."""
+    """Deterministic app that attaches synthetic usage/cost on each turn.
+
+    The payloads are intentionally synthetic so the example is reproducible while
+    still mirroring the fields available in real Opik traces/spans.
+    """
 
     def __init__(self) -> None:
         self.trajectory_by_thread: dict[str, list[dict[str, Any]]] = {}
@@ -39,7 +53,9 @@ class ObservabilityAwareAgent:
 
     @opik.track(name="observability_aware_agent")
     def __call__(self, user_message: str, *, thread_id: str, **kwargs):
+        """Emit deterministic content plus span usage/cost telemetry per turn."""
         run_tag = f"episode-observability-{thread_id[-8:]}"
+        # Thread tags/metadata make downstream filtering reliable in CI and demos.
         opik_context.update_current_trace(
             thread_id=thread_id,
             tags=["simulation", "observability", "budgets", run_tag],
@@ -68,6 +84,7 @@ class ObservabilityAwareAgent:
         total_tokens = prompt_tokens + completion_tokens
         estimated_cost = round(total_tokens * 0.0000008, 8)
 
+        # Populate the same telemetry fields used by production observability flows.
         opik_context.update_current_span(
             usage={
                 "prompt_tokens": prompt_tokens,
@@ -84,6 +101,7 @@ class ObservabilityAwareAgent:
 
 
 def observability_scenarios() -> list[dict[str, Any]]:
+    """Single scenario focused on token/latency/cost budget gating."""
     return [
         {
             "scenario_id": "observability_billing_v1",
@@ -104,6 +122,7 @@ def observability_scenarios() -> list[dict[str, Any]]:
 
 
 def _duration_ms_from_span(span: Any) -> float:
+    """Extract span duration in milliseconds from datetime or numeric fields."""
     start = getattr(span, "start_time", None)
     end = getattr(span, "end_time", None)
 
@@ -123,6 +142,13 @@ def _duration_ms_from_span(span: Any) -> float:
 def _rollup_thread_telemetry(
     project_name: str, thread_id: str, run_tag: str
 ) -> dict[str, float]:
+    """Query and aggregate trace/span telemetry for one simulation thread.
+
+    Returns rollups used by EpisodeBudgets:
+    - token usage (prompt/completion/total)
+    - latency
+    - estimated cost
+    """
     # Project used by runtime tracing is controlled by OPIK_PROJECT_NAME.
     # If unset, let Opik default to its configured project.
     configured_project_name = os.getenv("OPIK_PROJECT_NAME")
@@ -136,6 +162,7 @@ def _rollup_thread_telemetry(
     traces = []
     deadline = time.time() + 8
     while time.time() < deadline and not traces:
+        # Primary lookup by thread id; fallback by synthetic run tag.
         traces = client.search_traces(
             project_name=configured_project_name,
             filter_string=f'thread_id = "{thread_id}"',
@@ -164,6 +191,7 @@ def _rollup_thread_telemetry(
         spans.extend(trace_spans)
 
     telemetry_records = spans if spans else traces
+    # Prefer span-level granularity; fallback to trace-level usage/cost fields.
 
     prompt_tokens = 0
     completion_tokens = 0
@@ -208,11 +236,13 @@ def _rollup_thread_telemetry(
 @pytest.mark.parametrize("scenario", observability_scenarios())
 @llm_episode(scenario_id_key="scenario_id")
 def test_llm_episode_budgeting_from_trace_span_telemetry(scenario):
+    """Build episode budgets directly from Opik observability telemetry."""
     agent = ObservabilityAwareAgent()
     thread_id = id_helpers.generate_id()
     run_tag = f"episode-observability-{thread_id[-8:]}"
     tags = [*scenario["tags"], run_tag]
 
+    # Run deterministic simulation and keep thread_id fixed for telemetry lookup.
     simulation = run_simulation(
         app=agent,
         user_simulator=SimulatedUser(
@@ -245,6 +275,7 @@ def test_llm_episode_budgeting_from_trace_span_telemetry(scenario):
         scenario_id=scenario["scenario_id"],
         thread_id=thread_id,
         assertions=[
+            # Optional strict gate for environments where telemetry ingestion is required.
             EpisodeAssertion(
                 name="telemetry_trace_or_span_discovered",
                 passed=telemetry_available or not require_telemetry,
@@ -259,6 +290,7 @@ def test_llm_episode_budgeting_from_trace_span_telemetry(scenario):
             turn_assertion,
         ],
         scores=[
+            # Example quality metric derived from usage budget headroom.
             EpisodeScore(
                 name="token_efficiency",
                 value=max(
@@ -276,6 +308,7 @@ def test_llm_episode_budgeting_from_trace_span_telemetry(scenario):
             )
         ],
         budgets=EpisodeBudgets(
+            # Mix built-in budgets plus custom cost budget from observability rollups.
             max_turns=EpisodeBudgetMetric(
                 used=float(len(simulation["conversation_history"]) // 2),
                 limit=float(scenario["max_turns"]),

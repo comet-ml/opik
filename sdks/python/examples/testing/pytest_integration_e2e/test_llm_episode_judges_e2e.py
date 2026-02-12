@@ -1,3 +1,10 @@
+"""End-to-end llm_episode demo with built-in and custom LLM judges.
+
+This example shows how episode tests can incorporate judge-based quality checks:
+- Built-in judge (`AnswerRelevance`) for a standard signal.
+- Custom judge (`GEval`) for domain-specific support quality criteria.
+"""
+
 import json
 import os
 
@@ -20,9 +27,13 @@ from opik.simulation import (
 from demo_helpers import get_demo_logger, log_episode_panel, log_json_debug
 
 LOGGER = get_demo_logger("pytest_integration_e2e.judges")
+BUILT_IN_JUDGE_THRESHOLD = 0.6
+CUSTOM_JUDGE_THRESHOLD = 0.4
 
 
 class SupportResolutionAgent:
+    """Deterministic support agent used to keep judge demos reproducible."""
+
     def __init__(self):
         self.trajectory_by_thread = {}
         self.state_by_thread = {}
@@ -33,6 +44,7 @@ class SupportResolutionAgent:
         )
 
     def __call__(self, user_message: str, *, thread_id: str, **kwargs):
+        """Return branch-specific support responses and capture mock tool calls."""
         normalized = user_message.lower()
         state = self.state_by_thread.setdefault(thread_id, {"workflow": None})
 
@@ -89,6 +101,7 @@ class SupportResolutionAgent:
 
 
 def judge_scenarios():
+    """Scenario fixtures used to evaluate judge behavior across support intents."""
     return [
         {
             "scenario_id": "judge_password_reset_v1",
@@ -122,18 +135,9 @@ def judge_scenarios():
 
 
 def _require_openai_api_key() -> None:
+    """Skip judge demos when no model key is configured locally."""
     if not os.getenv("OPENAI_API_KEY"):
         pytest.skip("Set OPENAI_API_KEY to run gpt-5-nano judge examples")
-
-
-def _threshold_from_env(name: str, default: float) -> float:
-    raw_value = os.getenv(name)
-    if raw_value is None:
-        return default
-    try:
-        return float(raw_value)
-    except ValueError:
-        return default
 
 
 @pytest.mark.filterwarnings(
@@ -145,6 +149,7 @@ def _threshold_from_env(name: str, default: float) -> float:
 @pytest.mark.parametrize("scenario", judge_scenarios())
 @llm_episode(scenario_id_key="scenario_id")
 def test_llm_episode_with_builtin_and_custom_judges(scenario):
+    """Run simulation, score with two judges, then gate on fixed demo thresholds."""
     _require_openai_api_key()
 
     agent = SupportResolutionAgent()
@@ -205,12 +210,6 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
     )
     custom_result = custom_judge.score(output=custom_judge_input)
 
-    built_in_judge_threshold = _threshold_from_env(
-        "OPIK_EXAMPLE_BUILTIN_JUDGE_THRESHOLD", 0.6
-    )
-    custom_judge_threshold = _threshold_from_env(
-        "OPIK_EXAMPLE_CUSTOM_JUDGE_THRESHOLD", 0.4
-    )
     turn_assertion = make_max_turns_assertion(
         conversation_history=simulation["conversation_history"],
         max_turns=scenario["max_turns"],
@@ -221,6 +220,7 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
         scenario_id=scenario["scenario_id"],
         thread_id=thread_id,
         assertions=[
+            # Distinguish "judge executed" from "judge score met threshold".
             EpisodeAssertion(
                 name="builtin_judge_scored",
                 passed=not built_in_result.scoring_failed,
@@ -233,18 +233,18 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
             ),
             EpisodeAssertion(
                 name="builtin_judge_meets_threshold",
-                passed=built_in_result.value >= built_in_judge_threshold,
+                passed=built_in_result.value >= BUILT_IN_JUDGE_THRESHOLD,
                 reason=(
                     f"answer_relevance={built_in_result.value:.3f}, "
-                    f"threshold={built_in_judge_threshold:.3f}"
+                    f"threshold={BUILT_IN_JUDGE_THRESHOLD:.3f}"
                 ),
             ),
             EpisodeAssertion(
                 name="custom_judge_meets_threshold",
-                passed=custom_result.value >= custom_judge_threshold,
+                passed=custom_result.value >= CUSTOM_JUDGE_THRESHOLD,
                 reason=(
                     f"custom_support_resolution={custom_result.value:.3f}, "
-                    f"threshold={custom_judge_threshold:.3f}"
+                    f"threshold={CUSTOM_JUDGE_THRESHOLD:.3f}"
                 ),
             ),
             turn_assertion,
@@ -277,8 +277,8 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
             "judge_model": "gpt-5-nano",
             "built_in_judge": built_in_result.name,
             "custom_judge": custom_result.name,
-            "built_in_judge_threshold": built_in_judge_threshold,
-            "custom_judge_threshold": custom_judge_threshold,
+            "built_in_judge_threshold": BUILT_IN_JUDGE_THRESHOLD,
+            "custom_judge_threshold": CUSTOM_JUDGE_THRESHOLD,
         },
     )
 
@@ -292,11 +292,11 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
         extras={
             "Built-in judge": (
                 f"{built_in_result.name}={built_in_result.value:.3f}"
-                f" (threshold={built_in_judge_threshold:.3f})"
+                f" (threshold={BUILT_IN_JUDGE_THRESHOLD:.3f})"
             ),
             "Custom judge": (
                 f"{custom_result.name}={custom_result.value:.3f}"
-                f" (threshold={custom_judge_threshold:.3f})"
+                f" (threshold={CUSTOM_JUDGE_THRESHOLD:.3f})"
             ),
         },
     )

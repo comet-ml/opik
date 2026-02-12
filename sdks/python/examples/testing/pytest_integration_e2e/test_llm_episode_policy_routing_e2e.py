@@ -1,3 +1,11 @@
+"""End-to-end llm_episode demo for policy enforcement and routing behavior.
+
+This file demonstrates how to encode policy and tool-routing expectations as
+episode assertions and budgets. The scenarios cover:
+- a safety refusal path (PII request)
+- a policy lookup path (billing guidance)
+"""
+
 import pytest
 
 from opik import llm_episode
@@ -19,6 +27,8 @@ LOGGER = get_demo_logger("pytest_integration_e2e.policy_routing")
 
 
 class PolicyRoutingAgent:
+    """Small deterministic agent with policy and routing branches."""
+
     def __init__(self):
         self.trajectory_by_thread = {}
         self.state_by_thread = {}
@@ -29,6 +39,7 @@ class PolicyRoutingAgent:
         )
 
     def __call__(self, user_message: str, *, thread_id: str, **kwargs):
+        """Apply simple safety/routing rules and record resulting tool actions."""
         state = self.state_by_thread.setdefault(thread_id, {"pii_refused": False})
         normalized = user_message.lower()
 
@@ -60,6 +71,7 @@ class PolicyRoutingAgent:
 
 
 def policy_routing_scenarios():
+    """Parameter set for episode coverage of policy and routing behavior."""
     return [
         {
             "scenario_id": "policy_pii_refusal_v1",
@@ -98,6 +110,7 @@ def policy_routing_scenarios():
 @pytest.mark.parametrize("scenario", policy_routing_scenarios())
 @llm_episode(scenario_id_key="scenario_id")
 def test_policy_and_routing_episode_ci_gate(scenario):
+    """Check that policy text and expected tool actions match each scenario."""
     agent = PolicyRoutingAgent()
     user_simulator = SimulatedUser(
         persona=scenario["user_persona"],
@@ -134,6 +147,7 @@ def test_policy_and_routing_episode_ci_gate(scenario):
         scenario_id=scenario["scenario_id"],
         thread_id=thread_id,
         assertions=[
+            # Gate on expected policy text and expected tool selection.
             EpisodeAssertion(
                 name="assistant_policy_or_routing_response_present",
                 passed=scenario["must_contain"] in assistant_text,
@@ -150,6 +164,7 @@ def test_policy_and_routing_episode_ci_gate(scenario):
             turn_assertion,
         ],
         scores=[
+            # Scores provide continuous quality telemetry.
             EpisodeScore(
                 name="goal_completion",
                 value=1.0 if scenario["must_contain"] in assistant_text else 0.0,

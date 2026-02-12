@@ -1,3 +1,12 @@
+"""End-to-end llm_episode demo for a deterministic refund workflow.
+
+This example shows a realistic pattern for CI-oriented episode tests:
+1) Define scenario fixtures (persona, turns, expected behaviors, budgets).
+2) Run a multi-turn simulation with a deterministic agent + user simulator.
+3) Convert the run into an EpisodeResult with explicit assertions/scores/budgets.
+4) Use native pytest assertions while still returning EpisodeResult for Opik artifacts.
+"""
+
 import os
 
 import pytest
@@ -26,6 +35,7 @@ def print_episode_debug(
     trajectory: list[dict],
     episode: EpisodeResult,
 ) -> None:
+    """Log episode output in two tiers: concise info and full debug payloads."""
     trajectory_summary = build_trajectory_summary(trajectory)
 
     log_episode_panel(
@@ -48,10 +58,12 @@ def print_episode_debug(
 
 
 def lookup_order(order_id: str):
+    """Fake lookup tool used by the deterministic demo agent."""
     return {"order_id": order_id, "status": "delivered", "eligible_for_refund": True}
 
 
 def create_refund(order_id: str):
+    """Fake refund tool used by the deterministic demo agent."""
     return {
         "order_id": order_id,
         "refund_id": f"rfnd-{order_id.lower()}",
@@ -60,6 +72,7 @@ def create_refund(order_id: str):
 
 
 def get_refund_scenario():
+    """Scenario fixtures used to parameterize episode coverage for this demo."""
     return [
         {
             "scenario_id": "refund_flow_v1",
@@ -101,6 +114,8 @@ def get_refund_scenario():
 
 
 class RefundAgent:
+    """Stateful deterministic agent that simulates a small refund flow."""
+
     def __init__(self):
         self.trajectory_by_thread = {}
         self.state_by_thread = {}
@@ -111,6 +126,7 @@ class RefundAgent:
         )
 
     def __call__(self, user_message: str, *, thread_id: str, **kwargs):
+        """Route each user turn through a simple policy + tool path."""
         state = self.state_by_thread.setdefault(
             thread_id,
             {
@@ -182,14 +198,17 @@ class RefundAgent:
 @pytest.mark.parametrize("scenario", get_refund_scenario())
 @llm_episode(scenario_id_key="scenario_id")
 def test_refund_episode_ci_gate(scenario):
+    """Validate refund episode behavior with CI-friendly deterministic checks."""
     scenario_id = scenario["scenario_id"]
     agent = RefundAgent()
 
+    # Fixed responses keep the simulation deterministic across local and CI runs.
     user_simulator = SimulatedUser(
         persona=scenario["user_persona"],
         fixed_responses=scenario["user_messages"],
     )
 
+    # run_simulation drives the full multi-turn episode and returns traceable artifacts.
     simulation = run_simulation(
         app=agent,
         user_simulator=user_simulator,
@@ -225,6 +244,7 @@ def test_refund_episode_ci_gate(scenario):
         scenario_id=scenario_id,
         thread_id=thread_id,
         assertions=[
+            # Assertions: hard constraints that should gate PRs.
             EpisodeAssertion(
                 name="assistant_replied_each_turn",
                 passed=len(assistant_messages) == scenario["max_turns"],
@@ -249,6 +269,7 @@ def test_refund_episode_ci_gate(scenario):
             turn_assertion,
         ],
         scores=[
+            # Scores: softer quality signals for trend tracking.
             EpisodeScore(
                 name="goal_completion",
                 value=1.0
@@ -265,6 +286,7 @@ def test_refund_episode_ci_gate(scenario):
             ),
         ],
         budgets=EpisodeBudgets(
+            # Budgets capture resource and control-plane constraints.
             max_turns=EpisodeBudgetMetric(
                 used=float(len(conversation_history) // 2),
                 limit=float(scenario["max_turns"]),
