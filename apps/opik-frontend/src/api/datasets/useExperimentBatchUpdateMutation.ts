@@ -8,8 +8,10 @@ import { useToast } from "@/components/ui/use-toast";
 
 type UseExperimentBatchUpdateMutationParams = {
   ids: string[];
-  experiment: Partial<Experiment>;
-  mergeTags?: boolean;
+  experiment: Partial<Experiment> & {
+    tagsToAdd?: string[];
+    tagsToRemove?: string[];
+  };
 };
 
 const useExperimentBatchUpdateMutation = () => {
@@ -20,22 +22,25 @@ const useExperimentBatchUpdateMutation = () => {
     mutationFn: async ({
       ids,
       experiment,
-      mergeTags = false,
     }: UseExperimentBatchUpdateMutationParams) => {
+      const { tagsToAdd, tagsToRemove, ...rest } = experiment;
+
+      const payload: Record<string, unknown> = { ...rest };
+      if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
+      if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
+
       const { data } = await api.patch(`${EXPERIMENTS_REST_ENDPOINT}batch`, {
         ids,
-        update: experiment,
-        merge_tags: mergeTags,
+        update: payload,
       });
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
+      const message =
+        get(error, ["response", "data", "errors", "0"]) ??
+        get(error, ["response", "data", "message"]) ??
         error.message ??
-          "An unknown error occurred while updating experiments. Please try again later.",
-      );
+        "An unknown error occurred while updating experiments. Please try again later.";
 
       toast({
         title: "Error",

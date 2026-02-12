@@ -14,8 +14,10 @@ import {
 type UseDatasetItemBatchUpdateMutationParams = {
   datasetId: string;
   itemIds: string[];
-  item: Partial<DatasetItem>;
-  mergeTags?: boolean;
+  item: Partial<DatasetItem> & {
+    tagsToAdd?: string[];
+    tagsToRemove?: string[];
+  };
   isAllItemsSelected?: boolean;
   filters?: Filters;
   search?: string;
@@ -31,12 +33,18 @@ const useDatasetItemBatchUpdateMutation = () => {
       datasetId,
       itemIds,
       item,
-      mergeTags,
       isAllItemsSelected,
       filters = [],
       search,
       batchGroupId,
     }: UseDatasetItemBatchUpdateMutationParams) => {
+      const { tagsToAdd, tagsToRemove, ...rest } = item;
+
+      const updatePayload: Record<string, unknown> = { ...rest };
+      if (tagsToAdd !== undefined) updatePayload.tags_to_add = tagsToAdd;
+      if (tagsToRemove !== undefined)
+        updatePayload.tags_to_remove = tagsToRemove;
+
       let payload;
 
       if (isAllItemsSelected) {
@@ -48,12 +56,14 @@ const useDatasetItemBatchUpdateMutation = () => {
         payload = {
           dataset_id: datasetId,
           filters: processFiltersArray(combinedFilters),
-          update: item,
-          merge_tags: mergeTags,
+          update: updatePayload,
           ...(batchGroupId && { batch_group_id: batchGroupId }),
         };
       } else {
-        payload = { ids: itemIds, update: item, merge_tags: mergeTags };
+        payload = {
+          ids: itemIds,
+          update: updatePayload,
+        };
       }
 
       const { data } = await api.patch(
@@ -64,11 +74,10 @@ const useDatasetItemBatchUpdateMutation = () => {
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        get(error, ["response", "data", "errors", "0"]) ??
+        get(error, ["response", "data", "message"]) ??
+        error.message;
 
       toast({
         title: "Error",

@@ -9,9 +9,9 @@ type UseThreadBatchUpdateMutationParams = {
   projectId: string;
   threadIds: string[];
   thread: {
-    tags?: string[];
+    tagsToAdd?: string[];
+    tagsToRemove?: string[];
   };
-  mergeTags?: boolean;
 };
 
 const useThreadBatchUpdateMutation = () => {
@@ -22,22 +22,25 @@ const useThreadBatchUpdateMutation = () => {
     mutationFn: async ({
       threadIds,
       thread,
-      mergeTags,
     }: UseThreadBatchUpdateMutationParams) => {
+      const { tagsToAdd, tagsToRemove, ...rest } = thread;
+
+      const payload: Record<string, unknown> = { ...rest };
+      if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
+      if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
+
       const { data } = await api.patch(TRACES_REST_ENDPOINT + "threads/batch", {
         ids: threadIds,
-        update: thread,
-        merge_tags: mergeTags,
+        update: payload,
       });
 
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        get(error, ["response", "data", "errors", "0"]) ??
+        get(error, ["response", "data", "message"]) ??
+        error.message;
 
       toast({
         title: "Error",
