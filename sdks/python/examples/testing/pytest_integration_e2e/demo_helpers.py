@@ -13,6 +13,7 @@ from opik.simulation import EpisodeResult
 DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 _LOGGING_CONFIGURED = False
+_USING_RICH_LOGGER = False
 ANSI_RESET = "\033[0m"
 ANSI_DIM = "\033[2m"
 ANSI_GREEN = "\033[32m"
@@ -23,7 +24,7 @@ ANSI_CYAN = "\033[36m"
 
 def setup_demo_logging() -> None:
     """Configure demo logging once for this demo test package."""
-    global _LOGGING_CONFIGURED
+    global _LOGGING_CONFIGURED, _USING_RICH_LOGGER
     if _LOGGING_CONFIGURED:
         return
 
@@ -47,16 +48,19 @@ def setup_demo_logging() -> None:
                 show_level=True,
                 show_path=False,
                 rich_tracebacks=False,
-                markup=False,
+                markup=True,
                 console=Console(stderr=True),
             )
             format_string = "%(message)s"
+            _USING_RICH_LOGGER = True
         except Exception:
             handler = logging.StreamHandler()
             handler.setLevel(level)
+            _USING_RICH_LOGGER = False
     else:
         handler = logging.StreamHandler()
         handler.setLevel(level)
+        _USING_RICH_LOGGER = False
 
     logging.basicConfig(
         level=level,
@@ -111,6 +115,8 @@ def _normalize_field_name(name: str) -> str:
 
 
 def _ansi_enabled() -> bool:
+    if _USING_RICH_LOGGER:
+        return False
     no_color = os.getenv("NO_COLOR")
     if no_color:
         return False
@@ -126,16 +132,35 @@ def _colorize(text: str, color: str) -> str:
     return f"{color}{text}{ANSI_RESET}"
 
 
+def _rich_escape(text: str) -> str:
+    if not _USING_RICH_LOGGER:
+        return text
+    try:
+        from rich.markup import escape
+
+        return escape(text)
+    except Exception:
+        return text
+
+
 def log_event(
     logger: logging.Logger, event: str, *, level: int = logging.INFO, **fields: Any
 ) -> None:
-    event_text = f"event={event}"
-    if event == "episode_summary":
-        event_text = _colorize(event_text, ANSI_CYAN)
-    elif event in {"episode_assertions_failed", "episode_budgets_failed"}:
-        event_text = _colorize(event_text, ANSI_YELLOW)
-    elif event == "payload":
-        event_text = _colorize(event_text, ANSI_DIM)
+    event_text = _rich_escape(f"event={event}")
+    if _USING_RICH_LOGGER:
+        if event == "episode_summary":
+            event_text = f"[cyan]{event_text}[/cyan]"
+        elif event in {"episode_assertions_failed", "episode_budgets_failed"}:
+            event_text = f"[yellow]{event_text}[/yellow]"
+        elif event == "payload":
+            event_text = f"[dim]{event_text}[/dim]"
+    else:
+        if event == "episode_summary":
+            event_text = _colorize(event_text, ANSI_CYAN)
+        elif event in {"episode_assertions_failed", "episode_budgets_failed"}:
+            event_text = _colorize(event_text, ANSI_YELLOW)
+        elif event == "payload":
+            event_text = _colorize(event_text, ANSI_DIM)
 
     parts = [event_text]
     for key, value in fields.items():
@@ -145,14 +170,25 @@ def log_event(
         if not normalized_key:
             continue
         rendered = f"{normalized_key}={_format_field_value(value)}"
+        if _USING_RICH_LOGGER:
+            rendered = _rich_escape(rendered)
         if normalized_key == "status":
             value_text = str(value).upper()
-            if value_text == "PASS":
-                rendered = _colorize(rendered, ANSI_GREEN)
-            elif value_text == "FAIL":
-                rendered = _colorize(rendered, ANSI_RED)
+            if _USING_RICH_LOGGER:
+                if value_text == "PASS":
+                    rendered = f"[green]{rendered}[/green]"
+                elif value_text == "FAIL":
+                    rendered = f"[red]{rendered}[/red]"
+            else:
+                if value_text == "PASS":
+                    rendered = _colorize(rendered, ANSI_GREEN)
+                elif value_text == "FAIL":
+                    rendered = _colorize(rendered, ANSI_RED)
         elif normalized_key.startswith("failed_"):
-            rendered = _colorize(rendered, ANSI_YELLOW)
+            if _USING_RICH_LOGGER:
+                rendered = f"[yellow]{rendered}[/yellow]"
+            else:
+                rendered = _colorize(rendered, ANSI_YELLOW)
         parts.append(rendered)
     logger.log(level, " ".join(parts))
 
