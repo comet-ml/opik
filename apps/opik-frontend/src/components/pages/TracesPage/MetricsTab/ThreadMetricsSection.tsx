@@ -24,6 +24,7 @@ import {
   durationYTickFormatter,
   tokenYTickFormatter,
 } from "./utils";
+import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 
 const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
   {
@@ -161,6 +162,7 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
+            renderValue={renderScoreTooltipValue}
             chartType={CHART_TYPE.line}
             threadFilters={threadFilters}
           />
