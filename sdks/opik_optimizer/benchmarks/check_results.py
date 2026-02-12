@@ -420,3 +420,13 @@ Examples:
     )
 
     args = parser.parse_args()
+    main(
+        run_id=args.run_id,
+        list_runs=args.list_runs,
+        watch=args.watch,
+        detailed=args.detailed,
+        raw=args.raw,
+        show_errors=args.show_errors,
+        task=args.task,
+        watch_interval=args.watch_interval,
+    )
