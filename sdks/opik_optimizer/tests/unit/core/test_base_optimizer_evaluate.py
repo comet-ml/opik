@@ -447,7 +447,7 @@ def test_optimize_prompt_uses_injected_display(
     assert spy.header_calls, "Injected display handler should be used"
 
 
-def test_evaluate_prompt_records_no_result_diagnostics(
+def test_evaluate_prompt_records_no_result_report(
     monkeypatch: pytest.MonkeyPatch, simple_chat_prompt
 ) -> None:
     optimizer = ConcreteOptimizer(model="gpt-4")
@@ -475,9 +475,7 @@ def test_evaluate_prompt_records_no_result_diagnostics(
     )
 
     assert score == 0.0
-    assert optimizer._evaluation_diagnostics["evaluations_run"] == 1
-    assert optimizer._evaluation_diagnostics["objective_scores"] == 0
-    assert optimizer._evaluation_diagnostics["objective_failed_scores"] == 1
-    failed = optimizer._evaluation_diagnostics["failed_evaluations"]
-    assert isinstance(failed, list)
-    assert failed[-1]["reason"] == "no_result"
+    assert optimizer._last_evaluation_report is not None
+    assert optimizer._last_evaluation_report["objective_metric"] == "metric_fn"
+    assert optimizer._last_evaluation_report["evaluated_items"] == 0
+    assert optimizer._last_evaluation_report["objective_scores"] == 0
