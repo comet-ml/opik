@@ -10,14 +10,14 @@ from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 
 
 class PromptMessage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     role: str
     content: str
 
 
 class MetricSpec(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     path: str
     args: list[Any] | None = None
@@ -25,7 +25,7 @@ class MetricSpec(BaseModel):
 
 
 class ManifestTask(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     dataset: str | dict[str, Any]
     optimizer: str
@@ -48,7 +48,7 @@ class ManifestTask(BaseModel):
 
 
 class GeneratorDataset(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     dataset: str | dict[str, Any]
     datasets: dict[str, Any] | None = None
@@ -63,14 +63,14 @@ class GeneratorDataset(BaseModel):
 
 
 class GeneratorModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     name: str
     model_parameters: dict[str, Any] | None = None
 
 
 class GeneratorOptimizer(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     name: str
     optimizer_params: dict[str, Any] | None = None
@@ -78,7 +78,7 @@ class GeneratorOptimizer(BaseModel):
 
 
 class GeneratorSpec(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     datasets: list[GeneratorDataset]
     models: list[GeneratorModel]
@@ -89,7 +89,7 @@ class GeneratorSpec(BaseModel):
 
 
 class BenchmarkManifest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     seed: int | None = None
     test_mode: bool | None = None
