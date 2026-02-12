@@ -14,8 +14,7 @@ export OPIK_PYTEST_EXPERIMENT_NAME_PREFIX="${OPIK_PYTEST_EXPERIMENT_NAME_PREFIX:
 export OPIK_PYTEST_PASSED_SCORE_NAME="${OPIK_PYTEST_PASSED_SCORE_NAME:-Passed}"
 export OPIK_PYTEST_EPISODE_ARTIFACT_ENABLED="${OPIK_PYTEST_EPISODE_ARTIFACT_ENABLED:-true}"
 export OPIK_PYTEST_EPISODE_ARTIFACT_PATH="${OPIK_PYTEST_EPISODE_ARTIFACT_PATH:-.opik/pytest_episode_report.json}"
-export OPIK_EXAMPLE_LOG_LEVEL="${OPIK_EXAMPLE_LOG_LEVEL:-INFO}"
-export OPIK_INCLUDE_JUDGES="${OPIK_INCLUDE_JUDGES:-false}"
+export OPIK_EXAMPLE_LOG_LEVEL="${OPIK_EXAMPLE_LOG_LEVEL:-DEBUG}"
 export OPIK_DEFAULT_FLUSH_TIMEOUT="${OPIK_DEFAULT_FLUSH_TIMEOUT:-5}"
 export OPIK_BACKGROUND_WORKERS="${OPIK_BACKGROUND_WORKERS:-1}"
 export OPIK_FILE_UPLOAD_BACKGROUND_WORKERS="${OPIK_FILE_UPLOAD_BACKGROUND_WORKERS:-1}"
@@ -33,28 +32,18 @@ if [[ -z "${PYTHON_BIN}" ]]; then
   fi
 fi
 
-DEFAULT_TEST_FILES=(
-  "test_llm_episode_e2e.py"
-  "test_llm_episode_policy_routing_e2e.py"
-)
-
-if [[ "${OPIK_INCLUDE_JUDGES}" == "true" ]]; then
-  DEFAULT_TEST_FILES+=("test_llm_episode_judges_e2e.py")
-fi
-
 echo "Running pytest integration E2E examples..."
 echo "Project: ${OPIK_PROJECT_NAME}"
 echo "Episode artifact: ${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}"
 echo "Example logger level: ${OPIK_EXAMPLE_LOG_LEVEL}"
-echo "Include judges: ${OPIK_INCLUDE_JUDGES}"
 echo "Flush timeout (s): ${OPIK_DEFAULT_FLUSH_TIMEOUT}"
 echo "Background workers: ${OPIK_BACKGROUND_WORKERS}"
 echo "Python binary: ${PYTHON_BIN}"
 echo "Pytest plugin autoload disabled: ${PYTEST_DISABLE_PLUGIN_AUTOLOAD}"
-echo "Included test files: ${DEFAULT_TEST_FILES[*]}"
-echo "Pytest args: -m pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no ${*:-}"
+echo "Included test files: test_*.py"
+echo "Pytest args: -m pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no test_*.py ${*:-}"
 
-"${PYTHON_BIN}" -m pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no "${DEFAULT_TEST_FILES[@]}" "$@"
+"${PYTHON_BIN}" -m pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no test_*.py "$@"
 
 if [[ -f "${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}" ]]; then
   echo

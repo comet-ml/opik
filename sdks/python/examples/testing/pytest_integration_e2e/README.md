@@ -6,8 +6,7 @@ This folder provides a simple end-to-end smoke test for the Opik pytest integrat
 - `test_llm_episode_policy_routing_e2e.py`: policy/routing episode scenarios with tool-action expectations
 - `test_llm_episode_judges_e2e.py`: episode scoring with LLM-as-a-judge (`gpt-5-nano`) using one built-in metric (`AnswerRelevance`) and one custom `GEval` rubric
 - `test_llm_episode_observability_budgets_e2e.py`: thread-level telemetry rollups (`search_spans` by `thread_id`) feeding token/latency/cost episode budgets
-- `run_examples.sh`: default fast runner (episode CI-gate and policy/routing scenarios)
-- `run_observability_example.sh`: dedicated runner for telemetry/cost budget example
+- `run_examples.sh`: one-command runner for all examples in this folder
 
 `@llm_unit` deterministic examples were moved to fast unit tests:
 - `sdks/python/tests/unit/plugins/pytest/test_llm_unit_contract_examples.py`
@@ -34,31 +33,11 @@ Default run executes:
 
 ```bash
 pytest -vv -s -rA --show-capture=no \
-  test_llm_episode_e2e.py \
-  test_llm_episode_policy_routing_e2e.py
+  test_*.py
 ```
 
-To include judge tests in the default run:
-
-```bash
-OPIK_INCLUDE_JUDGES=true ./run_examples.sh
-```
-
-To run observability/cost budgets separately:
-
-```bash
-./run_observability_example.sh
-```
-
-To run any single file/nodeid with the same stable settings:
-
-```bash
-./run_safe_pytest.sh test_llm_episode_policy_routing_e2e.py
-./run_safe_pytest.sh 'test_llm_episode_e2e.py::test_refund_episode_ci_gate[scenario0]'
-```
-
-Example diagnostic logging defaults to `INFO`.
-Set `OPIK_EXAMPLE_LOG_LEVEL=DEBUG` to print full JSON dumps.
+Example diagnostic logging defaults to `DEBUG`.
+Set `OPIK_EXAMPLE_LOG_LEVEL=INFO` to keep summary-only logs.
 
 For demo stability/perf, runners also default to:
 - `OPIK_DEFAULT_FLUSH_TIMEOUT=5`

@@ -9,5 +9,5 @@ from demo_helpers import setup_demo_logging
 
 @pytest.fixture(scope="session", autouse=True)
 def _configure_demo_logging() -> None:
-    """Apply rich demo logging once for all tests in this folder."""
+    """Apply demo logging once for all tests in this folder."""
     setup_demo_logging()
