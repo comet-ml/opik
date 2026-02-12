@@ -19,8 +19,8 @@ import {
   formatMetricValue,
   isFeedbackScoreMetric,
   extractFeedbackScoreName,
-  formatFeedbackScoreValue,
 } from "./metrics";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
 
 const renderMetricDisplay = (label: string, value: string) => (
@@ -205,7 +205,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
 
       return renderMetricDisplay(
         `Average ${scoreName}`,
-        scoreValue !== undefined ? formatFeedbackScoreValue(scoreValue) : "-",
+        scoreValue !== undefined ? formatScoreDisplay(scoreValue) : "-",
       );
     }
 

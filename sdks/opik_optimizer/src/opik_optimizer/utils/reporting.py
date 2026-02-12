@@ -2,6 +2,7 @@ import base64
 import logging
 import time
 import urllib.parse
+from numbers import Real
 from contextlib import contextmanager
 from functools import wraps
 from typing import Any, Final, TypeVar
@@ -10,7 +11,7 @@ from collections.abc import Callable
 import opik
 import opik.config
 from rich.console import Console
-from rich.progress import Progress
+from rich.progress import Progress, TextColumn
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -43,13 +44,18 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
             disable: bool,
         ) -> None:
             self._iterable = iterable
+            self._base_description = desc or ""
             self._progress = Progress(
+                *Progress.get_default_columns(),
+                TextColumn("{task.fields[postfix]}", justify="right"),
                 transient=True,
                 disable=disable,
                 console=get_console(),
             )
             self._progress.start()
-            self._task_id = self._progress.add_task(desc or "", total=total)
+            self._task_id = self._progress.add_task(
+                self._base_description, total=total, postfix=""
+            )
             self._last_heartbeat = time.time()
             self._logger = logging.getLogger("opik_optimizer")
             self._heartbeat_interval = 5.0
@@ -101,6 +107,43 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
         def total(self, value: int | None) -> None:
             """Set the total number of items to be processed."""
             self._progress.update(self._task_id, total=value)
+
+        def set_postfix(self, ordered_dict: Any | None = None, **kwargs: Any) -> None:
+            """
+            Set postfix metadata in a tqdm-compatible way.
+
+            Rich does not provide a direct postfix API, so we append formatted
+            key/value pairs to the task description.
+            """
+            postfix: dict[str, Any] = {}
+            if ordered_dict is not None:
+                if isinstance(ordered_dict, dict):
+                    postfix.update(ordered_dict)
+                else:
+                    try:
+                        postfix.update(dict(ordered_dict))
+                    except (TypeError, ValueError):
+                        pass
+            postfix.update(kwargs)
+            postfix_text = " | ".join(
+                f"[dim]{key}:[/] {self._format_postfix_value(value)}"
+                for key, value in postfix.items()
+            )
+            self._progress.update(self._task_id, postfix=postfix_text)
+
+        @staticmethod
+        def _format_postfix_value(value: Any) -> str:
+            """
+            Format values for postfix display.
+
+            Preformatted strings are preserved exactly so SDK-side formatting
+            (for example, score averages formatted to 4 decimals) is not lost.
+            """
+            if isinstance(value, Real) and not isinstance(value, bool):
+                return f"{float(value):.2f}".rstrip("0").rstrip(".")
+            if isinstance(value, str):
+                return value
+            return str(value)
 
         def close(self) -> None:
             """Stop the progress bar."""
