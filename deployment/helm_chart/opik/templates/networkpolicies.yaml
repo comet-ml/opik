@@ -30,7 +30,15 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Allow traffic to external destinations (outside the cluster)
+    - to:
+      - podSelector:
+          matchLabels:
+            component: {{ include "opik.name" $ }}-backend
+      ports:
+        - protocol: TCP
+          port: 8080
+    {{- if index .Values "component" "python-backend" "networkPolicy" "engineEgress" }}
+    # Legacy engineEgress support (deprecated, use additionalRules instead)
     - to:
       - ipBlock:
           cidr: {{ index .Values "component" "python-backend" "networkPolicy" "engineEgress" "ipBlock" | default "0.0.0.0/0" }}
@@ -40,4 +48,9 @@ spec:
             - {{ . }}
             {{- end }}
           {{- end }}
+    {{- else }}
+    {{- with index .Values "component" "python-backend" "networkPolicy" "additionalRules" }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    {{- end }}
 {{- end }}
