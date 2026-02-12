@@ -4,7 +4,6 @@ import get from "lodash/get";
 import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 
-import { formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { TraceFeedbackScore } from "@/types/traces";
 import FeedbackScoreTag from "../FeedbackScoreTag/FeedbackScoreTag";
@@ -17,6 +16,7 @@ import {
   SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { useVisibleItemsByWidth } from "@/hooks/useVisibleItemsByWidth";
+import { formatScoreDisplay, getScoreDisplayName } from "@/lib/feedback-scores";
 
 const FEEDBACK_SCORE_LIST_CONFIG = { itemGap: 6 };
 
@@ -32,6 +32,7 @@ type RowWithScores = {
 
 type ScoreWithType = TraceFeedbackScore & {
   scoreType: ScoreType;
+  colorKey?: string;
 };
 
 const FeedbackScoreListCell = <TData,>(
@@ -42,11 +43,13 @@ const FeedbackScoreListCell = <TData,>(
   const scoreList: ScoreWithType[] = [
     ...(rowData.feedback_scores ?? []).map((score) => ({
       ...score,
-      name: `${score.name} (avg)`,
+      colorKey: score.name,
+      name: getScoreDisplayName(score.name, SCORE_TYPE_FEEDBACK),
       scoreType: SCORE_TYPE_FEEDBACK,
     })),
     ...(rowData.experiment_scores ?? []).map((score) => ({
       ...score,
+      name: getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT),
       scoreType: SCORE_TYPE_EXPERIMENT,
     })),
   ];
@@ -85,6 +88,7 @@ const FeedbackScoreListCell = <TData,>(
                     <div key={item.name}>
                       <FeedbackScoreTag
                         label={item.name}
+                        colorKey={item.colorKey}
                         value={item.value}
                         reason={item.reason}
                       />
@@ -95,6 +99,7 @@ const FeedbackScoreListCell = <TData,>(
                   <FeedbackScoreTag
                     key={item.name}
                     label={item.name}
+                    colorKey={item.colorKey}
                     value={item.value}
                     className="min-w-0"
                   />
@@ -122,7 +127,7 @@ const FeedbackScoreListAggregationCell = <TData,>(
   context: CellContext<TData, string>,
 ) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { aggregationKey, dataFormatter = formatNumericData } = (custom ??
+  const { aggregationKey, dataFormatter = formatScoreDisplay } = (custom ??
     {}) as AggregationCustomMeta;
 
   const rowId = context.row.id;
@@ -138,7 +143,8 @@ const FeedbackScoreListAggregationCell = <TData,>(
     isArray(feedbackScores) ? feedbackScores : []
   ).map((score: TraceFeedbackScore) => ({
     ...score,
-    name: `${score.name} (avg)`,
+    colorKey: score.name,
+    name: getScoreDisplayName(score.name, SCORE_TYPE_FEEDBACK),
     scoreType: SCORE_TYPE_FEEDBACK,
   }));
 
@@ -146,6 +152,7 @@ const FeedbackScoreListAggregationCell = <TData,>(
     isArray(experimentScores) ? experimentScores : []
   ).map((score: TraceFeedbackScore) => ({
     ...score,
+    name: getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT),
     scoreType: SCORE_TYPE_EXPERIMENT,
   }));
 
