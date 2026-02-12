@@ -362,15 +362,19 @@ def _average_finite_scores(
     finite_values = [
         score_result_.value
         for score_result_ in scores
-        if score_result_.value is not None and math.isfinite(score_result_.value)
+        if (
+            not score_result_.scoring_failed
+            and score_result_.value is not None
+            and math.isfinite(score_result_.value)
+        )
     ]
     if not finite_values:
         logger.error(
-            "All metric scores were non-finite for metric '%s'; aborting evaluation.",
+            "No successful finite metric scores for metric '%s'; aborting evaluation.",
             objective_metric_name,
         )
         raise ValueError(
-            f"All metric scores were non-finite for metric '{objective_metric_name}'."
+            f"No successful finite metric scores for metric '{objective_metric_name}'."
         )
     return sum(finite_values) / len(finite_values)
 

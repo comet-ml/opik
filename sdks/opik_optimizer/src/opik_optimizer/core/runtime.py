@@ -151,6 +151,12 @@ def build_final_result(
         "stop_reason": finish_reason,
         "verbose": optimizer.verbose,
     }
+    preflight_report = getattr(optimizer, "_preflight_report", None)
+    if preflight_report is not None:
+        details["preflight"] = preflight_report
+    evaluation_diagnostics = getattr(optimizer, "_evaluation_diagnostics", None)
+    if evaluation_diagnostics is not None:
+        details["evaluation_diagnostics"] = evaluation_diagnostics
 
     details.update(optimizer_metadata)
     details.update(algorithm_result.metadata)
@@ -460,6 +466,12 @@ def build_early_stop_details(
         "model": optimizer.model,
         "temperature": optimizer.model_parameters.get("temperature"),
     }
+    preflight_report = getattr(optimizer, "_preflight_report", None)
+    if preflight_report is not None:
+        early_stop_details["preflight"] = preflight_report
+    evaluation_diagnostics = getattr(optimizer, "_evaluation_diagnostics", None)
+    if evaluation_diagnostics is not None:
+        early_stop_details["evaluation_diagnostics"] = evaluation_diagnostics
     early_stop_details.update(optimizer_metadata)
     early_stop_details.pop("rounds_completed", None)
     if early_stop_details.get("trials_completed", 0) == 0:

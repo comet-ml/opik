@@ -8,7 +8,11 @@ from typing import Any
 import pytest
 
 from tests.unit.fixtures.base_optimizer_test_helpers import ConcreteOptimizer
-from tests.unit.test_helpers import make_mock_dataset
+from tests.unit.test_helpers import make_mock_dataset, make_optimization_context
+from opik.evaluation.metrics import score_result
+from opik.evaluation import evaluation_result as opik_evaluation_result
+from opik.evaluation import test_case as opik_test_case
+from opik.evaluation import test_result as opik_test_result
 
 
 class TestValidateOptimizationInputs:
@@ -224,3 +228,152 @@ class TestMetricRequiredFields:
                 compute_baseline=False,
                 validation_dataset=validation_ds,
             )
+
+
+class TestPreflight:
+    @pytest.fixture
+    def optimizer(self) -> ConcreteOptimizer:
+        return ConcreteOptimizer(model="gpt-4")
+
+    def test_preflight_fails_on_unresolved_placeholders(
+        self,
+        optimizer: ConcreteOptimizer,
+    ) -> None:
+        from opik_optimizer import ChatPrompt
+
+        chat = ChatPrompt(system="sys", user="{question}")
+        dataset = make_mock_dataset([{"id": "1", "input": "hello"}])
+
+        def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+            _ = dataset_item, llm_output
+            return 1.0
+
+        metric_fn.__name__ = "metric_fn"
+
+        class Agent:
+            def invoke_agent(self, **kwargs: Any) -> str:
+                _ = kwargs
+                return "ok"
+
+        context = make_optimization_context(
+            chat,
+            dataset=dataset,
+            evaluation_dataset=dataset,
+            metric=metric_fn,
+            agent=Agent(),
+        )
+
+        with pytest.raises(ValueError, match="unresolved prompt placeholders"):
+            optimizer._run_preflight(context)
+
+    def test_preflight_fails_when_metric_marks_scoring_failed(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        dataset = make_mock_dataset([{"id": "1", "question": "hello", "input": "hello"}])
+
+        def metric_fn(
+            dataset_item: dict[str, Any], llm_output: str
+        ) -> score_result.ScoreResult:
+            _ = dataset_item, llm_output
+            return score_result.ScoreResult(
+                name="metric_fn",
+                value=0.0,
+                scoring_failed=True,
+                reason="parser failed",
+            )
+
+        metric_fn.__name__ = "metric_fn"
+
+        class Agent:
+            def invoke_agent(self, **kwargs: Any) -> str:
+                _ = kwargs
+                return "ok"
+
+        context = make_optimization_context(
+            simple_chat_prompt,
+            dataset=dataset,
+            evaluation_dataset=dataset,
+            metric=metric_fn,
+            agent=Agent(),
+        )
+
+        failed_score = score_result.ScoreResult(
+            name="metric_fn",
+            value=0.0,
+            scoring_failed=True,
+            reason="parser failed",
+        )
+        fake_eval_result = opik_evaluation_result.EvaluationResultOnDictItems(
+            test_results=[
+                opik_test_result.TestResult(
+                    test_case=opik_test_case.TestCase(
+                        trace_id="trace-1",
+                        dataset_item_id="item-1",
+                        task_output={"llm_output": "ok"},
+                        dataset_item_content={"id": "1", "question": "hello"},
+                    ),
+                    score_results=[failed_score],
+                    trial_id=0,
+                )
+            ]
+        )
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **_kwargs: fake_eval_result)
+
+        with pytest.raises(ValueError, match="scoring_failed=True"):
+            optimizer._run_preflight(context)
+
+    def test_preflight_passes_and_stores_report(
+        self,
+        optimizer: ConcreteOptimizer,
+        simple_chat_prompt,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        dataset = make_mock_dataset([{"id": "1", "question": "hello", "input": "hello"}])
+
+        def metric_fn(dataset_item: dict[str, Any], llm_output: str) -> float:
+            _ = dataset_item, llm_output
+            return 1.0
+
+        metric_fn.__name__ = "metric_fn"
+
+        class Agent:
+            def invoke_agent(self, **kwargs: Any) -> str:
+                _ = kwargs
+                return "ok"
+
+        context = make_optimization_context(
+            simple_chat_prompt,
+            dataset=dataset,
+            evaluation_dataset=dataset,
+            metric=metric_fn,
+            agent=Agent(),
+        )
+
+        ok_score = score_result.ScoreResult(
+            name="metric_fn",
+            value=1.0,
+            scoring_failed=False,
+        )
+        fake_eval_result = opik_evaluation_result.EvaluationResultOnDictItems(
+            test_results=[
+                opik_test_result.TestResult(
+                    test_case=opik_test_case.TestCase(
+                        trace_id="trace-1",
+                        dataset_item_id="item-1",
+                        task_output={"llm_output": "ok"},
+                        dataset_item_content={"id": "1", "question": "hello"},
+                    ),
+                    score_results=[ok_score],
+                    trial_id=0,
+                )
+            ]
+        )
+        monkeypatch.setattr(optimizer, "evaluate_prompt", lambda **_kwargs: fake_eval_result)
+
+        optimizer._run_preflight(context)
+
+        assert optimizer._preflight_report is not None
+        assert optimizer._preflight_report["status"] == "passed"
