@@ -497,6 +497,8 @@ def _load_previous_run_metadata(run_id: str) -> tuple[set[str], set[str]]:
             # For now, we'll return empty sets - the check_results.py script
             # will handle loading results from the volume properly
             # This is a limitation of Modal's local entrypoint environment
+            # FIXME(benchmarks): implement run metadata loading via a dedicated
+            # modal helper function so resume/retry can skip already-finished tasks.
 
             print("   ⚠️  Note: Cannot load previous results in local entrypoint mode")
             print("      All tasks will be submitted (duplicates may occur)")

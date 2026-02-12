@@ -20,7 +20,9 @@ def run_task_evaluation(
     metrics: list[str | dict[str, Any]] | None = None,
     prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
-    """Shared benchmark evaluation entrypoint used by engines."""
+    """Shared benchmark evaluation entrypoint used by engine workers."""
+    # TODO(benchmarks): this thin wrapper can be removed once engines call
+    # task_runner.execute_task directly through a stabilized runtime interface.
     return execute_task(
         task_id=task_id,
         dataset_name=dataset_name,

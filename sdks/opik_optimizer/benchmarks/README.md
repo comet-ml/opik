@@ -285,7 +285,7 @@ The benchmark system is organized into several modules:
 
 ### Architecture Layers
 
-- **`core/`** - Engine-agnostic runtime flow (`planning`, `runtime`, `state`, `evaluation`, `deploy`, `results`)
+- **`core/`** - Engine-agnostic runtime flow (`planning`, `runtime`, `state`, `evaluation`, `manifest`, `types`)
 - **`engines/`** - Execution backends (`local`, `modal`) with capabilities and storage adapters
 - **`packages/`** - Dataset/package-specific wiring (agents/prompts/metrics)
 - **`utils/`** - Shared sinks/display/logging/helper modules

@@ -7,6 +7,7 @@ from benchmarks.engines.registry import get_engine
 
 
 def run_plan(engine_name: str, plan: TaskPlan) -> RunSummary:
+    """Execute a compiled task plan with the selected engine."""
     engine = get_engine(engine_name)
     result = engine.run(plan)
     return RunSummary(
@@ -18,6 +19,7 @@ def run_plan(engine_name: str, plan: TaskPlan) -> RunSummary:
 
 
 def deploy_engine(engine_name: str) -> RunSummary:
+    """Deploy engine infrastructure when supported by the engine backend."""
     engine = get_engine(engine_name)
     if not engine.capabilities.supports_deploy:
         raise DeployNotSupportedError(f"Engine '{engine_name}' does not support deploy")

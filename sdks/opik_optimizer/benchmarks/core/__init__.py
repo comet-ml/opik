@@ -1,1 +1,1 @@
-"""Core benchmark configuration and task models."""
+"""Core benchmark orchestration modules (planning/runtime/state/types)."""
