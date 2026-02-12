@@ -29,6 +29,8 @@ from rich.rule import Rule
 from rich.style import Style
 from rich.table import Table
 from rich.text import Text
+from benchmarks.utils.display import render_active_task_line
+from benchmarks.utils.sinks import BenchmarkEvent, EventSink, NullSink
 
 if typing.TYPE_CHECKING:
     from benchmarks.core.benchmark_task import TaskResult
@@ -68,8 +70,8 @@ def clean_metric_name(metric_name: str) -> str:
 
 
 class BenchmarkLogger:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, event_sink: EventSink | None = None) -> None:
+        self.event_sink = event_sink or NullSink()
 
     def setup_logger(
         self,
@@ -168,6 +170,18 @@ class BenchmarkLogger:
             "status": status,
             "short_id": short_id,
         }
+        self.event_sink.emit(
+            BenchmarkEvent(
+                name="task_status_updated",
+                payload={
+                    "dataset_name": dataset_name,
+                    "optimizer_name": optimizer_name,
+                    "model_name": model_name,
+                    "status": status,
+                    "short_id": short_id,
+                },
+            )
+        )
 
     def remove_active_task_status(
         self, future: Any, final_status: str | None = None
@@ -176,6 +190,12 @@ class BenchmarkLogger:
             # Track completed tasks before removing
             if final_status in ("Success", "Failed"):
                 self.completed_tasks_count[final_status] += 1
+                self.event_sink.emit(
+                    BenchmarkEvent(
+                        name="task_finished",
+                        payload={"status": final_status},
+                    )
+                )
             del self.tasks_status[future]
 
     def _generate_live_display_message(self) -> Group:
@@ -187,19 +207,12 @@ class BenchmarkLogger:
             short_id = status_info.get("short_id")
 
             if status_info["status"] == "Running":
-                if short_id:
-                    line = Text.assemble(
-                        " • ",
-                        (f"#{short_id} ", "dim"),
-                        (f"{dataset_name} + {model_name}", "yellow"),
-                        (f" [{optimizer_name}]", "dim"),
-                    )
-                else:
-                    line = Text.assemble(
-                        " • ",
-                        (f"{dataset_name} + {model_name}", "yellow"),
-                        (f" [{optimizer_name}]", "dim"),
-                    )
+                line = render_active_task_line(
+                    dataset_name=f"{dataset_name} + {model_name}",
+                    optimizer_name=optimizer_name,
+                    model_name=model_name,
+                    short_id=short_id,
+                )
                 active_list.append(line)
 
         if not active_list:

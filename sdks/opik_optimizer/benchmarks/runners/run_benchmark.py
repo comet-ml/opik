@@ -1,29 +1,23 @@
 #!/usr/bin/env python3
-"""
-Unified benchmark runner for both local and Modal execution.
+"""Unified benchmark runner powered by pluggable execution engines."""
 
-Usage:
-    # Local execution
-    python benchmarks/runners/run_benchmark.py --demo-datasets gsm8k --optimizers few_shot --test-mode
-
-    # Modal execution
-    python benchmarks/runners/run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
-
-    # Modal execution with custom concurrency
-    python benchmarks/runners/run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode --max-concurrent 10
-"""
+from __future__ import annotations
 
 import argparse
 import os
 from typing import Any
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich import box
 
-from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
+from rich import box
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+
 from benchmarks.core import benchmark_config
+from benchmarks.core.deploy import deploy_engine
+from benchmarks.core.planning import PlanInput, compile_task_plan
+from benchmarks.core.runtime import run_plan
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.engines.registry import list_engines
 
 
 def _print_manifest_summary(tasks: list[BenchmarkTaskSpec], console: Console) -> None:
@@ -79,7 +73,6 @@ def _print_manifest_summary(tasks: list[BenchmarkTaskSpec], console: Console) ->
 
 
 def _print_registry(console: Console) -> None:
-    """Print available datasets and optimizers from the registry."""
     split_suffixes = {"train": "_train", "validation": "_validation", "test": "_test"}
     dataset_groups: dict[str, dict[str, Any]] = {}
 
@@ -128,51 +121,40 @@ def _print_registry(console: Console) -> None:
             ", ".join(sorted(cfg.optimizer_prompt_params.keys())) or "[dim]-[/dim]",
         )
 
+    engine_table = Table(title="Engines", box=box.SIMPLE, expand=True)
+    engine_table.add_column("Engine")
+    for name in list_engines():
+        engine_table.add_row(name)
+
     console.print(Panel(ds_table, title="Dataset Registry", border_style="cyan"))
     console.print(Panel(opt_table, title="Optimizer Registry", border_style="cyan"))
+    console.print(Panel(engine_table, title="Engine Registry", border_style="cyan"))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run benchmarks for prompt optimization (local or Modal)",
+        description="Run benchmarks for prompt optimization using pluggable engines",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Local execution with test mode
-  python benchmarks/runners/run_benchmark.py --demo-datasets gsm8k --optimizers few_shot --test-mode
-
-  # Modal execution with test mode
-  python benchmarks/runners/run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
-
-  # Modal execution with multiple datasets and optimizers
-  python benchmarks/runners/run_benchmark.py --modal \\
-    --demo-datasets gsm8k hotpot_300 \\
-    --optimizers few_shot meta_prompt \\
-    --models openai/gpt-4o-mini \\
-    --max-concurrent 10
-
-  # Local execution with custom concurrency
-  python benchmarks/runners/run_benchmark.py \\
-    --demo-datasets gsm8k hotpot_300 \\
-    --optimizers few_shot \\
-    --max-concurrent 4
-
-  # Resume a previous run
-  python benchmarks/runners/run_benchmark.py --modal --resume-run-id run_20250423_153045
-
-  # Retry failed tasks
-  python benchmarks/runners/run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
-        """,
     )
 
-    # Execution mode
+    parser.add_argument(
+        "--engine",
+        type=str,
+        choices=list_engines(),
+        default="local",
+        help="Benchmark engine to use",
+    )
     parser.add_argument(
         "--modal",
         action="store_true",
-        help="Run on Modal (distributed cloud execution) instead of locally",
+        help="Alias for --engine modal",
+    )
+    parser.add_argument(
+        "--deploy-engine",
+        action="store_true",
+        help="Deploy engine infrastructure (if supported) and exit",
     )
 
-    # Benchmark configuration
     parser.add_argument(
         "--demo-datasets",
         type=str,
@@ -200,131 +182,65 @@ Examples:
         default=False,
         help="Run in test mode with 5 examples per dataset",
     )
-    parser.add_argument(
-        "--seed", type=int, default=42, help="Random seed for reproducibility"
-    )
-
-    # Concurrency options
-    parser.add_argument(
-        "--max-concurrent",
-        type=int,
-        default=5,
-        help="Maximum number of concurrent tasks (workers for local, containers for Modal)",
-    )
-
-    # Local-specific options
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max-concurrent", type=int, default=5)
     parser.add_argument(
         "--checkpoint-dir",
         type=str,
         default=os.path.join(
             os.path.expanduser("~"), ".opik_optimizer", "benchmark_results"
         ),
-        help="[Local only] Directory to save benchmark results",
     )
-
-    # Resume/retry options
-    parser.add_argument(
-        "--retry-failed-run-id",
-        type=str,
-        default=None,
-        metavar="RUN_ID",
-        help="Retry only failed tasks from a previous run",
-    )
-    parser.add_argument(
-        "--resume-run-id",
-        type=str,
-        default=None,
-        metavar="RUN_ID",
-        help="Resume incomplete run (skip completed tasks)",
-    )
-
-    parser.add_argument(
-        "--config",
-        type=str,
-        default=None,
-        help="Path to benchmark manifest JSON (overrides dataset/model/optimizer options)",
-    )
-    parser.add_argument(
-        "--list-registries",
-        action="store_true",
-        help="Show available datasets and optimizers, then exit",
-    )
+    parser.add_argument("--retry-failed-run-id", type=str, default=None)
+    parser.add_argument("--resume-run-id", type=str, default=None)
+    parser.add_argument("--config", type=str, default=None)
+    parser.add_argument("--list-registries", action="store_true")
     args = parser.parse_args()
 
-    manifest_tasks: list[BenchmarkTaskSpec] | None = None
-    manifest_seed = args.seed
-    manifest_test_mode = args.test_mode
     console = Console()
-
     if args.list_registries:
         _print_registry(console)
         return
 
-    if args.config:
-        manifest = load_manifest(args.config)
-        manifest_tasks = manifest_to_task_specs(
-            manifest, fallback_test_mode=args.test_mode
-        )
-        if not manifest_tasks:
-            raise ValueError("Manifest must contain at least one task.")
-        if manifest.seed is not None:
-            manifest_seed = manifest.seed
-        if manifest.test_mode is not None:
-            manifest_test_mode = manifest.test_mode
-        _print_manifest_summary(manifest_tasks, console)
+    engine_name = "modal" if args.modal else args.engine
 
-    if args.modal:
-        # Modal execution
-        print("🌩️  Running on Modal (cloud execution)")
-        print("-" * 80)
-
-        try:
-            import modal  # noqa: F401
-        except ModuleNotFoundError:
-            print(
-                "❌ Modal is not installed. Install it with `pip install modal` or rerun without --modal."
-            )
-            return
-
-        # Import Modal submission function
-        from benchmarks.runners.run_benchmark_modal import app, submit_benchmark_tasks
-
-        # Call the function within app context
-        with app.run():
-            submit_benchmark_tasks(
-                demo_datasets=args.demo_datasets,
-                optimizers=args.optimizers,
-                models=args.models,
-                seed=manifest_seed,
-                test_mode=manifest_test_mode,
-                max_concurrent=args.max_concurrent,
-                retry_failed_run_id=args.retry_failed_run_id,
-                resume_run_id=args.resume_run_id,
-                task_specs=manifest_tasks,
-                manifest_path=args.config,
-            )
-    else:
-        # Local execution
-        print("💻 Running locally (local machine execution)")
-        print("-" * 80)
-
-        # Import local benchmark function
-        from benchmarks.runners.run_benchmark_local import run_benchmark
-
-        run_benchmark(
+    plan = compile_task_plan(
+        PlanInput(
             demo_datasets=args.demo_datasets,
             optimizers=args.optimizers,
             models=args.models,
-            max_workers=args.max_concurrent,
-            seed=manifest_seed,
-            test_mode=manifest_test_mode,
+            seed=args.seed,
+            test_mode=args.test_mode,
+            max_concurrent=args.max_concurrent,
             checkpoint_dir=args.checkpoint_dir,
+            config_path=args.config,
             retry_failed_run_id=args.retry_failed_run_id,
             resume_run_id=args.resume_run_id,
-            task_specs=manifest_tasks,
-            skip_confirmation=manifest_tasks is not None,
-            manifest_path=args.config,
         )
+    )
+
+    if plan.manifest_path:
+        _print_manifest_summary(plan.tasks, console)
+
+    if args.deploy_engine:
+        summary = deploy_engine(engine_name)
+        console.print(
+            Panel(
+                f"Engine '{summary.engine}' deployed.\n{summary.metadata}",
+                title="Deployment",
+                border_style="green",
+            )
+        )
+        return
+
+    summary = run_plan(engine_name, plan)
+    console.print(
+        Panel(
+            f"Engine: {summary.engine}\nRun ID: {summary.run_id or 'n/a'}\nStatus: {summary.status}",
+            title="Run Complete",
+            border_style="green" if summary.status == "succeeded" else "red",
+        )
+    )
 
 
 if __name__ == "__main__":

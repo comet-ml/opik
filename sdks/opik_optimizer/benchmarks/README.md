@@ -49,8 +49,8 @@ modal secret create opik-benchmarks \
 modal deploy benchmarks/runners/benchmark_worker.py
 modal deploy benchmarks/runners/run_benchmark_modal.py
 
-# 3. Submit benchmark tasks (note the --modal flag)
-python benchmarks/runners/run_benchmark.py --modal \
+# 3. Submit benchmark tasks (engine can be selected explicitly)
+python benchmarks/runners/run_benchmark.py --engine modal \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --models openai/gpt-4o-mini \
@@ -71,7 +71,7 @@ modal run benchmarks/check_results.py --run-id <RUN_ID> --raw       # full JSON
 Use CLI arguments for quick, interactive benchmarking:
 
 ```bash
-python benchmarks/runners/run_benchmark.py \
+python benchmarks/runners/run_benchmark.py --engine local \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt \
   --models openai/gpt-4o-mini \
@@ -156,7 +156,9 @@ All parameters work for both local and Modal execution:
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `--modal` | Run on Modal cloud (omit for local execution) | `false` |
+| `--engine` | Execution engine (`local`, `modal`) | `local` |
+| `--modal` | Alias for `--engine modal` | `false` |
+| `--deploy-engine` | Deploy selected engine infrastructure (if supported) and exit | `false` |
 | `--config` | Path to manifest JSON (overrides CLI options) | - |
 | `--demo-datasets` | Dataset names (e.g., `gsm8k`, `hotpot_300`) | All datasets |
 | `--optimizers` | Optimizer names (e.g., `few_shot`, `meta_prompt`) | All optimizers |
@@ -204,22 +206,22 @@ python benchmarks/runners/run_benchmark.py \
   --max-concurrent 4
 
 # Modal cloud execution (high concurrency)
-python benchmarks/runners/run_benchmark.py --modal \
+python benchmarks/runners/run_benchmark.py --engine modal \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt evolutionary_optimizer \
   --max-concurrent 10
 
 # Resume interrupted run
-python benchmarks/runners/run_benchmark.py --modal --resume-run-id run_20250423_153045
+python benchmarks/runners/run_benchmark.py --engine modal --resume-run-id run_20250423_153045
 
 # Retry only failed tasks
-python benchmarks/runners/run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
+python benchmarks/runners/run_benchmark.py --engine modal --retry-failed-run-id run_20250423_153045
 
 # Using a manifest file (local)
 python benchmarks/runners/run_benchmark.py --config manifest.json
 
 # Using a manifest file (Modal)
-python benchmarks/runners/run_benchmark.py --modal --config manifest.json --max-concurrent 10
+python benchmarks/runners/run_benchmark.py --engine modal --config manifest.json --max-concurrent 10
 ```
 
 ## Results
@@ -283,9 +285,9 @@ The benchmark system is organized into several modules:
 
 ### Entry Points (`runners/`)
 
-- **`runners/run_benchmark.py`** - Main unified entry point (routes to local or Modal execution based on `--modal` flag)
-  - Calls `runners/run_benchmark_local.py` for local execution
-  - Calls `runners/run_benchmark_modal.py` for Modal execution
+- **`runners/run_benchmark.py`** - Main unified engine-driven entry point
+  - Compiles CLI/manifest into a canonical plan (`core/planning.py`)
+  - Runs/deploys via engine registry (`engines/registry.py`)
 - **`runners/run_benchmark_local.py`** - Local execution logic
   - Imports `local.runner.BenchmarkRunner`
   - Imports `utils.validation.ask_for_input_confirmation`
@@ -332,4 +334,5 @@ The benchmark system is organized into several modules:
 - **Modal execution** runs tasks in parallel on cloud infrastructure (controlled by `--max-concurrent`)
 - Your machine can disconnect after Modal submission - tasks continue in the cloud
 - Results are persisted in Modal Volume indefinitely
-- The unified `benchmarks/runners/run_benchmark.py` entry point automatically routes to the appropriate execution mode
+- Engines are pluggable via `benchmarks/engines/`; current engines are `local` and `modal`
+- The unified `benchmarks/runners/run_benchmark.py` entry point uses `--engine` (or `--modal` alias) to choose execution mode
