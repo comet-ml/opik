@@ -144,8 +144,8 @@ class MultiMetricObjective:
                 reason=f"Metric execution failed: {exception}",
                 scoring_failed=True,
                 metadata={
-                    "error_type": type(exception).__name__,
-                    "error_message": str(exception),
+                    "_error_type": type(exception).__name__,
+                    "_error_message": str(exception),
                 },
             )
 

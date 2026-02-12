@@ -4,8 +4,6 @@ from typing import Any, cast, overload, Literal
 from collections.abc import Iterator
 import logging
 import time
-import re
-import math
 from abc import ABC
 import random
 import importlib.metadata
@@ -146,7 +144,6 @@ class BaseOptimizer(ABC):
             "objective_failed_scores": 0,
             "failed_evaluations": [],
         }
-        self._preflight_report: dict[str, Any] | None = None
 
         # Initialize prompt library with overrides
         self._prompts = PromptLibrary(self.DEFAULT_PROMPTS, prompt_overrides)
@@ -228,7 +225,6 @@ class BaseOptimizer(ABC):
             "objective_failed_scores": 0,
             "failed_evaluations": [],
         }
-        self._preflight_report = None
 
     def _increment_llm_counter(self) -> None:
         """Increment the LLM call counter."""
@@ -908,32 +904,6 @@ class BaseOptimizer(ABC):
                 "but they are missing/empty in the evaluation dataset."
             )
 
-    @staticmethod
-    def _extract_prompt_placeholders(
-        prompts: dict[str, chat_prompt.ChatPrompt],
-    ) -> set[str]:
-        placeholder_pattern = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
-        placeholders: set[str] = set()
-        for prompt in prompts.values():
-            for message in prompt._standardize_prompts():  # noqa: SLF001
-                content = message.get("content")
-                if isinstance(content, str):
-                    placeholders.update(placeholder_pattern.findall(content))
-                    continue
-                if isinstance(content, list):
-                    for part in content:
-                        if not isinstance(part, dict):
-                            continue
-                        text_value = part.get("text")
-                        if isinstance(text_value, str):
-                            placeholders.update(placeholder_pattern.findall(text_value))
-                        image_url = part.get("image_url")
-                        if isinstance(image_url, dict):
-                            url = image_url.get("url")
-                            if isinstance(url, str):
-                                placeholders.update(placeholder_pattern.findall(url))
-        return placeholders
-
     def _record_evaluation_report(
         self,
         *,
@@ -989,109 +959,6 @@ class BaseOptimizer(ABC):
                 failed_evaluations.extend(failed_samples)
                 if len(failed_evaluations) > 20:
                     del failed_evaluations[:-20]
-
-    def _run_preflight(self, context: OptimizationContext) -> None:
-        sample_items = context.evaluation_dataset.get_items(5)
-        if not sample_items:
-            raise ValueError("Preflight failed: evaluation dataset is empty.")
-
-        placeholders = self._extract_prompt_placeholders(context.prompts)
-        unresolved_by_item: list[dict[str, Any]] = []
-        for item in sample_items:
-            missing = sorted(k for k in placeholders if k not in item)
-            empty = sorted(
-                key
-                for key in placeholders
-                if key in item
-                and (
-                    item.get(key) is None
-                    or (
-                        isinstance(item.get(key), str)
-                        and not str(item.get(key)).strip()
-                    )
-                )
-            )
-            if missing or empty:
-                unresolved_by_item.append(
-                    {
-                        "id": item.get("id"),
-                        "missing_placeholders": missing,
-                        "empty_placeholders": empty,
-                    }
-                )
-
-        if unresolved_by_item:
-            raise ValueError(
-                "Preflight failed: unresolved prompt placeholders against dataset items: "
-                f"{unresolved_by_item[:3]}"
-            )
-
-        try:
-            evaluation_result = self.evaluate_prompt(
-                prompt=context.prompts,
-                dataset=context.evaluation_dataset,
-                metric=context.metric,
-                agent=context.agent,
-                n_threads=1,
-                verbose=0,
-                experiment_config=context.experiment_config,
-                n_samples=1,
-                n_samples_strategy=context.n_samples_strategy,
-                return_evaluation_result=True,
-                allow_tool_use=context.allow_tool_use,
-                sampling_tag="preflight",
-            )
-        except Exception as exception:
-            raise ValueError(
-                f"Preflight failed: sample evaluation could not execute: {exception}"
-            ) from exception
-
-        if not isinstance(
-            evaluation_result, (EvaluationResult, EvaluationResultOnDictItems)
-        ):
-            self._preflight_report = {
-                "status": "passed",
-                "sample_item_id": sample_items[0].get("id"),
-                "checked_placeholders": sorted(placeholders),
-                "metric_result_count": 0,
-                "execution_check": "skipped_nonstandard_evaluate_prompt",
-            }
-            return
-
-        objective_scores = task_evaluator._extract_objective_scores(
-            evaluation_result, context.metric.__name__
-        )
-        if not objective_scores:
-            raise ValueError(
-                "Preflight failed: sample evaluation produced no objective scores."
-            )
-        failed_results = [score for score in objective_scores if score.scoring_failed]
-        if failed_results:
-            raise ValueError(
-                "Preflight failed: metric returned scoring_failed=True during sample evaluation. "
-                f"Failures: {[{'name': r.name, 'reason': r.reason, 'metadata': r.metadata} for r in failed_results[:3]]}"
-            )
-
-        non_finite = [
-            result
-            for result in objective_scores
-            if (
-                result.value is None
-                or not isinstance(result.value, (int, float))
-                or not math.isfinite(float(result.value))
-            )
-        ]
-        if non_finite:
-            raise ValueError(
-                "Preflight failed: metric produced non-finite scores during sample evaluation."
-            )
-
-        self._preflight_report = {
-            "status": "passed",
-            "sample_item_id": sample_items[0].get("id"),
-            "checked_placeholders": sorted(placeholders),
-            "metric_result_count": len(objective_scores),
-        }
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -1710,21 +1577,6 @@ class BaseOptimizer(ABC):
                 extra_kwargs=kwargs,
             )
         )
-        try:
-            self._run_preflight(context)
-        except Exception as preflight_exception:
-            self._preflight_report = {
-                "status": "failed",
-                "error_type": type(preflight_exception).__name__,
-                "error_message": str(preflight_exception),
-            }
-            context.finish_reason = "preflight_failed"
-            context.should_stop = True
-            self._finalize_optimization(context, status="error")
-            logger.exception(
-                "Preflight failed; optimization will be cancelled before baseline."
-            )
-            raise
         with runtime.handle_termination(optimizer=self, context=context):
             baseline_score = self._run_baseline(context)
 

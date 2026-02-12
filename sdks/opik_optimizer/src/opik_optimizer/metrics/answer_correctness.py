@@ -104,7 +104,7 @@ Return your evaluation as JSON with 'is_correct' and 'reason' fields."""
                 reason=f"Error during evaluation: {str(e)}",
                 scoring_failed=True,
                 metadata={
-                    "error_type": type(e).__name__,
-                    "error_message": str(e),
+                    "_error_type": type(e).__name__,
+                    "_error_message": str(e),
                 },
             )
