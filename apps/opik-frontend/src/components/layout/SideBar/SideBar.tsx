@@ -257,7 +257,11 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
               </div>
             )}
 
-            <ul>{renderItems(group.items.filter((item) => item !== null))}</ul>
+            <ul>
+              {renderItems(
+                group.items.filter((item): item is MenuItem => item !== null),
+              )}
+            </ul>
           </div>
         </li>
       );
