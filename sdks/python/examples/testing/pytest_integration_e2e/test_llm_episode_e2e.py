@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from opik import llm_episode
@@ -35,9 +37,10 @@ def print_episode_debug(
         tool_calls=trajectory_summary["tool_calls_count"],
         extras={"Project": simulation.get("project_name")},
     )
-    LOGGER.info(
-        "set OPIK_EXAMPLE_LOG_LEVEL=DEBUG for full simulation/trajectory/episode dumps"
-    )
+    if os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "INFO").upper() != "DEBUG":
+        LOGGER.info(
+            "set OPIK_EXAMPLE_LOG_LEVEL=DEBUG for full simulation/trajectory/episode dumps"
+        )
 
     log_json_debug(LOGGER, "conversation_history", simulation["conversation_history"])
     log_json_debug(LOGGER, "trajectory", trajectory)
