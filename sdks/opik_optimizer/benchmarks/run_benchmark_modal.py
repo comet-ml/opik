@@ -40,15 +40,15 @@ except ModuleNotFoundError:
     )
     sys.exit(1)
 
-from benchmarks.benchmark_constants import (
-    DEFAULT_MAX_CONCURRENT,
-    MODAL_SECRET_NAME,
-)
 from benchmarks.configs import registry as benchmark_config
 from benchmarks.core.results import TaskSpec
 from benchmarks.engines.modal import engine as modal_engine
 from benchmarks.utils.budgeting import resolve_optimize_params
 from benchmarks.utils.task_runner import preflight_tasks
+from opik_optimizer.constants import (
+    DEFAULT_BENCHMARK_MAX_CONCURRENT,
+    DEFAULT_BENCHMARK_MODAL_SECRET_NAME,
+)
 
 from rich import box
 from rich.console import Console
@@ -91,7 +91,7 @@ def submit_benchmark_tasks(
     models: list[str] | None = None,
     seed: int = 42,
     test_mode: bool = False,
-    max_concurrent: int | None = DEFAULT_MAX_CONCURRENT,
+    max_concurrent: int | None = DEFAULT_BENCHMARK_MAX_CONCURRENT,
     retry_failed_run_id: str | None = None,
     resume_run_id: str | None = None,
     task_specs: list[TaskSpec] | None = None,
@@ -201,7 +201,11 @@ def submit_benchmark_tasks(
     summary_table.add_row("Test mode", str(test_mode))
     summary_table.add_row(
         "Max concurrent",
-        str(max_concurrent if max_concurrent is not None else DEFAULT_MAX_CONCURRENT),
+        str(
+            max_concurrent
+            if max_concurrent is not None
+            else DEFAULT_BENCHMARK_MAX_CONCURRENT
+        ),
     )
     summary_table.add_row("Manifest", manifest_path or "N/A")
     summary_table.add_row(
@@ -229,10 +233,14 @@ def submit_benchmark_tasks(
     except Exception as e:
         volume_status = f"[red]{e}[/red]"
     summary_table.add_row("Volume", f"opik-benchmark-results ({volume_status})")
-    secret_cmd = modal_engine.build_secret_command(MODAL_SECRET_NAME, env_summary)
+    secret_cmd = modal_engine.build_secret_command(
+        DEFAULT_BENCHMARK_MODAL_SECRET_NAME, env_summary
+    )
     summary_table.add_row("Secret from env", f"[dim]{secret_cmd}[/dim]")
     if env_summary["missing_optional"]:
-        template_cmd = modal_engine.build_placeholder_secret_command(MODAL_SECRET_NAME)
+        template_cmd = modal_engine.build_placeholder_secret_command(
+            DEFAULT_BENCHMARK_MODAL_SECRET_NAME
+        )
         summary_table.add_row(
             "Template",
             f"[dim]{template_cmd}[/dim]\nInclude optional keys by exporting them, then rerun secret.",
@@ -283,7 +291,7 @@ def submit_benchmark_tasks(
         sys.exit(1)
 
     # Update worker's max_containers to control concurrency
-    max_containers = max_concurrent or DEFAULT_MAX_CONCURRENT
+    max_containers = max_concurrent or DEFAULT_BENCHMARK_MAX_CONCURRENT
     console.print(f"🔧 Configuring worker for {max_containers} concurrent tasks...")
     try:
         worker.update_autoscaler(max_containers=max_containers)
@@ -395,7 +403,7 @@ def submit_benchmark_tasks(
             optimizers=optimizers,
             models=models,
             test_mode=test_mode,
-            max_concurrent=max_concurrent or DEFAULT_MAX_CONCURRENT,
+            max_concurrent=max_concurrent or DEFAULT_BENCHMARK_MAX_CONCURRENT,
             total_tasks=len(all_tasks),
             workspace=workspace,
             seed=seed,
@@ -674,8 +682,11 @@ Examples:
     parser.add_argument(
         "--max-concurrent",
         type=int,
-        default=DEFAULT_MAX_CONCURRENT,
-        help=f"Maximum number of concurrent tasks (default: {DEFAULT_MAX_CONCURRENT})",
+        default=DEFAULT_BENCHMARK_MAX_CONCURRENT,
+        help=(
+            "Maximum number of concurrent tasks "
+            f"(default: {DEFAULT_BENCHMARK_MAX_CONCURRENT})"
+        ),
     )
     parser.add_argument(
         "--retry-failed-run-id",

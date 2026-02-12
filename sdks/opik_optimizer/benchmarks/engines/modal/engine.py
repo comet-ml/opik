@@ -11,13 +11,16 @@ from collections.abc import Iterable
 from typing import Any
 
 import opik
-from benchmarks.benchmark_constants import MODAL_SECRET_NAME, WORKER_TIMEOUT_SECONDS
 from benchmarks.core.results import TASK_STATUS_FAILED, TaskResult
 from benchmarks.core.results import TASK_STATUS_RUNNING
 from benchmarks.core.evaluation import run_task_evaluation
 from benchmarks.core.planning import TaskPlan
 from benchmarks.engines.base import BenchmarkEngine, EngineCapabilities, EngineRunResult
 from benchmarks.engines.modal.volume import save_result_to_volume
+from opik_optimizer.constants import (
+    DEFAULT_BENCHMARK_MODAL_SECRET_NAME,
+    DEFAULT_BENCHMARK_WORKER_TIMEOUT_SECONDS,
+)
 
 try:
     import modal
@@ -256,13 +259,13 @@ if modal is not None:
     results_volume = modal.Volume.from_name(
         "opik-benchmark-results", create_if_missing=True
     )
-    modal_secrets = [modal.Secret.from_name(MODAL_SECRET_NAME)]
+    modal_secrets = [modal.Secret.from_name(DEFAULT_BENCHMARK_MODAL_SECRET_NAME)]
 
     @app.function(
         image=image,
         volumes={"/results": results_volume},
         secrets=modal_secrets,
-        timeout=WORKER_TIMEOUT_SECONDS,
+        timeout=DEFAULT_BENCHMARK_WORKER_TIMEOUT_SECONDS,
         retries=modal.Retries(
             max_retries=2,
             initial_delay=10.0,

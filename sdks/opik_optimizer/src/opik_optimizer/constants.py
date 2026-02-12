@@ -38,6 +38,11 @@ DEFAULT_TOOL_CALL_MAX_ITERATIONS = 5
 DEFAULT_N_SAMPLES_STRATEGY = "random_sorted"
 DEFAULT_N_SAMPLES_MINIBATCH = None
 
+# Benchmarks defaults.
+DEFAULT_BENCHMARK_MAX_CONCURRENT = 5
+DEFAULT_BENCHMARK_WORKER_TIMEOUT_SECONDS = 60 * 60 * 12  # 12 hours
+DEFAULT_BENCHMARK_MODAL_SECRET_NAME = "opik-benchmarks"
+
 # Feature flags
 # TODO(opik-sdk): remove this flag once evaluate_on_dict_items is the default path.
 ENABLE_EVALUATE_ON_DICT_ITEMS = False
