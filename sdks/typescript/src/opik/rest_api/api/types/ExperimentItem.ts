@@ -7,6 +7,7 @@ export interface ExperimentItem {
     experimentId: string;
     datasetItemId: string;
     traceId: string;
+    projectId?: string;
     input?: OpikApi.JsonListString;
     output?: OpikApi.JsonListString;
     feedbackScores?: OpikApi.FeedbackScore[];

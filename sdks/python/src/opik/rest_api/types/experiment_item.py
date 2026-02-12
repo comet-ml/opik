@@ -16,6 +16,7 @@ class ExperimentItem(UniversalBaseModel):
     experiment_id: str
     dataset_item_id: str
     trace_id: str
+    project_id: typing.Optional[str] = None
     input: typing.Optional[JsonListString] = None
     output: typing.Optional[JsonListString] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
