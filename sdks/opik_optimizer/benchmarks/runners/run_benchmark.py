@@ -4,13 +4,13 @@ Unified benchmark runner for both local and Modal execution.
 
 Usage:
     # Local execution
-    python run_benchmark.py --demo-datasets gsm8k --optimizers few_shot --test-mode
+    python benchmarks/runners/run_benchmark.py --demo-datasets gsm8k --optimizers few_shot --test-mode
 
     # Modal execution
-    python run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
+    python benchmarks/runners/run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
 
     # Modal execution with custom concurrency
-    python run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode --max-concurrent 10
+    python benchmarks/runners/run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode --max-concurrent 10
 """
 
 import argparse
@@ -139,29 +139,29 @@ def main() -> None:
         epilog="""
 Examples:
   # Local execution with test mode
-  python run_benchmark.py --demo-datasets gsm8k --optimizers few_shot --test-mode
+  python benchmarks/runners/run_benchmark.py --demo-datasets gsm8k --optimizers few_shot --test-mode
 
   # Modal execution with test mode
-  python run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
+  python benchmarks/runners/run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
 
   # Modal execution with multiple datasets and optimizers
-  python run_benchmark.py --modal \\
+  python benchmarks/runners/run_benchmark.py --modal \\
     --demo-datasets gsm8k hotpot_300 \\
     --optimizers few_shot meta_prompt \\
     --models openai/gpt-4o-mini \\
     --max-concurrent 10
 
   # Local execution with custom concurrency
-  python run_benchmark.py \\
+  python benchmarks/runners/run_benchmark.py \\
     --demo-datasets gsm8k hotpot_300 \\
     --optimizers few_shot \\
     --max-concurrent 4
 
   # Resume a previous run
-  python run_benchmark.py --modal --resume-run-id run_20250423_153045
+  python benchmarks/runners/run_benchmark.py --modal --resume-run-id run_20250423_153045
 
   # Retry failed tasks
-  python run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
+  python benchmarks/runners/run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
         """,
     )
 

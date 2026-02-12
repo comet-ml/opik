@@ -191,35 +191,35 @@ All parameters work for both local and Modal execution:
 
 ```bash
 # Quick local test (1 task, ~5 minutes)
-python run_benchmark.py \
+python benchmarks/runners/run_benchmark.py \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --test-mode \
   --max-concurrent 1
 
 # Full local benchmark (multiple tasks)
-python run_benchmark.py \
+python benchmarks/runners/run_benchmark.py \
   --demo-datasets gsm8k hotpot_300 ai2_arc \
   --optimizers few_shot meta_prompt \
   --max-concurrent 4
 
 # Modal cloud execution (high concurrency)
-python run_benchmark.py --modal \
+python benchmarks/runners/run_benchmark.py --modal \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt evolutionary_optimizer \
   --max-concurrent 10
 
 # Resume interrupted run
-python run_benchmark.py --modal --resume-run-id run_20250423_153045
+python benchmarks/runners/run_benchmark.py --modal --resume-run-id run_20250423_153045
 
 # Retry only failed tasks
-python run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
+python benchmarks/runners/run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
 
 # Using a manifest file (local)
-python run_benchmark.py --config manifest.json
+python benchmarks/runners/run_benchmark.py --config manifest.json
 
 # Using a manifest file (Modal)
-python run_benchmark.py --modal --config manifest.json --max-concurrent 10
+python benchmarks/runners/run_benchmark.py --modal --config manifest.json --max-concurrent 10
 ```
 
 ## Results
@@ -237,16 +237,16 @@ Modal results are stored in Modal Volume and can be checked with:
 
 ```bash
 # List all runs
-modal run check_results.py --list-runs
+modal run benchmarks/check_results.py --list-runs
 
 # View results for a specific run
-modal run check_results.py --run-id <RUN_ID>
+modal run benchmarks/check_results.py --run-id <RUN_ID>
 
 # Live monitoring (updates every 30 seconds)
-modal run check_results.py --run-id <RUN_ID> --watch
+modal run benchmarks/check_results.py --run-id <RUN_ID> --watch
 
 # Detailed metrics
-modal run check_results.py --run-id <RUN_ID> --detailed
+modal run benchmarks/check_results.py --run-id <RUN_ID> --detailed
 ```
 
 ## Modal Setup

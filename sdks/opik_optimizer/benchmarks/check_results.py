@@ -6,16 +6,16 @@ It can be run at any time to check the status of running or completed benchmarks
 
 Usage:
     # Check results for a specific run
-    modal run check_results.py --run-id run_20250423_153045
+    modal run benchmarks/check_results.py --run-id run_20250423_153045
 
     # Watch for new results (live monitoring)
-    modal run check_results.py --run-id run_20250423_153045 --watch
+    modal run benchmarks/check_results.py --run-id run_20250423_153045 --watch
 
     # List all available runs
-    modal run check_results.py --list-runs
+    modal run benchmarks/check_results.py --list-runs
 
     # Generate detailed report with all metrics
-    modal run check_results.py --run-id run_20250423_153045 --detailed
+    modal run benchmarks/check_results.py --run-id run_20250423_153045 --detailed
 """
 
 import argparse
@@ -357,22 +357,22 @@ if __name__ == "__main__":
         epilog="""
 Examples:
   # List all available runs
-  modal run check_results.py --list-runs
+  modal run benchmarks/check_results.py --list-runs
 
   # Check results for a specific run
-  modal run check_results.py --run-id run_20250423_153045
+  modal run benchmarks/check_results.py --run-id run_20250423_153045
 
   # Watch for new results (live monitoring)
-  modal run check_results.py --run-id run_20250423_153045 --watch
+  modal run benchmarks/check_results.py --run-id run_20250423_153045 --watch
 
   # Show detailed metrics breakdown
-  modal run check_results.py --run-id run_20250423_153045 --detailed
+  modal run benchmarks/check_results.py --run-id run_20250423_153045 --detailed
 
   # Show full error messages for failed tasks
-  modal run check_results.py --run-id run_20250423_153045 --show-errors
+  modal run benchmarks/check_results.py --run-id run_20250423_153045 --show-errors
 
   # Show full logs and details for a specific task (exact task ID)
-  modal run check_results.py --run-id run_20250423_153045 --task "ai2_arc_evolutionary_optimizer_openai/gpt-4o-mini"
+  modal run benchmarks/check_results.py --run-id run_20250423_153045 --task "ai2_arc_evolutionary_optimizer_openai/gpt-4o-mini"
         """,
     )
     parser.add_argument(

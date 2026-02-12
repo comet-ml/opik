@@ -6,21 +6,21 @@ Use --detach flag to disconnect after submission without waiting for results.
 
 Usage:
     # Recommended: Use the unified entry point
-    python run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
+    python benchmarks/runners/run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
 
     # Alternative: Direct Modal execution (from benchmarks directory)
     modal run --detach benchmarks/runners/run_benchmark_modal.py --test-mode
 
     # Submit specific configuration
-    python run_benchmark.py --modal \
+    python benchmarks/runners/run_benchmark.py --modal \
         --demo-datasets gsm8k hotpot_300 \
         --optimizers few_shot meta_prompt \
         --models openai/gpt-4o-mini \
         --max-concurrent 5
 
     # Resume or retry a previous run
-    python run_benchmark.py --modal --resume-run-id run_20250423_153045
-    python run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
+    python benchmarks/runners/run_benchmark.py --modal --resume-run-id run_20250423_153045
+    python benchmarks/runners/run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
 """
 
 import argparse
@@ -623,23 +623,23 @@ if __name__ == "__main__":
         epilog="""
 Examples:
   # Recommended: Use the unified entry point
-  python run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
+  python benchmarks/runners/run_benchmark.py --modal --demo-datasets gsm8k --optimizers few_shot --test-mode
 
   # Alternative: Direct Modal execution (use --detach to disconnect)
   modal run --detach benchmarks/runners/run_benchmark_modal.py --test-mode
 
   # Submit specific configuration
-  python run_benchmark.py --modal \\
+  python benchmarks/runners/run_benchmark.py --modal \\
     --demo-datasets gsm8k hotpot_300 \\
     --optimizers few_shot meta_prompt \\
     --models openai/gpt-4o-mini \\
     --max-concurrent 10
 
   # Resume incomplete run
-  python run_benchmark.py --modal --resume-run-id run_20250423_153045
+  python benchmarks/runners/run_benchmark.py --modal --resume-run-id run_20250423_153045
 
   # Retry failed tasks
-  python run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
+  python benchmarks/runners/run_benchmark.py --modal --retry-failed-run-id run_20250423_153045
         """,
     )
     parser.add_argument(
