@@ -892,71 +892,6 @@ class BaseOptimizer(ABC):
                 "but they are missing/empty in the evaluation dataset."
             )
 
-    def _record_evaluation_report(
-        self,
-        *,
-        evaluation_result: EvaluationResult | EvaluationResultOnDictItems | None,
-        objective_metric_name: str,
-    ) -> None:
-        """Store a summary report for the latest objective-metric evaluation.
-
-        This helper updates ``self._last_evaluation_report`` with a compact payload
-        consumed by trial extras/history. Report fields:
-
-        - ``objective_metric``: Objective metric name used for extraction.
-        - ``evaluated_items``: Number of evaluated test rows.
-        - ``objective_scores``: Number of objective metric results found.
-        - ``failed_objective_scores``: Count of objective scores with
-          ``scoring_failed=True``.
-        - ``failed_ratio``: ``failed_objective_scores / objective_scores`` when
-          objective scores exist, otherwise ``0.0``.
-        - ``failed_objective_samples``: Up to 5 failed objective score samples with
-          ``name``, ``value``, ``reason``, and ``metadata``.
-
-        Edge cases:
-        - When ``evaluation_result`` is ``None``, the method records an empty report
-          (0 items, 0 objective scores, empty failed samples).
-        - ``failed_ratio`` is intentionally ``0.0`` when no objective scores are
-          present to avoid divide-by-zero and to keep the payload numeric.
-        """
-        if evaluation_result is None:
-            report = {
-                "objective_metric": objective_metric_name,
-                "evaluated_items": 0,
-                "objective_scores": 0,
-                "failed_objective_scores": 0,
-                "failed_ratio": 0.0,
-                "failed_objective_samples": [],
-            }
-            self._last_evaluation_report = report
-            return
-
-        objective_scores = task_evaluator._extract_objective_scores(
-            evaluation_result, objective_metric_name
-        )
-        failed = [score for score in objective_scores if score.scoring_failed]
-        failed_samples = [
-            {
-                "name": score.name,
-                "value": score.value,
-                "reason": score.reason,
-                "metadata": score.metadata,
-            }
-            for score in failed[:5]
-        ]
-
-        report = {
-            "objective_metric": objective_metric_name,
-            "evaluated_items": len(evaluation_result.test_results),
-            "objective_scores": len(objective_scores),
-            "failed_objective_scores": len(failed),
-            "failed_ratio": (
-                len(failed) / len(objective_scores) if objective_scores else 0.0
-            ),
-            "failed_objective_samples": failed_samples,
-        }
-        self._last_evaluation_report = report
-
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
     ) -> dict[str, str] | None:
@@ -2010,7 +1945,7 @@ class BaseOptimizer(ABC):
             n_samples=resolved_n_samples,
             use_evaluate_on_dict_items=use_evaluate_on_dict_items,
         )
-        self._record_evaluation_report(
+        self._last_evaluation_report = task_evaluator.build_evaluation_report(
             evaluation_result=evaluation_result,
             objective_metric_name=metric.__name__,
         )
