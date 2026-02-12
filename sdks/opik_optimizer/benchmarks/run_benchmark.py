@@ -18,6 +18,11 @@ from benchmarks.core.runtime import deploy_engine, run_plan
 from benchmarks.core.types import TaskSpec
 from benchmarks.engines.registry import list_engines
 
+try:
+    from opik_optimizer.constants import DEFAULT_BENCHMARK_MAX_CONCURRENT
+except Exception:
+    DEFAULT_BENCHMARK_MAX_CONCURRENT = 5
+
 
 def _print_manifest_summary(tasks: list[TaskSpec], console: Console) -> None:
     table = Table(title="Manifest Summary", box=None, padding=(0, 1))
@@ -182,7 +187,11 @@ def main() -> None:
         help="Run in test mode with 5 examples per dataset",
     )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--max-concurrent", type=int, default=5)
+    parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=DEFAULT_BENCHMARK_MAX_CONCURRENT,
+    )
     parser.add_argument(
         "--checkpoint-dir",
         type=str,
