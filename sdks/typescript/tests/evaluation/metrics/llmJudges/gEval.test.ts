@@ -182,7 +182,7 @@ describe("GEval Metric", () => {
       expect(messages[0].content).toContain("Test output");
     });
 
-    it("should pass providerOptions for logprobs", async () => {
+    it("should NOT pass providerOptions for non-Vercel models", async () => {
       const metric = new GEval({
         taskIntroduction: "Evaluate quality.",
         evaluationCriteria: "Score from 0 to 10.",
@@ -192,10 +192,7 @@ describe("GEval Metric", () => {
       await metric.score({ output: "Test output" });
 
       const options = mockGenerateProviderResponse.mock.calls[0][1];
-      expect(options).toHaveProperty("providerOptions");
-      expect(options.providerOptions).toEqual({
-        openai: { logprobs: true, top_logprobs: 20 },
-      });
+      expect(options).not.toHaveProperty("providerOptions");
     });
 
     it("should fall back to generateString when generateProviderResponse fails", async () => {

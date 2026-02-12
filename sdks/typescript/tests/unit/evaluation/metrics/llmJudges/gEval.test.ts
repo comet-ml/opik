@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
+import { type LanguageModel } from "ai";
 import { GEval } from "@/evaluation/metrics/llmJudges/gEval/GEval";
 import { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
 import { VercelAIChatModel } from "@/evaluation/models/VercelAIChatModel";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
+import * as providerDetection from "@/evaluation/models/providerDetection";
 import { logger } from "@/utils/logger";
 
 class MockModel extends OpikBaseModel {
@@ -291,10 +293,23 @@ describe("GEval providerOptions with Vercel models", () => {
   });
 
   it("should pass providerOptions when using string model ID (defaults to Vercel)", async () => {
+    const fakeLanguageModel = {
+      modelId: "gpt-4o",
+      specificationVersion: "v1",
+      provider: "openai",
+      defaultObjectGenerationMode: "json",
+    } as unknown as LanguageModel;
+
+    vi.spyOn(providerDetection, "detectProvider").mockReturnValue(
+      fakeLanguageModel
+    );
+
     const model = new VercelAIChatModel("gpt-4o", {
       trackGenerations: false,
     });
     const providerSpy = spyOnVercelModel(model);
+
+    vi.mocked(providerDetection.detectProvider).mockRestore();
 
     const metric = new GEval({
       taskIntroduction: "Evaluate quality.",
