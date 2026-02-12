@@ -39,6 +39,62 @@ OPTIONAL_KEYS = [
 OPIK_HOST_KEYS = ["OPIK_URL_OVERRIDE", "OPIK_HOST"]
 logger = logging.getLogger(__name__)
 
+# Modal worker runtime knobs (env-overridable):
+# - MODAL_MAX_RETRIES: int >= 0
+# - MODAL_INITIAL_DELAY: float > 0
+# - MODAL_BACKOFF_COEFFICIENT: float >= 1
+# - MODAL_CPU: float > 0
+# - MODAL_MEMORY: int > 0 (MiB)
+
+
+def _env_int(name: str, default: int, *, minimum: int | None = None) -> int:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("Invalid %s=%r; using default %s", name, raw, default)
+        return default
+    if minimum is not None and value < minimum:
+        logger.warning(
+            "Out-of-range %s=%s (min=%s); using default %s",
+            name,
+            value,
+            minimum,
+            default,
+        )
+        return default
+    return value
+
+
+def _env_float(name: str, default: float, *, minimum: float | None = None) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("Invalid %s=%r; using default %s", name, raw, default)
+        return default
+    if minimum is not None and value < minimum:
+        logger.warning(
+            "Out-of-range %s=%s (min=%s); using default %s",
+            name,
+            value,
+            minimum,
+            default,
+        )
+        return default
+    return value
+
+
+MODAL_MAX_RETRIES = _env_int("MODAL_MAX_RETRIES", 2, minimum=0)
+MODAL_INITIAL_DELAY = _env_float("MODAL_INITIAL_DELAY", 10.0, minimum=0.0001)
+MODAL_BACKOFF_COEFFICIENT = _env_float("MODAL_BACKOFF_COEFFICIENT", 2.0, minimum=1.0)
+MODAL_CPU = _env_float("MODAL_CPU", 2.0, minimum=0.0001)
+MODAL_MEMORY = _env_int("MODAL_MEMORY", 4096, minimum=1)
+
 
 def _collect(keys: Iterable[str]) -> tuple[list[str], list[str]]:
     present: list[str] = []
@@ -234,6 +290,14 @@ def run_optimization_task(
 
 
 if modal is not None:
+    logger.info(
+        "Modal worker config: retries=%s initial_delay=%s backoff=%s cpu=%s memory=%sMiB",
+        MODAL_MAX_RETRIES,
+        MODAL_INITIAL_DELAY,
+        MODAL_BACKOFF_COEFFICIENT,
+        MODAL_CPU,
+        MODAL_MEMORY,
+    )
     app = modal.App("opik-optimizer-benchmarks")
     image = (
         modal.Image.debian_slim(python_version="3.12")
@@ -274,12 +338,12 @@ if modal is not None:
         secrets=modal_secrets,
         timeout=DEFAULT_BENCHMARK_WORKER_TIMEOUT_SECONDS,
         retries=modal.Retries(
-            max_retries=2,
-            initial_delay=10.0,
-            backoff_coefficient=2.0,
+            max_retries=MODAL_MAX_RETRIES,
+            initial_delay=MODAL_INITIAL_DELAY,
+            backoff_coefficient=MODAL_BACKOFF_COEFFICIENT,
         ),
-        cpu=2.0,
-        memory=4096,
+        cpu=MODAL_CPU,
+        memory=MODAL_MEMORY,
     )
     def run_optimization_modal(
         task_id: str,
