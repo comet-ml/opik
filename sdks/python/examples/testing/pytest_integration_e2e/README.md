@@ -58,6 +58,7 @@ For demo stability/perf, runners also default to:
 - `OPIK_BACKGROUND_WORKERS=1`
 - `OPIK_FILE_UPLOAD_BACKGROUND_WORKERS=1`
 - `OPIK_SENTRY_ENABLE=false`
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` and explicit `-p opik.plugins.pytest`
 
 ## Outputs
 

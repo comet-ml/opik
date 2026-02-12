@@ -20,6 +20,7 @@ export OPIK_BACKGROUND_WORKERS="${OPIK_BACKGROUND_WORKERS:-1}"
 export OPIK_FILE_UPLOAD_BACKGROUND_WORKERS="${OPIK_FILE_UPLOAD_BACKGROUND_WORKERS:-1}"
 export OPIK_SENTRY_ENABLE="${OPIK_SENTRY_ENABLE:-false}"
 export OPIK_ENABLE_LITELLM_MODELS_MONITORING="${OPIK_ENABLE_LITELLM_MODELS_MONITORING:-false}"
+export PYTEST_DISABLE_PLUGIN_AUTOLOAD="${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-1}"
 
 echo "Running observability budget example..."
 echo "Project: ${OPIK_PROJECT_NAME}"
@@ -27,9 +28,10 @@ echo "Episode artifact: ${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}"
 echo "Example logger level: ${OPIK_EXAMPLE_LOG_LEVEL}"
 echo "Flush timeout (s): ${OPIK_DEFAULT_FLUSH_TIMEOUT}"
 echo "Background workers: ${OPIK_BACKGROUND_WORKERS}"
-echo "Pytest args: -vv -s -rA --show-capture=no ${*:-}"
+echo "Pytest plugin autoload disabled: ${PYTEST_DISABLE_PLUGIN_AUTOLOAD}"
+echo "Pytest args: -p opik.plugins.pytest -vv -s -rA --show-capture=no ${*:-}"
 
-pytest -vv -s -rA --show-capture=no test_llm_episode_observability_budgets_e2e.py "$@"
+pytest -p opik.plugins.pytest -vv -s -rA --show-capture=no test_llm_episode_observability_budgets_e2e.py "$@"
 
 if [[ -f "${OPIK_PYTEST_EPISODE_ARTIFACT_PATH}" ]]; then
   echo
