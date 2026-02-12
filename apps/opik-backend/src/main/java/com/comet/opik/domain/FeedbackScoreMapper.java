@@ -83,7 +83,7 @@ public interface FeedbackScoreMapper {
                     int lastUpdatedByIndex = hasErrorColumns ? 11 : 9;
 
                     return FeedbackScore.builder()
-                            .name((String) feedbackScore.get(0))
+                            .name((String) feedbackScore.getFirst())
                             .categoryName(getIfNotEmpty(feedbackScore.get(1)))
                             .value((BigDecimal) feedbackScore.get(2))
                             .reason(getIfNotEmpty(feedbackScore.get(3)))
