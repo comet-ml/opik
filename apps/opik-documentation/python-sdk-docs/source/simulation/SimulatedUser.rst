@@ -27,7 +27,7 @@ Constructor
 
    SimulatedUser(
        persona: str,
-       model: str = "openai/gpt-5-nano",
+       model: Optional[str] = None,
        fixed_responses: Optional[List[str]] = None
    )
 
@@ -38,7 +38,7 @@ Parameters
    Description of the user's personality and behavior. This is used as a system prompt to guide the LLM's response generation.
 
 **model** (str, optional)
-   LLM model to use for generating responses. Defaults to "openai/gpt-5-nano". Supports any model available through Opik's model factory.
+   LLM model to use for generating responses. If omitted, defaults to the value of ``OPIK_DEFAULT_LLM`` (or ``openai/gpt-5-nano`` when unset). Supports any model available through Opik's model factory.
 
 **fixed_responses** (List[str], optional)
    List of predefined responses to cycle through. If provided, these responses will be used instead of LLM generation.

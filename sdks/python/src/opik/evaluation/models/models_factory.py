@@ -1,11 +1,17 @@
+import os
 from typing import Optional, Any, Dict
 
 from .litellm import litellm_chat_model
 from . import base_model
 
-DEFAULT_GPT_MODEL_NAME = "gpt-5-nano"
+DEFAULT_GPT_MODEL_NAME = "openai/gpt-5-nano"
 
 _MODEL_CACHE: Dict[Any, base_model.OpikBaseModel] = {}
+
+
+def get_default_model_name() -> str:
+    """Resolve the default model name from env or built-in fallback."""
+    return os.getenv("OPIK_DEFAULT_LLM", DEFAULT_GPT_MODEL_NAME)
 
 
 def _freeze(value: Any) -> Any:
@@ -39,7 +45,7 @@ def get(
         A cached or newly created OpikBaseModel instance.
     """
     if model_name is None:
-        model_name = DEFAULT_GPT_MODEL_NAME
+        model_name = get_default_model_name()
 
     cache_key = _make_cache_key(model_name, track, model_kwargs)
     if cache_key not in _MODEL_CACHE:

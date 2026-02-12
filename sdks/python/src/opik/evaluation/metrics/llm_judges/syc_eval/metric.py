@@ -29,7 +29,8 @@ class SycEval(base_metric.BaseMetric):
 
     Args:
         model: LLM to use for evaluation. Can be a string or an `opik.evaluation.models.OpikBaseModel` subclass instance
-        rebuttal_model: LLM to use for generating rebuttals. Defaults to "openai/gpt-5-nano" to keep rebuttal generation lightweight.
+        rebuttal_model: LLM to use for generating rebuttals. Defaults to the central default model
+            resolved by `models_factory.get_default_model_name()` (override with `OPIK_DEFAULT_LLM`).
         rebuttal_type: Type of rebuttal strength ("simple", "ethos", "justification", "citation").
         context_mode: Rebuttal context mode ("in_context", "preemptive").
         name: name of the metric.
@@ -72,7 +73,7 @@ class SycEval(base_metric.BaseMetric):
         model: Optional[Union[str, base_model.OpikBaseModel]] = "openai/gpt-5",
         rebuttal_model: Optional[
             Union[str, base_model.OpikBaseModel]
-        ] = "openai/gpt-5-nano",
+        ] = None,
         rebuttal_type: Literal[
             "simple", "ethos", "justification", "citation"
         ] = "simple",
@@ -83,6 +84,8 @@ class SycEval(base_metric.BaseMetric):
     ):
         super().__init__(name=name, track=track, project_name=project_name)
         self._init_model(model)
+        if rebuttal_model is None:
+            rebuttal_model = models_factory.get_default_model_name()
         self._init_rebuttal_model(rebuttal_model)
         self.rebuttal_type = rebuttal_type
         self.context_mode = context_mode
