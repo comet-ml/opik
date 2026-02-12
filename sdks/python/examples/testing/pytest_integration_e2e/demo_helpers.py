@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 from typing import Any
 
 from opik.simulation import EpisodeResult
@@ -12,6 +13,12 @@ from opik.simulation import EpisodeResult
 DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 _LOGGING_CONFIGURED = False
+ANSI_RESET = "\033[0m"
+ANSI_DIM = "\033[2m"
+ANSI_GREEN = "\033[32m"
+ANSI_RED = "\033[31m"
+ANSI_YELLOW = "\033[33m"
+ANSI_CYAN = "\033[36m"
 
 
 def setup_demo_logging() -> None:
@@ -77,17 +84,50 @@ def _normalize_field_name(name: str) -> str:
     return normalized
 
 
+def _ansi_enabled() -> bool:
+    no_color = os.getenv("NO_COLOR")
+    if no_color:
+        return False
+    force_color = os.getenv("FORCE_COLOR")
+    if force_color:
+        return True
+    return sys.stderr.isatty()
+
+
+def _colorize(text: str, color: str) -> str:
+    if not _ansi_enabled():
+        return text
+    return f"{color}{text}{ANSI_RESET}"
+
+
 def log_event(
     logger: logging.Logger, event: str, *, level: int = logging.INFO, **fields: Any
 ) -> None:
-    parts = [f"event={event}"]
+    event_text = f"event={event}"
+    if event == "episode_summary":
+        event_text = _colorize(event_text, ANSI_CYAN)
+    elif event in {"episode_assertions_failed", "episode_budgets_failed"}:
+        event_text = _colorize(event_text, ANSI_YELLOW)
+    elif event == "payload":
+        event_text = _colorize(event_text, ANSI_DIM)
+
+    parts = [event_text]
     for key, value in fields.items():
         if value is None:
             continue
         normalized_key = _normalize_field_name(key)
         if not normalized_key:
             continue
-        parts.append(f"{normalized_key}={_format_field_value(value)}")
+        rendered = f"{normalized_key}={_format_field_value(value)}"
+        if normalized_key == "status":
+            value_text = str(value).upper()
+            if value_text == "PASS":
+                rendered = _colorize(rendered, ANSI_GREEN)
+            elif value_text == "FAIL":
+                rendered = _colorize(rendered, ANSI_RED)
+        elif normalized_key.startswith("failed_"):
+            rendered = _colorize(rendered, ANSI_YELLOW)
+        parts.append(rendered)
     logger.log(level, " ".join(parts))
 
 
