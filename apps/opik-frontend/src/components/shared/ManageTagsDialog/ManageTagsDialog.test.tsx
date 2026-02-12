@@ -33,10 +33,8 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      expect(screen.getByText("Manage tags")).toBeInTheDocument();
-      expect(
-        screen.getByPlaceholderText("Type a tag and press Enter..."),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Manage shared tags")).toBeInTheDocument();
+      expect(screen.getByText("+ Add tag")).toBeInTheDocument();
     });
 
     it("should not render dialog when closed", () => {
@@ -49,7 +47,7 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      expect(screen.queryByText("Manage tags")).not.toBeInTheDocument();
+      expect(screen.queryByText("Manage shared tags")).not.toBeInTheDocument();
     });
 
     it("should display correct item count in button", () => {
@@ -83,10 +81,8 @@ describe("ManageTagsDialog", () => {
         screen.getByRole("button", { name: /Update tags for 100 items/i }),
       ).toBeInTheDocument();
     });
-  });
 
-  describe("Tag Addition", () => {
-    it("should add a new tag when input is valid", async () => {
+    it("should only display tags shared by all entities", () => {
       render(
         <ManageTagsDialog
           entities={defaultEntities}
@@ -96,18 +92,51 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
+      expect(screen.getByText("tag2")).toBeInTheDocument();
+      expect(screen.queryByText("tag1")).not.toBeInTheDocument();
+      expect(screen.queryByText("tag3")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Tag Addition via inline input", () => {
+    it("should show input when clicking + Add tag", () => {
+      render(
+        <ManageTagsDialog
+          entities={defaultEntities}
+          open={true}
+          setOpen={mockSetOpen}
+          onUpdate={mockOnUpdate}
+        />,
       );
+
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+
+      expect(screen.getByPlaceholderText("Tag name...")).toBeInTheDocument();
+      expect(screen.queryByText("+ Add tag")).not.toBeInTheDocument();
+    });
+
+    it("should add a new tag on Enter", async () => {
+      render(
+        <ManageTagsDialog
+          entities={defaultEntities}
+          open={true}
+          setOpen={mockSetOpen}
+          onUpdate={mockOnUpdate}
+        />,
+      );
+
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+      const input = screen.getByPlaceholderText("Tag name...");
       fireEvent.change(input, { target: { value: "newtag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
       await waitFor(() => {
         expect(screen.getByText("newtag")).toBeInTheDocument();
       });
+      expect(screen.getByText("+ Add tag")).toBeInTheDocument();
     });
 
-    it("should trim whitespace from new tags", async () => {
+    it("should revert to button on blur", () => {
       render(
         <ManageTagsDialog
           entities={defaultEntities}
@@ -117,35 +146,12 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
-      );
-      fireEvent.change(input, { target: { value: "  newtag  " } });
-      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+      const input = screen.getByPlaceholderText("Tag name...");
+      fireEvent.change(input, { target: { value: "some text" } });
+      fireEvent.blur(input);
 
-      await waitFor(() => {
-        expect(screen.getByText("newtag")).toBeInTheDocument();
-      });
-    });
-
-    it("should not add empty tag", () => {
-      render(
-        <ManageTagsDialog
-          entities={defaultEntities}
-          open={true}
-          setOpen={mockSetOpen}
-          onUpdate={mockOnUpdate}
-        />,
-      );
-
-      const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
-      );
-
-      fireEvent.change(input, { target: { value: "   " } });
-      fireEvent.keyDown(input, { key: "Enter" });
-
-      expect(screen.queryByText("No tags added yet")).toBeInTheDocument();
+      expect(screen.getByText("+ Add tag")).toBeInTheDocument();
     });
 
     it("should prevent duplicate tags in new tags list", async () => {
@@ -158,10 +164,8 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
-      );
-
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+      const input = screen.getByPlaceholderText("Tag name...");
       fireEvent.change(input, { target: { value: "tag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -169,8 +173,10 @@ describe("ManageTagsDialog", () => {
         expect(screen.getByText("tag")).toBeInTheDocument();
       });
 
-      fireEvent.change(input, { target: { value: "tag" } });
-      fireEvent.keyDown(input, { key: "Enter" });
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+      const input2 = screen.getByPlaceholderText("Tag name...");
+      fireEvent.change(input2, { target: { value: "tag" } });
+      fireEvent.keyDown(input2, { key: "Enter" });
 
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith(
@@ -195,25 +201,9 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
+      fireEvent.click(screen.getByTestId("add-tag-button"));
       const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
-      ) as HTMLInputElement;
-
-      expect(input.maxLength).toBe(100);
-    });
-
-    it("should use default maxTagLength of 100", () => {
-      render(
-        <ManageTagsDialog
-          entities={defaultEntities}
-          open={true}
-          setOpen={mockSetOpen}
-          onUpdate={mockOnUpdate}
-        />,
-      );
-
-      const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
+        "Tag name...",
       ) as HTMLInputElement;
 
       expect(input.maxLength).toBe(100);
@@ -237,10 +227,8 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
-      );
-
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+      let input = screen.getByPlaceholderText("Tag name...");
       fireEvent.change(input, { target: { value: "tag50" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -248,6 +236,8 @@ describe("ManageTagsDialog", () => {
         expect(screen.getByText("tag50")).toBeInTheDocument();
       });
 
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+      input = screen.getByPlaceholderText("Tag name...");
       fireEvent.change(input, { target: { value: "tag51" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -298,7 +288,7 @@ describe("ManageTagsDialog", () => {
         }),
       );
       expect(mockSetOpen).toHaveBeenCalledWith(false);
-      expect(screen.queryByText("Manage tags")).not.toBeInTheDocument();
+      expect(screen.queryByText("Manage shared tags")).not.toBeInTheDocument();
     });
 
     it("should allow dialog when isAllItemsSelected is true regardless of entities length", () => {
@@ -317,7 +307,7 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      expect(screen.getByText("Manage tags")).toBeInTheDocument();
+      expect(screen.getByText("Manage shared tags")).toBeInTheDocument();
       expect(mockToast).not.toHaveBeenCalled();
     });
   });
@@ -333,9 +323,8 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
-      );
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+      const input = screen.getByPlaceholderText("Tag name...");
       fireEvent.change(input, { target: { value: "newtag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -363,9 +352,8 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
-      );
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+      const input = screen.getByPlaceholderText("Tag name...");
       fireEvent.change(input, { target: { value: "newtag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -398,9 +386,8 @@ describe("ManageTagsDialog", () => {
         />,
       );
 
-      const input = screen.getByPlaceholderText(
-        "Type a tag and press Enter...",
-      );
+      fireEvent.click(screen.getByTestId("add-tag-button"));
+      const input = screen.getByPlaceholderText("Tag name...");
       fireEvent.change(input, { target: { value: "newtag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -432,6 +419,26 @@ describe("ManageTagsDialog", () => {
         name: /Update tags for/i,
       });
       expect(updateButton).toBeDisabled();
+    });
+  });
+
+  describe("Tag Removal (strikethrough)", () => {
+    it("should show removed common tag with strikethrough", async () => {
+      const entities: EntityWithTags[] = [
+        { id: "1", tags: ["shared"] },
+        { id: "2", tags: ["shared"] },
+      ];
+
+      render(
+        <ManageTagsDialog
+          entities={entities}
+          open={true}
+          setOpen={mockSetOpen}
+          onUpdate={mockOnUpdate}
+        />,
+      );
+
+      expect(screen.getByText("shared")).toBeInTheDocument();
     });
   });
 
