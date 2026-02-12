@@ -2,24 +2,20 @@ import functools
 import logging
 from typing import List, Optional, Any, Dict, Iterator, Union
 
+import opik
 import opik.logging_messages as logging_messages
 import opik.opik_context as opik_context
-import opik
 from opik.api_objects import opik_client, trace, local_recording
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment
-from opik.evaluation import (
-    rest_operations,
-    test_case,
-    test_result,
-    samplers,
-)
+from opik.evaluation import rest_operations, test_case, test_result, samplers
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
+from opik.evaluation.suite_evaluators import opik_llm_judge_config, llm_judge
+from opik.message_processing.emulation import models
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
 from .types import EvaluationTask
 from ..metrics import base_metric, score_result
-from ...message_processing.emulation import models
 
 
 LOGGER = logging.getLogger(__name__)
@@ -28,9 +24,50 @@ EVALUATION_TASK_NAME = "evaluation_task"
 
 EVALUATION_STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the default streaming limit to improve the UX and not wait too long for the first items to be evaluated
 
+# Reserved keys for evaluation suite metadata stored in dataset item content.
+# These will become proper backend fields on Dataset and DatasetItem once
+# OPIK-4222/4223 are implemented.
+EVALUATORS_KEY = "__evaluators__"
+EXECUTION_POLICY_KEY = "__execution_policy__"
+
+
+def _extract_item_evaluators(
+    dataset_item_content: Dict[str, Any],
+) -> List[base_metric.BaseMetric]:
+    """
+    Extract evaluators from dataset item content.
+
+    If the item has evaluator configs stored under the __evaluators__ key,
+    instantiate LLMJudge evaluators from those configs.
+
+    Args:
+        dataset_item_content: The dataset item content dict.
+
+    Returns:
+        List of evaluator instances extracted from the item content.
+    """
+    evaluator_configs = dataset_item_content.get(EVALUATORS_KEY)
+    if not evaluator_configs:
+        return []
+
+    evaluators: List[base_metric.BaseMetric] = []
+    for config_dict in evaluator_configs:
+        try:
+            config = opik_llm_judge_config.LLMJudgeConfig(**config_dict)
+            evaluator = llm_judge.LLMJudge.from_config(config)
+            evaluators.append(evaluator)
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to instantiate evaluator from config: %s. Error: %s",
+                config_dict,
+                e,
+            )
+
+    return evaluators
+
 
 def _calculate_total_items(
-    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
+    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
     nb_samples: Optional[int],
     dataset_item_ids: Optional[List[str]],
 ) -> Optional[int]:
@@ -44,11 +81,11 @@ def _calculate_total_items(
 
     # If nb_samples is specified and smaller than dataset size, use it
     if nb_samples is not None:
-        if dataset.dataset_items_count is not None:
-            return min(nb_samples, dataset.dataset_items_count)
+        if dataset_.dataset_items_count is not None:
+            return min(nb_samples, dataset_.dataset_items_count)
         return nb_samples
 
-    return dataset.dataset_items_count
+    return dataset_.dataset_items_count
 
 
 class EvaluationEngine:
@@ -65,11 +102,38 @@ class EvaluationEngine:
         self._project_name = project_name
         self._workers = workers
         self._verbose = verbose
+        self._scoring_key_mapping = scoring_key_mapping
 
-        # Delegate metric analysis to MetricsEvaluator
-        self._metrics_evaluator = metrics_evaluator.MetricsEvaluator(
-            scoring_metrics=scoring_metrics,
-            scoring_key_mapping=scoring_key_mapping,
+        # Separate suite-level metrics into regular and task-span categories
+        self._suite_regular_metrics, self._suite_task_span_metrics = (
+            metrics_evaluator.split_into_regular_and_task_span_metrics(scoring_metrics)
+        )
+
+        # Keep evaluator for task span metrics computation (needs scoring logic)
+        self._task_span_evaluator: Optional[metrics_evaluator.MetricsEvaluator] = None
+        if self._suite_task_span_metrics:
+            self._task_span_evaluator = metrics_evaluator.MetricsEvaluator(
+                scoring_metrics=self._suite_task_span_metrics,
+                scoring_key_mapping=scoring_key_mapping,
+            )
+
+    @property
+    def _has_task_span_metrics(self) -> bool:
+        """Check if any task span scoring metrics are configured."""
+        return len(self._suite_task_span_metrics) > 0
+
+    def _build_metrics_evaluator(
+        self,
+        dataset_item_content: Dict[str, Any],
+    ) -> metrics_evaluator.MetricsEvaluator:
+        """Build a MetricsEvaluator with suite-level + item-level metrics."""
+        all_metrics: List[base_metric.BaseMetric] = list(self._suite_regular_metrics)
+        item_evaluators = _extract_item_evaluators(dataset_item_content)
+        all_metrics.extend(item_evaluators)
+
+        return metrics_evaluator.MetricsEvaluator(
+            scoring_metrics=all_metrics,
+            scoring_key_mapping=self._scoring_key_mapping,
         )
 
     @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
@@ -78,11 +142,10 @@ class EvaluationEngine:
         test_case_: test_case.TestCase,
         trial_id: int = 0,
     ) -> test_result.TestResult:
-        score_results, mapped_scoring_inputs = (
-            self._metrics_evaluator.compute_regular_scores(
-                dataset_item_content=test_case_.dataset_item_content,
-                task_output=test_case_.task_output,
-            )
+        item_evaluator = self._build_metrics_evaluator(test_case_.dataset_item_content)
+        score_results, mapped_scoring_inputs = item_evaluator.compute_regular_scores(
+            dataset_item_content=test_case_.dataset_item_content,
+            task_output=test_case_.task_output,
         )
         test_case_.mapped_scoring_inputs = mapped_scoring_inputs
 
@@ -110,7 +173,7 @@ class EvaluationEngine:
         test_case_: test_case.TestCase,
     ) -> List[score_result.ScoreResult]:
         score_results, mapped_scoring_inputs = (
-            self._metrics_evaluator.compute_task_span_scores(
+            self._task_span_evaluator.compute_task_span_scores(
                 dataset_item_content=test_case_.dataset_item_content,
                 task_output=test_case_.task_output,
                 task_span=task_span,
@@ -333,7 +396,7 @@ class EvaluationEngine:
         # Can't use streaming with these parameters yet, so fallback to non-streaming
         use_streaming = (
             dataset_sampler is None
-            and not self._metrics_evaluator.has_task_span_metrics
+            and not self._has_task_span_metrics
         )
 
         # Get dataset items using streaming or non-streaming approach
@@ -364,7 +427,7 @@ class EvaluationEngine:
         # Calculate total items for progress bar
         if use_streaming:
             total_items = _calculate_total_items(
-                dataset=dataset_,
+                dataset_=dataset_,
                 nb_samples=nb_samples,
                 dataset_item_ids=dataset_item_ids,
             )
@@ -372,7 +435,7 @@ class EvaluationEngine:
             # After sampling, the actual count is the length of the list
             total_items = len(dataset_items_list)
 
-        if not self._metrics_evaluator.has_task_span_metrics:
+        if not self._has_task_span_metrics:
             return self._compute_test_results_for_llm_task(
                 dataset_items=dataset_items_iter,
                 task=task,
@@ -384,7 +447,7 @@ class EvaluationEngine:
 
         LOGGER.debug(
             "Detected %d LLM task span scoring metrics — enabling handling of the LLM task evaluation span.",
-            len(self._metrics_evaluator.task_span_metrics),
+            len(self._suite_task_span_metrics),
         )
 
         with local_recording.record_traces_locally(client=self._client) as recording:
@@ -431,7 +494,7 @@ class EvaluationEngine:
             for idx, item in enumerate(items)
         ]
 
-        if not self._metrics_evaluator.has_task_span_metrics:
+        if not self._has_task_span_metrics:
             return self._compute_test_results_for_llm_task(
                 dataset_items=iter(dataset_items_list),
                 task=task,
@@ -443,7 +506,7 @@ class EvaluationEngine:
 
         LOGGER.debug(
             "Detected %d LLM task span scoring metrics — enabling handling of the LLM task evaluation span.",
-            len(self._metrics_evaluator.task_span_metrics),
+            len(self._suite_task_span_metrics),
         )
 
         with local_recording.record_traces_locally(client=self._client) as recording:

@@ -9,21 +9,27 @@ break existing functionality.
 import logging
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
+from opik import id_helpers
 from opik.api_objects.prompt import base_prompt
-from opik.api_objects.dataset import dataset as dataset_module
+from opik.api_objects.dataset import dataset, dataset_item
 from opik.evaluation import evaluator as opik_evaluator
-from opik.evaluation.metrics import score_result
-
-from . import types
+from opik.evaluation import evaluation_result
 
 if TYPE_CHECKING:
-    from opik.evaluation import suite_evaluators
+    from opik.evaluation.suite_evaluators import llm_judge
 
 LOGGER = logging.getLogger(__name__)
 
-SUITE_ITEM_INDEX_KEY = "__suite_item_index__"
-
 LLMTask = Callable[[Dict[str, Any]], Any]
+
+# Reserved keys for evaluation suite metadata stored in dataset item content.
+# These will become proper backend fields on Dataset and DatasetItem once
+# OPIK-4222/4223 are implemented. At that point:
+# - Dataset will have `evaluators` and `execution_policy` columns
+# - DatasetItem will have `evaluators` and `execution_policy` columns
+# For now, we store item-level configs in the item content under these keys.
+EVALUATORS_KEY = "__evaluators__"
+EXECUTION_POLICY_KEY = "__execution_policy__"
 
 
 class EvaluationSuite:
@@ -34,17 +40,9 @@ class EvaluationSuite:
     - Define test cases with inputs and context
     - Configure evaluation criteria (LLMJudge evaluators)
     - Run tests against any task function
-    - Handle LLM non-determinism with multi-run execution
 
-    The suite stores evaluator configurations in the backend, making them
+    The suite stores evaluator configurations in dataset items, making them
     reusable across multiple test runs without code changes.
-
-    Args:
-        name: Name for the evaluation suite.
-        description: Optional description of what this suite tests.
-        evaluators: Suite-level evaluators applied to all items.
-        execution_policy: Default execution policy for all items.
-            Controls runs_per_item and pass_threshold.
 
     Example:
         >>> from opik import Opik
@@ -67,30 +65,30 @@ class EvaluationSuite:
         >>>
         >>> suite.add_item(
         ...     data={"user_input": "How do I get a refund?", "user_tier": "premium"},
-        ...     description="Premium user refund request",
         ...     evaluators=[
         ...         LLMJudge(assertions=[{"name": "polite", "expected_behavior": "Response is polite"}]),
         ...     ]
         ... )
         >>>
         >>> results = suite.run(task=my_llm_function)
-        >>> print(f"Passed: {results.passed_items}/{results.total_items}")
     """
 
     def __init__(
         self,
         name: str,
-        dataset: dataset_module.Dataset,
+        dataset_: dataset.Dataset,
         description: Optional[str] = None,
-        evaluators: Optional[List["suite_evaluators.LLMJudge"]] = None,
-        execution_policy: Optional[types.ExecutionPolicy] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        execution_policy: Optional[Dict[str, Any]] = None,
     ):
         self._name = name
-        self._dataset = dataset
+        self._dataset = dataset_
         self._description = description
+        # Dataset-level evaluators and execution_policy are stored in memory for now.
+        # Once OPIK-4222/4223 are implemented, these will be stored as dataset columns
+        # and retrieved from the backend.
         self._evaluators = evaluators or []
-        self._execution_policy = execution_policy or types.ExecutionPolicy()
-        self._items: List[types.SuiteItem] = []
+        self._execution_policy = execution_policy
 
     @property
     def name(self) -> str:
@@ -103,50 +101,37 @@ class EvaluationSuite:
         return self._description
 
     @property
-    def evaluators(self) -> List["suite_evaluators.LLMJudge"]:
+    def evaluators(self) -> List["llm_judge.LLMJudge"]:
         """Suite-level evaluators applied to all items."""
         return self._evaluators
 
     @property
-    def execution_policy(self) -> types.ExecutionPolicy:
-        """Default execution policy for all items."""
-        return self._execution_policy
-
-    @property
-    def items(self) -> List[types.SuiteItem]:
-        """The list of test items in this suite."""
-        return self._items
-
-    @property
-    def dataset(self) -> dataset_module.Dataset:
+    def dataset(self) -> dataset.Dataset:
         """The underlying dataset storing suite items."""
         return self._dataset
+
+    @property
+    def execution_policy(self) -> Optional[Dict[str, Any]]:
+        """Dataset-level execution policy."""
+        return self._execution_policy
 
     def add_item(
         self,
         data: Dict[str, Any],
-        description: Optional[str] = None,
-        evaluators: Optional[List["suite_evaluators.LLMJudge"]] = None,
-        execution_policy: Optional[types.ExecutionPolicy] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        execution_policy: Optional[Dict[str, Any]] = None,
     ) -> "EvaluationSuite":
         """
         Add a test case to the evaluation suite.
-
-        Each test case represents a scenario to validate. The item's evaluators
-        can override or extend suite-level evaluators.
 
         Args:
             data: Dictionary containing the test case data. This is passed to
                 the task function and can contain any fields needed.
                 Example: {"user_input": "How do I get a refund?", "user_tier": "premium"}
-            description: Optional human-readable description of this test case.
-                Example: "User asks about refund policy"
             evaluators: Item-specific evaluators. If provided, these are used
-                for this item instead of suite-level evaluators.
+                in addition to suite-level evaluators.
             execution_policy: Item-specific execution policy override.
-                Use for critical tests that need more runs or stricter thresholds.
-            metadata: Optional metadata (tags, source info, priority, etc.).
+                Example: {"runs_per_item": 3, "pass_threshold": 2}
 
         Returns:
             Self for method chaining.
@@ -154,24 +139,23 @@ class EvaluationSuite:
         Example:
             >>> suite.add_item(
             ...     data={"user_input": "How do I get a refund?", "user_tier": "premium"},
-            ...     description="Premium user refund request",
             ...     evaluators=[
             ...         LLMJudge(assertions=[{"name": "polite", "expected_behavior": "Response is polite"}]),
             ...     ]
             ... )
         """
-        item = types.SuiteItem(
-            data=data,
-            description=description,
-            evaluators=evaluators,
-            execution_policy=execution_policy,
-            metadata=metadata,
-        )
-        self._items.append(item)
+        item_id = id_helpers.generate_id()
 
-        dataset_item = dict(data)
-        dataset_item[SUITE_ITEM_INDEX_KEY] = len(self._items) - 1
-        self._dataset.insert([dataset_item])
+        item_content = dict(data)
+
+        if evaluators:
+            item_content[EVALUATORS_KEY] = [e.to_config().model_dump() for e in evaluators]
+
+        if execution_policy:
+            item_content[EXECUTION_POLICY_KEY] = execution_policy
+
+        ds_item = dataset_item.DatasetItem(id=item_id, **item_content)
+        self._dataset.__internal_api__insert_items_as_dataclasses__([ds_item])
 
         return self
 
@@ -187,16 +171,16 @@ class EvaluationSuite:
         experiment_tags: Optional[List[str]] = None,
         verbose: int = 1,
         worker_threads: int = 16,
-    ) -> types.SuiteResult:
+    ) -> evaluation_result.EvaluationResult:
         """
         Run the evaluation suite against a task function.
 
-        The task function receives each test item's data dict and should
-        return the LLM output to evaluate.
+        The task function receives each test item's data dict and must return
+        a dict with "input" and "output" keys for the evaluators.
 
         Args:
             task: A callable that takes a dict (the item's data) and returns
-                the LLM output.
+                a dict with "input" and "output" keys.
             experiment_name_prefix: Optional prefix for auto-generated experiment name.
             experiment_name: Optional explicit name for the experiment.
             project_name: Optional project name for tracking.
@@ -207,34 +191,19 @@ class EvaluationSuite:
             worker_threads: Number of threads for parallel task execution.
 
         Returns:
-            SuiteResult with pass/fail status for all items.
-
-        Raises:
-            ValueError: If no items have been added to the suite.
+            EvaluationResult from the evaluation run.
 
         Example:
-            >>> def my_llm_task(data: dict) -> str:
-            ...     return call_my_llm(data["user_input"], user_tier=data.get("user_tier"))
+            >>> def my_llm_task(data: dict) -> dict:
+            ...     response = call_my_llm(data["user_input"], user_tier=data.get("user_tier"))
+            ...     return {"input": data, "output": response}
             >>>
             >>> results = suite.run(task=my_llm_task)
-            >>> print(f"Passed: {results.passed_items}/{results.total_items}")
         """
-        if not self._items:
-            raise ValueError(
-                "No items added to the evaluation suite. Use add_item() first."
-            )
-
-        scoring_metrics = self._get_scoring_metrics()
-
-        def wrapped_task(item: Dict[str, Any]) -> Dict[str, Any]:
-            task_input = {k: v for k, v in item.items() if k != SUITE_ITEM_INDEX_KEY}
-            output = task(task_input)
-            return {"output": output, "input": task_input}
-
-        eval_result = opik_evaluator.evaluate(
+        return opik_evaluator.evaluate(
             dataset=self._dataset,
-            task=wrapped_task,
-            scoring_metrics=scoring_metrics,
+            task=task,
+            scoring_metrics=list(self._evaluators),
             experiment_name_prefix=experiment_name_prefix,
             experiment_name=experiment_name,
             project_name=project_name,
@@ -244,79 +213,3 @@ class EvaluationSuite:
             verbose=verbose,
             task_threads=worker_threads,
         )
-
-        return self._convert_to_suite_result(eval_result)
-
-    def _get_scoring_metrics(self) -> List["suite_evaluators.LLMJudge"]:
-        """Get all scoring metrics (evaluators) for the suite."""
-        return list(self._evaluators)
-
-    def _convert_to_suite_result(
-        self,
-        eval_result: Any,
-    ) -> types.SuiteResult:
-        """Convert EvaluationResult to SuiteResult."""
-        from opik.evaluation import test_result as test_result_module
-
-        results_by_item: Dict[int, List[test_result_module.TestResult]] = {}
-        for test_result in eval_result.test_results:
-            item_index = test_result.test_case.dataset_item_content.get(
-                SUITE_ITEM_INDEX_KEY, 0
-            )
-            if item_index not in results_by_item:
-                results_by_item[item_index] = []
-            results_by_item[item_index].append(test_result)
-
-        item_results: List[types.SuiteItemResult] = []
-        passed_items = 0
-
-        for index, item in enumerate(self._items):
-            test_results = results_by_item.get(index, [])
-
-            run_results: List[types.SuiteItemRunResult] = []
-            for test_result in test_results:
-                all_passed = all(
-                    self._score_passed(sr) for sr in test_result.score_results
-                )
-                run_result = types.SuiteItemRunResult(
-                    run_index=test_result.trial_id,
-                    output=test_result.test_case.task_output,
-                    score_results=test_result.score_results,
-                    passed=all_passed,
-                    trace_id=test_result.test_case.trace_id or "",
-                )
-                run_results.append(run_result)
-
-            passed_runs = sum(1 for r in run_results if r.passed)
-            total_runs = len(run_results)
-            item_passed = passed_runs >= 1 if total_runs > 0 else False
-
-            if item_passed:
-                passed_items += 1
-
-            item_result = types.SuiteItemResult(
-                item=item,
-                run_results=run_results,
-                passed=item_passed,
-                passed_runs=passed_runs,
-                total_runs=total_runs,
-            )
-            item_results.append(item_result)
-
-        return types.SuiteResult(
-            experiment_id=eval_result.experiment_id,
-            experiment_name=eval_result.experiment_name,
-            experiment_url=eval_result.experiment_url,
-            item_results=item_results,
-            passed_items=passed_items,
-            total_items=len(self._items),
-            passed=passed_items == len(self._items),
-        )
-
-    def _score_passed(self, score: score_result.ScoreResult) -> bool:
-        """Determine if a score result indicates a pass."""
-        if isinstance(score.value, bool):
-            return score.value
-        if isinstance(score.value, (int, float)):
-            return score.value >= 0.5
-        return False

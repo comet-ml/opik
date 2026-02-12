@@ -5,8 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from opik.evaluation.suite_evaluators import LLMJudge
-    from opik.api_objects.evaluation_suite import types as evaluation_suite_types
+    from opik.evaluation.suite_evaluators import llm_judge
 
 import httpx
 
@@ -949,8 +948,8 @@ class Opik:
         self,
         name: str,
         description: Optional[str] = None,
-        evaluators: Optional[List["LLMJudge"]] = None,
-        execution_policy: Optional["evaluation_suite_types.ExecutionPolicy"] = None,
+        evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
+        execution_policy: Optional[Dict[str, Any]] = None,
     ) -> "evaluation_suite.EvaluationSuite":
         """
         Create a new evaluation suite for regression testing.
@@ -964,8 +963,8 @@ class Opik:
             description: Optional description of what this suite tests.
             evaluators: Suite-level evaluators (e.g., LLMJudge instances)
                 applied to all test items.
-            execution_policy: Default execution policy controlling runs_per_item
-                and pass_threshold for handling LLM non-determinism.
+            execution_policy: Dataset-level execution policy.
+                Example: {"runs_per_item": 3, "pass_threshold": 2}
 
         Returns:
             EvaluationSuite: The created evaluation suite object.
@@ -985,7 +984,6 @@ class Opik:
             >>>
             >>> suite.add_item(
             ...     data={"user_input": "How do I get a refund?", "user_tier": "premium"},
-            ...     description="Premium user refund request",
             ... )
             >>>
             >>> results = suite.run(task=my_llm_function)
@@ -1002,7 +1000,7 @@ class Opik:
             description=description,
             evaluators=evaluators or [],
             execution_policy=execution_policy,
-            dataset=suite_dataset,
+            dataset_=suite_dataset,
         )
 
     def create_experiment(

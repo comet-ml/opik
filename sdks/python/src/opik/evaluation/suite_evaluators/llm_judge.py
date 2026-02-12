@@ -355,6 +355,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         ]
 
         return llm_judge_config.LLMJudgeConfig(
+            name=self.name,
             model=model_config,
             messages=messages,
             variables=variables,
@@ -365,7 +366,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
     def from_config(
         cls,
         config: llm_judge_config.LLMJudgeConfig,
-        name: str = "llm_judge",
+        name: Optional[str] = None,
         track: bool = True,
         project_name: Optional[str] = None,
     ) -> "LLMJudge":
@@ -377,7 +378,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         Args:
             config: LLMJudgeConfig with model, messages, variables, and schema.
-            name: The name of the evaluator. Defaults to "llm_judge".
+            name: The name of the evaluator. If not provided, uses the name from config.
             track: Whether to track the evaluator. Defaults to True.
             project_name: Optional project name for tracking.
 
@@ -404,7 +405,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         return cls(
             assertions=assertions,
             model=config.model.name,
-            name=name,
+            name=name if name is not None else config.name,
             track=track,
             project_name=project_name,
             seed=config.model.seed,

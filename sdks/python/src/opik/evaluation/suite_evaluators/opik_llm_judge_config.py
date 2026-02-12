@@ -73,6 +73,9 @@ class LLMJudgeConfig(pydantic.BaseModel):
     for online evaluations stored in `automation_rule_evaluators.code`.
     """
 
+    name: str = "llm_judge"
+    """The name of the evaluator (used as prefix for score names)."""
+
     model: LLMJudgeModelConfig
     """Model configuration with name, temperature, seed."""
 

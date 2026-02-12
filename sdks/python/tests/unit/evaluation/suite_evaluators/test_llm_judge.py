@@ -74,6 +74,7 @@ class TestLLMJudgeToConfig:
         config_dict = config.model_dump(by_alias=True, exclude_none=True)
 
         assert config_dict == {
+            "name": "llm_judge",
             "model": {"name": "gpt-4o", "temperature": 0.0, "seed": 123},
             "variables": {"input": "input", "output": "output"},
             "schema": [

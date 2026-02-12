@@ -31,6 +31,30 @@ def _has_evaluation_span_parameter(func: Callable) -> bool:
         return False
 
 
+def split_into_regular_and_task_span_metrics(
+    scoring_metrics: List[base_metric.BaseMetric],
+) -> Tuple[List[base_metric.BaseMetric], List[base_metric.BaseMetric]]:
+    """
+    Separate metrics into regular and task-span categories.
+
+    Args:
+        scoring_metrics: List of metrics to analyze.
+
+    Returns:
+        Tuple of (regular_metrics, task_span_metrics).
+    """
+    regular_metrics: List[base_metric.BaseMetric] = []
+    task_span_metrics: List[base_metric.BaseMetric] = []
+
+    for metric in scoring_metrics:
+        if _has_evaluation_span_parameter(metric.score):
+            task_span_metrics.append(metric)
+        else:
+            regular_metrics.append(metric)
+
+    return regular_metrics, task_span_metrics
+
+
 def _compute_metric_scores(
     scoring_metrics: List[base_metric.BaseMetric],
     mapped_scoring_inputs: Dict[str, Any],
@@ -150,16 +174,19 @@ class MetricsEvaluator:
         """Get list of regular scoring metrics."""
         return self._regular_metrics
 
+    @property
+    def scoring_key_mapping(self) -> Optional[ScoringKeyMappingType]:
+        """Get the scoring key mapping."""
+        return self._scoring_key_mapping
+
     def _analyze_metrics(
         self,
         scoring_metrics: List[base_metric.BaseMetric],
     ) -> None:
         """Separate metrics into regular and task-span categories."""
-        for metric in scoring_metrics:
-            if _has_evaluation_span_parameter(metric.score):
-                self._task_span_metrics.append(metric)
-            else:
-                self._regular_metrics.append(metric)
+        self._regular_metrics, self._task_span_metrics = (
+            split_into_regular_and_task_span_metrics(scoring_metrics)
+        )
 
         if self.has_task_span_metrics:
             LOGGER.debug(
