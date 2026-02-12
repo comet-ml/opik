@@ -62,6 +62,7 @@ const convertRawPromptToPromptWithLatestVersion = (
     created_at: date, // We don't have this in raw data
     version_count: 1, // Assuming single version
     tags: [], // We don't have this in raw data
+    template_structure: rawPrompt.template_structure,
     latest_version: promptVersion,
   };
 };
