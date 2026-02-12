@@ -13,6 +13,8 @@ import { type GoogleGenerativeAIModelId } from "@ai-sdk/google/internal";
 import { type LanguageModel } from "ai";
 import { ModelConfigurationError } from "./errors";
 
+type PrefixedOpenAIModelId = `openai/${OpenAIChatModelId}`;
+
 /**
  * Union type of all supported model IDs from OpenAI, Anthropic, and Google Gemini.
  *
@@ -26,6 +28,7 @@ import { ModelConfigurationError } from "./errors";
  */
 export type SupportedModelId =
   | OpenAIChatModelId
+  | PrefixedOpenAIModelId
   | AnthropicMessagesModelId
   | GoogleGenerativeAIModelId;
 
@@ -86,7 +89,7 @@ export type AllProviderOptions =
  * ```
  */
 export type ProviderOptionsForModel<T extends SupportedModelId> =
-  T extends OpenAIChatModelId
+  T extends OpenAIChatModelId | PrefixedOpenAIModelId
     ? OpenAIProviderOptions
     : T extends AnthropicMessagesModelId
       ? AnthropicProviderOptions
@@ -105,6 +108,7 @@ function isOpenAIModelId(
   options?: AllProviderOptions
 ): options is OpenAIProviderOptions {
   return (
+    modelId.startsWith("openai/") ||
     modelId.startsWith("gpt-") ||
     modelId.startsWith("o1") ||
     modelId.startsWith("o3") ||
@@ -195,11 +199,14 @@ export function detectProvider(
   if (isOpenAIModelId(modelId, options)) {
     const apiKey = (options?.apiKey as string) || process.env.OPENAI_API_KEY;
     validateApiKey("OpenAI", apiKey, "OPENAI_API_KEY");
+    const normalizedModelId = modelId.startsWith("openai/")
+      ? (modelId.slice("openai/".length) as OpenAIChatModelId)
+      : (modelId as OpenAIChatModelId);
 
     return createOpenAI({
       apiKey,
       ...options,
-    })(modelId);
+    })(normalizedModelId);
   }
 
   if (isAnthropicModelId(modelId, options)) {
@@ -225,7 +232,7 @@ export function detectProvider(
   // If no provider matches, throw error
   throw new ModelConfigurationError(
     `Unable to detect provider for model ID: ${modelId}. ` +
-      `Supported providers are OpenAI (gpt-*, o1*, o3*, chatgpt-*), ` +
+      `Supported providers are OpenAI (openai/*, gpt-*, o1*, o3*, chatgpt-*), ` +
       `Anthropic (claude-*), and Google Gemini (gemini-*, gemma-*).`
   );
 }
