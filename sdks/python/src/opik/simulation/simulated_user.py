@@ -1,6 +1,6 @@
 """SimulatedUser class for multi-turn conversation simulation."""
 
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from opik.evaluation.models.models_factory import get as get_model
 
 
@@ -38,8 +38,9 @@ class SimulatedUser:
         self.max_history_messages = max_history_messages
         self._response_index = 0
 
-        # Initialize LLM backend using models_factory for consistency
-        self._llm = get_model(model_name=model)
+        # Lazy-initialize LLM backend only when needed.
+        # This avoids model/provider initialization overhead for fixed-response simulations.
+        self._llm: Optional[Any] = None
 
     def generate_response(
         self,
@@ -74,6 +75,9 @@ class SimulatedUser:
 
     def _generate_llm_response(self, conversation_history: List[Dict[str, str]]) -> str:
         """Generate response using the LLM backend."""
+        if self._llm is None:
+            self._llm = get_model(model_name=self.model)
+
         # Build system prompt with persona and clear instructions
         system_prompt = f"""You are a simulated user with the following persona: {self.persona}
 

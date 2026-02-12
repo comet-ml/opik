@@ -17,7 +17,7 @@ class TestSimulatedUser:
         assert user.fixed_responses == []
         assert user.max_history_messages is None
         assert user._response_index == 0
-        assert user._llm is not None
+        assert user._llm is None
 
     def test_init_with_fixed_responses(self):
         """Test SimulatedUser initialization with fixed responses."""
@@ -26,6 +26,19 @@ class TestSimulatedUser:
 
         assert user.fixed_responses == fixed_responses
         assert user._response_index == 0
+        assert user._llm is None
+
+    @patch("opik.simulation.simulated_user.get_model")
+    def test_generate_response_with_fixed_responses__does_not_initialize_llm(
+        self, mock_get_model
+    ):
+        fixed_responses = ["Response 1", "Response 2"]
+        user = SimulatedUser(persona="Test persona", fixed_responses=fixed_responses)
+
+        assert user.generate_response([]) == "Response 1"
+        assert user.generate_response([]) == "Response 2"
+        assert user._llm is None
+        mock_get_model.assert_not_called()
 
     def test_generate_response_with_fixed_responses(self):
         """Test response generation using fixed responses."""
