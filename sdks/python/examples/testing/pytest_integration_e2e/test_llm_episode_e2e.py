@@ -24,7 +24,13 @@ from opik.simulation import (
     make_tool_call_budget,
     run_simulation,
 )
-from demo_helpers import get_demo_logger, log_episode_panel, log_json_debug
+from demo_helpers import (
+    get_demo_logger,
+    log_conversation_turns_debug,
+    log_episode_panel,
+    log_json_debug,
+    log_trajectory_steps_debug,
+)
 
 LOGGER = get_demo_logger("pytest_integration_e2e.episode")
 
@@ -47,13 +53,13 @@ def print_episode_debug(
         tool_calls=trajectory_summary["tool_calls_count"],
         extras={"Project": simulation.get("project_name")},
     )
-    if os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "INFO").upper() != "DEBUG":
+    if os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "DEBUG").upper() != "DEBUG":
         LOGGER.info(
             "set OPIK_EXAMPLE_LOG_LEVEL=DEBUG for full simulation/trajectory/episode dumps"
         )
 
-    log_json_debug(LOGGER, "conversation_history", simulation["conversation_history"])
-    log_json_debug(LOGGER, "trajectory", trajectory)
+    log_conversation_turns_debug(LOGGER, simulation["conversation_history"])
+    log_trajectory_steps_debug(LOGGER, trajectory)
     log_json_debug(LOGGER, "episode", episode.model_dump())
 
 

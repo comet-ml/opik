@@ -5,66 +5,40 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sys
 from typing import Any
+
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.markup import escape as rich_escape
 
 from opik.simulation import EpisodeResult
 
-DEFAULT_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 _LOGGING_CONFIGURED = False
-_USING_RICH_LOGGER = False
-ANSI_RESET = "\033[0m"
-ANSI_DIM = "\033[2m"
-ANSI_GREEN = "\033[32m"
-ANSI_RED = "\033[31m"
-ANSI_YELLOW = "\033[33m"
-ANSI_CYAN = "\033[36m"
 
 
 def setup_demo_logging() -> None:
     """Configure demo logging once for this demo test package."""
-    global _LOGGING_CONFIGURED, _USING_RICH_LOGGER
+    global _LOGGING_CONFIGURED
     if _LOGGING_CONFIGURED:
         return
 
-    level_name = os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "INFO").upper()
+    level_name = os.getenv("OPIK_EXAMPLE_LOG_LEVEL", "DEBUG").upper()
     level = getattr(logging, level_name, logging.INFO)
-    use_rich_logger = os.getenv("OPIK_EXAMPLE_USE_RICH_LOGGER", "false").lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-    handler: logging.Handler
-    format_string = DEFAULT_LOG_FORMAT
-    if use_rich_logger:
-        try:
-            from rich.console import Console
-            from rich.logging import RichHandler
 
-            handler = RichHandler(
-                level=level,
-                show_time=True,
-                show_level=True,
-                show_path=False,
-                rich_tracebacks=False,
-                markup=True,
-                console=Console(stderr=True),
-            )
-            format_string = "%(message)s"
-            _USING_RICH_LOGGER = True
-        except Exception:
-            handler = logging.StreamHandler()
-            handler.setLevel(level)
-            _USING_RICH_LOGGER = False
-    else:
-        handler = logging.StreamHandler()
-        handler.setLevel(level)
-        _USING_RICH_LOGGER = False
+    handler: logging.Handler = RichHandler(
+        level=level,
+        show_time=True,
+        show_level=True,
+        show_path=False,
+        rich_tracebacks=False,
+        markup=True,
+        console=Console(stderr=True),
+    )
 
     logging.basicConfig(
         level=level,
-        format=format_string,
+        format="%(message)s",
         datefmt=DEFAULT_DATE_FORMAT,
         handlers=[handler],
         force=True,
@@ -74,6 +48,9 @@ def setup_demo_logging() -> None:
     for logger_name in (
         "opik",
         "opik.api_objects.opik_client",
+        "openai",
+        "openai._base_client",
+        "openai._utils",
         "urllib3",
         "httpx",
         "httpcore",
@@ -106,61 +83,23 @@ def _format_field_value(value: Any) -> str:
 
 def _normalize_field_name(name: str) -> str:
     normalized = "".join(
-        character.lower() if character.isalnum() else "_"
-        for character in name
+        character.lower() if character.isalnum() else "_" for character in name
     ).strip("_")
     while "__" in normalized:
         normalized = normalized.replace("__", "_")
     return normalized
 
 
-def _ansi_enabled() -> bool:
-    if _USING_RICH_LOGGER:
-        return False
-    no_color = os.getenv("NO_COLOR")
-    if no_color:
-        return False
-    force_color = os.getenv("FORCE_COLOR")
-    if force_color:
-        return True
-    return sys.stderr.isatty()
-
-
-def _colorize(text: str, color: str) -> str:
-    if not _ansi_enabled():
-        return text
-    return f"{color}{text}{ANSI_RESET}"
-
-
-def _rich_escape(text: str) -> str:
-    if not _USING_RICH_LOGGER:
-        return text
-    try:
-        from rich.markup import escape
-
-        return escape(text)
-    except Exception:
-        return text
-
-
 def log_event(
     logger: logging.Logger, event: str, *, level: int = logging.INFO, **fields: Any
 ) -> None:
-    event_text = _rich_escape(f"event={event}")
-    if _USING_RICH_LOGGER:
-        if event == "episode_summary":
-            event_text = f"[cyan]{event_text}[/cyan]"
-        elif event in {"episode_assertions_failed", "episode_budgets_failed"}:
-            event_text = f"[yellow]{event_text}[/yellow]"
-        elif event == "payload":
-            event_text = f"[dim]{event_text}[/dim]"
-    else:
-        if event == "episode_summary":
-            event_text = _colorize(event_text, ANSI_CYAN)
-        elif event in {"episode_assertions_failed", "episode_budgets_failed"}:
-            event_text = _colorize(event_text, ANSI_YELLOW)
-        elif event == "payload":
-            event_text = _colorize(event_text, ANSI_DIM)
+    event_text = rich_escape(f"event={event}")
+    if event == "episode_summary":
+        event_text = f"[cyan]{event_text}[/cyan]"
+    elif event in {"episode_assertions_failed", "episode_budgets_failed"}:
+        event_text = f"[yellow]{event_text}[/yellow]"
+    elif event == "payload":
+        event_text = f"[dim]{event_text}[/dim]"
 
     parts = [event_text]
     for key, value in fields.items():
@@ -169,26 +108,20 @@ def log_event(
         normalized_key = _normalize_field_name(key)
         if not normalized_key:
             continue
-        rendered = f"{normalized_key}={_format_field_value(value)}"
-        if _USING_RICH_LOGGER:
-            rendered = _rich_escape(rendered)
+        if normalized_key == "payload" and isinstance(value, str):
+            rendered_value = value
+        else:
+            rendered_value = _format_field_value(value)
+
+        rendered = rich_escape(f"{normalized_key}={rendered_value}")
         if normalized_key == "status":
             value_text = str(value).upper()
-            if _USING_RICH_LOGGER:
-                if value_text == "PASS":
-                    rendered = f"[green]{rendered}[/green]"
-                elif value_text == "FAIL":
-                    rendered = f"[red]{rendered}[/red]"
-            else:
-                if value_text == "PASS":
-                    rendered = _colorize(rendered, ANSI_GREEN)
-                elif value_text == "FAIL":
-                    rendered = _colorize(rendered, ANSI_RED)
+            if value_text == "PASS":
+                rendered = f"[green]{rendered}[/green]"
+            elif value_text == "FAIL":
+                rendered = f"[red]{rendered}[/red]"
         elif normalized_key.startswith("failed_"):
-            if _USING_RICH_LOGGER:
-                rendered = f"[yellow]{rendered}[/yellow]"
-            else:
-                rendered = _colorize(rendered, ANSI_YELLOW)
+            rendered = f"[yellow]{rendered}[/yellow]"
         parts.append(rendered)
     logger.log(level, " ".join(parts))
 
@@ -208,6 +141,36 @@ def log_json_debug(logger: logging.Logger, key: str, payload: Any) -> None:
     )
 
 
+def log_conversation_turns_debug(
+    logger: logging.Logger, conversation_history: list[dict[str, Any]]
+) -> None:
+    """Log each conversation turn as a separate debug line."""
+    logger.debug("conversation turns:")
+    if not conversation_history:
+        logger.debug("  (none)")
+        return
+
+    for index, message in enumerate(conversation_history, start=1):
+        role = message.get("role", "unknown")
+        content = str(message.get("content", "")).replace("\n", " ").strip()
+        logger.debug("  %02d. %s: %s", index, role, content)
+
+
+def log_trajectory_steps_debug(
+    logger: logging.Logger, trajectory: list[dict[str, Any]]
+) -> None:
+    """Log each trajectory/tool step as a separate debug line."""
+    logger.debug("trajectory steps:")
+    if not trajectory:
+        logger.debug("  (none)")
+        return
+
+    for index, step in enumerate(trajectory, start=1):
+        action = step.get("action", "unknown")
+        details = step.get("details", {})
+        logger.debug("  %02d. action=%s details=%s", index, action, details)
+
+
 def log_episode_panel(
     logger: logging.Logger,
     *,
@@ -218,7 +181,7 @@ def log_episode_panel(
     tool_calls: int | None = None,
     extras: dict[str, Any] | None = None,
 ) -> None:
-    """Render a compact episode summary."""
+    """Render a human-readable episode summary at INFO level."""
     assertions_passed = sum(1 for assertion in episode.assertions if assertion.passed)
     assertions_total = len(episode.assertions)
     failed_assertions = [a.name for a in episode.assertions if not a.passed]
@@ -228,35 +191,24 @@ def log_episode_panel(
     failed_budgets = [name for name, metric in budgets.items() if not metric.passed]
 
     status = "PASS" if episode.is_passing() else "FAIL"
-    log_event(
-        logger,
-        "episode_summary",
-        scenario_id=scenario_id,
-        thread_id=thread_id or "-",
-        status=status,
-        assertions_passed=assertions_passed,
-        assertions_total=assertions_total,
-        budgets_passed=budgets_passed,
-        budgets_total=budgets_total,
-        turns=turns,
-        tool_calls=tool_calls,
-        **(extras or {}),
+    status_markup = "[green]PASS[/green]" if status == "PASS" else "[red]FAIL[/red]"
+    logger.info("episode: %s status=%s", scenario_id, status_markup)
+    logger.info(
+        "thread=%s turns=%s tool_calls=%s assertions=%s/%s budgets=%s/%s",
+        thread_id or "-",
+        "-" if turns is None else turns,
+        "-" if tool_calls is None else tool_calls,
+        assertions_passed,
+        assertions_total,
+        budgets_passed,
+        budgets_total,
     )
+    if extras:
+        for key, value in extras.items():
+            logger.info("%s: %s", key, value)
 
     if failed_assertions:
-        log_event(
-            logger,
-            "episode_assertions_failed",
-            level=logging.WARNING,
-            scenario_id=scenario_id,
-            failed_assertions=failed_assertions,
-        )
+        logger.warning("failed assertions: %s", failed_assertions)
 
     if failed_budgets:
-        log_event(
-            logger,
-            "episode_budgets_failed",
-            level=logging.WARNING,
-            scenario_id=scenario_id,
-            failed_budgets=failed_budgets,
-        )
+        logger.warning("failed budgets: %s", failed_budgets)

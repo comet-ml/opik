@@ -52,7 +52,7 @@ status, pytest pass/fail, and full episode payload per test case.
 
 Configuration:
 
-- ``pytest_episode_artifact_enabled`` (default: ``True``)
+- ``pytest_episode_artifact_enabled`` (default: ``False``)
 - ``pytest_episode_artifact_path`` (default: ``".opik/pytest_episode_report.json"``)
 
 Notes

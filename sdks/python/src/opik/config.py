@@ -175,7 +175,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Feedback score name used by the pytest plugin to store pass/fail status.
     """
 
-    pytest_episode_artifact_enabled: bool = True
+    pytest_episode_artifact_enabled: bool = False
     """
     If enabled, the pytest plugin writes a JSON artifact summarizing episode results.
     """

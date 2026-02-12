@@ -29,6 +29,7 @@ from demo_helpers import get_demo_logger, log_episode_panel, log_json_debug
 LOGGER = get_demo_logger("pytest_integration_e2e.judges")
 BUILT_IN_JUDGE_THRESHOLD = 0.6
 CUSTOM_JUDGE_THRESHOLD = 0.4
+JUDGE_TEMPERATURE = 1.0
 
 
 class SupportResolutionAgent:
@@ -143,9 +144,7 @@ def _require_openai_api_key() -> None:
 @pytest.mark.filterwarnings(
     "ignore:Test functions should return None:pytest.PytestReturnNotNoneWarning"
 )
-@pytest.mark.filterwarnings(
-    "ignore:There is no current event loop:DeprecationWarning"
-)
+@pytest.mark.filterwarnings("ignore:There is no current event loop:DeprecationWarning")
 @pytest.mark.parametrize("scenario", judge_scenarios())
 @llm_episode(scenario_id_key="scenario_id")
 def test_llm_episode_with_builtin_and_custom_judges(scenario):
@@ -177,6 +176,7 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
     built_in_judge = metrics.AnswerRelevance(
         name="answer_relevance_builtin_judge",
         model="gpt-5-nano",
+        temperature=JUDGE_TEMPERATURE,
         require_context=False,
         track=False,
     )
@@ -188,6 +188,7 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
     custom_judge = metrics.GEval(
         name="custom_support_resolution_judge",
         model="gpt-5-nano",
+        temperature=JUDGE_TEMPERATURE,
         track=False,
         task_introduction=(
             "You are a support QA judge evaluating whether an assistant response is "
@@ -275,6 +276,7 @@ def test_llm_episode_with_builtin_and_custom_judges(scenario):
         metadata={
             "tags": simulation.get("tags"),
             "judge_model": "gpt-5-nano",
+            "judge_temperature": JUDGE_TEMPERATURE,
             "built_in_judge": built_in_result.name,
             "custom_judge": custom_result.name,
             "built_in_judge_threshold": BUILT_IN_JUDGE_THRESHOLD,

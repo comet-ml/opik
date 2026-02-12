@@ -60,7 +60,12 @@ class SimulatedUser:
         # Use fixed responses first if available
         if self.fixed_responses:
             if simulation_state is not None:
-                state_index = int(simulation_state.get("user_response_index", 0))
+                state_index_raw = simulation_state.get("user_response_index", 0)
+                state_index = (
+                    int(state_index_raw)
+                    if isinstance(state_index_raw, (int, float, str))
+                    else 0
+                )
                 response = self.fixed_responses[state_index % len(self.fixed_responses)]
                 simulation_state["user_response_index"] = state_index + 1
             else:

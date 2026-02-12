@@ -78,7 +78,7 @@ These can be provided through Opik configuration sources (for example environmen
 
 ### Episode-Based Tests with Simulated Users
 
-For multi-turn agent testing, use `llm_episode` and return an `EpisodeResult`. This lets you keep native pytest assertions while also emitting structured episode artifacts (assertions, scores, budgets, trajectory summary) for CI/reporting.
+For multi-turn agent testing, use `llm_episode` and return an `EpisodeResult`. This lets you keep native pytest assertions and, when enabled, emit structured episode artifacts (assertions, scores, budgets, trajectory summary) for CI/reporting.
 
 The example below uses `SimulatedUser` with fixed responses so the scenario is deterministic and easy to run in CI:
 

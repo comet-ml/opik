@@ -39,18 +39,11 @@ pytest -vv -s -rA --show-capture=no \
 Example diagnostic logging defaults to `DEBUG`.
 Set `OPIK_EXAMPLE_LOG_LEVEL=INFO` to keep summary-only logs.
 
-For demo stability/perf, runners also default to:
-- `OPIK_DEFAULT_FLUSH_TIMEOUT=5`
-- `OPIK_BACKGROUND_WORKERS=1`
-- `OPIK_FILE_UPLOAD_BACKGROUND_WORKERS=1`
-- `OPIK_SENTRY_ENABLE=false`
-- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` and explicit `-p opik.plugins.pytest`
-
 ## Outputs
 
 - Standard pytest output
 - Opik pytest experiment logs
-- Episode artifact JSON (default path):
+- Optional episode artifact JSON (when enabled via config/env):
   - `.opik/pytest_episode_report.json`
 
 You can override defaults with environment variables, for example:

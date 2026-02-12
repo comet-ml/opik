@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 
 import opik
+from opik import exceptions
 from opik import id_helpers
 from opik import llm_episode
 import opik.opik_context as opik_context
@@ -45,6 +46,7 @@ class ObservabilityAwareAgent:
 
     def __init__(self) -> None:
         self.trajectory_by_thread: dict[str, list[dict[str, Any]]] = {}
+        self.local_telemetry_by_thread: dict[str, dict[str, float]] = {}
 
     def _record(self, thread_id: str, action: str, details: dict[str, Any]) -> None:
         self.trajectory_by_thread.setdefault(thread_id, []).append(
@@ -83,6 +85,19 @@ class ObservabilityAwareAgent:
 
         total_tokens = prompt_tokens + completion_tokens
         estimated_cost = round(total_tokens * 0.0000008, 8)
+        telemetry = self.local_telemetry_by_thread.setdefault(
+            thread_id,
+            {
+                "prompt_tokens": 0.0,
+                "completion_tokens": 0.0,
+                "total_tokens": 0.0,
+                "total_cost_usd": 0.0,
+            },
+        )
+        telemetry["prompt_tokens"] += float(prompt_tokens)
+        telemetry["completion_tokens"] += float(completion_tokens)
+        telemetry["total_tokens"] += float(total_tokens)
+        telemetry["total_cost_usd"] += float(estimated_cost)
 
         # Populate the same telemetry fields used by production observability flows.
         opik_context.update_current_span(
@@ -140,8 +155,8 @@ def _duration_ms_from_span(span: Any) -> float:
 
 
 def _rollup_thread_telemetry(
-    project_name: str, thread_id: str, run_tag: str
-) -> dict[str, float]:
+    project_name: str, thread_id: str, run_tag: str, require_telemetry: bool = False
+) -> dict[str, Any]:
     """Query and aggregate trace/span telemetry for one simulation thread.
 
     Returns rollups used by EpisodeBudgets:
@@ -149,41 +164,108 @@ def _rollup_thread_telemetry(
     - latency
     - estimated cost
     """
-    # Project used by runtime tracing is controlled by OPIK_PROJECT_NAME.
-    # If unset, let Opik default to its configured project.
-    configured_project_name = os.getenv("OPIK_PROJECT_NAME")
+    # Runtime traces usually land in OPIK_PROJECT_NAME; scenario project_name is metadata.
+    env_project_name = os.getenv("OPIK_PROJECT_NAME")
+    project_candidates = []
+    for candidate in (env_project_name, project_name, None):
+        if candidate not in project_candidates:
+            project_candidates.append(candidate)
+
+    selected_project_name = project_candidates[0]
     client = (
-        opik.Opik(project_name=configured_project_name)
-        if configured_project_name
+        opik.Opik(project_name=selected_project_name)
+        if selected_project_name
         else opik.Opik()
     )
     # Ensure async trace/span messages are sent before querying telemetry.
     client.flush(timeout=20)
     traces = []
-    deadline = time.time() + 8
-    while time.time() < deadline and not traces:
-        # Primary lookup by thread id; fallback by synthetic run tag.
-        traces = client.search_traces(
-            project_name=configured_project_name,
-            filter_string=f'thread_id = "{thread_id}"',
-            max_results=1000,
-            truncate=False,
-        )
-        if not traces:
-            traces = client.search_traces(
-                project_name=configured_project_name,
-                filter_string=f'tags contains "{run_tag}"',
-                max_results=1000,
-                truncate=False,
-            )
+    spans = []
+
+    # Try each candidate project so local/demo setups are resilient.
+    for candidate_project_name in project_candidates:
         if traces:
             break
-        time.sleep(1)
 
-    spans = []
+        try:
+            if require_telemetry:
+                traces = client.search_traces(
+                    project_name=candidate_project_name,
+                    filter_string=f'thread_id = "{thread_id}"',
+                    max_results=1000,
+                    truncate=False,
+                    wait_for_at_least=1,
+                    wait_for_timeout=15,
+                )
+            else:
+                traces = client.search_traces(
+                    project_name=candidate_project_name,
+                    filter_string=f'thread_id = "{thread_id}"',
+                    max_results=1000,
+                    truncate=False,
+                )
+        except exceptions.SearchTimeoutError:
+            traces = []
+        except Exception:
+            traces = []
+
+        if traces:
+            break
+
+        try:
+            if require_telemetry:
+                traces = client.search_traces(
+                    project_name=candidate_project_name,
+                    filter_string=f'tags contains "{run_tag}"',
+                    max_results=1000,
+                    truncate=False,
+                    wait_for_at_least=1,
+                    wait_for_timeout=8,
+                )
+            else:
+                traces = client.search_traces(
+                    project_name=candidate_project_name,
+                    filter_string=f'tags contains "{run_tag}"',
+                    max_results=1000,
+                    truncate=False,
+                )
+        except exceptions.SearchTimeoutError:
+            traces = []
+        except Exception:
+            traces = []
+
+        if traces:
+            break
+
+        deadline = time.time() + (8 if require_telemetry else 1.5)
+        while time.time() < deadline and not traces:
+            try:
+                traces = client.search_traces(
+                    project_name=candidate_project_name,
+                    filter_string=f'thread_id = "{thread_id}"',
+                    max_results=1000,
+                    truncate=False,
+                )
+            except Exception:
+                traces = []
+
+            if not traces:
+                try:
+                    traces = client.search_traces(
+                        project_name=candidate_project_name,
+                        filter_string=f'tags contains "{run_tag}"',
+                        max_results=1000,
+                        truncate=False,
+                    )
+                except Exception:
+                    traces = []
+            if traces:
+                break
+            time.sleep(1)
+
     for trace in traces:
         trace_spans = client.search_spans(
-            project_name=configured_project_name,
+            project_name=getattr(trace, "project_name", None) or selected_project_name,
             trace_id=trace.id,
             max_results=1000,
             truncate=False,
@@ -191,7 +273,7 @@ def _rollup_thread_telemetry(
         spans.extend(trace_spans)
 
     telemetry_records = spans if spans else traces
-    # Prefer span-level granularity; fallback to trace-level usage/cost fields.
+    telemetry_source = "spans" if spans else ("traces" if traces else "none")
 
     prompt_tokens = 0
     completion_tokens = 0
@@ -221,12 +303,31 @@ def _rollup_thread_telemetry(
     return {
         "traces_count": float(len(traces)),
         "spans_count": float(len(spans)),
-        "telemetry_source": "spans" if spans else "traces",
+        "telemetry_source": telemetry_source,
         "prompt_tokens": float(prompt_tokens),
         "completion_tokens": float(completion_tokens),
         "total_tokens": float(total_tokens),
         "total_cost_usd": float(round(total_cost, 10)),
         "latency_ms": float(round(latency_ms, 2)),
+    }
+
+
+def _local_telemetry_fallback(
+    agent: ObservabilityAwareAgent, thread_id: str
+) -> dict[str, Any]:
+    local = agent.local_telemetry_by_thread.get(thread_id)
+    if not local:
+        return {}
+
+    return {
+        "traces_count": 0.0,
+        "spans_count": 0.0,
+        "telemetry_source": "local_fallback",
+        "prompt_tokens": float(local["prompt_tokens"]),
+        "completion_tokens": float(local["completion_tokens"]),
+        "total_tokens": float(local["total_tokens"]),
+        "total_cost_usd": float(round(local["total_cost_usd"], 10)),
+        "latency_ms": 0.0,
     }
 
 
@@ -255,14 +356,21 @@ def test_llm_episode_budgeting_from_trace_span_telemetry(scenario):
     )
 
     trajectory = agent.trajectory_by_thread.get(thread_id, [])
-    telemetry = _rollup_thread_telemetry(
-        project_name=scenario["project_name"], thread_id=thread_id, run_tag=run_tag
-    )
-    telemetry_available = (
-        telemetry["spans_count"] >= 1.0 or telemetry["traces_count"] >= 1.0
-    )
     require_telemetry = (
         os.getenv("OPIK_EXAMPLE_REQUIRE_TELEMETRY", "false").lower() == "true"
+    )
+    telemetry = _rollup_thread_telemetry(
+        project_name=scenario["project_name"],
+        thread_id=thread_id,
+        run_tag=run_tag,
+        require_telemetry=require_telemetry,
+    )
+    if telemetry["telemetry_source"] == "none":
+        fallback = _local_telemetry_fallback(agent=agent, thread_id=thread_id)
+        if fallback:
+            telemetry = fallback
+    telemetry_available = (
+        telemetry["spans_count"] >= 1.0 or telemetry["traces_count"] >= 1.0
     )
 
     turn_assertion = make_max_turns_assertion(

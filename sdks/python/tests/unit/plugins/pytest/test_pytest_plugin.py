@@ -181,7 +181,7 @@ def test_pytest_plugin_config_defaults():
     assert config.pytest_experiment_dataset_name == "tests"
     assert config.pytest_experiment_name_prefix == "Test-Suite"
     assert config.pytest_passed_score_name == "Passed"
-    assert config.pytest_episode_artifact_enabled is True
+    assert config.pytest_episode_artifact_enabled is False
     assert config.pytest_episode_artifact_path == ".opik/pytest_episode_report.json"
 
 
