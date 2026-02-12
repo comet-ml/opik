@@ -54,13 +54,25 @@ async def _start_client(
     except TypeError:
         # Older SDK variants may not accept an `auth` argument.
         transport_cm = streamablehttp_client(url, headers=safe_headers)
-    read_stream, write_stream, _get_session_id = await transport_cm.__aenter__()
-    session = cast(type[Any], ClientSession)(read_stream, write_stream)
-    if hasattr(session, "__aenter__"):
-        await session.__aenter__()
-    if hasattr(session, "initialize"):
-        await session.initialize()
-    return session, transport_cm
+    session: Any | None = None
+    transport_entered = False
+    session_entered = False
+    try:
+        read_stream, write_stream, _get_session_id = await transport_cm.__aenter__()
+        transport_entered = True
+        session = cast(type[Any], ClientSession)(read_stream, write_stream)
+        if hasattr(session, "__aenter__"):
+            await session.__aenter__()
+            session_entered = True
+        if hasattr(session, "initialize"):
+            await session.initialize()
+        return session, transport_cm
+    except Exception:
+        if session is not None and session_entered and hasattr(session, "__aexit__"):
+            await session.__aexit__(None, None, None)
+        if transport_entered:
+            await transport_cm.__aexit__(None, None, None)
+        raise
 
 
 async def _close_client(session_bundle: tuple[Any, Any]) -> None:

@@ -267,15 +267,17 @@ def resolve_toolcalling_tools(
                 }
                 resolved_tools.append(function_entry)
                 if require_approval:
+                    callable_for_tool = _build_approval_required_callable(function_name)
                     logger.debug("MCP tool requires approval before execution.")
-                    resolved_map.setdefault(
-                        function_name,
-                        _build_approval_required_callable(function_name),
-                    )
                 else:
-                    resolved_map.setdefault(
-                        function_name, factory._build_callable(server, tool_name)
-                    )
+                    callable_for_tool = factory._build_callable(server, tool_name)
+                resolved_map.setdefault(function_name, callable_for_tool)
+                if function_name != tool_name:
+                    had_tool_name = tool_name in resolved_map
+                    resolved_map.setdefault(tool_name, callable_for_tool)
+                    if not had_tool_name and tool_name not in occupied_names:
+                        occupied_names.add(tool_name)
+                    logger.debug("Registered MCP base-name alias for renamed tool.")
             continue
 
         if "mcp" not in tool:

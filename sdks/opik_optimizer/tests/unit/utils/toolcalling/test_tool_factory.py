@@ -387,3 +387,52 @@ def test_tool_factory__collect_names_skips_non_mapping_tools() -> None:
         {"existing": lambda: None},
     )
     assert names == {"existing", "search"}
+
+
+def test_tool_factory__registers_base_alias_for_renamed_mcp_tool(
+    monkeypatch: Any,
+) -> None:
+    def _fake_get_signature(
+        self: ToolCallingFactory,
+        server: dict[str, Any],
+        tool_name: str,
+        _signature_override: dict[str, Any] | None,
+    ) -> ToolSignature:
+        _ = self, server, _signature_override
+        return ToolSignature(
+            name=tool_name,
+            description="mcp tool",
+            parameters={"type": "object", "properties": {}},
+        )
+
+    def _fake_build_callable(
+        self: ToolCallingFactory, server: dict[str, Any], tool_name: str
+    ) -> Any:
+        _ = self, server
+        return lambda **_kwargs: f"called:{tool_name}"
+
+    monkeypatch.setattr(ToolCallingFactory, "_get_signature", _fake_get_signature)
+    monkeypatch.setattr(ToolCallingFactory, "_build_callable", _fake_build_callable)
+
+    tools: list[dict[str, Any]] = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search",
+                "description": "existing schema-only tool",
+                "parameters": {"type": "object", "properties": {}},
+            },
+        },
+        {
+            "type": "mcp",
+            "server_label": "context7",
+            "server_url": "https://mcp.context7.com/mcp",
+            "allowed_tools": ["search"],
+        },
+    ]
+
+    _resolved_tools, function_map = resolve_toolcalling_tools(tools, {})
+    assert "context7.search" in function_map
+    assert "search" in function_map
+    assert function_map["context7.search"]() == "called:search"
+    assert function_map["search"]() == "called:search"
