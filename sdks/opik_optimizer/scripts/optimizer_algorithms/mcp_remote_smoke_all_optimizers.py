@@ -82,29 +82,12 @@ cursor_config = {
     }
 }
 tools = cursor_mcp_config_to_tools(cursor_config)
-base_dataset = load_context7_dataset(test_mode=True)
+dataset = load_context7_dataset(test_mode=True)
 scorer = LevenshteinRatio()
-
-
-class _SingleItemDataset:
-    """Dataset wrapper that exposes only one item from the source dataset."""
-
-    def __init__(self, source: Any) -> None:
-        self._source = source
-        self._items = list(source.get_items(nb_samples=1))
-        if not self._items:
-            raise ValueError("Context7 dataset is empty; cannot run smoke test.")
-        self.name = getattr(source, "name", "context7_smoke_single")
-        self.id = getattr(source, "id", self.name)
-
-    def get_items(self, nb_samples: int | None = None) -> list[dict[str, Any]]:
-        if nb_samples is None:
-            return list(self._items)
-        return list(self._items[:nb_samples])
-
-
-dataset = _SingleItemDataset(base_dataset)
-logger.info("Using dataset sample size: %s item(s)", len(dataset.get_items()))
+dataset_items = list(dataset.get_items(nb_samples=1))
+if not dataset_items:
+    raise ValueError("Context7 dataset is empty; cannot run smoke test.")
+logger.info("Using dataset sample size per optimization call: %s item(s)", N_SAMPLES)
 
 
 def context7_metric(dataset_item: dict[str, Any], llm_output: str) -> Any:
