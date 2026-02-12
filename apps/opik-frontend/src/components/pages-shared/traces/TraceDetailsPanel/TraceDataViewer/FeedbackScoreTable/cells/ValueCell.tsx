@@ -213,10 +213,7 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
       tableMetadata={context.table.options.meta}
       className="gap-1.5"
     >
-      <TooltipWrapper
-        content={String(cellContent) !== value ? value : cellContent}
-        stopClickPropagation
-      >
+      <TooltipWrapper content={value} stopClickPropagation>
         <span className="truncate direction-alternate">{cellContent}</span>
       </TooltipWrapper>
     </CellWrapper>

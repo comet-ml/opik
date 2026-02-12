@@ -13,6 +13,7 @@ import {
   getIsMultiValueFeedbackScore,
   formatScoreDisplay,
 } from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import FeedbackScoreCellValue from "./FeedbackScoreCellValue";
 import { BaseTraceData } from "@/types/traces";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
@@ -137,7 +138,13 @@ const FeedbackScoreAggregationCell = <TData,>(
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="truncate text-light-slate">{value}</span>
+      {isNumber(rawValue) ? (
+        <TooltipWrapper content={String(rawValue)}>
+          <span className="truncate text-light-slate">{value}</span>
+        </TooltipWrapper>
+      ) : (
+        <span className="truncate text-light-slate">{value}</span>
+      )}
     </CellWrapper>
   );
 };

@@ -92,9 +92,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
 
   const isMultiValue = getIsMultiValueFeedbackScore(valueByAuthor);
   const showFullPrecisionTooltip =
-    !isMultiValue &&
-    fullPrecisionDisplayValue !== undefined &&
-    String(displayValue) !== fullPrecisionDisplayValue;
+    !isMultiValue && fullPrecisionDisplayValue !== undefined;
 
   // Content that will be wrapped in hover card for multi-value or rendered directly for single value
   const tagContent = (

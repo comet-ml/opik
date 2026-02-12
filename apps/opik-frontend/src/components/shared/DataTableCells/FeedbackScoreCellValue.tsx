@@ -55,8 +55,7 @@ const FeedbackScoreCellValue = ({
     ? `${category} (${formattedValue})`
     : String(formattedValue);
   const fullPrecisionText = category ? `${category} (${value})` : String(value);
-  const isMultiValue = getIsMultiValueFeedbackScore(valueByAuthor);
-  const showTooltip = !isMultiValue && displayText !== fullPrecisionText;
+  const showTooltip = !getIsMultiValueFeedbackScore(valueByAuthor);
 
   return (
     <div className="flex min-w-0 items-center gap-1 overflow-hidden">
