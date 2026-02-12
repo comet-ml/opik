@@ -646,6 +646,35 @@ def _serialize_optimization_result(result: Any) -> Any:
     return result
 
 
+def _result_field(result: Any, name: str, default: Any = None) -> Any:
+    """Read a field from an object-like or dict-like optimization result."""
+    if hasattr(result, name):
+        return getattr(result, name)
+    if isinstance(result, dict):
+        return result.get(name, default)
+    return default
+
+
+def _resolve_optimization_history(
+    result: Any, fallback_history: opik_optimizer.core.results.OptimizationHistoryState
+) -> list[dict[str, Any]]:
+    """Prefer optimizer-native history and fall back to benchmark-synthesized rounds."""
+    native_history = _result_field(result, "history")
+    if isinstance(native_history, list):
+        normalized: list[dict[str, Any]] = []
+        for entry in native_history:
+            if isinstance(entry, dict):
+                normalized.append(entry)
+            elif hasattr(entry, "to_dict"):
+                try:
+                    normalized.append(entry.to_dict())
+                except Exception:
+                    continue
+        if normalized:
+            return normalized
+    return fallback_history.get_entries()
+
+
 def execute_task(
     *,
     task_id: str,
@@ -858,7 +887,7 @@ def execute_task(
                 **optimize_kwargs,
             )
             # Handle the optimized prompt - may be dict for multi-prompt agents
-            result_prompt = optimization_results.prompt
+            result_prompt = _result_field(optimization_results, "prompt")
             if isinstance(result_prompt, dict):
                 optimized_prompt = result_prompt
             elif isinstance(result_prompt, ChatPrompt):
@@ -890,7 +919,8 @@ def execute_task(
                     "split": bundle.evaluation_role,
                     "prompt_snapshot": optimized_prompt,
                     "metrics": {bundle.evaluation_role: optimized_evaluation.metrics},
-                    "llm_calls": optimization_results.llm_calls or 0,
+                    "llm_calls": _result_field(optimization_results, "llm_calls", 0)
+                    or 0,
                     "meta": {},
                 }
             )
@@ -989,6 +1019,11 @@ def execute_task(
                     )
                 )
 
+            optimization_history_rounds = _resolve_optimization_history(
+                optimization_results, history_state
+            )
+            llm_calls_total = _result_field(optimization_results, "llm_calls", 0) or 0
+
             return TaskResult(
                 id=task_id,
                 dataset_name=dataset_name,
@@ -1000,9 +1035,9 @@ def execute_task(
                 optimized_prompt=optimized_prompt,
                 evaluations=evaluations,
                 stages=stages,
-                optimization_history={"rounds": history_state.get_entries()},
+                optimization_history={"rounds": optimization_history_rounds},
                 error_message=None,
-                llm_calls_total_optimization=optimization_results.llm_calls or 0,
+                llm_calls_total_optimization=llm_calls_total,
                 optimization_raw_result=optimization_results,
                 optimization_summary=_serialize_optimization_result(
                     optimization_results
