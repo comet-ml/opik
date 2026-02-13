@@ -61,6 +61,7 @@ import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPane
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { formatDate, formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
@@ -131,7 +132,8 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     label: "Duration",
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
-    statisticDataFormater: (value) => formatDuration(value),
+    statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
     supportsPercentiles: true,
   },
   {
@@ -202,6 +204,9 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
     size: 160,
     statisticKey: "total_estimated_cost",
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
   {
     id: "created_by",
