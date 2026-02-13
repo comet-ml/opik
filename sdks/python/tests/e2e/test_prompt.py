@@ -814,9 +814,7 @@ def test_prompt__filter_versions(opik_client: opik.Opik):
 
     filtered_versions = opik_client.get_prompt_history(
         name=prompt_name,
-        filters=json.dumps(
-            [{"field": "tags", "operator": "contains", "value": shared_tag}]
-        ),
+        filter_string=f'tags contains "{shared_tag}"',
     )
 
     assert len(filtered_versions) == 2
@@ -889,9 +887,7 @@ def test_chat_prompt__filter_versions(opik_client: opik.Opik):
 
     filtered_versions = opik_client.get_chat_prompt_history(
         name=prompt_name,
-        filters=json.dumps(
-            [{"field": "tags", "operator": "contains", "value": shared_tag}]
-        ),
+        filter_string=f'tags contains "{shared_tag}"',
     )
 
     assert len(filtered_versions) == 2

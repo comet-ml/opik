@@ -1586,7 +1586,7 @@ class Opik:
         self,
         name: str,
         search: Optional[str] = None,
-        filters: Optional[str] = None,
+        filter_string: Optional[str] = None,
     ) -> List[prompt_module.Prompt]:
         """
         Retrieve all text prompt versions history for a given prompt name.
@@ -1594,7 +1594,23 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            filters: Optional filter specification as JSON array. Format: '[{"field": "FIELD_NAME", "operator": "OPERATOR", "value": "VALUE"}]'
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "customer"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
             List[Prompt]: A list of text Prompt instances for the given name, or an empty list if not found.
@@ -1607,10 +1623,9 @@ class Opik:
             versions = client.get_prompt_history(name="my-prompt")
 
             # Filter by tags (versions containing "production" tag)
-            import json
             versions = client.get_prompt_history(
                 name="my-prompt",
-                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
+                filter_string='tags contains "production"',
             )
 
             # Search for specific text in template or change description fields
@@ -1623,7 +1638,7 @@ class Opik:
             versions = client.get_prompt_history(
                 name="my-prompt",
                 search="customer",
-                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
+                filter_string='tags contains "production"',
             )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
@@ -1636,6 +1651,14 @@ class Opik:
 
         if latest_version is None:
             return []
+
+        # Parse filter_string using OQL
+        filters: Optional[str] = None
+        if filter_string is not None:
+            oql = opik_query_language.OpikQueryLanguage.for_prompt_versions(
+                filter_string
+            )
+            filters = oql.parsed_filters
 
         # Now get all versions (we know it's a text prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(
@@ -1652,7 +1675,7 @@ class Opik:
         self,
         name: str,
         search: Optional[str] = None,
-        filters: Optional[str] = None,
+        filter_string: Optional[str] = None,
     ) -> List[prompt_module.ChatPrompt]:
         """
         Retrieve all chat prompt versions history for a given prompt name.
@@ -1660,7 +1683,23 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            filters: Optional filter specification as JSON array. Format: '[{"field": "FIELD_NAME", "operator": "OPERATOR", "value": "VALUE"}]'
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "helpful assistant"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
             List[ChatPrompt]: A list of ChatPrompt instances for the given name, or an empty list if not found.
@@ -1673,10 +1712,9 @@ class Opik:
             versions = client.get_chat_prompt_history(name="my-chat-prompt")
 
             # Filter by tags (versions containing "production" tag)
-            import json
             versions = client.get_chat_prompt_history(
                 name="my-chat-prompt",
-                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
+                filter_string='tags contains "production"',
             )
 
             # Search for specific text in template or change description fields
@@ -1689,7 +1727,7 @@ class Opik:
             versions = client.get_chat_prompt_history(
                 name="my-chat-prompt",
                 search="helpful assistant",
-                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
+                filter_string='tags contains "production"',
             )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
@@ -1702,6 +1740,14 @@ class Opik:
 
         if latest_version is None:
             return []
+
+        # Parse filter_string using OQL
+        filters: Optional[str] = None
+        if filter_string is not None:
+            oql = opik_query_language.OpikQueryLanguage.for_prompt_versions(
+                filter_string
+            )
+            filters = oql.parsed_filters
 
         # Now get all versions (we know it's a chat prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(
