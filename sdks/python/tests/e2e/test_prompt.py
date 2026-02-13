@@ -853,32 +853,6 @@ def test_prompt__search_versions(opik_client: opik.Opik):
     assert v2.version_id not in version_ids
 
 
-def test_prompt__sort_versions(opik_client: opik.Opik):
-    prompt_name = _generate_random_prompt_name()
-    v1 = opik_client.create_prompt(
-        name=prompt_name,
-        prompt="Version 1",
-    )
-    v2 = opik_client.create_prompt(
-        name=prompt_name,
-        prompt="Version 2",
-    )
-    v3 = opik_client.create_prompt(
-        name=prompt_name,
-        prompt="Version 3",
-    )
-
-    sorted_versions = opik_client.get_prompt_history(
-        name=prompt_name,
-        sorting=json.dumps([{"field": "template", "direction": "DESC"}]),
-    )
-
-    assert len(sorted_versions) == 3
-    assert sorted_versions[0].version_id == v3.version_id
-    assert sorted_versions[1].version_id == v2.version_id
-    assert sorted_versions[2].version_id == v1.version_id
-
-
 def test_chat_prompt__filter_versions(opik_client: opik.Opik):
     prompt_name = _generate_random_prompt_name()
     shared_tag = _generate_random_tag()
@@ -964,32 +938,6 @@ def test_chat_prompt__search_versions(opik_client: opik.Opik):
     assert v1.version_id in version_ids
     assert v3.version_id in version_ids
     assert v2.version_id not in version_ids
-
-
-def test_chat_prompt__sort_versions(opik_client: opik.Opik):
-    prompt_name = _generate_random_prompt_name()
-    v1 = opik_client.create_chat_prompt(
-        name=prompt_name,
-        messages=[{"role": "user", "content": "Version 1"}],
-    )
-    v2 = opik_client.create_chat_prompt(
-        name=prompt_name,
-        messages=[{"role": "user", "content": "Version 2"}],
-    )
-    v3 = opik_client.create_chat_prompt(
-        name=prompt_name,
-        messages=[{"role": "user", "content": "Version 3"}],
-    )
-
-    sorted_versions = opik_client.get_chat_prompt_history(
-        name=prompt_name,
-        sorting=json.dumps([{"field": "template", "direction": "DESC"}]),
-    )
-
-    assert len(sorted_versions) == 3
-    assert sorted_versions[0].version_id == v3.version_id
-    assert sorted_versions[1].version_id == v2.version_id
-    assert sorted_versions[2].version_id == v1.version_id
 
 
 def test_prompt__update_version_tags__replace_mode(opik_client: opik.Opik):

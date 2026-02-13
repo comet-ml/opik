@@ -1586,7 +1586,6 @@ class Opik:
         self,
         name: str,
         search: Optional[str] = None,
-        sorting: Optional[str] = None,
         filters: Optional[str] = None,
     ) -> List[prompt_module.Prompt]:
         """
@@ -1595,7 +1594,6 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            sorting: Optional sorting specification as JSON array. Format: '[{"field": "FIELD_NAME", "direction": "ASC|DESC"}]'
             filters: Optional filter specification as JSON array. Format: '[{"field": "FIELD_NAME", "operator": "OPERATOR", "value": "VALUE"}]'
 
         Returns:
@@ -1615,24 +1613,17 @@ class Opik:
                 filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
             )
 
-            # Sort by template (lexicographically descending)
-            versions = client.get_prompt_history(
-                name="my-prompt",
-                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
-            )
-
             # Search for specific text in template or change description fields
             versions = client.get_prompt_history(
                 name="my-prompt",
                 search="customer"
             )
 
-            # Combine search, filtering, and sorting
+            # Combine search and filtering
             versions = client.get_prompt_history(
                 name="my-prompt",
                 search="customer",
-                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}]),
-                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
+                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
             )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
@@ -1648,7 +1639,7 @@ class Opik:
 
         # Now get all versions (we know it's a text prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(
-            name=name, search=search, sorting=sorting, filters=filters
+            name=name, search=search, filters=filters
         )
 
         result = [
@@ -1661,7 +1652,6 @@ class Opik:
         self,
         name: str,
         search: Optional[str] = None,
-        sorting: Optional[str] = None,
         filters: Optional[str] = None,
     ) -> List[prompt_module.ChatPrompt]:
         """
@@ -1670,7 +1660,6 @@ class Opik:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            sorting: Optional sorting specification as JSON array. Format: '[{"field": "FIELD_NAME", "direction": "ASC|DESC"}]'
             filters: Optional filter specification as JSON array. Format: '[{"field": "FIELD_NAME", "operator": "OPERATOR", "value": "VALUE"}]'
 
         Returns:
@@ -1690,24 +1679,17 @@ class Opik:
                 filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
             )
 
-            # Sort by template (lexicographically descending)
-            versions = client.get_chat_prompt_history(
-                name="my-chat-prompt",
-                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
-            )
-
             # Search for specific text in template or change description fields
             versions = client.get_chat_prompt_history(
                 name="my-chat-prompt",
                 search="helpful assistant"
             )
 
-            # Combine search, filtering, and sorting
+            # Combine search and filtering
             versions = client.get_chat_prompt_history(
                 name="my-chat-prompt",
                 search="helpful assistant",
-                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}]),
-                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
+                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
             )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
@@ -1723,7 +1705,7 @@ class Opik:
 
         # Now get all versions (we know it's a chat prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(
-            name=name, search=search, sorting=sorting, filters=filters
+            name=name, search=search, filters=filters
         )
 
         result = [

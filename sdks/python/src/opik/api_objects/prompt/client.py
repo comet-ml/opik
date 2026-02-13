@@ -233,7 +233,6 @@ class PromptClient:
         self,
         name: str,
         search: Optional[str] = None,
-        sorting: Optional[str] = None,
         filters: Optional[str] = None,
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         """
@@ -242,7 +241,6 @@ class PromptClient:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            sorting: Optional sorting specification as JSON array. Format: '[{"field": "FIELD_NAME", "direction": "ASC|DESC"}]'
             filters: Optional filter specification as JSON array. Format: '[{"field": "FIELD_NAME", "operator": "OPERATOR", "value": "VALUE"}]'
 
         Returns:
@@ -259,24 +257,17 @@ class PromptClient:
                 filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
             )
 
-            # Sort by template (lexicographically descending)
-            versions = prompt_client.get_all_prompt_versions(
-                name="my-prompt",
-                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
-            )
-
             # Search for specific text in template or change description fields
             versions = prompt_client.get_all_prompt_versions(
                 name="my-prompt",
                 search="customer"
             )
 
-            # Combine search, filtering, and sorting
+            # Combine search and filtering
             versions = prompt_client.get_all_prompt_versions(
                 name="my-prompt",
                 search="customer",
-                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}]),
-                sorting=json.dumps([{"field": "template", "direction": "DESC"}])
+                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
             )
         """
         try:
@@ -297,7 +288,7 @@ class PromptClient:
 
             prompt_id = filtered_prompt_list[0]
             return self._get_prompt_versions_by_id_paginated(
-                prompt_id, search=search, sorting=sorting, filters=filters
+                prompt_id, search=search, filters=filters
             )
 
         except rest_api_core.ApiError as e:
@@ -310,7 +301,6 @@ class PromptClient:
         self,
         prompt_id: str,
         search: Optional[str] = None,
-        sorting: Optional[str] = None,
         filters: Optional[str] = None,
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         page = 1
@@ -322,7 +312,6 @@ class PromptClient:
                 page=page,
                 size=size,
                 search=search,
-                sorting=sorting,
                 filters=filters,
             ).content
 
