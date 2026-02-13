@@ -41,7 +41,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import StatusCell from "@/components/shared/DataTableCells/StatusCell";
 import useRulesList from "@/api/automations/useRulesList";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoRulesPage from "@/components/pages-shared/automations/NoRulesPage";
 import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
@@ -81,7 +81,7 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
@@ -92,7 +92,7 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "sampling_rate",

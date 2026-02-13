@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
@@ -86,25 +86,25 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     id: "most_recent_experiment_at",
     label: "Most recent experiment",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.most_recent_experiment_at),
+    cell: TimeCell as never,
   },
   {
     id: "most_recent_optimization_at",
     label: "Most recent optimization",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.most_recent_optimization_at),
+    cell: TimeCell as never,
   },
   {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
@@ -144,7 +144,6 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
   },
   {
     id: "created_by",

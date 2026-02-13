@@ -60,8 +60,9 @@ import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPa
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import { formatDate, formatDuration } from "@/lib/date";
+import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
@@ -118,13 +119,13 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    cell: TimeCell as never,
     sortable: true,
   },
   {
@@ -147,13 +148,13 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "start_time",
     label: "Start time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.start_time),
+    cell: TimeCell as never,
   },
   {
     id: "end_time",
     label: "End time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.end_time),
+    cell: TimeCell as never,
   },
 ];
 
