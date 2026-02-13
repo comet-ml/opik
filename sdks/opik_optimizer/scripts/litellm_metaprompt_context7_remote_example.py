@@ -8,7 +8,6 @@ from typing import Any
 
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets import context7_eval
-from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +16,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 CURSOR_MCP_CONFIG: dict[str, Any] = {
-    "mcpServers": {"context7": {"url": "https://mcp.context7.com/mcp"}}
+    "mcpServers": {
+        "context7": {
+            "url": "https://mcp.context7.com/mcp",
+            # "headers": {"CONTEXT7_API_KEY": os.getenv("CONTEXT7_API_KEY", "")},
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -47,13 +51,13 @@ def context7_metric(dataset_item: dict[str, Any], llm_output: str) -> float:
 prompt = ChatPrompt(
     system="Use the docs tool when needed. Summarize sources with library IDs.",
     user="{user_query}",
-    tools=cursor_mcp_config_to_tools(CURSOR_MCP_CONFIG),
-    model="openai/gpt-4o-mini",
+    tools=CURSOR_MCP_CONFIG,
+    model="openai/gpt-5-nano",
     model_parameters={"temperature": 0.2},
 )
 
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4o-mini",
+    model="openai/gpt-5-nano",
     prompts_per_round=3,
     n_threads=1,
     model_parameters={"temperature": 0.2},

@@ -10,9 +10,6 @@ from opik.evaluation.metrics.score_result import ScoreResult
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
 from opik_optimizer.utils.toolcalling.core.metadata import extract_tool_descriptions
-from opik_optimizer.utils.toolcalling.normalize.tool_factory import (
-    cursor_mcp_config_to_tools,
-)
 from opik_optimizer.utils.toolcalling.runtime import mcp_remote
 from opik_optimizer.utils.toolcalling.runtime.mcp import ToolCallingDependencyError
 
@@ -49,11 +46,9 @@ cursor_config = {
         }
     }
 }
-tools = cursor_mcp_config_to_tools(cursor_config)
 # Default behavior: when `allowed_tools` is omitted, the SDK resolves all tools
 # exposed by the MCP server.
-# for tool in tools:
-#     tool["allowed_tools"] = ALLOWED_TOOLS
+# To constrain tools, use the OpenAI-style MCP block shown below with `allowed_tools`.
 
 # ---------------------------------------------------------------------------
 # OpenAI-style MCP tool entry (alternative)
@@ -104,7 +99,7 @@ prompt = ChatPrompt(
         "and fetch docs before answering. Keep responses concise and grounded."
     ),
     user="{user_query}",
-    tools=tools,
+    tools=cursor_config,
 )
 before_descriptions = extract_tool_descriptions(prompt)
 logger.info("Dataset size: %s", len(dataset.get_items()))
@@ -113,7 +108,7 @@ for name, description in sorted(before_descriptions.items()):
     logger.debug("- %s: %s", name, description[:140])
 
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4o-mini",
+    model="openai/gpt-5-nano",
     prompts_per_round=4,
     n_threads=1,
     verbose=1,

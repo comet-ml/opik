@@ -378,8 +378,6 @@ tools = [
 #### Cursor MCP Config
 
 ```python
-from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
-
 cursor_config = {
     "mcpServers": {
         "context7": {
@@ -388,7 +386,8 @@ cursor_config = {
         }
     }
 }
-tools = cursor_mcp_config_to_tools(cursor_config)
+# ChatPrompt accepts Cursor config directly in `tools`.
+prompt = ChatPrompt(system="Use MCP tools", user="{user_query}", tools=cursor_config)
 ```
 
 ## Deprecation Warnings
@@ -442,8 +441,6 @@ Underlying utilities are available in `src/opik_optimizer/{utils/toolcalling,uti
 Local vs remote MCP configuration examples:
 
 ```python
-from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
-
 local_tool = {
     "type": "mcp",
     "server_label": "local_docs",
@@ -469,8 +466,8 @@ cursor_config = {
         }
     }
 }
-
-tools = cursor_mcp_config_to_tools(cursor_config)
+# Cursor config can be passed directly as ChatPrompt.tools
+prompt = ChatPrompt(system="Use MCP tools", user="{user_query}", tools=cursor_config)
 ```
 
 <Note>
