@@ -137,6 +137,32 @@ def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
     assert not caplog.records
 
 
+def test_litellm_chat_model_drops_temperature_for_provider_prefixed_gpt5(
+    monkeypatch, caplog
+):
+    stub = _install_litellm_stub(monkeypatch)
+
+    caplog.set_level(logging.WARNING)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="openai/gpt-5-nano",
+        temperature=1e-8,
+    )
+
+    assert "temperature" not in model._completion_kwargs
+    assert any(
+        "temperature" in record.message and "Dropping" in record.message
+        for record in caplog.records
+    )
+
+    caplog.clear()
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+    assert "temperature" not in kwargs
+    assert not caplog.records
+
+
 def test_litellm_chat_model_drops_top_logprobs_for_dashscope(
     monkeypatch,
 ):
