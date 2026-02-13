@@ -36,5 +36,5 @@ public record TraceUpdate(
         @Valid @Size(max = 50, message = "Cannot have more than 50 tags to remove") @Schema(description = "Tags to remove") Set<@NotBlank(message = "Tag must not be blank") @Size(max = 100, message = "Tag cannot exceed 100 characters") String> tagsToRemove,
         ErrorInfo errorInfo,
         String threadId,
-        @PositiveOrZero Double ttft) implements TagUpdatable  {
+        @PositiveOrZero Double ttft) implements TagUpdatable {
 }

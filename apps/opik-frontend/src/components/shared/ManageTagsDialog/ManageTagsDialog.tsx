@@ -175,8 +175,8 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
       const separator = removedMsg && addedMsg ? ", " : "";
 
       toast({
-        title: "Success",
-        description: `Tags updated: ${removedMsg}${separator}${addedMsg}`,
+        title: "Tags updated",
+        description: `${removedMsg}${separator}${addedMsg} from/to ${entities.length} items`,
       });
       handleClose();
     } catch {

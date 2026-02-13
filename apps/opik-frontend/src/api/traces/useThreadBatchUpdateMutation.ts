@@ -1,10 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import get from "lodash/get";
 
 import api, { THREADS_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
-import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
+import {
+  TagUpdateFields,
+  buildTagUpdatePayload,
+  extractErrorMessage,
+} from "@/lib/tags";
 
 type UseThreadBatchUpdateMutationParams = {
   projectId: string;
@@ -29,14 +32,9 @@ const useThreadBatchUpdateMutation = () => {
       return data;
     },
     onError: (error: AxiosError) => {
-      const message =
-        get(error, ["response", "data", "errors", "0"]) ??
-        get(error, ["response", "data", "message"]) ??
-        error.message;
-
       toast({
         title: "Error",
-        description: message,
+        description: extractErrorMessage(error),
         variant: "destructive",
       });
     },

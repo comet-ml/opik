@@ -367,8 +367,8 @@ describe("ManageTagsDialog", () => {
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith(
           expect.objectContaining({
-            title: "Success",
-            description: "Tags updated: 1 added",
+            title: "Tags updated",
+            description: "1 added from/to 2 items",
           }),
         );
       });

@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import get from "lodash/get";
 
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
@@ -10,7 +9,11 @@ import {
   generateSearchByFieldFilters,
   processFiltersArray,
 } from "@/lib/filters";
-import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
+import {
+  TagUpdateFields,
+  buildTagUpdatePayload,
+  extractErrorMessage,
+} from "@/lib/tags";
 
 type UseDatasetItemBatchUpdateMutationParams = {
   datasetId: string;
@@ -67,14 +70,9 @@ const useDatasetItemBatchUpdateMutation = () => {
       return data;
     },
     onError: (error: AxiosError) => {
-      const message =
-        get(error, ["response", "data", "errors", "0"]) ??
-        get(error, ["response", "data", "message"]) ??
-        error.message;
-
       toast({
         title: "Error",
-        description: message,
+        description: extractErrorMessage(error),
         variant: "destructive",
       });
     },

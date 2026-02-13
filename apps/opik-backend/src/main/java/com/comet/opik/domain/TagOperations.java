@@ -92,9 +92,9 @@ public class TagOperations {
      * Generates a StringTemplate fragment for handling tag updates in batch operations.
      * Supports both the new tagsToAdd/tagsToRemove API and the legacy tags + mergeTags API.
      *
-     * <p>When tags are being modified (add or replace), the result is wrapped with a length check
-     * that throws if the resulting tag array exceeds {@link #MAX_TAGS_PER_ITEM}. Removal-only
-     * operations skip validation since they can only decrease the count.
+     * <p>When new tags are added, the result is wrapped with a length check that throws if
+     * the resulting tag array exceeds {@link #MAX_TAGS_PER_ITEM}. Removal-only operations
+     * and non-tag updates skip validation since they cannot increase the count.
      *
      * <p>Requires {@code short_circuit_function_evaluation = 'force_enable'} in the query SETTINGS
      * to ensure throwIf is only evaluated when the limit is actually exceeded.
@@ -103,24 +103,27 @@ public class TagOperations {
      * @return StringTemplate fragment for tag update logic
      */
     public static String tagUpdateFragment(String tagsColumnRef) {
-        String inner = """
-                <if(tags_to_add || tags_to_remove)>
-                    <if(tags_to_add && tags_to_remove)>
-                        arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), TAGS_COL), :tags_to_add))
-                    <elseif(tags_to_add)>
-                        arrayDistinct(arrayConcat(TAGS_COL, :tags_to_add))
-                    <elseif(tags_to_remove)>
-                        arrayFilter(x -> NOT has(:tags_to_remove, x), TAGS_COL)
-                    <endif>
+        String innerGuarded = """
+                <if(tags_to_add && tags_to_remove)>
+                    arrayDistinct(arrayConcat(arrayFilter(x -> NOT has(:tags_to_remove, x), TAGS_COL), :tags_to_add))
+                <elseif(tags_to_add)>
+                    arrayDistinct(arrayConcat(TAGS_COL, :tags_to_add))
                 <elseif(tags)>
                     <if(merge_tags)>arrayDistinct(arrayConcat(TAGS_COL, :tags))<else>:tags<endif>
+                <endif>""";
+
+        String guarded = "if(length(" + innerGuarded + ") > " + MAX_TAGS_PER_ITEM
+                + ", [toString(throwIf(1, '" + TAG_LIMIT_ERROR + "'))]"
+                + ", " + innerGuarded + ")";
+
+        return """
+                <if(tags_to_add || tags)>
+                    """ + guarded + """
+                <elseif(tags_to_remove)>
+                    arrayFilter(x -> NOT has(:tags_to_remove, x), TAGS_COL)
                 <else>
                     TAGS_COL
                 <endif>"""
                 .replace("TAGS_COL", tagsColumnRef);
-
-        return "if(length(" + inner + ") > " + MAX_TAGS_PER_ITEM
-                + ", [toString(throwIf(1, '" + TAG_LIMIT_ERROR + "'))]"
-                + ", " + inner + ")";
     }
 }
