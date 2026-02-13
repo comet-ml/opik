@@ -16,7 +16,7 @@ import type { Prompt } from "@/prompt/Prompt";
 export interface ExperimentData {
   id?: string;
   name?: string;
-  datasetName: string;
+  datasetName?: string;
   prompts?: Prompt[];
 }
 
@@ -26,7 +26,7 @@ export interface ExperimentData {
 export class Experiment {
   public readonly id: string;
   private _name?: string;
-  public readonly datasetName: string;
+  public readonly datasetName?: string;
   public readonly prompts?: Prompt[];
 
   /**
@@ -199,6 +199,9 @@ export class Experiment {
   }
 
   async getUrl(): Promise<string> {
+    if (!this.datasetName) {
+      throw new Error("Cannot get URL for experiment without a dataset name");
+    }
     const dataset = await this.opik.getDataset(this.datasetName);
     const baseUrl = this.opik.config.apiUrl || DEFAULT_CONFIG.apiUrl;
 
