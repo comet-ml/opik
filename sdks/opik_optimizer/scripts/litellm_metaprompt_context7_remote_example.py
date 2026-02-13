@@ -28,10 +28,11 @@ def context7_metric(dataset_item: dict[str, Any], llm_output: str) -> float:
     reference = (dataset_item.get("reference_answer") or "").strip()
     if not reference:
         return 0.0
+    normalized_output = " ".join(str(llm_output or "").lower().split())
     ratio = SequenceMatcher(
         None,
         " ".join(reference.lower().split()),
-        " ".join(llm_output.lower().split()),
+        normalized_output,
     ).ratio()
     return ratio
 
