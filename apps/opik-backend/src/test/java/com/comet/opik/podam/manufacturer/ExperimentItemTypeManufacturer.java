@@ -29,7 +29,8 @@ public class ExperimentItemTypeManufacturer extends AbstractTypeManufacturer<Exp
                 .experimentId(strategy.getTypeValue(metadata, context, UUID.class))
                 .datasetItemId(strategy.getTypeValue(metadata, context, UUID.class))
                 .traceId(strategy.getTypeValue(metadata, context, UUID.class))
-                .projectId(null) // Always null to test the fallback logic
+                .projectId(null) // Read-only field, always null from API
+                .projectName(strategy.getTypeValue(metadata, context, String.class)) // Write-only field for tests
                 .input(strategy.getTypeValue(metadata, context, JsonNode.class))
                 .output(strategy.getTypeValue(metadata, context, JsonNode.class))
                 .feedbackScores(strategy.getTypeValue(metadata, context, List.class))

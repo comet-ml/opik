@@ -129,6 +129,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -515,11 +516,48 @@ class ExperimentsResourceTest {
 
             mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
 
-            var createRequest = createItemsWithoutTrace(okApikey, workspaceName);
+            // Create project and experiment first
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, okApikey, workspaceName);
+
+            var experimentName = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var experimentId = createAndAssert(experimentResourceClient.createPartialExperiment()
+                    .name(experimentName)
+                    .build(), okApikey, workspaceName);
+
+            // Create experiment items for the experiment
+            var itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+            var createRequest = itemsBatch.toBuilder()
+                    .experimentItems(itemsBatch.experimentItems().stream()
+                            .map(item -> item.toBuilder()
+                                    .experimentId(experimentId)
+                                    .projectName(project.name())
+                                    .totalEstimatedCost(null)
+                                    .usage(null)
+                                    .duration(null)
+                                    .comments(null)
+                                    .createdBy(USER)
+                                    .lastUpdatedBy(USER)
+                                    .projectId(projectId)
+                                    .feedbackScores(null)
+                                    .input(null)
+                                    .output(null)
+                                    .traceVisibilityMode(null)
+                                    .build())
+                            .collect(toSet()))
+                    .build();
 
             createAndAssert(createRequest, okApikey, workspaceName);
 
-            createRequest.experimentItems().forEach(item -> getAndAssert(item, workspaceName, okApikey));
+            // Fetch created items to verify they were created with resolved projectIds
+            var createdItems = getExperimentItems(experimentName, okApikey, workspaceName);
+
+            // Build expected items with resolved projectId and null projectName
+            var expectedItems = createRequest.experimentItems().stream()
+                    .sorted(Comparator.comparing(ExperimentItem::id))
+                    .toList();
+
+            assertExperimentItems(createdItems, expectedItems);
 
             var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
             var deleteRequest = ExperimentItemsDelete.builder().ids(ids).build();
@@ -4970,6 +5008,7 @@ class ExperimentsResourceTest {
                 .experimentItems(itemsBatch.experimentItems().stream()
                         .map(experimentItem -> experimentItem.toBuilder()
                                 .traceVisibilityMode(null)
+                                .projectName(project.name())
                                 .projectId(projectId) // Override PODAM's null default with valid projectId
                                 .build())
                         .collect(toSet()))
@@ -5137,6 +5176,7 @@ class ExperimentsResourceTest {
                             .experimentId(experiment1.id())
                             .traceId(traceWithScores1.getLeft().id())
                             .projectId(projectId)
+                            .projectName(project.name())
                             .totalEstimatedCost(null)
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
@@ -5150,6 +5190,7 @@ class ExperimentsResourceTest {
                     .map(experimentItem -> experimentItem.toBuilder().experimentId(experiment2.id())
                             .traceId(traceWithScores2.getLeft().id())
                             .projectId(projectId)
+                            .projectName(project.name())
                             .totalEstimatedCost(null)
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
@@ -5309,6 +5350,7 @@ class ExperimentsResourceTest {
                     .experimentId(experiment.id())
                     .traceId(trace1.id())
                     .projectId(projectId)
+                    .projectName(project.name())
                     .totalEstimatedCost(getTotalEstimatedCost(List.of(span1, span3)))
                     .usage(getUsage(List.of(span1, span3)))
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace1.startTime(),
@@ -5325,6 +5367,7 @@ class ExperimentsResourceTest {
                     .experimentId(experiment.id())
                     .traceId(trace2.id())
                     .projectId(projectId)
+                    .projectName(project.name())
                     .totalEstimatedCost(getTotalEstimatedCost(List.of(span2, span4)))
                     .usage(getUsage(List.of(span2, span4)))
                     .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace2.startTime(),
@@ -5403,22 +5446,15 @@ class ExperimentsResourceTest {
                             .collect(toList()));
         }
 
-        private Pair<Trace, List<FeedbackScoreBatchItem>> createTraceWithScores(String apiKey,
-                String workspaceName) {
-            var trace = podamFactory.manufacturePojo(Trace.class);
-            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+    }
 
-            // Creating 5 scores peach each of the two traces above
-            return Pair.of(trace,
-                    PodamFactoryUtils.manufacturePojoList(podamFactory, FeedbackScoreBatchItem.class)
-                            .stream()
-                            .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
-                                    .id(trace.id())
-                                    .projectName(trace.projectName())
-                                    .value(podamFactory.manufacturePojo(BigDecimal.class))
-                                    .build())
-                            .collect(toList()));
-        }
+    private List<ExperimentItem> getExperimentItems(String experimentName, String apiKey, String workspaceName) {
+
+        var streamRequest = ExperimentItemStreamRequest.builder()
+                .experimentName(experimentName)
+                .build();
+
+        return experimentResourceClient.streamExperimentItems(streamRequest, apiKey, workspaceName);
     }
 
     @Nested
@@ -5427,27 +5463,84 @@ class ExperimentsResourceTest {
 
         @Test
         void createAndGet() {
-            ExperimentItemsBatch itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+
+            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            var experimentName = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+            UUID experimentId = createAndAssert(experimentResourceClient.createPartialExperiment()
+                    .name(experimentName)
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+            List<ExperimentItem> expectedItems = itemsBatch.experimentItems().stream()
+                    .map(item -> item.toBuilder()
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(null)
+                            .comments(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .feedbackScores(null)
+                            .experimentId(experimentId)
+                            .projectName(projectName)
+                            .projectId(projectId)
+                            .input(null)
+                            .output(null)
+                            .traceVisibilityMode(null)
+                            .build())
+                    .sorted(Comparator.comparing(ExperimentItem::id).reversed())
+                    .toList();
+
             var request = itemsBatch.toBuilder()
-                    .experimentItems(itemsBatch.experimentItems().stream()
-                            .map(item -> item.toBuilder()
-                                    .totalEstimatedCost(null)
-                                    .usage(null)
-                                    .duration(null)
-                                    .comments(null)
-                                    .createdBy(USER)
-                                    .lastUpdatedBy(USER)
-                                    .feedbackScores(null)
-                                    .input(null)
-                                    .output(null)
-                                    .traceVisibilityMode(null)
-                                    .build())
-                            .collect(toSet()))
+                    .experimentItems(new HashSet<>(expectedItems))
                     .build();
 
             createAndAssert(request, API_KEY, TEST_WORKSPACE);
 
-            request.experimentItems().forEach(item -> getAndAssert(item, TEST_WORKSPACE, API_KEY));
+            List<ExperimentItem> actualExperimentItems = getExperimentItems(experimentName, API_KEY, TEST_WORKSPACE);
+
+            assertExperimentItems(actualExperimentItems, expectedItems);
+        }
+
+        @Test
+        void createAndGetWithoutProjectName() {
+            var experimentName = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+            UUID experimentId = createAndAssert(experimentResourceClient.createPartialExperiment()
+                    .name(experimentName)
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            var itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+            List<ExperimentItem> expectedItems = itemsBatch.experimentItems().stream()
+                    .map(item -> item.toBuilder()
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(null)
+                            .comments(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .feedbackScores(null)
+                            .experimentId(experimentId)
+                            .projectName(null)
+                            .projectId(null)
+                            .input(null)
+                            .output(null)
+                            .traceVisibilityMode(null)
+                            .build())
+                    .sorted(Comparator.comparing(ExperimentItem::id).reversed())
+                    .toList();
+
+            var request = itemsBatch.toBuilder()
+                    .experimentItems(new HashSet<>(expectedItems))
+                    .build();
+
+            createAndAssert(request, API_KEY, TEST_WORKSPACE);
+
+            List<ExperimentItem> actualExperimentItems = getExperimentItems(experimentName, API_KEY, TEST_WORKSPACE);
+
+            assertExperimentItems(actualExperimentItems, expectedItems);
         }
 
         @Test
@@ -5608,6 +5701,16 @@ class ExperimentsResourceTest {
         }
     }
 
+    private void assertExperimentItems(List<ExperimentItem> actualExperimentItems, List<ExperimentItem> expectedItems) {
+        String[] ignoringFields = Stream.concat(
+                Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
+                Stream.of("id", "experimentId"))
+                .toArray(String[]::new);
+
+        ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
+                ignoringFields);
+    }
+
     @Nested
     @DisplayName("Get Feedback Score names")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -5709,42 +5812,6 @@ class ExperimentsResourceTest {
 
     private void createAndAssert(ExperimentItemsBatch request, String apiKey, String workspaceName) {
         experimentResourceClient.createExperimentItem(request.experimentItems(), apiKey, workspaceName);
-    }
-
-    private void createAndAssertWithTraces(ExperimentItemsBatch request, String apiKey, String workspaceName) {
-        // Create traces first so the fallback logic can populate projectId
-        // All traces will use the same project to ensure consistency
-        createTracesForExperimentItems(request.experimentItems(), apiKey, workspaceName);
-        experimentResourceClient.createExperimentItem(request.experimentItems(), apiKey, workspaceName);
-    }
-
-    private void createTracesForExperimentItems(Set<ExperimentItem> experimentItems, String apiKey,
-            String workspaceName) {
-        // Create a single project for all traces to ensure consistency
-        var projectName = podamFactory.manufacturePojo(Project.class).name();
-
-        // Extract unique trace IDs and create traces for them
-        var traces = experimentItems.stream()
-                .map(item -> {
-                    // Create a minimal trace with the same ID as referenced by the experiment item
-                    Instant now = Instant.now();
-                    return podamFactory.manufacturePojo(Trace.class).toBuilder()
-                            .id(item.traceId())
-                            .projectName(projectName) // Same project for all traces
-                            .startTime(now)
-                            .endTime(now.plusSeconds(1))
-                            .usage(null)
-                            .totalEstimatedCost(null)
-                            .createdBy(USER)
-                            .lastUpdatedBy(USER)
-                            .build();
-                })
-                .distinct()
-                .toList();
-
-        if (!traces.isEmpty()) {
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
-        }
     }
 
     private void getAndAssert(ExperimentItem expectedExperimentItem, String workspaceName, String apiKey) {
@@ -5862,10 +5929,7 @@ class ExperimentsResourceTest {
             List<ExperimentItem> actualExperimentItems = experimentResourceClient.getExperimentItems(experimentName,
                     API_KEY, TEST_WORKSPACE);
 
-            ExperimentTestAssertions.assertExperimentResultsIgnoringFields(actualExperimentItems, expectedItems,
-                    Stream.concat(Arrays.stream(ExperimentTestAssertions.EXPERIMENT_ITEMS_IGNORED_FIELDS),
-                            Stream.of("id", "experimentId"))
-                            .toArray(String[]::new));
+            assertExperimentItems(actualExperimentItems, expectedItems);
         }
 
         private List<ExperimentItem> getExpectedItem(DatasetItem datasetItem, Trace trace,

@@ -19,9 +19,14 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static java.util.stream.Collectors.toSet;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -33,6 +38,7 @@ public class ExperimentItemService {
     private final @NonNull DatasetItemDAO datasetItemDAO;
     private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
     private final @NonNull TraceDAO traceDAO;
+    private final @NonNull ProjectService projectService;
     private final @NonNull FeatureFlags featureFlags;
 
     public Mono<Void> create(Set<ExperimentItem> experimentItems) {
@@ -48,15 +54,57 @@ public class ExperimentItemService {
 
             log.info("Creating experiment items, count '{}'", experimentItemsWithValidIds.size());
 
-            return populateProjectIdFromTraces(experimentItemsWithValidIds)
+            return resolveProjectIdFromProjectName(experimentItemsWithValidIds)
+                    .flatMap(this::populateProjectIdFromTraces)
                     .flatMap(experimentItemDAO::insert)
                     .then();
         });
     }
 
+    private Mono<Set<ExperimentItem>> resolveProjectIdFromProjectName(Set<ExperimentItem> experimentItems) {
+
+        // Extract project names from items that have projectName
+        var projectNames = experimentItems.stream()
+                .map(ExperimentItem::projectName)
+                .filter(Objects::nonNull)
+                .collect(toSet());
+
+        if (projectNames.isEmpty()) {
+            return Mono.just(experimentItems);
+        }
+
+        log.info("Resolving project_id for '{}' project names", projectNames.size());
+
+        return projectService.retrieveByNamesOrCreate(projectNames)
+                .map(projects -> {
+                    // Create case-insensitive map: projectName -> projectId
+                    var projectNameToIdMap = new TreeMap<String, UUID>(String.CASE_INSENSITIVE_ORDER);
+                    projects.forEach(project -> projectNameToIdMap.put(project.name(), project.id()));
+
+                    // Only update items that have a projectName in the map
+                    return experimentItems.stream()
+                            .map(item -> {
+                                if (item.projectName() != null
+                                        && projectNameToIdMap.containsKey(item.projectName())) {
+
+                                    UUID projectId = projectNameToIdMap.get(item.projectName());
+
+                                    log.debug("Resolved project_id '{}' for experiment item with project_name '{}'",
+                                            projectId, item.projectName());
+
+                                    return item.toBuilder()
+                                            .projectId(projectId)
+                                            .build();
+                                }
+                                return item;
+                            })
+                            .collect(toSet());
+                });
+    }
+
     private Mono<Set<ExperimentItem>> populateProjectIdFromTraces(Set<ExperimentItem> experimentItems) {
 
-        // Find experiment items without project_id
+        // Find experiment items without project_id (and without projectName)
         var itemsWithoutProjectId = experimentItems.stream()
                 .filter(item -> item.projectId() == null)
                 .toList();
@@ -81,11 +129,10 @@ public class ExperimentItemService {
                     // Update experiment items with project_id from traces
                     return experimentItems.stream()
                             .map(item -> {
-                                if (item.projectId() == null && traceToProjectMap.containsKey(item.traceId())
-                                        && traceToProjectMap.getOrDefault(item.traceId(), List.of()).size() == 1) {
+                                if (isProjectResolved(traceToProjectMap, item)) {
                                     UUID projectId = traceToProjectMap.get(item.traceId()).getFirst();
 
-                                    log.debug("Populating project_id '{}' for experiment item with trace_id '{}'",
+                                    log.debug("Resolved project_id '{}' for experiment item with trace_id '{}'",
                                             projectId, item.traceId());
 
                                     return item.toBuilder()
@@ -94,8 +141,13 @@ public class ExperimentItemService {
                                 }
                                 return item;
                             })
-                            .collect(Collectors.toUnmodifiableSet());
+                            .collect(toSet());
                 });
+    }
+
+    private boolean isProjectResolved(Map<UUID, List<UUID>> traceToProjectMap, ExperimentItem item) {
+        return item.projectId() == null && traceToProjectMap.containsKey(item.traceId())
+                && traceToProjectMap.getOrDefault(item.traceId(), List.of()).size() == 1;
     }
 
     private Set<ExperimentItem> validateExperimentItemIdsAndWorkspace(
@@ -119,7 +171,7 @@ public class ExperimentItemService {
         Set<UUID> experimentIds = experimentItems
                 .stream()
                 .map(ExperimentItem::experimentId)
-                .collect(Collectors.toSet());
+                .collect(toSet());
 
         boolean allExperimentsBelongToWorkspace = Boolean.TRUE
                 .equals(experimentService.validateExperimentWorkspace(workspaceId, experimentIds)
@@ -140,7 +192,7 @@ public class ExperimentItemService {
         Set<UUID> datasetItemIds = experimentItems
                 .stream()
                 .map(ExperimentItem::datasetItemId)
-                .collect(Collectors.toSet());
+                .collect(toSet());
 
         boolean allDatasetItemsBelongToWorkspace = Boolean.TRUE
                 .equals(validateDatasetItemWorkspace(workspaceId, datasetItemIds)
