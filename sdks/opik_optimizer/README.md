@@ -386,7 +386,7 @@ cursor_config = {
         }
     }
 }
-# ChatPrompt accepts Cursor config directly in `tools`.
+# ChatPrompt accepts Cursor style MCP config directly in `tools`.
 prompt = ChatPrompt(system="Use MCP tools", user="{user_query}", tools=cursor_config)
 ```
 
