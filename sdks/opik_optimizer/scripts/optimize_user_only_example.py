@@ -8,6 +8,8 @@ def simple_metric(dataset_item: dict, output: str) -> float:
     reference = (dataset_item.get("reference_answer") or "").strip()
     if not reference:
         return 0.0
+    if not isinstance(output, str):
+        return 0.0
     return 1.0 if reference in output else 0.0
 
 
