@@ -43,10 +43,12 @@ export const formatDate = (
 };
 
 export const getTimeFromNow = (value: string): string => {
-  if (!isString(value) || !dayjs(value).isValid()) return "";
+  if (!isString(value)) return "";
+
+  const date = dayjs(value);
+  if (!date.isValid()) return "";
 
   const now = dayjs();
-  const date = dayjs(value);
   const diffMinutes = now.diff(date, "minute");
   const diffHours = now.diff(date, "hour");
 
