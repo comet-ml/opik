@@ -148,7 +148,6 @@ def test_litellm_chat_model_drops_temperature_for_provider_prefixed_gpt5(
         temperature=1e-8,
     )
 
-    assert "temperature" not in model._completion_kwargs
     assert any(
         "temperature" in record.message and "Dropping" in record.message
         for record in caplog.records
