@@ -46,6 +46,62 @@ def _validate_evaluators(evaluators: List[Any], context: str) -> None:
             )
 
 
+def _load_suite_config_from_dataset(
+    dataset_: dataset.Dataset,
+) -> Dict[str, Any]:
+    """
+    Load suite-level configuration from the special config item in the dataset.
+
+    Returns:
+        Dictionary with 'evaluators' and 'execution_policy' keys, or empty dict.
+    """
+    for item in dataset_.__internal_api__stream_items_as_dataclasses__():
+        if item.id == engine_types.SUITE_CONFIG_ITEM_ID:
+            content = item.get_content()
+            return content.get(engine_types.EVALUATION_CONFIG_KEY, {})
+    return {}
+
+
+def _save_suite_config_to_dataset(
+    dataset_: dataset.Dataset,
+    evaluators: List[llm_judge.LLMJudge],
+    execution_policy: evaluation_engine.ExecutionPolicy,
+) -> None:
+    """
+    Save suite-level configuration to a special config item in the dataset.
+    """
+    eval_config: Dict[str, Any] = {}
+    if evaluators:
+        eval_config["evaluators"] = [e.to_config().model_dump() for e in evaluators]
+    eval_config["execution_policy"] = execution_policy
+
+    item_content = {engine_types.EVALUATION_CONFIG_KEY: eval_config}
+
+    config_item = dataset_item.DatasetItem(
+        id=engine_types.SUITE_CONFIG_ITEM_ID, **item_content
+    )
+    dataset_.__internal_api__insert_items_as_dataclasses__([config_item])
+
+
+def _deserialize_evaluators(
+    evaluator_configs: List[Dict[str, Any]],
+) -> List[llm_judge.LLMJudge]:
+    """
+    Deserialize evaluator configurations into LLMJudge instances.
+
+    Args:
+        evaluator_configs: List of serialized evaluator configurations.
+
+    Returns:
+        List of LLMJudge instances.
+    """
+    evaluators: List[llm_judge.LLMJudge] = []
+    for config_dict in evaluator_configs:
+        evaluator = llm_judge.LLMJudge.from_config(config_dict)
+        evaluators.append(evaluator)
+    return evaluators
+
+
 class EvaluationSuite:
     """
     A pre-configured regression test suite for LLM applications.
@@ -98,22 +154,51 @@ class EvaluationSuite:
         description: Optional[str] = None,
         evaluators: Optional[List[llm_judge.LLMJudge]] = None,
         execution_policy: Optional[evaluation_engine.ExecutionPolicy] = None,
+        _load_from_dataset: bool = False,
     ):
+        """
+        Initialize an EvaluationSuite.
+
+        Args:
+            name: The name of the evaluation suite.
+            dataset_: The underlying dataset storing suite items.
+            description: Optional description of what this suite tests.
+            evaluators: Suite-level evaluators applied to all test items.
+            execution_policy: Suite-level execution policy.
+            _load_from_dataset: Internal flag. If True, load config from dataset
+                instead of using provided evaluators/execution_policy.
+        """
         if evaluators:
             _validate_evaluators(evaluators, "suite-level evaluators")
 
         self._name = name
         self._dataset = dataset_
         self._description = description
-        # Dataset-level evaluators and execution_policy are stored in memory for now.
-        # Once OPIK-4222/4223 are implemented, these will be stored as dataset columns
-        # and retrieved from the backend.
-        self._evaluators = evaluators or []
-        self._execution_policy: evaluation_engine.ExecutionPolicy = (
-            execution_policy
-            if execution_policy
-            else evaluation_engine.DEFAULT_EXECUTION_POLICY.copy()
-        )
+
+        if _load_from_dataset:
+            # Load suite-level config from the special config item in the dataset
+            suite_config = _load_suite_config_from_dataset(dataset_)
+            self._evaluators = _deserialize_evaluators(
+                suite_config.get("evaluators", [])
+            )
+            stored_policy = suite_config.get("execution_policy", {})
+            self._execution_policy: evaluation_engine.ExecutionPolicy = (
+                stored_policy
+                if stored_policy
+                else evaluation_engine.DEFAULT_EXECUTION_POLICY.copy()
+            )
+        else:
+            # Use provided evaluators and execution_policy, and save to dataset
+            self._evaluators = evaluators or []
+            self._execution_policy = (
+                execution_policy
+                if execution_policy
+                else evaluation_engine.DEFAULT_EXECUTION_POLICY.copy()
+            )
+            # Save suite-level config to the dataset
+            _save_suite_config_to_dataset(
+                dataset_, self._evaluators, self._execution_policy
+            )
 
     @property
     def name(self) -> str:
@@ -241,6 +326,9 @@ class EvaluationSuite:
         # This is a temporary approach until OPIK-4222/4223 adds proper backend support.
         self._dataset.execution_policy = self._execution_policy  # type: ignore[attr-defined]
 
+        # Filter out the suite config item - it's not a test case
+        filter_string = f'id != "{engine_types.SUITE_CONFIG_ITEM_ID}"'
+
         eval_result = opik_evaluator.evaluate(
             dataset=self._dataset,
             task=task,
@@ -253,6 +341,7 @@ class EvaluationSuite:
             experiment_tags=experiment_tags,
             verbose=verbose,
             task_threads=worker_threads,
+            dataset_filter_string=filter_string,
         )
 
         return suite_result_constructor.build_suite_result(eval_result)

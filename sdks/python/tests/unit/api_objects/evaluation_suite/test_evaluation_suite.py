@@ -36,6 +36,7 @@ class TestEvaluatorValidation:
     def test_init__with_llm_judge_evaluator__succeeds(self):
         """Test that LLMJudge evaluators are accepted."""
         mock_dataset = mock.MagicMock()
+        mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.MagicMock()
         llm_judge = suite_evaluators.LLMJudge(
             assertions=["Response is helpful"],
             track=False,
@@ -52,6 +53,7 @@ class TestEvaluatorValidation:
     def test_init__with_no_evaluators__succeeds(self):
         """Test that suite can be created without evaluators."""
         mock_dataset = mock.MagicMock()
+        mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.MagicMock()
 
         suite = evaluation_suite.EvaluationSuite(
             name="test_suite",
@@ -63,6 +65,7 @@ class TestEvaluatorValidation:
     def test_add_item__with_non_llm_judge_evaluator__raises_type_error(self):
         """Test that non-LLMJudge evaluators raise TypeError on add_item."""
         mock_dataset = mock.MagicMock()
+        mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.MagicMock()
         suite = evaluation_suite.EvaluationSuite(
             name="test_suite",
             dataset_=mock_dataset,

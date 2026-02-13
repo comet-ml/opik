@@ -1014,6 +1014,40 @@ class Opik:
             dataset_=suite_dataset,
         )
 
+    def get_evaluation_suite(
+        self,
+        name: str,
+    ) -> "evaluation_suite.EvaluationSuite":
+        """
+        Get an existing evaluation suite by name.
+
+        The suite-level evaluators and execution policy are loaded from the
+        dataset's special configuration item.
+
+        Args:
+            name: The name of the evaluation suite (same as the underlying dataset name).
+
+        Returns:
+            EvaluationSuite: The evaluation suite object with loaded configuration.
+
+        Raises:
+            opik.exceptions.DatasetNotFoundError: If no dataset with the given name exists.
+
+        Example:
+            >>> suite = client.get_evaluation_suite("Refund Policy Tests")
+            >>> result = suite.run(task=my_llm_function)
+        """
+        from . import evaluation_suite
+
+        suite_dataset = self.get_dataset(name=name)
+
+        return evaluation_suite.EvaluationSuite(
+            name=name,
+            description=suite_dataset.description,
+            dataset_=suite_dataset,
+            _load_from_dataset=True,
+        )
+
     def create_experiment(
         self,
         dataset_name: str,
