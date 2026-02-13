@@ -436,7 +436,7 @@ await evaluatePrompt({
   messages: [{ role: "user", content: "{{input}}" }],
   model: "gpt-5-nano", // Cheaper for generation
   scoringMetrics: [
-    new Hallucination({ model: "gpt-5-nano" }), // More accurate for evaluation
+    new Hallucination({ model: "gpt-5-mini" }), // More accurate for evaluation
   ],
 });
 ```
