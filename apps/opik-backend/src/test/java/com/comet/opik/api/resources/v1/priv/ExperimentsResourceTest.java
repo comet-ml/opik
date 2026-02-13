@@ -527,24 +527,27 @@ class ExperimentsResourceTest {
 
             // Create experiment items for the experiment
             var itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+            List<ExperimentItem> expectedExperimentItems = itemsBatch.experimentItems().stream()
+                    .map(item -> item.toBuilder()
+                            .experimentId(experimentId)
+                            .projectName(project.name())
+                            .totalEstimatedCost(null)
+                            .usage(null)
+                            .duration(null)
+                            .comments(null)
+                            .createdBy(USER)
+                            .lastUpdatedBy(USER)
+                            .projectId(projectId)
+                            .feedbackScores(null)
+                            .input(null)
+                            .output(null)
+                            .traceVisibilityMode(null)
+                            .build())
+                    .sorted(Comparator.comparing(ExperimentItem::id).reversed())
+                    .toList();
+
             var createRequest = itemsBatch.toBuilder()
-                    .experimentItems(itemsBatch.experimentItems().stream()
-                            .map(item -> item.toBuilder()
-                                    .experimentId(experimentId)
-                                    .projectName(project.name())
-                                    .totalEstimatedCost(null)
-                                    .usage(null)
-                                    .duration(null)
-                                    .comments(null)
-                                    .createdBy(USER)
-                                    .lastUpdatedBy(USER)
-                                    .projectId(projectId)
-                                    .feedbackScores(null)
-                                    .input(null)
-                                    .output(null)
-                                    .traceVisibilityMode(null)
-                                    .build())
-                            .collect(toSet()))
+                    .experimentItems(new HashSet<>(expectedExperimentItems))
                     .build();
 
             createAndAssert(createRequest, okApikey, workspaceName);
@@ -552,12 +555,7 @@ class ExperimentsResourceTest {
             // Fetch created items to verify they were created with resolved projectIds
             var createdItems = getExperimentItems(experimentName, okApikey, workspaceName);
 
-            // Build expected items with resolved projectId and null projectName
-            var expectedItems = createRequest.experimentItems().stream()
-                    .sorted(Comparator.comparing(ExperimentItem::id))
-                    .toList();
-
-            assertExperimentItems(createdItems, expectedItems);
+            assertExperimentItems(createdItems, expectedExperimentItems);
 
             var ids = createRequest.experimentItems().stream().map(ExperimentItem::id).collect(toSet());
             var deleteRequest = ExperimentItemsDelete.builder().ids(ids).build();
