@@ -1872,7 +1872,7 @@ class Opik:
 
         Example:
             prompts_client = client.get_prompts_client()
-            prompts_client.update_prompt_version_tags(
+            prompts_client.batch_update_prompt_version_tags(
                 version_ids=["version-id-1", "version-id-2"],
                 tags=["production", "v2"]
             )

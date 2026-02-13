@@ -455,7 +455,7 @@ class PromptClient:
                 raise e
             return []
 
-    def update_prompt_version_tags(
+    def batch_update_prompt_version_tags(
         self,
         version_ids: List[str],
         tags: Optional[List[str]] = None,
@@ -477,20 +477,20 @@ class PromptClient:
 
         Example:
             # Replace tags on multiple versions (default behavior)
-            prompts_client.update_prompt_version_tags(
+            prompts_client.batch_update_prompt_version_tags(
                 version_ids=["version-id-1", "version-id-2"],
                 tags=["production", "v2"]
             )
 
             # Merge new tags with existing tags
-            prompts_client.update_prompt_version_tags(
+            prompts_client.batch_update_prompt_version_tags(
                 version_ids=["version-id-1"],
                 tags=["hotfix"],
                 merge=True
             )
 
             # Clear all tags
-            prompts_client.update_prompt_version_tags(
+            prompts_client.batch_update_prompt_version_tags(
                 version_ids=["version-id-1"],
                 tags=[]
             )
