@@ -84,24 +84,24 @@ class TestLLMJudgeToConfig:
             "seed": 123,
         }
         assert config_dict["variables"] == {"input": "input", "output": "output"}
-        # Both name and expected_behavior use the assertion text directly
+        # Both name and description use the assertion text directly
         assert config_dict["schema"] == [
             {
                 "name": "Response is accurate",
                 "type": "BOOLEAN",
-                "expected_behavior": "Response is accurate",
+                "description": "Response is accurate",
             },
             {
                 "name": "Response is helpful",
                 "type": "BOOLEAN",
-                "expected_behavior": "Response is helpful",
+                "description": "Response is helpful",
             },
         ]
-        # Verify dynamic response format uses assertion text in the message
-        assert '"name": "Response is accurate"' in config_dict["messages"][0]["content"]
-        assert '"name": "Response is helpful"' in config_dict["messages"][0]["content"]
+        # Verify assertions are listed in the prompt (response format is via structured output)
+        assert "- Response is accurate" in config_dict["messages"][0]["content"]
+        assert "- Response is helpful" in config_dict["messages"][0]["content"]
 
-    def test_to_config__without_optional_params__sets_none(self):
+    def test_to_config__without_optional_params__uses_defaults(self):
         evaluator = LLMJudge(
             assertions=["Test"],
             track=False,
@@ -109,7 +109,8 @@ class TestLLMJudgeToConfig:
 
         config = evaluator.to_config()
 
-        assert config.model.temperature is None
+        # Temperature defaults to 0.0 when not specified (backend requires it)
+        assert config.model.temperature == 0.0
         assert config.model.seed is None
 
     def test_to_config__serializes_to_dict_with_schema_alias(self):
@@ -133,10 +134,10 @@ class TestLLMJudgeFromConfig:
             variables={"input": "input", "output": "output"},
             schema=[
                 LLMJudgeSchemaItem(
-                    name="accurate", type="BOOLEAN", expected_behavior="Is accurate"
+                    name="accurate", type="BOOLEAN", description="Is accurate"
                 ),
                 LLMJudgeSchemaItem(
-                    name="helpful", type="BOOLEAN", expected_behavior="Is helpful"
+                    name="helpful", type="BOOLEAN", description="Is helpful"
                 ),
             ],
             messages=[],
@@ -145,7 +146,7 @@ class TestLLMJudgeFromConfig:
         evaluator = LLMJudge.from_config(config, name="restored_evaluator", track=False)
 
         assert evaluator.name == "restored_evaluator"
-        # from_config extracts expected_behavior as assertion texts
+        # from_config extracts description as assertion texts
         assert evaluator.assertions[0] == "Is accurate"
         assert evaluator.assertions[1] == "Is helpful"
 
@@ -175,9 +176,7 @@ class TestLLMJudgeFromConfig:
             model=LLMJudgeModelConfig(name="gpt-4o-mini", temperature=0.7, seed=123),
             variables={"input": "input", "output": "output"},
             schema=[
-                LLMJudgeSchemaItem(
-                    name="test", type="BOOLEAN", expected_behavior="Test"
-                ),
+                LLMJudgeSchemaItem(name="test", type="BOOLEAN", description="Test"),
             ],
             messages=[LLMJudgeMessage(role="USER", content="test")],
         )

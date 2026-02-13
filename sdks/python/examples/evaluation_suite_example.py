@@ -143,14 +143,14 @@ def run_test_mode():
             print(f"  - {evaluator.name}: {len(evaluator.assertions)} assertion(s)")
 
             # Mock the LLM response for scoring
-            # Now assertions are just strings (the assertion text itself)
+            # Response format matches ScoreResult structure: name, value, reason, metadata
             mock_results = {
                 "results": [
                     {
-                        "name": assertion,  # Use assertion text directly as name
+                        "name": assertion,
                         "value": True,  # Simulate all passing
                         "reason": f"The response satisfies: {assertion[:50]}",
-                        "confidence": 0.95,
+                        "metadata": {"confidence": 0.95},
                     }
                     for assertion in evaluator.assertions
                 ]

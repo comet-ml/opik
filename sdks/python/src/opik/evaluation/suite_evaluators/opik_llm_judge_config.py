@@ -5,45 +5,48 @@ These Pydantic models represent the JSON structure used by the Opik backend
 for online evaluations. The configuration is stored in the
 `automation_rule_evaluators.code` column and used to execute LLM-as-a-judge
 evaluations on the server side.
+
+The schema aligns with the Java backend's LlmAsJudgeCode structure:
+- model: LlmAsJudgeModelParameters (name, temperature, seed, custom_parameters)
+- messages: List[LlmAsJudgeMessage] (role, content)
+- variables: Map<String, String>
+- schema: List[LlmAsJudgeOutputSchema] (name, type, description)
 """
 
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 import pydantic
-
-
-class LLMJudgeResultFormat(pydantic.BaseModel):
-    """Pydantic model for structured output parsing from LLM."""
-
-    class AssertionResult(pydantic.BaseModel):
-        name: str
-        value: bool
-        reason: str
-        confidence: float
-
-    results: List[AssertionResult]
 
 
 class LLMJudgeModelConfig(pydantic.BaseModel):
     """
     Model configuration for LLMJudge.
 
-    This structure represents the JSON format used by the Opik backend
-    for online evaluations to configure the LLM model.
+    Matches backend's LlmAsJudgeModelParameters structure.
     """
 
     name: str
     """The model name (e.g., 'gpt-4o', 'claude-3-opus')."""
 
-    temperature: Optional[float] = None
-    """Temperature for model generation."""
+    temperature: float
+    """Temperature for model generation (required by backend)."""
 
     seed: Optional[int] = None
     """Seed for reproducible generation."""
 
+    custom_parameters: Optional[dict[str, Any]] = pydantic.Field(
+        default=None, alias="customParameters"
+    )
+    """Optional custom parameters for the model."""
+
+    model_config = pydantic.ConfigDict(populate_by_name=True)
+
 
 class LLMJudgeMessage(pydantic.BaseModel):
-    """A message in the LLMJudge prompt template."""
+    """A message in the LLMJudge prompt template.
+
+    Matches backend's LlmAsJudgeMessage structure.
+    """
 
     role: Literal["USER", "SYSTEM", "ASSISTANT"]
     """The role of the message sender."""
@@ -53,16 +56,22 @@ class LLMJudgeMessage(pydantic.BaseModel):
 
 
 class LLMJudgeSchemaItem(pydantic.BaseModel):
-    """Schema definition for an assertion output."""
+    """Schema definition for an assertion output.
+
+    Matches backend's LlmAsJudgeOutputSchema structure.
+    """
 
     name: str
-    """The name of the assertion."""
+    """The name of the assertion/score."""
 
-    type: Literal["INTEGER", "FLOAT", "STRING", "BOOLEAN"]
-    """The type of the assertion result."""
+    type: Literal["INTEGER", "DOUBLE", "BOOLEAN"]
+    """The type of the result (matches backend's LlmAsJudgeOutputSchemaType)."""
 
-    expected_behavior: str
+    description: str
     """Description of the expected behavior to check."""
+
+    metadata: Optional[dict[str, Any]] = None
+    """Optional metadata dict for additional information."""
 
 
 class LLMJudgeConfig(pydantic.BaseModel):
@@ -71,10 +80,13 @@ class LLMJudgeConfig(pydantic.BaseModel):
 
     This structure represents the JSON format used by the Opik backend
     for online evaluations stored in `automation_rule_evaluators.code`.
+
+    Note: The evaluator 'name' is stored separately in the automation_rule_evaluators
+    table, not inside the code JSON. It's included here for SDK convenience.
     """
 
     name: str = "llm_judge"
-    """The name of the evaluator (used as prefix for score names)."""
+    """The name of the evaluator (SDK convenience, not part of backend code JSON)."""
 
     model: LLMJudgeModelConfig
     """Model configuration with name, temperature, seed."""
