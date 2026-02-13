@@ -19,6 +19,7 @@ from .normalize.tool_factory import (
     cursor_mcp_config_to_tools,
     resolve_toolcalling_tools,
 )
+from .core.metadata import extract_tool_descriptions
 from .ops.toolcalling import (
     build_tool_blocks_from_prompt,
     generate_tool_description_candidates,
@@ -35,6 +36,7 @@ __all__ = [
     "ToolSignature",
     "ToolCallingFactory",
     "cursor_mcp_config_to_tools",
+    "extract_tool_descriptions",
     "call_tool_from_manifest",
     "dump_mcp_signature",
     "list_tools_from_manifest",

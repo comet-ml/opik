@@ -181,6 +181,10 @@ def preserve_multimodal_message_structure(
     """
     Preserve original multimodal content-part layout while applying generated text.
 
+    Current primary consumer: FewShotBayesianOptimizer prompt-template synthesis.
+    Other optimizers should call this only when they receive full rewritten message
+    arrays from an LLM and must keep original non-text parts stable.
+
     For aligned message indices where role matches and original content is multimodal
     (list of parts), this keeps non-text parts from the original message and replaces
     only the text part with generated text. If generated text is empty, original text

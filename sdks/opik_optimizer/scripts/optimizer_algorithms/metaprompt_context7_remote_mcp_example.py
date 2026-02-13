@@ -9,7 +9,7 @@ from opik.evaluation.metrics.score_result import ScoreResult
 
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets.context7_eval import load_context7_dataset
-from opik_optimizer.utils.toolcalling.optimizer_helpers import extract_tool_descriptions
+from opik_optimizer.utils.toolcalling.core.metadata import extract_tool_descriptions
 from opik_optimizer.utils.toolcalling.normalize.tool_factory import (
     cursor_mcp_config_to_tools,
 )

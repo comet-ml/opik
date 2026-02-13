@@ -13,7 +13,6 @@ from ... import helpers
 from ...core.state import prepare_experiment_config
 from ...base_optimizer import _OPTIMIZER_VERSION
 from ...core import evaluation as task_evaluator
-from ...utils.toolcalling.core import components as tool_components
 from ...utils.toolcalling.core import metadata as tool_metadata
 from ...utils.toolcalling.core import segment_updates
 from ...core import runtime
@@ -205,9 +204,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             new_prompt = segment_updates.apply_tool_updates_from_candidate(
                 candidate=candidate,
                 prompt=new_prompt,
-                tool_component_prefix=f"{prompt_name}{tool_components.TOOL_COMPONENT_PREFIX}",
+                tool_component_prefix=f"{prompt_name}{segment_updates.TOOL_COMPONENT_PREFIX}",
                 tool_param_component_prefix=(
-                    f"{prompt_name}{tool_components.TOOL_PARAM_COMPONENT_PREFIX}"
+                    f"{prompt_name}{segment_updates.TOOL_PARAM_COMPONENT_PREFIX}"
                 ),
             )
             # Final prompt

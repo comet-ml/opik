@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ....api_objects.chat_prompt import ChatPrompt
 from ....utils import prompt_segments
-from . import components
+from ..normalize.tool_factory import ToolCallingFactory
+from . import segment_updates
 
 
 def build_tool_metadata_by_component(
@@ -22,7 +24,7 @@ def build_tool_metadata_by_component(
                 tool_name = segment.segment_id.replace(
                     prompt_segments.PROMPT_SEGMENT_PREFIX_TOOL, "", 1
                 )
-                key = components.tool_component_key(prompt_name, tool_name)
+                key = segment_updates.tool_component_key(prompt_name, tool_name)
                 tool_metadata_by_component[key] = json.dumps(
                     segment.metadata.get("raw_tool", {}),
                     sort_keys=True,
@@ -35,7 +37,7 @@ def build_tool_metadata_by_component(
                     param_name, str
                 ):
                     continue
-                key = components.tool_param_component_key(
+                key = segment_updates.tool_param_component_key(
                     prompt_name, param_tool_name, param_name
                 )
                 tool_metadata_by_component[key] = json.dumps(
@@ -44,3 +46,15 @@ def build_tool_metadata_by_component(
                     default=str,
                 )
     return tool_metadata_by_component
+
+
+def extract_tool_descriptions(prompt: ChatPrompt) -> dict[str, str]:
+    """Return function name -> description for resolved tool entries."""
+    resolved_prompt = ToolCallingFactory().resolve_prompt(prompt)
+    descriptions: dict[str, str] = {}
+    for tool in resolved_prompt.tools or []:
+        function = tool.get("function", {})
+        name = function.get("name")
+        if isinstance(name, str):
+            descriptions[name] = str(function.get("description", ""))
+    return descriptions

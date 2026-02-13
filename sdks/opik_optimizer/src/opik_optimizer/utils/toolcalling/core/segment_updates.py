@@ -6,7 +6,19 @@ from typing import Any
 
 from ....utils import prompt_segments
 from ....api_objects import chat_prompt
-from . import components
+
+TOOL_COMPONENT_PREFIX = "__tool::"
+TOOL_PARAM_COMPONENT_PREFIX = "__tool_param::"
+
+
+def tool_component_key(prompt_name: str, tool_name: str) -> str:
+    """Return the candidate key for a tool description component."""
+    return f"{prompt_name}{TOOL_COMPONENT_PREFIX}{tool_name}"
+
+
+def tool_param_component_key(prompt_name: str, tool_name: str, param_name: str) -> str:
+    """Return the candidate key for a tool parameter description component."""
+    return f"{prompt_name}{TOOL_PARAM_COMPONENT_PREFIX}{tool_name}::{param_name}"
 
 
 def apply_tool_updates_from_candidate(
@@ -101,9 +113,7 @@ def build_tool_component_seed(
             )
             if tool_names and tool_name not in tool_names:
                 continue
-            seed[f"{prompt_name}{components.TOOL_COMPONENT_PREFIX}{tool_name}"] = str(
-                segment.content
-            )
+            seed[tool_component_key(prompt_name, tool_name)] = str(segment.content)
         elif segment.is_tool_param():
             param_tool_name = segment.metadata.get("tool_name")
             param_name = segment.metadata.get("param_name")
@@ -111,7 +121,7 @@ def build_tool_component_seed(
                 continue
             if tool_names and param_tool_name not in tool_names:
                 continue
-            seed[
-                f"{prompt_name}{components.TOOL_PARAM_COMPONENT_PREFIX}{param_tool_name}::{param_name}"
-            ] = str(segment.content)
+            seed[tool_param_component_key(prompt_name, param_tool_name, param_name)] = (
+                str(segment.content)
+            )
     return seed
