@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
@@ -27,7 +28,8 @@ public record ExperimentItem(
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID experimentId,
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID datasetItemId,
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID traceId,
-        @JsonView({ExperimentItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
+        @JsonView({
+                ExperimentItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable UUID projectId,
         @JsonView({
                 ExperimentItem.View.Write.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") String projectName,
         @JsonView({

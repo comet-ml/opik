@@ -1866,11 +1866,11 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_PROJECT_IDS_BY_TRACE_IDS = """
             SELECT
                 id,
-                groupArray(project_id) AS project_ids
+                groupUniqArray(project_id) AS project_ids
             FROM traces
             WHERE id IN :trace_ids
             AND workspace_id = :workspace_id
-            GROUP BY workspace_id, id
+            GROUP BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -3454,7 +3454,8 @@ class TraceDAOImpl implements TraceDAO {
                     .flatMapMany(result -> result.map((row, rowMetadata) -> {
                         List<UUID> projectIds = row.get("project_ids", List.class)
                                 .stream()
-                                .map(obj -> UUID.fromString((String) obj))
+                                .filter(obj -> obj != null)
+                                .map(obj -> UUID.fromString(new String((byte[]) obj)))
                                 .toList();
 
                         return Map.entry(
