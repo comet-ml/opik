@@ -74,7 +74,8 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                             .map((v) => v.name)
                             .forEach(
                               (v: string) =>
-                                (localArguments[v] = currentArguments?.[v] ?? ""),
+                                (localArguments[v] =
+                                  currentArguments?.[v] ?? ""),
                             );
                         } catch (e) {
                           parsingArgumentsError = true;

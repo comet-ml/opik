@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { UseFormReturn } from "react-hook-form";
 import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import find from "lodash/find";
@@ -85,9 +91,7 @@ const extractPaths = (
 
     const value = (obj as Record<string, unknown>)[key];
     if (value && typeof value === "object" && !Array.isArray(value)) {
-      paths.push(
-        ...extractPaths(value, fullPath, maxDepth, currentDepth + 1),
-      );
+      paths.push(...extractPaths(value, fullPath, maxDepth, currentDepth + 1));
     }
   }
   return paths;
@@ -175,9 +179,7 @@ const TraceStructureHelper: React.FC<{
 
   const outputPaths = useMemo(
     () =>
-      selectedTrace?.output
-        ? extractPaths(selectedTrace.output, "output")
-        : [],
+      selectedTrace?.output ? extractPaths(selectedTrace.output, "output") : [],
     [selectedTrace?.output],
   );
 
