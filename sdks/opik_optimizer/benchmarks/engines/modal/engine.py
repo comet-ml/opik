@@ -153,8 +153,9 @@ def read_opik_config(config_path: str | None = None) -> dict[str, str]:
         if workspace:
             data["workspace"] = workspace
         return data
-    except Exception:
-        return {}
+    except (configparser.Error, OSError) as exc:
+        logger.error("Failed to read Opik config at %s: %s", path, exc)
+        raise
 
 
 def _dump_opik_configuration() -> None:
@@ -197,7 +198,7 @@ def _dump_opik_configuration() -> None:
 
 def _ensure_opik_credentials() -> None:
     api_key = os.getenv("OPIK_API_KEY", "").strip()
-    host = os.getenv("OPIK_URL_OVERRIDE")
+    host = os.getenv("OPIK_URL_OVERRIDE") or os.getenv("OPIK_HOST")
     is_self_hosted = bool(host and host != "https://www.comet.com/opik/api")
 
     logger.info(
@@ -210,7 +211,7 @@ def _ensure_opik_credentials() -> None:
         raise RuntimeError(
             "OPIK_API_KEY is missing or empty for Comet Cloud. "
             "Ensure the `opik-benchmarks` secret includes OPIK_API_KEY. "
-            "For self-hosted instances, set OPIK_BASE_URL or OPIK_HOST and omit OPIK_API_KEY."
+            "For self-hosted instances, set OPIK_URL_OVERRIDE or OPIK_HOST and omit OPIK_API_KEY."
         )
 
     logger.info("Testing Opik client connection...")
