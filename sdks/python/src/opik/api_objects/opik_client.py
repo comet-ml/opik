@@ -1652,17 +1652,9 @@ class Opik:
         if latest_version is None:
             return []
 
-        # Parse filter_string using OQL
-        filters: Optional[str] = None
-        if filter_string is not None:
-            oql = opik_query_language.OpikQueryLanguage.for_prompt_versions(
-                filter_string
-            )
-            filters = oql.parsed_filters
-
         # Now get all versions (we know it's a text prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(
-            name=name, search=search, filters=filters
+            name=name, search=search, filter_string=filter_string
         )
 
         result = [
@@ -1741,17 +1733,9 @@ class Opik:
         if latest_version is None:
             return []
 
-        # Parse filter_string using OQL
-        filters: Optional[str] = None
-        if filter_string is not None:
-            oql = opik_query_language.OpikQueryLanguage.for_prompt_versions(
-                filter_string
-            )
-            filters = oql.parsed_filters
-
         # Now get all versions (we know it's a chat prompt)
         fern_prompt_versions = prompt_client_.get_all_prompt_versions(
-            name=name, search=search, filters=filters
+            name=name, search=search, filter_string=filter_string
         )
 
         result = [

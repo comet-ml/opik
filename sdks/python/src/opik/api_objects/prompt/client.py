@@ -6,6 +6,7 @@ import opik.exceptions
 from opik.rest_api import client as rest_client, PromptVersionUpdate
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
+from opik.api_objects import opik_query_language
 from . import types as prompt_types
 
 
@@ -233,7 +234,7 @@ class PromptClient:
         self,
         name: str,
         search: Optional[str] = None,
-        filters: Optional[str] = None,
+        filter_string: Optional[str] = None,
     ) -> List[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve all the prompt details for a given prompt name.
@@ -241,7 +242,23 @@ class PromptClient:
         Parameters:
             name: The name of the prompt.
             search: Optional search text to find in template or change description fields.
-            filters: Optional filter specification as JSON array. Format: '[{"field": "FIELD_NAME", "operator": "OPERATOR", "value": "VALUE"}]'
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "customer"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
             List[Prompt]: A list of prompts for the given name.
@@ -251,10 +268,9 @@ class PromptClient:
             versions = prompt_client.get_all_prompt_versions(name="my-prompt")
 
             # Filter by tags (versions containing "production" tag)
-            import json
             versions = prompt_client.get_all_prompt_versions(
                 name="my-prompt",
-                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
+                filter_string='tags contains "production"',
             )
 
             # Search for specific text in template or change description fields
@@ -267,7 +283,7 @@ class PromptClient:
             versions = prompt_client.get_all_prompt_versions(
                 name="my-prompt",
                 search="customer",
-                filters=json.dumps([{"field": "tags", "operator": "contains", "value": "production"}])
+                filter_string='tags contains "production"',
             )
         """
         try:
@@ -285,6 +301,14 @@ class PromptClient:
             ]
             if len(filtered_prompt_list) == 0:
                 raise ValueError("No prompts found for name: " + name)
+
+            # Parse filter_string using OQL
+            filters: Optional[str] = None
+            if filter_string is not None:
+                oql = opik_query_language.OpikQueryLanguage.for_prompt_versions(
+                    filter_string
+                )
+                filters = oql.parsed_filters
 
             prompt_id = filtered_prompt_list[0]
             return self._get_prompt_versions_by_id_paginated(
