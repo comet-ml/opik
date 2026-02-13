@@ -235,8 +235,8 @@ class SpanOQLConfig(OQLConfig):
         return ["metadata", "input_json", "output_json", "feedback_scores"]
 
 
-class TraceThreadOQLConfig(OQLConfig):
-    """OQL configuration for trace thread filtering.
+class ThreadOQLConfig(OQLConfig):
+    """OQL configuration for thread filtering.
 
     Based on backend's TraceThreadField enum.
     See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/TraceThreadField.java
@@ -495,14 +495,14 @@ class OpikQueryLanguage:
         return cls(query_string, SpanOQLConfig())
 
     @classmethod
-    def for_trace_threads(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+    def for_threads(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
         """
         Creates a parser for filtering trace threads using OQL syntax. Returns an
-        OpikQueryLanguage instance preconfigured with TraceThreadOQLConfig that validates
+        OpikQueryLanguage instance preconfigured with ThreadOQLConfig that validates
         thread-specific fields. Empty or None query_string yields no filters;
         malformed queries raise ValueError during parsing.
         """
-        return cls(query_string, TraceThreadOQLConfig())
+        return cls(query_string, ThreadOQLConfig())
 
     @classmethod
     def for_dataset_items(cls, query_string: Optional[str]) -> "OpikQueryLanguage":

@@ -116,7 +116,7 @@ def parse_filter_expressions(
         parsed_item_class: The class type to which the parsed filter expressions are mapped.
         entity_type: The entity type to determine which OQL config to use.
             Use "traces" for trace filtering, "spans" for span filtering,
-            "trace_threads" for trace thread filtering.
+            "threads" for trace thread filtering.
 
     Returns:
         Optional[List[T]]: A list of objects of type T created from the parsed filter
@@ -127,8 +127,8 @@ def parse_filter_expressions(
 
     if entity_type == "spans":
         oql = opik_query_language.OpikQueryLanguage.for_spans(filter_string)
-    elif entity_type == "trace_threads":
-        oql = opik_query_language.OpikQueryLanguage.for_trace_threads(filter_string)
+    elif entity_type == "threads":
+        oql = opik_query_language.OpikQueryLanguage.for_threads(filter_string)
     else:
         oql = opik_query_language.OpikQueryLanguage.for_traces(filter_string)
 

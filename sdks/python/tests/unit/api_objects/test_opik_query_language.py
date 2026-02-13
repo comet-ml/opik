@@ -713,7 +713,7 @@ def test_span_oql__empty_filter(filter_string):
     ],
 )
 def test_trace_thread_oql__valid_filters(filter_string, expected):
-    oql = OpikQueryLanguage.for_trace_threads(filter_string)
+    oql = OpikQueryLanguage.for_threads(filter_string)
     parsed = json.loads(oql.parsed_filters)
     assert len(parsed) == len(expected)
 
@@ -739,7 +739,7 @@ def test_trace_thread_oql__valid_filters(filter_string, expected):
             r"Invalid filter string, trailing characters.*",
         ),
         (
-            # metadata is not a dictionary field in TraceThreadOQLConfig
+            # metadata is not a dictionary field in ThreadOQLConfig
             'metadata.key = "value"',
             r"Field metadata\.key is not supported.*",
         ),
@@ -747,12 +747,12 @@ def test_trace_thread_oql__valid_filters(filter_string, expected):
 )
 def test_trace_thread_oql__invalid_filters(filter_string, error_pattern):
     with pytest.raises(ValueError, match=error_pattern):
-        OpikQueryLanguage.for_trace_threads(filter_string)
+        OpikQueryLanguage.for_threads(filter_string)
 
 
 @pytest.mark.parametrize("filter_string", [None, ""])
 def test_trace_thread_oql__empty_filter(filter_string):
-    oql = OpikQueryLanguage.for_trace_threads(filter_string)
+    oql = OpikQueryLanguage.for_threads(filter_string)
     assert oql.parsed_filters is None
 
 
