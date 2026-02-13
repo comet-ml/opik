@@ -27,7 +27,7 @@
       "optimizer_prompt_params": { "max_trials": 1, "population_size": 2, "num_generations": 1 },
       "metrics": [
         {
-          "path": "benchmarks.configs.registry.create_levenshtein_ratio_metric",
+          "path": "benchmarks.packages.registry.create_levenshtein_ratio_metric",
           "kwargs": { "reference_col": "label" }
         }
       ],
