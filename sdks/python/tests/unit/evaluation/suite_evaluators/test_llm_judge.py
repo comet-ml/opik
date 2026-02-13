@@ -10,18 +10,23 @@ from opik.evaluation.suite_evaluators.opik_llm_judge_config import (
 
 
 class TestLLMJudgeInit:
-    def test_init__with_assertions_list__stores_assertions(self):
-        assertions = [
-            {"name": "test", "expected_behavior": "Test assertion"},
-        ]
-        evaluator = LLMJudge(assertions=assertions, track=False)
+    def test_init__with_string_assertions__stores_texts(self):
+        """Test that string assertions are stored directly."""
+        evaluator = LLMJudge(
+            assertions=[
+                "Response is factually correct",
+                "No hallucinated information",
+            ],
+            track=False,
+        )
 
-        assert evaluator.assertions == assertions
-        assert evaluator.name == "llm_judge"
+        assert len(evaluator.assertions) == 2
+        assert evaluator.assertions[0] == "Response is factually correct"
+        assert evaluator.assertions[1] == "No hallucinated information"
 
     def test_init__with_custom_name__uses_custom_name(self):
         evaluator = LLMJudge(
-            assertions=[{"name": "a", "expected_behavior": "b"}],
+            assertions=["Test assertion"],
             name="custom_evaluator",
             track=False,
         )
@@ -30,7 +35,7 @@ class TestLLMJudgeInit:
 
     def test_init__with_track_false__sets_track(self):
         evaluator = LLMJudge(
-            assertions=[{"name": "a", "expected_behavior": "b"}],
+            assertions=["Test assertion"],
             track=False,
         )
 
@@ -38,7 +43,7 @@ class TestLLMJudgeInit:
 
     def test_init__with_track_true__sets_track(self):
         evaluator = LLMJudge(
-            assertions=[{"name": "a", "expected_behavior": "b"}],
+            assertions=["Test assertion"],
             track=True,
         )
 
@@ -46,24 +51,23 @@ class TestLLMJudgeInit:
 
     def test_assertions_property__returns_copy__modifications_dont_affect_original(self):
         evaluator = LLMJudge(
-            assertions=[{"name": "a", "expected_behavior": "b"}],
+            assertions=["Test assertion"],
             track=False,
         )
 
         assertions = evaluator.assertions
-        assertions.append({"name": "c", "expected_behavior": "d"})
+        assertions.append("Another assertion")
 
         assert len(evaluator.assertions) == 1
 
 
 class TestLLMJudgeToConfig:
     def test_to_config__basic__returns_valid_config(self):
-        assertions = [
-            {"name": "accurate", "expected_behavior": "Response is accurate"},
-            {"name": "helpful", "expected_behavior": "Response is helpful"},
-        ]
         evaluator = LLMJudge(
-            assertions=assertions,
+            assertions=[
+                "Response is accurate",
+                "Response is helpful",
+            ],
             model="gpt-4o",
             temperature=0.0,
             seed=123,
@@ -73,28 +77,29 @@ class TestLLMJudgeToConfig:
         config = evaluator.to_config()
         config_dict = config.model_dump(by_alias=True, exclude_none=True)
 
-        assert config_dict == {
-            "name": "llm_judge",
-            "model": {"name": "gpt-4o", "temperature": 0.0, "seed": 123},
-            "variables": {"input": "input", "output": "output"},
-            "schema": [
-                {
-                    "name": "accurate",
-                    "type": "BOOLEAN",
-                    "expected_behavior": "Response is accurate",
-                },
-                {
-                    "name": "helpful",
-                    "type": "BOOLEAN",
-                    "expected_behavior": "Response is helpful",
-                },
-            ],
-            "messages": [{"role": "USER", "content": config_dict["messages"][0]["content"]}],
-        }
+        assert config_dict["name"] == "llm_judge"
+        assert config_dict["model"] == {"name": "gpt-4o", "temperature": 0.0, "seed": 123}
+        assert config_dict["variables"] == {"input": "input", "output": "output"}
+        # Both name and expected_behavior use the assertion text directly
+        assert config_dict["schema"] == [
+            {
+                "name": "Response is accurate",
+                "type": "BOOLEAN",
+                "expected_behavior": "Response is accurate",
+            },
+            {
+                "name": "Response is helpful",
+                "type": "BOOLEAN",
+                "expected_behavior": "Response is helpful",
+            },
+        ]
+        # Verify dynamic response format uses assertion text in the message
+        assert '"name": "Response is accurate"' in config_dict["messages"][0]["content"]
+        assert '"name": "Response is helpful"' in config_dict["messages"][0]["content"]
 
     def test_to_config__without_optional_params__sets_none(self):
         evaluator = LLMJudge(
-            assertions=[{"name": "test", "expected_behavior": "Test"}],
+            assertions=["Test"],
             track=False,
         )
 
@@ -105,7 +110,7 @@ class TestLLMJudgeToConfig:
 
     def test_to_config__serializes_to_dict_with_schema_alias(self):
         evaluator = LLMJudge(
-            assertions=[{"name": "test", "expected_behavior": "Test"}],
+            assertions=["Test"],
             model="gpt-4o",
             track=False,
         )
@@ -115,7 +120,6 @@ class TestLLMJudgeToConfig:
 
         assert "schema" in config_dict
         assert "schema_" not in config_dict
-        assert config_dict["schema"][0]["name"] == "test"
 
 
 class TestLLMJudgeFromConfig:
@@ -139,16 +143,15 @@ class TestLLMJudgeFromConfig:
         )
 
         assert evaluator.name == "restored_evaluator"
-        assert evaluator.assertions == [
-            {"name": "accurate", "expected_behavior": "Is accurate"},
-            {"name": "helpful", "expected_behavior": "Is helpful"},
-        ]
+        # from_config extracts expected_behavior as assertion texts
+        assert evaluator.assertions[0] == "Is accurate"
+        assert evaluator.assertions[1] == "Is helpful"
 
-    def test_from_config__roundtrip__preserves_data(self):
+    def test_from_config__roundtrip__preserves_assertions(self):
         original = LLMJudge(
             assertions=[
-                {"name": "factual", "expected_behavior": "Factually correct"},
-                {"name": "relevant", "expected_behavior": "Relevant to question"},
+                "Factually correct",
+                "Relevant to question",
             ],
             model="gpt-4o",
             temperature=0.2,
@@ -161,7 +164,9 @@ class TestLLMJudgeFromConfig:
         restored = LLMJudge.from_config(config, name="my_evaluator", track=False)
 
         assert restored.name == original.name
-        assert restored.assertions == original.assertions
+        # Assertions should be preserved
+        assert restored.assertions[0] == "Factually correct"
+        assert restored.assertions[1] == "Relevant to question"
 
     def test_from_config__config_model_params__preserved_in_new_config(self):
         config = LLMJudgeConfig(

@@ -1,6 +1,6 @@
 import functools
 import logging
-from typing import List, Optional, Any, Dict, Iterator, Union
+from typing import List, Optional, Any, Dict, Iterator, Union, TypedDict
 
 import opik
 import opik.logging_messages as logging_messages
@@ -29,6 +29,56 @@ EVALUATION_STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the 
 # OPIK-4222/4223 are implemented.
 EVALUATORS_KEY = "__evaluators__"
 EXECUTION_POLICY_KEY = "__execution_policy__"
+
+
+class ExecutionPolicy(TypedDict, total=False):
+    """
+    Execution policy for evaluation suite items.
+
+    Attributes:
+        runs_per_item: Number of times to run evaluation for each item.
+        pass_threshold: Minimum number of passing runs required for item to pass.
+    """
+
+    runs_per_item: int
+    pass_threshold: int
+
+
+DEFAULT_EXECUTION_POLICY: ExecutionPolicy = {
+    "runs_per_item": 1,
+    "pass_threshold": 1,
+}
+
+
+def get_item_execution_policy(
+    dataset_item_content: Dict[str, Any],
+    default_policy: ExecutionPolicy,
+) -> ExecutionPolicy:
+    """
+    Get execution policy for a dataset item.
+
+    If the item has its own execution policy, merge it with the default.
+    Item-level values override default values.
+
+    Args:
+        dataset_item_content: The dataset item content dict.
+        default_policy: Default execution policy from suite level.
+
+    Returns:
+        Merged execution policy for this item.
+    """
+    item_policy = dataset_item_content.get(EXECUTION_POLICY_KEY)
+    if item_policy is None:
+        return default_policy
+
+    return {
+        "runs_per_item": item_policy.get(
+            "runs_per_item", default_policy.get("runs_per_item", 1)
+        ),
+        "pass_threshold": item_policy.get(
+            "pass_threshold", default_policy.get("pass_threshold", 1)
+        ),
+    }
 
 
 def _extract_item_evaluators(
@@ -172,6 +222,7 @@ class EvaluationEngine:
         task_span: models.SpanModel,
         test_case_: test_case.TestCase,
     ) -> List[score_result.ScoreResult]:
+        assert self._task_span_evaluator is not None
         score_results, mapped_scoring_inputs = (
             self._task_span_evaluator.compute_task_span_scores(
                 dataset_item_content=test_case_.dataset_item_content,
@@ -250,40 +301,80 @@ class EvaluationEngine:
         trial_count: int,
         description: str,
         total_items: Optional[int] = None,
+        default_execution_policy: Optional[ExecutionPolicy] = None,
     ) -> List[test_result.TestResult]:
         test_results: List[test_result.TestResult] = []
 
-        # Cache dataset items for multiple trials
+        # Build effective default policy:
+        # - If explicit policy provided, use it
+        # - Otherwise, use trial_count parameter (backward compatibility)
+        effective_default_policy: ExecutionPolicy
+        if default_execution_policy is not None:
+            effective_default_policy = default_execution_policy
+            initial_trial_count = default_execution_policy.get("runs_per_item", 1)
+        else:
+            effective_default_policy = {
+                "runs_per_item": trial_count,
+                "pass_threshold": 1,
+            }
+            initial_trial_count = trial_count
+
+        # Cache dataset items and their runs_per_item for multiple trials
         dataset_items_cache: List[dataset_item.DatasetItem] = []
+        item_runs_cache: List[int] = []
+        max_runs_per_item = initial_trial_count
 
-        for trial_id in range(trial_count):
-            desc = f"{description} trial {trial_id}" if trial_count > 1 else description
+        # First pass: process all items for trial 0 and determine max runs_per_item
+        desc = f"{description} trial 0" if initial_trial_count > 1 else description
+        executor: evaluation_tasks_executor.StreamingExecutor[
+            test_result.TestResult
+        ] = evaluation_tasks_executor.StreamingExecutor(
+            workers=self._workers,
+            verbose=self._verbose,
+            desc=desc,
+            total=total_items,
+        )
+        with executor:
+            for item in dataset_items:
+                dataset_items_cache.append(item)
+                item_content = item.get_content(include_id=False)
+                item_policy = get_item_execution_policy(
+                    item_content, effective_default_policy
+                )
+                item_runs = item_policy.get("runs_per_item", 1)
+                item_runs_cache.append(item_runs)
+                max_runs_per_item = max(max_runs_per_item, item_runs)
 
-            # Use streaming executor to submit tasks as items arrive
-            executor: evaluation_tasks_executor.StreamingExecutor[
-                test_result.TestResult
-            ] = evaluation_tasks_executor.StreamingExecutor(
+                # Store resolved execution policy in item for result building
+                if item.model_extra is not None:
+                    item.model_extra[EXECUTION_POLICY_KEY] = item_policy
+
+                # Trial 0: always run (trial_id=0 < item_runs for any item_runs >= 1)
+                evaluation_task = functools.partial(
+                    self._compute_test_result_for_llm_task,
+                    item=item,
+                    task=task,
+                    trial_id=0,
+                    experiment_=experiment_,
+                )
+                executor.submit(evaluation_task)
+
+            test_results += executor.get_results()
+
+        # Subsequent trials: use cached items and their runs_per_item
+        for trial_id in range(1, max_runs_per_item):
+            desc = f"{description} trial {trial_id}"
+
+            executor = evaluation_tasks_executor.StreamingExecutor(
                 workers=self._workers,
                 verbose=self._verbose,
                 desc=desc,
                 total=total_items,
             )
             with executor:
-                # For first trial, consume from iterator and cache items
-                if trial_id == 0:
-                    for item in dataset_items:
-                        dataset_items_cache.append(item)
-                        evaluation_task = functools.partial(
-                            self._compute_test_result_for_llm_task,
-                            item=item,
-                            task=task,
-                            trial_id=trial_id,
-                            experiment_=experiment_,
-                        )
-                        executor.submit(evaluation_task)
-                else:
-                    # For subsequent trials, use cached items
-                    for item in dataset_items_cache:
+                for item, item_runs in zip(dataset_items_cache, item_runs_cache):
+                    # Only run if this trial_id is within item's runs_per_item
+                    if trial_id < item_runs:
                         evaluation_task = functools.partial(
                             self._compute_test_result_for_llm_task,
                             item=item,
@@ -293,7 +384,6 @@ class EvaluationEngine:
                         )
                         executor.submit(evaluation_task)
 
-                # Collect results from executor
                 test_results += executor.get_results()
 
         return test_results
@@ -393,11 +483,11 @@ class EvaluationEngine:
         experiment_: Optional[experiment.Experiment],
         dataset_filter_string: Optional[str] = None,
     ) -> List[test_result.TestResult]:
+        # Extract execution policy from dataset if available (future: OPIK-4222/4223).
+        # For now, check if dataset has execution_policy attribute, otherwise use trial_count.
+        default_execution_policy = getattr(dataset_, "execution_policy", None)
         # Can't use streaming with these parameters yet, so fallback to non-streaming
-        use_streaming = (
-            dataset_sampler is None
-            and not self._has_task_span_metrics
-        )
+        use_streaming = dataset_sampler is None and not self._has_task_span_metrics
 
         # Get dataset items using streaming or non-streaming approach
         if use_streaming:
@@ -443,6 +533,7 @@ class EvaluationEngine:
                 trial_count=trial_count,
                 description="Evaluation",
                 total_items=total_items,
+                default_execution_policy=default_execution_policy,
             )
 
         LOGGER.debug(
@@ -458,6 +549,7 @@ class EvaluationEngine:
                 trial_count=trial_count,
                 description="Evaluation",
                 total_items=total_items,
+                default_execution_policy=default_execution_policy,
             )
             self._update_test_results_with_task_span_metrics(
                 test_results=test_results,

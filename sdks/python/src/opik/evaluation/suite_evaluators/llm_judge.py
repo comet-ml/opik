@@ -6,7 +6,7 @@ in the backend and used with evaluation suites. The evaluator can
 evaluate one or more assertions/criteria against the agent's output.
 """
 
-from typing import Any, Union, Optional, List, TypedDict
+from typing import Any, Optional, List
 
 import pydantic
 
@@ -17,14 +17,15 @@ from . import base
 from . import opik_llm_judge_config as llm_judge_config
 
 
-class Assertion(TypedDict):
-    """Represents an assertion to evaluate against the output."""
-
-    name: str
-    """The name/identifier of the assertion."""
-
-    expected_behavior: str
-    """Description of the expected behavior to check."""
+def _build_response_format_example(assertions: List[str]) -> str:
+    """
+    Build a dynamic JSON response format example based on the assertions.
+    """
+    results_items = [
+        f'        {{"name": "{assertion}", "value": <true or false>, "reason": "<brief explanation>", "confidence": <0.0 to 1.0>}}'
+        for assertion in assertions
+    ]
+    return "{\n    \"results\": [\n" + ",\n".join(results_items) + "\n    ]\n}"
 
 
 LLM_JUDGE_TEMPLATE = """You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
@@ -48,16 +49,7 @@ For each assertion, determine if it passes (true) or fails (false).
 Also provide a confidence score between 0.0 and 1.0 indicating how confident you are in your judgment.
 
 Provide your answer in the following JSON format:
-{{
-    "results": [
-        {{
-            "name": "<assertion name>",
-            "value": <true for pass, false for fail>,
-            "reason": "<brief explanation>",
-            "confidence": <float between 0.0 and 1.0>
-        }}
-    ]
-}}
+{response_format}
 
 Output must be JSON format only. Evaluate ALL assertions provided.
 """
@@ -74,47 +66,40 @@ def _format_value(value: Any) -> str:
 def _generate_prompt(
     input: Any,
     output: Any,
-    assertions: List[Assertion],
+    assertions: List[str],
 ) -> str:
     """Generate the LLM query for evaluating assertions."""
-    assertions_str = "\n".join(
-        f"- **{assertion['name']}**: {assertion['expected_behavior']}"
-        for assertion in assertions
-    )
+    assertions_str = "\n".join(f"- {assertion}" for assertion in assertions)
 
     return LLM_JUDGE_TEMPLATE.format(
         input=_format_value(input),
         output=_format_value(output),
         assertions=assertions_str,
+        response_format=_build_response_format_example(assertions),
     )
 
 
 def _parse_model_output(
     content: str,
     name: str,
-    assertions: List[Assertion],
+    assertions: List[str],
 ) -> List[score_result.ScoreResult]:
     """Parse the model output into ScoreResults."""
     import json
 
     results: List[score_result.ScoreResult] = []
-    assertion_map = {a["name"]: a for a in assertions}
 
     try:
         parsed = json.loads(content)
         validated = llm_judge_config.LLMJudgeResultFormat(**parsed)
 
         for item in validated.results:
-            assertion = assertion_map.get(item.name)
             results.append(
                 score_result.ScoreResult(
-                    name=f"{name}_{item.name}",
+                    name=item.name,
                     value=item.value,
                     reason=item.reason,
-                    metadata={
-                        "confidence": item.confidence,
-                        "expected_behavior": assertion["expected_behavior"] if assertion else None,
-                    },
+                    metadata={"confidence": item.confidence},
                 )
             )
 
@@ -122,12 +107,11 @@ def _parse_model_output(
         for assertion in assertions:
             results.append(
                 score_result.ScoreResult(
-                    name=f"{name}_{assertion['name']}",
+                    name=assertion,
                     value=False,
                     reason=f"Failed to parse model output: {e}",
                     metadata={
                         "raw_output": content,
-                        "expected_behavior": assertion["expected_behavior"],
                         "parsing_error": True,
                     },
                 )
@@ -147,8 +131,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
     `from_config()` for storage in the backend's online evaluation system.
 
     Args:
-        assertions: A list of assertions to evaluate. Each assertion should have
-            a 'name' and 'expected_behavior' key.
+        assertions: A list of assertion strings describing expected behaviors.
+            Each string should describe what the output should satisfy.
         model: The LLM to use for evaluation. Can be a string (model name) or
             an `opik.evaluation.models.OpikBaseModel` subclass instance.
             `opik.evaluation.models.LiteLLMChatModel` is used by default.
@@ -164,8 +148,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
         >>>
         >>> evaluator = LLMJudge(
         ...     assertions=[
-        ...         {"name": "no_hallucination", "expected_behavior": "Response does not contain hallucinated information"},
-        ...         {"name": "helpful", "expected_behavior": "Response is helpful to the user"},
+        ...         "Response does not contain hallucinated information",
+        ...         "Response is helpful to the user",
         ...     ]
         ... )
         >>>
@@ -176,14 +160,12 @@ class LLMJudge(base.BaseSuiteEvaluator):
         ... )
         >>> for result in results:
         ...     print(f"{result.name}: {result.value}")
-        llm_judge_no_hallucination: True
-        llm_judge_helpful: True
     """
 
     def __init__(
         self,
-        assertions: List[Assertion],
-        model: Optional[Union[str, base_model.OpikBaseModel]] = None,
+        assertions: List[str],
+        model: Optional[str | base_model.OpikBaseModel] = None,
         name: str = "llm_judge",
         track: bool = True,
         project_name: Optional[str] = None,
@@ -192,7 +174,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
-        self._assertions: List[Assertion] = assertions
+        self._assertions: List[str] = list(assertions)
 
         self._seed = seed
         self._temperature = temperature
@@ -200,13 +182,13 @@ class LLMJudge(base.BaseSuiteEvaluator):
         self._init_model(model, temperature=temperature)
 
     @property
-    def assertions(self) -> List[Assertion]:
+    def assertions(self) -> List[str]:
         """The assertions this evaluator checks (read-only copy)."""
         return list(self._assertions)
 
     def _init_model(
         self,
-        model: Optional[Union[str, base_model.OpikBaseModel]],
+        model: Optional[str | base_model.OpikBaseModel],
         temperature: Optional[float],
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
@@ -314,7 +296,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         Example:
             >>> evaluator = LLMJudge(
-            ...     assertions=[{"name": "accurate", "expected_behavior": "Response is accurate"}],
+            ...     assertions=["Response is accurate"],
             ...     model="gpt-4o",
             ...     temperature=0.0,
             ... )
@@ -328,15 +310,17 @@ class LLMJudge(base.BaseSuiteEvaluator):
             seed=self._seed,
         )
 
-        assertions_text = "\n".join(
-            f"- **{assertion['name']}**: {assertion['expected_behavior']}"
-            for assertion in self._assertions
-        )
+        assertions_text = "\n".join(f"- {assertion}" for assertion in self._assertions)
+        response_format = _build_response_format_example(self._assertions)
+
+        prompt_content = LLM_JUDGE_TEMPLATE.replace(
+            "{assertions}", assertions_text
+        ).replace("{response_format}", response_format)
 
         messages = [
             llm_judge_config.LLMJudgeMessage(
                 role="USER",
-                content=LLM_JUDGE_TEMPLATE.replace("{assertions}", assertions_text),
+                content=prompt_content,
             )
         ]
 
@@ -347,9 +331,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         schema_items = [
             llm_judge_config.LLMJudgeSchemaItem(
-                name=assertion["name"],
+                name=assertion,
                 type="BOOLEAN",
-                expected_behavior=assertion["expected_behavior"],
+                expected_behavior=assertion,
             )
             for assertion in self._assertions
         ]
@@ -394,16 +378,11 @@ class LLMJudge(base.BaseSuiteEvaluator):
             ... )
             >>> evaluator = LLMJudge.from_config(config)
         """
-        assertions: List[Assertion] = [
-            Assertion(
-                name=item.name,
-                expected_behavior=item.expected_behavior,
-            )
-            for item in config.schema_
-        ]
+        # Extract assertion texts from config schema
+        assertion_texts = [item.expected_behavior for item in config.schema_]
 
         return cls(
-            assertions=assertions,
+            assertions=assertion_texts,
             model=config.model.name,
             name=name if name is not None else config.name,
             track=track,

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast, TYP
 
 if TYPE_CHECKING:
     from opik.evaluation.suite_evaluators import llm_judge
+    from opik.api_objects import evaluation_suite
 
 import httpx
 
@@ -949,7 +950,7 @@ class Opik:
         name: str,
         description: Optional[str] = None,
         evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
-        execution_policy: Optional[Dict[str, Any]] = None,
+        execution_policy: Optional["evaluation_suite.ExecutionPolicy"] = None,
     ) -> "evaluation_suite.EvaluationSuite":
         """
         Create a new evaluation suite for regression testing.
