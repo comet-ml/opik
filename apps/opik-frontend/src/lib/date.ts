@@ -56,8 +56,10 @@ export const getTimeFromNow = (value: string): string => {
   if (diffMinutes < 0) return date.format("MMM D, YYYY");
   if (diffMinutes < 1) return "< 1 min ago";
   if (diffMinutes < 60) return `${diffMinutes} mins ago`;
-  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
-  if (diffDays <= 7) return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
+  if (diffHours < 24)
+    return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
+  if (diffDays <= 7)
+    return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
 
   return date.year() === now.year()
     ? date.format("MMM D")
