@@ -42,12 +42,13 @@ Workflow:
     └────────────────┘
 """
 
-from typing import Any
+from typing import Any, cast
 import random
 
-from jinja2 import Template
+from jinja2 import Template  # type: ignore[import-not-found]
 from datasets import load_dataset
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+from opik_optimizer.api_objects.types import MetricFunction
 from opik_optimizer.utils import prompt_segments
 
 if __name__ == "__main__":
@@ -179,14 +180,16 @@ if __name__ == "__main__":
     def render_prompt_from_template(
         prompt: ChatPrompt, data: dict[str, Any]
     ) -> ChatPrompt:
+        system_template = prompt.system or ""
+        message_templates = prompt.messages or []
         return ChatPrompt(
-            system=render_jinja_template(prompt.system, data),
+            system=render_jinja_template(system_template, data),
             messages=[
                 {
                     "role": msg["role"],
                     "content": render_jinja_template(msg["content"], data),
                 }
-                for msg in prompt.messages
+                for msg in message_templates
             ],
         )
 
@@ -253,7 +256,7 @@ if __name__ == "__main__":
         result = optimizer.optimize_prompt(
             prompt=updated_prompt_template,
             dataset=dataset,
-            metric=metric,
+            metric=cast(MetricFunction, metric),
             optimize_prompts="user",
         )
         print("Optimization complete. Best score:", result.score)

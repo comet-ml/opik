@@ -1,10 +1,13 @@
 """Example: optimize only user messages while keeping system/assistant fixed."""
 
+from typing import Any, cast
+
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+from opik_optimizer.api_objects.types import MetricFunction
 from opik_optimizer.datasets import context7_eval
 
 
-def simple_metric(dataset_item: dict, output: str) -> float:
+def simple_metric(dataset_item: dict[str, Any], output: str) -> float:
     reference = (dataset_item.get("reference_answer") or "").strip()
     if not reference:
         return 0.0
@@ -30,7 +33,7 @@ def main() -> None:
     optimizer.optimize_prompt(
         prompt=prompt,
         dataset=dataset,
-        metric=simple_metric,
+        metric=cast(MetricFunction, simple_metric),
         optimize_prompts="user",  # keep system + assistant unchanged
     )
 

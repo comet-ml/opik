@@ -183,7 +183,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert updated_message["content"][1]["image_url"]["url"] == "{image}"
 
     def test_preserve_multimodal_structure_helper_mixed_messages(self) -> None:
-        original_messages = [
+        original_messages: list[dict[str, Any]] = [
             {
                 "role": "user",
                 "content": [
@@ -193,7 +193,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             },
             {"role": "assistant", "content": "Original assistant"},
         ]
-        generated_messages = [
+        generated_messages: list[dict[str, Any]] = [
             {
                 "role": "user",
                 "content": [
