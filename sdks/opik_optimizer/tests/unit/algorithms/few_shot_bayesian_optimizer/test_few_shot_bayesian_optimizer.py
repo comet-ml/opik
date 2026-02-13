@@ -12,6 +12,7 @@ from opik_optimizer import (
     FewShotBayesianOptimizer,
     OptimizationResult,
 )
+from opik_optimizer.api_objects import types as api_types
 from opik_optimizer.agents.optimizable_agent import OptimizableAgent
 from tests.unit.test_helpers import (
     make_mock_dataset,
@@ -129,6 +130,56 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             ValueError, match="Prompt name collision after sanitization"
         ):
             optimizer._sanitize_prompt_field_names(["chat-prompt", "chat_prompt"])
+
+    def test_create_few_shot_template_preserves_multimodal_structure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        prompt = ChatPrompt(
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Original text"},
+                        {"type": "image_url", "image_url": {"url": "{image}"}},
+                    ],
+                }
+            ]
+        )
+
+        class _FakeResponse:
+            template = "Template"
+
+            main = [
+                api_types.Message(
+                    role="user",
+                    content=[
+                        {"type": "text", "text": "Updated text"},
+                        {"type": "image_url", "image_url": {"url": "{image}"}},
+                        {"type": "image_url", "image_url": {"url": "{other_image}"}},
+                    ],
+                )
+            ]
+
+        monkeypatch.setattr(
+            "opik_optimizer.algorithms.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer._llm_calls.call_model",
+            lambda **_kwargs: _FakeResponse(),
+        )
+
+        updated_prompts, _ = optimizer._create_few_shot_prompt_template(
+            model="openai/gpt-4o-mini",
+            prompts={"main": prompt},
+            few_shot_examples=[{"input": "x", "output": "y"}],
+        )
+
+        updated_message = updated_prompts["main"].get_messages()[0]
+        assert isinstance(updated_message["content"], list)
+        assert [part["type"] for part in updated_message["content"]] == [
+            "text",
+            "image_url",
+        ]
+        assert updated_message["content"][0]["text"] == "Updated text"
+        assert updated_message["content"][1]["image_url"]["url"] == "{image}"
 
     def test_dict_prompt_returns_dict(
         self,

@@ -28,6 +28,7 @@ from ...core.state import (
 )
 from ... import constants
 from ...api_objects import chat_prompt
+from ...api_objects import types as api_types
 from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 from ...core import evaluation as task_evaluator
@@ -403,6 +404,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                         response_content, original_to_sanitized[prompt_name]
                     )
                 ]
+                messages = self._preserve_multimodal_message_structure(
+                    original_messages=prompts[prompt_name].get_messages(),
+                    generated_messages=messages,
+                )
                 new_prompt = prompts[prompt_name].copy()
                 # Store LLM-produced messages as-is to preserve placeholders.
                 # Role constraints are applied later in _reconstruct_prompts_with_examples
@@ -417,6 +422,47 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             new_prompts[prompt_name] = new_prompt
 
         return new_prompts, str(response_content.template)
+
+    def _preserve_multimodal_message_structure(
+        self,
+        *,
+        original_messages: list[dict[str, Any]],
+        generated_messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Preserve original multimodal content-part structure while applying new text."""
+        preserved: list[dict[str, Any]] = []
+        for index, generated in enumerate(generated_messages):
+            if (
+                index < len(original_messages)
+                and original_messages[index].get("role") == generated.get("role")
+                and isinstance(original_messages[index].get("content"), list)
+            ):
+                original_content = cast(
+                    api_types.Content, original_messages[index]["content"]
+                )
+                generated_content_raw = generated.get("content", "")
+                if isinstance(generated_content_raw, str) or isinstance(
+                    generated_content_raw, list
+                ):
+                    generated_content = cast(api_types.Content, generated_content_raw)
+                    generated_text = api_types.extract_text_from_content(
+                        generated_content
+                    )
+                else:
+                    generated_text = str(generated_content_raw)
+
+                preserved.append(
+                    {
+                        "role": generated.get("role"),
+                        "content": api_types.rebuild_content_with_new_text(
+                            original_content, generated_text
+                        ),
+                    }
+                )
+                continue
+
+            preserved.append(generated)
+        return preserved
 
     def _suggest_example_index(
         self,
