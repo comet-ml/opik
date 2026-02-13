@@ -21,7 +21,9 @@ class TestEvaluatorValidation:
                 evaluators=[equals_metric],
             )
 
-        assert "Evaluation suites only support LLMJudge evaluators" in str(exc_info.value)
+        assert "Evaluation suites only support LLMJudge evaluators" in str(
+            exc_info.value
+        )
         assert "Equals" in str(exc_info.value)
 
     def test_init__with_llm_judge_evaluator__succeeds(self):
@@ -67,7 +69,9 @@ class TestEvaluatorValidation:
                 evaluators=[equals_metric],
             )
 
-        assert "Evaluation suites only support LLMJudge evaluators" in str(exc_info.value)
+        assert "Evaluation suites only support LLMJudge evaluators" in str(
+            exc_info.value
+        )
         assert "item-level evaluators" in str(exc_info.value)
 
     def test_add_item__with_llm_judge_evaluator__succeeds(self):
@@ -115,4 +119,6 @@ class TestEvaluatorValidation:
                 evaluators=[llm_judge, equals_metric],
             )
 
-        assert "Evaluation suites only support LLMJudge evaluators" in str(exc_info.value)
+        assert "Evaluation suites only support LLMJudge evaluators" in str(
+            exc_info.value
+        )

@@ -9,7 +9,7 @@ break existing functionality.
 import dataclasses
 import logging
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional
 
 from opik import id_helpers
 from opik.api_objects.prompt import base_prompt
@@ -43,6 +43,7 @@ def _validate_evaluators(evaluators: List[Any], context: str) -> None:
                 f"Got {type(evaluator).__name__} in {context}. "
                 f"Use LLMJudge from opik.evaluation.suite_evaluators instead."
             )
+
 
 # Reserved keys for evaluation suite metadata stored in dataset item content.
 # These will become proper backend fields on Dataset and DatasetItem once
@@ -151,8 +152,10 @@ def _build_suite_result(
         pass_threshold = item_policy.get("pass_threshold", 1)
 
         runs_passed = sum(
-            1 for r in item_test_results
-            if not r.score_results or all(
+            1
+            for r in item_test_results
+            if not r.score_results
+            or all(
                 s.value >= 0.5 if isinstance(s.value, (int, float)) else bool(s.value)
                 for s in r.score_results
             )
@@ -313,7 +316,9 @@ class EvaluationSuite:
         item_content = dict(data)
 
         if evaluators:
-            item_content[EVALUATORS_KEY] = [e.to_config().model_dump() for e in evaluators]
+            item_content[EVALUATORS_KEY] = [
+                e.to_config().model_dump() for e in evaluators
+            ]
 
         if execution_policy:
             item_content[EXECUTION_POLICY_KEY] = execution_policy

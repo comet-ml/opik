@@ -2,7 +2,17 @@ import atexit
 import datetime
 import functools
 import logging
-from typing import Any, Dict, List, Optional, TypeVar, Union, Literal, cast, TYPE_CHECKING
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    TypeVar,
+    Union,
+    Literal,
+    cast,
+    TYPE_CHECKING,
+)
 
 if TYPE_CHECKING:
     from opik.evaluation.suite_evaluators import llm_judge

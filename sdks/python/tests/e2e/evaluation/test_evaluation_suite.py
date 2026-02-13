@@ -101,7 +101,10 @@ def test_evaluation_suite__with_suite_level_llm_judge__scores_computed(
         if "France" in question:
             return {"input": item["input"], "output": "The capital of France is Paris."}
         if "Germany" in question:
-            return {"input": item["input"], "output": "I have no idea what the capital is."}
+            return {
+                "input": item["input"],
+                "output": "I have no idea what the capital is.",
+            }
         return {"input": item["input"], "output": "Unknown"}
 
     suite_result = suite.run(
@@ -466,7 +469,9 @@ def test_evaluation_suite__pass_threshold_not_met__item_fails(
     opik.flush_tracker()
 
     # Suite should fail because item doesn't meet pass_threshold
-    assert suite_result.passed is False, "Suite should fail when item doesn't meet threshold"
+    assert suite_result.passed is False, (
+        "Suite should fail when item doesn't meet threshold"
+    )
     assert suite_result.items_passed == 0
     assert suite_result.items_total == 1
 

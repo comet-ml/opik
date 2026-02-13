@@ -11,7 +11,10 @@ class TestLLMJudgeScore:
     def test_score__single_assertion__returns_result(self):
         evaluator = LLMJudge(
             assertions=[
-                {"name": "accurate", "expected_behavior": "Response is factually accurate"}
+                {
+                    "name": "accurate",
+                    "expected_behavior": "Response is factually accurate",
+                }
             ],
             model="gpt-4o",
             track=False,
@@ -29,8 +32,14 @@ class TestLLMJudgeScore:
     def test_score__multiple_assertions__returns_multiple_results(self):
         evaluator = LLMJudge(
             assertions=[
-                {"name": "accurate", "expected_behavior": "Response is factually accurate"},
-                {"name": "helpful", "expected_behavior": "Response is helpful to the user"},
+                {
+                    "name": "accurate",
+                    "expected_behavior": "Response is factually accurate",
+                },
+                {
+                    "name": "helpful",
+                    "expected_behavior": "Response is helpful to the user",
+                },
             ],
             model="gpt-4o",
             track=False,
@@ -67,7 +76,10 @@ class TestLLMJudgeScore:
     def test_score__failing_assertion__returns_false(self):
         evaluator = LLMJudge(
             assertions=[
-                {"name": "accurate", "expected_behavior": "Response is factually accurate"}
+                {
+                    "name": "accurate",
+                    "expected_behavior": "Response is factually accurate",
+                }
             ],
             model="gpt-4o",
             track=False,
@@ -88,7 +100,10 @@ class TestLLMJudgeAsyncScore:
     async def test_ascore__single_assertion__returns_result(self):
         evaluator = LLMJudge(
             assertions=[
-                {"name": "accurate", "expected_behavior": "Response is factually accurate"}
+                {
+                    "name": "accurate",
+                    "expected_behavior": "Response is factually accurate",
+                }
             ],
             model="gpt-4o",
             track=False,
@@ -107,8 +122,14 @@ class TestLLMJudgeAsyncScore:
     async def test_ascore__multiple_assertions__returns_multiple_results(self):
         evaluator = LLMJudge(
             assertions=[
-                {"name": "accurate", "expected_behavior": "Response is factually accurate"},
-                {"name": "concise", "expected_behavior": "Response is concise and to the point"},
+                {
+                    "name": "accurate",
+                    "expected_behavior": "Response is factually accurate",
+                },
+                {
+                    "name": "concise",
+                    "expected_behavior": "Response is concise and to the point",
+                },
             ],
             model="gpt-4o",
             track=False,

@@ -1,5 +1,3 @@
-import pytest
-
 from opik.evaluation.suite_evaluators import LLMJudge
 from opik.evaluation.suite_evaluators.opik_llm_judge_config import (
     LLMJudgeConfig,
@@ -49,7 +47,9 @@ class TestLLMJudgeInit:
 
         assert evaluator.track is True
 
-    def test_assertions_property__returns_copy__modifications_dont_affect_original(self):
+    def test_assertions_property__returns_copy__modifications_dont_affect_original(
+        self,
+    ):
         evaluator = LLMJudge(
             assertions=["Test assertion"],
             track=False,
@@ -78,7 +78,11 @@ class TestLLMJudgeToConfig:
         config_dict = config.model_dump(by_alias=True, exclude_none=True)
 
         assert config_dict["name"] == "llm_judge"
-        assert config_dict["model"] == {"name": "gpt-4o", "temperature": 0.0, "seed": 123}
+        assert config_dict["model"] == {
+            "name": "gpt-4o",
+            "temperature": 0.0,
+            "seed": 123,
+        }
         assert config_dict["variables"] == {"input": "input", "output": "output"}
         # Both name and expected_behavior use the assertion text directly
         assert config_dict["schema"] == [
@@ -138,9 +142,7 @@ class TestLLMJudgeFromConfig:
             messages=[],
         )
 
-        evaluator = LLMJudge.from_config(
-            config, name="restored_evaluator", track=False
-        )
+        evaluator = LLMJudge.from_config(config, name="restored_evaluator", track=False)
 
         assert evaluator.name == "restored_evaluator"
         # from_config extracts expected_behavior as assertion texts

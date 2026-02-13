@@ -25,7 +25,7 @@ def _build_response_format_example(assertions: List[str]) -> str:
         f'        {{"name": "{assertion}", "value": <true or false>, "reason": "<brief explanation>", "confidence": <0.0 to 1.0>}}'
         for assertion in assertions
     ]
-    return "{\n    \"results\": [\n" + ",\n".join(results_items) + "\n    ]\n}"
+    return '{\n    "results": [\n' + ",\n".join(results_items) + "\n    ]\n}"
 
 
 LLM_JUDGE_TEMPLATE = """You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
@@ -60,6 +60,7 @@ def _format_value(value: Any) -> str:
     if isinstance(value, str):
         return value
     import json
+
     return json.dumps(value, indent=2, default=str)
 
 
