@@ -70,8 +70,9 @@ import QueueItemActionsPanel from "@/components/pages/AnnotationQueuePage/QueueI
 import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useTracesList from "@/api/traces/useTracesList";
-import { formatDate, formatDuration } from "@/lib/date";
+import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useAppStore from "@/store/AppStore";
@@ -99,13 +100,13 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     id: "start_time",
     label: "Start time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.start_time),
+    cell: TimeCell as never,
   },
   {
     id: "end_time",
     label: "End time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.end_time),
+    cell: TimeCell as never,
   },
   {
     id: "input",

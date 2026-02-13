@@ -90,8 +90,9 @@ import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableW
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
-import { formatDate, formatDuration } from "@/lib/date";
+import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -148,13 +149,13 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "start_time",
     label: "Start time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.start_time),
+    cell: TimeCell as never,
   },
   {
     id: "end_time",
     label: "End time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.end_time),
+    cell: TimeCell as never,
   },
   {
     id: "input",

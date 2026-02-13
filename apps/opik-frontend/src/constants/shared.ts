@@ -38,7 +38,7 @@ export const CELL_HORIZONTAL_ALIGNMENT_MAP: Record<COLUMN_TYPE, string> = {
   [COLUMN_TYPE.duration]: "justify-end",
   [COLUMN_TYPE.string]: "justify-start",
   [COLUMN_TYPE.list]: "justify-start",
-  [COLUMN_TYPE.time]: "justify-start",
+  [COLUMN_TYPE.time]: "justify-end",
   [COLUMN_TYPE.dictionary]: "justify-start",
   [COLUMN_TYPE.numberDictionary]: "justify-start",
   [COLUMN_TYPE.category]: "justify-start",

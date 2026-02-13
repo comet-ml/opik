@@ -42,7 +42,7 @@ import NoAnnotationQueuesPage from "@/components/pages-shared/annotation-queues/
 import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -90,7 +90,7 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",
@@ -101,7 +101,7 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    cell: TimeCell as never,
     sortable: true,
   },
 ];

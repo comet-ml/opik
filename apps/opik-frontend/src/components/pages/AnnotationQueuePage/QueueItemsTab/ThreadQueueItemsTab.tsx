@@ -60,7 +60,7 @@ import QueueItemActionsPanel from "@/components/pages/AnnotationQueuePage/QueueI
 import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useThreadsList from "@/api/traces/useThreadsList";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import useAppStore from "@/store/AppStore";
@@ -102,13 +102,13 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "created_at",
     label: "Created at",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "last_updated_at",
     label: "Last updated",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.last_updated_at),
+    cell: TimeCell as never,
     sortable: true,
   },
   {
@@ -128,13 +128,13 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "start_time",
     label: "Start time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.start_time),
+    cell: TimeCell as never,
   },
   {
     id: "end_time",
     label: "End time",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.end_time),
+    cell: TimeCell as never,
   },
 ];
 
