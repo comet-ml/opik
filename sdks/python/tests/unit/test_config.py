@@ -75,3 +75,11 @@ def test_save_to_file_without_api_key(mock_expanduser, mock_open_file):
     assert parsed_config["opik"]["url_override"] == "http://test-url"
     assert parsed_config["opik"]["workspace"] == "test_workspace"
     assert "api_key" not in parsed_config["opik"]
+
+
+def test_default_llm_loaded_from_env(monkeypatch):
+    monkeypatch.setenv("OPIK_DEFAULT_LLM", "gpt-4.1-mini")
+
+    config = OpikConfig()
+
+    assert config.default_llm == "gpt-4.1-mini"
