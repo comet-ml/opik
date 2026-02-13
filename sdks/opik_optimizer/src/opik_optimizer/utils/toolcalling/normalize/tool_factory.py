@@ -25,13 +25,13 @@ from __future__ import annotations
 import copy
 import json
 import logging
-import os
 import warnings
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Callable, Mapping
 
 from opik_optimizer.api_objects import chat_prompt
+from . import config_input
 from ..runtime.mcp import (
     ToolCallingDependencyError,
     ToolCallingManifest,
@@ -57,6 +57,11 @@ _SENSITIVE_LOG_KEYS = (
     "key",
     "cookie",
 )
+
+
+def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Convert Cursor-style MCP config into OpenAI-style MCP tool entries."""
+    return config_input.cursor_mcp_config_to_tools(config)
 
 
 @dataclass(frozen=True)
@@ -379,95 +384,6 @@ def _resolve_openai_mcp_tool_entries(
             if not had_tool_name and tool_name not in occupied_names:
                 occupied_names.add(tool_name)
             logger.debug("Registered MCP base-name alias for renamed tool.")
-
-
-def cursor_mcp_config_to_tools(config: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Convert Cursor-style MCP config into OpenAI-style MCP tool entries.
-
-    Cursor style (local):
-        {
-          "mcpServers": {
-            "context7": {
-              "command": "npx",
-              "args": ["-y", "@upstash/context7-mcp", "--api-key", "YOUR_API_KEY"],
-              "env": {"API_KEY": "${env:API_KEY}"}
-            }
-          }
-        }
-
-    Cursor style (remote):
-        {
-          "mcpServers": {
-            "context7": {
-              "url": "https://mcp.context7.com/mcp",
-              "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"}
-            }
-          }
-        }
-
-    OpenAI-style output:
-        {
-          "tools": [
-            {
-              "type": "mcp",
-              "server_label": "context7",
-              "server_url": "https://mcp.context7.com/mcp",
-              "headers": {"CONTEXT7_API_KEY": "YOUR_API_KEY"}
-            }
-          ]
-        }
-    """
-    servers = config.get("mcpServers")
-    if not isinstance(servers, Mapping):
-        raise ValueError("Cursor MCP config must include 'mcpServers'.")
-
-    def _resolve_env_value(value: Any, env_key: str) -> str:
-        """Resolve ${env:VAR} tokens or empty values using environment variables."""
-        if not isinstance(value, str):
-            return str(value)
-        if value.startswith("${env:") and value.endswith("}"):
-            env_name = value[6:-1]
-            return str(os.environ.get(env_name, ""))
-        if value == "":
-            return str(os.environ.get(env_key, ""))
-        return value
-
-    def _resolve_env_mapping(mapping: Mapping[str, Any]) -> dict[str, str]:
-        """Resolve env tokens in a mapping for headers/auth/env values."""
-        resolved: dict[str, str] = {}
-        for key, value in mapping.items():
-            resolved[key] = _resolve_env_value(value, key)
-        return resolved
-
-    tools: list[dict[str, Any]] = []
-    for server_label, server in servers.items():
-        if not isinstance(server, Mapping):
-            raise ValueError(f"MCP server '{server_label}' must be a mapping.")
-        entry: dict[str, Any] = {"type": "mcp", "server_label": server_label}
-        if "url" in server:
-            entry["server_url"] = server.get("url")
-            if "headers" in server:
-                headers = server.get("headers")
-                entry["headers"] = (
-                    _resolve_env_mapping(headers)
-                    if isinstance(headers, Mapping)
-                    else headers
-                )
-            if "auth" in server:
-                auth = server.get("auth")
-                entry["auth"] = (
-                    _resolve_env_mapping(auth) if isinstance(auth, Mapping) else auth
-                )
-        else:
-            entry["command"] = server.get("command")
-            entry["args"] = server.get("args", [])
-            env = server.get("env", {})
-            entry["env"] = (
-                _resolve_env_mapping(env) if isinstance(env, Mapping) else env
-            )
-        tools.append(entry)
-
-    return tools
 
 
 def _normalize_openai_mcp_tool(entry: Mapping[str, Any]) -> dict[str, Any]:

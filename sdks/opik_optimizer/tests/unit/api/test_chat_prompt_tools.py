@@ -1,3 +1,7 @@
+from typing import Any, cast
+
+import pytest
+
 from opik_optimizer.api_objects.chat_prompt import ChatPrompt
 
 
@@ -83,3 +87,31 @@ class TestChatPromptWithTools:
             ],
         )
         assert prompt.tools is not None
+
+    def test_accepts_cursor_mcp_config_as_tools(self) -> None:
+        prompt = ChatPrompt(
+            system="System",
+            tools={
+                "mcpServers": {
+                    "context7": {
+                        "url": "https://mcp.context7.com/mcp",
+                        "headers": {"CONTEXT7_API_KEY": "test-key"},
+                    }
+                }
+            },
+        )
+        assert isinstance(prompt.tools, list)
+        assert prompt.tools[0]["type"] == "mcp"
+        assert prompt.tools[0]["server_label"] == "context7"
+        assert prompt.tools[0]["server_url"] == "https://mcp.context7.com/mcp"
+
+    def test_rejects_invalid_cursor_config(self) -> None:
+        with pytest.raises(ValueError, match="mcpServers"):
+            ChatPrompt(system="System", tools={"wrong_key": {}})
+
+    def test_rejects_non_callable_function_map_values(self) -> None:
+        with pytest.raises(ValueError, match="callable"):
+            ChatPrompt(
+                system="System",
+                function_map={"search": cast(Any, "not-callable")},
+            )

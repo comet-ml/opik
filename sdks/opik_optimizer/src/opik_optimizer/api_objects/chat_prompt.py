@@ -2,7 +2,7 @@ import copy
 import json
 import logging
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 from pydantic import BaseModel, ConfigDict
 from opik import track
@@ -43,8 +43,8 @@ class ChatPrompt:
         system: str | None = None,
         user: str | None = None,
         messages: list[dict[str, Any]] | None = None,
-        tools: list[dict[str, Any]] | None = None,
-        function_map: dict[str, Callable] | None = None,
+        tools: list[dict[str, Any]] | Mapping[str, Any] | None = None,
+        function_map: Mapping[str, Callable[..., Any]] | None = None,
         model: str = "gpt-4o-mini",
         model_parameters: dict[str, Any] | None = None,
         model_kwargs: dict[str, Any] | None = None,
@@ -86,16 +86,20 @@ class ChatPrompt:
         if messages is not None:
             self._validate_messages(messages)
 
-        if tools is not None:
-            self._validate_tools(tools)
+        from ..utils.toolcalling.normalize.config_input import normalize_tools_input
+
+        normalized_tools = normalize_tools_input(tools)
+        if normalized_tools is not None:
+            self._validate_tools(normalized_tools)
 
         self.name = name
         self.system = system
         self.user = user
         self.messages = messages
 
-        self.tools = tools
+        self.tools = normalized_tools
         if function_map is not None:
+            self._validate_function_map(function_map)
             self.function_map = {
                 key: (
                     value
@@ -203,6 +207,19 @@ class ChatPrompt:
                             )
                     continue
                 types.Tool.model_validate(tool)
+
+    @staticmethod
+    def _validate_function_map(function_map: Mapping[str, Callable[..., Any]]) -> None:
+        """Validate user-provided function map keys/values."""
+        if not isinstance(function_map, Mapping):
+            raise ValueError("`function_map` must be a mapping of name -> callable")
+        for name, fn in function_map.items():
+            if not isinstance(name, str) or not name:
+                raise ValueError("`function_map` keys must be non-empty strings")
+            if not callable(fn):
+                raise ValueError(
+                    f"`function_map` value for '{name}' must be callable, got {type(fn).__name__}"
+                )
 
     @staticmethod
     def _update_string_content(content: str, label: str, value: str) -> str:
