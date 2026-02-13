@@ -3,7 +3,7 @@ import { MockInstance } from "vitest";
 import {
   searchTracesWithFilters,
   searchAndWaitForDone,
-  parseFilterString,
+  parseTracesFilterString,
 } from "@/utils/searchHelpers";
 import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 import * as OpikApi from "@/rest_api/api";
@@ -20,10 +20,10 @@ vi.mock("@/utils/stream", async () => {
 });
 
 describe("searchHelpers", () => {
-  describe("parseFilterString", () => {
+  describe("parseTracesFilterString", () => {
     it("should return null for empty or undefined filter strings", () => {
-      expect(parseFilterString(undefined)).toBeNull();
-      expect(parseFilterString("")).toBeNull();
+      expect(parseTracesFilterString(undefined)).toBeNull();
+      expect(parseTracesFilterString("")).toBeNull();
     });
 
     it("should parse filters with different operators", () => {
@@ -51,14 +51,14 @@ describe("searchHelpers", () => {
       ];
 
       testCases.forEach(({ input, expected }) => {
-        const result = parseFilterString(input);
+        const result = parseTracesFilterString(input);
         expect(result).toHaveLength(1);
         expect(result![0]).toMatchObject(expected);
       });
     });
 
     it("should parse filters with keys for metadata and feedback_scores", () => {
-      const metadataResult = parseFilterString('metadata.version = "1.0"');
+      const metadataResult = parseTracesFilterString('metadata.version = "1.0"');
       expect(metadataResult![0]).toMatchObject({
         field: "metadata",
         key: "version",
@@ -66,7 +66,7 @@ describe("searchHelpers", () => {
         value: "1.0",
       });
 
-      const feedbackResult = parseFilterString(
+      const feedbackResult = parseTracesFilterString(
         'feedback_scores."Answer Relevance" < 0.8'
       );
       expect(feedbackResult![0]).toMatchObject({
@@ -78,19 +78,19 @@ describe("searchHelpers", () => {
     });
 
     it("should parse complex queries with multiple conditions", () => {
-      const result = parseFilterString(
-        'name = "test" and duration > 100 and status = "active"'
+      const result = parseTracesFilterString(
+        'name = "test" and duration > 100 and thread_id = "1111"'
       );
 
       expect(result).toHaveLength(3);
       expect(result![0].field).toBe("name");
       expect(result![1].field).toBe("duration");
-      expect(result![2].field).toBe("status");
+      expect(result![2].field).toBe("thread_id");
     });
 
     it("should throw error for invalid OQL syntax", () => {
-      expect(() => parseFilterString("invalid syntax ===")).toThrow();
-      expect(() => parseFilterString('invalid_field = "test"')).toThrow(
+      expect(() => parseTracesFilterString("invalid syntax ===")).toThrow();
+      expect(() => parseTracesFilterString('invalid_field = "test"')).toThrow(
         /is not supported/
       );
     });

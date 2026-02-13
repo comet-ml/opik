@@ -41,7 +41,7 @@ import {
   searchTracesWithFilters,
   searchThreadsWithFilters,
   searchAndWaitForDone,
-  parseFilterString,
+  parseTracesFilterString,
   parseThreadFilterString,
 } from "@/utils/searchHelpers";
 import { SearchTimeoutError } from "@/errors";
@@ -1392,7 +1392,7 @@ export class OpikClient {
     return this.executeSearch<OpikApi.TracePublic, OpikApi.TraceFilterPublic>(
       "traces",
       options ?? {},
-      parseFilterString,
+      parseTracesFilterString,
       searchTracesWithFilters
     );
   };

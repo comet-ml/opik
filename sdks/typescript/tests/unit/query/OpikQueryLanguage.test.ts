@@ -150,9 +150,9 @@ describe("OpikQueryLanguage", () => {
         value: "test",
       });
       expect(parsed![1]).toMatchObject({
-        field: "1111",
+        field: "thread_id",
         operator: "=",
-        value: "active",
+        value: "1111",
       });
     });
 

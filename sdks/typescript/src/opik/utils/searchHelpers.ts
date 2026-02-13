@@ -90,17 +90,16 @@ export async function searchThreadsWithFilters(
 }
 
 /**
- * Generic filter parsing function that works for both traces and threads
+ * Parses a filter string using OpikQueryLanguage and converts to TraceFilterPublic format
  */
-function parseFilterStringGeneric<TFilter, TOperator>(
-  filterString: string | undefined,
-  operatorCast: (op: string) => TOperator
-): TFilter[] | null {
+export function parseTracesFilterString(
+  filterString?: string
+): OpikApi.TraceFilterPublic[] | null {
   if (!filterString) {
     return null;
   }
 
-  const oql = new OpikQueryLanguage(filterString);
+  const oql = OpikQueryLanguage.forTraces(filterString);
   const filterExpressions = oql.getFilterExpressions();
 
   if (!filterExpressions) {
@@ -110,12 +109,12 @@ function parseFilterStringGeneric<TFilter, TOperator>(
   return filterExpressions.map((expr) => {
     const filter: {
       field: string;
-      operator: TOperator;
+      operator: OpikApi.TraceFilterPublicOperator;
       value: string;
       key?: string;
     } = {
       field: expr.field,
-      operator: operatorCast(expr.operator),
+      operator: expr.operator as OpikApi.TraceFilterPublicOperator,
       value: expr.value,
     };
 
@@ -123,20 +122,8 @@ function parseFilterStringGeneric<TFilter, TOperator>(
       filter.key = expr.key;
     }
 
-    return filter as TFilter;
+    return filter as OpikApi.TraceFilterPublic;
   });
-}
-
-/**
- * Parses a filter string using OpikQueryLanguage and converts to TraceFilterPublic format
- */
-export function parseFilterString(
-  filterString?: string
-): OpikApi.TraceFilterPublic[] | null {
-  return parseFilterStringGeneric<OpikApi.TraceFilterPublic, OpikApi.TraceFilterPublicOperator>(
-    filterString,
-    (op) => op as OpikApi.TraceFilterPublicOperator
-  );
 }
 
 /**
@@ -145,8 +132,33 @@ export function parseFilterString(
 export function parseThreadFilterString(
   filterString?: string
 ): OpikApi.TraceThreadFilter[] | null {
-  return parseFilterStringGeneric<OpikApi.TraceThreadFilter, OpikApi.TraceThreadFilterOperator>(
-    filterString,
-    (op) => op as OpikApi.TraceThreadFilterOperator
-  );
+  if (!filterString) {
+    return null;
+  }
+
+  const oql = OpikQueryLanguage.forThreads(filterString);
+  const filterExpressions = oql.getFilterExpressions();
+
+  if (!filterExpressions) {
+    return null;
+  }
+
+  return filterExpressions.map((expr) => {
+    const filter: {
+      field: string;
+      operator: OpikApi.TraceThreadFilterOperator;
+      value: string;
+      key?: string;
+    } = {
+      field: expr.field,
+      operator: expr.operator as OpikApi.TraceThreadFilterOperator,
+      value: expr.value,
+    };
+
+    if (expr.key) {
+      filter.key = expr.key;
+    }
+
+    return filter as OpikApi.TraceThreadFilter;
+  });
 }
