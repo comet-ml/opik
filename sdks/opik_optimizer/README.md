@@ -181,7 +181,7 @@ Tool optimization is currently supported by all optimizers except `FewShotBayesi
   You can restrict edits to `"user"` (or any role) while keeping system/assistant messages fixed.
 * Tool use means the agent can call tools during evaluation (function calling or MCP). This is enabled
   by default when tools are present. You can disable tool use by setting `model_kwargs={"allow_tool_use": False}`.
-* Tool optimization*(`optimize_tools`) updates tool descriptions and parameter descriptions only.
+* Tool optimization (`optimize_tools`) updates tool descriptions and parameter descriptions only.
   Schemas, tool names, and tool lists are unchanged. Set `optimize_tools=True` to optimize all tools or pass
   a dict of `{tool_name: bool}` to choose specific tools.
 
