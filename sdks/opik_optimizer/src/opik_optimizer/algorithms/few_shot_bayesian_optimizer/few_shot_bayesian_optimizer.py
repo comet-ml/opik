@@ -65,6 +65,7 @@ def _preserve_multimodal_message_structure(
             original_content = cast(
                 api_types.Content, original_messages[index]["content"]
             )
+            original_text = api_types.extract_text_from_content(original_content)
             generated_content_raw = generated.get("content", "")
             if isinstance(generated_content_raw, str) or isinstance(
                 generated_content_raw, list
@@ -73,6 +74,8 @@ def _preserve_multimodal_message_structure(
                 generated_text = api_types.extract_text_from_content(generated_content)
             else:
                 generated_text = str(generated_content_raw)
+            if not generated_text.strip():
+                generated_text = original_text
 
             preserved.append(
                 {

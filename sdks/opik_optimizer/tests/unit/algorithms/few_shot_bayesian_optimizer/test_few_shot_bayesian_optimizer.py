@@ -249,6 +249,34 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
 
         assert preserved == generated_messages
 
+    def test_preserve_multimodal_structure_keeps_original_text_when_generated_empty(
+        self,
+    ) -> None:
+        original_messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "Keep me"},
+                    {"type": "image_url", "image_url": {"url": "{image}"}},
+                ],
+            }
+        ]
+        generated_messages = [
+            {
+                "role": "assistant",
+                "content": [{"type": "image_url", "image_url": {"url": "{image}"}}],
+            }
+        ]
+
+        preserved = _preserve_multimodal_message_structure(
+            original_messages=original_messages,
+            generated_messages=generated_messages,
+        )
+
+        assert isinstance(preserved[0]["content"], list)
+        assert preserved[0]["content"][0]["type"] == "text"
+        assert preserved[0]["content"][0]["text"] == "Keep me"
+
     def test_dict_prompt_returns_dict(
         self,
         mock_optimization_context,
