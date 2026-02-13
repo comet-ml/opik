@@ -76,9 +76,9 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             Map<String, Object> data;
             try {
                 data = OnlineScoringEngine.toFullSectionObjectData(trace);
-            } catch (Exception exception) {
+            } catch (IllegalArgumentException exception) {
                 userFacingLogger.error("Error preparing Python request for traceId '{}': \n\n{}",
-                        trace.id(), exception.getMessage());
+                        trace.id(), exception.getMessage(), exception);
                 throw exception;
             }
 

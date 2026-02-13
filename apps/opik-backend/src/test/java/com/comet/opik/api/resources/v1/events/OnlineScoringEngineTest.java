@@ -1689,7 +1689,8 @@ class OnlineScoringEngineTest {
                 arguments("output.answer", OnlineScoringEngine.TraceSection.OUTPUT, "$.answer"),
                 arguments("metadata.model", OnlineScoringEngine.TraceSection.METADATA, "$.model"),
                 arguments("input", OnlineScoringEngine.TraceSection.INPUT, "$"),
-                arguments("input.questions.question1", OnlineScoringEngine.TraceSection.INPUT, "$.questions.question1"));
+                arguments("input.questions.question1", OnlineScoringEngine.TraceSection.INPUT,
+                        "$.questions.question1"));
     }
 
     @ParameterizedTest(name = "parseVariableAsPath(\"{0}\") -> section={1}, jsonPath={2}")

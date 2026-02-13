@@ -82,9 +82,9 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
             Map<String, Object> data;
             try {
                 data = OnlineScoringEngine.toFullSectionObjectData(span);
-            } catch (Exception exception) {
+            } catch (IllegalArgumentException exception) {
                 userFacingLogger.error("Error preparing Python request for spanId '{}': \n\n{}",
-                        span.id(), exception.getMessage());
+                        span.id(), exception.getMessage(), exception);
                 throw exception;
             }
 
