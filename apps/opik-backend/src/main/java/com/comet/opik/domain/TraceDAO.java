@@ -2411,7 +2411,8 @@ class TraceDAOImpl implements TraceDAO {
                 visibility_mode,
                 truncation_threshold,
                 input_slim,
-                output_slim
+                output_slim,
+                ttft
             )
             SELECT
                 t.id,
@@ -2432,7 +2433,8 @@ class TraceDAOImpl implements TraceDAO {
                 t.visibility_mode,
                 :truncation_threshold as truncation_threshold,
                 <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> t.output_slim <endif> as output_slim
+                <if(output)> :output_slim <else> t.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> t.ttft <endif> as ttft
             FROM traces t
             WHERE t.id IN :ids AND t.workspace_id = :workspace_id
             ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
@@ -3620,6 +3622,8 @@ class TraceDAOImpl implements TraceDAO {
         if (StringUtils.isNotBlank(traceUpdate.threadId())) {
             template.add("thread_id", traceUpdate.threadId());
         }
+        Optional.ofNullable(traceUpdate.ttft())
+                .ifPresent(ttft -> template.add("ttft", ttft));
 
         return template;
     }
@@ -3651,6 +3655,8 @@ class TraceDAOImpl implements TraceDAO {
         if (StringUtils.isNotBlank(traceUpdate.threadId())) {
             statement.bind("thread_id", traceUpdate.threadId());
         }
+        Optional.ofNullable(traceUpdate.ttft())
+                .ifPresent(ttft -> statement.bind("ttft", ttft));
     }
 
     private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {
