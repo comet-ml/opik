@@ -18,7 +18,8 @@ To use G-Eval, supply two pieces of information:
 
 The judge responds with an **integer between 0 and 10**. Opik divides that value by 10 so callers receive a score between 0.0 and 1.0. We recommend packaging the full scenario (prompt, context, answer, etc.) inside a single string and passing it via the `output` argument; any other keyword arguments are ignored by the metric interface.
 
-```python
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import GEval
 
 metric = GEval(
@@ -32,7 +33,25 @@ OUTPUT: Paris is the capital of France.
 """
 
 metric.score(output=payload)
-```
+````
+
+```typescript title="TypeScript" language="typescript"
+import { GEval } from "opik/evaluation/metrics";
+
+const metric = new GEval({
+  taskIntroduction: "You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context.",
+  evaluationCriteria: "In the provided text the OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
+});
+
+const payload = `INPUT: What is the capital of France?
+CONTEXT: France is a country in Western Europe. Its capital is Paris, which is known for landmarks like the Eiffel Tower.
+OUTPUT: Paris is the capital of France.
+`;
+
+await metric.score({ output: payload });
+````
+
+</CodeBlocks>
 
 ## How it works
 
@@ -51,7 +70,8 @@ Opik ships opinionated presets for common evaluation needs. Each class inherits 
 ### Compliance Risk Judge
 Flags statements that may be non-factual, non-compliant, or risky (e.g. finance, healthcare, legal). This judge is useful when you need an automated review step before customer-facing responses are sent, or when auditing historical conversations for policy breaches.
 
-```python title="Compliance example"
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import ComplianceRiskJudge
 
 metric = ComplianceRiskJudge(model="gpt-4o-mini")
@@ -62,28 +82,56 @@ OUTPUT: Just reverse it whenever the customer asks.
 
 score = metric.score(output=payload)
 print(score.value, score.reason)
-```
+````
+
+```typescript title="TypeScript" language="typescript"
+import { ComplianceRiskJudge } from "opik/evaluation/metrics";
+
+const metric = new ComplianceRiskJudge({ model: "gpt-4o-mini" });
+
+const payload = `INPUT: Customer asked about wire-transfer reversal policies.
+OUTPUT: Just reverse it whenever the customer asks.
+`;
+
+const score = await metric.score({ output: payload });
+console.log(score.value, score.reason);
+````
+
+</CodeBlocks>
 
 Inspect `score.reason` for granular rationales and route risky cases accordingly. The raw 0–10 judgement is divided by 10 in the returned value.
 
 ### Prompt Uncertainty Judge
 `PromptUncertaintyJudge` estimates how ambiguous a user prompt is before it reaches your model. Run it on raw user messages to prioritise agent hand-offs or to warn users when the request is ill-posed.
 
-```python title="Prompt uncertainty"
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import PromptUncertaintyJudge
 
 prompt = "Summarise the attached 400 page contract in one sentence and guarantee there are no mistakes."
 
 uncertainty = PromptUncertaintyJudge().score(prompt=prompt)
 print(uncertainty.value)
-```
+````
+
+```typescript title="TypeScript" language="typescript"
+import { PromptUncertaintyJudge } from "opik/evaluation/metrics";
+
+const prompt = "Summarise the attached 400 page contract in one sentence and guarantee there are no mistakes.";
+
+const uncertainty = await new PromptUncertaintyJudge().score({ output: prompt });
+console.log(uncertainty.value);
+````
+
+</CodeBlocks>
 
 Use the score to highlight prompts that may confuse downstream models; the judge emits an integer from 0 (best) to 10 (worst) before normalisation.
 
 ### Summarization Consistency Judge
 Checks whether a generated summary is faithful to the source material. This is the right choice when a downstream workflow consumes summaries and you need to enforce factual alignment with the source document.
 
-```python title="Summary faithfulness"
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import SummarizationConsistencyJudge
 
 metric = SummarizationConsistencyJudge(model="gpt-4o")
@@ -94,28 +142,56 @@ SUMMARY: The article confirms new safety protocols but misstates the deadline.
 
 score = metric.score(output=payload)
 print(score.value, score.reason)
-```
+````
+
+```typescript title="TypeScript" language="typescript"
+import { SummarizationConsistencyJudge } from "opik/evaluation/metrics";
+
+const metric = new SummarizationConsistencyJudge({ model: "gpt-4o" });
+
+const payload = `CONTEXT: ...long article text...
+SUMMARY: The article confirms new safety protocols but misstates the deadline.
+`;
+
+const score = await metric.score({ output: payload });
+console.log(score.value, score.reason);
+````
+
+</CodeBlocks>
 
 Pair this metric with alerts or automated rollbacks when the score drops below a threshold; the evaluator still returns raw integers in 0–10 before Opik scales them.
 
 ### Summarization Coherence Judge
 Scores the structure, clarity, and organisation of a summary. Use it when you optimise for human readability or want to catch summaries that are factually right but poorly written.
 
-```python title="Summary coherence"
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import SummarizationCoherenceJudge
 
 metric = SummarizationCoherenceJudge()
 
 score = metric.score(output="""SUMMARY: First... Secondly... Finally...""")
 print(score.value, score.reason)
-```
+````
+
+```typescript title="TypeScript" language="typescript"
+import { SummarizationCoherenceJudge } from "opik/evaluation/metrics";
+
+const metric = new SummarizationCoherenceJudge();
+
+const score = await metric.score({ output: "SUMMARY: First... Secondly... Finally..." });
+console.log(score.value, score.reason);
+````
+
+</CodeBlocks>
 
 High scores correlate with summaries that maintain logical ordering and concise transitions between ideas. A perfect 10 becomes 1.0 after Opik normalisation.
 
 ### Dialogue Helpfulness Judge
 Examines how helpful an assistant reply is in the context of the preceding dialogue. Helpful for agent tuning or support chat routing where you want to surface conversations that require escalation.
 
-```python title="Dialogue helpfulness"
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import DialogueHelpfulnessJudge
 
 transcript = """USER: How do I reset my password?
@@ -126,14 +202,30 @@ ASSISTANT: Please contact support.
 
 score = DialogueHelpfulnessJudge().score(output=transcript)
 print(score.value, score.reason)
-```
+````
+
+```typescript title="TypeScript" language="typescript"
+import { DialogueHelpfulnessJudge } from "opik/evaluation/metrics";
+
+const transcript = `USER: How do I reset my password?
+ASSISTANT: Visit settings and click reset.
+USER: I cannot see that option.
+ASSISTANT: Please contact support.
+`;
+
+const score = await new DialogueHelpfulnessJudge().score({ output: transcript });
+console.log(score.value, score.reason);
+````
+
+</CodeBlocks>
 
 Low scores typically indicate the assistant ignored prior context or refused to offer actionable steps. The normalised value originates from an integer between 0 and 10.
 
 ### QA Relevance Judge
 Determines whether an answer directly addresses the user’s question. Ideal for dataset regression tests where each sample has a clear question/answer pair.
 
-```python title="QA relevance"
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import QARelevanceJudge
 
 metric = QARelevanceJudge()
@@ -144,33 +236,70 @@ ANSWER: The capital of France is Paris.
 
 score = metric.score(output=payload)
 print(score.value, score.reason)
-```
+````
+
+```typescript title="TypeScript" language="typescript"
+import { QARelevanceJudge } from "opik/evaluation/metrics";
+
+const metric = new QARelevanceJudge();
+
+const payload = `QUESTION: What causes rainbows?
+ANSWER: The capital of France is Paris.
+`;
+
+const score = await metric.score({ output: payload });
+console.log(score.value, score.reason);
+````
+
+</CodeBlocks>
 
 Combine with hallucination metrics to distinguish totally off-topic answers from confident but wrong responses; the judge still works on a 0–10 scale internally.
 
 ### Agent Task Completion Judge
 Evaluates if an agent fulfilled its assigned high-level task. Works well for long-running workflows where success is defined by end-state rather than a single response.
 
-```python title="Task completion"
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import AgentTaskCompletionJudge
 
 trace_summary = "Agent gathered quotes, compared options, and booked travel."
 score = AgentTaskCompletionJudge().score(output=trace_summary)
 print(score.value, score.reason)
-```
+````
+
+```typescript title="TypeScript" language="typescript"
+import { AgentTaskCompletionJudge } from "opik/evaluation/metrics";
+
+const traceSummary = "Agent gathered quotes, compared options, and booked travel.";
+const score = await new AgentTaskCompletionJudge().score({ output: traceSummary });
+console.log(score.value, score.reason);
+````
+
+</CodeBlocks>
 
 Use the reason text to inspect which sub-goals the judge believed were satisfied; a raw 0–10 verdict is divided by 10 in the returned value.
 
 ### Agent Tool Correctness Judge
 Assesses whether an agent invoked tools appropriately and interpreted outputs correctly. Especially useful for production agents integrating external APIs.
 
-```python title="Tool correctness"
+<CodeBlocks>
+```python title="Python" language="python"
 from opik.evaluation.metrics import AgentToolCorrectnessJudge
 
 call_trace = "Tool weather_api called with city='Paris' but response ignored."
 score = AgentToolCorrectnessJudge().score(output=call_trace)
 print(score.value, score.reason)
-```
+````
+
+```typescript title="TypeScript" language="typescript"
+import { AgentToolCorrectnessJudge } from "opik/evaluation/metrics";
+
+const callTrace = "Tool weather_api called with city='Paris' but response ignored.";
+const score = await new AgentToolCorrectnessJudge().score({ output: callTrace });
+console.log(score.value, score.reason);
+````
+
+</CodeBlocks>
 
 Lower scores suggest the agent mis-handled tool results or skipped required invocations. Raw values remain in the 0–10 range before normalisation.
 
@@ -217,16 +346,36 @@ Refer to [Conversation-level GEval Metrics](/evaluation/metrics/g_eval_conversat
 
 All GEval-derived metrics expose the `model` parameter so you can switch the underlying LLM. For example:
 
-```python
-from opik.evaluation.metrics import Hallucination
+<CodeBlocks>
+```python title="Python" language="python"
+from opik.evaluation.metrics import ComplianceRiskJudge
 
-metric = Hallucination(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
+metric = ComplianceRiskJudge(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
 
 payload = """INPUT: What is the capital of France?
 OUTPUT: The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.
 """
 
 score = metric.score(output=payload)
-```
+````
 
-This functionality relies on LiteLLM. See the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide for a full list of supported providers and model identifiers.
+```typescript title="TypeScript" language="typescript"
+import { ComplianceRiskJudge } from "opik/evaluation/metrics";
+import { anthropic } from "@ai-sdk/anthropic";
+
+const metric = new ComplianceRiskJudge({ 
+  model: anthropic("claude-3-5-sonnet-latest") 
+});
+
+const payload = `INPUT: What is the capital of France?
+OUTPUT: The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.
+`;
+
+const score = await metric.score({ output: payload });
+````
+
+</CodeBlocks>
+
+In Python, this functionality relies on LiteLLM. See the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide for a full list of supported providers and model identifiers.
+
+In TypeScript, the SDK uses the [Vercel AI SDK](https://sdk.vercel.ai/providers) for model integration. See the [Models documentation](/reference/typescript-sdk/evaluation/models) for configuration details.
