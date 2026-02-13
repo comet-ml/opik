@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import rich.text
+from ..api_objects import types as api_types
 
 
 def _extract_url_from_part(part: dict[str, Any], field_name: str) -> str:
@@ -170,3 +171,51 @@ def content_to_string(content: str | list[dict[str, Any]]) -> str:
             parts.append(_format_url_for_string(url, "video_url", "data:video"))
 
     return "\n".join(parts) if parts else "(empty content)"
+
+
+def preserve_multimodal_message_structure(
+    *,
+    original_messages: list[dict[str, Any]],
+    generated_messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Preserve original multimodal content-part layout while applying generated text.
+
+    For aligned message indices where role matches and original content is multimodal
+    (list of parts), this keeps non-text parts from the original message and replaces
+    only the text part with generated text. If generated text is empty, original text
+    is retained.
+    """
+    preserved: list[dict[str, Any]] = []
+    for index, generated in enumerate(generated_messages):
+        if (
+            index < len(original_messages)
+            and original_messages[index].get("role") == generated.get("role")
+            and isinstance(original_messages[index].get("content"), list)
+        ):
+            original_content = original_messages[index]["content"]
+            original_text = api_types.extract_text_from_content(original_content)
+            generated_content_raw = generated.get("content", "")
+            if isinstance(generated_content_raw, str) or isinstance(
+                generated_content_raw, list
+            ):
+                generated_text = api_types.extract_text_from_content(
+                    generated_content_raw
+                )
+            else:
+                generated_text = str(generated_content_raw)
+            if not generated_text.strip():
+                generated_text = original_text
+
+            preserved.append(
+                {
+                    "role": generated.get("role"),
+                    "content": api_types.rebuild_content_with_new_text(
+                        original_content, generated_text
+                    ),
+                }
+            )
+            continue
+
+        preserved.append(generated)
+    return preserved

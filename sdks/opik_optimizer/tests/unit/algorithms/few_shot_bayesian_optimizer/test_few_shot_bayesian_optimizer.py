@@ -14,9 +14,7 @@ from opik_optimizer import (
 )
 from opik_optimizer.api_objects import types as api_types
 from opik_optimizer.agents.optimizable_agent import OptimizableAgent
-from opik_optimizer.algorithms.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer import (
-    _preserve_multimodal_message_structure,
-)
+from opik_optimizer.utils.multimodal import preserve_multimodal_message_structure
 from tests.unit.test_helpers import (
     make_mock_dataset,
     make_simple_metric,
@@ -207,7 +205,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             {"role": "assistant", "content": "Updated assistant"},
         ]
 
-        preserved = _preserve_multimodal_message_structure(
+        preserved = preserve_multimodal_message_structure(
             original_messages=original_messages,
             generated_messages=generated_messages,
         )
@@ -242,7 +240,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             }
         ]
 
-        preserved = _preserve_multimodal_message_structure(
+        preserved = preserve_multimodal_message_structure(
             original_messages=original_messages,
             generated_messages=generated_messages,
         )
@@ -268,7 +266,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             }
         ]
 
-        preserved = _preserve_multimodal_message_structure(
+        preserved = preserve_multimodal_message_structure(
             original_messages=original_messages,
             generated_messages=generated_messages,
         )
