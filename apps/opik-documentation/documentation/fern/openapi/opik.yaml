@@ -9316,6 +9316,10 @@ components:
         project_id:
           type: string
           format: uuid
+          readOnly: true
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         input:
           $ref: "#/components/schemas/JsonListString"
         output:
@@ -9847,6 +9851,7 @@ components:
         project_id:
           type: string
           format: uuid
+          readOnly: true
         input:
           $ref: "#/components/schemas/JsonListString_Compare"
         output:
@@ -10292,6 +10297,7 @@ components:
         project_id:
           type: string
           format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
