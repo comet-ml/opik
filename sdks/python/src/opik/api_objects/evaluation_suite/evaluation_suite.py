@@ -45,14 +45,10 @@ def _validate_evaluators(evaluators: List[Any], context: str) -> None:
             )
 
 
-# Reserved keys for evaluation suite metadata stored in dataset item content.
-# These will become proper backend fields on Dataset and DatasetItem once
-# OPIK-4222/4223 are implemented. At that point:
-# - Dataset will have `evaluators` and `execution_policy` columns
-# - DatasetItem will have `evaluators` and `execution_policy` columns
-# For now, we store item-level configs in the item content under these keys.
-EVALUATORS_KEY = "__evaluators__"
-EXECUTION_POLICY_KEY = "__execution_policy__"
+# Reserved key for evaluation suite metadata stored in dataset item content.
+# This will become proper backend fields on Dataset and DatasetItem once
+# OPIK-4222/4223 are implemented. Contains: {"evaluators": [...], "execution_policy": {...}}
+EVALUATION_CONFIG_KEY = "__evaluation_config__"
 
 
 @dataclasses.dataclass
@@ -148,7 +144,8 @@ def _build_suite_result(
 
     for item_id, item_test_results in results_by_item.items():
         item_content = item_contents.get(item_id, {})
-        item_policy = item_content.get(EXECUTION_POLICY_KEY, {})
+        eval_config = item_content.get(EVALUATION_CONFIG_KEY, {})
+        item_policy = eval_config.get("execution_policy", {})
         pass_threshold = item_policy.get("pass_threshold", 1)
 
         runs_passed = sum(
@@ -315,13 +312,14 @@ class EvaluationSuite:
 
         item_content = dict(data)
 
+        # Store evaluation config (evaluators and execution_policy) under a single key
+        eval_config: Dict[str, Any] = {}
         if evaluators:
-            item_content[EVALUATORS_KEY] = [
-                e.to_config().model_dump() for e in evaluators
-            ]
-
+            eval_config["evaluators"] = [e.to_config().model_dump() for e in evaluators]
         if execution_policy:
-            item_content[EXECUTION_POLICY_KEY] = execution_policy
+            eval_config["execution_policy"] = execution_policy
+        if eval_config:
+            item_content[EVALUATION_CONFIG_KEY] = eval_config
 
         ds_item = dataset_item.DatasetItem(id=item_id, **item_content)
         self._dataset.__internal_api__insert_items_as_dataclasses__([ds_item])

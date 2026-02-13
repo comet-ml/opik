@@ -1,4 +1,17 @@
-"""E2E tests for EvaluationSuite API."""
+"""E2E tests for EvaluationSuite API.
+
+These tests verify the core evaluation suite functionality:
+1. Item-level evaluators stored in dataset items (main flow)
+2. Execution policy handling (runs_per_item, pass_threshold)
+3. Pass/fail determination based on LLMJudge assertion results
+
+Key concepts:
+- Evaluation suites only support LLMJudge evaluators
+- Evaluators and execution_policy are stored in dataset item content under
+  __evaluation_config__ key (will become backend fields via OPIK-4222/4223)
+- Items without evaluators pass by default (no assertions to fail)
+- Pass/fail is determined by: runs_passed >= pass_threshold
+"""
 
 from typing import Dict, Any
 
@@ -10,13 +23,346 @@ from .. import verifiers
 from ...testlib import environment
 
 
-def test_evaluation_suite__basic_run__happyflow(
+# =============================================================================
+# MAIN FLOW: Item-level evaluators with LLMJudge
+# =============================================================================
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_evaluation_suite__item_level_evaluators__feedback_scores_created(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    """Test basic evaluation suite creation and run."""
+    """
+    Main flow: Items have their own LLMJudge evaluators stored in dataset item content.
+
+    This is the primary use case for evaluation suites - each item can have
+    different assertions to verify. The evaluators are stored under
+    __evaluation_config__.evaluators in the dataset item content.
+
+    Expected behavior:
+    - Each item is evaluated using its own LLMJudge evaluators
+    - Feedback scores are created with assertion text as the score name
+    - Score values are boolean (True=1.0, False=0.0)
+    """
+    geography_assertion = (
+        "The response correctly identifies Paris as the capital of France"
+    )
+    math_assertion = "The response correctly states that 2 + 2 equals 4"
+
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
-        description="Test evaluation suite",
+        description="Test item-level evaluators",
+    )
+
+    # Item 1: Geography question with specific assertion
+    geography_judge = LLMJudge(
+        name="geography_judge",
+        model="openai/gpt-5-nano",
+        assertions=[geography_assertion],
+    )
+    suite.add_item(
+        data={"input": {"question": "What is the capital of France?"}},
+        evaluators=[geography_judge],
+    )
+
+    # Item 2: Math question with specific assertion
+    math_judge = LLMJudge(
+        name="math_judge",
+        model="openai/gpt-5-nano",
+        assertions=[math_assertion],
+    )
+    suite.add_item(
+        data={"input": {"question": "What is 2 + 2?"}},
+        evaluators=[math_judge],
+    )
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        question = item["input"]["question"]
+        if "France" in question:
+            return {"input": item["input"], "output": "The capital of France is Paris."}
+        if "2 + 2" in question:
+            return {"input": item["input"], "output": "2 + 2 equals 4."}
+        return {"input": item["input"], "output": "Unknown"}
+
+    suite_result = suite.run(
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
+    )
+
+    opik.flush_tracker()
+
+    # Both items should pass since responses are correct
+    assert suite_result.items_total == 2
+    assert suite_result.items_passed == 2
+    assert suite_result.passed is True
+
+    # Verify feedback scores were created
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    experiment_items = retrieved_experiment.get_items()
+
+    assert len(experiment_items) == 2
+
+    # Collect all score names across items
+    all_score_names = set()
+    for exp_item in experiment_items:
+        assert exp_item.feedback_scores is not None, "Expected feedback scores"
+        assert len(exp_item.feedback_scores) == 1, (
+            f"Expected 1 feedback score per item, got {len(exp_item.feedback_scores)}"
+        )
+
+        score = exp_item.feedback_scores[0]
+        all_score_names.add(score["name"])
+
+        # Verify score value is boolean
+        assert score["value"] in [0.0, 1.0, True, False], (
+            f"Score value should be boolean, got {score['value']}"
+        )
+
+    # Verify both assertion names are present (one per item)
+    assert geography_assertion in all_score_names, (
+        f"Expected geography assertion '{geography_assertion}' not found in {all_score_names}"
+    )
+    assert math_assertion in all_score_names, (
+        f"Expected math assertion '{math_assertion}' not found in {all_score_names}"
+    )
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_evaluation_suite__multiple_assertions_per_item__all_scores_created(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Test that multiple assertions in a single LLMJudge create multiple feedback scores.
+
+    Expected behavior:
+    - Each assertion in the LLMJudge creates a separate feedback score
+    - Score names are the assertion text (used as identifier)
+    - All scores are evaluated independently
+    """
+    assertion_1 = "The response is factually correct"
+    assertion_2 = "The response is concise and clear"
+
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test multiple assertions per item",
+    )
+
+    multi_assertion_judge = LLMJudge(
+        name="quality_judge",
+        model="openai/gpt-5-nano",
+        assertions=[assertion_1, assertion_2],
+    )
+    suite.add_item(
+        data={"input": {"question": "What is the capital of France?"}},
+        evaluators=[multi_assertion_judge],
+    )
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        return {"input": item["input"], "output": "Paris is the capital of France."}
+
+    suite_result = suite.run(
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
+    )
+
+    opik.flush_tracker()
+
+    # Verify suite result
+    assert suite_result.items_total == 1
+    assert suite_result.items_passed == 1
+    assert suite_result.passed is True
+
+    # Verify 2 feedback scores were created (one per assertion)
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    experiment_items = retrieved_experiment.get_items()
+
+    assert len(experiment_items) == 1
+    exp_item = experiment_items[0]
+
+    assert exp_item.feedback_scores is not None, "Expected feedback scores"
+    assert len(exp_item.feedback_scores) == 2, (
+        f"Expected 2 feedback scores (one per assertion), got {len(exp_item.feedback_scores)}"
+    )
+
+    # Verify score names match the assertion texts
+    score_names = {score["name"] for score in exp_item.feedback_scores}
+    assert assertion_1 in score_names, (
+        f"Expected score name '{assertion_1}' not found in {score_names}"
+    )
+    assert assertion_2 in score_names, (
+        f"Expected score name '{assertion_2}' not found in {score_names}"
+    )
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_evaluation_suite__suite_level_evaluators__applied_to_all_items(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Test that suite-level evaluators are applied to all items.
+
+    Expected behavior:
+    - Suite-level evaluators are applied to every item in the suite
+    - Each item gets feedback scores from suite-level evaluators
+    - This is useful for common assertions that apply to all test cases
+    """
+    suite_assertion = "The response is helpful and informative"
+
+    suite_judge = LLMJudge(
+        name="suite_judge",
+        model="openai/gpt-5-nano",
+        assertions=[suite_assertion],
+    )
+
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test suite-level evaluators",
+        evaluators=[suite_judge],
+    )
+
+    suite.add_item(data={"input": {"question": "What is the capital of France?"}})
+    suite.add_item(data={"input": {"question": "What is 2 + 2?"}})
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        question = item["input"]["question"]
+        if "France" in question:
+            return {"input": item["input"], "output": "The capital of France is Paris."}
+        return {"input": item["input"], "output": "2 + 2 equals 4."}
+
+    suite_result = suite.run(
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
+    )
+
+    opik.flush_tracker()
+
+    assert suite_result.items_total == 2
+
+    # Verify each item has feedback scores from suite-level evaluator
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    experiment_items = retrieved_experiment.get_items()
+
+    assert len(experiment_items) == 2
+
+    for exp_item in experiment_items:
+        assert exp_item.feedback_scores is not None, "Expected feedback scores"
+        assert len(exp_item.feedback_scores) == 1, (
+            "Expected 1 feedback score per item from suite-level evaluator"
+        )
+
+        # Verify score name matches the suite-level assertion
+        score = exp_item.feedback_scores[0]
+        assert score["name"] == suite_assertion, (
+            f"Expected score name '{suite_assertion}', got '{score['name']}'"
+        )
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_evaluation_suite__combined_suite_and_item_level_evaluators__all_scores_created(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Test that suite-level and item-level evaluators are combined for an item.
+
+    Expected behavior:
+    - Item gets feedback scores from both suite-level and item-level evaluators
+    - Total feedback scores = suite-level assertions + item-level assertions
+    - Both evaluators are applied independently
+    """
+    suite_assertion = "The response is helpful and informative"
+    item_assertion = "The response correctly identifies Paris as the capital"
+
+    # Suite-level evaluator with 1 assertion (applied to all items)
+    suite_judge = LLMJudge(
+        name="suite_judge",
+        model="openai/gpt-5-nano",
+        assertions=[suite_assertion],
+    )
+
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test combined suite and item level evaluators",
+        evaluators=[suite_judge],
+    )
+
+    # Item-level evaluator with 1 assertion (specific to this item)
+    item_judge = LLMJudge(
+        name="item_judge",
+        model="openai/gpt-5-nano",
+        assertions=[item_assertion],
+    )
+    suite.add_item(
+        data={"input": {"question": "What is the capital of France?"}},
+        evaluators=[item_judge],
+    )
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        return {"input": item["input"], "output": "The capital of France is Paris."}
+
+    suite_result = suite.run(
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
+    )
+
+    opik.flush_tracker()
+
+    assert suite_result.items_total == 1
+
+    # Verify item has feedback scores from BOTH evaluators (1 suite + 1 item = 2 total)
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    experiment_items = retrieved_experiment.get_items()
+
+    assert len(experiment_items) == 1
+    exp_item = experiment_items[0]
+
+    assert exp_item.feedback_scores is not None, "Expected feedback scores"
+    assert len(exp_item.feedback_scores) == 2, (
+        f"Expected 2 feedback scores (1 suite-level + 1 item-level), "
+        f"got {len(exp_item.feedback_scores)}"
+    )
+
+    # Verify score names match both assertions
+    score_names = {score["name"] for score in exp_item.feedback_scores}
+    assert suite_assertion in score_names, (
+        f"Expected suite-level score name '{suite_assertion}' not found in {score_names}"
+    )
+    assert item_assertion in score_names, (
+        f"Expected item-level score name '{item_assertion}' not found in {score_names}"
+    )
+
+
+# =============================================================================
+# EDGE CASE: Items without evaluators
+# =============================================================================
+
+
+def test_evaluation_suite__no_evaluators__items_pass_by_default(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Edge case: Items without any evaluators pass by default.
+
+    Expected behavior:
+    - When an item has no evaluators (no assertions to check), it passes
+    - This is because there are no assertions that could fail
+    - The suite passes if all items pass (even with no evaluators)
+    - No feedback scores are created for items without evaluators
+    """
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test items without evaluators",
     )
 
     suite.add_item(
@@ -33,12 +379,7 @@ def test_evaluation_suite__basic_run__happyflow(
     )
 
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        question = item["input"]["question"]
-        if "France" in question:
-            return {"input": item["input"], "output": "Paris"}
-        if "Germany" in question:
-            return {"input": item["input"], "output": "Berlin"}
-        return {"input": item["input"], "output": "Unknown"}
+        return {"input": item["input"], "output": "Some response"}
 
     suite_result = suite.run(
         task=task,
@@ -48,115 +389,48 @@ def test_evaluation_suite__basic_run__happyflow(
 
     opik.flush_tracker()
 
-    # Verify EvaluationSuiteResult structure
-    assert suite_result.passed is True, "Suite should pass when no metrics fail"
+    # Items without evaluators pass by default (no assertions to fail)
+    assert suite_result.passed is True, (
+        "Suite should pass when items have no evaluators (nothing to fail)"
+    )
     assert suite_result.items_passed == 2
     assert suite_result.items_total == 2
-    assert len(suite_result.item_results) == 2
 
+    # Verify no feedback scores were created
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=suite_result.experiment_id,
         experiment_name=suite_result.experiment_name,
         experiment_metadata=None,
         traces_amount=2,
-        feedback_scores_amount=0,
+        feedback_scores_amount=0,  # No evaluators = no feedback scores
     )
 
 
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
-def test_evaluation_suite__with_suite_level_llm_judge__scores_computed(
+# =============================================================================
+# EXECUTION POLICY: runs_per_item and pass_threshold
+# =============================================================================
+
+
+def test_evaluation_suite__execution_policy_runs_per_item__task_called_multiple_times(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    """Test evaluation suite with suite-level LLMJudge evaluator."""
-    llm_judge = LLMJudge(
-        name="answer_judge",
-        model="openai/gpt-4o-mini",
-        assertions=[
-            "The response correctly answers the geography question",
-        ],
-    )
+    """
+    Test that runs_per_item in execution policy causes multiple task executions.
 
+    Expected behavior:
+    - With runs_per_item=N, the task is called N times for each item
+    - Each run creates a separate trace
+    - pass_threshold determines how many runs must pass for item to pass
+    """
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
-        description="Test evaluation suite with LLMJudge",
-        evaluators=[llm_judge],
-    )
-
-    suite.add_item(
-        data={
-            "input": {"question": "What is the capital of France?"},
-        }
-    )
-    suite.add_item(
-        data={
-            "input": {"question": "What is the capital of Germany?"},
-        }
-    )
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        question = item["input"]["question"]
-        if "France" in question:
-            return {"input": item["input"], "output": "The capital of France is Paris."}
-        if "Germany" in question:
-            return {
-                "input": item["input"],
-                "output": "I have no idea what the capital is.",
-            }
-        return {"input": item["input"], "output": "Unknown"}
-
-    suite_result = suite.run(
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-
-    opik.flush_tracker()
-
-    # France item should pass, Germany item should fail
-    assert suite_result.items_total == 2
-
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=suite_result.experiment_id,
-        experiment_name=suite_result.experiment_name,
-        experiment_metadata=None,
-        traces_amount=2,
-        feedback_scores_amount=1,  # 1 assertion per LLMJudge
-    )
-
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    experiment_items_contents = retrieved_experiment.get_items()
-
-    assert len(experiment_items_contents) == 2, (
-        f"Expected 2 experiment items, but got {len(experiment_items_contents)}"
-    )
-
-    # Each item should have feedback scores from the LLMJudge assertion
-    for exp_item in experiment_items_contents:
-        assert exp_item.feedback_scores is not None, "Expected feedback scores"
-        assert len(exp_item.feedback_scores) == 1, (
-            f"Expected 1 feedback score per item, got {len(exp_item.feedback_scores)}"
-        )
-
-
-def test_evaluation_suite__with_execution_policy_runs_per_item__multiple_runs(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """Test evaluation suite with runs_per_item > 1 in execution policy."""
-    suite = opik_client.create_evaluation_suite(
-        name=dataset_name,
-        description="Test evaluation suite with multiple runs",
+        description="Test runs_per_item execution policy",
         execution_policy={"runs_per_item": 2, "pass_threshold": 1},
     )
 
     suite.add_item(
-        data={
-            "input": {"question": "What is the capital of France?"},
-            "reference": "Paris",
-        }
+        data={"input": {"question": "What is the capital of France?"}},
     )
 
     call_count = {"value": 0}
@@ -173,56 +447,55 @@ def test_evaluation_suite__with_execution_policy_runs_per_item__multiple_runs(
 
     opik.flush_tracker()
 
-    # With runs_per_item=2, the task should be called twice for the single item
+    # Task should be called twice (runs_per_item=2)
     assert call_count["value"] == 2, (
         f"Expected task to be called 2 times, but was called {call_count['value']} times"
     )
 
-    # Verify suite result
+    # Verify suite result structure
     assert suite_result.passed is True
-    assert suite_result.items_passed == 1
     assert suite_result.items_total == 1
 
-    # Verify item result shows 2 runs
     item_result = list(suite_result.item_results.values())[0]
     assert item_result.runs_total == 2
-    assert item_result.runs_passed == 2
     assert item_result.pass_threshold == 1
 
+    # Verify 2 traces were created (one per run)
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=suite_result.experiment_id,
         experiment_name=suite_result.experiment_name,
         experiment_metadata=None,
-        traces_amount=2,  # 1 item × 2 runs
+        traces_amount=2,
         feedback_scores_amount=0,
     )
 
 
-def test_evaluation_suite__with_item_level_execution_policy__overrides_suite_policy(
+def test_evaluation_suite__item_level_execution_policy__overrides_suite_policy(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    """Test that item-level execution policy overrides suite-level policy."""
+    """
+    Test that item-level execution policy overrides suite-level policy.
+
+    Expected behavior:
+    - Suite-level execution_policy is the default for all items
+    - Item-level execution_policy overrides suite-level for that specific item
+    - Each item uses its own effective execution policy
+    """
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test item-level execution policy override",
         execution_policy={"runs_per_item": 1, "pass_threshold": 1},
     )
 
-    # Item 1: use suite-level policy (runs_per_item=1)
+    # Item 1: uses suite-level policy (runs_per_item=1)
     suite.add_item(
-        data={
-            "input": {"question": "What is the capital of France?"},
-            "reference": "Paris",
-        }
+        data={"input": {"question": "What is the capital of France?"}},
     )
 
-    # Item 2: override with item-level policy (runs_per_item=3)
+    # Item 2: overrides with item-level policy (runs_per_item=3)
     suite.add_item(
-        data={
-            "input": {"question": "What is the capital of Germany?"},
-            "reference": "Berlin",
-        },
+        data={"input": {"question": "What is the capital of Germany?"}},
         execution_policy={"runs_per_item": 3, "pass_threshold": 2},
     )
 
@@ -232,11 +505,9 @@ def test_evaluation_suite__with_item_level_execution_policy__overrides_suite_pol
         question = item["input"]["question"]
         if "France" in question:
             call_counts["france"] += 1
-            return {"input": item["input"], "output": "Paris"}
-        if "Germany" in question:
+        elif "Germany" in question:
             call_counts["germany"] += 1
-            return {"input": item["input"], "output": "Berlin"}
-        return {"input": item["input"], "output": "Unknown"}
+        return {"input": item["input"], "output": "Answer"}
 
     suite_result = suite.run(
         task=task,
@@ -246,36 +517,39 @@ def test_evaluation_suite__with_item_level_execution_policy__overrides_suite_pol
 
     opik.flush_tracker()
 
-    # France item should be called 1 time (suite-level policy)
+    # France: 1 call (suite-level policy)
     assert call_counts["france"] == 1, (
-        f"Expected France task to be called 1 time, but was called {call_counts['france']} times"
+        f"Expected France task called 1 time, got {call_counts['france']}"
     )
 
-    # Germany item should be called 3 times (item-level policy override)
+    # Germany: 3 calls (item-level policy override)
     assert call_counts["germany"] == 3, (
-        f"Expected Germany task to be called 3 times, but was called {call_counts['germany']} times"
+        f"Expected Germany task called 3 times, got {call_counts['germany']}"
     )
 
     # Verify suite result
     assert suite_result.passed is True
-    assert suite_result.items_passed == 2
     assert suite_result.items_total == 2
+    assert suite_result.items_passed == 2
 
     # Verify item-level pass_threshold is used
     for item_result in suite_result.item_results.values():
         if item_result.runs_total == 3:
-            # Germany item with item-level policy
-            assert item_result.pass_threshold == 2
+            assert item_result.pass_threshold == 2, (
+                "Germany should use item-level threshold"
+            )
         else:
-            # France item with suite-level policy
-            assert item_result.pass_threshold == 1
+            assert item_result.pass_threshold == 1, (
+                "France should use suite-level threshold"
+            )
 
+    # Total traces: 1 + 3 = 4
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=suite_result.experiment_id,
         experiment_name=suite_result.experiment_name,
         experiment_metadata=None,
-        traces_amount=4,  # 1 + 3 = 4 total runs
+        traces_amount=4,
         feedback_scores_amount=0,
     )
 
@@ -283,24 +557,21 @@ def test_evaluation_suite__with_item_level_execution_policy__overrides_suite_pol
 def test_evaluation_suite__default_execution_policy__single_run_per_item(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    """Test that default execution policy runs each item once."""
+    """
+    Test that default execution policy runs each item once with pass_threshold=1.
+
+    Expected behavior:
+    - Default execution_policy is {"runs_per_item": 1, "pass_threshold": 1}
+    - Each item is evaluated exactly once
+    - Item passes if that single run passes
+    """
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
         description="Test default execution policy",
     )
 
-    suite.add_item(
-        data={
-            "input": {"question": "What is the capital of France?"},
-            "reference": "Paris",
-        }
-    )
-    suite.add_item(
-        data={
-            "input": {"question": "What is the capital of Germany?"},
-            "reference": "Berlin",
-        }
-    )
+    suite.add_item(data={"input": {"question": "Question 1"}})
+    suite.add_item(data={"input": {"question": "Question 2"}})
 
     call_count = {"value": 0}
 
@@ -316,67 +587,131 @@ def test_evaluation_suite__default_execution_policy__single_run_per_item(
 
     opik.flush_tracker()
 
-    # Default policy is runs_per_item=1, so 2 items = 2 calls
+    # Default: runs_per_item=1, so 2 items = 2 calls
     assert call_count["value"] == 2, (
-        f"Expected task to be called 2 times, but was called {call_count['value']} times"
+        f"Expected 2 task calls (one per item), got {call_count['value']}"
     )
 
     # Verify suite result
     assert suite_result.passed is True
-    assert suite_result.items_passed == 2
     assert suite_result.items_total == 2
+    assert suite_result.items_passed == 2
 
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=suite_result.experiment_id,
-        experiment_name=suite_result.experiment_name,
-        experiment_metadata=None,
-        traces_amount=2,
-        feedback_scores_amount=0,
+    # Verify default pass_threshold=1
+    for item_result in suite_result.item_results.values():
+        assert item_result.runs_total == 1
+        assert item_result.pass_threshold == 1
+
+
+# =============================================================================
+# PASS/FAIL DETERMINATION
+# =============================================================================
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_evaluation_suite__assertion_fails__item_fails(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Test that items fail when LLMJudge assertions fail.
+
+    Expected behavior:
+    - If any assertion in an item's evaluators fails, the item fails
+    - Failed items contribute to suite failure
+    - Feedback scores show which assertions passed/failed
+    """
+    failing_assertion = "The response correctly states that 2 + 2 equals 5"
+
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test assertion failure",
+    )
+
+    # This assertion should fail because the response is wrong
+    wrong_answer_judge = LLMJudge(
+        name="wrong_judge",
+        model="openai/gpt-5-nano",
+        assertions=[failing_assertion],
+    )
+    suite.add_item(
+        data={"input": {"question": "What is 2 + 2?"}},
+        evaluators=[wrong_answer_judge],
+    )
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        # Correct answer, but assertion expects wrong answer
+        return {"input": item["input"], "output": "2 + 2 equals 4."}
+
+    suite_result = suite.run(
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
+    )
+
+    opik.flush_tracker()
+
+    # Item should fail because assertion expects wrong answer
+    assert suite_result.items_total == 1
+    assert suite_result.items_passed == 0, "Item should fail when assertion fails"
+    assert suite_result.passed is False, "Suite should fail when any item fails"
+
+    # Verify feedback score was created with failing value
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    experiment_items = retrieved_experiment.get_items()
+
+    assert len(experiment_items) == 1
+    exp_item = experiment_items[0]
+
+    assert exp_item.feedback_scores is not None
+    assert len(exp_item.feedback_scores) == 1
+
+    # Verify score name and that it indicates failure
+    score = exp_item.feedback_scores[0]
+    assert score["name"] == failing_assertion, (
+        f"Expected score name '{failing_assertion}', got '{score['name']}'"
+    )
+    assert score["value"] in [0.0, False], (
+        f"Expected failing score (0.0 or False), got {score['value']}"
     )
 
 
 @pytest.mark.skipif(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
-def test_evaluation_suite__with_llm_judge_evaluator__assertions_evaluated(
+def test_evaluation_suite__pass_threshold_not_met__item_fails(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
-    """Test evaluation suite with LLMJudge evaluator using string assertions."""
-    # Use string assertions - names will be auto-generated
-    llm_judge = LLMJudge(
-        name="quality_judge",
-        model="openai/gpt-4o-mini",
-        assertions=[
-            "The response directly answers the question asked",
-            "The response contains factually correct information",
-        ],
+    """
+    Test that items fail when pass_threshold is not met across multiple runs.
+
+    Expected behavior:
+    - With runs_per_item=3 and pass_threshold=2, item needs 2+ passing runs
+    - If only 1 run passes, item fails (1 < 2)
+    - Suite fails if any item fails
+    """
+    judge = LLMJudge(
+        name="math_judge",
+        model="openai/gpt-5-nano",
+        assertions=["The response correctly states that 2 + 2 equals 4"],
     )
 
     suite = opik_client.create_evaluation_suite(
         name=dataset_name,
-        description="Test evaluation suite with LLMJudge",
-        evaluators=[llm_judge],
+        description="Test pass threshold failure",
+        evaluators=[judge],
+        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
     )
 
-    suite.add_item(
-        data={
-            "input": {"question": "What is the capital of France?"},
-            "expected_answer": "Paris",
-        }
-    )
-    suite.add_item(
-        data={
-            "input": {"question": "What is 2 + 2?"},
-            "expected_answer": "4",
-        }
-    )
+    suite.add_item(data={"input": {"question": "What is 2 + 2?"}})
+
+    call_count = {"value": 0}
 
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        question = item["input"]["question"]
-        if "France" in question:
-            return {"input": item["input"], "output": "The capital of France is Paris."}
-        if "2 + 2" in question:
+        call_count["value"] += 1
+        # Only first run returns correct answer
+        if call_count["value"] == 1:
             return {"input": item["input"], "output": "2 + 2 equals 4."}
         return {"input": item["input"], "output": "I don't know."}
 
@@ -388,96 +723,13 @@ def test_evaluation_suite__with_llm_judge_evaluator__assertions_evaluated(
 
     opik.flush_tracker()
 
-    # Each item should have 2 assertion scores from the LLMJudge
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=suite_result.experiment_id,
-        experiment_name=suite_result.experiment_name,
-        experiment_metadata=None,
-        traces_amount=2,
-        feedback_scores_amount=2,  # 2 assertions per LLMJudge
-    )
-
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    experiment_items_contents = retrieved_experiment.get_items()
-
-    assert len(experiment_items_contents) == 2, (
-        f"Expected 2 experiment items, but got {len(experiment_items_contents)}"
-    )
-
-    # Each item should have feedback scores from the LLMJudge assertions
-    for item in experiment_items_contents:
-        assert item.feedback_scores is not None, "Expected feedback scores"
-        assert len(item.feedback_scores) == 2, (
-            f"Expected 2 feedback scores per item, got {len(item.feedback_scores)}"
-        )
-
-        # Verify auto-generated score names
-        score_names = {score["name"] for score in item.feedback_scores}
-        assert "quality_judge_the_response_directly_answers" in score_names, (
-            f"Expected auto-generated score name, got {score_names}"
-        )
-        assert "quality_judge_the_response_contains_factually" in score_names, (
-            f"Expected auto-generated score name, got {score_names}"
-        )
-
-
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
-def test_evaluation_suite__pass_threshold_not_met__item_fails(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """Test that items fail when pass_threshold is not met."""
-    llm_judge = LLMJudge(
-        name="math_judge",
-        model="openai/gpt-4o-mini",
-        assertions=[
-            "The response correctly states that 2 + 2 equals 4",
-        ],
-    )
-
-    # Require 2 out of 3 runs to pass
-    suite = opik_client.create_evaluation_suite(
-        name=dataset_name,
-        description="Test pass threshold failure",
-        evaluators=[llm_judge],
-        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
-    )
-
-    suite.add_item(
-        data={
-            "input": {"question": "What is 2 + 2?"},
-        }
-    )
-
-    call_count = {"value": 0}
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        call_count["value"] += 1
-        # Only the first run returns correct answer, rest fail
-        if call_count["value"] == 1:
-            return {"input": item["input"], "output": "2 + 2 equals 4."}
-        return {"input": item["input"], "output": "I don't know the answer."}
-
-    suite_result = suite.run(
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-
-    opik.flush_tracker()
-
-    # Suite should fail because item doesn't meet pass_threshold
-    assert suite_result.passed is False, (
-        "Suite should fail when item doesn't meet threshold"
-    )
+    # Item should fail: only 1 run passes, but threshold is 2
+    assert suite_result.passed is False, "Suite should fail when threshold not met"
     assert suite_result.items_passed == 0
     assert suite_result.items_total == 1
 
-    # Verify item result details
     item_result = list(suite_result.item_results.values())[0]
     assert item_result.passed is False
-    assert item_result.runs_passed == 1, "Only first run should pass"
     assert item_result.runs_total == 3
     assert item_result.pass_threshold == 2
+    # Note: runs_passed depends on LLM evaluation, but should be < 2

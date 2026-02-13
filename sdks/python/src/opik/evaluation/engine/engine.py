@@ -24,11 +24,10 @@ EVALUATION_TASK_NAME = "evaluation_task"
 
 EVALUATION_STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the default streaming limit to improve the UX and not wait too long for the first items to be evaluated
 
-# Reserved keys for evaluation suite metadata stored in dataset item content.
-# These will become proper backend fields on Dataset and DatasetItem once
-# OPIK-4222/4223 are implemented.
-EVALUATORS_KEY = "__evaluators__"
-EXECUTION_POLICY_KEY = "__execution_policy__"
+# Reserved key for evaluation suite metadata stored in dataset item content.
+# This will become proper backend fields on Dataset and DatasetItem once
+# OPIK-4222/4223 are implemented. Contains: {"evaluators": [...], "execution_policy": {...}}
+EVALUATION_CONFIG_KEY = "__evaluation_config__"
 
 
 class ExecutionPolicy(TypedDict, total=False):
@@ -67,7 +66,8 @@ def get_item_execution_policy(
     Returns:
         Merged execution policy for this item.
     """
-    item_policy = dataset_item_content.get(EXECUTION_POLICY_KEY)
+    eval_config = dataset_item_content.get(EVALUATION_CONFIG_KEY, {})
+    item_policy = eval_config.get("execution_policy")
     if item_policy is None:
         return default_policy
 
@@ -87,7 +87,7 @@ def _extract_item_evaluators(
     """
     Extract evaluators from dataset item content.
 
-    If the item has evaluator configs stored under the __evaluators__ key,
+    If the item has evaluator configs stored under __evaluation_config__.evaluators,
     instantiate LLMJudge evaluators from those configs.
 
     Args:
@@ -96,7 +96,8 @@ def _extract_item_evaluators(
     Returns:
         List of evaluator instances extracted from the item content.
     """
-    evaluator_configs = dataset_item_content.get(EVALUATORS_KEY)
+    eval_config = dataset_item_content.get(EVALUATION_CONFIG_KEY, {})
+    evaluator_configs = eval_config.get("evaluators")
     if not evaluator_configs:
         return []
 
@@ -253,8 +254,12 @@ class EvaluationEngine:
             task = opik.track(name=name)(task)  # type: ignore[attr-defined,has-type]
 
         item_content = item.get_content(include_id=True)
+        # Filter out evaluation config from task input (user shouldn't see it)
+        task_input = {
+            k: v for k, v in item_content.items() if k != EVALUATION_CONFIG_KEY
+        }
         trace_data = trace.TraceData(
-            input=item_content,
+            input=task_input,
             name=EVALUATION_TASK_NAME,
             created_by="evaluation",
             project_name=self._project_name,
@@ -266,9 +271,9 @@ class EvaluationEngine:
             trace_data=trace_data,
             client=self._client,
         ):
-            LOGGER.debug("Task started, input: %s", item_content)
+            LOGGER.debug("Task started, input: %s", task_input)
             try:
-                task_output_ = task(item_content)
+                task_output_ = task(task_input)
             except Exception as exception:
                 if exception_analyzer.is_llm_provider_rate_limit_error(exception):
                     LOGGER.error(
@@ -345,9 +350,16 @@ class EvaluationEngine:
                 item_runs_cache.append(item_runs)
                 max_runs_per_item = max(max_runs_per_item, item_runs)
 
-                # Store resolved execution policy in item for result building
-                if item.model_extra is not None:
-                    item.model_extra[EXECUTION_POLICY_KEY] = item_policy
+                # Store resolved execution policy only when using evaluation suites
+                # (i.e., when default_execution_policy is explicitly provided)
+                if default_execution_policy is not None:
+                    if item.model_extra is None:
+                        item.model_extra = {}
+                    if EVALUATION_CONFIG_KEY not in item.model_extra:
+                        item.model_extra[EVALUATION_CONFIG_KEY] = {}
+                    item.model_extra[EVALUATION_CONFIG_KEY]["execution_policy"] = (
+                        item_policy
+                    )
 
                 # Trial 0: always run (trial_id=0 < item_runs for any item_runs >= 1)
                 evaluation_task = functools.partial(
