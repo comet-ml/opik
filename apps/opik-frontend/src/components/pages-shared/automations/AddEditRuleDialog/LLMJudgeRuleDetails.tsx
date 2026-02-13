@@ -42,6 +42,7 @@ import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import useTracesList from "@/api/traces/useTracesList";
+import useSpansList from "@/api/traces/useSpansList";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -114,9 +115,10 @@ const getValuePreview = (value: unknown, maxLength: number = 50): string => {
 };
 
 // Component to display trace structure
-const TraceStructureHelper: React.FC<{ projectId: string }> = ({
-  projectId,
-}) => {
+const TraceStructureHelper: React.FC<{
+  projectId: string;
+  isSpanScope?: boolean;
+}> = ({ projectId, isSpanScope = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedTraceIndex, setSelectedTraceIndex] = useState(0);
   const [testPath, setTestPath] = useState("");
@@ -125,7 +127,9 @@ const TraceStructureHelper: React.FC<{ projectId: string }> = ({
     error: string | null;
   } | null>(null);
 
-  const { data: tracesData, isLoading } = useTracesList(
+  const fetchEnabled = Boolean(projectId) && isOpen;
+
+  const { data: tracesData, isLoading: isTracesLoading } = useTracesList(
     {
       projectId,
       page: 1,
@@ -133,12 +137,35 @@ const TraceStructureHelper: React.FC<{ projectId: string }> = ({
       truncate: true,
     },
     {
-      enabled: Boolean(projectId) && isOpen,
+      enabled: fetchEnabled && !isSpanScope,
     },
   );
 
-  const traces = tracesData?.content || [];
-  const selectedTrace = traces[selectedTraceIndex];
+  const { data: spansData, isLoading: isSpansLoading } = useSpansList(
+    {
+      projectId,
+      page: 1,
+      size: 5,
+      truncate: true,
+    },
+    {
+      enabled: fetchEnabled && isSpanScope,
+    },
+  );
+
+  const isLoading = isSpanScope ? isSpansLoading : isTracesLoading;
+  const items = isSpanScope
+    ? spansData?.content || []
+    : tracesData?.content || [];
+  const itemLabel = isSpanScope ? "span" : "trace";
+
+  useEffect(() => {
+    setSelectedTraceIndex((prev) =>
+      items.length === 0 ? 0 : Math.min(prev, items.length - 1),
+    );
+  }, [projectId, items.length]);
+
+  const selectedTrace = items[selectedTraceIndex];
 
   const inputPaths = useMemo(
     () =>
@@ -278,26 +305,28 @@ const TraceStructureHelper: React.FC<{ projectId: string }> = ({
         ) : (
           <ChevronRight className="size-4" />
         )}
-        View trace structure from project
+        View {itemLabel} structure from project
       </button>
 
       {isOpen && (
         <div className="mt-3">
           {!projectId ? (
             <p className="text-sm text-muted-foreground">
-              Select a project to view trace structure.
+              Select a project to view {itemLabel} structure.
             </p>
           ) : isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading traces...</p>
-          ) : traces.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No traces found in this project.
+              Loading {itemLabel}s...
+            </p>
+          ) : items.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No {itemLabel}s found in this project.
             </p>
           ) : (
             <div className="space-y-3">
-              {traces.length > 1 && (
+              {items.length > 1 && (
                 <div className="flex items-center gap-2">
-                  <Label className="text-xs">Sample trace:</Label>
+                  <Label className="text-xs">Sample {itemLabel}:</Label>
                   <select
                     className="text-xs border rounded px-2 py-1 bg-background"
                     value={selectedTraceIndex}
@@ -305,9 +334,9 @@ const TraceStructureHelper: React.FC<{ projectId: string }> = ({
                       setSelectedTraceIndex(Number(e.target.value))
                     }
                   >
-                    {traces.map((trace, idx) => (
-                      <option key={trace.id} value={idx}>
-                        {trace.name || trace.id.substring(0, 8)}
+                    {items.map((item, idx) => (
+                      <option key={item.id} value={idx}>
+                        {item.name || item.id.substring(0, 8)}
                       </option>
                     ))}
                   </select>
@@ -344,7 +373,7 @@ const TraceStructureHelper: React.FC<{ projectId: string }> = ({
                 {testResult && (
                   <div className="mt-2">
                     {testResult.error ? (
-                      <div className="text-xs text-red-500 bg-red-50 dark:bg-red-950 rounded p-2">
+                      <div className="text-xs text-destructive bg-destructive/10 rounded p-2">
                         Error: {testResult.error}
                       </div>
                     ) : (
@@ -373,22 +402,25 @@ const TraceStructureHelper: React.FC<{ projectId: string }> = ({
                   </div>
                   {inputPaths.length > 0 ? (
                     <div className="pl-2 space-y-0.5">
-                      {inputPaths.map((path) => (
-                        <button
-                          type="button"
-                          key={path}
-                          className="flex gap-2 w-full text-left hover:bg-muted/50 rounded px-1 -mx-1"
-                          onClick={() => {
-                            setTestPath(path);
-                            setTestResult(getValueAtPath(path));
-                          }}
-                        >
-                          <span className="text-blue-600">{path}</span>
-                          <span className="text-muted-foreground truncate">
-                            → {getValuePreview(getValueAtPath(path).value)}
-                          </span>
-                        </button>
-                      ))}
+                      {inputPaths.map((path) => {
+                        const result = getValueAtPath(path);
+                        return (
+                          <button
+                            type="button"
+                            key={path}
+                            className="flex gap-2 w-full text-left hover:bg-muted/50 rounded px-1 -mx-1"
+                            onClick={() => {
+                              setTestPath(path);
+                              setTestResult(result);
+                            }}
+                          >
+                            <span className="text-blue-600">{path}</span>
+                            <span className="text-muted-foreground truncate">
+                              → {getValuePreview(result.value)}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="pl-2 text-muted-foreground">
@@ -404,22 +436,25 @@ const TraceStructureHelper: React.FC<{ projectId: string }> = ({
                   </div>
                   {outputPaths.length > 0 ? (
                     <div className="pl-2 space-y-0.5">
-                      {outputPaths.map((path) => (
-                        <button
-                          type="button"
-                          key={path}
-                          className="flex gap-2 w-full text-left hover:bg-muted/50 rounded px-1 -mx-1"
-                          onClick={() => {
-                            setTestPath(path);
-                            setTestResult(getValueAtPath(path));
-                          }}
-                        >
-                          <span className="text-green-600">{path}</span>
-                          <span className="text-muted-foreground truncate">
-                            → {getValuePreview(getValueAtPath(path).value)}
-                          </span>
-                        </button>
-                      ))}
+                      {outputPaths.map((path) => {
+                        const result = getValueAtPath(path);
+                        return (
+                          <button
+                            type="button"
+                            key={path}
+                            className="flex gap-2 w-full text-left hover:bg-muted/50 rounded px-1 -mx-1"
+                            onClick={() => {
+                              setTestPath(path);
+                              setTestResult(result);
+                            }}
+                          >
+                            <span className="text-green-600">{path}</span>
+                            <span className="text-muted-foreground truncate">
+                              → {getValuePreview(result.value)}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="pl-2 text-muted-foreground">
@@ -435,22 +470,25 @@ const TraceStructureHelper: React.FC<{ projectId: string }> = ({
                   </div>
                   {metadataPaths.length > 0 ? (
                     <div className="pl-2 space-y-0.5">
-                      {metadataPaths.map((path) => (
-                        <button
-                          type="button"
-                          key={path}
-                          className="flex gap-2 w-full text-left hover:bg-muted/50 rounded px-1 -mx-1"
-                          onClick={() => {
-                            setTestPath(path);
-                            setTestResult(getValueAtPath(path));
-                          }}
-                        >
-                          <span className="text-purple-600">{path}</span>
-                          <span className="text-muted-foreground truncate">
-                            → {getValuePreview(getValueAtPath(path).value)}
-                          </span>
-                        </button>
-                      ))}
+                      {metadataPaths.map((path) => {
+                        const result = getValueAtPath(path);
+                        return (
+                          <button
+                            type="button"
+                            key={path}
+                            className="flex gap-2 w-full text-left hover:bg-muted/50 rounded px-1 -mx-1"
+                            onClick={() => {
+                              setTestPath(path);
+                              setTestResult(result);
+                            }}
+                          >
+                            <span className="text-purple-600">{path}</span>
+                            <span className="text-muted-foreground truncate">
+                              → {getValuePreview(result.value)}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="pl-2 text-muted-foreground">
@@ -785,7 +823,10 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           />
         )}
         {!isThreadScope && hideVariables && (
-          <TraceStructureHelper projectId={form.watch("projectIds")[0] || ""} />
+          <TraceStructureHelper
+            projectId={form.watch("projectIds")[0] || ""}
+            isSpanScope={isSpanScope}
+          />
         )}
       </div>
       <div className="flex flex-col gap-2">
