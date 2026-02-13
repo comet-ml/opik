@@ -20,7 +20,7 @@ import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceC
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { getJSONPaths } from "@/lib/utils";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { parseScoreColumnId } from "@/lib/feedback-scores";
 import { DEFAULT_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
 
@@ -83,7 +83,7 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
     id: "created_at",
     label: "Created",
     type: COLUMN_TYPE.time,
-    accessorFn: (row) => formatDate(row.created_at),
+    cell: TimeCell as never,
   },
   {
     id: "created_by",

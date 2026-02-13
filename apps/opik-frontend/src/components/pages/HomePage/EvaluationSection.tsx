@@ -22,7 +22,7 @@ import {
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
 import { convertColumnDataToColumn } from "@/lib/table";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { transformExperimentScores } from "@/lib/feedback-scores";
 
@@ -76,7 +76,7 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       id: "created_at",
       label: "Created",
       type: COLUMN_TYPE.time,
-      accessorFn: (row) => formatDate(row.created_at),
+      cell: TimeCell as never,
       sortable: true,
     },
   ],

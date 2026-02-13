@@ -22,7 +22,7 @@ import {
 import InviteUsersPopover from "./InviteUsersPopover";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
-import { formatDate } from "@/lib/date";
+import TimeCell from "@/components/shared/DataTableCells/TimeCell";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import {
   getPermissionByType,
@@ -60,10 +60,10 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
     label: "Joined",
     type: COLUMN_TYPE.time,
     accessorFn: (row) => {
-      if (!row.joinedAt) return "-";
-      const dateString = new Date(row.joinedAt).toISOString();
-      return formatDate(dateString);
+      if (!row.joinedAt) return "";
+      return new Date(row.joinedAt).toISOString();
     },
+    cell: TimeCell as never,
   },
   {
     id: WARNING_COLUMN_ID,

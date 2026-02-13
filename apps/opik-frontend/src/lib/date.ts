@@ -1,6 +1,5 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
-import relativeTime from "dayjs/plugin/relativeTime";
 import duration from "dayjs/plugin/duration";
 import customParseFormat from "dayjs/plugin/customParseFormat";
 import isString from "lodash/isString";
@@ -10,7 +9,6 @@ import isNull from "lodash/isNull";
 import { getDateFormatFromLocalStorage } from "@/hooks/useDateFormat";
 
 dayjs.extend(utc);
-dayjs.extend(relativeTime);
 dayjs.extend(duration);
 dayjs.extend(customParseFormat);
 
@@ -47,15 +45,24 @@ export const formatDate = (
   return "";
 };
 
-export const isStringValidFormattedDate = (value: string) => {
-  return isString(value) && FORMATTED_DATE_STRING_REGEXP.test(value);
-};
+export const getTimeFromNow = (value: string): string => {
+  if (!isString(value) || !dayjs(value).isValid()) return "";
 
-export const getTimeFromNow = (date: string) => {
-  if (isString(date) && dayjs(date).isValid()) {
-    return dayjs().to(dayjs(date));
-  }
-  return "";
+  const now = dayjs();
+  const date = dayjs(value);
+  const diffMinutes = now.diff(date, "minute");
+  const diffHours = now.diff(date, "hour");
+
+  if (diffMinutes < 0) return date.format("MMM D, YYYY");
+  if (diffMinutes < 1) return "just now";
+  if (diffMinutes === 1) return "a minute ago";
+  if (diffMinutes < 60) return `${diffMinutes} minutes ago`;
+  if (diffHours === 1) return "an hour ago";
+  if (diffHours < 24) return `${diffHours} hours ago`;
+
+  return date.year() === now.year()
+    ? date.format("MMM D")
+    : date.format("MMM D, YYYY");
 };
 
 export const makeStartOfMinute = (value: string) => {
