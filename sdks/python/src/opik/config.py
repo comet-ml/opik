@@ -111,9 +111,6 @@ class OpikConfig(pydantic_settings.BaseSettings):
     workspace: str = OPIK_WORKSPACE_DEFAULT_NAME
     """Opik workspace"""
 
-    default_llm: str = "gpt-5-nano"
-    """Default LLM model name used by evaluation model factories when model is not provided."""
-
     api_key: Optional[str] = None
     """Opik API key. This is not required if you are running against open source Opik installation"""
 

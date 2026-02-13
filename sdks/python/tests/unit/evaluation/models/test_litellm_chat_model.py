@@ -104,15 +104,6 @@ def test_models_factory_default_model(monkeypatch):
     assert default_instance.model_name == "gpt-5-nano"
 
 
-def test_models_factory_default_model_from_env(monkeypatch):
-    _install_litellm_stub(monkeypatch)
-    monkeypatch.setenv("OPIK_DEFAULT_LLM", "gpt-4o-mini")
-
-    default_instance = models_factory.get(None)
-
-    assert default_instance.model_name == "gpt-4o-mini"
-
-
 def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
     stub = _install_litellm_stub(monkeypatch)
 
