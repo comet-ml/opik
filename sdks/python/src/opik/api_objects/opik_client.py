@@ -16,7 +16,8 @@ from typing import (
 
 if TYPE_CHECKING:
     from opik.evaluation.suite_evaluators import llm_judge
-    from opik.api_objects import evaluation_suite
+    from opik.api_objects.evaluation_suite import EvaluationSuite
+    from opik.api_objects.evaluation_suite import types as evaluation_suite_types
 
 import httpx
 
@@ -960,8 +961,8 @@ class Opik:
         name: str,
         description: Optional[str] = None,
         evaluators: Optional[List["llm_judge.LLMJudge"]] = None,
-        execution_policy: Optional["evaluation_suite.ExecutionPolicy"] = None,
-    ) -> "evaluation_suite.EvaluationSuite":
+        execution_policy: Optional["evaluation_suite_types.ExecutionPolicy"] = None,
+    ) -> "EvaluationSuite":
         """
         Create a new evaluation suite for regression testing.
 
@@ -1000,52 +1001,24 @@ class Opik:
             >>> results = suite.run(task=my_llm_function)
         """
         from . import evaluation_suite
+        from .evaluation_suite import validators
+
+        if evaluators:
+            validators.validate_evaluators(evaluators, "suite-level evaluators")
 
         suite_dataset = self.create_dataset(
             name=name,
             description=description,
         )
+        suite_dataset.set_evaluators(evaluators or [])
+        suite_dataset.set_execution_policy(
+            execution_policy or validators.DEFAULT_EXECUTION_POLICY.copy()
+        )
 
         return evaluation_suite.EvaluationSuite(
             name=name,
             description=description,
-            evaluators=evaluators or [],
-            execution_policy=execution_policy,
             dataset_=suite_dataset,
-        )
-
-    def get_evaluation_suite(
-        self,
-        name: str,
-    ) -> "evaluation_suite.EvaluationSuite":
-        """
-        Get an existing evaluation suite by name.
-
-        The suite-level evaluators and execution policy are loaded from the
-        dataset's special configuration item.
-
-        Args:
-            name: The name of the evaluation suite (same as the underlying dataset name).
-
-        Returns:
-            EvaluationSuite: The evaluation suite object with loaded configuration.
-
-        Raises:
-            opik.exceptions.DatasetNotFoundError: If no dataset with the given name exists.
-
-        Example:
-            >>> suite = client.get_evaluation_suite("Refund Policy Tests")
-            >>> result = suite.run(task=my_llm_function)
-        """
-        from . import evaluation_suite
-
-        suite_dataset = self.get_dataset(name=name)
-
-        return evaluation_suite.EvaluationSuite(
-            name=name,
-            description=suite_dataset.description,
-            dataset_=suite_dataset,
-            _load_from_dataset=True,
         )
 
     def create_experiment(

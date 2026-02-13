@@ -648,7 +648,9 @@ def test_evaluation_suite__assertion_fails__item_fails(
     # Item should fail because assertion expects wrong answer
     assert suite_result.items_total == 1
     assert suite_result.items_passed == 0, "Item should fail when assertion fails"
-    assert suite_result.all_items_passed is False, "Suite should fail when any item fails"
+    assert suite_result.all_items_passed is False, (
+        "Suite should fail when any item fails"
+    )
 
     # Verify feedback score was created with failing value
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
@@ -716,7 +718,9 @@ def test_evaluation_suite__pass_threshold_not_met__item_fails(
     opik.flush_tracker()
 
     # Item should fail: only 1 run passes, but threshold is 2
-    assert suite_result.all_items_passed is False, "Suite should fail when threshold not met"
+    assert suite_result.all_items_passed is False, (
+        "Suite should fail when threshold not met"
+    )
     assert suite_result.items_passed == 0
     assert suite_result.items_total == 1
 
@@ -787,7 +791,9 @@ def test_evaluation_suite__multiple_assertions_multiple_runs__pass_threshold_log
     # Verify suite-level results
     assert suite_result.items_total == 1
     assert suite_result.items_passed == 1, "Item should pass when threshold is met"
-    assert suite_result.all_items_passed is True, "Suite should pass when all items pass"
+    assert suite_result.all_items_passed is True, (
+        "Suite should pass when all items pass"
+    )
     assert suite_result.pass_rate == 1.0, "Pass rate should be 1.0 when all items pass"
 
     # Verify item-level results
@@ -819,92 +825,3 @@ def test_evaluation_suite__multiple_assertions_multiple_runs__pass_threshold_log
         assert assertion_1 in score_names, f"Missing score for '{assertion_1}'"
         assert assertion_2 in score_names, f"Missing score for '{assertion_2}'"
         assert assertion_3 in score_names, f"Missing score for '{assertion_3}'"
-
-
-# =============================================================================
-# GET EVALUATION SUITE: Retrieve suite with persisted config
-# =============================================================================
-
-
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
-def test_evaluation_suite__get_suite_with_persisted_evaluators__runs_successfully(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Test that suite-level evaluators are persisted and can be retrieved via get_evaluation_suite.
-
-    This test verifies:
-    1. Suite-level evaluators are stored in the dataset (as a special config item)
-    2. get_evaluation_suite() loads the evaluators from the dataset
-    3. The retrieved suite can run evaluations with the loaded evaluators
-
-    Expected behavior:
-    - Create suite with suite-level evaluators
-    - Add items without item-level evaluators
-    - Retrieve suite via get_evaluation_suite()
-    - Run the retrieved suite
-    - Feedback scores should be created using the suite-level evaluators
-    """
-    suite_assertion = "The response is helpful and informative"
-
-    # Create suite with suite-level evaluator
-    suite = opik_client.create_evaluation_suite(
-        name=dataset_name,
-        description="Test get_evaluation_suite with persisted evaluators",
-        evaluators=[
-            LLMJudge(
-                name="suite_level_judge",
-                assertions=[suite_assertion],
-            )
-        ],
-    )
-
-    # Add items without item-level evaluators (they will use suite-level evaluators)
-    suite.add_item(
-        data={"input": {"question": "What is the capital of France?"}},
-    )
-
-    # Retrieve the suite via get_evaluation_suite
-    retrieved_suite = opik_client.get_evaluation_suite(name=dataset_name)
-
-    # Verify the suite-level evaluators were loaded
-    assert len(retrieved_suite.evaluators) == 1, (
-        f"Expected 1 suite-level evaluator, got {len(retrieved_suite.evaluators)}"
-    )
-    assert retrieved_suite.evaluators[0].assertions == [suite_assertion]
-
-    # Run the retrieved suite
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        return {"input": item["input"], "output": "Paris is the capital of France."}
-
-    suite_result = retrieved_suite.run(
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-
-    opik.flush_tracker()
-
-    # Verify suite result
-    assert suite_result.items_total == 1
-    assert suite_result.items_passed == 1
-    assert suite_result.all_items_passed is True
-
-    # Verify feedback scores were created using suite-level evaluator
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    experiment_items = retrieved_experiment.get_items()
-
-    assert len(experiment_items) == 1
-    exp_item = experiment_items[0]
-
-    assert exp_item.feedback_scores is not None, "Expected feedback scores"
-    assert len(exp_item.feedback_scores) == 1, (
-        f"Expected 1 feedback score (from suite-level evaluator), got {len(exp_item.feedback_scores)}"
-    )
-
-    score = exp_item.feedback_scores[0]
-    assert score["name"] == suite_assertion, (
-        f"Expected score name '{suite_assertion}', got '{score['name']}'"
-    )

@@ -6,6 +6,7 @@ from unittest import mock
 from opik.api_objects.evaluation_suite import evaluation_suite
 from opik.api_objects.evaluation_suite import suite_result_constructor
 from opik.api_objects.evaluation_suite import types as suite_types
+from opik.api_objects.evaluation_suite import validators
 from opik.evaluation.engine import types as engine_types
 from opik.evaluation import suite_evaluators
 from opik.evaluation import metrics
@@ -15,57 +16,59 @@ from opik.evaluation import test_case
 from opik.evaluation.metrics import score_result
 
 
+def _create_mock_dataset():
+    """Helper to create a mock dataset."""
+    mock_dataset = mock.MagicMock(
+        spec=[
+            "__internal_api__insert_items_as_dataclasses__",
+            "__internal_api__stream_items_as_dataclasses__",
+        ]
+    )
+    mock_dataset.__internal_api__stream_items_as_dataclasses__ = mock.MagicMock(
+        return_value=iter([])
+    )
+    mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.MagicMock()
+    return mock_dataset
+
+
 class TestEvaluatorValidation:
-    def test_init__with_non_llm_judge_evaluator__raises_type_error(self):
-        """Test that non-LLMJudge evaluators raise TypeError on suite creation."""
-        mock_dataset = mock.MagicMock()
+    def test_validate_evaluators__with_non_llm_judge__raises_type_error(self):
+        """Test that non-LLMJudge evaluators raise TypeError."""
         equals_metric = metrics.Equals()
 
         with pytest.raises(TypeError) as exc_info:
-            evaluation_suite.EvaluationSuite(
-                name="test_suite",
-                dataset_=mock_dataset,
-                evaluators=[equals_metric],
-            )
+            validators.validate_evaluators([equals_metric], "suite-level evaluators")
 
         assert "Evaluation suites only support LLMJudge evaluators" in str(
             exc_info.value
         )
         assert "Equals" in str(exc_info.value)
 
-    def test_init__with_llm_judge_evaluator__succeeds(self):
-        """Test that LLMJudge evaluators are accepted."""
-        mock_dataset = mock.MagicMock()
-        mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.MagicMock()
+    def test_validate_evaluators__with_llm_judge__succeeds(self):
+        """Test that LLMJudge evaluators pass validation."""
         llm_judge = suite_evaluators.LLMJudge(
             assertions=["Response is helpful"],
             track=False,
         )
 
-        suite = evaluation_suite.EvaluationSuite(
-            name="test_suite",
-            dataset_=mock_dataset,
-            evaluators=[llm_judge],
-        )
+        # Should not raise
+        validators.validate_evaluators([llm_judge], "suite-level evaluators")
 
-        assert suite.evaluators == [llm_judge]
-
-    def test_init__with_no_evaluators__succeeds(self):
-        """Test that suite can be created without evaluators."""
-        mock_dataset = mock.MagicMock()
-        mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.MagicMock()
+    def test_init__stores_dataset_reference(self):
+        """Test that suite stores the dataset reference."""
+        mock_dataset = _create_mock_dataset()
 
         suite = evaluation_suite.EvaluationSuite(
             name="test_suite",
             dataset_=mock_dataset,
         )
 
-        assert suite.evaluators == []
+        assert suite.dataset is mock_dataset
+        assert suite.name == "test_suite"
 
     def test_add_item__with_non_llm_judge_evaluator__raises_type_error(self):
         """Test that non-LLMJudge evaluators raise TypeError on add_item."""
-        mock_dataset = mock.MagicMock()
-        mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.MagicMock()
+        mock_dataset = _create_mock_dataset()
         suite = evaluation_suite.EvaluationSuite(
             name="test_suite",
             dataset_=mock_dataset,
@@ -86,8 +89,7 @@ class TestEvaluatorValidation:
 
     def test_add_item__with_llm_judge_evaluator__succeeds(self):
         """Test that LLMJudge evaluators are accepted in add_item."""
-        mock_dataset = mock.MagicMock()
-        mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.MagicMock()
+        mock_dataset = _create_mock_dataset()
         suite = evaluation_suite.EvaluationSuite(
             name="test_suite",
             dataset_=mock_dataset,
@@ -106,8 +108,7 @@ class TestEvaluatorValidation:
 
     def test_add_item__with_no_evaluators__succeeds(self):
         """Test that items can be added without evaluators."""
-        mock_dataset = mock.MagicMock()
-        mock_dataset.__internal_api__insert_items_as_dataclasses__ = mock.MagicMock()
+        mock_dataset = _create_mock_dataset()
         suite = evaluation_suite.EvaluationSuite(
             name="test_suite",
             dataset_=mock_dataset,
@@ -116,17 +117,14 @@ class TestEvaluatorValidation:
         # Should not raise
         suite.add_item(data={"input": "test"})
 
-    def test_init__with_mixed_evaluators__raises_type_error(self):
+    def test_validate_evaluators__with_mixed_evaluators__raises_type_error(self):
         """Test that mixing LLMJudge with other evaluators raises TypeError."""
-        mock_dataset = mock.MagicMock()
         llm_judge = suite_evaluators.LLMJudge(assertions=["Test"], track=False)
         equals_metric = metrics.Equals()
 
         with pytest.raises(TypeError) as exc_info:
-            evaluation_suite.EvaluationSuite(
-                name="test_suite",
-                dataset_=mock_dataset,
-                evaluators=[llm_judge, equals_metric],
+            validators.validate_evaluators(
+                [llm_judge, equals_metric], "suite-level evaluators"
             )
 
         assert "Evaluation suites only support LLMJudge evaluators" in str(

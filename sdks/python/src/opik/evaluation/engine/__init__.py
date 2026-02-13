@@ -1,3 +1,4 @@
-from .engine import EvaluationEngine, ExecutionPolicy, DEFAULT_EXECUTION_POLICY
+from .engine import EvaluationEngine
+from opik.api_objects.evaluation_suite.types import ExecutionPolicy
 
-__all__ = ["EvaluationEngine", "ExecutionPolicy", "DEFAULT_EXECUTION_POLICY"]
+__all__ = ["EvaluationEngine", "ExecutionPolicy"]

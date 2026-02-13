@@ -10,7 +10,7 @@ from typing import Any, Optional, List, Type
 
 import pydantic
 
-from opik.evaluation.models import base_model, models_factory
+from opik.evaluation.models import models_factory
 from opik.evaluation.metrics import score_result
 
 from . import base

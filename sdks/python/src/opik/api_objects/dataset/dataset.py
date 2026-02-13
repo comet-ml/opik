@@ -14,6 +14,9 @@ from typing import (
     Iterator,
 )
 
+if TYPE_CHECKING:
+    from opik.api_objects.evaluation_suite import types as evaluation_suite_types
+
 from opik.api_objects import rest_helpers
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import (
@@ -280,6 +283,32 @@ class DatasetVersion(DatasetExportOperations):
         """
         return self._version_info
 
+    def get_evaluators(self) -> List[Any]:
+        """
+        Get suite-level evaluators for this dataset version.
+
+        DatasetVersion does not support suite-level evaluators, so this always
+        returns an empty list.
+
+        Returns:
+            Empty list.
+        """
+        return []
+
+    def get_execution_policy(self) -> "evaluation_suite_types.ExecutionPolicy":
+        """
+        Get the execution policy for this dataset version.
+
+        DatasetVersion does not support suite-level execution policy, so this
+        returns the default execution policy.
+
+        Returns:
+            Default execution policy.
+        """
+        from opik.api_objects.evaluation_suite import validators
+
+        return validators.DEFAULT_EXECUTION_POLICY.copy()
+
 
 class Dataset(DatasetExportOperations):
     def __init__(
@@ -299,6 +328,12 @@ class Dataset(DatasetExportOperations):
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
+
+        # Temporary storage for suite-level evaluators and execution policy until OPIK-4222/4223 is implemented
+        self._evaluators: List[Any] = []
+        self._execution_policy: Optional["evaluation_suite_types.ExecutionPolicy"] = (
+            None
+        )
 
     @functools.cached_property
     def id(self) -> str:
@@ -330,6 +365,55 @@ class Dataset(DatasetExportOperations):
             )
             self._dataset_items_count = dataset_info.dataset_items_count
         return self._dataset_items_count
+
+    def set_evaluators(self, evaluators: List[Any]) -> None:
+        """
+        Set suite-level evaluators for this dataset.
+
+        This is used internally by evaluation suites to store evaluators
+        that should be applied when running evaluations on this dataset.
+
+        Args:
+            evaluators: List of LLMJudge evaluators.
+        """
+        self._evaluators = evaluators
+
+    def get_evaluators(self) -> List[Any]:
+        """
+        Get suite-level evaluators for this dataset.
+
+        Returns:
+            List of evaluators set for this dataset, or empty list if none set.
+        """
+        return self._evaluators
+
+    def set_execution_policy(
+        self, execution_policy: "evaluation_suite_types.ExecutionPolicy"
+    ) -> None:
+        """
+        Set the execution policy for this dataset.
+
+        This is used internally by evaluation suites to store execution policy
+        that should be applied when running evaluations on this dataset.
+
+        Args:
+            execution_policy: Execution policy dict with runs_per_item and pass_threshold.
+        """
+        self._execution_policy = execution_policy
+
+    def get_execution_policy(self) -> "evaluation_suite_types.ExecutionPolicy":
+        """
+        Get the execution policy for this dataset.
+
+        Returns:
+            Execution policy dict if set, or default execution policy if not set.
+        """
+        if self._execution_policy is not None:
+            return self._execution_policy
+
+        from opik.api_objects.evaluation_suite import validators
+
+        return validators.DEFAULT_EXECUTION_POLICY.copy()
 
     def get_current_version_name(self) -> Optional[str]:
         """

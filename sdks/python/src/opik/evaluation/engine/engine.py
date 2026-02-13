@@ -1,6 +1,6 @@
 import functools
 import logging
-from typing import List, Optional, Any, Dict, Iterator, Union, TypedDict
+from typing import List, Optional, Any, Dict, Iterator, Union
 
 import opik
 import opik.logging_messages as logging_messages
@@ -8,6 +8,7 @@ import opik.opik_context as opik_context
 from opik.api_objects import opik_client, trace, local_recording
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.api_objects.experiment import experiment
+from opik.api_objects.evaluation_suite.types import ExecutionPolicy
 from opik.evaluation import rest_operations, test_case, test_result, samplers
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 from opik.evaluation.suite_evaluators import opik_llm_judge_config, llm_judge
@@ -23,25 +24,6 @@ LOGGER = logging.getLogger(__name__)
 EVALUATION_TASK_NAME = "evaluation_task"
 
 EVALUATION_STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the default streaming limit to improve the UX and not wait too long for the first items to be evaluated
-
-
-class ExecutionPolicy(TypedDict, total=False):
-    """
-    Execution policy for evaluation suite items.
-
-    Attributes:
-        runs_per_item: Number of times to run evaluation for each item.
-        pass_threshold: Minimum number of passing runs required for item to pass.
-    """
-
-    runs_per_item: int
-    pass_threshold: int
-
-
-DEFAULT_EXECUTION_POLICY: ExecutionPolicy = {
-    "runs_per_item": 1,
-    "pass_threshold": 1,
-}
 
 
 def get_item_execution_policy(
@@ -490,9 +472,15 @@ class EvaluationEngine:
         experiment_: Optional[experiment.Experiment],
         dataset_filter_string: Optional[str] = None,
     ) -> List[test_result.TestResult]:
-        # Extract execution policy from dataset if available (future: OPIK-4222/4223).
-        # For now, check if dataset has execution_policy attribute, otherwise use trial_count.
-        default_execution_policy = getattr(dataset_, "execution_policy", None)
+        # Extract suite config from dataset (set by create_evaluation_suite).
+        # This includes evaluators and execution_policy for evaluation suites.
+        default_execution_policy = dataset_.get_execution_policy()
+        suite_evaluators = dataset_.get_evaluators()
+        if suite_evaluators:
+            self._suite_regular_metrics = (
+                list(self._suite_regular_metrics) + suite_evaluators
+            )
+
         # Can't use streaming with these parameters yet, so fallback to non-streaming
         use_streaming = dataset_sampler is None and not self._has_task_span_metrics
 

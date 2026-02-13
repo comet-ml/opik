@@ -1,10 +1,5 @@
 from .evaluation_suite import EvaluationSuite
-from .types import EvaluationSuiteResult, ItemResult
-from opik.evaluation.engine import ExecutionPolicy
 
 __all__ = [
     "EvaluationSuite",
-    "EvaluationSuiteResult",
-    "ItemResult",
-    "ExecutionPolicy",
 ]
