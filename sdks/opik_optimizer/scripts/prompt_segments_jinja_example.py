@@ -58,6 +58,7 @@ if __name__ == "__main__":
     How: We stratify by Class (fraud/legit) for balanced demo coverage and
     synthesize a dispute-style user query from Amount/Time/Class.
     """
+
     def load_creditcard_records(
         count: int = 10,
         seed: int = 7,
@@ -69,7 +70,9 @@ if __name__ == "__main__":
             )
         dataset = load_dataset("mlg-ulb/creditcard", split="train")
         count = max(1, min(count, len(dataset)))
-        return stratified_sample(dataset, count=count, seed=seed, fraud_ratio=fraud_ratio)
+        return stratified_sample(
+            dataset, count=count, seed=seed, fraud_ratio=fraud_ratio
+        )
 
     def stratified_sample(
         dataset: Any, count: int, seed: int, fraud_ratio: float
@@ -106,10 +109,7 @@ if __name__ == "__main__":
         "MCP tool instructions (client injected): {{ mcp_instructions }}\n"
         "{{ mcp_tool_response }}"
     )
-    user_template = (
-        "User says: {{ user_query }}\n"
-        "Goal: resolve the issue in one reply."
-    )
+    user_template = "User says: {{ user_query }}\nGoal: resolve the issue in one reply."
 
     prompt_template = ChatPrompt(
         system=system_template,
@@ -124,6 +124,7 @@ if __name__ == "__main__":
     A lightweight stand-in for a future MCP tool call.
     It derives a compact risk summary from the same dataset row.
     """
+
     def mock_mcp_tool(record: dict[str, Any]) -> str:
         v_snippet = ", ".join(
             f"{record.get(f'V{i}'):.3f}"
@@ -153,8 +154,7 @@ if __name__ == "__main__":
             else "I want to confirm a recent charge"
         )
         user_query = (
-            f"{dispute_prefix}. Amount ${amount}. "
-            f"Timestamp {time}. Please advise."
+            f"{dispute_prefix}. Amount ${amount}. Timestamp {time}. Please advise."
         )
         dataset.append(
             {
@@ -172,14 +172,20 @@ if __name__ == "__main__":
     == 5. RENDERING ==
     Render templates for a single sample so we can inspect segment ids.
     """
+
     def render_jinja_template(template: str, data: dict[str, Any]) -> str:
         return Template(template).render(**data)
 
-    def render_prompt_from_template(prompt: ChatPrompt, data: dict[str, Any]) -> ChatPrompt:
+    def render_prompt_from_template(
+        prompt: ChatPrompt, data: dict[str, Any]
+    ) -> ChatPrompt:
         return ChatPrompt(
             system=render_jinja_template(prompt.system, data),
             messages=[
-                {"role": msg["role"], "content": render_jinja_template(msg["content"], data)}
+                {
+                    "role": msg["role"],
+                    "content": render_jinja_template(msg["content"], data),
+                }
                 for msg in prompt.messages
             ],
         )
@@ -219,6 +225,7 @@ if __name__ == "__main__":
     Run a mock agent response over the dataset and score it with a
     simple heuristic metric (question + bullet list).
     """
+
     def mock_agent_response(_item: dict[str, Any]) -> str:
         return (
             "What channel contacted you, on what date, and do you have a call-back number?\n"

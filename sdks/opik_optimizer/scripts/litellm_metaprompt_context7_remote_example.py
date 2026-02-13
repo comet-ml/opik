@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from difflib import SequenceMatcher
 from typing import Any
 
@@ -15,11 +14,7 @@ from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
 # ---------------------------------------------------------------------------
 
 CURSOR_MCP_CONFIG: dict[str, Any] = {
-    "mcpServers": {
-        "context7": {
-            "url": "https://mcp.context7.com/mcp"
-        }
-    }
+    "mcpServers": {"context7": {"url": "https://mcp.context7.com/mcp"}}
 }
 
 # ---------------------------------------------------------------------------
