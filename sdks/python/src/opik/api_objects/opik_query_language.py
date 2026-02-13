@@ -29,8 +29,214 @@ class OQLConfig(ABC):
         return ["usage", "feedback_scores", "metadata"]
 
 
+class TraceOQLConfig(OQLConfig):
+    """OQL configuration for trace filtering.
+
+    Based on backend's TraceField enum.
+    See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/TraceField.java
+    """
+
+    _STRING_OPERATORS = [
+        "=",
+        "!=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        ">",
+        "<",
+    ]
+    _DATE_TIME_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
+    _NUMBER_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
+    _FEEDBACK_SCORES_OPERATORS = [
+        "=",
+        "!=",
+        ">",
+        ">=",
+        "<",
+        "<=",
+        "is_empty",
+        "is_not_empty",
+    ]
+    _LIST_OPERATORS = [
+        "=",
+        "!=",
+        "contains",
+        "not_contains",
+        "is_empty",
+        "is_not_empty",
+    ]
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        return {
+            "id": "string",
+            "name": "string",
+            "start_time": "date_time",
+            "end_time": "date_time",
+            "input": "string",
+            "output": "string",
+            "input_json": "dictionary",
+            "output_json": "dictionary",
+            "metadata": "dictionary",
+            "total_estimated_cost": "number",
+            "llm_span_count": "number",
+            "tags": "list",
+            "usage.total_tokens": "number",
+            "usage.prompt_tokens": "number",
+            "usage.completion_tokens": "number",
+            "feedback_scores": "feedback_scores_number",
+            "span_feedback_scores": "feedback_scores_number",
+            "duration": "number",
+            "thread_id": "string",
+            "guardrails": "string",
+            "error_info": "error_container",
+            "created_at": "date_time",
+            "last_updated_at": "date_time",
+            "annotation_queue_ids": "list",
+            "experiment_id": "string",
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        return {
+            "id": self._STRING_OPERATORS,
+            "name": self._STRING_OPERATORS,
+            "input": self._STRING_OPERATORS,
+            "output": self._STRING_OPERATORS,
+            "thread_id": self._STRING_OPERATORS,
+            "guardrails": self._STRING_OPERATORS,
+            "experiment_id": self._STRING_OPERATORS,
+            "start_time": self._DATE_TIME_OPERATORS,
+            "end_time": self._DATE_TIME_OPERATORS,
+            "created_at": self._DATE_TIME_OPERATORS,
+            "last_updated_at": self._DATE_TIME_OPERATORS,
+            "total_estimated_cost": self._NUMBER_OPERATORS,
+            "llm_span_count": self._NUMBER_OPERATORS,
+            "usage.total_tokens": self._NUMBER_OPERATORS,
+            "usage.prompt_tokens": self._NUMBER_OPERATORS,
+            "usage.completion_tokens": self._NUMBER_OPERATORS,
+            "duration": self._NUMBER_OPERATORS,
+            "input_json": self._STRING_OPERATORS,
+            "output_json": self._STRING_OPERATORS,
+            "metadata": self._STRING_OPERATORS,
+            "feedback_scores": self._FEEDBACK_SCORES_OPERATORS,
+            "span_feedback_scores": self._FEEDBACK_SCORES_OPERATORS,
+            "tags": self._LIST_OPERATORS,
+            "annotation_queue_ids": self._LIST_OPERATORS,
+            "error_info": ["is_empty", "is_not_empty"],
+            "default": self._STRING_OPERATORS,
+        }
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        return [
+            "metadata",
+            "input_json",
+            "output_json",
+            "feedback_scores",
+            "span_feedback_scores",
+        ]
+
+
+class SpanOQLConfig(OQLConfig):
+    """OQL configuration for span filtering.
+
+    Based on backend's SpanField enum.
+    See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/SpanField.java
+    """
+
+    _STRING_OPERATORS = [
+        "=",
+        "!=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        ">",
+        "<",
+    ]
+    _DATE_TIME_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
+    _NUMBER_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
+    _FEEDBACK_SCORES_OPERATORS = [
+        "=",
+        "!=",
+        ">",
+        ">=",
+        "<",
+        "<=",
+        "is_empty",
+        "is_not_empty",
+    ]
+    _LIST_OPERATORS = [
+        "=",
+        "!=",
+        "contains",
+        "not_contains",
+        "is_empty",
+        "is_not_empty",
+    ]
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        return {
+            "id": "string",
+            "name": "string",
+            "start_time": "date_time",
+            "end_time": "date_time",
+            "input": "string",
+            "output": "string",
+            "input_json": "dictionary",
+            "output_json": "dictionary",
+            "metadata": "dictionary",
+            "model": "string",
+            "provider": "string",
+            "total_estimated_cost": "number",
+            "tags": "list",
+            "usage.total_tokens": "number",
+            "usage.prompt_tokens": "number",
+            "usage.completion_tokens": "number",
+            "feedback_scores": "feedback_scores_number",
+            "duration": "number",
+            "error_info": "error_container",
+            "type": "enum",
+            "trace_id": "string",
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        return {
+            "id": self._STRING_OPERATORS,
+            "name": self._STRING_OPERATORS,
+            "input": self._STRING_OPERATORS,
+            "output": self._STRING_OPERATORS,
+            "model": self._STRING_OPERATORS,
+            "provider": self._STRING_OPERATORS,
+            "trace_id": self._STRING_OPERATORS,
+            "type": ["=", "!="],
+            "start_time": self._DATE_TIME_OPERATORS,
+            "end_time": self._DATE_TIME_OPERATORS,
+            "total_estimated_cost": self._NUMBER_OPERATORS,
+            "usage.total_tokens": self._NUMBER_OPERATORS,
+            "usage.prompt_tokens": self._NUMBER_OPERATORS,
+            "usage.completion_tokens": self._NUMBER_OPERATORS,
+            "duration": self._NUMBER_OPERATORS,
+            "input_json": self._STRING_OPERATORS,
+            "output_json": self._STRING_OPERATORS,
+            "metadata": self._STRING_OPERATORS,
+            "feedback_scores": self._FEEDBACK_SCORES_OPERATORS,
+            "tags": self._LIST_OPERATORS,
+            "error_info": ["is_empty", "is_not_empty"],
+            "default": self._STRING_OPERATORS,
+        }
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        return ["metadata", "input_json", "output_json", "feedback_scores"]
+
+
 class GeneralPurposeOQLConfig(OQLConfig):
-    """OQL configuration for traces and spans filtering."""
+    """OQL configuration for general-purpose filtering (prompts, experiments, etc.)."""
 
     @property
     def columns(self) -> Dict[str, str]:
@@ -334,13 +540,22 @@ class OpikQueryLanguage:
     @classmethod
     def for_traces(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
         """
-        Creates a parser for filtering traces and spans using OQL syntax. Use this when searching
-        or filtering trace/span data in projects, experiments, or prompt searches. Returns an
-        OpikQueryLanguage instance preconfigured with TraceSpanOQLConfig that validates fields like
-        name, status, metadata, feedback_scores, tags, and usage tokens. Empty or None query_string
-        yields no filters; malformed queries raise ValueError during parsing.
+        Creates a parser for filtering traces using OQL syntax. Returns an
+        OpikQueryLanguage instance preconfigured with TraceOQLConfig that validates
+        trace-specific fields. Empty or None query_string yields no filters;
+        malformed queries raise ValueError during parsing.
         """
-        return cls(query_string, GeneralPurposeOQLConfig())
+        return cls(query_string, TraceOQLConfig())
+
+    @classmethod
+    def for_spans(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+        """
+        Creates a parser for filtering spans using OQL syntax. Returns an
+        OpikQueryLanguage instance preconfigured with SpanOQLConfig that validates
+        span-specific fields. Empty or None query_string yields no filters;
+        malformed queries raise ValueError during parsing.
+        """
+        return cls(query_string, SpanOQLConfig())
 
     @classmethod
     def for_dataset_items(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
@@ -499,6 +714,10 @@ class OpikQueryLanguage:
         if self.query_string[self._cursor] == "=":
             operator = "="
             self._cursor += 1
+            if operator not in supported_operators[parsed_field]:
+                raise ValueError(
+                    f"Operator {operator} is not supported for field {parsed_field}, only the operators {supported_operators[parsed_field]} are supported."
+                )
             return {"operator": operator}
 
         elif self.query_string[self._cursor] in ["<", ">"]:
