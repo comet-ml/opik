@@ -51,13 +51,13 @@ export const getTimeFromNow = (value: string): string => {
   const now = dayjs();
   const diffMinutes = now.diff(date, "minute");
   const diffHours = now.diff(date, "hour");
+  const diffDays = now.diff(date, "day");
 
   if (diffMinutes < 0) return date.format("MMM D, YYYY");
   if (diffMinutes < 1) return "just now";
-  if (diffMinutes === 1) return "a minute ago";
-  if (diffMinutes < 60) return `${diffMinutes} minutes ago`;
-  if (diffHours === 1) return "an hour ago";
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
   if (diffHours < 24) return `${diffHours} hours ago`;
+  if (diffDays <= 7) return `${diffDays} days ago`;
 
   return date.year() === now.year()
     ? date.format("MMM D")
