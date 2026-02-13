@@ -121,7 +121,7 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       >
         <span
           data-testid="feedback-score-tag-value"
-          className="comet-body-s-accented min-w-0 truncate"
+          className="comet-body-s-accented shrink-0"
         >
           {displayValue}
         </span>
