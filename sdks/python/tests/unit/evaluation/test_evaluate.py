@@ -34,11 +34,18 @@ def create_mock_dataset(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = name
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     if items is not None:
         mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
             items
@@ -121,11 +128,18 @@ def test_evaluate__happyflow(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -358,11 +372,18 @@ def test_evaluate_with_scoring_key_mapping(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -605,11 +626,18 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -661,11 +689,18 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -772,11 +807,18 @@ def test_evaluate__with_random_sampler__happy_flow(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     # When dataset_sampler is provided, streaming is used but exhausted to a list
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
@@ -897,11 +939,18 @@ def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = 10  # Original dataset has 10 items
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     # Return 10 items
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
@@ -980,11 +1029,18 @@ def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = 5
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     # Return 5 items
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
@@ -1068,11 +1124,18 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = 100  # Original dataset has 100 items
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     # nb_samples=10 will fetch 10 items
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
@@ -1185,11 +1248,18 @@ def test_evaluate_prompt_happyflow(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -1394,11 +1464,18 @@ def test_evaluate__aggregated_metric__happy_flow(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -1731,11 +1808,18 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     # When dataset_sampler is provided, streaming is used but exhausted to a list
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
@@ -1862,11 +1946,18 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 2,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -2014,11 +2105,18 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 2,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -2181,10 +2279,17 @@ def test_evaluate__with_experiment_scores(fake_backend):
             "name",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "test-dataset"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -2277,10 +2382,17 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
             "name",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "test-dataset"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.dataset_items_count = None
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter([])
@@ -2597,11 +2709,18 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
 
     # Mock the streaming method to return an iterator
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
@@ -2655,11 +2774,18 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -2712,11 +2838,18 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
             "id",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
         [
             dataset_item.DatasetItem(
@@ -2778,9 +2911,16 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
             "name",
             "dataset_items_count",
             "get_version_info",
+            "get_execution_policy",
+            "get_evaluators",
         ]
     )
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.get_execution_policy.return_value = {
+        "runs_per_item": 1,
+        "pass_threshold": 1,
+    }
+    mock_dataset.get_evaluators.return_value = []
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
 

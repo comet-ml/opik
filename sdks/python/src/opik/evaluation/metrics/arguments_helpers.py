@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import opik.exceptions as exceptions
 from .. import types as evaluation_types
+from ..engine.types import EVALUATION_CONFIG_KEY
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,7 +53,11 @@ def create_scoring_inputs(
     task_output: Dict[str, Any],
     scoring_key_mapping: Optional[evaluation_types.ScoringKeyMappingType],
 ) -> Dict[str, Any]:
-    mapped_inputs = {**dataset_item, **task_output}
+    # Filter out internal evaluation config from scoring inputs
+    filtered_dataset_item = {
+        k: v for k, v in dataset_item.items() if k != EVALUATION_CONFIG_KEY
+    }
+    mapped_inputs = {**filtered_dataset_item, **task_output}
 
     if scoring_key_mapping is None:
         return mapped_inputs

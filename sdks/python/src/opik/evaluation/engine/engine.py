@@ -232,6 +232,7 @@ class EvaluationEngine:
 
         item_content = item.get_content(include_id=True)
         # Filter out evaluation config from task input (user shouldn't see it)
+        # but keep it in item_content for suite result construction
         task_input = {
             k: v for k, v in item_content.items() if k != EVALUATION_CONFIG_KEY
         }
@@ -288,18 +289,25 @@ class EvaluationEngine:
         test_results: List[test_result.TestResult] = []
 
         # Build effective default policy:
-        # - If explicit policy provided, use it
-        # - Otherwise, use trial_count parameter (backward compatibility)
+        # - If trial_count > 1 is explicitly provided, use it (backward compatibility)
+        # - Otherwise, use default_execution_policy from dataset
         effective_default_policy: ExecutionPolicy
-        if default_execution_policy is not None:
-            effective_default_policy = default_execution_policy
-            initial_trial_count = default_execution_policy.get("runs_per_item", 1)
-        else:
+        if trial_count > 1:
+            # Explicit trial_count takes precedence (backward compatibility)
             effective_default_policy = {
                 "runs_per_item": trial_count,
                 "pass_threshold": 1,
             }
             initial_trial_count = trial_count
+        elif default_execution_policy is not None:
+            effective_default_policy = default_execution_policy
+            initial_trial_count = default_execution_policy.get("runs_per_item", 1)
+        else:
+            effective_default_policy = {
+                "runs_per_item": 1,
+                "pass_threshold": 1,
+            }
+            initial_trial_count = 1
 
         # Cache dataset items and their runs_per_item for multiple trials
         dataset_items_cache: List[dataset_item.DatasetItem] = []
