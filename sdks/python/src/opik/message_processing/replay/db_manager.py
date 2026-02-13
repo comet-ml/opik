@@ -476,7 +476,7 @@ class DBManager:
                 )
                 total_replayed += replayed
                 # sleep to allow consumption of the messages batch and to avoid OOM (when subsequent batches loaded)
-                # applied only if full batch_size was replied to avoid delays after last batch or for smaller batches
+                # applied only if full batch_size was replayed to avoid delays after the last batch or for smaller batches
                 if replayed >= self.batch_size:
                     time.sleep(self.batch_replay_delay)
 
@@ -548,7 +548,9 @@ class DBManager:
             )
             row = c.fetchone()
             if row is not None:
-                return DBMessage(id=row[0], type=row[1], json=row[2], status=row[3])
+                return DBMessage(
+                    id=row[0], type=row[1], json=row[2], status=MessageStatus(row[3])
+                )
             else:
                 return None
 

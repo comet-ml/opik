@@ -25,6 +25,7 @@ class ReplayManager(threading.Thread):
     def __init__(
         self,
         monitor: connection_monitor.OpikConnectionMonitor,
+        manager: db_manager.DBManager,
         tick_interval_seconds: float = 0.3,
     ):
         """
@@ -34,10 +35,11 @@ class ReplayManager(threading.Thread):
 
         Args:
             monitor: An instance of OpikConnectionMonitor used for monitoring the connection.
+            manager: An instance of DBManager used for database operations.
             tick_interval_seconds: Interval in seconds between execution ticks. Default is 0.3.
         """
         super().__init__(daemon=True, name="ReplayManager")
-        self._db_manager = db_manager.DBManager()
+        self._db_manager = manager
         self._running = True
         self._monitor = monitor
         self._replay_callback: Optional[types.ReplayCallback] = None
@@ -97,9 +99,10 @@ class ReplayManager(threading.Thread):
         self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore
 
     def _loop(self) -> None:
-        now = time.time()
-        if now < self._next_tick_time:
-            return
+        sleep_time = self._next_tick_time - time.time()
+        if sleep_time > 0:
+            # sleep until the next tick time to avoid excessive CPU usage
+            time.sleep(sleep_time)
 
         try:
             status = self._monitor.tick()
