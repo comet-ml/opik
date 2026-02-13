@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from difflib import SequenceMatcher
+import logging
 from typing import Any
 
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 from opik_optimizer.datasets import context7_eval
 from opik_optimizer.utils.toolcalling import cursor_mcp_config_to_tools
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # CONTEXT7 REMOTE CONFIGURATION
@@ -69,6 +72,6 @@ result = optimizer.optimize_prompt(
 if not result.prompt:
     raise RuntimeError("MetaPromptOptimizer did not return an optimized prompt.")
 
-print("Optimization complete! Best score:", result.score)
+logger.info("Optimization complete! Best score=%s", result.score)
 
 result.display()

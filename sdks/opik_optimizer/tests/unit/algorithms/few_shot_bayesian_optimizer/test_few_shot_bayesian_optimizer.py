@@ -14,6 +14,9 @@ from opik_optimizer import (
 )
 from opik_optimizer.api_objects import types as api_types
 from opik_optimizer.agents.optimizable_agent import OptimizableAgent
+from opik_optimizer.algorithms.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer import (
+    _preserve_multimodal_message_structure,
+)
 from tests.unit.test_helpers import (
     make_mock_dataset,
     make_simple_metric,
@@ -182,7 +185,6 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert updated_message["content"][1]["image_url"]["url"] == "{image}"
 
     def test_preserve_multimodal_structure_helper_mixed_messages(self) -> None:
-        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         original_messages = [
             {
                 "role": "user",
@@ -205,7 +207,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             {"role": "assistant", "content": "Updated assistant"},
         ]
 
-        preserved = optimizer._preserve_multimodal_message_structure(
+        preserved = _preserve_multimodal_message_structure(
             original_messages=original_messages,
             generated_messages=generated_messages,
         )
@@ -220,7 +222,6 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert preserved[1]["content"] == "Updated assistant"
 
     def test_preserve_multimodal_structure_helper_skips_role_mismatch(self) -> None:
-        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
         original_messages = [
             {
                 "role": "user",
@@ -241,7 +242,7 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
             }
         ]
 
-        preserved = optimizer._preserve_multimodal_message_structure(
+        preserved = _preserve_multimodal_message_structure(
             original_messages=original_messages,
             generated_messages=generated_messages,
         )

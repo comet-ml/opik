@@ -137,6 +137,12 @@ descriptions without changing prompt text.
 If you need finer control than roles (for example, only optimize a specific assistant message),
 use `prompt_segments` to extract and update parts by segment ID.
 
+Intent/Trigger: use segment-level updates when role-level optimization is too broad and you need to constrain changes to exact message segments.
+
+- Required parameters: `prompt`, `dataset`, `metric`
+- Optional parameters: `optimize_prompts` and segment update args (`updates` passed to `prompt_segments.apply_segment_updates`)
+- Minimal valid payload: `optimizer.optimize_prompt(prompt=updated_prompt, dataset=my_dataset, metric=answer_quality, optimize_prompts="user")`
+
 ```python
 from opik_optimizer.utils import prompt_segments
 
