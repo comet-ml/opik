@@ -94,9 +94,9 @@ class TestReplayManagerInitialization:
         assert manager.name == "ReplayManager"
         assert not manager.is_alive()
 
-    def test_init__db_manager_initialized(self, manager: replay_manager.ReplayManager):
-        assert manager._db_manager.initialized
-        assert not manager._db_manager.closed
+    def test_init_db_manager_initialized(self, manager: replay_manager.ReplayManager):
+        assert manager.db_manager.initialized
+        assert not manager.db_manager.closed
 
 
 class TestStart:
@@ -132,7 +132,7 @@ class TestClose:
 
         assert not manager.is_alive()
 
-    def test_close__db_manager_closed_after_thread_exits(
+    def test_close_db_manager_closed_after_thread_exits(
         self, manager: replay_manager.ReplayManager
     ):
         manager.set_replay_callback(mock.Mock())
@@ -141,7 +141,7 @@ class TestClose:
         manager.close()
         manager.join(timeout=2)
 
-        assert manager._db_manager.closed
+        assert manager.db_manager.closed
 
     def test_close__interruptible_sleep(self, monitor: mock.MagicMock):
         """close() should interrupt the sleep and stop quickly, not wait full tick."""
@@ -175,7 +175,7 @@ class TestRegisterMessage:
         msg = _create_trace_message(message_id=1)
         manager.register_message(msg)
 
-        db_msg = manager._db_manager.get_db_message(1)
+        db_msg = manager.db_manager.get_db_message(1)
         assert db_msg is not None
         assert db_msg.id == 1
         assert db_msg.status == db_manager.MessageStatus.registered
@@ -190,7 +190,7 @@ class TestUnregisterMessage:
 
         manager.unregister_message(1)
 
-        db_msg = manager._db_manager.get_db_message(1)
+        db_msg = manager.db_manager.get_db_message(1)
         assert db_msg is None
 
 
@@ -203,7 +203,7 @@ class TestMessageSentFailed:
 
         manager.message_sent_failed(1, failure_reason="timeout")
 
-        db_msg = manager._db_manager.get_db_message(1)
+        db_msg = manager.db_manager.get_db_message(1)
         assert db_msg is not None
         assert db_msg.status == db_manager.MessageStatus.failed
 
@@ -240,7 +240,7 @@ class TestFlush:
     ):
         for i in range(3):
             msg = _create_trace_message(message_id=i + 1, trace_id=f"trace-{i}")
-            manager._db_manager.register_message(
+            manager.db_manager.register_message(
                 msg, status=db_manager.MessageStatus.failed
             )
 
@@ -258,16 +258,14 @@ class TestFlush:
         self, manager: replay_manager.ReplayManager
     ):
         msg = _create_trace_message(message_id=1)
-        manager._db_manager.register_message(
-            msg, status=db_manager.MessageStatus.failed
-        )
+        manager.db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
 
         callback = mock.Mock(side_effect=RuntimeError("send error"))
         manager.set_replay_callback(callback)
 
         manager.flush()
 
-        db_msg = manager._db_manager.get_db_message(1)
+        db_msg = manager.db_manager.get_db_message(1)
         assert db_msg is not None
         assert db_msg.status == db_manager.MessageStatus.failed
 
@@ -286,7 +284,7 @@ class TestLoopConnectionRestored:
 
         # Register a failed message
         msg = _create_trace_message(message_id=1)
-        rm._db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
+        rm.db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
 
         replayed: List[messages.BaseMessage] = []
 
@@ -342,14 +340,14 @@ class TestLoopConnectionRestored:
         monitor.tick.return_value = connection_monitor.ConnectionStatus.connection_ok
 
         msg = _create_trace_message(message_id=1)
-        rm._db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
+        rm.db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
 
         callback = mock.Mock()
         rm.set_replay_callback(callback)
         rm.start()
 
         # Let several ticks pass
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         rm.close()
         rm.join(timeout=2)
@@ -363,15 +361,18 @@ class TestLoopConnectionRestored:
         ],
     ):
         rm, monitor = manager_monitor
+        monitor.tick.return_value = (
+            connection_monitor.ConnectionStatus.connection_failed
+        )
 
         msg = _create_trace_message(message_id=1)
-        rm._db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
+        rm.db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
 
         callback = mock.Mock()
         rm.set_replay_callback(callback)
         rm.start()
 
-        time.sleep(0.3)
+        time.sleep(0.1)
 
         rm.close()
         rm.join(timeout=2)
@@ -422,7 +423,7 @@ class TestLoopExceptionHandling:
         rm, monitor = manager_monitor
 
         msg = _create_trace_message(message_id=1)
-        rm._db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
+        rm.db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
 
         call_count = 0
 
@@ -458,7 +459,7 @@ class TestFlushConcurrency:
 
         for i in range(5):
             msg = _create_trace_message(message_id=i + 1, trace_id=f"trace-{i}")
-            rm._db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
+            rm.db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
 
         replayed_ids: List[str] = []
         lock = threading.Lock()
@@ -508,7 +509,7 @@ class TestEndToEnd:
 
         # 2. Mark it as failed (simulating a connection error during sending)
         rm.message_sent_failed(1, failure_reason="connection timeout")
-        db_msg = rm._db_manager.get_db_message(1)
+        db_msg = rm.db_manager.get_db_message(1)
         assert db_msg is not None
         assert db_msg.status == db_manager.MessageStatus.failed
 

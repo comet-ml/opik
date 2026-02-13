@@ -71,6 +71,10 @@ class ReplayManager(threading.Thread):
             self._db_manager.close()
 
     @property
+    def db_manager(self) -> db_manager.DBManager:
+        return self._db_manager
+
+    @property
     def has_server_connection(self) -> bool:
         """Checks if SDK has a connection to the OPIK server."""
         return self._monitor.has_server_connection
