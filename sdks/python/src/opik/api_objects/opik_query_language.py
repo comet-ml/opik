@@ -7,6 +7,37 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, Tuple, List
 
+STRING_OPERATORS = [
+    "=",
+    "!=",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "ends_with",
+    ">",
+    "<",
+]
+DATE_TIME_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
+NUMBER_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
+FEEDBACK_SCORES_OPERATORS = [
+    "=",
+    "!=",
+    ">",
+    ">=",
+    "<",
+    "<=",
+    "is_empty",
+    "is_not_empty",
+]
+LIST_OPERATORS = [
+    "=",
+    "!=",
+    "contains",
+    "not_contains",
+    "is_empty",
+    "is_not_empty",
+]
+
 
 class OQLConfig(ABC):
     """Abstract base class for OQL configuration."""
@@ -35,37 +66,6 @@ class TraceOQLConfig(OQLConfig):
     Based on backend's TraceField enum.
     See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/TraceField.java
     """
-
-    _STRING_OPERATORS = [
-        "=",
-        "!=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        ">",
-        "<",
-    ]
-    _DATE_TIME_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
-    _NUMBER_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
-    _FEEDBACK_SCORES_OPERATORS = [
-        "=",
-        "!=",
-        ">",
-        ">=",
-        "<",
-        "<=",
-        "is_empty",
-        "is_not_empty",
-    ]
-    _LIST_OPERATORS = [
-        "=",
-        "!=",
-        "contains",
-        "not_contains",
-        "is_empty",
-        "is_not_empty",
-    ]
 
     @property
     def columns(self) -> Dict[str, str]:
@@ -100,32 +100,32 @@ class TraceOQLConfig(OQLConfig):
     @property
     def supported_operators(self) -> Dict[str, List[str]]:
         return {
-            "id": self._STRING_OPERATORS,
-            "name": self._STRING_OPERATORS,
-            "input": self._STRING_OPERATORS,
-            "output": self._STRING_OPERATORS,
-            "thread_id": self._STRING_OPERATORS,
-            "guardrails": self._STRING_OPERATORS,
-            "experiment_id": self._STRING_OPERATORS,
-            "start_time": self._DATE_TIME_OPERATORS,
-            "end_time": self._DATE_TIME_OPERATORS,
-            "created_at": self._DATE_TIME_OPERATORS,
-            "last_updated_at": self._DATE_TIME_OPERATORS,
-            "total_estimated_cost": self._NUMBER_OPERATORS,
-            "llm_span_count": self._NUMBER_OPERATORS,
-            "usage.total_tokens": self._NUMBER_OPERATORS,
-            "usage.prompt_tokens": self._NUMBER_OPERATORS,
-            "usage.completion_tokens": self._NUMBER_OPERATORS,
-            "duration": self._NUMBER_OPERATORS,
-            "input_json": self._STRING_OPERATORS,
-            "output_json": self._STRING_OPERATORS,
-            "metadata": self._STRING_OPERATORS,
-            "feedback_scores": self._FEEDBACK_SCORES_OPERATORS,
-            "span_feedback_scores": self._FEEDBACK_SCORES_OPERATORS,
-            "tags": self._LIST_OPERATORS,
-            "annotation_queue_ids": self._LIST_OPERATORS,
+            "id": STRING_OPERATORS,
+            "name": STRING_OPERATORS,
+            "input": STRING_OPERATORS,
+            "output": STRING_OPERATORS,
+            "thread_id": STRING_OPERATORS,
+            "guardrails": STRING_OPERATORS,
+            "experiment_id": STRING_OPERATORS,
+            "start_time": DATE_TIME_OPERATORS,
+            "end_time": DATE_TIME_OPERATORS,
+            "created_at": DATE_TIME_OPERATORS,
+            "last_updated_at": DATE_TIME_OPERATORS,
+            "total_estimated_cost": NUMBER_OPERATORS,
+            "llm_span_count": NUMBER_OPERATORS,
+            "usage.total_tokens": NUMBER_OPERATORS,
+            "usage.prompt_tokens": NUMBER_OPERATORS,
+            "usage.completion_tokens": NUMBER_OPERATORS,
+            "duration": NUMBER_OPERATORS,
+            "input_json": STRING_OPERATORS,
+            "output_json": STRING_OPERATORS,
+            "metadata": STRING_OPERATORS,
+            "feedback_scores": FEEDBACK_SCORES_OPERATORS,
+            "span_feedback_scores": FEEDBACK_SCORES_OPERATORS,
+            "tags": LIST_OPERATORS,
+            "annotation_queue_ids": LIST_OPERATORS,
             "error_info": ["is_empty", "is_not_empty"],
-            "default": self._STRING_OPERATORS,
+            "default": STRING_OPERATORS,
         }
 
     @property
@@ -145,37 +145,6 @@ class SpanOQLConfig(OQLConfig):
     Based on backend's SpanField enum.
     See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/SpanField.java
     """
-
-    _STRING_OPERATORS = [
-        "=",
-        "!=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        ">",
-        "<",
-    ]
-    _DATE_TIME_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
-    _NUMBER_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
-    _FEEDBACK_SCORES_OPERATORS = [
-        "=",
-        "!=",
-        ">",
-        ">=",
-        "<",
-        "<=",
-        "is_empty",
-        "is_not_empty",
-    ]
-    _LIST_OPERATORS = [
-        "=",
-        "!=",
-        "contains",
-        "not_contains",
-        "is_empty",
-        "is_not_empty",
-    ]
 
     @property
     def columns(self) -> Dict[str, str]:
@@ -206,28 +175,28 @@ class SpanOQLConfig(OQLConfig):
     @property
     def supported_operators(self) -> Dict[str, List[str]]:
         return {
-            "id": self._STRING_OPERATORS,
-            "name": self._STRING_OPERATORS,
-            "input": self._STRING_OPERATORS,
-            "output": self._STRING_OPERATORS,
-            "model": self._STRING_OPERATORS,
-            "provider": self._STRING_OPERATORS,
-            "trace_id": self._STRING_OPERATORS,
+            "id": STRING_OPERATORS,
+            "name": STRING_OPERATORS,
+            "input": STRING_OPERATORS,
+            "output": STRING_OPERATORS,
+            "model": STRING_OPERATORS,
+            "provider": STRING_OPERATORS,
+            "trace_id": STRING_OPERATORS,
             "type": ["=", "!="],
-            "start_time": self._DATE_TIME_OPERATORS,
-            "end_time": self._DATE_TIME_OPERATORS,
-            "total_estimated_cost": self._NUMBER_OPERATORS,
-            "usage.total_tokens": self._NUMBER_OPERATORS,
-            "usage.prompt_tokens": self._NUMBER_OPERATORS,
-            "usage.completion_tokens": self._NUMBER_OPERATORS,
-            "duration": self._NUMBER_OPERATORS,
-            "input_json": self._STRING_OPERATORS,
-            "output_json": self._STRING_OPERATORS,
-            "metadata": self._STRING_OPERATORS,
-            "feedback_scores": self._FEEDBACK_SCORES_OPERATORS,
-            "tags": self._LIST_OPERATORS,
+            "start_time": DATE_TIME_OPERATORS,
+            "end_time": DATE_TIME_OPERATORS,
+            "total_estimated_cost": NUMBER_OPERATORS,
+            "usage.total_tokens": NUMBER_OPERATORS,
+            "usage.prompt_tokens": NUMBER_OPERATORS,
+            "usage.completion_tokens": NUMBER_OPERATORS,
+            "duration": NUMBER_OPERATORS,
+            "input_json": STRING_OPERATORS,
+            "output_json": STRING_OPERATORS,
+            "metadata": STRING_OPERATORS,
+            "feedback_scores": FEEDBACK_SCORES_OPERATORS,
+            "tags": LIST_OPERATORS,
             "error_info": ["is_empty", "is_not_empty"],
-            "default": self._STRING_OPERATORS,
+            "default": STRING_OPERATORS,
         }
 
     @property
@@ -241,37 +210,6 @@ class ThreadOQLConfig(OQLConfig):
     Based on backend's TraceThreadField enum.
     See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/TraceThreadField.java
     """
-
-    _STRING_OPERATORS = [
-        "=",
-        "!=",
-        "contains",
-        "not_contains",
-        "starts_with",
-        "ends_with",
-        ">",
-        "<",
-    ]
-    _DATE_TIME_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
-    _NUMBER_OPERATORS = ["=", "!=", ">", ">=", "<", "<="]
-    _FEEDBACK_SCORES_OPERATORS = [
-        "=",
-        "!=",
-        ">",
-        ">=",
-        "<",
-        "<=",
-        "is_empty",
-        "is_not_empty",
-    ]
-    _LIST_OPERATORS = [
-        "=",
-        "!=",
-        "contains",
-        "not_contains",
-        "is_empty",
-        "is_not_empty",
-    ]
 
     @property
     def columns(self) -> Dict[str, str]:
@@ -294,20 +232,20 @@ class ThreadOQLConfig(OQLConfig):
     @property
     def supported_operators(self) -> Dict[str, List[str]]:
         return {
-            "id": self._STRING_OPERATORS,
-            "first_message": self._STRING_OPERATORS,
-            "last_message": self._STRING_OPERATORS,
-            "number_of_messages": self._NUMBER_OPERATORS,
-            "duration": self._NUMBER_OPERATORS,
-            "created_at": self._DATE_TIME_OPERATORS,
-            "last_updated_at": self._DATE_TIME_OPERATORS,
-            "start_time": self._DATE_TIME_OPERATORS,
-            "end_time": self._DATE_TIME_OPERATORS,
-            "feedback_scores": self._FEEDBACK_SCORES_OPERATORS,
+            "id": STRING_OPERATORS,
+            "first_message": STRING_OPERATORS,
+            "last_message": STRING_OPERATORS,
+            "number_of_messages": NUMBER_OPERATORS,
+            "duration": NUMBER_OPERATORS,
+            "created_at": DATE_TIME_OPERATORS,
+            "last_updated_at": DATE_TIME_OPERATORS,
+            "start_time": DATE_TIME_OPERATORS,
+            "end_time": DATE_TIME_OPERATORS,
+            "feedback_scores": FEEDBACK_SCORES_OPERATORS,
             "status": ["=", "!="],
-            "tags": self._LIST_OPERATORS,
-            "annotation_queue_ids": self._LIST_OPERATORS,
-            "default": self._STRING_OPERATORS,
+            "tags": LIST_OPERATORS,
+            "annotation_queue_ids": LIST_OPERATORS,
+            "default": STRING_OPERATORS,
         }
 
     @property
@@ -341,98 +279,19 @@ class DatasetItemOQLConfig(OQLConfig):
 
     @property
     def supported_operators(self) -> Dict[str, List[str]]:
-        # Based on ANALYTICS_DB_OPERATOR_MAP in FilterQueryBuilder.java
-        # Operators supported per FieldType
         return {
-            # STRING fields: =, !=, contains, not_contains, starts_with, ends_with, >, <
-            "id": [
-                "=",
-                "!=",
-                "contains",
-                "not_contains",
-                "starts_with",
-                "ends_with",
-                ">",
-                "<",
-            ],
-            "full_data": [
-                "=",
-                "!=",
-                "contains",
-                "not_contains",
-                "starts_with",
-                "ends_with",
-                ">",
-                "<",
-            ],
-            "source": [
-                "=",
-                "!=",
-                "contains",
-                "not_contains",
-                "starts_with",
-                "ends_with",
-                ">",
-                "<",
-            ],
-            "trace_id": [
-                "=",
-                "!=",
-                "contains",
-                "not_contains",
-                "starts_with",
-                "ends_with",
-                ">",
-                "<",
-            ],
-            "span_id": [
-                "=",
-                "!=",
-                "contains",
-                "not_contains",
-                "starts_with",
-                "ends_with",
-                ">",
-                "<",
-            ],
-            "created_by": [
-                "=",
-                "!=",
-                "contains",
-                "not_contains",
-                "starts_with",
-                "ends_with",
-                ">",
-                "<",
-            ],
-            "last_updated_by": [
-                "=",
-                "!=",
-                "contains",
-                "not_contains",
-                "starts_with",
-                "ends_with",
-                ">",
-                "<",
-            ],
-            # MAP fields: =, !=, contains, not_contains, starts_with, ends_with (with key access)
+            "id": STRING_OPERATORS,
+            "full_data": STRING_OPERATORS,
+            "source": STRING_OPERATORS,
+            "trace_id": STRING_OPERATORS,
+            "span_id": STRING_OPERATORS,
+            "created_by": STRING_OPERATORS,
+            "last_updated_by": STRING_OPERATORS,
             "data": ["=", "!=", "contains", "not_contains", "starts_with", "ends_with"],
-            # LIST fields: =, !=, contains, not_contains, is_empty, is_not_empty
-            "tags": ["=", "!=", "contains", "not_contains", "is_empty", "is_not_empty"],
-            # DATE_TIME fields: =, !=, >, >=, <, <=
-            "created_at": ["=", "!=", ">", ">=", "<", "<="],
-            "last_updated_at": ["=", "!=", ">", ">=", "<", "<="],
-            # Default for unknown fields (dynamic fields)
-            "default": [
-                "=",
-                "!=",
-                "contains",
-                "not_contains",
-                "starts_with",
-                "ends_with",
-                ">",
-                "<",
-            ],
+            "tags": LIST_OPERATORS,
+            "created_at": DATE_TIME_OPERATORS,
+            "last_updated_at": DATE_TIME_OPERATORS,
+            "default": STRING_OPERATORS,
         }
 
     @property
