@@ -4,13 +4,16 @@ import {
   selectWidgetResolver,
   selectPreviewWidget,
 } from "@/store/DashboardStore";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const WidgetConfigPreview: React.FunctionComponent = () => {
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const previewWidget = useDashboardStore(selectPreviewWidget);
 
+  const { canViewExperiments } = useUserPermission();
+
   const WidgetComponent = previewWidget
-    ? widgetResolver?.(previewWidget.type)?.Widget
+    ? widgetResolver?.({ type: previewWidget.type, canViewExperiments })?.Widget
     : null;
 
   if (!WidgetComponent || !previewWidget) {

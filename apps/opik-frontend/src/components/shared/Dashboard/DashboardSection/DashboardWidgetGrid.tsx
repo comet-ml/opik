@@ -2,7 +2,7 @@ import React, { useCallback, memo } from "react";
 import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-
+import isEmpty from "lodash/isEmpty";
 import {
   DashboardLayout,
   DashboardWidget,
@@ -23,7 +23,8 @@ import {
   selectWidgetResolver,
 } from "@/store/DashboardStore";
 import DashboardWidgetGridEmpty from "./DashboardWidgetGridEmpty";
-import isEmpty from "lodash/isEmpty";
+import useUserPermission from "@/plugins/comet/useUserPermission";
+import DashboardWidgetDisabled from "../DashboardWidget/DashboardWidgetDisabled";
 
 const ResponsiveGridLayout = WidthProvider(GridLayout);
 
@@ -41,6 +42,8 @@ const DashboardWidgetGrid: React.FunctionComponent<
   );
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const updateLayout = useDashboardStore(selectUpdateLayout);
+
+  const { canViewExperiments } = useUserPermission();
 
   const handleAddWidget = () => {
     onAddEditWidgetCallback?.({ sectionId });
@@ -77,17 +80,25 @@ const DashboardWidgetGrid: React.FunctionComponent<
       autoSize={true}
     >
       {widgets.map((widget) => {
-        const widgetComponents = widgetResolver?.(
-          widget.type || WIDGET_TYPE.PROJECT_METRICS,
-        );
+        const widgetComponents = widgetResolver?.({
+          type: widget.type || WIDGET_TYPE.PROJECT_METRICS,
+          canViewExperiments,
+        });
 
         if (!widgetComponents) return null;
 
-        const { Widget } = widgetComponents;
+        const { Widget, metadata } = widgetComponents;
 
         return (
           <div key={widget.id}>
-            <Widget sectionId={sectionId} widgetId={widget.id} />
+            {metadata.disabled ? (
+              <DashboardWidgetDisabled
+                widget={widget}
+                disabledMessage={metadata.disabledTooltip}
+              />
+            ) : (
+              <Widget sectionId={sectionId} widgetId={widget.id} />
+            )}
           </div>
         );
       })}
