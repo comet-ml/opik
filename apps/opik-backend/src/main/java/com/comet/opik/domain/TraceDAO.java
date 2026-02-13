@@ -53,6 +53,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -3454,8 +3455,8 @@ class TraceDAOImpl implements TraceDAO {
                     .flatMapMany(result -> result.map((row, rowMetadata) -> {
                         List<UUID> projectIds = row.get("project_ids", List.class)
                                 .stream()
-                                .filter(obj -> obj != null)
-                                .map(obj -> UUID.fromString(new String((byte[]) obj)))
+                                .filter(Objects::nonNull)
+                                .map(it -> UUID.fromString((String) it))
                                 .toList();
 
                         return Map.entry(

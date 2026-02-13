@@ -5461,19 +5461,28 @@ class ExperimentsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class CreateExperimentsItems {
 
-        @Test
-        void createAndGet() {
-
-            String projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
-
-            var projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+        @ParameterizedTest(name = "Create and get experiment items with project: {0}")
+        @MethodSource("projectTestCases")
+        void createAndGetExperimentItems(boolean includeProject) {
             var experimentName = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(32);
+
+            // Create project if includeProject is true
+            UUID projectId = null;
+            String projectName = null;
+            if (includeProject) {
+                projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+                projectId = projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            }
 
             UUID experimentId = createAndAssert(experimentResourceClient.createPartialExperiment()
                     .name(experimentName)
                     .build(), API_KEY, TEST_WORKSPACE);
 
             var itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
+
+            // Build expected items with or without project fields
+            final UUID finalProjectId = projectId;
+            final String finalProjectName = projectName;
             List<ExperimentItem> expectedItems = itemsBatch.experimentItems().stream()
                     .map(item -> item.toBuilder()
                             .totalEstimatedCost(null)
@@ -5484,8 +5493,8 @@ class ExperimentsResourceTest {
                             .lastUpdatedBy(USER)
                             .feedbackScores(null)
                             .experimentId(experimentId)
-                            .projectName(projectName)
-                            .projectId(projectId)
+                            .projectName(finalProjectName)
+                            .projectId(finalProjectId)
                             .input(null)
                             .output(null)
                             .traceVisibilityMode(null)
@@ -5504,43 +5513,11 @@ class ExperimentsResourceTest {
             assertExperimentItems(actualExperimentItems, expectedItems);
         }
 
-        @Test
-        void createAndGetWithoutProjectName() {
-            var experimentName = "experiment-" + RandomStringUtils.secure().nextAlphanumeric(32);
-
-            UUID experimentId = createAndAssert(experimentResourceClient.createPartialExperiment()
-                    .name(experimentName)
-                    .build(), API_KEY, TEST_WORKSPACE);
-
-            var itemsBatch = podamFactory.manufacturePojo(ExperimentItemsBatch.class);
-            List<ExperimentItem> expectedItems = itemsBatch.experimentItems().stream()
-                    .map(item -> item.toBuilder()
-                            .totalEstimatedCost(null)
-                            .usage(null)
-                            .duration(null)
-                            .comments(null)
-                            .createdBy(USER)
-                            .lastUpdatedBy(USER)
-                            .feedbackScores(null)
-                            .experimentId(experimentId)
-                            .projectName(null)
-                            .projectId(null)
-                            .input(null)
-                            .output(null)
-                            .traceVisibilityMode(null)
-                            .build())
-                    .sorted(Comparator.comparing(ExperimentItem::id).reversed())
-                    .toList();
-
-            var request = itemsBatch.toBuilder()
-                    .experimentItems(new HashSet<>(expectedItems))
-                    .build();
-
-            createAndAssert(request, API_KEY, TEST_WORKSPACE);
-
-            List<ExperimentItem> actualExperimentItems = getExperimentItems(experimentName, API_KEY, TEST_WORKSPACE);
-
-            assertExperimentItems(actualExperimentItems, expectedItems);
+        static Stream<Arguments> projectTestCases() {
+            return Stream.of(
+                    Arguments.of(true), // With project
+                    Arguments.of(false) // Without project
+            );
         }
 
         @Test
