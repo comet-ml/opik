@@ -1,17 +1,11 @@
-import os
 from typing import Optional, Any, Dict
+
+from opik import config
 
 from .litellm import litellm_chat_model
 from . import base_model
 
-DEFAULT_GPT_MODEL_NAME = "openai/gpt-5-nano"
-
 _MODEL_CACHE: Dict[Any, base_model.OpikBaseModel] = {}
-
-
-def get_default_model_name() -> str:
-    """Resolve the default model name from env or built-in fallback."""
-    return os.getenv("OPIK_DEFAULT_LLM", DEFAULT_GPT_MODEL_NAME)
 
 
 def _freeze(value: Any) -> Any:
@@ -29,6 +23,11 @@ def _make_cache_key(model_name: str, track: bool, model_kwargs: Dict[str, Any]) 
     return (model_name, track, frozen_kwargs)
 
 
+def get_default_model_name() -> str:
+    """Resolve the default model name from Opik config."""
+    return config.OpikConfig().default_llm
+
+
 def get(
     model_name: Optional[str], track: bool = True, **model_kwargs: Any
 ) -> base_model.OpikBaseModel:
@@ -36,7 +35,7 @@ def get(
     Get or create a cached LiteLLM chat model instance.
 
     Args:
-        model_name: The name of the model to use. Defaults to DEFAULT_GPT_MODEL_NAME if None.
+        model_name: The name of the model to use. Defaults to OpikConfig.default_llm if None.
         track: Whether to track the model calls. When False, disables tracing for this model instance.
             Defaults to True.
         **model_kwargs: Additional keyword arguments to pass to the model constructor.
