@@ -57,6 +57,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -74,6 +75,7 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 
 import java.util.Collections;
@@ -287,6 +289,9 @@ public class ExperimentsResource {
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Experiment.class))) @JsonView(Experiment.View.Write.class) @NotNull @Valid Experiment experiment,
             @Context UriInfo uriInfo) {
+        if (StringUtils.isBlank(experiment.datasetName())) {
+            throw new BadRequestException("dataset_name must not be blank");
+        }
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 experiment.id(), experiment.name(), experiment.datasetName(), workspaceId);
