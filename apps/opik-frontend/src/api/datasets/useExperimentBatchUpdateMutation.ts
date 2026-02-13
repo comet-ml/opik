@@ -5,11 +5,11 @@ import get from "lodash/get";
 import api, { EXPERIMENTS_REST_ENDPOINT } from "@/api/api";
 import { Experiment } from "@/types/datasets";
 import { useToast } from "@/components/ui/use-toast";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
 
 type UseExperimentBatchUpdateMutationParams = {
   ids: string[];
-  experiment: Partial<Experiment>;
-  mergeTags?: boolean;
+  experiment: Partial<Experiment> & TagUpdateFields;
 };
 
 const useExperimentBatchUpdateMutation = () => {
@@ -20,22 +20,19 @@ const useExperimentBatchUpdateMutation = () => {
     mutationFn: async ({
       ids,
       experiment,
-      mergeTags = false,
     }: UseExperimentBatchUpdateMutationParams) => {
       const { data } = await api.patch(`${EXPERIMENTS_REST_ENDPOINT}batch`, {
         ids,
-        update: experiment,
-        merge_tags: mergeTags,
+        update: buildTagUpdatePayload(experiment),
       });
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
+      const message =
+        get(error, ["response", "data", "errors", "0"]) ??
+        get(error, ["response", "data", "message"]) ??
         error.message ??
-          "An unknown error occurred while updating experiments. Please try again later.",
-      );
+        "An unknown error occurred while updating experiments. Please try again later.";
 
       toast({
         title: "Error",

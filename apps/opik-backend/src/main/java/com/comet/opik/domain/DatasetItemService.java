@@ -50,6 +50,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.DatasetItem.DatasetItemPage;
 import static com.comet.opik.domain.DatasetItemVersionDAO.DatasetItemIdMapping;
@@ -518,7 +519,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             return dao.bulkUpdate(batchUpdate.ids(), batchUpdate.datasetId(), batchUpdate.filters(),
                     batchUpdate.update(),
                     batchUpdate.mergeTags());
-        });
+        }).onErrorResume(TagOperations::mapTagLimitError);
     }
 
     /**
@@ -1495,6 +1496,21 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         // Assign row IDs to edited and added items
                         List<DatasetItem> editedItemsWithIds = withAssignedRowIds(editedItems, editedUuids);
                         List<DatasetItem> addedItemsWithIds = withAssignedRowIds(addedItems, addedUuids);
+
+                        // Validate tag limits on all items being inserted
+                        Stream.concat(addedItemsWithIds.stream(), editedItemsWithIds.stream())
+                                .filter(item -> item.tags() != null
+                                        && item.tags().size() > TagOperations.MAX_TAGS_PER_ITEM)
+                                .findFirst()
+                                .ifPresent(item -> {
+                                    throw new ClientErrorException(
+                                            Response.status(422)
+                                                    .entity(new ErrorMessage(List.of(
+                                                            "Tag limit exceeded: maximum "
+                                                                    + TagOperations.MAX_TAGS_PER_ITEM
+                                                                    + " tags per item")))
+                                                    .build());
+                                });
 
                         // Apply delta changes via DAO
                         return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,

@@ -5,12 +5,12 @@ import get from "lodash/get";
 import api, { SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { Span } from "@/types/traces";
 import { useToast } from "@/components/ui/use-toast";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
 
 type UseSpanBatchUpdateMutationParams = {
   projectId: string;
   spanIds: string[];
-  span: Partial<Span>;
-  mergeTags?: boolean;
+  span: Partial<Span> & TagUpdateFields;
 };
 
 const useSpanBatchUpdateMutation = () => {
@@ -18,25 +18,19 @@ const useSpanBatchUpdateMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({
-      spanIds,
-      span,
-      mergeTags,
-    }: UseSpanBatchUpdateMutationParams) => {
+    mutationFn: async ({ spanIds, span }: UseSpanBatchUpdateMutationParams) => {
       const { data } = await api.patch(SPANS_REST_ENDPOINT + "batch", {
         ids: spanIds,
-        update: span,
-        merge_tags: mergeTags,
+        update: buildTagUpdatePayload(span),
       });
 
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const message =
+        get(error, ["response", "data", "errors", "0"]) ??
+        get(error, ["response", "data", "message"]) ??
+        error.message;
 
       toast({
         title: "Error",

@@ -1150,32 +1150,34 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.source,
                 src.trace_id,
                 src.span_id,
-                <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
-                src.item_created_at,
-                now64(9) as item_last_updated_at,
-                src.item_created_by,
-                :userName as item_last_updated_by,
-                now64(9) as created_at,
-                now64(9) as last_updated_at,
-                :userName as created_by,
-                :userName as last_updated_by,
-                src.workspace_id
-            FROM (
-                SELECT *
-                FROM dataset_item_versions
-                WHERE workspace_id = :workspace_id
-                AND dataset_id = :datasetId
-                AND dataset_version_id = :baseVersionId
-                <if(item_ids)>
-                AND dataset_item_id IN :itemIds
-                <endif>
-                <if(dataset_item_filters)>
-                AND <dataset_item_filters>
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY dataset_item_id
-            ) AS src
-            """;
+                """ + TagOperations.tagUpdateFragment("src.tags") + """
+            as tags,
+                           src.item_created_at,
+                           now64(9) as item_last_updated_at,
+                           src.item_created_by,
+                           :userName as item_last_updated_by,
+                           now64(9) as created_at,
+                           now64(9) as last_updated_at,
+                           :userName as created_by,
+                           :userName as last_updated_by,
+                           src.workspace_id
+                       FROM (
+                           SELECT *
+                           FROM dataset_item_versions
+                           WHERE workspace_id = :workspace_id
+                           AND dataset_id = :datasetId
+                           AND dataset_version_id = :baseVersionId
+                           <if(item_ids)>
+                           AND dataset_item_id IN :itemIds
+                           <endif>
+                           <if(dataset_item_filters)>
+                           AND <dataset_item_filters>
+                           <endif>
+                           ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                           LIMIT 1 BY dataset_item_id
+                       ) AS src
+                       SETTINGS short_circuit_function_evaluation = 'force_enable'
+                       """;
 
     // Copy items from source version to target version
     // Optionally excludes items matching filters (when exclude_filters is set)
@@ -2326,12 +2328,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 if (batchUpdate.update().data() != null) {
                     template.add("data", true);
                 }
-                if (batchUpdate.update().tags() != null) {
-                    template.add("tags", true);
-                    if (Boolean.TRUE.equals(batchUpdate.mergeTags())) {
-                        template.add("merge_tags", true);
-                    }
-                }
+
+                TagOperations.configureTagTemplate(template, batchUpdate.update(),
+                        Boolean.TRUE.equals(batchUpdate.mergeTags()));
 
                 // Add either item IDs or filters based on what's provided
                 if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
@@ -2375,9 +2374,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             .getOrDefault(batchUpdate.update().data());
                     statement.bind("data", dataAsStrings);
                 }
-                if (batchUpdate.update().tags() != null) {
-                    statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
-                }
+
+                TagOperations.bindTagParams(statement, batchUpdate.update());
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "batch_update_items");
 
