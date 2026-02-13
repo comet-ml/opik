@@ -261,7 +261,7 @@ class PromptClient:
                 - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
-            List[Prompt]: A list of prompts for the given name.
+            List[PromptVersionDetail]: A list of prompt versions for the given name.
 
         Example:
             # Get all versions of a prompt
