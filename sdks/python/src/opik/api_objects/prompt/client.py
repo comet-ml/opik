@@ -3,7 +3,7 @@ import json
 import dataclasses
 
 import opik.exceptions
-from opik.rest_api import client as rest_client
+from opik.rest_api import client as rest_client, PromptVersionUpdate
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
 from . import types as prompt_types
@@ -431,3 +431,48 @@ class PromptClient:
             if e.status_code != 404:
                 raise e
             return []
+
+    def update_prompt_version_tags(
+        self,
+        version_ids: List[str],
+        tags: Optional[List[str]] = None,
+        merge: Optional[bool] = None,
+    ) -> None:
+        """
+        Update tags for one or more prompt versions in a single batch operation.
+
+        Parameters:
+            version_ids: List of prompt version IDs to update.
+            tags: Tags to set or merge. Semantics:
+                - None: No change to tags (preserves existing tags).
+                - []: Clear all tags (when merge is False or None).
+                - ['tag1', 'tag2']: Set or merge tags (based on merge parameter).
+            merge: Controls tag update behavior. Semantics:
+                - None: Use backend default behavior (replace mode).
+                - False: Replace all existing tags (replace mode).
+                - True: Merge new tags with existing tags (union).
+
+        Example:
+            # Replace tags on multiple versions (default behavior)
+            prompts_client.update_prompt_version_tags(
+                version_ids=["version-id-1", "version-id-2"],
+                tags=["production", "v2"]
+            )
+
+            # Merge new tags with existing tags
+            prompts_client.update_prompt_version_tags(
+                version_ids=["version-id-1"],
+                tags=["hotfix"],
+                merge=True
+            )
+
+            # Clear all tags
+            prompts_client.update_prompt_version_tags(
+                version_ids=["version-id-1"],
+                tags=[]
+            )
+        """
+        update = PromptVersionUpdate(tags=tags)
+        self._rest_client.prompts.update_prompt_versions(
+            ids=version_ids, update=update, merge_tags=merge
+        )

@@ -51,7 +51,7 @@ from ..message_processing import (
 )
 from ..message_processing.batching import sequence_splitter
 from ..message_processing.processors import message_processors_chain
-from ..rest_api import client as rest_api_client, PromptVersionUpdate
+from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
     dataset_public,
@@ -1760,52 +1760,6 @@ class Opik:
         ]
         return result
 
-    def update_prompt_version_tags(
-        self,
-        version_ids: List[str],
-        tags: Optional[List[str]] = None,
-        merge: Optional[bool] = None,
-    ) -> None:
-        """
-        Update tags for one or more prompt versions in a single batch operation.
-
-        Parameters:
-            version_ids: List of prompt version IDs to update.
-            tags: Tags to set or merge. Semantics:
-                - None: No change to tags (preserves existing tags).
-                - []: Clear all tags (when merge is False or None).
-                - ['tag1', 'tag2']: Set or merge tags (based on merge parameter).
-            merge: Controls tag update behavior. Semantics:
-                - None: Use backend default behavior (replace mode).
-                - False: Replace all existing tags (replace mode).
-                - True: Merge new tags with existing tags (union).
-
-        Example:
-            # Replace tags on multiple versions (default behavior)
-            client.update_prompt_version_tags(
-                version_ids=["version-id-1", "version-id-2"],
-                tags=["production", "v2"]
-            )
-
-            # Merge new tags with existing tags
-            client.update_prompt_version_tags(
-                version_ids=["version-id-1"],
-                tags=["hotfix"],
-                merge=True
-            )
-
-            # Clear all tags
-            client.update_prompt_version_tags(
-                version_ids=["version-id-1"],
-                tags=[]
-            )
-        """
-
-        update = PromptVersionUpdate(tags=tags)
-        self._rest_client.prompts.update_prompt_versions(
-            ids=version_ids, update=update, merge_tags=merge
-        )
-
     def get_all_prompts(self, name: str) -> List[prompt_module.Prompt]:
         """
         DEPRECATED: Please use Opik.get_prompt_history() instead.
@@ -1922,6 +1876,24 @@ class Opik:
             An instance of the ExperimentsClient initialized with a cached REST client.
         """
         return experiments_client.ExperimentsClient(self._rest_client)
+
+    def get_prompts_client(self) -> prompt_client.PromptClient:
+        """
+        Retrieves an instance of `PromptClient` for bulk prompt operations.
+
+        Use this client for operations like updating prompt version tags in batch.
+
+        Returns:
+            An instance of the PromptClient initialized with a cached REST client.
+
+        Example:
+            prompts_client = client.get_prompts_client()
+            prompts_client.update_prompt_version_tags(
+                version_ids=["version-id-1", "version-id-2"],
+                tags=["production", "v2"]
+            )
+        """
+        return prompt_client.PromptClient(self._rest_client)
 
     def _create_annotation_queue(
         self,

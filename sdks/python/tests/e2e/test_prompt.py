@@ -791,7 +791,7 @@ def test_prompt__filter_versions(opik_client: opik.Opik):
         name=prompt_name,
         prompt=f"Template v1-{_generate_random_suffix()}",
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[v1.version_id],
         tags=[shared_tag, _generate_random_tag()],
     )
@@ -799,7 +799,7 @@ def test_prompt__filter_versions(opik_client: opik.Opik):
         name=prompt_name,
         prompt=f"Template v2-{_generate_random_suffix()}",
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[v2.version_id],
         tags=_generate_random_tags(),
     )
@@ -807,7 +807,7 @@ def test_prompt__filter_versions(opik_client: opik.Opik):
         name=prompt_name,
         prompt=f"Template v3-{_generate_random_suffix()}",
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[v3.version_id],
         tags=[_generate_random_tag(), shared_tag],
     )
@@ -860,7 +860,7 @@ def test_chat_prompt__filter_versions(opik_client: opik.Opik):
             {"role": "user", "content": f"Message v1-{_generate_random_suffix()}"}
         ],
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[v1.version_id],
         tags=[shared_tag, _generate_random_tag()],
     )
@@ -870,7 +870,7 @@ def test_chat_prompt__filter_versions(opik_client: opik.Opik):
             {"role": "user", "content": f"Message v2-{_generate_random_suffix()}"}
         ],
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[v2.version_id],
         tags=_generate_random_tags(),
     )
@@ -880,7 +880,7 @@ def test_chat_prompt__filter_versions(opik_client: opik.Opik):
             {"role": "user", "content": f"Message v3-{_generate_random_suffix()}"}
         ],
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[v3.version_id],
         tags=[_generate_random_tag(), shared_tag],
     )
@@ -942,7 +942,7 @@ def test_prompt__update_version_tags__replace_mode(opik_client: opik.Opik):
         name=prompt_name,
         prompt=f"Template v1-{_generate_random_suffix()}",
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id],
         tags=_generate_random_tags(),
         merge=False,
@@ -951,14 +951,14 @@ def test_prompt__update_version_tags__replace_mode(opik_client: opik.Opik):
         name=prompt_name,
         prompt=f"Template v2-{_generate_random_suffix()}",
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version2.version_id],
         tags=_generate_random_tags(),
         merge=False,
     )
 
     new_tags = _generate_random_tags()
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id, version2.version_id],
         tags=new_tags,
         merge=False,
@@ -982,7 +982,7 @@ def test_prompt__update_version_tags__default_replace_mode(opik_client: opik.Opi
         name=prompt_name,
         prompt=f"Template v1-{_generate_random_suffix()}",
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id],
         tags=_generate_random_tags(),
     )
@@ -990,13 +990,13 @@ def test_prompt__update_version_tags__default_replace_mode(opik_client: opik.Opi
         name=prompt_name,
         prompt=f"Template v2-{_generate_random_suffix()}",
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version2.version_id],
         tags=_generate_random_tags(),
     )
 
     new_tags = _generate_random_tags()
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id, version2.version_id],
         tags=new_tags,
     )
@@ -1022,12 +1022,12 @@ def test_prompt__update_version_tags__clear_with_empty_array(opik_client: opik.O
         name=prompt_name,
         prompt=f"Template v2-{_generate_random_suffix()}",
     )
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id, version2.version_id],
         tags=_generate_random_tags(),
     )
 
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id, version2.version_id],
         tags=[],
     )
@@ -1054,7 +1054,7 @@ def test_prompt__update_version_tags__preserve_with_none(
         prompt=f"Template v1-{_generate_random_suffix()}",
     )
     initial_tags_v1 = _generate_random_tags()
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id],
         tags=initial_tags_v1,
     )
@@ -1063,12 +1063,12 @@ def test_prompt__update_version_tags__preserve_with_none(
         prompt=f"Template v2-{_generate_random_suffix()}",
     )
     initial_tags_v2 = _generate_random_tags()
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version2.version_id],
         tags=initial_tags_v2,
     )
 
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id, version2.version_id],
         tags=None,
         merge=merge_param,
@@ -1093,7 +1093,7 @@ def test_prompt__update_version_tags__merge_mode(opik_client: opik.Opik):
         prompt=f"Template v1-{_generate_random_suffix()}",
     )
     initial_tags_v1 = _generate_random_tags()
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id],
         tags=initial_tags_v1,
         merge=False,
@@ -1103,14 +1103,14 @@ def test_prompt__update_version_tags__merge_mode(opik_client: opik.Opik):
         prompt=f"Template v2-{_generate_random_suffix()}",
     )
     initial_tags_v2 = _generate_random_tags()
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version2.version_id],
         tags=initial_tags_v2,
         merge=False,
     )
 
     additional_tags = _generate_random_tags()
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[version1.version_id, version2.version_id],
         tags=additional_tags,
         merge=True,
@@ -1144,7 +1144,7 @@ def test_chat_prompt__update_version_tags(opik_client: opik.Opik):
     )
 
     new_tags = _generate_random_tags()
-    opik_client.update_prompt_version_tags(
+    opik_client.get_prompts_client().update_prompt_version_tags(
         version_ids=[v1.version_id, v2.version_id],
         tags=new_tags,
         merge=False,
