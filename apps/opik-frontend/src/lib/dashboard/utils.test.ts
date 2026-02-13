@@ -414,6 +414,8 @@ describe("createDefaultWidgetConfig", () => {
     expect(config.generatedTitle).toBe("Generated Title");
     expect(config.subtitle).toBe("");
     expect(config.config).toEqual({ content: "default" });
-    expect(mockResolver).toHaveBeenCalledWith(WIDGET_TYPE.TEXT_MARKDOWN);
+    expect(mockResolver).toHaveBeenCalledWith({
+      type: WIDGET_TYPE.TEXT_MARKDOWN,
+    });
   });
 });

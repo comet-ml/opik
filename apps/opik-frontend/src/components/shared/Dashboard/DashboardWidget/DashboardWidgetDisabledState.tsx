@@ -16,7 +16,7 @@ const DashboardWidgetDisabledState: React.FunctionComponent<
   icon,
 }) => {
   return (
-    <div className="flex h-full w-full items-center justify-center">
+    <div className="flex size-full items-center justify-center">
       <div className="flex flex-col items-center gap-3 text-center">
         <div
           className={cn(
