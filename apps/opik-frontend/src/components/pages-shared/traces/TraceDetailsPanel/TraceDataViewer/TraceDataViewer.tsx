@@ -240,14 +240,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             )}
             {!isUndefined(estimatedCost) && (
               <TooltipWrapper
-                content={`Estimated cost ${formatCost(estimatedCost)}`}
+                content={`Estimated cost ${formatCost(estimatedCost, {
+                  modifier: "full",
+                })}`}
               >
                 <div
                   className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-cost"
                 >
                   <Coins className="size-3 shrink-0" />{" "}
-                  {formatCost(estimatedCost, { modifier: "short" })}
+                  {formatCost(estimatedCost)}
                 </div>
               </TooltipWrapper>
             )}

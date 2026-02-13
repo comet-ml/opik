@@ -71,6 +71,7 @@ import QueueItemRowActionsCell from "@/components/pages/AnnotationQueuePage/Queu
 import NoQueueItemsPage from "@/components/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
 import useTracesList from "@/api/traces/useTracesList";
 import { formatDate, formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import { generateTracesURL } from "@/lib/annotation-queues";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useAppStore from "@/store/AppStore";
@@ -132,6 +133,7 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
     statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
   },
   {
     id: COLUMN_METADATA_ID,
@@ -183,6 +185,9 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     type: COLUMN_TYPE.cost,
     cell: CostCell as never,
     size: 160,
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
   {
     id: "llm_span_count",

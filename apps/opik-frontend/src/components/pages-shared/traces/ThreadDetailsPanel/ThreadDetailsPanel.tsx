@@ -392,14 +392,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             <TooltipWrapper
               content={`Estimated cost ${formatCost(
                 thread?.total_estimated_cost,
+                { modifier: "full" },
               )}`}
             >
               <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
                 <Coins className="size-4 shrink-0" />
                 <span className="comet-body-s-accented truncate">
-                  {formatCost(thread?.total_estimated_cost, {
-                    modifier: "short",
-                  })}
+                  {formatCost(thread?.total_estimated_cost)}
                 </span>
               </div>
             </TooltipWrapper>

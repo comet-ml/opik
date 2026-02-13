@@ -86,6 +86,7 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { calculateLineHeight } from "@/lib/experiments";
 import { formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import SectionHeader from "@/components/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -460,6 +461,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         cell: DurationCell.Compare as never,
         statisticKey: "duration",
         statisticDataFormater: formatDuration,
+        statisticTooltipFormater: formatDuration,
         customMeta: {
           experimentsIds,
         },
@@ -483,6 +485,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         type: COLUMN_TYPE.cost,
         cell: CostCell.Compare as never,
         statisticKey: "total_estimated_cost",
+        statisticDataFormater: formatCost,
+        statisticTooltipFormater: (value: number) =>
+          formatCost(value, { modifier: "full" }),
         supportsPercentiles: true,
         customMeta: {
           experimentsIds,
