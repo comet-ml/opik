@@ -4,7 +4,7 @@ import type * as OpikApi from "../index.js";
 
 export interface Experiment {
     id?: string;
-    datasetName: string;
+    datasetName?: string;
     datasetId?: string;
     projectId?: string;
     projectName?: string;

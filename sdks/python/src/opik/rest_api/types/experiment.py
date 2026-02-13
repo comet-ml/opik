@@ -18,7 +18,7 @@ from .prompt_version_link import PromptVersionLink
 
 class Experiment(UniversalBaseModel):
     id: typing.Optional[str] = None
-    dataset_name: str
+    dataset_name: typing.Optional[str] = None
     dataset_id: typing.Optional[str] = None
     project_id: typing.Optional[str] = None
     project_name: typing.Optional[str] = None

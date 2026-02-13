@@ -4,13 +4,11 @@ import type * as OpikApi from "../../../../index.js";
 
 /**
  * @example
- *     {
- *         datasetName: "dataset_name"
- *     }
+ *     {}
  */
 export interface ExperimentWrite {
     id?: string;
-    datasetName: string;
+    datasetName?: string;
     name?: string;
     metadata?: OpikApi.JsonListStringWrite;
     tags?: string[];

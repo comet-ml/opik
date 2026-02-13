@@ -10593,15 +10593,12 @@ components:
           items:
             $ref: "#/components/schemas/ExperimentScore"
     Experiment:
-      required:
-      - dataset_name
       type: object
       properties:
         id:
           type: string
           format: uuid
         dataset_name:
-          minLength: 1
           type: string
         dataset_id:
           type: string
@@ -10742,15 +10739,12 @@ components:
         value:
           type: number
     Experiment_Write:
-      required:
-      - dataset_name
       type: object
       properties:
         id:
           type: string
           format: uuid
         dataset_name:
-          minLength: 1
           type: string
         name:
           type: string
@@ -11473,15 +11467,12 @@ components:
         value:
           type: number
     Experiment_Public:
-      required:
-      - dataset_name
       type: object
       properties:
         id:
           type: string
           format: uuid
         dataset_name:
-          minLength: 1
           type: string
         dataset_id:
           type: string
