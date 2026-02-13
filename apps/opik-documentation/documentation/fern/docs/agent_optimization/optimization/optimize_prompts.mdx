@@ -71,6 +71,44 @@ Supported values:
 - `False` (optimize no roles; useful if you only want tool optimization)
 - `["system", "user"]` (explicit allowlist)
 
+### Example: Banking support flow (user-only)
+
+This matches production constraints where a client injects system/assistant instructions you cannot edit,
+but you still need to roll out a new support flow by changing only the user message.
+
+```python
+from opik_optimizer import ChatPrompt, MetaPromptOptimizer
+from opik_optimizer.utils import prompt_segments
+
+prompt = ChatPrompt(
+    messages=[
+        {"role": "system", "content": "Client-injected policy instructions."},
+        {"role": "assistant", "content": "Client-injected MCP guidance."},
+        {"role": "user", "content": "{user_query}"},
+    ]
+)
+
+# Update only the user message (message:2). This returns a new ChatPrompt.
+updates = {
+    "message:2": (
+        "Banking support flow:\n"
+        "1) Collect risk context (account type, recent activity, device).\n"
+        "2) Ask one clarifying question.\n"
+        "3) Propose next steps and confirm.\n"
+        "User request: {user_query}"
+    )
+}
+updated_prompt = prompt_segments.apply_segment_updates(prompt, updates)
+
+optimizer = MetaPromptOptimizer(model="openai/gpt-5-nano")
+result = optimizer.optimize_prompt(
+    prompt=updated_prompt,
+    dataset=my_dataset,
+    metric=answer_quality,
+    optimize_prompts="user",  # system + assistant unchanged
+)
+```
+
 ### Optimize tools (MCP)
 
 Tool optimization is now documented separately. Use it when you want to improve MCP tool
@@ -102,6 +140,11 @@ result = optimizer.optimize_prompt(
     optimize_prompts="user",
 )
 ```
+
+<Note>
+For a full end-to-end workflow (Jinja templates + user-only optimization + dataset evaluation),
+see `sdks/opik_optimizer/scripts/prompt_segments_jinja_example.py` in the SDK repository.
+</Note>
 
 ### Optimize multiple prompts together
 

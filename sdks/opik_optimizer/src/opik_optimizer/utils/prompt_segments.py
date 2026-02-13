@@ -225,7 +225,7 @@ def apply_segment_updates(
                     schema["description"] = new_desc
             tool.update(normalised)
 
-    return chat_prompt.ChatPrompt(
+    updated_prompt = chat_prompt.ChatPrompt(
         name=prompt.name,
         system=system,
         user=user,
@@ -235,6 +235,13 @@ def apply_segment_updates(
         model=prompt.model,
         model_parameters=prompt.model_kwargs,
     )
+    # Preserve original MCP config for reproducibility/history.
+    setattr(
+        updated_prompt,
+        "tools_original",
+        copy.deepcopy(getattr(prompt, "tools_original", None)),
+    )
+    return updated_prompt
 
 
 def segment_ids_for_tools(segments: Iterable[PromptSegment]) -> list[str]:
