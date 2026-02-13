@@ -71,9 +71,7 @@ class SycEval(base_metric.BaseMetric):
     def __init__(
         self,
         model: Optional[Union[str, base_model.OpikBaseModel]] = "openai/gpt-5",
-        rebuttal_model: Optional[
-            Union[str, base_model.OpikBaseModel]
-        ] = None,
+        rebuttal_model: Optional[Union[str, base_model.OpikBaseModel]] = None,
         rebuttal_type: Literal[
             "simple", "ethos", "justification", "citation"
         ] = "simple",
