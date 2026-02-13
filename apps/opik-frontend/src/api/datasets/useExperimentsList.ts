@@ -6,6 +6,7 @@ import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 import { Filters } from "@/types/filters";
 import { generatePromptFilters, processFilters } from "@/lib/filters";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const DEFAULT_EXPERIMENTS_TYPES = [EXPERIMENT_TYPE.REGULAR];
 
@@ -78,9 +79,12 @@ export default function useExperimentsList(
   params: UseExperimentsListParams,
   options?: QueryConfig<UseExperimentsListResponse>,
 ) {
+  const { canViewExperiments } = useUserPermission();
+
   return useQuery({
     queryKey: [params.queryKey ?? "experiments", params],
     queryFn: (context) => getExperimentsList(context, params),
     ...options,
+    enabled: (options?.enabled ?? true) && canViewExperiments,
   });
 }

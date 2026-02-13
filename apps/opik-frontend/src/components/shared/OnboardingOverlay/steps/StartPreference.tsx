@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import OnboardingStep from "../OnboardingStep";
 import useAppStore from "@/store/AppStore";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const OPTIONS = {
   TRACE_APP: "Trace an app – Debug and analyze every AI interaction",
@@ -17,6 +18,7 @@ const FEATURE_FLAG_KEY = "onboarding-start-exploring-test";
 const StartPreference: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const variant = useFeatureFlagVariantKey(FEATURE_FLAG_KEY);
+  const { canViewExperiments } = useUserPermission();
 
   // A/B test: control shows "Skip", test shows "Start exploring Opik"
   // Enhanced flow also opens create experiment dialog when clicking "Run evaluations"
@@ -49,20 +51,25 @@ const StartPreference: React.FC = () => {
           <OnboardingStep.AnswerCard option={OPTIONS.TEST_PROMPTS} />
         </Link>
 
-        <Link
-          to="/$workspaceName/experiments"
-          params={{ workspaceName }}
-          search={
-            showEnhancedOnboarding
-              ? {
-                  new: { experiment: true, datasetName: "Opik Demo Questions" },
-                }
-              : undefined
-          }
-          className="w-full"
-        >
-          <OnboardingStep.AnswerCard option={OPTIONS.RUN_EVALUATIONS} />
-        </Link>
+        {canViewExperiments && (
+          <Link
+            to="/$workspaceName/experiments"
+            params={{ workspaceName }}
+            search={
+              showEnhancedOnboarding
+                ? {
+                    new: {
+                      experiment: true,
+                      datasetName: "Opik Demo Questions",
+                    },
+                  }
+                : undefined
+            }
+            className="w-full"
+          >
+            <OnboardingStep.AnswerCard option={OPTIONS.RUN_EVALUATIONS} />
+          </Link>
+        )}
       </OnboardingStep.AnswerList>
 
       {showEnhancedOnboarding ? (

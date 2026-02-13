@@ -14,9 +14,11 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
+  const { canViewExperiments } = useUserPermission();
 
   const promptId = usePromptIdFromURL();
 
@@ -77,15 +79,17 @@ const PromptPage: React.FunctionComponent = () => {
             <TabsTrigger variant="underline" value="prompt">
               Prompt
             </TabsTrigger>
-            <TabsTrigger variant="underline" value="experiments">
-              Experiments
-              <ExplainerIcon
-                className="ml-1"
-                {...EXPLAINERS_MAP[
-                  EXPLAINER_ID.why_do_i_have_experiments_in_the_prompt_library
-                ]}
-              />
-            </TabsTrigger>
+            {canViewExperiments && (
+              <TabsTrigger variant="underline" value="experiments">
+                Experiments
+                <ExplainerIcon
+                  className="ml-1"
+                  {...EXPLAINERS_MAP[
+                    EXPLAINER_ID.why_do_i_have_experiments_in_the_prompt_library
+                  ]}
+                />
+              </TabsTrigger>
+            )}
             <TabsTrigger variant="underline" value="commits">
               Commits
               <ExplainerIcon
@@ -98,9 +102,11 @@ const PromptPage: React.FunctionComponent = () => {
         <TabsContent value="prompt">
           <PromptTab prompt={prompt} />
         </TabsContent>
-        <TabsContent value="experiments">
-          <ExperimentsTab promptId={promptId} />
-        </TabsContent>
+        {canViewExperiments && (
+          <TabsContent value="experiments">
+            <ExperimentsTab promptId={promptId} />
+          </TabsContent>
+        )}
         <TabsContent value="commits">
           <CommitsTab prompt={prompt} />
         </TabsContent>
