@@ -125,7 +125,10 @@ const PromptTemplateView: React.FC<PromptTemplateViewProps> = ({
 
     if (isTextPrompt) {
       return (
-        <div className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground">
+        <div
+          className="comet-body-s whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-3 text-foreground"
+          data-testid="prompt-text-content"
+        >
           {textContent}
         </div>
       );
