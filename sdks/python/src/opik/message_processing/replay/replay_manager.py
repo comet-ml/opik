@@ -11,6 +11,11 @@ from .. import messages
 LOGGER = logging.getLogger(__name__)
 
 
+DEFAULT_BATCH_SIZE = 100
+DEFAULT_BATCH_REPLAY_DELAY = 0.5
+DEFAULT_TICK_INTERVAL = 0.3
+
+
 class ReplayManager(threading.Thread):
     """
     Manages replaying messages to the server for a connection management system.
@@ -25,8 +30,9 @@ class ReplayManager(threading.Thread):
     def __init__(
         self,
         monitor: connection_monitor.OpikConnectionMonitor,
-        manager: db_manager.DBManager,
-        tick_interval_seconds: float = 0.3,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+        batch_replay_delay: float = DEFAULT_BATCH_REPLAY_DELAY,
+        tick_interval_seconds: float = DEFAULT_TICK_INTERVAL,
     ):
         """
         Initializes the ReplayManager instance.
@@ -35,18 +41,22 @@ class ReplayManager(threading.Thread):
 
         Args:
             monitor: An instance of OpikConnectionMonitor used for monitoring the connection.
-            manager: An instance of DBManager used for database operations.
+            batch_size: The size of batches for processing.
+            batch_replay_delay: The delay (in seconds) between replaying batches of messages.
             tick_interval_seconds: Interval in seconds between execution ticks. Default is 0.3.
         """
         super().__init__(daemon=True, name="ReplayManager")
-        self._db_manager = manager
-        self._running = True
+        self._stop_running = threading.Event()
         self._monitor = monitor
+        self._replay_lock = threading.RLock()
+        self._db_manager = db_manager.DBManager(
+            sync_lock=self._replay_lock,
+            batch_size=batch_size,
+            batch_replay_delay=batch_replay_delay,
+        )
         self._replay_callback: Optional[types.ReplayCallback] = None
         self._tick_interval_seconds = tick_interval_seconds
         self._next_tick_time = time.time() + self._tick_interval_seconds
-        self._in_failed_messages_replay = False
-        self._in_failed_messages_replay_repetitions = 0
 
     def start(self) -> None:
         self._check_replay_callback()
@@ -54,7 +64,7 @@ class ReplayManager(threading.Thread):
 
     def run(self) -> None:
         try:
-            while self._running:
+            while not self._stop_running.is_set():
                 self._loop()
         finally:
             # release the database connection
@@ -90,39 +100,28 @@ class ReplayManager(threading.Thread):
 
     def close(self) -> None:
         """Stop the replay manager."""
-        self._running = False
+        self._stop_running.set()
 
     def flush(self) -> None:
         """Force replay of all failed messages to the server."""
         self._check_replay_callback()
         # ignore MyPy check because already asserted above
-        self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore
+        self._replay_failed_messages()
 
     def _loop(self) -> None:
         sleep_time = self._next_tick_time - time.time()
         if sleep_time > 0:
-            # sleep until the next tick time to avoid excessive CPU usage
-            time.sleep(sleep_time)
+            # sleep until the next tick time to avoid excessive CPU usage - interruptible-sleep by close
+            self._stop_running.wait(sleep_time)
 
         try:
             status = self._monitor.tick()
             if status == connection_monitor.ConnectionStatus.connection_restored:
-                self._monitor.reset()
                 # the connection was restored, replay all failed messages
-                self._check_replay_callback()
-                # ignore MyPy check because already asserted above
-                self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore
-
-            self._in_failed_messages_replay = False
+                self._replay_failed_messages()
+                self._monitor.reset()
         except Exception as ex:
-            if not self._in_failed_messages_replay:
-                self._in_failed_messages_replay = True
-                log_level = logging.WARNING
-            else:
-                log_level = logging.DEBUG
-
-            LOGGER.log(
-                log_level,
+            LOGGER.warning(
                 "Failed to tick the connection monitor or replay failed messages, will repeat. Reason: %s",
                 ex,
                 exc_info=ex,
@@ -132,6 +131,13 @@ class ReplayManager(threading.Thread):
         self._next_tick_time = time.time() + self._tick_interval_seconds
 
     def _check_replay_callback(self) -> None:
-        assert self._replay_callback is not None, (
-            "Replay callback must be set before starting the replay manager"
-        )
+        if self._replay_callback is None:
+            raise ValueError(
+                "Replay callback must be set before starting the replay manager"
+            )
+
+    def _replay_failed_messages(self) -> None:
+        with self._replay_lock:
+            self._check_replay_callback()
+            # ignore MyPy check because already asserted above
+            self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore

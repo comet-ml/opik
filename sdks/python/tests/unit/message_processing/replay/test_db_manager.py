@@ -12,15 +12,15 @@ from opik.message_processing.replay import message_serialization, db_manager
 @pytest.fixture
 def manager() -> Generator[db_manager.DBManager, None, None]:
     """Fixture that creates a ReplayManager and ensures cleanup after test."""
-    mgr = db_manager.DBManager()
+    mgr = db_manager.DBManager(batch_size=10, batch_replay_delay=0.5)
     yield mgr
     mgr.close()
 
 
 @pytest.fixture
 def small_batch_manager() -> Generator[db_manager.DBManager, None, None]:
-    """Fixture that creates a ReplayManager with small batch size for testing batching."""
-    mgr = db_manager.DBManager(batch_size=10)
+    """Fixture that creates a ReplayManager with a small batch size for testing batching."""
+    mgr = db_manager.DBManager(batch_size=10, batch_replay_delay=0.1)
     yield mgr
     mgr.close()
 
@@ -111,7 +111,7 @@ class TestReplayManagerInitialization:
     def test_init__custom_connection__uses_provided_connection(self):
         """Test that ReplayManager uses a provided connection."""
         conn = sqlite3.connect(":memory:", check_same_thread=False)
-        mgr = db_manager.DBManager(conn=conn)
+        mgr = db_manager.DBManager(conn=conn, batch_size=10, batch_replay_delay=0.1)
 
         try:
             assert mgr.conn is conn
@@ -120,13 +120,13 @@ class TestReplayManagerInitialization:
             mgr.close()
 
     def test_init__connection_creation_failure__marks_as_error(self):
-        """Test that schema creation failure marks manager as error."""
+        """Test that schema creation failure marks the manager as an error."""
         # Create a read-only connection that will fail on CREATE TABLE
         conn = sqlite3.connect(":memory:", check_same_thread=False)
         # Close the connection to make it unusable
         conn.close()
 
-        mgr = db_manager.DBManager(conn=conn)
+        mgr = db_manager.DBManager(conn=conn, batch_size=10, batch_replay_delay=0.1)
 
         assert mgr.failed
         assert not mgr.initialized
@@ -181,7 +181,7 @@ class TestRegisterMessage:
         """Test that registering a message on an uninitialized manager is ignored."""
         conn = sqlite3.connect(":memory:", check_same_thread=False)
         conn.execute("CREATE TABLE messages (id INTEGER)")  # Force init failure
-        mgr = db_manager.DBManager(conn=conn)
+        mgr = db_manager.DBManager(conn=conn, batch_size=10, batch_replay_delay=0.1)
 
         try:
             message = _create_trace_message(message_id=1)
@@ -526,8 +526,8 @@ class TestReplayFailedMessages:
 
         result = manager.replay_failed_messages(callback)
 
-        # Should still return 3 even though one callback failed
-        assert result == 3
+        # Should return 2 because one callback failed
+        assert result == 2
         assert call_count == 3
 
 
@@ -556,7 +556,7 @@ class TestReplayManagerStatusProperties:
         # Use a closed connection to force init failure
         conn = sqlite3.connect(":memory:", check_same_thread=False)
         conn.close()
-        mgr = db_manager.DBManager(conn=conn)
+        mgr = db_manager.DBManager(conn=conn, batch_size=10, batch_replay_delay=0.1)
 
         assert mgr.failed
 

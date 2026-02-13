@@ -15,7 +15,6 @@ from .types import ReplayCallback
 
 
 DEFAULT_DB_FILE = "opik_messages.db"
-DEFAULT_BATCH_SIZE = 100
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,10 +90,11 @@ class DBManager:
 
     def __init__(
         self,
-        batch_size: int = DEFAULT_BATCH_SIZE,
-        batch_replay_delay: float = 0.5,
+        batch_size: int,
+        batch_replay_delay: float,
         db_file: Optional[str] = None,
         conn: Optional[sqlite3.Connection] = None,
+        sync_lock: Optional[threading.RLock] = None,
     ) -> None:
         """
         Initializes the Manager class, setting up the database connection, temporary
@@ -122,7 +122,10 @@ class DBManager:
             conn = sqlite3.connect(self.db_file, check_same_thread=False)
         self.conn = conn
 
-        self.__lock__ = threading.RLock()
+        if sync_lock is None:
+            self.__lock__ = threading.RLock()
+        else:
+            self.__lock__ = sync_lock
         self._create_db_schema()
 
         self.message_files: Dict[int, str] = {}
@@ -446,9 +449,6 @@ class DBManager:
 
             total_replayed = 0
             for db_messages in self.fetch_failed_messages_batched(self.batch_size):
-                if self.closed:
-                    break
-
                 params = [
                     (int(MessageStatus.registered), message.id)
                     for message in db_messages
@@ -486,13 +486,12 @@ class DBManager:
         self, db_messages: List[DBMessage], replay_callback: ReplayCallback
     ) -> int:
         LOGGER.debug("Replaying %d failed messages to streamer", len(db_messages))
+        replayed = 0
         for message in db_messages:
-            if self.closed:
-                return 0
-
             try:
                 base_message = db_message_to_message(message)
                 replay_callback(base_message)
+                replayed += 1
             except Exception as e:
                 LOGGER.error(
                     "Failed to replay message with id=%r, type=%r, status=%r, reason: %s",
@@ -502,8 +501,10 @@ class DBManager:
                     e,
                     exc_info=True,
                 )
+                # mark the message as failed in the DB
+                self.update_message(message.id, MessageStatus.failed)
 
-        return len(db_messages)
+        return replayed
 
     def get_message(self, message_id: int) -> Optional[messages.BaseMessage]:
         """
@@ -612,9 +613,6 @@ class DBManager:
                 (MessageStatus.failed, last_seen_id, batch_size),
             )
             for row in rows:
-                if self.closed:
-                    # early exit if the manager is closed
-                    return
                 batch.append(
                     DBMessage(
                         id=row[0], type=row[1], json=row[2], status=MessageStatus.failed
