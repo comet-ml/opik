@@ -18,6 +18,9 @@ from typing import Any, List, Literal, Optional
 import pydantic
 
 
+DEFAULT_MODEL_NAME = "gpt-5-nano"
+
+
 class LLMJudgeModelConfig(pydantic.BaseModel):
     """
     Model configuration for LLMJudge.
@@ -25,11 +28,11 @@ class LLMJudgeModelConfig(pydantic.BaseModel):
     Matches backend's LlmAsJudgeModelParameters structure.
     """
 
-    name: str
-    """The model name (e.g., 'gpt-4o', 'claude-3-opus')."""
+    name: Optional[str] = None
+    """The model name (e.g., 'gpt-4o', 'claude-3-opus'). Optional."""
 
-    temperature: float
-    """Temperature for model generation (required by backend)."""
+    temperature: Optional[float] = None
+    """Temperature for model generation."""
 
     seed: Optional[int] = None
     """Seed for reproducible generation."""

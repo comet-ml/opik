@@ -14,7 +14,7 @@ from opik.evaluation.suite_evaluators import opik_llm_judge_config, llm_judge
 from opik.message_processing.emulation import models
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
-from .types import EvaluationTask
+from .types import EvaluationTask, EVALUATION_CONFIG_KEY
 from ..metrics import base_metric, score_result
 
 
@@ -23,11 +23,6 @@ LOGGER = logging.getLogger(__name__)
 EVALUATION_TASK_NAME = "evaluation_task"
 
 EVALUATION_STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the default streaming limit to improve the UX and not wait too long for the first items to be evaluated
-
-# Reserved key for evaluation suite metadata stored in dataset item content.
-# This will become proper backend fields on Dataset and DatasetItem once
-# OPIK-4222/4223 are implemented. Contains: {"evaluators": [...], "execution_policy": {...}}
-EVALUATION_CONFIG_KEY = "__evaluation_config__"
 
 
 class ExecutionPolicy(TypedDict, total=False):

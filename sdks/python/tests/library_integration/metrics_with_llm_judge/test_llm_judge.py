@@ -20,7 +20,6 @@ class TestLLMJudgeScore:
         assertion = "Response is factually accurate"
         evaluator = LLMJudge(
             assertions=[assertion],
-            model="gpt-4o",
             track=False,
         )
 
@@ -38,7 +37,6 @@ class TestLLMJudgeScore:
         assertion_helpful = "Response is helpful to the user"
         evaluator = LLMJudge(
             assertions=[assertion_accurate, assertion_helpful],
-            model="gpt-4o",
             track=False,
         )
 
@@ -58,7 +56,6 @@ class TestLLMJudgeScore:
         assertion = "Test assertion"
         evaluator = LLMJudge(
             assertions=[assertion],
-            model="gpt-4o",
             name="my_custom_judge",
             track=False,
         )
@@ -76,7 +73,6 @@ class TestLLMJudgeScore:
         assertion = "Response is factually accurate"
         evaluator = LLMJudge(
             assertions=[assertion],
-            model="gpt-4o",
             track=False,
         )
 
@@ -96,7 +92,6 @@ class TestLLMJudgeAsyncScore:
         assertion = "Response is factually accurate"
         evaluator = LLMJudge(
             assertions=[assertion],
-            model="gpt-4o",
             track=False,
         )
 
@@ -115,7 +110,6 @@ class TestLLMJudgeAsyncScore:
         assertion_concise = "Response is concise and to the point"
         evaluator = LLMJudge(
             assertions=[assertion_accurate, assertion_concise],
-            model="gpt-4o",
             track=False,
         )
 

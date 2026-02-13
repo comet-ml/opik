@@ -152,9 +152,6 @@ class LLMJudge(base.BaseSuiteEvaluator):
     Args:
         assertions: A list of assertion strings describing expected behaviors.
             Each string should describe what the output should satisfy.
-        model: The LLM to use for evaluation. Can be a string (model name) or
-            an `opik.evaluation.models.OpikBaseModel` subclass instance.
-            `opik.evaluation.models.LiteLLMChatModel` is used by default.
         name: The name of the evaluator (used as prefix for score names).
             Defaults to "llm_judge".
         track: Whether to track the evaluator. Defaults to True.
@@ -184,7 +181,6 @@ class LLMJudge(base.BaseSuiteEvaluator):
     def __init__(
         self,
         assertions: List[str],
-        model: Optional[str | base_model.OpikBaseModel] = None,
         name: str = "llm_judge",
         track: bool = True,
         project_name: Optional[str] = None,
@@ -197,8 +193,8 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         self._seed = seed
         self._temperature = temperature
-        self._model_name = model if isinstance(model, str) else None
-        self._init_model(model, temperature=temperature)
+        self._model_name: str = llm_judge_config.DEFAULT_MODEL_NAME
+        self._init_model(temperature=temperature)
 
     @property
     def assertions(self) -> List[str]:
@@ -207,23 +203,17 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
     def _init_model(
         self,
-        model: Optional[str | base_model.OpikBaseModel],
         temperature: Optional[float],
     ) -> None:
-        if isinstance(model, base_model.OpikBaseModel):
-            self._model = model
-            self._model_name = getattr(model, "model_name", None)
-        else:
-            model_kwargs = {}
-            if temperature is not None:
-                model_kwargs["temperature"] = temperature
-            if self._seed is not None:
-                model_kwargs["seed"] = self._seed
+        model_kwargs = {}
+        if temperature is not None:
+            model_kwargs["temperature"] = temperature
+        if self._seed is not None:
+            model_kwargs["seed"] = self._seed
 
-            self._model = models_factory.get(
-                model_name=model, track=self.track, **model_kwargs
-            )
-            self._model_name = model
+        self._model = models_factory.get(
+            model_name=self._model_name, track=self.track, **model_kwargs
+        )
 
     def score(
         self,
@@ -316,19 +306,13 @@ class LLMJudge(base.BaseSuiteEvaluator):
         Example:
             >>> evaluator = LLMJudge(
             ...     assertions=["Response is accurate"],
-            ...     model="gpt-4o",
             ...     temperature=0.0,
             ... )
             >>> config = evaluator.to_config()
-            >>> config.model.name
-            'gpt-4o'
         """
-        # Default temperature to 0.0 if not specified (backend requires it)
-        temperature = self._temperature if self._temperature is not None else 0.0
-
         model_config = llm_judge_config.LLMJudgeModelConfig(
-            name=self._model_name or "gpt-4o",
-            temperature=temperature,
+            name=None,
+            temperature=self._temperature,
             seed=self._seed,
         )
 
@@ -390,7 +374,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         Example:
             >>> config = llm_judge_config.LLMJudgeConfig(
-            ...     model=llm_judge_config.LLMJudgeModelConfig(name="gpt-4o", temperature=0.0),
+            ...     model=llm_judge_config.LLMJudgeModelConfig(temperature=0.0),
             ...     messages=[llm_judge_config.LLMJudgeMessage(role="USER", content="...")],
             ...     variables={"input": "input", "output": "output"},
             ...     schema=[llm_judge_config.LLMJudgeSchemaItem(name="accurate", type="BOOLEAN", description="Response is accurate")],
@@ -402,7 +386,6 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         return cls(
             assertions=assertion_texts,
-            model=config.model.name,
             name=name if name is not None else config.name,
             track=track,
             project_name=project_name,

@@ -6,3 +6,9 @@ T = TypeVar("T", covariant=True)
 class EvaluationTask(Protocol[T]):
     def __call__(self) -> T:
         pass
+
+
+# Reserved key for evaluation suite metadata stored in dataset item content.
+# This will become proper backend fields on Dataset and DatasetItem once
+# OPIK-4222/4223 are implemented. Contains: {"evaluators": [...], "execution_policy": {...}}
+EVALUATION_CONFIG_KEY = "__evaluation_config__"

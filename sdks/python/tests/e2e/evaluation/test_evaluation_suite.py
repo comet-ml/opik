@@ -59,7 +59,6 @@ def test_evaluation_suite__item_level_evaluators__feedback_scores_created(
     # Item 1: Geography question with specific assertion
     geography_judge = LLMJudge(
         name="geography_judge",
-        model="openai/gpt-5-nano",
         assertions=[geography_assertion],
     )
     suite.add_item(
@@ -70,7 +69,6 @@ def test_evaluation_suite__item_level_evaluators__feedback_scores_created(
     # Item 2: Math question with specific assertion
     math_judge = LLMJudge(
         name="math_judge",
-        model="openai/gpt-5-nano",
         assertions=[math_assertion],
     )
     suite.add_item(
@@ -97,7 +95,7 @@ def test_evaluation_suite__item_level_evaluators__feedback_scores_created(
     # Both items should pass since responses are correct
     assert suite_result.items_total == 2
     assert suite_result.items_passed == 2
-    assert suite_result.passed is True
+    assert suite_result.all_items_passed is True
 
     # Verify feedback scores were created
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
@@ -154,7 +152,6 @@ def test_evaluation_suite__multiple_assertions_per_item__all_scores_created(
 
     multi_assertion_judge = LLMJudge(
         name="quality_judge",
-        model="openai/gpt-5-nano",
         assertions=[assertion_1, assertion_2],
     )
     suite.add_item(
@@ -176,7 +173,7 @@ def test_evaluation_suite__multiple_assertions_per_item__all_scores_created(
     # Verify suite result
     assert suite_result.items_total == 1
     assert suite_result.items_passed == 1
-    assert suite_result.passed is True
+    assert suite_result.all_items_passed is True
 
     # Verify 2 feedback scores were created (one per assertion)
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
@@ -218,7 +215,6 @@ def test_evaluation_suite__suite_level_evaluators__applied_to_all_items(
 
     suite_judge = LLMJudge(
         name="suite_judge",
-        model="openai/gpt-5-nano",
         assertions=[suite_assertion],
     )
 
@@ -286,7 +282,6 @@ def test_evaluation_suite__combined_suite_and_item_level_evaluators__all_scores_
     # Suite-level evaluator with 1 assertion (applied to all items)
     suite_judge = LLMJudge(
         name="suite_judge",
-        model="openai/gpt-5-nano",
         assertions=[suite_assertion],
     )
 
@@ -299,7 +294,6 @@ def test_evaluation_suite__combined_suite_and_item_level_evaluators__all_scores_
     # Item-level evaluator with 1 assertion (specific to this item)
     item_judge = LLMJudge(
         name="item_judge",
-        model="openai/gpt-5-nano",
         assertions=[item_assertion],
     )
     suite.add_item(
@@ -390,7 +384,7 @@ def test_evaluation_suite__no_evaluators__items_pass_by_default(
     opik.flush_tracker()
 
     # Items without evaluators pass by default (no assertions to fail)
-    assert suite_result.passed is True, (
+    assert suite_result.all_items_passed is True, (
         "Suite should pass when items have no evaluators (nothing to fail)"
     )
     assert suite_result.items_passed == 2
@@ -453,7 +447,7 @@ def test_evaluation_suite__execution_policy_runs_per_item__task_called_multiple_
     )
 
     # Verify suite result structure
-    assert suite_result.passed is True
+    assert suite_result.all_items_passed is True
     assert suite_result.items_total == 1
 
     item_result = list(suite_result.item_results.values())[0]
@@ -528,7 +522,7 @@ def test_evaluation_suite__item_level_execution_policy__overrides_suite_policy(
     )
 
     # Verify suite result
-    assert suite_result.passed is True
+    assert suite_result.all_items_passed is True
     assert suite_result.items_total == 2
     assert suite_result.items_passed == 2
 
@@ -593,7 +587,7 @@ def test_evaluation_suite__default_execution_policy__single_run_per_item(
     )
 
     # Verify suite result
-    assert suite_result.passed is True
+    assert suite_result.all_items_passed is True
     assert suite_result.items_total == 2
     assert suite_result.items_passed == 2
 
@@ -632,7 +626,6 @@ def test_evaluation_suite__assertion_fails__item_fails(
     # This assertion should fail because the response is wrong
     wrong_answer_judge = LLMJudge(
         name="wrong_judge",
-        model="openai/gpt-5-nano",
         assertions=[failing_assertion],
     )
     suite.add_item(
@@ -655,7 +648,7 @@ def test_evaluation_suite__assertion_fails__item_fails(
     # Item should fail because assertion expects wrong answer
     assert suite_result.items_total == 1
     assert suite_result.items_passed == 0, "Item should fail when assertion fails"
-    assert suite_result.passed is False, "Suite should fail when any item fails"
+    assert suite_result.all_items_passed is False, "Suite should fail when any item fails"
 
     # Verify feedback score was created with failing value
     retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
@@ -693,7 +686,6 @@ def test_evaluation_suite__pass_threshold_not_met__item_fails(
     """
     judge = LLMJudge(
         name="math_judge",
-        model="openai/gpt-5-nano",
         assertions=["The response correctly states that 2 + 2 equals 4"],
     )
 
@@ -724,7 +716,7 @@ def test_evaluation_suite__pass_threshold_not_met__item_fails(
     opik.flush_tracker()
 
     # Item should fail: only 1 run passes, but threshold is 2
-    assert suite_result.passed is False, "Suite should fail when threshold not met"
+    assert suite_result.all_items_passed is False, "Suite should fail when threshold not met"
     assert suite_result.items_passed == 0
     assert suite_result.items_total == 1
 
@@ -733,3 +725,97 @@ def test_evaluation_suite__pass_threshold_not_met__item_fails(
     assert item_result.runs_total == 3
     assert item_result.pass_threshold == 2
     # Note: runs_passed depends on LLM evaluation, but should be < 2
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_evaluation_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """
+    Comprehensive test for pass/fail logic with multiple assertions and runs.
+
+    Scenario:
+    - 1 item with 3 assertions
+    - execution_policy: runs_per_item=3, pass_threshold=2
+    - Task returns consistent correct answers
+
+    Pass/fail logic:
+    1. A RUN passes if ALL assertions in that run pass
+    2. An ITEM passes if runs_passed >= pass_threshold
+    3. The SUITE passes if all items pass
+
+    Expected behavior:
+    - Each of the 3 runs should have all 3 assertions evaluated
+    - With correct answers, all assertions should pass in each run
+    - All 3 runs pass -> runs_passed=3 >= pass_threshold=2 -> item passes
+    - suite.pass_rate = items_passed / items_total = 1/1 = 1.0
+    """
+    assertion_1 = "The response mentions Paris"
+    assertion_2 = "The response mentions France"
+    assertion_3 = "The response is factually correct"
+
+    judge = LLMJudge(
+        name="geography_judge",
+        assertions=[assertion_1, assertion_2, assertion_3],
+    )
+
+    suite = opik_client.create_evaluation_suite(
+        name=dataset_name,
+        description="Test multiple assertions with multiple runs",
+        evaluators=[judge],
+        execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+    )
+
+    suite.add_item(data={"input": {"question": "What is the capital of France?"}})
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "input": item["input"],
+            "output": "The capital of France is Paris.",
+        }
+
+    suite_result = suite.run(
+        task=task,
+        experiment_name=experiment_name,
+        verbose=0,
+    )
+
+    opik.flush_tracker()
+
+    # Verify suite-level results
+    assert suite_result.items_total == 1
+    assert suite_result.items_passed == 1, "Item should pass when threshold is met"
+    assert suite_result.all_items_passed is True, "Suite should pass when all items pass"
+    assert suite_result.pass_rate == 1.0, "Pass rate should be 1.0 when all items pass"
+
+    # Verify item-level results
+    item_result = list(suite_result.item_results.values())[0]
+    assert item_result.runs_total == 3, "Should have 3 runs per item"
+    assert item_result.pass_threshold == 2
+    assert item_result.runs_passed >= 2, (
+        f"At least 2 runs should pass, got {item_result.runs_passed}"
+    )
+    assert item_result.passed is True
+
+    # Verify feedback scores: 3 assertions * 3 runs = 9 feedback scores
+    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
+    experiment_items = retrieved_experiment.get_items()
+
+    # Should have 3 experiment items (one per run)
+    assert len(experiment_items) == 3, (
+        f"Expected 3 experiment items (one per run), got {len(experiment_items)}"
+    )
+
+    # Each experiment item should have 3 feedback scores (one per assertion)
+    for exp_item in experiment_items:
+        assert exp_item.feedback_scores is not None
+        assert len(exp_item.feedback_scores) == 3, (
+            f"Expected 3 feedback scores per run, got {len(exp_item.feedback_scores)}"
+        )
+
+        score_names = {s["name"] for s in exp_item.feedback_scores}
+        assert assertion_1 in score_names, f"Missing score for '{assertion_1}'"
+        assert assertion_2 in score_names, f"Missing score for '{assertion_2}'"
+        assert assertion_3 in score_names, f"Missing score for '{assertion_3}'"

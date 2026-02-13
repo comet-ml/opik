@@ -6,18 +6,19 @@ validate that prompt changes, model updates, or code modifications don't
 break existing functionality.
 """
 
-import dataclasses
 import logging
-from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional
 
 from opik import id_helpers
 from opik.api_objects.prompt import base_prompt
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.evaluation import evaluator as opik_evaluator
-from opik.evaluation import evaluation_result, test_result
-from opik.evaluation.engine import ExecutionPolicy, DEFAULT_EXECUTION_POLICY
+from opik.evaluation.engine import engine as evaluation_engine
+from opik.evaluation.engine import types as engine_types
 from opik.evaluation.suite_evaluators import llm_judge
+
+from . import suite_result_constructor
+from . import types as suite_types
 
 
 LOGGER = logging.getLogger(__name__)
@@ -43,142 +44,6 @@ def _validate_evaluators(evaluators: List[Any], context: str) -> None:
                 f"Got {type(evaluator).__name__} in {context}. "
                 f"Use LLMJudge from opik.evaluation.suite_evaluators instead."
             )
-
-
-# Reserved key for evaluation suite metadata stored in dataset item content.
-# This will become proper backend fields on Dataset and DatasetItem once
-# OPIK-4222/4223 are implemented. Contains: {"evaluators": [...], "execution_policy": {...}}
-EVALUATION_CONFIG_KEY = "__evaluation_config__"
-
-
-@dataclasses.dataclass
-class ItemResult:
-    """Result for a single evaluation suite item."""
-
-    dataset_item_id: str
-    """The ID of the dataset item."""
-
-    passed: bool
-    """Whether this item passed based on its execution policy."""
-
-    runs_passed: int
-    """Number of runs that passed for this item."""
-
-    runs_total: int
-    """Total number of runs for this item."""
-
-    pass_threshold: int
-    """Minimum passing runs required (from execution policy)."""
-
-    test_results: List[test_result.TestResult]
-    """Individual test results for each run of this item."""
-
-
-@dataclasses.dataclass
-class EvaluationSuiteResult:
-    """
-    Result of running an evaluation suite.
-
-    Contains pass/fail status for each item based on execution policy,
-    as well as overall suite pass/fail status.
-
-    Attributes:
-        passed: Whether the entire suite passed (all items passed).
-        items_passed: Number of items that passed.
-        items_total: Total number of items evaluated.
-        item_results: Results for each individual item.
-        evaluation_result: The underlying EvaluationResult with full details.
-    """
-
-    passed: bool
-    """Whether the entire suite passed (all items passed)."""
-
-    items_passed: int
-    """Number of items that passed."""
-
-    items_total: int
-    """Total number of items evaluated."""
-
-    item_results: Dict[str, ItemResult]
-    """Results for each item, keyed by dataset_item_id."""
-
-    evaluation_result: evaluation_result.EvaluationResult
-    """The underlying EvaluationResult with full experiment details."""
-
-    @property
-    def experiment_id(self) -> str:
-        """The experiment ID."""
-        return self.evaluation_result.experiment_id
-
-    @property
-    def experiment_name(self) -> Optional[str]:
-        """The experiment name."""
-        return self.evaluation_result.experiment_name
-
-    @property
-    def experiment_url(self) -> Optional[str]:
-        """URL to view the experiment."""
-        return self.evaluation_result.experiment_url
-
-
-def _build_suite_result(
-    eval_result: evaluation_result.EvaluationResult,
-) -> EvaluationSuiteResult:
-    """
-    Build an EvaluationSuiteResult from an EvaluationResult.
-
-    Groups test results by dataset item and computes pass/fail status
-    based on execution policies stored in each item's content.
-    """
-    results_by_item: Dict[str, List[test_result.TestResult]] = defaultdict(list)
-    item_contents: Dict[str, Dict[str, Any]] = {}
-
-    for result in eval_result.test_results:
-        item_id = result.test_case.dataset_item_id
-        results_by_item[item_id].append(result)
-        if item_id not in item_contents:
-            item_contents[item_id] = result.test_case.dataset_item_content
-
-    item_results: Dict[str, ItemResult] = {}
-    items_passed = 0
-
-    for item_id, item_test_results in results_by_item.items():
-        item_content = item_contents.get(item_id, {})
-        eval_config = item_content.get(EVALUATION_CONFIG_KEY, {})
-        item_policy = eval_config.get("execution_policy", {})
-        pass_threshold = item_policy.get("pass_threshold", 1)
-
-        runs_passed = sum(
-            1
-            for r in item_test_results
-            if not r.score_results
-            or all(
-                s.value >= 0.5 if isinstance(s.value, (int, float)) else bool(s.value)
-                for s in r.score_results
-            )
-        )
-
-        passed = runs_passed >= pass_threshold
-
-        if passed:
-            items_passed += 1
-
-        item_results[item_id] = ItemResult(
-            dataset_item_id=item_id,
-            passed=passed,
-            runs_passed=runs_passed,
-            runs_total=len(item_test_results),
-            pass_threshold=pass_threshold,
-            test_results=sorted(item_test_results, key=lambda r: r.trial_id),
-        )
-
-    return EvaluationSuiteResult(
-        passed=items_passed == len(results_by_item),
-        items_passed=items_passed,
-        items_total=len(results_by_item),
-        item_results=item_results,
-        evaluation_result=eval_result,
-    )
 
 
 class EvaluationSuite:
@@ -232,7 +97,7 @@ class EvaluationSuite:
         dataset_: dataset.Dataset,
         description: Optional[str] = None,
         evaluators: Optional[List[llm_judge.LLMJudge]] = None,
-        execution_policy: Optional[ExecutionPolicy] = None,
+        execution_policy: Optional[evaluation_engine.ExecutionPolicy] = None,
     ):
         if evaluators:
             _validate_evaluators(evaluators, "suite-level evaluators")
@@ -244,8 +109,10 @@ class EvaluationSuite:
         # Once OPIK-4222/4223 are implemented, these will be stored as dataset columns
         # and retrieved from the backend.
         self._evaluators = evaluators or []
-        self._execution_policy: ExecutionPolicy = (
-            execution_policy if execution_policy else DEFAULT_EXECUTION_POLICY.copy()
+        self._execution_policy: evaluation_engine.ExecutionPolicy = (
+            execution_policy
+            if execution_policy
+            else evaluation_engine.DEFAULT_EXECUTION_POLICY.copy()
         )
 
     @property
@@ -269,7 +136,7 @@ class EvaluationSuite:
         return self._dataset
 
     @property
-    def execution_policy(self) -> ExecutionPolicy:
+    def execution_policy(self) -> evaluation_engine.ExecutionPolicy:
         """Dataset-level execution policy."""
         return self._execution_policy
 
@@ -277,7 +144,7 @@ class EvaluationSuite:
         self,
         data: Dict[str, Any],
         evaluators: Optional[List[llm_judge.LLMJudge]] = None,
-        execution_policy: Optional[ExecutionPolicy] = None,
+        execution_policy: Optional[evaluation_engine.ExecutionPolicy] = None,
     ) -> "EvaluationSuite":
         """
         Add a test case to the evaluation suite.
@@ -319,7 +186,7 @@ class EvaluationSuite:
         if execution_policy:
             eval_config["execution_policy"] = execution_policy
         if eval_config:
-            item_content[EVALUATION_CONFIG_KEY] = eval_config
+            item_content[engine_types.EVALUATION_CONFIG_KEY] = eval_config
 
         ds_item = dataset_item.DatasetItem(id=item_id, **item_content)
         self._dataset.__internal_api__insert_items_as_dataclasses__([ds_item])
@@ -338,7 +205,7 @@ class EvaluationSuite:
         experiment_tags: Optional[List[str]] = None,
         verbose: int = 1,
         worker_threads: int = 16,
-    ) -> EvaluationSuiteResult:
+    ) -> suite_types.EvaluationSuiteResult:
         """
         Run the evaluation suite against a task function.
 
@@ -388,4 +255,4 @@ class EvaluationSuite:
             task_threads=worker_threads,
         )
 
-        return _build_suite_result(eval_result)
+        return suite_result_constructor.build_suite_result(eval_result)
