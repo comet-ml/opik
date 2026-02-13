@@ -34,7 +34,7 @@ describe("ManageTagsDialog", () => {
       );
 
       expect(screen.getByText("Manage shared tags")).toBeInTheDocument();
-      expect(screen.getByText("+ Add tag")).toBeInTheDocument();
+      expect(screen.getByTestId("add-tag-button")).toBeInTheDocument();
     });
 
     it("should not render dialog when closed", () => {
@@ -111,8 +111,8 @@ describe("ManageTagsDialog", () => {
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
 
-      expect(screen.getByPlaceholderText("Tag name...")).toBeInTheDocument();
-      expect(screen.queryByText("+ Add tag")).not.toBeInTheDocument();
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
+      expect(screen.queryByTestId("add-tag-button")).not.toBeInTheDocument();
     });
 
     it("should add a new tag on Enter", async () => {
@@ -126,14 +126,14 @@ describe("ManageTagsDialog", () => {
       );
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      const input = screen.getByPlaceholderText("Tag name...");
+      const input = screen.getByRole("textbox");
       fireEvent.change(input, { target: { value: "newtag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
       await waitFor(() => {
         expect(screen.getByText("newtag")).toBeInTheDocument();
       });
-      expect(screen.getByText("+ Add tag")).toBeInTheDocument();
+      expect(screen.getByTestId("add-tag-button")).toBeInTheDocument();
     });
 
     it("should revert to button on blur", () => {
@@ -147,11 +147,11 @@ describe("ManageTagsDialog", () => {
       );
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      const input = screen.getByPlaceholderText("Tag name...");
+      const input = screen.getByRole("textbox");
       fireEvent.change(input, { target: { value: "some text" } });
       fireEvent.blur(input);
 
-      expect(screen.getByText("+ Add tag")).toBeInTheDocument();
+      expect(screen.getByTestId("add-tag-button")).toBeInTheDocument();
     });
 
     it("should prevent duplicate tags in new tags list", async () => {
@@ -165,7 +165,7 @@ describe("ManageTagsDialog", () => {
       );
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      const input = screen.getByPlaceholderText("Tag name...");
+      const input = screen.getByRole("textbox");
       fireEvent.change(input, { target: { value: "tag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -174,7 +174,7 @@ describe("ManageTagsDialog", () => {
       });
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      const input2 = screen.getByPlaceholderText("Tag name...");
+      const input2 = screen.getByRole("textbox");
       fireEvent.change(input2, { target: { value: "tag" } });
       fireEvent.keyDown(input2, { key: "Enter" });
 
@@ -202,9 +202,7 @@ describe("ManageTagsDialog", () => {
       );
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      const input = screen.getByPlaceholderText(
-        "Tag name...",
-      ) as HTMLInputElement;
+      const input = screen.getByRole("textbox") as HTMLInputElement;
 
       expect(input.maxLength).toBe(100);
     });
@@ -228,7 +226,7 @@ describe("ManageTagsDialog", () => {
       );
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      let input = screen.getByPlaceholderText("Tag name...");
+      let input = screen.getByRole("textbox");
       fireEvent.change(input, { target: { value: "tag50" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -237,7 +235,7 @@ describe("ManageTagsDialog", () => {
       });
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      input = screen.getByPlaceholderText("Tag name...");
+      input = screen.getByRole("textbox");
       fireEvent.change(input, { target: { value: "tag51" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -324,7 +322,7 @@ describe("ManageTagsDialog", () => {
       );
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      const input = screen.getByPlaceholderText("Tag name...");
+      const input = screen.getByRole("textbox");
       fireEvent.change(input, { target: { value: "newtag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -353,7 +351,7 @@ describe("ManageTagsDialog", () => {
       );
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      const input = screen.getByPlaceholderText("Tag name...");
+      const input = screen.getByRole("textbox");
       fireEvent.change(input, { target: { value: "newtag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
@@ -387,7 +385,7 @@ describe("ManageTagsDialog", () => {
       );
 
       fireEvent.click(screen.getByTestId("add-tag-button"));
-      const input = screen.getByPlaceholderText("Tag name...");
+      const input = screen.getByRole("textbox");
       fireEvent.change(input, { target: { value: "newtag" } });
       fireEvent.keyDown(input, { key: "Enter" });
 
