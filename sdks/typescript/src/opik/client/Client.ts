@@ -1190,7 +1190,7 @@ export class OpikClient {
       // Parse OQL filter string to JSON (aligned with Python SDK)
       let filters: string | undefined;
       if (filterString) {
-        const oql = new OpikQueryLanguage(filterString);
+        const oql = OpikQueryLanguage.forPrompts(filterString);
         const filterExpressions = oql.getFilterExpressions();
         filters = filterExpressions
           ? JSON.stringify(filterExpressions)

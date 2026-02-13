@@ -11,7 +11,10 @@ export type ColumnType =
   | "dictionary"
   | "feedback_scores_number"
   | "list"
-  | "number";
+  | "number"
+  | "error_container"
+  | "enum"
+  | "map";
 
 /**
  * Parsed filter expression structure

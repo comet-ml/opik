@@ -2,17 +2,19 @@
  * Validation logic for OQL parser
  */
 
-import { COLUMNS, SUPPORTED_OPERATORS, QUERY_CONFIG } from "./constants";
+import { QUERY_CONFIG, type OQLConfig } from "./config";
 
 /**
  * Validates that a field exists in the schema
  */
-export function validateFieldExists(field: string): void {
-  const isSpecialField = QUERY_CONFIG.SPECIAL_FIELDS.includes(field);
-  const isDefinedField = Object.keys(COLUMNS).includes(field);
+export function validateFieldExists(field: string, config: OQLConfig): void {
+  // Special handling for "usage" - it's a special field that requires a key
+  const isUsageField = field === "usage";
+  const isSpecialField = config.dictionaryFields.includes(field);
+  const isDefinedField = Object.keys(config.columns).includes(field);
 
-  if (!isSpecialField && !isDefinedField) {
-    const supportedFields = Object.keys(COLUMNS).join(", ");
+  if (!isUsageField && !isSpecialField && !isDefinedField) {
+    const supportedFields = Object.keys(config.columns).join(", ");
     throw new Error(
       `Field ${field} is not supported, only the fields ${supportedFields} are supported.`
     );
@@ -22,17 +24,22 @@ export function validateFieldExists(field: string): void {
 /**
  * Validates that a key is supported for the given field
  */
-export function validateFieldKey(field: string, key: string): void {
-  if (!QUERY_CONFIG.SPECIAL_FIELDS.includes(field)) {
-    const supportedFields = Object.keys(COLUMNS).join(", ");
-    throw new Error(
-      `Field ${field}.${key} is not supported, only the fields ${supportedFields} are supported.`
-    );
+export function validateFieldKey(field: string, key: string, config: OQLConfig): void {
+  // Special handling for usage fields
+  if (field === "usage") {
+    if (!QUERY_CONFIG.USAGE_KEYS.includes(key)) {
+      throw new Error(
+        `When querying usage, ${key} is not supported, only usage.total_tokens, usage.prompt_tokens and usage.completion_tokens are supported.`
+      );
+    }
+    return;
   }
 
-  if (field === "usage" && !QUERY_CONFIG.USAGE_KEYS.includes(key)) {
+  // For other fields, check if they support dictionary access
+  if (!config.dictionaryFields.includes(field)) {
+    const supportedFields = Object.keys(config.columns).join(", ");
     throw new Error(
-      `When querying usage, ${key} is not supported, only usage.total_tokens, usage.prompt_tokens and usage.completion_tokens are supported.`
+      `Field ${field}.${key} is not supported, only the fields ${supportedFields} are supported.`
     );
   }
 }
@@ -40,8 +47,8 @@ export function validateFieldKey(field: string, key: string): void {
 /**
  * Validates that an operator is supported for the given field
  */
-export function validateOperator(field: string, operator: string): void {
-  const supportedOps = SUPPORTED_OPERATORS[field];
+export function validateOperator(field: string, operator: string, config: OQLConfig): void {
+  const supportedOps = config.supportedOperators[field] || config.supportedOperators["default"];
 
   if (!supportedOps?.includes(operator)) {
     const operatorsList = supportedOps?.join(", ") || "none";

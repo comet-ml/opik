@@ -19,9 +19,19 @@ import type {
 import { QueryTokenizer } from "./tokenizer";
 import { validateConnector } from "./validators";
 import { FieldParser, OperatorParser, ValueParser } from "./parsers";
+import {
+  OQLConfig,
+  TraceOQLConfig,
+  SpanOQLConfig,
+  ThreadOQLConfig,
+  DatasetItemOQLConfig,
+  PromptOQLConfig,
+} from "./config";
 
 // Re-export types for backward compatibility
 export type { FilterExpression };
+
+const DEFAULT_CONFIG = new TraceOQLConfig();
 
 /**
  * This class implements a parser that can be used to convert a filter string into a list of filters that the BE expects.
@@ -38,9 +48,11 @@ export type { FilterExpression };
 export class OpikQueryLanguage {
   private readonly filterExpressions: FilterExpression[] | null;
   public readonly parsedFilters: string | null;
+  private readonly config: OQLConfig;
 
-  constructor(queryString?: string) {
+  constructor(queryString?: string, config?: OQLConfig) {
     const normalizedQuery = queryString || "";
+    this.config = config || DEFAULT_CONFIG;
 
     this.filterExpressions = normalizedQuery
       ? this.parse(normalizedQuery)
@@ -49,6 +61,26 @@ export class OpikQueryLanguage {
     this.parsedFilters = this.filterExpressions
       ? JSON.stringify(this.filterExpressions)
       : null;
+  }
+
+  static forTraces(queryString?: string): OpikQueryLanguage {
+    return new OpikQueryLanguage(queryString, new TraceOQLConfig());
+  }
+
+  static forSpans(queryString?: string): OpikQueryLanguage {
+    return new OpikQueryLanguage(queryString, new SpanOQLConfig());
+  }
+
+  static forThreads(queryString?: string): OpikQueryLanguage {
+    return new OpikQueryLanguage(queryString, new ThreadOQLConfig());
+  }
+
+  static forDatasetItems(queryString?: string): OpikQueryLanguage {
+    return new OpikQueryLanguage(queryString, new DatasetItemOQLConfig());
+  }
+
+  static forPrompts(queryString?: string): OpikQueryLanguage {
+    return new OpikQueryLanguage(queryString, new PromptOQLConfig());
   }
 
   /**
@@ -86,8 +118,8 @@ export class OpikQueryLanguage {
    * Parses a single filter expression (field operator value)
    */
   private parseExpression(tokenizer: QueryTokenizer): FilterExpression {
-    const field = FieldParser.parse(tokenizer);
-    const operator = OperatorParser.parse(tokenizer, this.getFieldName(field));
+    const field = FieldParser.parse(tokenizer, this.config);
+    const operator = OperatorParser.parse(tokenizer, this.getFieldName(field), this.config);
     const value = ValueParser.parse(tokenizer);
 
     return this.buildExpression(field, operator, value);

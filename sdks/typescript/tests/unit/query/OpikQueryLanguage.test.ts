@@ -140,7 +140,7 @@ describe("OpikQueryLanguage", () => {
     });
 
     it("should parse multiple filters with AND", () => {
-      const oql = new OpikQueryLanguage('name = "test" and status = "active"');
+      const oql = new OpikQueryLanguage('name = "test" and thread_id = "1111"');
       const parsed = oql.getFilterExpressions();
 
       expect(parsed).toHaveLength(2);
@@ -150,7 +150,7 @@ describe("OpikQueryLanguage", () => {
         value: "test",
       });
       expect(parsed![1]).toMatchObject({
-        field: "status",
+        field: "1111",
         operator: "=",
         value: "active",
       });
@@ -222,8 +222,8 @@ describe("OpikQueryLanguage", () => {
 
     it("should throw error for unsupported operator on field", () => {
       expect(() => {
-        new OpikQueryLanguage('status >= "active"');
-      }).toThrow(/Operator >= is not supported for field status/);
+        new OpikQueryLanguage('tags >= "active"');
+      }).toThrow(/Operator >= is not supported for field tags/);
     });
 
     it("should throw error for invalid usage field", () => {
@@ -295,40 +295,35 @@ describe("OpikQueryLanguage", () => {
   });
 
   describe("all supported fields", () => {
-    const supportedFields = [
-      "id",
-      "name",
-      "status",
-      "start_time",
-      "end_time",
-      "input",
-      "output",
-      "tags",
-      "duration",
-      "number_of_messages",
-      "created_by",
-      "thread_id",
-      "total_estimated_cost",
-      "type",
-      "model",
-      "provider",
-    ];
+    describe("trace fields (default config)", () => {
+      const traceFields = [
+        "id",
+        "name",
+        "start_time",
+        "end_time",
+        "input",
+        "output",
+        "tags",
+        "duration",
+        "thread_id",
+        "total_estimated_cost",
+      ];
 
-    it.each(supportedFields)('should parse field "%s"', (field) => {
-      // Tags field only supports 'contains' operator
-      const operator = field === "tags" ? "contains" : "=";
-      const oql = new OpikQueryLanguage(`${field} ${operator} "test"`);
-      const parsed = oql.getFilterExpressions();
+      it.each(traceFields)('should parse field "%s"', (field) => {
+        const operator = field === "tags" ? "contains" : "=";
+        const oql = new OpikQueryLanguage(`${field} ${operator} "test"`);
+        const parsed = oql.getFilterExpressions();
 
-      expect(parsed).toHaveLength(1);
-      expect(parsed![0].field).toBe(field);
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0].field).toBe(field);
+      });
     });
   });
 
   describe("complex queries", () => {
     it("should parse query with multiple conditions", () => {
       const oql = new OpikQueryLanguage(
-        'name contains "test" and status = "active" and duration > 100'
+        'name contains "test" and thread_id = "abc123" and duration > 100'
       );
       const parsed = oql.getFilterExpressions();
 
@@ -339,9 +334,9 @@ describe("OpikQueryLanguage", () => {
         value: "test",
       });
       expect(parsed![1]).toMatchObject({
-        field: "status",
+        field: "thread_id",
         operator: "=",
-        value: "active",
+        value: "abc123",
       });
       expect(parsed![2]).toMatchObject({
         field: "duration",
@@ -371,6 +366,154 @@ describe("OpikQueryLanguage", () => {
         field: "name",
         operator: "!=",
         value: "excluded",
+      });
+    });
+  });
+
+  describe("entity-specific configs", () => {
+    describe("traces", () => {
+      it("should support trace-specific fields", () => {
+        const oql = OpikQueryLanguage.forTraces('thread_id = "123"');
+        const parsed = oql.getFilterExpressions();
+
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0]).toMatchObject({
+          field: "thread_id",
+          operator: "=",
+          value: "123",
+        });
+      });
+
+      it("should support trace-specific feedback fields", () => {
+        const oql = OpikQueryLanguage.forTraces(
+          'span_feedback_scores.accuracy > 0.8'
+        );
+        const parsed = oql.getFilterExpressions();
+
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0]).toMatchObject({
+          field: "span_feedback_scores",
+          key: "accuracy",
+          operator: ">",
+          value: "0.8",
+        });
+      });
+
+      it("should reject span-only fields", () => {
+        expect(() => {
+          OpikQueryLanguage.forTraces('trace_id = "123"');
+        }).toThrow(/is not supported/);
+      });
+    });
+
+    describe("spans", () => {
+      it("should support span-specific fields", () => {
+        const oql = OpikQueryLanguage.forSpans('trace_id = "123"');
+        const parsed = oql.getFilterExpressions();
+
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0]).toMatchObject({
+          field: "trace_id",
+          operator: "=",
+          value: "123",
+        });
+      });
+
+      it("should support model and provider fields", () => {
+        const oql = OpikQueryLanguage.forSpans(
+          'model = "gpt-4" and provider = "openai"'
+        );
+        const parsed = oql.getFilterExpressions();
+
+        expect(parsed).toHaveLength(2);
+        expect(parsed![0]).toMatchObject({
+          field: "model",
+          operator: "=",
+          value: "gpt-4",
+        });
+        expect(parsed![1]).toMatchObject({
+          field: "provider",
+          operator: "=",
+          value: "openai",
+        });
+      });
+
+      it("should reject trace-only fields", () => {
+        expect(() => {
+          OpikQueryLanguage.forSpans('thread_id = "123"');
+        }).toThrow(/is not supported/);
+      });
+    });
+
+    describe("threads", () => {
+      it("should support thread-specific fields", () => {
+        const oql = OpikQueryLanguage.forThreads(
+          'number_of_messages > 5 and first_message contains "hello"'
+        );
+        const parsed = oql.getFilterExpressions();
+
+        expect(parsed).toHaveLength(2);
+        expect(parsed![0]).toMatchObject({
+          field: "number_of_messages",
+          operator: ">",
+          value: "5",
+        });
+        expect(parsed![1]).toMatchObject({
+          field: "first_message",
+          operator: "contains",
+          value: "hello",
+        });
+      });
+
+      it("should support thread status field", () => {
+        const oql = OpikQueryLanguage.forThreads('status = "active"');
+        const parsed = oql.getFilterExpressions();
+
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0]).toMatchObject({
+          field: "status",
+          operator: "=",
+          value: "active",
+        });
+      });
+
+      it("should reject span-only fields", () => {
+        expect(() => {
+          OpikQueryLanguage.forThreads('model = "gpt-4"');
+        }).toThrow(/is not supported/);
+      });
+    });
+
+    describe("dataset items", () => {
+      it("should support dataset-specific fields", () => {
+        const oql = OpikQueryLanguage.forDatasetItems('source = "manual"');
+        const parsed = oql.getFilterExpressions();
+
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0]).toMatchObject({
+          field: "source",
+          operator: "=",
+          value: "manual",
+        });
+      });
+
+      it("should support data field with nested key", () => {
+        const oql = OpikQueryLanguage.forDatasetItems('data.input = "test"');
+        const parsed = oql.getFilterExpressions();
+
+        expect(parsed).toHaveLength(1);
+        expect(parsed![0]).toMatchObject({
+          field: "data",
+          key: "input",
+          operator: "=",
+          value: "test",
+        });
+      });
+
+      it("should reject trace-only fields", () => {
+        expect(() => {
+          OpikQueryLanguage.forDatasetItems('thread_id = "123"');
+        }).toThrow(/is not supported/);
       });
     });
   });
