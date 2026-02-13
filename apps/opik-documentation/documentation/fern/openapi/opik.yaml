@@ -10739,12 +10739,15 @@ components:
         value:
           type: number
     Experiment_Write:
+      required:
+      - dataset_name
       type: object
       properties:
         id:
           type: string
           format: uuid
         dataset_name:
+          minLength: 1
           type: string
         name:
           type: string

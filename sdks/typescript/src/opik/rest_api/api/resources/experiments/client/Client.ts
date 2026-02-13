@@ -220,17 +220,19 @@ export class ExperimentsClient {
      * @param {ExperimentsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.experiments.createExperiment()
+     *     await client.experiments.createExperiment({
+     *         datasetName: "dataset_name"
+     *     })
      */
     public createExperiment(
-        request: OpikApi.ExperimentWrite = {},
+        request: OpikApi.ExperimentWrite,
         requestOptions?: ExperimentsClient.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__createExperiment(request, requestOptions));
     }
 
     private async __createExperiment(
-        request: OpikApi.ExperimentWrite = {},
+        request: OpikApi.ExperimentWrite,
         requestOptions?: ExperimentsClient.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(

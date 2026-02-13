@@ -43,7 +43,6 @@ import com.comet.opik.infrastructure.usagelimit.UsageLimited;
 import com.comet.opik.utils.RetryUtils;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.base.Preconditions;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -58,6 +57,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -289,9 +289,9 @@ public class ExperimentsResource {
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Experiment.class))) @JsonView(Experiment.View.Write.class) @NotNull @Valid Experiment experiment,
             @Context UriInfo uriInfo) {
-        Preconditions.checkArgument(
-                StringUtils.isNotBlank(experiment.datasetName()),
-                "dataset_name must not be blank");
+        if (StringUtils.isBlank(experiment.datasetName())) {
+            throw new BadRequestException("dataset_name must not be blank");
+        }
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating experiment with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 experiment.id(), experiment.name(), experiment.datasetName(), workspaceId);

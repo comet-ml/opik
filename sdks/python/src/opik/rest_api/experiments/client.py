@@ -172,8 +172,8 @@ class ExperimentsClient:
     def create_experiment(
         self,
         *,
+        dataset_name: str,
         id: typing.Optional[str] = OMIT,
-        dataset_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -191,9 +191,9 @@ class ExperimentsClient:
 
         Parameters
         ----------
-        id : typing.Optional[str]
+        dataset_name : str
 
-        dataset_name : typing.Optional[str]
+        id : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -227,11 +227,11 @@ class ExperimentsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.experiments.create_experiment()
+        client.experiments.create_experiment(dataset_name='dataset_name', )
         """
         _response = self._raw_client.create_experiment(
-            id=id,
             dataset_name=dataset_name,
+            id=id,
             name=name,
             metadata=metadata,
             tags=tags,
@@ -870,8 +870,8 @@ class AsyncExperimentsClient:
     async def create_experiment(
         self,
         *,
+        dataset_name: str,
         id: typing.Optional[str] = OMIT,
-        dataset_name: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
@@ -889,9 +889,9 @@ class AsyncExperimentsClient:
 
         Parameters
         ----------
-        id : typing.Optional[str]
+        dataset_name : str
 
-        dataset_name : typing.Optional[str]
+        id : typing.Optional[str]
 
         name : typing.Optional[str]
 
@@ -927,12 +927,12 @@ class AsyncExperimentsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.experiments.create_experiment()
+            await client.experiments.create_experiment(dataset_name='dataset_name', )
         asyncio.run(main())
         """
         _response = await self._raw_client.create_experiment(
-            id=id,
             dataset_name=dataset_name,
+            id=id,
             name=name,
             metadata=metadata,
             tags=tags,
