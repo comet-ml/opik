@@ -181,6 +181,73 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert updated_message["content"][0]["text"] == "Updated text"
         assert updated_message["content"][1]["image_url"]["url"] == "{image}"
 
+    def test_preserve_multimodal_structure_helper_mixed_messages(self) -> None:
+        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        original_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Original"},
+                    {"type": "image_url", "image_url": {"url": "{image}"}},
+                ],
+            },
+            {"role": "assistant", "content": "Original assistant"},
+        ]
+        generated_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Updated"},
+                    {"type": "image_url", "image_url": {"url": "{image}"}},
+                    {"type": "image_url", "image_url": {"url": "{other_image}"}},
+                ],
+            },
+            {"role": "assistant", "content": "Updated assistant"},
+        ]
+
+        preserved = optimizer._preserve_multimodal_message_structure(
+            original_messages=original_messages,
+            generated_messages=generated_messages,
+        )
+
+        assert isinstance(preserved[0]["content"], list)
+        assert [part["type"] for part in preserved[0]["content"]] == [
+            "text",
+            "image_url",
+        ]
+        assert preserved[0]["content"][0]["text"] == "Updated"
+        assert preserved[0]["content"][1]["image_url"]["url"] == "{image}"
+        assert preserved[1]["content"] == "Updated assistant"
+
+    def test_preserve_multimodal_structure_helper_skips_role_mismatch(self) -> None:
+        optimizer = FewShotBayesianOptimizer(model="gpt-4o-mini", verbose=0, seed=42)
+        original_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Original"},
+                    {"type": "image_url", "image_url": {"url": "{image}"}},
+                ],
+            }
+        ]
+        generated_messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "Updated"},
+                    {"type": "image_url", "image_url": {"url": "{image}"}},
+                    {"type": "image_url", "image_url": {"url": "{other_image}"}},
+                ],
+            }
+        ]
+
+        preserved = optimizer._preserve_multimodal_message_structure(
+            original_messages=original_messages,
+            generated_messages=generated_messages,
+        )
+
+        assert preserved == generated_messages
+
     def test_dict_prompt_returns_dict(
         self,
         mock_optimization_context,
