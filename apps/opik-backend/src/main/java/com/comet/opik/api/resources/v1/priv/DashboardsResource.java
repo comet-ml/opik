@@ -10,6 +10,8 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DashboardService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -102,6 +104,7 @@ public class DashboardsResource {
     }
 
     @GET
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_VIEW)
     @Operation(operationId = "findDashboards", summary = "Find dashboards", description = "Find dashboards in a workspace", responses = {
             @ApiResponse(responseCode = "200", description = "Dashboard page", content = @Content(schema = @Schema(implementation = DashboardPage.class)))
     })
