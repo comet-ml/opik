@@ -4,14 +4,12 @@ import get from "lodash/get";
 
 import api, { THREADS_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
 
 type UseThreadBatchUpdateMutationParams = {
   projectId: string;
   threadIds: string[];
-  thread: {
-    tagsToAdd?: string[];
-    tagsToRemove?: string[];
-  };
+  thread: TagUpdateFields;
 };
 
 const useThreadBatchUpdateMutation = () => {
@@ -23,15 +21,9 @@ const useThreadBatchUpdateMutation = () => {
       threadIds,
       thread,
     }: UseThreadBatchUpdateMutationParams) => {
-      const { tagsToAdd, tagsToRemove, ...rest } = thread;
-
-      const payload: Record<string, unknown> = { ...rest };
-      if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
-      if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
-
       const { data } = await api.patch(TRACES_REST_ENDPOINT + "threads/batch", {
         ids: threadIds,
-        update: payload,
+        update: buildTagUpdatePayload(thread),
       });
 
       return data;

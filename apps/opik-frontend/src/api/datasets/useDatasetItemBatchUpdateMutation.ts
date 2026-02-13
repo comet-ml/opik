@@ -10,14 +10,12 @@ import {
   generateSearchByFieldFilters,
   processFiltersArray,
 } from "@/lib/filters";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
 
 type UseDatasetItemBatchUpdateMutationParams = {
   datasetId: string;
   itemIds: string[];
-  item: Partial<DatasetItem> & {
-    tagsToAdd?: string[];
-    tagsToRemove?: string[];
-  };
+  item: Partial<DatasetItem> & TagUpdateFields;
   isAllItemsSelected?: boolean;
   filters?: Filters;
   search?: string;
@@ -38,12 +36,7 @@ const useDatasetItemBatchUpdateMutation = () => {
       search,
       batchGroupId,
     }: UseDatasetItemBatchUpdateMutationParams) => {
-      const { tagsToAdd, tagsToRemove, ...rest } = item;
-
-      const updatePayload: Record<string, unknown> = { ...rest };
-      if (tagsToAdd !== undefined) updatePayload.tags_to_add = tagsToAdd;
-      if (tagsToRemove !== undefined)
-        updatePayload.tags_to_remove = tagsToRemove;
+      const updatePayload = buildTagUpdatePayload(item);
 
       let payload;
 
