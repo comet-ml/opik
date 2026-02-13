@@ -12,9 +12,6 @@ dayjs.extend(utc);
 dayjs.extend(duration);
 dayjs.extend(customParseFormat);
 
-const FORMATTED_DATE_STRING_REGEXP =
-  /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/(\d{2}|\d{4})\s(0[1-9]|1[0-2]):([0-5][0-9])\s(AM|PM)$/;
-
 type FormatDateConfig = {
   utc?: boolean;
   includeSeconds?: boolean;
