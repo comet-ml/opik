@@ -1683,59 +1683,25 @@ class OnlineScoringEngineTest {
 
     // ==================== Tests for direct variable parsing (without mapping) ====================
 
-    @Test
-    @DisplayName("parseVariableAsPath should parse input.field correctly")
-    void testParseVariableAsPath_inputField() {
-        var mapping = OnlineScoringEngine.parseVariableAsPath("input.question");
-
-        assertThat(mapping).isNotNull();
-        assertThat(mapping.variableName()).isEqualTo("input.question");
-        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
-        assertThat(mapping.jsonPath()).isEqualTo("$.question");
+    static Stream<Arguments> parseVariableAsPathCases() {
+        return Stream.of(
+                arguments("input.question", OnlineScoringEngine.TraceSection.INPUT, "$.question"),
+                arguments("output.answer", OnlineScoringEngine.TraceSection.OUTPUT, "$.answer"),
+                arguments("metadata.model", OnlineScoringEngine.TraceSection.METADATA, "$.model"),
+                arguments("input", OnlineScoringEngine.TraceSection.INPUT, "$"),
+                arguments("input.questions.question1", OnlineScoringEngine.TraceSection.INPUT, "$.questions.question1"));
     }
 
-    @Test
-    @DisplayName("parseVariableAsPath should parse output.field correctly")
-    void testParseVariableAsPath_outputField() {
-        var mapping = OnlineScoringEngine.parseVariableAsPath("output.answer");
+    @ParameterizedTest(name = "parseVariableAsPath(\"{0}\") -> section={1}, jsonPath={2}")
+    @MethodSource("parseVariableAsPathCases")
+    void testParseVariableAsPath(String variableName, OnlineScoringEngine.TraceSection expectedSection,
+            String expectedJsonPath) {
+        var mapping = OnlineScoringEngine.parseVariableAsPath(variableName);
 
         assertThat(mapping).isNotNull();
-        assertThat(mapping.variableName()).isEqualTo("output.answer");
-        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.OUTPUT);
-        assertThat(mapping.jsonPath()).isEqualTo("$.answer");
-    }
-
-    @Test
-    @DisplayName("parseVariableAsPath should parse metadata.field correctly")
-    void testParseVariableAsPath_metadataField() {
-        var mapping = OnlineScoringEngine.parseVariableAsPath("metadata.model");
-
-        assertThat(mapping).isNotNull();
-        assertThat(mapping.variableName()).isEqualTo("metadata.model");
-        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.METADATA);
-        assertThat(mapping.jsonPath()).isEqualTo("$.model");
-    }
-
-    @Test
-    @DisplayName("parseVariableAsPath should parse root section (input) correctly")
-    void testParseVariableAsPath_rootInput() {
-        var mapping = OnlineScoringEngine.parseVariableAsPath("input");
-
-        assertThat(mapping).isNotNull();
-        assertThat(mapping.variableName()).isEqualTo("input");
-        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
-        assertThat(mapping.jsonPath()).isEqualTo("$");
-    }
-
-    @Test
-    @DisplayName("parseVariableAsPath should parse nested paths correctly")
-    void testParseVariableAsPath_nestedPath() {
-        var mapping = OnlineScoringEngine.parseVariableAsPath("input.questions.question1");
-
-        assertThat(mapping).isNotNull();
-        assertThat(mapping.variableName()).isEqualTo("input.questions.question1");
-        assertThat(mapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
-        assertThat(mapping.jsonPath()).isEqualTo("$.questions.question1");
+        assertThat(mapping.variableName()).isEqualTo(variableName);
+        assertThat(mapping.traceSection()).isEqualTo(expectedSection);
+        assertThat(mapping.jsonPath()).isEqualTo(expectedJsonPath);
     }
 
     @Test

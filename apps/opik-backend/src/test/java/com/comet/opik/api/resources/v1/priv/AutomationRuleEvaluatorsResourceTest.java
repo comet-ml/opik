@@ -1076,11 +1076,15 @@ class AutomationRuleEvaluatorsResourceTest {
 
         @Test
         void getLogsUserDefinedMetricPythonScorer() throws JsonProcessingException {
+            var outputJson = OBJECT_MAPPER.readTree("""
+                    {
+                        "response": "abc"
+                    }
+                    """);
             var pythonEvaluatorRequest = PythonEvaluatorRequest.builder()
                     .code(USER_DEFINED_METRIC)
                     .data(Map.of(
-                            "output", "abc",
-                            "reference", "abc"))
+                            "output", OBJECT_MAPPER.convertValue(outputJson, Object.class)))
                     .build();
             var pythonEvaluatorResponse = factory.manufacturePojo(PythonEvaluatorResponse.class);
             wireMock.server().stubFor(
@@ -1092,9 +1096,6 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
                     .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
                             .metric(USER_DEFINED_METRIC)
-                            .arguments(Map.of(
-                                    "output", "output.response",
-                                    "reference", "abc"))
                             .build())
                     .samplingRate(1f)
                     .filters(List.of())
@@ -1104,13 +1105,11 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
-                    .projectName(projectName) // Backend uses projectName, not projectId!
-                    .threadId(null) // Must be null for trace-level evaluation
-                    .output(OBJECT_MAPPER.readTree("""
-                            {
-                                "response": "abc"
-                            }
-                            """))
+                    .projectName(projectName)
+                    .threadId(null)
+                    .input(null)
+                    .metadata(null)
+                    .output(outputJson)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
