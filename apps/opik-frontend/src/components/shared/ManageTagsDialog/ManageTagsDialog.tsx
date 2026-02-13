@@ -5,7 +5,7 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-import { Tag as TagIcon } from "lucide-react";
+import { Tag as TagIcon, Plus, Check, X } from "lucide-react";
 
 import {
   Dialog,
@@ -100,6 +100,8 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
   const handleAddNewTag = useCallback(() => {
     const trimmedTag = newTagInput.trim();
 
+    if (!trimmedTag) return;
+
     if (newTags.has(trimmedTag)) {
       toast({
         title: "Tag already added",
@@ -191,7 +193,18 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
 
   return (
     <Dialog open={Boolean(open)} onOpenChange={handleClose}>
-      <DialogContent className="outline-none sm:max-w-[600px]">
+      <DialogContent
+        className="outline-none sm:max-w-[600px]"
+        onEscapeKeyDown={(e) => {
+          if (isAdding) e.preventDefault();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !isAdding) {
+            e.preventDefault();
+            handleUpdateTags();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Manage shared tags</DialogTitle>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -200,7 +213,7 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
           </p>
         </DialogHeader>
 
-        <div className="flex max-h-80 items-start gap-2 overflow-y-auto py-4">
+        <div className="flex max-h-80 items-start gap-2 overflow-y-auto pb-4 pt-2">
           <TagIcon className="mt-1 size-4 shrink-0 text-muted-foreground" />
           <div className="flex flex-wrap items-center gap-2">
             {commonTags.map((tag) =>
@@ -234,34 +247,55 @@ const ManageTagsDialog: React.FunctionComponent<ManageTagsDialogProps> = ({
               />
             ))}
             {isAdding ? (
-              <input
-                ref={inputRef}
-                type="text"
-                value={newTagInput}
-                onChange={(e) => setNewTagInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newTagInput.trim()) {
+              <span className="inline-flex h-6 items-center rounded-md focus-within:ring-1 focus-within:ring-ring">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={newTagInput}
+                  onChange={(e) => setNewTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddNewTag();
+                    }
+                    if (e.key === "Escape") {
+                      setNewTagInput("");
+                      setIsAdding(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    setNewTagInput("");
+                    setIsAdding(false);
+                  }}
+                  maxLength={MAX_TAG_LENGTH}
+                  className="comet-body-s-accented h-full w-16 rounded-l-md bg-background px-1.5 outline-none"
+                />
+                <Check
+                  className="ml-1 size-4 shrink-0 cursor-pointer text-emerald-600"
+                  onMouseDown={(e) => {
                     e.preventDefault();
                     handleAddNewTag();
-                  }
-                }}
-                onBlur={() => {
-                  setNewTagInput("");
-                  setIsAdding(false);
-                }}
-                maxLength={MAX_TAG_LENGTH}
-                className="comet-body-s-accented h-6 w-24 rounded-md bg-background px-1.5 outline-none focus:ring-1 focus:ring-ring"
-                placeholder="Tag name..."
-              />
+                  }}
+                />
+                <X
+                  className="ml-1 mr-1.5 size-4 shrink-0 cursor-pointer text-red-500"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setNewTagInput("");
+                    setIsAdding(false);
+                  }}
+                />
+              </span>
             ) : (
               <Tag
                 size="md"
-                className="cursor-pointer border-none"
+                className="cursor-pointer border-none text-muted-slate hover:text-foreground"
                 onClick={() => setIsAdding(true)}
                 role="button"
                 data-testid="add-tag-button"
               >
-                + Add tag
+                <Plus className="mr-0.5 inline-block size-3.5" />
+                Add tag
               </Tag>
             )}
           </div>
