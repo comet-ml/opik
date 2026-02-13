@@ -784,6 +784,7 @@ def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
     assert filtered_prompts[0].name == prompt_name
     assert set(filtered_prompts[0].tags) == set(tags)
 
+
 def test_prompt__filter_versions(opik_client: opik.Opik):
     prompt_name = _generate_random_prompt_name()
     shared_tag = _generate_random_tag()

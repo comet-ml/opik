@@ -1625,7 +1625,7 @@ class Opik:
             # Filter by tags (versions containing "production" tag)
             versions = client.get_prompt_history(
                 name="my-prompt",
-                filter_string='tags contains "production"',
+                filter_string='tags contains "production"'
             )
 
             # Search for specific text in template or change description fields
@@ -1638,7 +1638,7 @@ class Opik:
             versions = client.get_prompt_history(
                 name="my-prompt",
                 search="customer",
-                filter_string='tags contains "production"',
+                filter_string='tags contains "production"'
             )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
@@ -1706,7 +1706,7 @@ class Opik:
             # Filter by tags (versions containing "production" tag)
             versions = client.get_chat_prompt_history(
                 name="my-chat-prompt",
-                filter_string='tags contains "production"',
+                filter_string='tags contains "production"'
             )
 
             # Search for specific text in template or change description fields
@@ -1719,7 +1719,7 @@ class Opik:
             versions = client.get_chat_prompt_history(
                 name="my-chat-prompt",
                 search="helpful assistant",
-                filter_string='tags contains "production"',
+                filter_string='tags contains "production"'
             )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)

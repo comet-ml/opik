@@ -298,11 +298,7 @@ class DatasetItemOQLConfig(OQLConfig):
 
 
 class PromptVersionOQLConfig(OQLConfig):
-    """OQL configuration for prompt version filtering.
-
-    Based on backend's PromptVersionField enum and FilterQueryBuilder.
-    See: apps/opik-backend/src/main/java/com/comet/opik/api/filter/PromptVersionField.java
-    """
+    """OQL configuration for prompt version filtering."""
 
     @property
     def columns(self) -> Dict[str, str]:
@@ -328,8 +324,6 @@ class PromptVersionOQLConfig(OQLConfig):
                 "not_contains",
                 "starts_with",
                 "ends_with",
-                ">",
-                "<",
             ],
             "commit": [
                 "=",
@@ -338,8 +332,6 @@ class PromptVersionOQLConfig(OQLConfig):
                 "not_contains",
                 "starts_with",
                 "ends_with",
-                ">",
-                "<",
             ],
             "template": [
                 "=",
@@ -348,8 +340,6 @@ class PromptVersionOQLConfig(OQLConfig):
                 "not_contains",
                 "starts_with",
                 "ends_with",
-                ">",
-                "<",
             ],
             "change_description": [
                 "=",
@@ -358,10 +348,19 @@ class PromptVersionOQLConfig(OQLConfig):
                 "not_contains",
                 "starts_with",
                 "ends_with",
-                ">",
-                "<",
             ],
-            "metadata": ["=", "contains", ">", "<"],
+            "metadata": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                ">=",
+                "<",
+                "<=",
+            ],
             "type": ["=", "!="],
             "tags": ["contains"],
             "created_at": ["=", "!=", ">", ">=", "<", "<="],
@@ -372,8 +371,6 @@ class PromptVersionOQLConfig(OQLConfig):
                 "not_contains",
                 "starts_with",
                 "ends_with",
-                ">",
-                "<",
             ],
             "default": [
                 "=",
@@ -383,7 +380,9 @@ class PromptVersionOQLConfig(OQLConfig):
                 "starts_with",
                 "ends_with",
                 ">",
+                ">=",
                 "<",
+                "<=",
             ],
         }
 

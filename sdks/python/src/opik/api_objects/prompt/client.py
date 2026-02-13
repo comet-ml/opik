@@ -270,7 +270,7 @@ class PromptClient:
             # Filter by tags (versions containing "production" tag)
             versions = prompt_client.get_all_prompt_versions(
                 name="my-prompt",
-                filter_string='tags contains "production"',
+                filter_string='tags contains "production"'
             )
 
             # Search for specific text in template or change description fields
@@ -283,7 +283,7 @@ class PromptClient:
             versions = prompt_client.get_all_prompt_versions(
                 name="my-prompt",
                 search="customer",
-                filter_string='tags contains "production"',
+                filter_string='tags contains "production"'
             )
         """
         try:
@@ -302,9 +302,8 @@ class PromptClient:
             if len(filtered_prompt_list) == 0:
                 raise ValueError("No prompts found for name: " + name)
 
-            # Parse filter_string using OQL
             filters: Optional[str] = None
-            if filter_string is not None:
+            if filter_string:
                 oql = opik_query_language.OpikQueryLanguage.for_prompt_versions(
                     filter_string
                 )

@@ -508,28 +508,35 @@ def test_dataset_item_oql__empty_filter__returns_none(filter_string):
     "filter_string, expected",
     [
         (
-            'tags contains "production"',
-            [{"field": "tags", "operator": "contains", "value": "production"}],
-        ),
-        (
-            'template contains "hello"',
-            [{"field": "template", "operator": "contains", "value": "hello"}],
+            'id != "1234"',
+            [{"field": "id", "operator": "!=", "value": "1234"}],
         ),
         (
             'commit = "abc123"',
             [{"field": "commit", "operator": "=", "value": "abc123"}],
         ),
         (
-            'created_by = "user@example.com"',
-            [{"field": "created_by", "operator": "=", "value": "user@example.com"}],
+            'template contains "hello"',
+            [{"field": "template", "operator": "contains", "value": "hello"}],
         ),
         (
-            'change_description contains "fix"',
+            'change_description not_contains "fix"',
             [
                 {
                     "field": "change_description",
-                    "operator": "contains",
+                    "operator": "not_contains",
                     "value": "fix",
+                }
+            ],
+        ),
+        (
+            'metadata.environment >= "prod"',
+            [
+                {
+                    "field": "metadata",
+                    "key": "environment",
+                    "operator": ">=",
+                    "value": "prod",
                 }
             ],
         ),
@@ -538,37 +545,33 @@ def test_dataset_item_oql__empty_filter__returns_none(filter_string):
             [{"field": "type", "operator": "=", "value": "MUSTACHE"}],
         ),
         (
+            'tags contains "production"',
+            [{"field": "tags", "operator": "contains", "value": "production"}],
+        ),
+        (
             "created_at > 1234567890",
             [{"field": "created_at", "operator": ">", "value": "1234567890"}],
         ),
         (
-            'metadata.environment = "prod"',
+            'created_by ends_with "user@example.com"',
             [
                 {
-                    "field": "metadata",
-                    "key": "environment",
-                    "operator": "=",
-                    "value": "prod",
+                    "field": "created_by",
+                    "operator": "ends_with",
+                    "value": "user@example.com",
                 }
             ],
         ),
         (
-            'tags contains "v1" AND tags contains "production"',
+            'template starts_with "customer" AND tags contains "production"',
             [
-                {"field": "tags", "operator": "contains", "value": "v1"},
+                {"field": "template", "operator": "starts_with", "value": "customer"},
                 {"field": "tags", "operator": "contains", "value": "production"},
-            ],
-        ),
-        (
-            'template contains "customer" AND created_by = "admin"',
-            [
-                {"field": "template", "operator": "contains", "value": "customer"},
-                {"field": "created_by", "operator": "=", "value": "admin"},
             ],
         ),
     ],
 )
-def test_prompt_version_oql__valid_filters__happyflow(filter_string, expected):
+def test_prompt_version_oql__valid_filters__happy_flow(filter_string, expected):
     oql = OpikQueryLanguage.for_prompt_versions(filter_string)
     parsed = json.loads(oql.parsed_filters)
     assert len(parsed) == len(expected)
