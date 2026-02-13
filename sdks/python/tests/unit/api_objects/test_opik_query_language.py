@@ -595,6 +595,168 @@ def test_span_oql__empty_filter(filter_string):
 
 
 # ============================================================
+# Trace thread OQL tests
+# ============================================================
+
+
+@pytest.mark.parametrize(
+    "filter_string, expected",
+    [
+        (
+            'id = "thread-123"',
+            [{"field": "id", "operator": "=", "value": "thread-123"}],
+        ),
+        (
+            'first_message contains "hello"',
+            [{"field": "first_message", "operator": "contains", "value": "hello"}],
+        ),
+        (
+            'last_message contains "goodbye"',
+            [{"field": "last_message", "operator": "contains", "value": "goodbye"}],
+        ),
+        (
+            "number_of_messages > 5",
+            [{"field": "number_of_messages", "operator": ">", "value": "5"}],
+        ),
+        (
+            "duration >= 1000",
+            [{"field": "duration", "operator": ">=", "value": "1000"}],
+        ),
+        (
+            "created_at > 1234567890",
+            [{"field": "created_at", "operator": ">", "value": "1234567890"}],
+        ),
+        (
+            "last_updated_at <= 9876543210",
+            [{"field": "last_updated_at", "operator": "<=", "value": "9876543210"}],
+        ),
+        (
+            "start_time > 1234567890",
+            [{"field": "start_time", "operator": ">", "value": "1234567890"}],
+        ),
+        (
+            "end_time < 9876543210",
+            [{"field": "end_time", "operator": "<", "value": "9876543210"}],
+        ),
+        (
+            "feedback_scores.accuracy > 0.8",
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "accuracy",
+                    "operator": ">",
+                    "value": "0.8",
+                }
+            ],
+        ),
+        (
+            "feedback_scores.my_metric is_empty",
+            [
+                {
+                    "field": "feedback_scores",
+                    "key": "my_metric",
+                    "operator": "is_empty",
+                    "value": "",
+                }
+            ],
+        ),
+        (
+            'status = "completed"',
+            [
+                {
+                    "field": "status",
+                    "operator": "=",
+                    "value": "completed",
+                    "type": "enum",
+                }
+            ],
+        ),
+        (
+            'tags contains "important"',
+            [{"field": "tags", "operator": "contains", "value": "important"}],
+        ),
+        (
+            "tags is_empty",
+            [{"field": "tags", "operator": "is_empty", "value": ""}],
+        ),
+        (
+            'annotation_queue_ids contains "queue_1"',
+            [
+                {
+                    "field": "annotation_queue_ids",
+                    "operator": "contains",
+                    "value": "queue_1",
+                }
+            ],
+        ),
+        # AND combinations
+        (
+            "number_of_messages > 3 AND duration > 500",
+            [
+                {"field": "number_of_messages", "operator": ">", "value": "3"},
+                {"field": "duration", "operator": ">", "value": "500"},
+            ],
+        ),
+        (
+            'status = "active" AND tags contains "vip" AND feedback_scores.quality is_not_empty',
+            [
+                {"field": "status", "operator": "=", "value": "active", "type": "enum"},
+                {"field": "tags", "operator": "contains", "value": "vip"},
+                {
+                    "field": "feedback_scores",
+                    "key": "quality",
+                    "operator": "is_not_empty",
+                    "value": "",
+                },
+            ],
+        ),
+    ],
+)
+def test_trace_thread_oql__valid_filters(filter_string, expected):
+    oql = OpikQueryLanguage.for_trace_threads(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert len(parsed) == len(expected)
+
+    for i, line in enumerate(expected):
+        for key, value in line.items():
+            assert parsed[i][key] == value
+
+
+@pytest.mark.parametrize(
+    "filter_string, error_pattern",
+    [
+        ("name = test", r"Invalid value.*"),
+        (
+            'status contains "active"',
+            r"Operator contains is not supported for field status.*",
+        ),
+        (
+            'id = "test" OR id = "other"',
+            r"Invalid filter string, OR is not currently supported",
+        ),
+        (
+            'id = "test" extra_stuff',
+            r"Invalid filter string, trailing characters.*",
+        ),
+        (
+            # metadata is not a dictionary field in TraceThreadOQLConfig
+            'metadata.key = "value"',
+            r"Field metadata\.key is not supported.*",
+        ),
+    ],
+)
+def test_trace_thread_oql__invalid_filters(filter_string, error_pattern):
+    with pytest.raises(ValueError, match=error_pattern):
+        OpikQueryLanguage.for_trace_threads(filter_string)
+
+
+@pytest.mark.parametrize("filter_string", [None, ""])
+def test_trace_thread_oql__empty_filter(filter_string):
+    oql = OpikQueryLanguage.for_trace_threads(filter_string)
+    assert oql.parsed_filters is None
+
+
+# ============================================================
 # Dataset item OQL tests
 # ============================================================
 
