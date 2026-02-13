@@ -53,7 +53,6 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -107,7 +106,7 @@ interface TraceDAO {
 
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
 
-    Mono<Map<UUID, List<UUID>>> getProjectIdsByTraceIds(List<UUID> traceIds);
+    Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
 
     Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
 
@@ -1867,7 +1866,7 @@ class TraceDAOImpl implements TraceDAO {
     private static final String SELECT_PROJECT_IDS_BY_TRACE_IDS = """
             SELECT
                 id,
-                groupUniqArray(project_id) AS project_ids
+                any(project_id) AS project_id
             FROM traces
             WHERE id IN :trace_ids
             AND workspace_id = :workspace_id
@@ -3439,7 +3438,7 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
-    public Mono<Map<UUID, List<UUID>>> getProjectIdsByTraceIds(@NonNull List<UUID> traceIds) {
+    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(@NonNull List<UUID> traceIds) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
 
         log.info("Getting project_ids for '{}' trace_ids", traceIds.size());
@@ -3452,17 +3451,8 @@ class TraceDAOImpl implements TraceDAO {
                     .bind("trace_ids", traceIds.toArray(UUID[]::new));
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> {
-                        List<UUID> projectIds = row.get("project_ids", List.class)
-                                .stream()
-                                .filter(Objects::nonNull)
-                                .map(it -> UUID.fromString((String) it))
-                                .toList();
-
-                        return Map.entry(
-                                row.get("id", UUID.class),
-                                projectIds);
-                    }))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
+                            row.get("project_id", UUID.class))))
                     .collect(toMap(Map.Entry::getKey, Map.Entry::getValue))
                     .doFinally(signalType -> {
                         if (signalType == SignalType.ON_COMPLETE) {

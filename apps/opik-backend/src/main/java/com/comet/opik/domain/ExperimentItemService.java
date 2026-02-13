@@ -130,7 +130,7 @@ public class ExperimentItemService {
                     return experimentItems.stream()
                             .map(item -> {
                                 if (isProjectResolved(traceToProjectMap, item)) {
-                                    UUID projectId = traceToProjectMap.get(item.traceId()).getFirst();
+                                    UUID projectId = traceToProjectMap.get(item.traceId());
 
                                     log.debug("Resolved project_id '{}' for experiment item with trace_id '{}'",
                                             projectId, item.traceId());
@@ -145,9 +145,8 @@ public class ExperimentItemService {
                 });
     }
 
-    private boolean isProjectResolved(Map<UUID, List<UUID>> traceToProjectMap, ExperimentItem item) {
-        return item.projectId() == null && traceToProjectMap.containsKey(item.traceId())
-                && traceToProjectMap.getOrDefault(item.traceId(), List.of()).size() == 1;
+    private boolean isProjectResolved(Map<UUID, UUID> traceToProjectMap, ExperimentItem item) {
+        return item.projectId() == null && traceToProjectMap.containsKey(item.traceId());
     }
 
     private Set<ExperimentItem> validateExperimentItemIdsAndWorkspace(
