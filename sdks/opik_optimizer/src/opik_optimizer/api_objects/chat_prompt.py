@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 from opik import track
 
 from . import types
+from .. import constants
 
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class ChatPrompt:
         messages: list[dict[str, Any]] | None = None,
         tools: list[dict[str, Any]] | None = None,
         function_map: dict[str, Callable] | None = None,
-        model: str = "gpt-4o-mini",
+        model: str = constants.DEFAULT_MODEL,
         model_parameters: dict[str, Any] | None = None,
         model_kwargs: dict[str, Any] | None = None,
         **kwargs: Any,

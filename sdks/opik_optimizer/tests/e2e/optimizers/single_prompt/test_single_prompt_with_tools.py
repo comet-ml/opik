@@ -93,7 +93,7 @@ def test_single_prompt_with_tools(
             "mock_calculator": mock_calculator,
             "mock_search": mock_search,
         },
-        model="openai/gpt-4o-mini",
+        model="openai/gpt-5-nano",
     )
 
     dataset = tiny_dataset

@@ -27,7 +27,7 @@ class MultiPromptTestAgent(OptimizableAgent):
 
     def __init__(
         self,
-        model: str = "openai/gpt-4o-mini",
+        model: str = "openai/gpt-5-nano",
         model_parameters: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()

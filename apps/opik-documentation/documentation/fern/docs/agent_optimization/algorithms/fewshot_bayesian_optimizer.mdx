@@ -80,7 +80,7 @@ results.display()
 
 The optimizer has the following parameters:
 
-<ParamField path="model" type="str" optional={true} default="gpt-4o">LiteLLM model name for optimizer's internal reasoning (generating few-shot templates)</ParamField>
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for optimizer's internal reasoning (generating few-shot templates)</ParamField>
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="min_examples" type="int" optional={true} default="2">Minimum number of examples to include in the prompt</ParamField>
 <ParamField path="max_examples" type="int" optional={true} default="8">Maximum number of examples to include in the prompt</ParamField>

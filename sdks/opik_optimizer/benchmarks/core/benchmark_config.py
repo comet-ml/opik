@@ -365,7 +365,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
 MODELS = [
     # Standard models
     # "openai/gpt-4.1-2025-04-14",
-    "openai/gpt-4o-mini",
+    "openai/gpt-5-nano",
     # "anthropic/claude-3-5-sonnet-20241022",
     # "openrouter/google/gemini-2.5-flash-preview",
     # # Reasoning models
