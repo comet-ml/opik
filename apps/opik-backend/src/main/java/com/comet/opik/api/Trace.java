@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -65,7 +66,7 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
         @JsonView({Trace.View.Public.class,
-                Trace.View.Write.class}) @Schema(description = "Time to first token in milliseconds") Double ttft,
+                Trace.View.Write.class}) @Schema(description = "Time to first token in milliseconds") @PositiveOrZero Double ttft,
         @JsonView({Trace.View.Public.class, Trace.View.Write.class}) String threadId,
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode visibilityMode,

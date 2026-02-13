@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -29,5 +30,5 @@ public record TraceUpdate(
         Set<String> tags,
         ErrorInfo errorInfo,
         String threadId,
-        Double ttft) {
+        @PositiveOrZero Double ttft) {
 }
