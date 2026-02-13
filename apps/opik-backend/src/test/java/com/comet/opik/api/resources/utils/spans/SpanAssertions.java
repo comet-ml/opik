@@ -126,6 +126,7 @@ public class SpanAssertions {
         assertThat(actualSpans).hasSize(expectedSpans.size());
         assertThat(actualSpans)
                 .usingRecursiveComparison()
+                .withComparatorForType(StatsUtils::compareDoubles, Double.class)
                 .ignoringFields(IGNORED_FIELDS)
                 .ignoringCollectionOrderInFields("tags")
                 .isEqualTo(preparedExpectedSpans);
@@ -136,6 +137,7 @@ public class SpanAssertions {
             var preparedUnexpectedSpans = prepareSpansForAssertion(unexpectedSpans);
             assertThat(actualSpans)
                     .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::compareDoubles, Double.class)
                     .ignoringFields(IGNORED_FIELDS)
                     .ignoringCollectionOrderInFields("tags")
                     .isNotEqualTo(preparedUnexpectedSpans);

@@ -137,16 +137,20 @@ public class TraceAssertions {
                 .toList();
 
         assertThat(actualTraces)
-                .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                .containsExactlyElementsOf(preparedExpectedTraces);
+                .usingRecursiveComparison()
+                .withComparatorForType(StatsUtils::compareDoubles, Double.class)
+                .ignoringFields(IGNORED_FIELDS_TRACES)
+                .isEqualTo(preparedExpectedTraces);
 
         assertIgnoredFields(actualTraces, preparedExpectedTraces, user);
 
         if (!unexpectedTraces.isEmpty()) {
             var preparedUnexpectedTraces = prepareTracesForAssertion(unexpectedTraces);
             assertThat(actualTraces)
-                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_TRACES)
-                    .doesNotContainAnyElementsOf(preparedUnexpectedTraces);
+                    .usingRecursiveComparison()
+                    .withComparatorForType(StatsUtils::compareDoubles, Double.class)
+                    .ignoringFields(IGNORED_FIELDS_TRACES)
+                    .isNotEqualTo(preparedUnexpectedTraces);
         }
     }
 
