@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
 
+import pytest
 
-from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
+from benchmarks.core.manifest import load_manifest, manifest_to_task_specs
 from tests.unit.fixtures import system_message, user_message
 
 
@@ -65,7 +66,7 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
                     {"name": "few_shot", "optimizer_prompt_params": {"max_trials": 1}},
                     {"name": "evolutionary_optimizer"},
                 ],
-                "metrics": ["benchmarks.metrics.hotpot.hotpot_f1"],
+                "metrics": ["benchmarks.packages.hotpot.metrics.hotpot_f1"],
                 "test_mode": True,
                 "prompt": [
                     system_message("Answer the question briefly and correctly."),
@@ -84,10 +85,57 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
     assert len(tasks) == 8
     # Ensure metrics propagated
     assert all(
-        task.metrics == ["benchmarks.metrics.hotpot.hotpot_f1"] for task in tasks
+        task.metrics == ["benchmarks.packages.hotpot.metrics.hotpot_f1"]
+        for task in tasks
     )
     # Ensure dataset override expansion
     tiny_tasks = [t for t in tasks if t.dataset_name == "tiny_test"]
     assert tiny_tasks and tiny_tasks[0].datasets is not None
     # Prompt override propagated to all tasks
     assert all(task.prompt_messages for task in tasks)
+
+
+def test_manifest_rejects_empty_payload(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest_empty.json"
+    manifest_path.write_text(json.dumps({"seed": 1}))
+
+    with pytest.raises(ValueError, match="at least one task or generator"):
+        load_manifest(str(manifest_path))
+
+
+def test_manifest_rejects_task_datasets_without_train(tmp_path: Path) -> None:
+    data = {
+        "tasks": [
+            {
+                "dataset": "tiny_test",
+                "optimizer": "few_shot",
+                "model": "model-a",
+                "datasets": {"validation": {"loader": "tiny_test", "count": 1}},
+            }
+        ]
+    }
+    manifest_path = tmp_path / "manifest_invalid_split.json"
+    manifest_path.write_text(json.dumps(data))
+
+    with pytest.raises(ValueError, match="must include a train split"):
+        load_manifest(str(manifest_path))
+
+
+def test_manifest_ignores_unknown_task_fields(tmp_path: Path) -> None:
+    data = {
+        "tasks": [
+            {
+                "dataset": "tiny_test",
+                "optimizer": "few_shot",
+                "model": "model-a",
+                "unexpected": True,
+            }
+        ]
+    }
+    manifest_path = tmp_path / "manifest_unknown_field.json"
+    manifest_path.write_text(json.dumps(data))
+
+    manifest = load_manifest(str(manifest_path))
+    tasks = manifest_to_task_specs(manifest)
+    assert len(tasks) == 1
+    assert tasks[0].dataset_name == "tiny_test"

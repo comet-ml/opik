@@ -2,7 +2,7 @@
 
 import pytest
 
-from benchmarks.core.benchmark_task import TaskResult
+from benchmarks.core.types import TaskResult
 
 
 def test_task_result_accepts_rounds_history() -> None:
