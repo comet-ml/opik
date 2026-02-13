@@ -5,14 +5,12 @@ import get from "lodash/get";
 import api, { SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { Span } from "@/types/traces";
 import { useToast } from "@/components/ui/use-toast";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
 
 type UseSpanBatchUpdateMutationParams = {
   projectId: string;
   spanIds: string[];
-  span: Partial<Span> & {
-    tagsToAdd?: string[];
-    tagsToRemove?: string[];
-  };
+  span: Partial<Span> & TagUpdateFields;
 };
 
 const useSpanBatchUpdateMutation = () => {
@@ -21,15 +19,9 @@ const useSpanBatchUpdateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ spanIds, span }: UseSpanBatchUpdateMutationParams) => {
-      const { tagsToAdd, tagsToRemove, ...rest } = span;
-
-      const payload: Record<string, unknown> = { ...rest };
-      if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
-      if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
-
       const { data } = await api.patch(SPANS_REST_ENDPOINT + "batch", {
         ids: spanIds,
-        update: payload,
+        update: buildTagUpdatePayload(span),
       });
 
       return data;

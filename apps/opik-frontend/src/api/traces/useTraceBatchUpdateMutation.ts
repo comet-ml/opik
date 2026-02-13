@@ -5,14 +5,12 @@ import get from "lodash/get";
 import api, { TRACES_KEY, TRACES_REST_ENDPOINT } from "@/api/api";
 import { Trace } from "@/types/traces";
 import { useToast } from "@/components/ui/use-toast";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
 
 type UseTraceBatchUpdateMutationParams = {
   projectId: string;
   traceIds: string[];
-  trace: Partial<Trace> & {
-    tagsToAdd?: string[];
-    tagsToRemove?: string[];
-  };
+  trace: Partial<Trace> & TagUpdateFields;
 };
 
 const useTraceBatchUpdateMutation = () => {
@@ -24,15 +22,9 @@ const useTraceBatchUpdateMutation = () => {
       traceIds,
       trace,
     }: UseTraceBatchUpdateMutationParams) => {
-      const { tagsToAdd, tagsToRemove, ...rest } = trace;
-
-      const payload: Record<string, unknown> = { ...rest };
-      if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
-      if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
-
       const { data } = await api.patch(TRACES_REST_ENDPOINT + "batch", {
         ids: traceIds,
-        update: payload,
+        update: buildTagUpdatePayload(trace),
       });
 
       return data;

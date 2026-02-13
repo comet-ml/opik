@@ -5,13 +5,11 @@ import get from "lodash/get";
 import api, { EXPERIMENTS_REST_ENDPOINT } from "@/api/api";
 import { Experiment } from "@/types/datasets";
 import { useToast } from "@/components/ui/use-toast";
+import { TagUpdateFields, buildTagUpdatePayload } from "@/lib/tags";
 
 type UseExperimentBatchUpdateMutationParams = {
   ids: string[];
-  experiment: Partial<Experiment> & {
-    tagsToAdd?: string[];
-    tagsToRemove?: string[];
-  };
+  experiment: Partial<Experiment> & TagUpdateFields;
 };
 
 const useExperimentBatchUpdateMutation = () => {
@@ -23,15 +21,9 @@ const useExperimentBatchUpdateMutation = () => {
       ids,
       experiment,
     }: UseExperimentBatchUpdateMutationParams) => {
-      const { tagsToAdd, tagsToRemove, ...rest } = experiment;
-
-      const payload: Record<string, unknown> = { ...rest };
-      if (tagsToAdd !== undefined) payload.tags_to_add = tagsToAdd;
-      if (tagsToRemove !== undefined) payload.tags_to_remove = tagsToRemove;
-
       const { data } = await api.patch(`${EXPERIMENTS_REST_ENDPOINT}batch`, {
         ids,
-        update: payload,
+        update: buildTagUpdatePayload(experiment),
       });
       return data;
     },
