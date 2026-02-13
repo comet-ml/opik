@@ -287,13 +287,13 @@ const TraceStructureHelper: React.FC<{
 
   return (
     <div className="rounded-md border border-border bg-muted/30 p-4">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="mb-2 flex items-center gap-2">
         <Info className="size-4 text-muted-foreground" />
         <Label className="text-sm font-medium">Direct JSONPath Mode</Label>
       </div>
-      <p className="text-sm text-muted-foreground mb-3">
+      <p className="mb-3 text-sm text-muted-foreground">
         Use dot-notation directly in your template variables (e.g.,{" "}
-        <code className="bg-muted px-1 rounded">{"{{input.question}}"}</code>).
+        <code className="rounded bg-muted px-1">{"{{input.question}}"}</code>).
         The backend will resolve paths automatically.
       </p>
 
@@ -330,7 +330,7 @@ const TraceStructureHelper: React.FC<{
                 <div className="flex items-center gap-2">
                   <Label className="text-xs">Sample {itemLabel}:</Label>
                   <select
-                    className="text-xs border rounded px-2 py-1 bg-background"
+                    className="rounded border bg-background px-2 py-1 text-xs"
                     value={selectedTraceIndex}
                     onChange={(e) =>
                       setSelectedTraceIndex(Number(e.target.value))
@@ -346,14 +346,14 @@ const TraceStructureHelper: React.FC<{
               )}
 
               {/* Path Tester */}
-              <div className="bg-background rounded p-3 border">
-                <Label className="text-xs font-medium mb-2 block">
+              <div className="rounded border bg-background p-3">
+                <Label className="mb-2 block text-xs font-medium">
                   Test a path
                 </Label>
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    className="flex-1 text-sm border rounded px-2 py-1 bg-background font-mono"
+                    className="flex-1 rounded border bg-background px-2 py-1 font-mono text-sm"
                     placeholder="e.g., input.question or output.answer"
                     value={testPath}
                     onChange={(e) => setTestPath(e.target.value)}
@@ -367,7 +367,7 @@ const TraceStructureHelper: React.FC<{
                   <button
                     type="button"
                     onClick={handleTestPath}
-                    className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90"
+                    className="rounded bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary/90"
                   >
                     Test
                   </button>
@@ -375,19 +375,19 @@ const TraceStructureHelper: React.FC<{
                 {testResult && (
                   <div className="mt-2">
                     {testResult.error ? (
-                      <div className="text-xs text-destructive bg-destructive/10 rounded p-2">
+                      <div className="rounded bg-destructive/10 p-2 text-xs text-destructive">
                         Error: {testResult.error}
                       </div>
                     ) : (
                       <div className="text-xs">
-                        <div className="text-muted-foreground mb-1">
+                        <div className="mb-1 text-muted-foreground">
                           Result for{" "}
-                          <code className="bg-muted px-1 rounded">
+                          <code className="rounded bg-muted px-1">
                             {`{{${testPath}}}`}
                           </code>
                           :
                         </div>
-                        <pre className="bg-muted rounded p-2 overflow-auto max-h-40 text-foreground">
+                        <pre className="max-h-40 overflow-auto rounded bg-muted p-2 text-foreground">
                           {formatResultValue(testResult.value)}
                         </pre>
                       </div>
@@ -396,28 +396,28 @@ const TraceStructureHelper: React.FC<{
                 )}
               </div>
 
-              <div className="text-xs font-mono bg-background rounded p-3 border max-h-60 overflow-auto">
+              <div className="max-h-60 overflow-auto rounded border bg-background p-3 font-mono text-xs">
                 {/* Input section */}
                 <div className="mb-3">
-                  <div className="font-semibold text-blue-600 mb-1">
+                  <div className="mb-1 font-semibold text-blue-600">
                     input (use as {"{{input}}"} for entire object)
                   </div>
                   {inputPaths.length > 0 ? (
-                    <div className="pl-2 space-y-0.5">
+                    <div className="space-y-0.5 pl-2">
                       {inputPaths.map((path) => {
                         const result = getValueAtPath(path);
                         return (
                           <button
                             type="button"
                             key={path}
-                            className="flex gap-2 w-full text-left hover:bg-muted/50 rounded px-1 -mx-1"
+                            className="-mx-1 flex w-full gap-2 rounded px-1 text-left hover:bg-muted/50"
                             onClick={() => {
                               setTestPath(path);
                               setTestResult(result);
                             }}
                           >
                             <span className="text-blue-600">{path}</span>
-                            <span className="text-muted-foreground truncate">
+                            <span className="truncate text-muted-foreground">
                               → {getValuePreview(result.value)}
                             </span>
                           </button>
@@ -433,25 +433,25 @@ const TraceStructureHelper: React.FC<{
 
                 {/* Output section */}
                 <div className="mb-3">
-                  <div className="font-semibold text-green-600 mb-1">
+                  <div className="mb-1 font-semibold text-green-600">
                     output (use as {"{{output}}"} for entire object)
                   </div>
                   {outputPaths.length > 0 ? (
-                    <div className="pl-2 space-y-0.5">
+                    <div className="space-y-0.5 pl-2">
                       {outputPaths.map((path) => {
                         const result = getValueAtPath(path);
                         return (
                           <button
                             type="button"
                             key={path}
-                            className="flex gap-2 w-full text-left hover:bg-muted/50 rounded px-1 -mx-1"
+                            className="-mx-1 flex w-full gap-2 rounded px-1 text-left hover:bg-muted/50"
                             onClick={() => {
                               setTestPath(path);
                               setTestResult(result);
                             }}
                           >
                             <span className="text-green-600">{path}</span>
-                            <span className="text-muted-foreground truncate">
+                            <span className="truncate text-muted-foreground">
                               → {getValuePreview(result.value)}
                             </span>
                           </button>
@@ -467,25 +467,25 @@ const TraceStructureHelper: React.FC<{
 
                 {/* Metadata section */}
                 <div>
-                  <div className="font-semibold text-purple-600 mb-1">
+                  <div className="mb-1 font-semibold text-purple-600">
                     metadata (use as {"{{metadata}}"} for entire object)
                   </div>
                   {metadataPaths.length > 0 ? (
-                    <div className="pl-2 space-y-0.5">
+                    <div className="space-y-0.5 pl-2">
                       {metadataPaths.map((path) => {
                         const result = getValueAtPath(path);
                         return (
                           <button
                             type="button"
                             key={path}
-                            className="flex gap-2 w-full text-left hover:bg-muted/50 rounded px-1 -mx-1"
+                            className="-mx-1 flex w-full gap-2 rounded px-1 text-left hover:bg-muted/50"
                             onClick={() => {
                               setTestPath(path);
                               setTestResult(result);
                             }}
                           >
                             <span className="text-purple-600">{path}</span>
-                            <span className="text-muted-foreground truncate">
+                            <span className="truncate text-muted-foreground">
                               → {getValuePreview(result.value)}
                             </span>
                           </button>
