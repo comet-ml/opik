@@ -80,6 +80,7 @@ import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreC
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
@@ -90,6 +91,7 @@ import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/Tra
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { formatDate, formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -180,6 +182,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
     statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
   },
   {
     id: "tags",
@@ -222,6 +225,9 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: CostCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_cost_estimated],
     size: 160,
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
 ];
 
@@ -722,6 +728,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
         }) as ColumnData<BaseTraceData>,
     );
 
@@ -742,6 +749,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 (f) => f.name === scoreName,
               ),
             statisticKey: `${COLUMN_SPAN_FEEDBACK_SCORES_ID}.${scoreName}`,
+            statisticDataFormater: formatScoreDisplay,
           } as ColumnData<BaseTraceData>;
         },
       );

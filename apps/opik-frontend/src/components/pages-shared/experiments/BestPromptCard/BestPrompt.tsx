@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { ArrowRight, Split } from "lucide-react";
+import React, { useCallback, useMemo, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ArrowRight, Save, Split } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 import isObject from "lodash/isObject";
 import get from "lodash/get";
@@ -8,7 +8,8 @@ import get from "lodash/get";
 import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
-import { Optimization } from "@/types/optimizations";
+import { Optimization, OPTIMIZATION_STATUS } from "@/types/optimizations";
+import { IN_PROGRESS_OPTIMIZATION_STATUSES } from "@/lib/optimizations";
 import {
   Card,
   CardContent,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatNumericData, toString } from "@/lib/utils";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
@@ -38,12 +40,18 @@ import {
   MessagesList,
   NamedPromptsList,
 } from "@/components/pages-shared/prompts/PromptMessageDisplay";
+import { useSaveToPromptLibrary } from "@/components/pages-shared/shared/useSaveToPromptLibrary";
+import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
+import { PROMPT_TEMPLATE_STRUCTURE, PromptVersion } from "@/types/prompts";
+import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 type BestPromptProps = {
   optimization: Optimization;
   experiment: Experiment;
   scoreMap: Record<string, { score: number; percentage?: number }>;
   baselineExperiment?: Experiment | null;
+  status?: OPTIMIZATION_STATUS;
 };
 
 export const BestPrompt: React.FC<BestPromptProps> = ({
@@ -51,9 +59,15 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
   experiment,
   scoreMap,
   baselineExperiment,
+  status,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [diffOpen, setDiffOpen] = useState(false);
+
+  const isInProgress =
+    status && IN_PROGRESS_OPTIMIZATION_STATUSES.includes(status);
 
   const { score, percentage } = useMemo(() => {
     const retVal: {
@@ -126,6 +140,66 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
     );
   }, [extractedPrompt, fallbackPrompt]);
 
+  const {
+    canSaveToLibrary,
+    saveDialogOpen,
+    openSaveDialog,
+    closeSaveDialog,
+    dialogKey,
+    existingPrompt,
+    saveTemplate,
+    saveMetadata,
+  } = useSaveToPromptLibrary({
+    promptName: optimization.name,
+    extractedPrompt,
+    optimizationId: optimization.id,
+    optimizationName: optimization.name,
+    experimentId: experiment.id,
+  });
+
+  const canSave = canSaveToLibrary && !isInProgress;
+
+  const handlePromptSaved = useCallback(
+    (_version: PromptVersion, promptName?: string, promptId?: string) => {
+      closeSaveDialog();
+
+      if (promptId && promptName) {
+        const isNewPrompt = promptId !== existingPrompt?.id;
+        const message = isNewPrompt ? (
+          <span>
+            New prompt <b>{promptName}</b> created
+          </span>
+        ) : (
+          <span>
+            New version saved to <b>{promptName}</b>
+          </span>
+        );
+
+        toast({
+          description: message,
+          actions: [
+            <ToastAction
+              key="save-new-prompt-version"
+              altText="Go to prompt"
+              variant="link"
+              size="sm"
+              className="px-0"
+              onClick={() =>
+                navigate({
+                  to: "/$workspaceName/prompts/$promptId",
+                  params: { workspaceName, promptId },
+                })
+              }
+            >
+              Go to prompt
+            </ToastAction>,
+          ],
+        });
+      }
+    },
+    [closeSaveDialog, toast, workspaceName, navigate, existingPrompt?.id],
+  );
+
   return (
     <Card className="flex h-full flex-col">
       <CardHeader className="shrink-0 gap-y-0.5 px-5">
@@ -135,12 +209,26 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
               <CardTitle className="comet-body-s-accented">
                 Best prompt
               </CardTitle>
-              <CopyButton
-                text={currentPromptJson}
-                message="Prompt copied to clipboard"
-                tooltipText="Copy prompt"
-                variant="ghost"
-              />
+              <div className="flex items-center">
+                <CopyButton
+                  text={currentPromptJson}
+                  message="Prompt copied to clipboard"
+                  tooltipText="Copy prompt"
+                  variant="ghost"
+                  size="icon-xs"
+                />
+                {canSave && (
+                  <TooltipWrapper content="Save to Prompt library">
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={openSaveDialog}
+                    >
+                      <Save />
+                    </Button>
+                  </TooltipWrapper>
+                )}
+              </div>
             </div>
             <CardDescription className="!mt-0">
               <ColoredTagNew
@@ -152,15 +240,23 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
           </div>
           <div className="flex flex-row items-baseline gap-2">
             {!isUndefined(baselineScore) && (
-              <div className="comet-body-s text-muted-slate">
-                {formatNumericData(baselineScore)}
-              </div>
+              <TooltipWrapper content={String(baselineScore)}>
+                <div className="comet-body-s text-muted-slate">
+                  {formatScoreDisplay(baselineScore)}
+                </div>
+              </TooltipWrapper>
             )}
             {!isUndefined(baselineScore) && (
               <div className="text-muted-slate">→</div>
             )}
             <div className="comet-title-xl text-4xl leading-none text-foreground-secondary">
-              {isUndefined(score) ? "-" : formatNumericData(score)}
+              {isUndefined(score) ? (
+                "-"
+              ) : (
+                <TooltipWrapper content={String(score)}>
+                  <span>{formatScoreDisplay(score)}</span>
+                </TooltipWrapper>
+              )}
             </div>
             {!isUndefined(percentage) && (
               <div
@@ -257,6 +353,20 @@ export const BestPrompt: React.FC<BestPromptProps> = ({
           )}
         </div>
       </CardContent>
+
+      {canSave && (
+        <AddNewPromptVersionDialog
+          key={dialogKey}
+          open={saveDialogOpen}
+          setOpen={closeSaveDialog}
+          prompt={existingPrompt}
+          template={saveTemplate}
+          templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+          defaultName={optimization.name}
+          metadata={saveMetadata}
+          onSave={handlePromptSaved}
+        />
+      )}
     </Card>
   );
 };
