@@ -8,6 +8,47 @@ import rich.text
 from ..api_objects import types as api_types
 
 
+def _has_non_empty_message_content(content: Any) -> bool:
+    """Return True when message content has a non-empty payload."""
+    if isinstance(content, str):
+        return bool(content.strip())
+    if not isinstance(content, list):
+        return False
+    if not content:
+        return False
+    for part in content:
+        if isinstance(part, api_types.TextContentPart):
+            if part.text.strip():
+                return True
+            continue
+        if isinstance(part, api_types.ImageContentPart):
+            if part.image_url.url.strip():
+                return True
+            continue
+        if not isinstance(part, dict):
+            continue
+        part_type = part.get("type")
+        if part_type == "text":
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                return True
+        elif part_type == "image_url":
+            image_url = part.get("image_url", {})
+            if isinstance(image_url, dict):
+                url = image_url.get("url")
+                if isinstance(url, str) and url.strip():
+                    return True
+        else:
+            for value in part.values():
+                if isinstance(value, str) and value.strip():
+                    return True
+                if isinstance(value, dict):
+                    for nested in value.values():
+                        if isinstance(nested, str) and nested.strip():
+                            return True
+    return False
+
+
 def _extract_url_from_part(part: dict[str, Any], field_name: str) -> str:
     """
     Extract URL from a content part.
@@ -192,10 +233,25 @@ def preserve_multimodal_message_structure(
     """
     preserved: list[dict[str, Any]] = []
     for index, generated in enumerate(generated_messages):
-        if (
+        generated_role = generated.get("role")
+        generated_content = generated.get("content")
+        has_original_match = (
             index < len(original_messages)
-            and original_messages[index].get("role") == generated.get("role")
-            and isinstance(original_messages[index].get("content"), list)
+            and original_messages[index].get("role") == generated_role
+        )
+        if not _has_non_empty_message_content(generated_content):
+            if has_original_match:
+                preserved.append(
+                    {
+                        "role": generated_role,
+                        "content": original_messages[index].get("content", ""),
+                    }
+                )
+            # If no matching original message exists, drop empty generated message.
+            continue
+
+        if has_original_match and isinstance(
+            original_messages[index].get("content"), list
         ):
             original_content = original_messages[index]["content"]
             original_text = api_types.extract_text_from_content(original_content)
@@ -213,7 +269,7 @@ def preserve_multimodal_message_structure(
 
             preserved.append(
                 {
-                    "role": generated.get("role"),
+                    "role": generated_role,
                     "content": api_types.rebuild_content_with_new_text(
                         original_content, generated_text
                     ),

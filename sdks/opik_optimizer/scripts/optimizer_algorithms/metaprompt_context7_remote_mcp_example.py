@@ -82,8 +82,9 @@ def context7_metric(dataset_item: dict[str, Any], llm_output: str) -> Any:
         Missing/None ``reference_answer`` values are treated as ``""``, so the score
         compares output against an empty string in that edge case.
     """
+    reference_text = dataset_item.get("reference_answer") or ""
     base_score = scorer.score(
-        reference=str(dataset_item.get("reference_answer", "")),
+        reference=str(reference_text),
         output=llm_output,
     )
     return ScoreResult(
