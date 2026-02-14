@@ -13,8 +13,9 @@ import pydantic
 IS_PYDANTIC_V2 = pydantic.VERSION.startswith("2.")
 
 if IS_PYDANTIC_V2:
+    from pydantic.deprecated.json import ENCODERS_BY_TYPE as encoders_by_type
+
     ModelField = Any
-    encoders_by_type: Dict[Any, Callable[[Any], Any]] = {}
 
     def parse_date(value: Any) -> dt.date:
         adapter = pydantic.TypeAdapter(dt.date)  # type: ignore[attr-defined]
