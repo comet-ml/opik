@@ -68,7 +68,13 @@ class TestChatPromptWithTools:
                 }
             ],
         )
-        assert prompt.tools is not None
+        assert isinstance(prompt.tools, list)
+        tool = prompt.tools[0]
+        assert "mcp" in tool
+        assert tool["mcp"]["name"] == "context7_docs"
+        assert tool["mcp"]["server"]["type"] == "stdio"
+        assert tool["mcp"]["server"]["command"] == "npx"
+        assert tool["mcp"]["tool"]["name"] == "get-library-docs"
 
     def test_accepts_mcp_remote_tool(self) -> None:
         prompt = ChatPrompt(
@@ -86,7 +92,13 @@ class TestChatPromptWithTools:
                 }
             ],
         )
-        assert prompt.tools is not None
+        assert isinstance(prompt.tools, list)
+        tool = prompt.tools[0]
+        assert "mcp" in tool
+        assert tool["mcp"]["name"] == "remote_docs"
+        assert tool["mcp"]["server"]["type"] == "remote"
+        assert tool["mcp"]["server"]["url"] == "https://mcp.example.com"
+        assert tool["mcp"]["tool"]["name"] == "search-docs"
 
     def test_accepts_cursor_mcp_config_as_tools(self) -> None:
         prompt = ChatPrompt(

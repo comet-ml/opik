@@ -275,6 +275,34 @@ class TestFewShotBayesianOptimizerOptimizePrompt:
         assert preserved[0]["content"][0]["type"] == "text"
         assert preserved[0]["content"][0]["text"] == "Keep me"
 
+    def test_preserve_structure_falls_back_for_empty_aligned_non_multimodal(
+        self,
+    ) -> None:
+        original_messages = [{"role": "user", "content": "{user_query}"}]
+        generated_messages = [{"role": "user", "content": "   "}]
+
+        preserved = preserve_multimodal_message_structure(
+            original_messages=original_messages,
+            generated_messages=generated_messages,
+        )
+
+        assert preserved == original_messages
+
+    def test_preserve_structure_drops_empty_unmatched_generated_message(self) -> None:
+        original_messages = [{"role": "system", "content": "System message"}]
+        generated_messages = [
+            {"role": "system", "content": "System message"},
+            {"role": "user", "content": ""},
+        ]
+
+        preserved = preserve_multimodal_message_structure(
+            original_messages=original_messages,
+            generated_messages=generated_messages,
+        )
+
+        assert len(preserved) == 1
+        assert preserved[0]["role"] == "system"
+
     def test_dict_prompt_returns_dict(
         self,
         mock_optimization_context,
