@@ -248,15 +248,12 @@ if __name__ == "__main__":
     """
     == 8. OPTIMIZATION ==
     Optionally call the optimizer using the dataset and metric.
-    Set RUN_OPTIMIZATION=True to enable LLM calls.
     """
-    RUN_OPTIMIZATION = False
-    if RUN_OPTIMIZATION:
-        optimizer = MetaPromptOptimizer(model="openai/gpt-5-nano")
-        result = optimizer.optimize_prompt(
-            prompt=updated_prompt_template,
-            dataset=dataset,
-            metric=cast(MetricFunction, metric),
-            optimize_prompts="user",
-        )
-        print("Optimization complete. Best score:", result.score)
+
+    result = optimizer.optimize_prompt(
+        prompt=updated_prompt_template,
+        dataset=dataset,
+        metric=cast(MetricFunction, metric),
+        optimize_prompts="user",
+    )
+    print("Optimization complete. Best score:", result.score)
