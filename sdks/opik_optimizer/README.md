@@ -272,12 +272,11 @@ updated_prompt = prompt_segments.apply_segment_updates(prompt, updates)
 Note: The segment IDs are stable (e.g., `system`, `user`, `message:0`, `tool:<name>`).
 Use these IDs to target exactly the part you want to optimize.
 
-### Tool Optimization (MCP) - Beta
+### Tool Optimization (MCP)
 
 ```python
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
 
-# MCP tool optimization is currently in Beta
 # See scripts/litellm_metaprompt_context7_mcp_example.py or
 # scripts/litellm_metaprompt_context7_remote_example.py for working examples.
 optimizer = MetaPromptOptimizer(model="gpt-5")
@@ -395,7 +394,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 ```
 
-### MCP Integration (Beta)
+### MCP Integration
 
 The optimizer includes utilities for MCP tool integration:
 
@@ -403,7 +402,7 @@ The optimizer includes utilities for MCP tool integration:
 # Install MCP Python SDK
 pip install mcp
 
-# Run MCP examples (Beta)
+# Run MCP examples
 python scripts/litellm_metaprompt_context7_mcp_example.py
 python scripts/litellm_metaprompt_context7_remote_example.py
 ```
@@ -443,7 +442,7 @@ prompt = ChatPrompt(system="Use MCP tools", user="{user_query}", tools=cursor_co
 ```
 
 <Note>
-  **Important:** True tool optimization (MCP) is currently in **Beta**. Most examples show **agent optimization** (optimizing prompts for agents that use tools), which is different from optimizing the tools themselves.
+  **Important:** Tool optimization (MCP) optimizes tool descriptions/signatures. This is different from agent optimization, which optimizes prompt text while tools are used at runtime.
 </Note>
 
 ## Development
