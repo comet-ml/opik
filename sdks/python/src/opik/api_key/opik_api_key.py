@@ -78,6 +78,7 @@ def parse_api_key(raw_key: str) -> Optional[OpikApiKey]:
     parts = raw_key.split(DELIMITER_CHAR)
     size = len(parts)
     if size == 1:
+        LOGGER.debug("Opik API key doesn't have attributes associated")
         return OpikApiKey(api_key_raw=raw_key)
     elif size == 2:
         attr_string = parts[1]
