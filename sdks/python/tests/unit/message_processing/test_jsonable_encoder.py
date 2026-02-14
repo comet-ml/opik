@@ -184,6 +184,8 @@ def test_jsonable_encoder__uuid_and_decimal_remain_serializable():
 
 
 def test_pydantic_utilities__import_does_not_emit_v1_py314_warning():
+    pytest.importorskip("pydantic")
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         importlib.reload(pydantic_utilities)
