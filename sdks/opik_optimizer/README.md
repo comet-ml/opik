@@ -240,32 +240,6 @@ optimizer = GepaOptimizer(model="gpt-4o-mini")
 result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric)
 ```
 
-### Optimize Only Specific Prompt Roles
-
-You can restrict optimization to specific prompt roles with `optimize_prompts`. This is useful when
-system/assistant content must remain fixed (e.g., MCP client templates) and only the user message
-should be improved.
-
-```python
-from opik_optimizer import ChatPrompt, MetaPromptOptimizer
-
-prompt = ChatPrompt(
-    system="You are a reliable assistant.",
-    user="{user_query}",
-    messages=[
-        {"role": "assistant", "content": "MCP tool instructions injected here."},
-    ],
-)
-
-optimizer = MetaPromptOptimizer(model="openai/gpt-4o-mini")
-result = optimizer.optimize_prompt(
-    prompt=prompt,
-    dataset=dataset,
-    metric=metric,
-    optimize_prompts="user",  # keep system + assistant unchanged
-)
-```
-
 ### Target Specific Prompt Segments (Advanced)
 
 If you need to optimize *only parts* of a prompt (for example, a specific assistant message
@@ -296,9 +270,7 @@ updated_prompt = prompt_segments.apply_segment_updates(prompt, updates)
 ```
 
 Note: The segment IDs are stable (e.g., `system`, `user`, `message:0`, `tool:<name>`).
-Use these IDs to target exactly the part you want to optimize. This is a low-level
-utility and works alongside any templating system (for example, a Jinja-based prompt
-builder), as long as you convert to `ChatPrompt` before applying updates.
+Use these IDs to target exactly the part you want to optimize.
 
 ### Tool Optimization (MCP) - Beta
 
