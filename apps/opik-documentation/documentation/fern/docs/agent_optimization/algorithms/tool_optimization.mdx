@@ -84,7 +84,7 @@ prompt = ChatPrompt(
 )
 
 # GEPA optimizes the agent's prompt, not the tools themselves
-optimizer = GepaOptimizer(model="gpt-4o-mini")
+optimizer = GepaOptimizer(model="gpt-5-nano")
 result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric)
 ```
 
@@ -104,7 +104,7 @@ result = optimizer.optimize_prompt(prompt=prompt, dataset=dataset, metric=metric
 from opik_optimizer import MetaPromptOptimizer
 
 # MCP tools are configured as OpenAI-style entries (local or remote)
-optimizer = MetaPromptOptimizer(model="gpt-4o-mini")
+optimizer = MetaPromptOptimizer(model="gpt-5-nano")
 
 # Any supported optimizer works here (e.g., HRPO, Evolutionary, MetaPrompt).
 ```
@@ -207,8 +207,8 @@ Always cite your sources and be thorough in your research."""
 
 # Initialize the optimizer
 optimizer = MetaPromptOptimizer(
-    model="openai/gpt-4",
-    reasoning_model="openai/gpt-4-turbo"
+    model="openai/gpt-5-nano",
+    reasoning_model="openai/gpt-5.2"
 )
 
 # Define evaluation metric
