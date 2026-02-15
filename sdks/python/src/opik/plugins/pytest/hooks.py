@@ -21,7 +21,7 @@ def _is_plugin_enabled(config: Any) -> bool:
     if config is not None and hasattr(config, "getini"):
         try:
             ini_enabled = bool(config.getini("opik_pytest_enabled"))
-        except Exception:
+        except ValueError:
             ini_enabled = False
 
     active_by_collection = bool(getattr(config, "_opik_pytest_active", False))

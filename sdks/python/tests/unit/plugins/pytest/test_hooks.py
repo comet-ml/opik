@@ -38,7 +38,8 @@ def _terminal_reporter(
     )
 
 
-def setup_function() -> None:
+def setup_function(function: object) -> None:
+    del function
     test_runs_storage.LLM_UNIT_TEST_RUNS.clear()
     test_runs_storage.TEST_RUNS_TO_TRACE_DATA.clear()
     test_runs_storage.TEST_RUNS_CONTENTS.clear()
@@ -83,7 +84,9 @@ def test_pytest_sessionfinish__item_without_report__is_ignored(monkeypatch):
     get_client_mock.assert_not_called()
 
 
-def test_pytest_sessionfinish__valid_item__logs_scores_and_runs_experiment(monkeypatch):
+def test_pytest_sessionfinish__valid_item__logs_scores_and_runs_experiment__happyflow(
+    monkeypatch,
+):
     report = SimpleNamespace(passed=True)
     item = SimpleNamespace(nodeid="case-1", report=report)
     session = _session(auto_active=True)
