@@ -16,6 +16,9 @@ import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.EvaluatorType;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Span;
@@ -3650,6 +3653,196 @@ class DatasetVersionResourceTest {
 
             var finalVersion = getLatestVersion(datasetId);
             assertThat(finalVersion.itemsTotal()).isEqualTo(0);
+        }
+    }
+
+    @Nested
+    @DisplayName("Evaluators and Execution Policy:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class EvaluatorsAndExecutionPolicy {
+
+        @Test
+        @DisplayName("Success: Create items with evaluators and executionPolicy, then read them back")
+        void createItems__whenEvaluatorsAndExecutionPolicy__thenFieldsReturned() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var evaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name("hallucination-check")
+                            .type(EvaluatorType.LLM_AS_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build(),
+                    EvaluatorItem.builder()
+                            .name("toxicity-score")
+                            .type(EvaluatorType.CODE_METRIC)
+                            .config(JsonUtils.getJsonNodeFromString("{\"threshold\":0.5}"))
+                            .build());
+
+            var executionPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(3)
+                    .passThreshold(2)
+                    .build();
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .evaluators(evaluators)
+                    .executionPolicy(executionPolicy)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Read back
+            var returnedItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "latest", API_KEY, TEST_WORKSPACE).content();
+            assertThat(returnedItems).hasSize(1);
+
+            var returnedItem = returnedItems.getFirst();
+            assertThat(returnedItem.evaluators()).hasSize(2);
+            assertThat(returnedItem.evaluators().get(0).name()).isEqualTo("hallucination-check");
+            assertThat(returnedItem.evaluators().get(0).type()).isEqualTo(EvaluatorType.LLM_AS_JUDGE);
+            assertThat(returnedItem.evaluators().get(1).name()).isEqualTo("toxicity-score");
+            assertThat(returnedItem.evaluators().get(1).type()).isEqualTo(EvaluatorType.CODE_METRIC);
+
+            assertThat(returnedItem.executionPolicy()).isNotNull();
+            assertThat(returnedItem.executionPolicy().runsPerItem()).isEqualTo(3);
+            assertThat(returnedItem.executionPolicy().passThreshold()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("Success: Editing only evaluators bumps dataset version as modified")
+        void applyChanges__whenOnlyEvaluatorsChanged__thenItemIsModified() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var originalEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name("original-evaluator")
+                            .type(EvaluatorType.LLM_AS_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build());
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .evaluators(originalEvaluators)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(1);
+
+            // Edit only evaluators — data stays the same
+            var newEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name("new-evaluator")
+                            .type(EvaluatorType.CODE_METRIC)
+                            .config(JsonUtils.getJsonNodeFromString("{\"threshold\":0.8}"))
+                            .build());
+
+            var editedItem = DatasetItemEdit.builder()
+                    .id(v1Items.getFirst().id())
+                    .evaluators(newEvaluators)
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .editedItems(List.of(editedItem))
+                    .tags(List.of("v2"))
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version2.itemsTotal()).isEqualTo(1);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+            assertThat(version2.itemsAdded()).isEqualTo(0);
+            assertThat(version2.itemsDeleted()).isEqualTo(0);
+
+            // Verify the evaluator was actually updated
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items.getFirst().evaluators()).hasSize(1);
+            assertThat(v2Items.getFirst().evaluators().getFirst().name()).isEqualTo("new-evaluator");
+        }
+
+        @Test
+        @DisplayName("Success: Editing only executionPolicy bumps dataset version as modified")
+        void applyChanges__whenOnlyExecutionPolicyChanged__thenItemIsModified() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var originalPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(1)
+                    .passThreshold(1)
+                    .build();
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .executionPolicy(originalPolicy)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(1);
+
+            // Edit only executionPolicy — data stays the same
+            var newPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(5)
+                    .passThreshold(3)
+                    .build();
+
+            var editedItem = DatasetItemEdit.builder()
+                    .id(v1Items.getFirst().id())
+                    .executionPolicy(newPolicy)
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .editedItems(List.of(editedItem))
+                    .tags(List.of("v2"))
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version2.itemsTotal()).isEqualTo(1);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+            assertThat(version2.itemsAdded()).isEqualTo(0);
+            assertThat(version2.itemsDeleted()).isEqualTo(0);
+
+            // Verify the execution policy was actually updated
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items.getFirst().executionPolicy()).isNotNull();
+            assertThat(v2Items.getFirst().executionPolicy().runsPerItem()).isEqualTo(5);
+            assertThat(v2Items.getFirst().executionPolicy().passThreshold()).isEqualTo(3);
         }
     }
 }
