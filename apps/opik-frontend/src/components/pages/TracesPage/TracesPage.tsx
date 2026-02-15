@@ -24,7 +24,7 @@ import ViewSelector, {
   VIEW_TYPE,
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import useProjectTabs from "@/components/pages/TracesPage/useProjectTabs";
-import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { PROJECT_TAB } from "@/constants/traces";
 import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 const TracesPage = () => {
@@ -49,7 +49,7 @@ const TracesPage = () => {
   const { intervalStart, intervalEnd } =
     useMetricDateRangeWithQueryAndStorage();
 
-  const { data: threadsStats, isPending: isStatsPending } = useThreadsStatistic(
+  const { data: threadsStats } = useThreadsStatistic(
     {
       projectId,
       fromTime: intervalStart,
@@ -61,18 +61,18 @@ const TracesPage = () => {
     },
   );
 
-  const defaultLogsType = useMemo(() => {
-    const threadCountStat = threadsStats?.stats?.find(
+  const threadCount = useMemo(() => {
+    if (!threadsStats) return undefined;
+
+    const threadCountStat = threadsStats.stats?.find(
       (stat) =>
         stat.name === "thread_count" &&
         stat.type === STATISTIC_AGGREGATION_TYPE.COUNT,
     );
-    const threadCount =
-      threadCountStat?.type === STATISTIC_AGGREGATION_TYPE.COUNT
-        ? threadCountStat.value
-        : 0;
 
-    return threadCount > 0 ? LOGS_TYPE.threads : LOGS_TYPE.traces;
+    return threadCountStat?.type === STATISTIC_AGGREGATION_TYPE.COUNT
+      ? threadCountStat.value
+      : 0;
   }, [threadsStats]);
 
   const {
@@ -83,10 +83,8 @@ const TracesPage = () => {
     handleTabChange,
   } = useProjectTabs({
     projectId,
-    defaultLogsType,
+    threadCount,
   });
-
-  const isResolvingDefault = needsDefaultResolution && isStatsPending;
 
   const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
     "view",
@@ -192,7 +190,7 @@ const TracesPage = () => {
             <div className="text-muted-slate">{project.description}</div>
           </PageBodyStickyContainer>
         )}
-        {isResolvingDefault ? <Loader /> : renderContent()}
+        {needsDefaultResolution ? <Loader /> : renderContent()}
       </PageBodyScrollContainer>
       {isGuardrailsEnabled && (
         <SetGuardrailDialog
