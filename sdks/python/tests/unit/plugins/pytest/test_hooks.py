@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest import mock
 
+# TODO(#5219): move these tests to a public pytest plugin test harness/API.
 from opik.plugins.pytest import hooks, test_runs_storage
 
 
@@ -97,7 +98,34 @@ def test_pytest_sessionfinish__valid_item__logs_scores_and_runs_experiment(monke
     hooks.pytest_sessionfinish(session=session, exitstatus=0)
 
     client.log_traces_feedback_scores.assert_called_once()
+    payload = client.log_traces_feedback_scores.call_args.args[0]
+    assert len(payload) == 1
+    score = payload[0]
+    assert score["id"] == "trace-1"
+    assert score["name"] == "Passed"
+    assert score["value"] == 1.0
     run_mock.assert_called_once_with(client=client, test_items=[item])
+    client.flush.assert_called_once()
+
+
+def test_pytest_sessionfinish__runner_error__flushes_client(monkeypatch):
+    report = SimpleNamespace(passed=True)
+    item = SimpleNamespace(nodeid="case-1", report=report)
+    session = _session(auto_active=True)
+    session.items = [item]
+
+    test_runs_storage.LLM_UNIT_TEST_RUNS.add("case-1")
+    test_runs_storage.TEST_RUNS_TO_TRACE_DATA["case-1"] = SimpleNamespace(id="trace-1")
+
+    client = mock.Mock()
+    monkeypatch.setattr(hooks.opik_client, "get_client_cached", mock.Mock(return_value=client))
+    monkeypatch.setattr(
+        hooks.experiment_runner, "run", mock.Mock(side_effect=RuntimeError("boom"))
+    )
+
+    hooks.pytest_sessionfinish(session=session, exitstatus=0)
+
+    client.log_traces_feedback_scores.assert_called_once()
     client.flush.assert_called_once()
 
 

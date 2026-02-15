@@ -130,10 +130,11 @@ def pytest_sessionfinish(session: "pytest.Session", exitstatus: Any) -> None:
             return
 
         client = opik_client.get_client_cached()
-        client.log_traces_feedback_scores(traces_feedback_scores)
-
-        experiment_runner.run(client=client, test_items=test_items_with_reports)
-        client.flush()
+        try:
+            client.log_traces_feedback_scores(traces_feedback_scores)
+            experiment_runner.run(client=client, test_items=test_items_with_reports)
+        finally:
+            client.flush()
     except Exception:
         LOGGER.error(
             "Unexpected exception occured while trying to log LLM unit tests experiment results",
