@@ -2,7 +2,9 @@ import React from "react";
 import * as RechartsPrimitive from "recharts";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import ColorIndicator from "@/components/shared/ColorIndicator/ColorIndicator";
 import { cn } from "@/lib/utils";
+import { useChart } from "@/components/ui/chart";
 
 type ChartHorizontalLegendProps = React.ComponentProps<
   typeof RechartsPrimitive.Legend
@@ -17,6 +19,8 @@ const ChartHorizontalLegend = React.forwardRef<
   HTMLDivElement,
   ChartHorizontalLegendProps
 >(({ payload, color, setActiveLine, containerClassName }, ref) => {
+  const { config } = useChart();
+
   const handleMouseEnter = (id: string) => {
     setActiveLine(id);
   };
@@ -46,6 +50,8 @@ const ChartHorizontalLegend = React.forwardRef<
         {payload.map((item, idx) => {
           const key = `${item.value || "value"}`;
           const indicatorColor = color || item.color;
+          const configEntry = config[item.value as string];
+          const displayLabel = (configEntry?.label as string) ?? item.value;
 
           return (
             <div
@@ -53,19 +59,16 @@ const ChartHorizontalLegend = React.forwardRef<
               className="relative min-w-0 pl-3 duration-200 group-hover-except-self:opacity-60"
               onMouseEnter={() => handleMouseEnter(item.value)}
             >
-              <TooltipWrapper content={item.value}>
+              <TooltipWrapper content={displayLabel}>
                 <div className="comet-body-xs truncate text-foreground">
-                  {item.value}
+                  {displayLabel}
                 </div>
               </TooltipWrapper>
-              <div
-                className="absolute left-0 top-[5px] size-1.5 shrink-0 rounded-full border-[--color-border] bg-[--color-bg]"
-                style={
-                  {
-                    "--color-bg": indicatorColor,
-                    "--color-border": indicatorColor,
-                  } as React.CSSProperties
-                }
+              <ColorIndicator
+                label={item.value ?? ""}
+                color={indicatorColor ?? ""}
+                variant="dot"
+                className="absolute left-0 top-[5px] shrink-0"
               />
             </div>
           );

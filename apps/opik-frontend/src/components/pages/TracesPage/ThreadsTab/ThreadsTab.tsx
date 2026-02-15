@@ -61,11 +61,13 @@ import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPane
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { formatDate, formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
+import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/components/shared/DataTableStateHandler/DataTableStateHandler";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
@@ -130,7 +132,8 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     label: "Duration",
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
-    statisticDataFormater: (value) => formatDuration(value),
+    statisticDataFormater: formatDuration,
+    statisticTooltipFormater: formatDuration,
     supportsPercentiles: true,
   },
   {
@@ -201,6 +204,9 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
     size: 160,
     statisticKey: "total_estimated_cost",
+    statisticDataFormater: formatCost,
+    statisticTooltipFormater: (value: number) =>
+      formatCost(value, { modifier: "full" }),
   },
   {
     id: "created_by",
@@ -471,6 +477,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           accessorFn: (row) =>
             row.feedback_scores?.find((f) => f.name === label),
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          statisticDataFormater: formatScoreDisplay,
         }) as ColumnData<Thread>,
     );
   }, [dynamicScoresColumns]);

@@ -28,7 +28,10 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { transformExperimentScores } from "@/lib/experimentScoreUtils";
+import {
+  transformExperimentScores,
+  getScoreDisplayName,
+} from "@/lib/feedback-scores";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_DATASET_ID,
@@ -39,6 +42,7 @@ import {
   COLUMN_NAME_ID,
   COLUMN_TYPE,
   ColumnData,
+  SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
@@ -553,55 +557,37 @@ const ExperimentsPage: React.FC = () => {
           name: group.name,
           data: [],
           lines: [],
+          labelsMap: {},
         };
       }
 
-      const createScoresMap = (
-        scores: Array<{ name: string; value: number }> | undefined,
-        addAvgSuffix: boolean,
-      ): Record<string, number> =>
-        (scores || []).reduce<Record<string, number>>((acc, score) => {
-          const key = addAvgSuffix ? `${score.name} (avg)` : score.name;
-          acc[key] = score.value;
-          return acc;
-        }, {});
-
-      const getScoreNames = (
-        scores: Array<{ name: string }> | undefined,
-        addAvgSuffix: boolean,
-      ): string[] =>
-        (scores || []).map((s) => (addAvgSuffix ? `${s.name} (avg)` : s.name));
-
       groupExperiments.forEach((experiment) => {
-        const feedbackScoresMap = createScoresMap(
-          experiment.feedback_scores,
-          true,
-        );
-        const experimentScoresMap = createScoresMap(
-          experiment.experiment_scores,
-          false,
-        );
+        const scores: Record<string, number> = {};
+        (experiment.feedback_scores ?? []).forEach((s) => {
+          scores[s.name] = s.value;
+        });
+        (experiment.experiment_scores ?? []).forEach((s) => {
+          scores[s.name] = s.value;
+        });
 
         groupsMap[groupKey].data.unshift({
           entityId: experiment.id,
           entityName: experiment.name,
           createdDate: formatDate(experiment.created_at),
-          scores: { ...feedbackScoresMap, ...experimentScoresMap },
+          scores,
         });
 
-        const feedbackScoreNames = getScoreNames(
-          experiment.feedback_scores,
-          true,
-        );
-        const experimentScoreNames = getScoreNames(
-          experiment.experiment_scores,
-          false,
-        );
         groupsMap[groupKey].lines = uniq([
           ...groupsMap[groupKey].lines,
-          ...feedbackScoreNames,
-          ...experimentScoreNames,
+          ...Object.keys(scores),
         ]);
+
+        (experiment.feedback_scores || []).forEach((score) => {
+          groupsMap[groupKey].labelsMap![score.name] = getScoreDisplayName(
+            score.name,
+            SCORE_TYPE_FEEDBACK,
+          );
+        });
       });
     });
 

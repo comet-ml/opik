@@ -70,6 +70,10 @@
     --codemirror-gutter: #94a3b8;
     --codemirror-line-highlight: #e6e6fe;
     --codemirror-syntax-blue: #005cc5;
+    --codemirror-syntax-string: #032f62;
+    --codemirror-syntax-bool: #e36209;
+    --codemirror-syntax-keyword: #d73a49;
+    --codemirror-syntax-punctuation: #6a737d;
 
     /* Chart colors */
     --chart-tick-stroke: #373d4d;
@@ -289,6 +293,10 @@
     --codemirror-gutter: #7d8590;
     --codemirror-line-highlight: rgba(255, 255, 255, 0.08);
     --codemirror-syntax-blue: #79c0ff;
+    --codemirror-syntax-string: #a5d6ff;
+    --codemirror-syntax-bool: #ffab70;
+    --codemirror-syntax-keyword: #ff7b72;
+    --codemirror-syntax-punctuation: #8b949e;
 
     /* Chart colors */
     --chart-tick-stroke: #a3a3a3;
@@ -369,6 +377,66 @@
 
   .dark .cm-focused .cm-selectionBackground {
     background-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  /* Static Lezer code highlighting (used in PrettyLLMMessageCodeBlock) */
+  .static-code-highlight {
+    font-family:
+      Ubuntu Mono,
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      "Liberation Mono",
+      "Courier New",
+      monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    color: hsl(var(--foreground));
+    background: transparent;
+
+    .tok-propertyName,
+    .tok-className {
+      color: var(--codemirror-syntax-blue);
+    }
+    .tok-string {
+      color: var(--codemirror-syntax-string);
+    }
+    .tok-number {
+      color: var(--codemirror-syntax-blue);
+    }
+    .tok-bool {
+      color: var(--codemirror-syntax-bool);
+    }
+    .tok-keyword {
+      color: var(--codemirror-syntax-keyword);
+    }
+    .tok-punctuation {
+      color: var(--codemirror-syntax-punctuation);
+    }
+  }
+
+  .static-code-gutter {
+    color: var(--codemirror-gutter);
+    background: transparent;
+  }
+
+  .dark .static-code-highlight {
+    .tok-string {
+      color: var(--codemirror-syntax-string);
+    }
+    .tok-bool {
+      color: var(--codemirror-syntax-bool);
+    }
+    .tok-keyword {
+      color: var(--codemirror-syntax-keyword);
+    }
+    .tok-punctuation {
+      color: var(--codemirror-syntax-punctuation);
+    }
   }
 
   .dark thead th {
@@ -684,9 +752,20 @@
   overflow-wrap: break-word;
   word-break: break-word;
 
+  pre {
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    overflow-x: auto;
+  }
+
   pre code {
-    font-size: 0.875rem !important;
-    white-space: preserve-breaks;
+    @apply comet-code;
+    font-size: 0.9375rem !important;
+    line-height: 1.2;
+    white-space: pre-wrap;
     overflow-wrap: break-word;
     word-break: break-word;
   }
