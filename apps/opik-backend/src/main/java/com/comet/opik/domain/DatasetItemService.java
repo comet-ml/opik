@@ -1647,6 +1647,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 .data(editItem.data() != null ? editItem.data() : existingItem.data())
                 // Source, traceId, spanId are always preserved from existing item
                 .tags(editItem.tags() != null ? editItem.tags() : existingItem.tags())
+                .evaluators(editItem.evaluators() != null ? editItem.evaluators() : existingItem.evaluators())
+                .executionPolicy(editItem.executionPolicy() != null
+                        ? editItem.executionPolicy()
+                        : existingItem.executionPolicy())
                 // Always preserve original creation time
                 .lastUpdatedAt(existingItem.lastUpdatedAt() != null
                         ? existingItem.lastUpdatedAt()

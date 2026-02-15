@@ -4,6 +4,8 @@ import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.DatasetItemBatchUpdate;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
@@ -15,7 +17,9 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Result;
@@ -31,6 +35,7 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.UncheckedIOException;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -328,7 +333,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             SELECT
                 dataset_item_id,
                 data_hash,
-                tags
+                tags,
+                COALESCE(xxHash64(evaluators), 0) as evaluators_hash,
+                COALESCE(xxHash64(execution_policy), 0) as execution_policy_hash
             FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
@@ -347,6 +354,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 span_id,
                 source,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at as created_at,
                 item_last_updated_at as last_updated_at,
                 item_created_by as created_by,
@@ -735,6 +744,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     div_dedup.trace_id AS trace_id,
                     div_dedup.span_id AS span_id,
                     div_dedup.tags AS tags,
+                    div_dedup.evaluators AS evaluators,
+                    div_dedup.execution_policy AS execution_policy,
                     div_dedup.created_at AS item_created_at,
                     div_dedup.last_updated_at AS item_last_updated_at,
                     div_dedup.created_by AS item_created_by,
@@ -950,6 +961,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 di.span_id AS span_id,
                 di.source AS source,
                 di.tags AS tags,
+                di.evaluators AS evaluators,
+                di.execution_policy AS execution_policy,
                 di.item_created_at AS created_at,
                 di.item_last_updated_at AS last_updated_at,
                 di.item_created_by AS created_by,
@@ -1048,6 +1061,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 di.span_id,
                 di.source,
                 di.tags,
+                di.evaluators,
+                di.execution_policy,
                 di.item_created_at,
                 di.item_last_updated_at,
                 di.item_created_by,
@@ -1080,6 +1095,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at,
                 item_last_updated_at,
                 item_created_by,
@@ -1102,6 +1119,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         :trace_id<item.index>,
                         :span_id<item.index>,
                         :tags<item.index>,
+                        :evaluators<item.index>,
+                        :execution_policy<item.index>,
                         :item_created_at<item.index>,
                         :item_last_updated_at<item.index>,
                         :item_created_by<item.index>,
@@ -1130,6 +1149,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at,
                 item_last_updated_at,
                 item_created_by,
@@ -1151,6 +1172,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.trace_id,
                 src.span_id,
                 <if(tags)><if(merge_tags)>arrayConcat(src.tags, :tags)<else>:tags<endif><else>src.tags<endif> as tags,
+                <if(evaluators)> :evaluators <else> src.evaluators <endif> as evaluators,
+                <if(execution_policy)> :execution_policy <else> src.execution_policy <endif> as execution_policy,
                 src.item_created_at,
                 now64(9) as item_last_updated_at,
                 src.item_created_by,
@@ -1192,6 +1215,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at,
                 item_last_updated_at,
                 item_created_by,
@@ -1213,6 +1238,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 src.trace_id,
                 src.span_id,
                 src.tags,
+                src.evaluators,
+                src.execution_policy,
                 src.item_created_at,
                 src.item_last_updated_at,
                 src.item_created_by,
@@ -1307,6 +1334,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at as created_at,
                 item_last_updated_at as last_updated_at,
                 item_created_by as created_by,
@@ -1338,6 +1367,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 trace_id,
                 span_id,
                 tags,
+                evaluators,
+                execution_policy,
                 item_created_at as created_at,
                 item_last_updated_at as last_updated_at,
                 item_created_by as created_by,
@@ -1731,12 +1762,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         Set<String> tags = Optional.ofNullable(row.get("tags", String[].class))
                                 .map(arr -> new HashSet<>(Arrays.asList(arr)))
                                 .orElseGet(HashSet::new);
+                        var evaluatorsHash = Optional.ofNullable(row.get("evaluators_hash", Long.class)).orElse(0L);
+                        var executionPolicyHash = Optional.ofNullable(row.get("execution_policy_hash", Long.class))
+                                .orElse(0L);
                         log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
                                 datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()
                                 .itemId(datasetItemId)
                                 .dataHash(hash)
                                 .tags(tags)
+                                .evaluatorsHash(evaluatorsHash)
+                                .executionPolicyHash(executionPolicyHash)
                                 .build();
                     }))
                     .collectList()
@@ -2433,6 +2469,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .bind("trace_id" + i, DatasetItemResultMapper.getOrDefault(item.traceId()))
                         .bind("span_id" + i, DatasetItemResultMapper.getOrDefault(item.spanId()))
                         .bind("tags" + i, item.tags() != null ? item.tags().toArray(new String[0]) : new String[0])
+                        .bind("evaluators" + i, serializeEvaluators(item.evaluators()))
+                        .bind("execution_policy" + i, serializeExecutionPolicy(item.executionPolicy()))
                         .bind("item_created_at" + i, formatTimestamp(item.createdAt()))
                         .bind("item_last_updated_at" + i, formatTimestamp(item.lastUpdatedAt()))
                         .bind("item_created_by" + i, item.createdBy() != null ? item.createdBy() : userName)
@@ -2630,6 +2668,28 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return Instant.now().toString().replace("Z", "");
         }
         return timestamp.toString().replace("Z", "");
+    }
+
+    private static String serializeEvaluators(List<EvaluatorItem> evaluators) {
+        if (evaluators == null || evaluators.isEmpty()) {
+            return "[]";
+        }
+        try {
+            return JsonUtils.getMapper().writeValueAsString(evaluators);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private static String serializeExecutionPolicy(ExecutionPolicy executionPolicy) {
+        if (executionPolicy == null) {
+            return "";
+        }
+        try {
+            return JsonUtils.getMapper().writeValueAsString(executionPolicy);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     @Override
