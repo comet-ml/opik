@@ -57,7 +57,9 @@ def test_pytest_sessionfinish__plugin_disabled__no_client_calls(monkeypatch):
     get_client_mock.assert_not_called()
 
 
-def test_pytest_sessionfinish__missing_session_items__returns_without_error(monkeypatch):
+def test_pytest_sessionfinish__missing_session_items__returns_without_error(
+    monkeypatch,
+):
     session = _session(opik_option=True)
     get_client_mock = mock.Mock()
     monkeypatch.setattr(hooks.opik_client, "get_client_cached", get_client_mock)
@@ -91,7 +93,9 @@ def test_pytest_sessionfinish__valid_item__logs_scores_and_runs_experiment(monke
     test_runs_storage.TEST_RUNS_TO_TRACE_DATA["case-1"] = SimpleNamespace(id="trace-1")
 
     client = mock.Mock()
-    monkeypatch.setattr(hooks.opik_client, "get_client_cached", mock.Mock(return_value=client))
+    monkeypatch.setattr(
+        hooks.opik_client, "get_client_cached", mock.Mock(return_value=client)
+    )
     run_mock = mock.Mock()
     monkeypatch.setattr(hooks.experiment_runner, "run", run_mock)
 
@@ -118,7 +122,9 @@ def test_pytest_sessionfinish__runner_error__flushes_client(monkeypatch):
     test_runs_storage.TEST_RUNS_TO_TRACE_DATA["case-1"] = SimpleNamespace(id="trace-1")
 
     client = mock.Mock()
-    monkeypatch.setattr(hooks.opik_client, "get_client_cached", mock.Mock(return_value=client))
+    monkeypatch.setattr(
+        hooks.opik_client, "get_client_cached", mock.Mock(return_value=client)
+    )
     monkeypatch.setattr(
         hooks.experiment_runner, "run", mock.Mock(side_effect=RuntimeError("boom"))
     )
