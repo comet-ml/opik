@@ -309,91 +309,8 @@ class SpansBatchUpdateResourceTest {
         }
 
         @Test
-        @DisplayName("Success: batch update name field")
-        void batchUpdate__updateName__success() {
-            // Create spans
-            var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .name("original-name-1")
-                    .build();
-            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .name("original-name-2")
-                    .build();
-
-            var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
-            var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
-
-            // Batch update with new name
-            var batchUpdate = SpanBatchUpdate.builder()
-                    .ids(Set.of(id1, id2))
-                    .update(SpanUpdate.builder()
-                            .projectName(DEFAULT_PROJECT)
-                            .traceId(traceId)
-                            .name("updated-name")
-                            .build())
-                    .mergeTags(false)
-                    .build();
-
-            spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify spans were updated
-            var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.name()).isEqualTo("updated-name");
-
-            var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.name()).isEqualTo("updated-name");
-        }
-
-        @Test
-        @DisplayName("Success: batch update type field")
-        void batchUpdate__updateType__success() {
-            // Create spans
-            var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .type(SpanType.general)
-                    .build();
-            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .type(SpanType.general)
-                    .build();
-
-            var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
-            var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
-
-            // Batch update with new type
-            var batchUpdate = SpanBatchUpdate.builder()
-                    .ids(Set.of(id1, id2))
-                    .update(SpanUpdate.builder()
-                            .projectName(DEFAULT_PROJECT)
-                            .traceId(traceId)
-                            .type(SpanType.llm)
-                            .build())
-                    .mergeTags(false)
-                    .build();
-
-            spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify spans were updated
-            var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.type()).isEqualTo(SpanType.llm);
-
-            var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.type()).isEqualTo(SpanType.llm);
-        }
-
-        @Test
-        @DisplayName("Success: batch update input and output fields")
-        void batchUpdate__updateInputOutput__success() {
-            // Create spans
+        @DisplayName("Success: batch update all fields simultaneously")
+        void batchUpdate__updateAllFields__success() {
             var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .projectName(DEFAULT_PROJECT)
                     .traceId(traceId)
@@ -408,332 +325,18 @@ class SpansBatchUpdateResourceTest {
             var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
             var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
 
-            // Batch update with new input/output
+            Instant newEndTime = Instant.now();
             JsonNode newInput = JsonUtils.readTree(Map.of("prompt", "updated prompt"));
             JsonNode newOutput = JsonUtils.readTree(Map.of("response", "updated response"));
-
-            var batchUpdate = SpanBatchUpdate.builder()
-                    .ids(Set.of(id1, id2))
-                    .update(SpanUpdate.builder()
-                            .projectName(DEFAULT_PROJECT)
-                            .traceId(traceId)
-                            .input(newInput)
-                            .output(newOutput)
-                            .build())
-                    .mergeTags(false)
-                    .build();
-
-            spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify spans were updated
-            var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.input().get("prompt").asText()).isEqualTo("updated prompt");
-            assertThat(updatedSpan1.output().get("response").asText()).isEqualTo("updated response");
-
-            var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.input().get("prompt").asText()).isEqualTo("updated prompt");
-            assertThat(updatedSpan2.output().get("response").asText()).isEqualTo("updated response");
-        }
-
-        @Test
-        @DisplayName("Success: batch update metadata field")
-        void batchUpdate__updateMetadata__success() {
-            // Create spans
-            var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .build();
-            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .build();
-
-            var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
-            var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
-
-            // Batch update with new metadata
-            JsonNode newMetadata = JsonUtils.readTree(Map.of("key1", "value1", "key2", "value2"));
-
-            var batchUpdate = SpanBatchUpdate.builder()
-                    .ids(Set.of(id1, id2))
-                    .update(SpanUpdate.builder()
-                            .projectName(DEFAULT_PROJECT)
-                            .traceId(traceId)
-                            .metadata(newMetadata)
-                            .build())
-                    .mergeTags(false)
-                    .build();
-
-            spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify spans were updated
-            var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.metadata().get("key1").asText()).isEqualTo("value1");
-            assertThat(updatedSpan1.metadata().get("key2").asText()).isEqualTo("value2");
-
-            var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.metadata().get("key1").asText()).isEqualTo("value1");
-            assertThat(updatedSpan2.metadata().get("key2").asText()).isEqualTo("value2");
-        }
-
-        @Test
-        @DisplayName("Success: batch update model and provider fields")
-        void batchUpdate__updateModelProvider__success() {
-            // Create spans
-            var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .model("gpt-3.5-turbo")
-                    .provider("openai")
-                    .build();
-            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .model("gpt-3.5-turbo")
-                    .provider("openai")
-                    .build();
-
-            var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
-            var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
-
-            // Batch update with new model and provider
-            var batchUpdate = SpanBatchUpdate.builder()
-                    .ids(Set.of(id1, id2))
-                    .update(SpanUpdate.builder()
-                            .projectName(DEFAULT_PROJECT)
-                            .traceId(traceId)
-                            .model("gpt-4")
-                            .provider("openai")
-                            .build())
-                    .mergeTags(false)
-                    .build();
-
-            spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify spans were updated
-            var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.model()).isEqualTo("gpt-4");
-            assertThat(updatedSpan1.provider()).isEqualTo("openai");
-
-            var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.model()).isEqualTo("gpt-4");
-            assertThat(updatedSpan2.provider()).isEqualTo("openai");
-        }
-
-        @Test
-        @DisplayName("Success: batch update usage field")
-        void batchUpdate__updateUsage__success() {
-            // Create spans
-            var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .usage(Map.of("prompt_tokens", 100, "completion_tokens", 50))
-                    .build();
-            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .usage(Map.of("prompt_tokens", 200, "completion_tokens", 100))
-                    .build();
-
-            var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
-            var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
-
-            // Batch update with new usage
+            JsonNode newMetadata = JsonUtils.readTree(Map.of("environment", "production", "key1", "value1"));
             var newUsage = Map.of("prompt_tokens", 500, "completion_tokens", 250);
-
-            var batchUpdate = SpanBatchUpdate.builder()
-                    .ids(Set.of(id1, id2))
-                    .update(SpanUpdate.builder()
-                            .projectName(DEFAULT_PROJECT)
-                            .traceId(traceId)
-                            .usage(newUsage)
-                            .build())
-                    .mergeTags(false)
-                    .build();
-
-            spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify spans were updated
-            var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.usage()).containsEntry("prompt_tokens", 500);
-            assertThat(updatedSpan1.usage()).containsEntry("completion_tokens", 250);
-
-            var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.usage()).containsEntry("prompt_tokens", 500);
-            assertThat(updatedSpan2.usage()).containsEntry("completion_tokens", 250);
-        }
-
-        @Test
-        @DisplayName("Success: batch update end_time field")
-        void batchUpdate__updateEndTime__success() {
-            // Create spans with start time
-            Instant startTime = Instant.now().minusSeconds(3600);
-            var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .startTime(startTime)
-                    .endTime(null)
-                    .build();
-            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .startTime(startTime)
-                    .endTime(null)
-                    .build();
-
-            var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
-            var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
-
-            // Batch update with end time
-            Instant endTime = Instant.now();
-            var batchUpdate = SpanBatchUpdate.builder()
-                    .ids(Set.of(id1, id2))
-                    .update(SpanUpdate.builder()
-                            .projectName(DEFAULT_PROJECT)
-                            .traceId(traceId)
-                            .endTime(endTime)
-                            .build())
-                    .mergeTags(false)
-                    .build();
-
-            spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify spans were updated
-            var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.endTime()).isNotNull();
-            assertThat(updatedSpan1.endTime().toEpochMilli()).isEqualTo(endTime.toEpochMilli());
-
-            var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.endTime()).isNotNull();
-            assertThat(updatedSpan2.endTime().toEpochMilli()).isEqualTo(endTime.toEpochMilli());
-        }
-
-        @Test
-        @DisplayName("Success: batch update totalEstimatedCost field")
-        void batchUpdate__updateTotalEstimatedCost__success() {
-            // Create spans
-            var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .build();
-            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .build();
-
-            var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
-            var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
-
-            // Batch update with new cost
             BigDecimal newCost = new BigDecimal("0.005");
-
-            var batchUpdate = SpanBatchUpdate.builder()
-                    .ids(Set.of(id1, id2))
-                    .update(SpanUpdate.builder()
-                            .projectName(DEFAULT_PROJECT)
-                            .traceId(traceId)
-                            .totalEstimatedCost(newCost)
-                            .build())
-                    .mergeTags(false)
-                    .build();
-
-            spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify spans were updated
-            var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.totalEstimatedCost()).isEqualByComparingTo(newCost);
-
-            var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.totalEstimatedCost()).isEqualByComparingTo(newCost);
-        }
-
-        @Test
-        @DisplayName("Success: batch update errorInfo field")
-        void batchUpdate__updateErrorInfo__success() {
-            // Create spans
-            var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .errorInfo(null)
-                    .build();
-            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .errorInfo(null)
-                    .build();
-
-            var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
-            var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
-
-            // Batch update with error info
-            var errorInfo = ErrorInfo.builder()
+            var newErrorInfo = ErrorInfo.builder()
                     .exceptionType("ValidationError")
                     .message("Invalid input")
                     .traceback("Stack trace here")
                     .build();
-
-            var batchUpdate = SpanBatchUpdate.builder()
-                    .ids(Set.of(id1, id2))
-                    .update(SpanUpdate.builder()
-                            .projectName(DEFAULT_PROJECT)
-                            .traceId(traceId)
-                            .errorInfo(errorInfo)
-                            .build())
-                    .mergeTags(false)
-                    .build();
-
-            spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
-
-            // Verify spans were updated
-            var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.errorInfo()).isNotNull();
-            assertThat(updatedSpan1.errorInfo().exceptionType()).isEqualTo("ValidationError");
-            assertThat(updatedSpan1.errorInfo().message()).isEqualTo("Invalid input");
-
-            var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.errorInfo()).isNotNull();
-            assertThat(updatedSpan2.errorInfo().exceptionType()).isEqualTo("ValidationError");
-            assertThat(updatedSpan2.errorInfo().message()).isEqualTo("Invalid input");
-        }
-
-        @Test
-        @DisplayName("Success: batch update multiple fields simultaneously")
-        void batchUpdate__updateMultipleFields__success() {
-            // Create spans
-            var span1 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .name("old-name")
-                    .type(SpanType.general)
-                    .tags(Set.of("old-tag"))
-                    .build();
-            var span2 = podamFactory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(DEFAULT_PROJECT)
-                    .traceId(traceId)
-                    .parentSpanId(null)
-                    .name("old-name")
-                    .type(SpanType.general)
-                    .tags(Set.of("old-tag"))
-                    .build();
-
-            var id1 = spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
-            var id2 = spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
-
-            // Batch update with multiple fields
-            JsonNode newMetadata = JsonUtils.readTree(Map.of("environment", "production"));
+            Double newTtft = 123.45;
 
             var batchUpdate = SpanBatchUpdate.builder()
                     .ids(Set.of(id1, id2))
@@ -742,32 +345,48 @@ class SpansBatchUpdateResourceTest {
                             .traceId(traceId)
                             .name("updated-name")
                             .type(SpanType.llm)
-                            .tags(Set.of("new-tag"))
+                            .endTime(newEndTime)
+                            .input(newInput)
+                            .output(newOutput)
                             .metadata(newMetadata)
+                            .tags(Set.of("new-tag"))
                             .model("gpt-4")
                             .provider("openai")
+                            .usage(newUsage)
+                            .totalEstimatedCost(newCost)
+                            .errorInfo(newErrorInfo)
+                            .ttft(newTtft)
                             .build())
                     .mergeTags(false)
                     .build();
 
             spanResourceClient.batchUpdateSpans(batchUpdate, API_KEY, TEST_WORKSPACE);
 
-            // Verify all fields were updated
             var updatedSpan1 = spanResourceClient.getById(id1, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan1.name()).isEqualTo("updated-name");
-            assertThat(updatedSpan1.type()).isEqualTo(SpanType.llm);
-            assertThat(updatedSpan1.tags()).containsExactly("new-tag");
-            assertThat(updatedSpan1.metadata().get("environment").asText()).isEqualTo("production");
-            assertThat(updatedSpan1.model()).isEqualTo("gpt-4");
-            assertThat(updatedSpan1.provider()).isEqualTo("openai");
+            assertSpanFieldsUpdated(updatedSpan1, newEndTime);
 
             var updatedSpan2 = spanResourceClient.getById(id2, TEST_WORKSPACE, API_KEY);
-            assertThat(updatedSpan2.name()).isEqualTo("updated-name");
-            assertThat(updatedSpan2.type()).isEqualTo(SpanType.llm);
-            assertThat(updatedSpan2.tags()).containsExactly("new-tag");
-            assertThat(updatedSpan2.metadata().get("environment").asText()).isEqualTo("production");
-            assertThat(updatedSpan2.model()).isEqualTo("gpt-4");
-            assertThat(updatedSpan2.provider()).isEqualTo("openai");
+            assertSpanFieldsUpdated(updatedSpan2, newEndTime);
+        }
+
+        private void assertSpanFieldsUpdated(Span span, Instant expectedEndTime) {
+            assertThat(span.name()).isEqualTo("updated-name");
+            assertThat(span.type()).isEqualTo(SpanType.llm);
+            assertThat(span.endTime().toEpochMilli()).isEqualTo(expectedEndTime.toEpochMilli());
+            assertThat(span.input().get("prompt").asText()).isEqualTo("updated prompt");
+            assertThat(span.output().get("response").asText()).isEqualTo("updated response");
+            assertThat(span.metadata().get("environment").asText()).isEqualTo("production");
+            assertThat(span.metadata().get("key1").asText()).isEqualTo("value1");
+            assertThat(span.tags()).containsExactly("new-tag");
+            assertThat(span.model()).isEqualTo("gpt-4");
+            assertThat(span.provider()).isEqualTo("openai");
+            assertThat(span.usage()).containsEntry("prompt_tokens", 500);
+            assertThat(span.usage()).containsEntry("completion_tokens", 250);
+            assertThat(span.totalEstimatedCost()).isEqualByComparingTo(new BigDecimal("0.005"));
+            assertThat(span.errorInfo()).isNotNull();
+            assertThat(span.errorInfo().exceptionType()).isEqualTo("ValidationError");
+            assertThat(span.errorInfo().message()).isEqualTo("Invalid input");
+            assertThat(span.ttft()).isEqualTo(123.45);
         }
     }
 }
