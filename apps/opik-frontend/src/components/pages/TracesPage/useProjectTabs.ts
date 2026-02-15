@@ -67,8 +67,9 @@ const useProjectTabs = (options: UseProjectTabsOptions) => {
         ? LOGS_TYPE.threads
         : LOGS_TYPE.traces;
 
-    const resolvedDefaultLogsType =
-      (isLogsType(storedLogsType) ? storedLogsType : null) ?? defaultLogsType;
+    const resolvedDefaultLogsType = isLogsType(storedLogsType)
+      ? storedLogsType
+      : defaultLogsType;
 
     // If new params exist, use them
     if (tabParam || logsTypeParam) {
