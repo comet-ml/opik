@@ -334,8 +334,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_item_id,
                 data_hash,
                 tags,
-                xxHash64(evaluators) as evaluators_hash,
-                xxHash64(execution_policy) as execution_policy_hash
+                COALESCE(xxHash64(evaluators), 0) as evaluators_hash,
+                COALESCE(xxHash64(execution_policy), 0) as execution_policy_hash
             FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
@@ -1762,8 +1762,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         Set<String> tags = Optional.ofNullable(row.get("tags", String[].class))
                                 .map(arr -> new HashSet<>(Arrays.asList(arr)))
                                 .orElseGet(HashSet::new);
-                        var evaluatorsHash = row.get("evaluators_hash", Long.class);
-                        var executionPolicyHash = row.get("execution_policy_hash", Long.class);
+                        var evaluatorsHash = Optional.ofNullable(row.get("evaluators_hash", Long.class)).orElse(0L);
+                        var executionPolicyHash = Optional.ofNullable(row.get("execution_policy_hash", Long.class))
+                                .orElse(0L);
                         log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}', tags='{}'",
                                 datasetItemId, hash, tags);
                         return DatasetItemIdAndHash.builder()

@@ -8,6 +8,7 @@ import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Sets;
@@ -193,7 +194,7 @@ class DatasetItemResultMapper {
                     .map(s -> {
                         try {
                             return JsonUtils.getMapper().readValue(s, EVALUATOR_LIST_TYPE);
-                        } catch (Exception e) {
+                        } catch (JsonProcessingException e) {
                             return (List<EvaluatorItem>) null;
                         }
                     })
@@ -213,7 +214,7 @@ class DatasetItemResultMapper {
                     .map(s -> {
                         try {
                             return JsonUtils.getMapper().readValue(s, ExecutionPolicy.class);
-                        } catch (Exception e) {
+                        } catch (JsonProcessingException e) {
                             return (ExecutionPolicy) null;
                         }
                     })
