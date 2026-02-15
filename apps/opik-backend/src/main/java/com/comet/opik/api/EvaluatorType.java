@@ -10,7 +10,7 @@ import java.util.Arrays;
 @Getter
 @RequiredArgsConstructor
 public enum EvaluatorType {
-    LLM_AS_JUDGE("llm_as_judge"),
+    LLM_JUDGE("llm_judge"),
     CODE_METRIC("code_metric"),
     ;
 

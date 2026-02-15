@@ -3669,7 +3669,7 @@ class DatasetVersionResourceTest {
             var evaluators = List.of(
                     EvaluatorItem.builder()
                             .name("hallucination-check")
-                            .type(EvaluatorType.LLM_AS_JUDGE)
+                            .type(EvaluatorType.LLM_JUDGE)
                             .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
                             .build(),
                     EvaluatorItem.builder()
@@ -3705,7 +3705,7 @@ class DatasetVersionResourceTest {
             var returnedItem = returnedItems.getFirst();
             assertThat(returnedItem.evaluators()).hasSize(2);
             assertThat(returnedItem.evaluators().get(0).name()).isEqualTo("hallucination-check");
-            assertThat(returnedItem.evaluators().get(0).type()).isEqualTo(EvaluatorType.LLM_AS_JUDGE);
+            assertThat(returnedItem.evaluators().get(0).type()).isEqualTo(EvaluatorType.LLM_JUDGE);
             assertThat(returnedItem.evaluators().get(1).name()).isEqualTo("toxicity-score");
             assertThat(returnedItem.evaluators().get(1).type()).isEqualTo(EvaluatorType.CODE_METRIC);
 
@@ -3722,7 +3722,7 @@ class DatasetVersionResourceTest {
             var originalEvaluators = List.of(
                     EvaluatorItem.builder()
                             .name("original-evaluator")
-                            .type(EvaluatorType.LLM_AS_JUDGE)
+                            .type(EvaluatorType.LLM_JUDGE)
                             .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
                             .build());
 
