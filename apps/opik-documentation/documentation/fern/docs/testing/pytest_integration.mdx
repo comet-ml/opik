@@ -14,7 +14,7 @@ Ensuring your LLM applications is working as expected is a crucial step before d
 
 We recommend using the `llm_unit` decorator to wrap your tests. This will ensure that Opik can track the results of your tests and provide you with a detailed report. It also works well when used in conjunction with the `track` decorator used to trace your LLM application.
 
-To enable Opik's pytest hooks, run pytest with `--opik` or set `OPIK_PYTEST_ENABLED=1`.
+Pytest hooks activate automatically when Opik `llm_unit` tests are collected. You can also force enablement with `--opik` or by setting `opik_pytest_enabled = true` in your pytest configuration.
 
 ```python
 import pytest

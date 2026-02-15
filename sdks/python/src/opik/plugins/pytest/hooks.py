@@ -1,5 +1,4 @@
 import logging
-import os
 import opik._logging as _logging
 from typing import List, Any, Generator, TYPE_CHECKING
 from opik.types import BatchFeedbackScoreDict
@@ -13,12 +12,10 @@ if TYPE_CHECKING:
     import _pytest.terminal
 
 LOGGER = logging.getLogger(__name__)
-_TRUE_VALUES = {"1", "true", "yes", "on"}
 
 
 def _is_plugin_enabled(config: Any) -> bool:
     option_enabled = bool(getattr(getattr(config, "option", None), "opik", False))
-    env_enabled = os.getenv("OPIK_PYTEST_ENABLED", "").strip().lower() in _TRUE_VALUES
 
     ini_enabled = False
     if config is not None and hasattr(config, "getini"):
@@ -27,7 +24,9 @@ def _is_plugin_enabled(config: Any) -> bool:
         except Exception:
             ini_enabled = False
 
-    return option_enabled or env_enabled or ini_enabled
+    active_by_collection = bool(getattr(config, "_opik_pytest_active", False))
+
+    return option_enabled or ini_enabled or active_by_collection
 
 
 def pytest_addoption(parser: "pytest.Parser") -> None:
@@ -44,6 +43,21 @@ def pytest_addoption(parser: "pytest.Parser") -> None:
         type="bool",
         default=False,
     )
+
+
+def pytest_collection_modifyitems(
+    session: "pytest.Session", config: "pytest.Config", items: List["pytest.Item"]
+) -> None:
+    del session
+
+    if _is_plugin_enabled(config):
+        return
+
+    for item in items:
+        test_obj = getattr(item, "obj", None)
+        if bool(getattr(test_obj, "_opik_llm_unit", False)):
+            setattr(config, "_opik_pytest_active", True)
+            return
 
 
 @pytest.hookimpl(hookwrapper=True)

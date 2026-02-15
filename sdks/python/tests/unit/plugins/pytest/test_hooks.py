@@ -4,22 +4,35 @@ from unittest import mock
 from opik.plugins.pytest import hooks, test_runs_storage
 
 
-def _config(*, opik_option: bool = False, ini_enabled: bool = False) -> SimpleNamespace:
-    return SimpleNamespace(
+def _config(
+    *, opik_option: bool = False, ini_enabled: bool = False, auto_active: bool = False
+) -> SimpleNamespace:
+    config = SimpleNamespace(
         option=SimpleNamespace(opik=opik_option),
         getini=lambda _: ini_enabled,
     )
+    if auto_active:
+        setattr(config, "_opik_pytest_active", True)
+    return config
 
 
-def _session(*, opik_option: bool = False, ini_enabled: bool = False) -> SimpleNamespace:
-    return SimpleNamespace(config=_config(opik_option=opik_option, ini_enabled=ini_enabled))
+def _session(
+    *, opik_option: bool = False, ini_enabled: bool = False, auto_active: bool = False
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        config=_config(
+            opik_option=opik_option, ini_enabled=ini_enabled, auto_active=auto_active
+        )
+    )
 
 
 def _terminal_reporter(
-    *, opik_option: bool = False, ini_enabled: bool = False
+    *, opik_option: bool = False, ini_enabled: bool = False, auto_active: bool = False
 ) -> SimpleNamespace:
     return SimpleNamespace(
-        config=_config(opik_option=opik_option, ini_enabled=ini_enabled),
+        config=_config(
+            opik_option=opik_option, ini_enabled=ini_enabled, auto_active=auto_active
+        ),
         stats={"passed": [], "failed": []},
     )
 
@@ -70,7 +83,7 @@ def test_pytest_sessionfinish__item_without_report__is_ignored(monkeypatch):
 def test_pytest_sessionfinish__valid_item__logs_scores_and_runs_experiment(monkeypatch):
     report = SimpleNamespace(passed=True)
     item = SimpleNamespace(nodeid="case-1", report=report)
-    session = _session(opik_option=True)
+    session = _session(auto_active=True)
     session.items = [item]
 
     test_runs_storage.LLM_UNIT_TEST_RUNS.add("case-1")
@@ -96,3 +109,14 @@ def test_pytest_terminal_summary__plugin_disabled__no_summary_output(monkeypatch
     hooks.pytest_terminal_summary(terminalreporter=terminal_reporter)
 
     print_mock.assert_not_called()
+
+
+def test_pytest_collection_modifyitems__activates_plugin_for_llm_unit_tests():
+    config = _config()
+    llm_item = SimpleNamespace(obj=SimpleNamespace(_opik_llm_unit=True))
+
+    hooks.pytest_collection_modifyitems(
+        session=SimpleNamespace(), config=config, items=[llm_item]
+    )
+
+    assert getattr(config, "_opik_pytest_active", False) is True
