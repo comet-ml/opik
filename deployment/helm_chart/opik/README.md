@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.12](https://img.shields.io/badge/Version-1.10.12-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.12](https://img.shields.io/badge/AppVersion-1.10.12-informational?style=flat-square)
+![Version: 1.10.13](https://img.shields.io/badge/Version-1.10.13-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.13](https://img.shields.io/badge/AppVersion-1.10.13-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -82,7 +82,7 @@ Call opik api on http://localhost:5173/api
 | Repository | Name | Version |
 |------------|------|---------|
 | https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.7 |
-| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
+| https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.6 |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.6.1 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
 | oci://registry-1.docker.io/cloudpirates | zookeeper | 0.5.4 |
@@ -153,7 +153,7 @@ Call opik api on http://localhost:5173/api
 | clickhouse.extraPodTemplates | list | `[]` |  |
 | clickhouse.extraServiceTemplates | list | `[]` |  |
 | clickhouse.extraVolumeClaimTemplates | list | `[]` |  |
-| clickhouse.image | string | `"altinity/clickhouse-server:25.3.6.10034.altinitystable"` |  |
+| clickhouse.image | string | `"altinity/clickhouse-server:25.3.8.10041.altinitystable"` |  |
 | clickhouse.livenessProbe.failureThreshold | int | `10` |  |
 | clickhouse.livenessProbe.httpGet.path | string | `"/ping"` |  |
 | clickhouse.livenessProbe.httpGet.port | int | `8123` |  |
