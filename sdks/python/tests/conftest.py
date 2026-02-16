@@ -12,7 +12,9 @@ import pytest
 
 from opik import context_storage
 from opik.api_objects import opik_client
+from opik.healthcheck import connection_monitor, connection_probe
 from opik.message_processing import streamer_constructors
+from opik.message_processing.replay import replay_manager
 
 from . import testlib
 from .testlib import (
@@ -43,8 +45,26 @@ def fake_file_upload_manager():
 
 
 @pytest.fixture
+def fake_replay_manager():
+    probe = mock.Mock(spec=connection_probe.ConnectionProbe)
+    probe.check_connection.return_value = connection_probe.ProbeResult(True, None)
+
+    monitor = connection_monitor.OpikConnectionMonitor(
+        ping_interval=10,
+        check_timeout=1,
+        probe=probe,
+    )
+
+    fallback_replay = replay_manager.ReplayManager(
+        monitor=monitor,
+    )
+    return fallback_replay
+
+
+@pytest.fixture
 def patch_streamer(
     fake_file_upload_manager: noop_file_upload_manager.FileUploadManagerEmulator,
+    fake_replay_manager: replay_manager.ReplayManager,
 ):
     streamer = None
     try:
@@ -61,6 +81,7 @@ def patch_streamer(
             file_uploader=fake_file_upload_manager,
             max_queue_size=None,
             use_attachment_extraction=False,
+            fallback_replay_manager=fake_replay_manager,
         )
 
         yield streamer, fake_message_processor_
@@ -70,7 +91,9 @@ def patch_streamer(
 
 
 @pytest.fixture
-def patch_streamer_without_batching():
+def patch_streamer_without_batching(
+    fake_replay_manager: replay_manager.ReplayManager,
+):
     streamer = None
     try:
         # Create an upload manager first
@@ -88,6 +111,7 @@ def patch_streamer_without_batching():
             file_uploader=fake_upload_manager,
             max_queue_size=None,
             use_attachment_extraction=False,
+            fallback_replay_manager=fake_replay_manager,
         )
 
         yield streamer, fake_message_processor_

@@ -27,18 +27,21 @@ def streamer_with_file_upload_manager(
             rest_client=mock.Mock(), httpx_client=mock.Mock(), worker_count=2
         )
         online = online_message_processor.OpikMessageProcessor(
-            rest_client=mock.Mock(), file_upload_manager=file_upload_manager
+            rest_client=mock.Mock(),
+            file_upload_manager=file_upload_manager,
+            fallback_replay_manager=mock.Mock(),
         )
-        streamer = streamer_constructors.construct_streamer(
+        streamer_ = streamer_constructors.construct_streamer(
             message_processor=online,
             n_consumers=1,
             use_batching=True,
             use_attachment_extraction=False,
             file_uploader=file_upload_manager,
             max_queue_size=None,
+            fallback_replay_manager=mock.Mock(),
         )
 
-        yield streamer, file_upload_manager
+        yield streamer_, file_upload_manager
 
 
 @pytest.mark.parametrize("streamer_with_file_upload_manager", [0.5], indirect=True)

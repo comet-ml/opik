@@ -13,6 +13,7 @@ from .preprocessing import (
     batching_preprocessor,
 )
 from .processors import attachments_extraction_processor, message_processors
+from .replay import replay_manager
 from ..file_upload import base_upload_manager
 
 
@@ -25,10 +26,12 @@ def construct_online_streamer(
     max_queue_size: int,
     message_processor: message_processors.ChainedMessageProcessor,
     url_override: str,
+    fallback_replay_manager: replay_manager.ReplayManager,
 ) -> streamer.Streamer:
     streamer = construct_streamer(
         message_processor=message_processor,
         file_uploader=file_uploader,
+        fallback_replay_manager=fallback_replay_manager,
         n_consumers=n_consumers,
         use_batching=use_batching,
         use_attachment_extraction=use_attachment_extraction,
@@ -52,6 +55,7 @@ def construct_online_streamer(
 def construct_streamer(
     message_processor: message_processors.BaseMessageProcessor,
     file_uploader: base_upload_manager.BaseFileUploadManager,
+    fallback_replay_manager: replay_manager.ReplayManager,
     n_consumers: int,
     use_batching: bool,
     use_attachment_extraction: bool,
@@ -84,6 +88,7 @@ def construct_streamer(
         attachments_preprocessor=attachments_preprocessor.AttachmentsPreprocessor(
             use_attachment_extraction
         ),
+        fallback_replay_manager=fallback_replay_manager,
     )
 
     return streamer_

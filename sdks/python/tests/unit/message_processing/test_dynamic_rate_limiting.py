@@ -19,6 +19,7 @@ def streamer_with_mock_message_processor(fake_file_upload_manager):
         use_attachment_extraction=False,
         file_uploader=fake_file_upload_manager,
         max_queue_size=MAX_QUEUE_SIZE,
+        fallback_replay_manager=mock.Mock(),
     )
 
     yield streamer, mock_message_processor

@@ -112,8 +112,8 @@ class OpikConnectionMonitor:
         next_beat = self.last_beat + self.ping_interval
         now = time.time()
         if next_beat <= now:
-            self.last_beat = now
             result = self._probe.check_connection(timeout=self._check_timeout)
+            self.last_beat = time.time()
             return self._on_ping_result(
                 result.is_healthy, failure_reason=result.error_message
             )

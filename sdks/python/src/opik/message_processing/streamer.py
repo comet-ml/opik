@@ -25,7 +25,7 @@ class Streamer:
         attachments_preprocessor: attachments_preprocessor.AttachmentsPreprocessor,
         batch_preprocessor: batching_preprocessor.BatchingPreprocessor,
         file_uploader: base_upload_manager.BaseFileUploadManager,
-        replay_manager: replay_manager.ReplayManager,
+        fallback_replay_manager: replay_manager.ReplayManager,
     ) -> None:
         self._lock = threading.RLock()
         self._message_queue = queue
@@ -33,7 +33,7 @@ class Streamer:
         self._attachments_preprocessor = attachments_preprocessor
         self._batch_preprocessor = batch_preprocessor
         self._file_upload_manager = file_uploader
-        self._replay_manager = replay_manager
+        self._fallback_replay_manager = fallback_replay_manager
 
         self._drain = False
 
@@ -42,8 +42,8 @@ class Streamer:
         self._start_queue_consumers()
         self._batch_preprocessor.start()
 
-        self._replay_manager.set_replay_callback(self.put)
-        self._replay_manager.start()
+        self._fallback_replay_manager.set_replay_callback(self.put)
+        self._fallback_replay_manager.start()
 
     def put(self, message: messages.BaseMessage) -> None:
         with self._lock:
@@ -90,7 +90,7 @@ class Streamer:
             self._drain = True
 
         self._batch_preprocessor.stop()  # stopping causes adding remaining batch messages to the queue
-        self._replay_manager.close()  # stopping can causes replaying of failed messages if connection is restored
+        self._fallback_replay_manager.close()  # stopping can causes replaying of failed messages if connection is restored
 
         self.flush(timeout)
         self._close_queue_consumers()
@@ -110,9 +110,9 @@ class Streamer:
 
         self._batch_preprocessor.flush()
 
-        if self._replay_manager.has_server_connection:
+        if self._fallback_replay_manager.has_server_connection:
             # do replay only if we have a connection to the server
-            return self._replay_manager.flush()
+            self._fallback_replay_manager.flush()
 
         start_time = time.time()
 

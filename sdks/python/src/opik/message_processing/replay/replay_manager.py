@@ -144,4 +144,10 @@ class ReplayManager(threading.Thread):
         with self._replay_lock:
             self._check_replay_callback()
             # ignore MyPy check because already asserted above
-            self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore
+            replayed = self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore
+
+            if replayed > 0:
+                LOGGER.info(
+                    "Replayed %d messages that was not sent due to server connection issues",
+                    replayed,
+                )

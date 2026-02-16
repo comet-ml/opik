@@ -18,6 +18,7 @@ from opik.rest_api.types import (
 
 from . import message_processors
 from .. import encoder_helpers, messages
+from ..replay import replay_manager
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self,
         rest_client: rest_api_client.OpikApi,
         file_upload_manager: base_upload_manager.BaseFileUploadManager,
+        fallback_replay_manager: replay_manager.ReplayManager,
         batch_memory_limit_mb: int = 50,
         active: bool = True,
     ):
@@ -37,6 +39,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self._file_uploader = file_upload_manager
         self._batch_memory_limit_mb = batch_memory_limit_mb
         self._is_active = active
+        self._replay_manager = fallback_replay_manager
 
         self._handlers: Dict[Type, MessageProcessingHandler] = {
             messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
@@ -121,6 +124,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 message_type.__name__,
             )
             # TODO: insert here marking message as failed
+
         except Exception as exception:
             error_tracking_extra = _generate_error_tracking_extra(exception, message)
             LOGGER.error(
