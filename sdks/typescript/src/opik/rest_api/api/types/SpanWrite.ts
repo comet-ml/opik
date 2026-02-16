@@ -23,4 +23,6 @@ export interface SpanWrite {
     lastUpdatedAt?: Date;
     totalEstimatedCost?: number;
     totalEstimatedCostVersion?: string;
+    /** Time to first token in milliseconds */
+    ttft?: number;
 }

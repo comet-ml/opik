@@ -345,6 +345,7 @@ class SpansClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -391,6 +392,9 @@ class SpansClient:
 
         total_estimated_cost_version : typing.Optional[str]
 
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -425,6 +429,7 @@ class SpansClient:
             last_updated_at=last_updated_at,
             total_estimated_cost=total_estimated_cost,
             total_estimated_cost_version=total_estimated_cost_version,
+            ttft=ttft,
             request_options=request_options,
         )
         return _response.data
@@ -508,6 +513,7 @@ class SpansClient:
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -551,6 +557,8 @@ class SpansClient:
 
         error_info : typing.Optional[ErrorInfo]
 
+        ttft : typing.Optional[float]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -582,6 +590,7 @@ class SpansClient:
             usage=usage,
             total_estimated_cost=total_estimated_cost,
             error_info=error_info,
+            ttft=ttft,
             request_options=request_options,
         )
         return _response.data
@@ -1259,6 +1268,7 @@ class AsyncSpansClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1305,6 +1315,9 @@ class AsyncSpansClient:
 
         total_estimated_cost_version : typing.Optional[str]
 
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1342,6 +1355,7 @@ class AsyncSpansClient:
             last_updated_at=last_updated_at,
             total_estimated_cost=total_estimated_cost,
             total_estimated_cost_version=total_estimated_cost_version,
+            ttft=ttft,
             request_options=request_options,
         )
         return _response.data
@@ -1431,6 +1445,7 @@ class AsyncSpansClient:
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1474,6 +1489,8 @@ class AsyncSpansClient:
 
         error_info : typing.Optional[ErrorInfo]
 
+        ttft : typing.Optional[float]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1508,6 +1525,7 @@ class AsyncSpansClient:
             usage=usage,
             total_estimated_cost=total_estimated_cost,
             error_info=error_info,
+            ttft=ttft,
             request_options=request_options,
         )
         return _response.data

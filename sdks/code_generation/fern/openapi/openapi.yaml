@@ -11058,6 +11058,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace:
       required:
       - start_time
@@ -11150,6 +11154,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:
@@ -11351,6 +11359,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -11387,6 +11399,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
       description: "Please provide either none, only one of evaluate_task_result or\
@@ -14332,6 +14348,9 @@ components:
           type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
+        ttft:
+          type: number
+          format: double
     ErrorInfo_Write:
       required:
       - exception_type
@@ -14410,6 +14429,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     SpanBatch:
       required:
       - spans
@@ -14598,6 +14621,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     ValueEntry_Public:
       type: object
       properties:
@@ -14791,6 +14818,9 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
+        ttft:
+          type: number
+          format: double
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -14876,6 +14906,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
     TraceBatch:
@@ -15097,6 +15131,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:

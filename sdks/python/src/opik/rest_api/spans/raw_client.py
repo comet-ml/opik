@@ -406,6 +406,7 @@ class RawSpansClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -452,6 +453,9 @@ class RawSpansClient:
 
         total_estimated_cost_version : typing.Optional[str]
 
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -490,6 +494,7 @@ class RawSpansClient:
                 "last_updated_at": last_updated_at,
                 "total_estimated_cost": total_estimated_cost,
                 "total_estimated_cost_version": total_estimated_cost_version,
+                "ttft": ttft,
             },
             headers={
                 "content-type": "application/json",
@@ -635,6 +640,7 @@ class RawSpansClient:
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -678,6 +684,8 @@ class RawSpansClient:
 
         error_info : typing.Optional[ErrorInfo]
 
+        ttft : typing.Optional[float]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -713,6 +721,7 @@ class RawSpansClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),
+                "ttft": ttft,
             },
             headers={
                 "content-type": "application/json",
@@ -1576,6 +1585,7 @@ class AsyncRawSpansClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         total_estimated_cost_version: typing.Optional[str] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1622,6 +1632,9 @@ class AsyncRawSpansClient:
 
         total_estimated_cost_version : typing.Optional[str]
 
+        ttft : typing.Optional[float]
+            Time to first token in milliseconds
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1660,6 +1673,7 @@ class AsyncRawSpansClient:
                 "last_updated_at": last_updated_at,
                 "total_estimated_cost": total_estimated_cost,
                 "total_estimated_cost_version": total_estimated_cost_version,
+                "ttft": ttft,
             },
             headers={
                 "content-type": "application/json",
@@ -1805,6 +1819,7 @@ class AsyncRawSpansClient:
         usage: typing.Optional[typing.Dict[str, int]] = OMIT,
         total_estimated_cost: typing.Optional[float] = OMIT,
         error_info: typing.Optional[ErrorInfo] = OMIT,
+        ttft: typing.Optional[float] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1848,6 +1863,8 @@ class AsyncRawSpansClient:
 
         error_info : typing.Optional[ErrorInfo]
 
+        ttft : typing.Optional[float]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1883,6 +1900,7 @@ class AsyncRawSpansClient:
                 "error_info": convert_and_respect_annotation_metadata(
                     object_=error_info, annotation=ErrorInfo, direction="write"
                 ),
+                "ttft": ttft,
             },
             headers={
                 "content-type": "application/json",
