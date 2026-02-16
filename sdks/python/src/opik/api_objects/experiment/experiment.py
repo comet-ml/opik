@@ -86,31 +86,17 @@ class Experiment:
         Returns:
             None
         """
-        experiment_item_messages = []
 
-        for item in experiment_items_references:
-            project_id = item.project_id
-
-            if project_id is None:
-                try:
-                    trace = self._rest_client.traces.get_trace_by_id(id=item.trace_id)
-                    project_id = trace.project_id
-                except Exception:
-                    LOGGER.debug(
-                        "Failed to fetch project_id for trace %s, will rely on backend fallback",
-                        item.trace_id
-                    )
-                    project_id = None
-
-            experiment_item_messages.append(
-                messages.ExperimentItemMessage(
-                    id=helpers.generate_id(),
-                    experiment_id=self.id,
-                    dataset_item_id=item.dataset_item_id,
-                    trace_id=item.trace_id,
-                    project_id=project_id,
-                )
+        experiment_item_messages = [
+            messages.ExperimentItemMessage(
+                id=helpers.generate_id(),
+                experiment_id=self.id,
+                dataset_item_id=item.dataset_item_id,
+                trace_id=item.trace_id,
+                project_name=item.project_name,
             )
+            for item in experiment_items_references
+        ]
 
         # Split into batches for the streamer
         batches = sequence_splitter.split_into_batches(
