@@ -4,6 +4,8 @@ import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { DatasetItemCompareSource } from "./DatasetItemCompareSource.js";
+import { EvaluatorItemCompare } from "./EvaluatorItemCompare.js";
+import { ExecutionPolicyCompare } from "./ExecutionPolicyCompare.js";
 import { ExperimentItemCompare } from "./ExperimentItemCompare.js";
 import { JsonNode } from "./JsonNode.js";
 
@@ -18,6 +20,8 @@ export const DatasetItemCompare: core.serialization.ObjectSchema<
     source: DatasetItemCompareSource,
     data: JsonNode,
     tags: core.serialization.list(core.serialization.string()).optional(),
+    evaluators: core.serialization.list(EvaluatorItemCompare).optional(),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyCompare.optional()),
     experimentItems: core.serialization.property(
         "experiment_items",
         core.serialization.list(ExperimentItemCompare).optional(),
@@ -38,6 +42,8 @@ export declare namespace DatasetItemCompare {
         source: DatasetItemCompareSource.Raw;
         data: JsonNode.Raw;
         tags?: string[] | null;
+        evaluators?: EvaluatorItemCompare.Raw[] | null;
+        execution_policy?: ExecutionPolicyCompare.Raw | null;
         experiment_items?: ExperimentItemCompare.Raw[] | null;
         dataset_id?: string | null;
         created_at?: string | null;

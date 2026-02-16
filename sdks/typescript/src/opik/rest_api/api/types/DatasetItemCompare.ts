@@ -10,6 +10,8 @@ export interface DatasetItemCompare {
     source: OpikApi.DatasetItemCompareSource;
     data: OpikApi.JsonNode;
     tags?: string[];
+    evaluators?: OpikApi.EvaluatorItemCompare[];
+    executionPolicy?: OpikApi.ExecutionPolicyCompare;
     experimentItems?: OpikApi.ExperimentItemCompare[];
     datasetId?: string;
     createdAt?: Date;

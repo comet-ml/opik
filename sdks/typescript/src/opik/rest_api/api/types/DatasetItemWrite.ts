@@ -9,4 +9,6 @@ export interface DatasetItemWrite {
     source: OpikApi.DatasetItemWriteSource;
     data: OpikApi.JsonNode;
     tags?: string[];
+    evaluators?: OpikApi.EvaluatorItemWrite[];
+    executionPolicy?: OpikApi.ExecutionPolicyWrite;
 }

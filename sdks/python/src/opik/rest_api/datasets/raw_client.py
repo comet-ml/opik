@@ -29,6 +29,8 @@ from ..types.dataset_public import DatasetPublic
 from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
 from ..types.dataset_version_public import DatasetVersionPublic
+from ..types.evaluator_item_write import EvaluatorItemWrite
+from ..types.execution_policy_write import ExecutionPolicyWrite
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
@@ -1270,6 +1272,8 @@ class RawDatasetsClient:
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -1291,6 +1295,10 @@ class RawDatasetsClient:
 
         tags : typing.Optional[typing.Sequence[str]]
 
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItemWrite]]
+
+        execution_policy : typing.Optional[ExecutionPolicyWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1308,6 +1316,12 @@ class RawDatasetsClient:
                 "source": source,
                 "data": data,
                 "tags": tags,
+                "evaluators": convert_and_respect_annotation_metadata(
+                    object_=evaluators, annotation=typing.Sequence[EvaluatorItemWrite], direction="write"
+                ),
+                "execution_policy": convert_and_respect_annotation_metadata(
+                    object_=execution_policy, annotation=ExecutionPolicyWrite, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",
@@ -3265,6 +3279,8 @@ class AsyncRawDatasetsClient:
         trace_id: typing.Optional[str] = OMIT,
         span_id: typing.Optional[str] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
+        evaluators: typing.Optional[typing.Sequence[EvaluatorItemWrite]] = OMIT,
+        execution_policy: typing.Optional[ExecutionPolicyWrite] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -3286,6 +3302,10 @@ class AsyncRawDatasetsClient:
 
         tags : typing.Optional[typing.Sequence[str]]
 
+        evaluators : typing.Optional[typing.Sequence[EvaluatorItemWrite]]
+
+        execution_policy : typing.Optional[ExecutionPolicyWrite]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -3303,6 +3323,12 @@ class AsyncRawDatasetsClient:
                 "source": source,
                 "data": data,
                 "tags": tags,
+                "evaluators": convert_and_respect_annotation_metadata(
+                    object_=evaluators, annotation=typing.Sequence[EvaluatorItemWrite], direction="write"
+                ),
+                "execution_policy": convert_and_respect_annotation_metadata(
+                    object_=execution_policy, annotation=ExecutionPolicyWrite, direction="write"
+                ),
             },
             headers={
                 "content-type": "application/json",

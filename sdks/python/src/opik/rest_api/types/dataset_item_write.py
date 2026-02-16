@@ -5,6 +5,8 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .dataset_item_write_source import DatasetItemWriteSource
+from .evaluator_item_write import EvaluatorItemWrite
+from .execution_policy_write import ExecutionPolicyWrite
 from .json_node import JsonNode
 
 
@@ -15,6 +17,8 @@ class DatasetItemWrite(UniversalBaseModel):
     source: DatasetItemWriteSource
     data: JsonNode
     tags: typing.Optional[typing.List[str]] = None
+    evaluators: typing.Optional[typing.List[EvaluatorItemWrite]] = None
+    execution_policy: typing.Optional[ExecutionPolicyWrite] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
