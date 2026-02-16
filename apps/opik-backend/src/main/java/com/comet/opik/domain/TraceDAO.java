@@ -152,7 +152,8 @@ class TraceDAOImpl implements TraceDAO {
                 visibility_mode,
                 truncation_threshold,
                 input_slim,
-                output_slim
+                output_slim,
+                ttft
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -176,7 +177,8 @@ class TraceDAOImpl implements TraceDAO {
                         if(:visibility_mode<item.index> IS NULL, 'default', :visibility_mode<item.index>),
                         :truncation_threshold<item.index>,
                         :input_slim<item.index>,
-                        :output_slim<item.index>
+                        :output_slim<item.index>,
+                        :ttft<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -209,7 +211,8 @@ class TraceDAOImpl implements TraceDAO {
                 visibility_mode,
                 truncation_threshold,
                 input_slim,
-                output_slim
+                output_slim,
+                ttft
             )
             SELECT
                 new_trace.id as id,
@@ -276,7 +279,11 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     notEmpty(old_trace.output) AND notEmpty(old_trace.output_slim), old_trace.output_slim,
                     new_trace.output_slim
-                ) as output_slim
+                ) as output_slim,
+                multiIf(
+                    isNotNull(old_trace.ttft), old_trace.ttft,
+                    new_trace.ttft
+                ) as ttft
             FROM (
                 SELECT
                     :id as id,
@@ -297,7 +304,8 @@ class TraceDAOImpl implements TraceDAO {
                     if(:visibility_mode IS NULL, 'default', :visibility_mode) as visibility_mode,
                     :truncation_threshold as truncation_threshold,
                     :input_slim as input_slim,
-                    :output_slim as output_slim
+                    :output_slim as output_slim,
+                    :ttft as ttft
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -318,7 +326,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft
             )
             SELECT
             	id,
@@ -339,7 +347,8 @@ class TraceDAOImpl implements TraceDAO {
                 visibility_mode,
                 :truncation_threshold as truncation_threshold,
                 <if(input)> :input_slim <else> input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> output_slim <endif> as output_slim
+                <if(output)> :output_slim <else> output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> ttft <endif> as ttft
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -1713,7 +1722,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft
             )
             SELECT
                 new_trace.id as id,
@@ -1789,7 +1798,12 @@ class TraceDAOImpl implements TraceDAO {
                     notEmpty(new_trace.output_slim), new_trace.output_slim,
                     notEmpty(old_trace.output) AND notEmpty(old_trace.output_slim), old_trace.output_slim,
                     new_trace.output_slim
-                ) as output_slim
+                ) as output_slim,
+                multiIf(
+                    isNotNull(new_trace.ttft), new_trace.ttft,
+                    isNotNull(old_trace.ttft), old_trace.ttft,
+                    new_trace.ttft
+                ) as ttft
             FROM (
                 SELECT
                     :id as id,
@@ -1810,7 +1824,8 @@ class TraceDAOImpl implements TraceDAO {
                     <if(visibility_mode)> :visibility_mode <else> 'unknown' <endif> as visibility_mode,
                     :truncation_threshold as truncation_threshold,
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
-                    <if(output)> :output_slim <else> '' <endif> as output_slim
+                    <if(output)> :output_slim <else> '' <endif> as output_slim,
+                    <if(ttft)> :ttft <else> null <endif> as ttft
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -2396,7 +2411,8 @@ class TraceDAOImpl implements TraceDAO {
                 visibility_mode,
                 truncation_threshold,
                 input_slim,
-                output_slim
+                output_slim,
+                ttft
             )
             SELECT
                 t.id,
@@ -2417,7 +2433,8 @@ class TraceDAOImpl implements TraceDAO {
                 t.visibility_mode,
                 :truncation_threshold as truncation_threshold,
                 <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
-                <if(output)> :output_slim <else> t.output_slim <endif> as output_slim
+                <if(output)> :output_slim <else> t.output_slim <endif> as output_slim,
+                <if(ttft)> :ttft <else> t.ttft <endif> as ttft
             FROM traces t
             WHERE t.id IN :ids AND t.workspace_id = :workspace_id
             ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
@@ -2484,6 +2501,12 @@ class TraceDAOImpl implements TraceDAO {
 
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
+        if (trace.ttft() != null) {
+            statement.bind("ttft", trace.ttft());
+        } else {
+            statement.bindNull("ttft", Double.class);
+        }
+
         return statement;
     }
 
@@ -2514,6 +2537,8 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(trace.endTime())
                 .ifPresent(endTime -> template.add("end_time", endTime));
+        Optional.ofNullable(trace.ttft())
+                .ifPresent(ttft -> template.add("ttft", ttft));
 
         return template;
     }
@@ -2585,6 +2610,9 @@ class TraceDAOImpl implements TraceDAO {
             statement.bind("thread_id", traceUpdate.threadId());
         }
 
+        Optional.ofNullable(traceUpdate.ttft())
+                .ifPresent(ttft -> statement.bind("ttft", ttft));
+
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
@@ -2616,6 +2644,9 @@ class TraceDAOImpl implements TraceDAO {
         if (StringUtils.isNotBlank(traceUpdate.threadId())) {
             template.add("thread_id", traceUpdate.threadId());
         }
+
+        Optional.ofNullable(traceUpdate.ttft())
+                .ifPresent(ttft -> template.add("ttft", ttft));
 
         return template;
     }
@@ -2849,6 +2880,7 @@ class TraceDAOImpl implements TraceDAO {
                 .lastUpdatedBy(
                         getValue(exclude, Trace.TraceField.LAST_UPDATED_BY, row, "last_updated_by", String.class))
                 .duration(getValue(exclude, Trace.TraceField.DURATION, row, "duration", Double.class))
+                .ttft(getValue(exclude, Trace.TraceField.TTFT, row, "ttft", Double.class))
                 .threadId(StringUtils.defaultIfBlank(
                         getValue(exclude, Trace.TraceField.THREAD_ID, row, "thread_id", String.class), null))
                 .visibilityMode(Optional.ofNullable(
@@ -3169,6 +3201,12 @@ class TraceDAOImpl implements TraceDAO {
                 }
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
+
+                if (trace.ttft() != null) {
+                    statement.bind("ttft" + i, trace.ttft());
+                } else {
+                    statement.bindNull("ttft" + i, Double.class);
+                }
 
                 i++;
             }
@@ -3584,6 +3622,8 @@ class TraceDAOImpl implements TraceDAO {
         if (StringUtils.isNotBlank(traceUpdate.threadId())) {
             template.add("thread_id", traceUpdate.threadId());
         }
+        Optional.ofNullable(traceUpdate.ttft())
+                .ifPresent(ttft -> template.add("ttft", ttft));
 
         return template;
     }
@@ -3615,6 +3655,8 @@ class TraceDAOImpl implements TraceDAO {
         if (StringUtils.isNotBlank(traceUpdate.threadId())) {
             statement.bind("thread_id", traceUpdate.threadId());
         }
+        Optional.ofNullable(traceUpdate.ttft())
+                .ifPresent(ttft -> statement.bind("ttft", ttft));
     }
 
     private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {

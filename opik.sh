@@ -125,6 +125,11 @@ log_worktree_config() {
 
 setup_buildx_bake() {
   if [[ "${BUILD_MODE}" = "true" ]]; then
+    if [[ "${COMPOSE_BAKE:-}" = "false" ]]; then
+      echo "ℹ️ COMPOSE_BAKE is explicitly disabled. Skipping Bake-enabled builds"
+      return
+    fi
+
     if docker buildx bake --help >/dev/null 2>&1; then
       echo "ℹ️ Bake is available on Docker Buildx. Exporting COMPOSE_BAKE=true"
       export COMPOSE_BAKE=true
