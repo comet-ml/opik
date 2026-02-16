@@ -502,3 +502,114 @@ def test_dataset_item_oql__invalid_filters__raises_value_error(
 def test_dataset_item_oql__empty_filter__returns_none(filter_string):
     oql = OpikQueryLanguage.for_dataset_items(filter_string)
     assert oql.parsed_filters is None
+
+
+@pytest.mark.parametrize(
+    "filter_string, expected",
+    [
+        (
+            'id != "1234"',
+            [{"field": "id", "operator": "!=", "value": "1234"}],
+        ),
+        (
+            'commit = "abc123"',
+            [{"field": "commit", "operator": "=", "value": "abc123"}],
+        ),
+        (
+            'template contains "hello"',
+            [{"field": "template", "operator": "contains", "value": "hello"}],
+        ),
+        (
+            'change_description not_contains "fix"',
+            [
+                {
+                    "field": "change_description",
+                    "operator": "not_contains",
+                    "value": "fix",
+                }
+            ],
+        ),
+        (
+            'metadata.environment >= "prod"',
+            [
+                {
+                    "field": "metadata",
+                    "key": "environment",
+                    "operator": ">=",
+                    "value": "prod",
+                }
+            ],
+        ),
+        (
+            'type = "MUSTACHE"',
+            [{"field": "type", "operator": "=", "value": "MUSTACHE"}],
+        ),
+        (
+            'tags contains "production"',
+            [{"field": "tags", "operator": "contains", "value": "production"}],
+        ),
+        (
+            "created_at > 1234567890",
+            [{"field": "created_at", "operator": ">", "value": "1234567890"}],
+        ),
+        (
+            'created_by ends_with "user@example.com"',
+            [
+                {
+                    "field": "created_by",
+                    "operator": "ends_with",
+                    "value": "user@example.com",
+                }
+            ],
+        ),
+        (
+            'template starts_with "customer" AND tags contains "production"',
+            [
+                {"field": "template", "operator": "starts_with", "value": "customer"},
+                {"field": "tags", "operator": "contains", "value": "production"},
+            ],
+        ),
+    ],
+)
+def test_prompt_version_oql__valid_filters__happyflow(filter_string, expected):
+    oql = OpikQueryLanguage.for_prompt_versions(filter_string)
+    parsed = json.loads(oql.parsed_filters)
+    assert len(parsed) == len(expected)
+
+    for i, line in enumerate(expected):
+        for key, value in line.items():
+            assert parsed[i][key] == value
+
+
+@pytest.mark.parametrize(
+    "filter_string, error_pattern",
+    [
+        (
+            "tags > 5",
+            r"Operator > is not supported for field tags.*",
+        ),
+        (
+            'type contains "MUSTACHE"',
+            r"Operator contains is not supported for field type.*",
+        ),
+        (
+            'id = "test" OR commit = "abc"',
+            r"Invalid filter string, OR is not currently supported",
+        ),
+        (
+            'template = "test" extra_stuff',
+            r"Invalid filter string, trailing characters.*",
+        ),
+    ],
+)
+def test_prompt_version_oql__invalid_filters__raises_value_error(
+    filter_string, error_pattern
+):
+    with pytest.raises(ValueError, match=error_pattern):
+        OpikQueryLanguage.for_prompt_versions(filter_string)
+
+
+@pytest.mark.parametrize("filter_string", [None, ""])
+def test_prompt_version_oql__empty_filter__returns_none(filter_string):
+    oql = OpikQueryLanguage.for_prompt_versions(filter_string)
+    assert oql.parsed_filters is None
