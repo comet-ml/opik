@@ -86,7 +86,7 @@ def _extract_item_evaluators(
             if evaluator_item.type == "llm_judge":
                 config = llm_judge_config.LLMJudgeConfig(**evaluator_item.config)
                 evaluator = llm_judge.LLMJudge.from_config(
-                    config, model=evaluator_model
+                    config, init_kwargs={"model": evaluator_model}
                 )
                 evaluators.append(evaluator)
             else:

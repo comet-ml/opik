@@ -6,7 +6,7 @@ in the backend and used with evaluation suites. The evaluator can
 evaluate one or more assertions/criteria against the agent's output.
 """
 
-from typing import Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 from opik.evaluation.models import models_factory
 from opik.evaluation.metrics import score_result
@@ -281,9 +281,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
     def from_config(
         cls,
         config: llm_judge_config.LLMJudgeConfig,
-        model: Optional[str] = None,
         track: bool = True,
         project_name: Optional[str] = None,
+        init_kwargs: Optional[Dict[str, Any]] = None,
     ) -> "LLMJudge":
         """
         Create an LLMJudge instance from a configuration.
@@ -293,9 +293,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
 
         Args:
             config: LLMJudgeConfig with model, messages, variables, and schema.
-            model: The model name to use. If not provided, uses the default model.
             track: Whether to track the evaluator. Defaults to True.
             project_name: Optional project name for tracking.
+            init_kwargs: Optional dictionary to override __init__ parameters.
+                Supported: 'model' to specify the model name.
 
         Returns:
             LLMJudge: A new instance configured according to the provided config.
@@ -307,9 +308,12 @@ class LLMJudge(base.BaseSuiteEvaluator):
             ...     variables={"input": "input", "output": "output"},
             ...     schema=[llm_judge_config.LLMJudgeSchemaItem(name="accurate", type="BOOLEAN", description="Response is accurate")],
             ... )
-            >>> evaluator = LLMJudge.from_config(config)
+            >>> evaluator = LLMJudge.from_config(config, init_kwargs={"model": "gpt-4o"})
         """
         assertion_texts = [item.description for item in config.schema_]
+
+        init_kwargs = init_kwargs or {}
+        model = init_kwargs.get("model")
 
         return cls(
             assertions=assertion_texts,

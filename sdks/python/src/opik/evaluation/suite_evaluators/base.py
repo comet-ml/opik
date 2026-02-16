@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Any, Optional, TypeVar
+from typing import Any, Dict, Optional, TypeVar
 
 from opik.evaluation.metrics import base_metric
 
@@ -34,18 +34,19 @@ class BaseSuiteEvaluator(base_metric.BaseMetric):
     def from_config(
         cls,
         config: Any,
-        model: Optional[str] = None,
         track: bool = True,
         project_name: Optional[str] = None,
+        init_kwargs: Optional[Dict[str, Any]] = None,
     ) -> "BaseSuiteEvaluator":
         """
         Create an evaluator instance from a configuration.
 
         Args:
             config: The configuration object.
-            model: The model name to use. If not provided, uses the default model.
             track: Whether to track the evaluator.
             project_name: Optional project name for tracking.
+            init_kwargs: Optional dictionary to override __init__ parameters.
+                For LLMJudge, this can include 'model' to specify the model name.
 
         Returns:
             A new evaluator instance.
