@@ -8,6 +8,7 @@ import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevBut
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
 import { WidgetConfigDialogAddStepProps } from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep";
 import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid";
+import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuItems";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -21,6 +22,7 @@ type PluginStore = {
   }> | null;
   InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
   SidebarInviteDevButton: React.ComponentType<SidebarInviteDevButtonProps> | null;
+  SideBarMenuItems: React.ComponentType<SideBarMenuItemsProps> | null;
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
@@ -45,6 +47,7 @@ const PLUGIN_NAMES = [
   "RetentionBanner",
   "InviteDevButton",
   "SidebarInviteDevButton",
+  "SideBarMenuItems",
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
@@ -67,6 +70,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   RetentionBanner: null,
   InviteDevButton: null,
   SidebarInviteDevButton: null,
+  SideBarMenuItems: null,
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,
