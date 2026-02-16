@@ -557,7 +557,7 @@ clickhouse:
   enabled: true
   shardsCount: 1
   replicasCount: 1
-  image: altinity/clickhouse-server:25.3.6.10034.altinitystable
+  image: altinity/clickhouse-server:25.3.8.10041.altinitystable
   storage: 50Gi
   logsLevel: information
   # Custom health checks with longer timeouts for major version upgrades
