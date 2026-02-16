@@ -3884,5 +3884,32 @@ class DatasetVersionResourceTest {
             assertThat(updatedItem.evaluators()).isEqualTo(newEvaluators);
             assertThat(updatedItem.executionPolicy()).isEqualTo(newPolicy);
         }
+
+        @Test
+        @DisplayName("Error: Create items with invalid executionPolicy (runsPerItem > 100) should be rejected")
+        void createItems__whenInvalidExecutionPolicy__thenReturn422() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var invalidPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(999)
+                    .passThreshold(1)
+                    .build();
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .executionPolicy(invalidPolicy)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+
+            try (var response = datasetResourceClient.callCreateDatasetItems(batch, TEST_WORKSPACE, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
+        }
     }
 }
