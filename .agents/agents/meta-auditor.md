@@ -41,7 +41,7 @@ description: |
 
   <example>
   Context: User enabling MCPs
-  user: "Enable the GitHub MCP"
+  user: "Enable the Slack MCP"
   assistant: "I'll use the config-auditor agent to check current MCP usage before adding another."
   <commentary>
   MCP change. Trigger config-auditor to check for overlap and context impact.

@@ -4,10 +4,10 @@
 
 ## Overview
 
-Fetch a GitHub issue by link, build full context (title, description, comments, labels, assignees, milestone), and generate an actionable implementation plan.  
+Fetch a GitHub issue by link, build full context (title, description, comments, labels, assignees, milestone), and generate an actionable implementation plan.
 This workflow will:
 
-- Verify GitHub MCP availability (or instruct how to install it).
+- Verify `gh` CLI availability (or instruct how to install it).
 - Fetch and parse the issue details.
 - If not found, list your assigned **open** issues.
 - Check local git status in the Opik repository and propose a branch if on `main`.
@@ -26,8 +26,9 @@ This workflow will:
 
 ### 1. Preflight & Environment Check
 
-- **Check GitHub MCP**: If unavailable, respond with:
-  > "This command needs the GitHub MCP server. Please enable it, then run: `npm run install-mcp`."  
+- **Check `gh` CLI**: Test availability by running `gh auth status`
+  > If unavailable or not authenticated, respond with: "This command needs the GitHub CLI (`gh`). Please install it (`brew install gh` on macOS) and authenticate with `gh auth login`."
+  > If installed via Homebrew but not found, add `/opt/homebrew/bin` to PATH in `~/.zshenv`: `echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshenv` and restart Claude Code/Cursor.
   > Stop here.
 - **Check development environment**: Verify project dependencies, build tools, and project structure are ready.
 - **Check local git branch** in the Opik repository:
@@ -45,9 +46,9 @@ This workflow will:
 ### 2. Fetch Issue
 
 - Extract issue number from link.
-- Fetch with GitHub MCP: title, body, state, labels, assignees, milestone, comments, created_at, updated_at.
+- Fetch with `gh` CLI: `gh issue view <ISSUE_NUMBER> --json number,title,body,state,labels,assignees,milestone,comments,createdAt,updatedAt`
 - **If fetch fails**: Show error message and suggest troubleshooting steps.
-- **If not found**: Search for open issues assigned to current user: `is:open assignee:@me` (max 10).
+- **If not found**: Search for open issues assigned to current user: `gh issue list --assignee @me --state open --limit 10`
 - **Show list**: `#1234 — Title (State)` and stop if issue not found.
 
 ---
@@ -58,7 +59,7 @@ This workflow will:
 - **Description**: verbatim if short, otherwise concise summary + key quotes.
 - **If no description**: Note this and suggest adding context for better implementation planning.
 - **Comments**: newest → oldest, `[author @ date] summary` with important snippets.
-- **Linked PRs**: Include any linked pull requests if available.
+- **Linked PRs**: Use `gh pr list --search "issue:<ISSUE_NUMBER>"` to find linked pull requests if available.
 - **Project context**: Include project board information if available.
 
 ---
@@ -102,7 +103,7 @@ This workflow will:
   # Ensure you're on main and pull latest
   git checkout main
   git pull origin main
-  
+
   # Create task-specific branch
   git checkout -b {USERNAME}/issue-{ISSUE-NUMBER}-{ISSUE-SUMMARY}
   ```
@@ -114,7 +115,7 @@ This workflow will:
 ### 7. Status Management (Optional)
 
 - **Move issue to "In Progress"** if currently **open**:
-  - Use GitHub MCP to add appropriate labels (e.g., "in-progress")
+  - Use `gh` CLI to add appropriate labels: `gh issue edit <ISSUE_NUMBER> --add-label "in-progress"`
   - **Verify label addition**: Confirm labels were added successfully
   - **Handle label failures**: Provide error details and retry options
 
@@ -187,7 +188,7 @@ This workflow will:
 ### 11. Completion Summary & Validation
 
 - **Confirm all steps completed**:
-  - ✅ GitHub MCP available and working
+  - ✅ `gh` CLI available and working
   - ✅ Issue fetched and analyzed successfully
   - ✅ Labels updated (if applicable)
   - ✅ Feature branch created and active following Opik naming convention
@@ -200,9 +201,10 @@ This workflow will:
 
 ## Error Handling
 
-### **GitHub MCP Failures**
+### **CLI Failures**
 
-- Connection issues: Check network and authentication
+- **`gh` CLI unavailable**: Stop immediately and provide installation instructions (`gh auth login`)
+- Connection issues: Check network and authentication with `gh auth status`
 - Permission errors: Verify user access to the repository
 - Rate limiting: Wait and retry
 - API errors: Check GitHub API status and retry
@@ -217,7 +219,7 @@ This workflow will:
 
 ### **Label Management Failures**
 
-- Invalid label: Check available labels in the repository
+- Invalid label: Check available labels in the repository with `gh label list`
 - Permission denied: Verify user can modify issue labels
 - Label doesn't exist: Create the label or use existing ones
 
@@ -242,7 +244,13 @@ The command is successful when:
 
 ### **Common Issues**
 
-- **GitHub MCP not available**: Run `npm run install-mcp`
+- **`gh` CLI not available**: Install with `brew install gh` (macOS) or see https://cli.github.com/
+- **`gh` CLI installed but not found**: If installed via Homebrew on macOS but not found in non-interactive shells (like Claude Code), add to `~/.zshenv`:
+  ```bash
+  echo 'export PATH="/opt/homebrew/bin:$PATH"' >> ~/.zshenv
+  ```
+  Then restart Claude Code/Cursor.
+- **`gh` CLI not authenticated**: Run `gh auth login`
 - **Git branch conflicts**: Resolve conflicts before proceeding
 - **Permission errors**: Check user access and repository settings
 - **Network issues**: Verify connectivity to GitHub services

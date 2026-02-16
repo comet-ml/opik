@@ -82,6 +82,18 @@ claude:
 		cp -r $(AI_DIR)/agents/* $(CLAUDE_DIR)/agents/; \
 		echo "  agents synced"; \
 	fi
+	@# Sync shell environment script
+	@if [ -f "$(AI_DIR)/shell-init.sh" ]; then \
+		echo "Syncing shell environment script..."; \
+		mkdir -p $(HOME)/.claude; \
+		cp $(AI_DIR)/shell-init.sh $(HOME)/.claude/shell-init.sh; \
+		chmod +x $(HOME)/.claude/shell-init.sh; \
+		echo "  shell-init.sh -> ~/.claude/shell-init.sh"; \
+		if ! grep -q 'CLAUDE_ENV_FILE' $(HOME)/.zshrc 2>/dev/null; then \
+			echo 'export CLAUDE_ENV_FILE="$$HOME/.claude/shell-init.sh"' >> $(HOME)/.zshrc; \
+			echo "  Added CLAUDE_ENV_FILE to ~/.zshrc (restart shell to apply)"; \
+		fi; \
+	fi
 	@# Convert MCP config to Claude CLI format (.mcp.json at repo root)
 	@if [ -f "$(AI_DIR)/mcp.json" ]; then \
 		echo "Converting MCP config to Claude CLI format..."; \
