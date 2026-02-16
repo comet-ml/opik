@@ -177,6 +177,7 @@ data:
 
         {{- if (index .Values.component "ai-backend").enabled }}
         location @ai-backend {
+            rewrite ^{{ $rootPath }}(/opik-ai/.*)$ $1 break;
             proxy_pass http://ai-backend;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
