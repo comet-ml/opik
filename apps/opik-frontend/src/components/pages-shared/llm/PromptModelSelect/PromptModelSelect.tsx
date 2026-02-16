@@ -10,8 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { ChevronRight, Search } from "lucide-react";
+import { ListAction } from "@/components/ui/list-action";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Input } from "@/components/ui/input";
 
@@ -322,16 +322,14 @@ const PromptModelSelect = ({
             <SelectSeparator />
             <div className="flex-1 overflow-y-auto py-1">{renderOptions()}</div>
             <SelectSeparator />
-            <Button
-              variant="link"
-              className="h-10 w-full"
+            <ListAction
               onClick={() => {
                 resetDialogKeyRef.current += 1;
                 setOpenConfigDialog(true);
               }}
             >
               Manage AI providers
-            </Button>
+            </ListAction>
           </div>
         </SelectContent>
       </Select>
