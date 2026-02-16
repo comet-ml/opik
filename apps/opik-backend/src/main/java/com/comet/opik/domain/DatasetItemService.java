@@ -1567,13 +1567,19 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return versionDao.mapRowIdsToDatasetItemIds(editedRowIds)
                 .collectList()
                 .flatMap(mappings -> {
-                    if (mappings.isEmpty()) {
-                        return Mono.error(failWithNotFound("Items not found for the provided IDs"));
-                    }
-                    return Mono.just(mappings.stream()
+                    Map<UUID, UUID> map = mappings.stream()
                             .collect(Collectors.toMap(
                                     DatasetItemVersionDAO.DatasetItemIdMapping::rowId,
-                                    DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId)));
+                                    DatasetItemVersionDAO.DatasetItemIdMapping::datasetItemId));
+
+                    Set<UUID> missing = editedRowIds.stream()
+                            .filter(id -> !map.containsKey(id))
+                            .collect(Collectors.toSet());
+
+                    if (!missing.isEmpty()) {
+                        return Mono.error(failWithNotFound("Items not found for IDs: " + missing));
+                    }
+                    return Mono.just(map);
                 });
     }
 
