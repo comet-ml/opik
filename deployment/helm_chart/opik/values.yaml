@@ -546,6 +546,13 @@ component:
       # proxy_send_timeout: 60
       # proxy_buffering: 'on'
       # proxy_request_buffering: 'on'
+    # Upstream config for opik-ai-backend (SSE streaming)
+    aiBackendUpstreamConfig:
+      proxy_read_timeout: 300
+      proxy_connect_timeout: 90
+      proxy_send_timeout: 300
+      proxy_buffering: 'off'
+      gzip: 'off'
     podDisruptionBudget:
       enabled: false
 
