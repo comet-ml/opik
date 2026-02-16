@@ -77,7 +77,7 @@ vi.mock("@/evaluation/models/modelsFactory", async (importOriginal) => {
       // For string IDs or undefined, return a new MockModel instance
       if (MockModelForFactory) {
         return new MockModelForFactory(
-          typeof model === "string" ? model : "gpt-4o"
+          typeof model === "string" ? model : "gpt-5-nano"
         );
       }
       // Fallback for edge cases
