@@ -11,7 +11,8 @@ from opik.api_objects.experiment import experiment
 from opik.api_objects.evaluation_suite.types import ExecutionPolicy
 from opik.evaluation import rest_operations, test_case, test_result, samplers
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
-from opik.evaluation.suite_evaluators import opik_llm_judge_config, llm_judge
+from opik.evaluation.suite_evaluators import llm_judge
+from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 from opik.message_processing.emulation import models
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
@@ -83,7 +84,7 @@ def _extract_item_evaluators(
     for evaluator_item in item.evaluators:
         try:
             if evaluator_item.type == "llm_judge":
-                config = opik_llm_judge_config.LLMJudgeConfig(**evaluator_item.config)
+                config = llm_judge_config.LLMJudgeConfig(**evaluator_item.config)
                 evaluator = llm_judge.LLMJudge.from_config(
                     config, model=evaluator_model
                 )

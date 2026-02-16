@@ -6,44 +6,14 @@ in the backend and used with evaluation suites. The evaluator can
 evaluate one or more assertions/criteria against the agent's output.
 """
 
-from typing import Any, Optional, List, Type
-
-import pydantic
+from typing import Any, Optional, List
 
 from opik.evaluation.models import models_factory
 from opik.evaluation.metrics import score_result
 
-from . import base
-from . import opik_llm_judge_config as llm_judge_config
-
-
-class AssertionResultMetadata(pydantic.BaseModel):
-    """Metadata for assertion result, containing confidence score."""
-
-    confidence: float
-
-
-class AssertionResult(pydantic.BaseModel):
-    """Result for a single assertion evaluation, matching ScoreResult structure."""
-
-    name: str
-    value: bool
-    reason: Optional[str] = None
-    metadata: Optional[AssertionResultMetadata] = None
-
-
-def _build_response_format_model(
-    assertions: List[str],
-) -> Type[pydantic.BaseModel]:
-    """
-    Dynamically build a Pydantic model for structured output based on assertions.
-
-    Returns a model with a 'results' field containing a list of AssertionResult items.
-    """
-    return pydantic.create_model(
-        "LLMJudgeResponse",
-        results=(List[AssertionResult], ...),
-    )
+from opik.evaluation.suite_evaluators import base
+from . import config as llm_judge_config
+from . import parsers
 
 
 LLM_JUDGE_TEMPLATE = """You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
@@ -63,11 +33,10 @@ Evaluate each of the following assertions against the agent's output:
 
 {assertions}
 
-For each assertion, provide a result with:
-- name: The exact assertion text
+For each assertion, provide:
 - value: true if the assertion passes, false if it fails
 - reason: A brief explanation of your judgment
-- metadata: An object containing "confidence" (0.0 to 1.0) indicating how confident you are
+- confidence: A float from 0.0 to 1.0 indicating how confident you are
 """
 
 
@@ -93,50 +62,6 @@ def _generate_prompt(
         output=_format_value(output),
         assertions=assertions_str,
     )
-
-
-def _parse_model_output(
-    content: str,
-    assertions: List[str],
-) -> List[score_result.ScoreResult]:
-    """Parse the model output into ScoreResults."""
-    import json
-
-    results: List[score_result.ScoreResult] = []
-    response_model = _build_response_format_model(assertions)
-
-    try:
-        parsed = json.loads(content)
-        validated = response_model(**parsed)
-
-        for item in validated.results:
-            metadata: dict[str, Any] = {}
-            if item.metadata is not None:
-                metadata["confidence"] = item.metadata.confidence
-            results.append(
-                score_result.ScoreResult(
-                    name=item.name,
-                    value=item.value,
-                    reason=item.reason,
-                    metadata=metadata if metadata else None,
-                )
-            )
-
-    except (json.JSONDecodeError, pydantic.ValidationError) as e:
-        for assertion in assertions:
-            results.append(
-                score_result.ScoreResult(
-                    name=assertion,
-                    value=False,
-                    reason=f"Failed to parse model output: {e}",
-                    metadata={
-                        "raw_output": content,
-                        "parsing_error": True,
-                    },
-                )
-            )
-
-    return results
 
 
 class LLMJudge(base.BaseSuiteEvaluator):
@@ -247,12 +172,12 @@ class LLMJudge(base.BaseSuiteEvaluator):
             output=output,
             assertions=self._assertions,
         )
-        response_format = _build_response_format_model(self._assertions)
+        response_format = parsers.build_response_format_model(self._assertions)
         model_output = self._model.generate_string(
             input=llm_query, response_format=response_format
         )
 
-        return _parse_model_output(
+        return parsers.parse_model_output(
             content=model_output,
             assertions=self._assertions,
         )
@@ -281,12 +206,12 @@ class LLMJudge(base.BaseSuiteEvaluator):
             output=output,
             assertions=self._assertions,
         )
-        response_format = _build_response_format_model(self._assertions)
+        response_format = parsers.build_response_format_model(self._assertions)
         model_output = await self._model.agenerate_string(
             input=llm_query, response_format=response_format
         )
 
-        return _parse_model_output(
+        return parsers.parse_model_output(
             content=model_output,
             assertions=self._assertions,
         )
@@ -384,7 +309,6 @@ class LLMJudge(base.BaseSuiteEvaluator):
             ... )
             >>> evaluator = LLMJudge.from_config(config)
         """
-        # Extract assertion texts from config schema (description field)
         assertion_texts = [item.description for item in config.schema_]
 
         return cls(

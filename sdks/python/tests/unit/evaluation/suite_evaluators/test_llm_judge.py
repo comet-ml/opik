@@ -1,4 +1,5 @@
-from opik.evaluation.suite_evaluators import llm_judge, opik_llm_judge_config
+from opik.evaluation.suite_evaluators import llm_judge
+from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 
 
 class TestLLMJudgeInit:
@@ -121,15 +122,15 @@ class TestLLMJudgeToConfig:
 
 class TestLLMJudgeFromConfig:
     def test_from_config__valid_config__creates_evaluator(self):
-        config = opik_llm_judge_config.LLMJudgeConfig(
+        config = llm_judge_config.LLMJudgeConfig(
             name="restored_evaluator",
-            model=opik_llm_judge_config.LLMJudgeModelConfig(temperature=0.5, seed=42),
+            model=llm_judge_config.LLMJudgeModelConfig(temperature=0.5, seed=42),
             variables={"input": "input", "output": "output"},
             schema=[
-                opik_llm_judge_config.LLMJudgeSchemaItem(
+                llm_judge_config.LLMJudgeSchemaItem(
                     name="accurate", type="BOOLEAN", description="Is accurate"
                 ),
-                opik_llm_judge_config.LLMJudgeSchemaItem(
+                llm_judge_config.LLMJudgeSchemaItem(
                     name="helpful", type="BOOLEAN", description="Is helpful"
                 ),
             ],
@@ -145,12 +146,12 @@ class TestLLMJudgeFromConfig:
 
     def test_from_config__no_model_name__uses_default(self):
         """When config has no model name, from_config uses the default model."""
-        config = opik_llm_judge_config.LLMJudgeConfig(
+        config = llm_judge_config.LLMJudgeConfig(
             name="test",
-            model=opik_llm_judge_config.LLMJudgeModelConfig(temperature=0.5),
+            model=llm_judge_config.LLMJudgeModelConfig(temperature=0.5),
             variables={"input": "input", "output": "output"},
             schema=[
-                opik_llm_judge_config.LLMJudgeSchemaItem(
+                llm_judge_config.LLMJudgeSchemaItem(
                     name="test", type="BOOLEAN", description="Test"
                 ),
             ],
@@ -160,7 +161,7 @@ class TestLLMJudgeFromConfig:
         evaluator = llm_judge.LLMJudge.from_config(config, track=False)
 
         # The evaluator should use the default model name internally
-        assert evaluator._model_name == opik_llm_judge_config.DEFAULT_MODEL_NAME
+        assert evaluator._model_name == llm_judge_config.DEFAULT_MODEL_NAME
 
     def test_from_config__roundtrip__preserves_assertions(self):
         original = llm_judge.LLMJudge(
@@ -184,17 +185,17 @@ class TestLLMJudgeFromConfig:
 
     def test_from_config__config_model_params__temperature_and_seed_preserved(self):
         """Temperature and seed from config are preserved, model name is not saved."""
-        config = opik_llm_judge_config.LLMJudgeConfig(
+        config = llm_judge_config.LLMJudgeConfig(
             name="test",
-            model=opik_llm_judge_config.LLMJudgeModelConfig(temperature=0.7, seed=123),
+            model=llm_judge_config.LLMJudgeModelConfig(temperature=0.7, seed=123),
             variables={"input": "input", "output": "output"},
             schema=[
-                opik_llm_judge_config.LLMJudgeSchemaItem(
+                llm_judge_config.LLMJudgeSchemaItem(
                     name="test", type="BOOLEAN", description="Test"
                 ),
             ],
             messages=[
-                opik_llm_judge_config.LLMJudgeMessage(role="USER", content="test")
+                llm_judge_config.LLMJudgeMessage(role="USER", content="test")
             ],
         )
 
