@@ -5,13 +5,17 @@
 import { QueryTokenizer } from "../tokenizer";
 import { validateOperator } from "../validators";
 import type { OperatorToken } from "../types";
-import type { OQLConfig } from "../config";
+import type { OQLConfig } from "../configs";
 
 /**
  * Parses an operator (symbolic or word-based)
  */
 export class OperatorParser {
-  static parse(tokenizer: QueryTokenizer, field: string, config: OQLConfig): OperatorToken {
+  static parse(
+    tokenizer: QueryTokenizer,
+    field: string,
+    config: OQLConfig
+  ): OperatorToken {
     tokenizer.skipWhitespace();
 
     const currentChar = tokenizer.peekChar();

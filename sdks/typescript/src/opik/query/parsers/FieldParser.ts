@@ -9,7 +9,7 @@ import {
   validateClosingQuote,
 } from "../validators";
 import type { FieldToken } from "../types";
-import type { OQLConfig } from "../config";
+import type { OQLConfig } from "../configs";
 
 /**
  * Parses a field reference, which may include a key (e.g., "metadata.version")

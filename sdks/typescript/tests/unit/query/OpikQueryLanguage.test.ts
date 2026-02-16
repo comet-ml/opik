@@ -140,19 +140,21 @@ describe("OpikQueryLanguage", () => {
     });
 
     it("should parse multiple filters with AND", () => {
-      const oql = new OpikQueryLanguage('name = "test" and thread_id = "1111"');
+      const oql = OpikQueryLanguage.forThreads(
+        'status = "active" and duration > 100'
+      );
       const parsed = oql.getFilterExpressions();
 
       expect(parsed).toHaveLength(2);
       expect(parsed![0]).toMatchObject({
-        field: "name",
+        field: "status",
         operator: "=",
-        value: "test",
+        value: "active",
       });
       expect(parsed![1]).toMatchObject({
-        field: "thread_id",
-        operator: "=",
-        value: "1111",
+        field: "duration",
+        operator: ">",
+        value: "100",
       });
     });
 
@@ -222,8 +224,8 @@ describe("OpikQueryLanguage", () => {
 
     it("should throw error for unsupported operator on field", () => {
       expect(() => {
-        new OpikQueryLanguage('tags >= "active"');
-      }).toThrow(/Operator >= is not supported for field tags/);
+        OpikQueryLanguage.forThreads('status >= "active"');
+      }).toThrow(/Operator >= is not supported for field status/);
     });
 
     it("should throw error for invalid usage field", () => {
@@ -234,7 +236,9 @@ describe("OpikQueryLanguage", () => {
 
     it("should throw error for OR connector", () => {
       expect(() => {
-        new OpikQueryLanguage('name = "test" or status = "active"');
+        OpikQueryLanguage.forThreads(
+          'status = "active" or duration > 100'
+        );
       }).toThrow(/OR is not currently supported/);
     });
 
@@ -260,6 +264,18 @@ describe("OpikQueryLanguage", () => {
       expect(() => {
         new OpikQueryLanguage('name.key = "test"');
       }).toThrow(/is not supported, only the fields/);
+    });
+
+    it("should throw error for trace field in prompt query", () => {
+      expect(() => {
+        OpikQueryLanguage.forPrompts('usage.total_tokens > 100');
+      }).toThrow(/is not supported/);
+    });
+
+    it("should throw error for span field in prompt query", () => {
+      expect(() => {
+        OpikQueryLanguage.forPrompts('model = "gpt-4"');
+      }).toThrow(/is not supported/);
     });
   });
 
@@ -295,34 +311,77 @@ describe("OpikQueryLanguage", () => {
   });
 
   describe("all supported fields", () => {
-    describe("trace fields (default config)", () => {
-      const traceFields = [
-        "id",
-        "name",
-        "start_time",
-        "end_time",
-        "input",
-        "output",
-        "tags",
-        "duration",
-        "thread_id",
-        "total_estimated_cost",
-      ];
+    const traceFields = [
+      "id",
+      "name",
+      "start_time",
+      "end_time",
+      "input",
+      "output",
+      "tags",
+      "duration",
+      "thread_id",
+      "total_estimated_cost",
+    ];
 
-      it.each(traceFields)('should parse field "%s"', (field) => {
-        const operator = field === "tags" ? "contains" : "=";
-        const oql = new OpikQueryLanguage(`${field} ${operator} "test"`);
-        const parsed = oql.getFilterExpressions();
+    const spanFields = ["model", "provider", "type"];
 
-        expect(parsed).toHaveLength(1);
-        expect(parsed![0].field).toBe(field);
-      });
+    const threadFields = ["status", "number_of_messages", "first_message"];
+
+    const promptFields = [
+      "id",
+      "name",
+      "description",
+      "created_by",
+      "last_updated_by",
+      "template_structure",
+      "tags",
+      "version_count",
+    ];
+
+    it.each(traceFields)('should parse trace field "%s"', (field) => {
+      const operator = field === "tags" ? "contains" : "=";
+      const oql = OpikQueryLanguage.forTraces(`${field} ${operator} "test"`);
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0].field).toBe(field);
+    });
+
+    it.each(spanFields)('should parse span field "%s"', (field) => {
+      const oql = OpikQueryLanguage.forSpans(`${field} = "test"`);
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0].field).toBe(field);
+    });
+
+    it.each(threadFields)('should parse thread field "%s"', (field) => {
+      const operator = field === "tags" ? "contains" : "=";
+      const oql = OpikQueryLanguage.forThreads(
+        `${field} ${operator} "test"`
+      );
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0].field).toBe(field);
+    });
+
+    it.each(promptFields)('should parse prompt field "%s"', (field) => {
+      const operator =
+        field === "tags" ? "contains" : field === "version_count" ? ">" : "=";
+      const value = field === "version_count" ? "5" : '"test"';
+      const oql = OpikQueryLanguage.forPrompts(`${field} ${operator} ${value}`);
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0].field).toBe(field);
     });
   });
 
   describe("complex queries", () => {
     it("should parse query with multiple conditions", () => {
-      const oql = new OpikQueryLanguage(
+      const oql = OpikQueryLanguage.forTraces(
         'name contains "test" and thread_id = "abc123" and duration > 100'
       );
       const parsed = oql.getFilterExpressions();
@@ -368,152 +427,47 @@ describe("OpikQueryLanguage", () => {
         value: "excluded",
       });
     });
-  });
 
-  describe("entity-specific configs", () => {
-    describe("traces", () => {
-      it("should support trace-specific fields", () => {
-        const oql = OpikQueryLanguage.forTraces('thread_id = "123"');
-        const parsed = oql.getFilterExpressions();
+    it("should parse prompt queries with multiple conditions", () => {
+      const oql = OpikQueryLanguage.forPrompts(
+        'tags contains "production" and version_count > 1 and created_by = "user@example.com"'
+      );
+      const parsed = oql.getFilterExpressions();
 
-        expect(parsed).toHaveLength(1);
-        expect(parsed![0]).toMatchObject({
-          field: "thread_id",
-          operator: "=",
-          value: "123",
-        });
+      expect(parsed).toHaveLength(3);
+      expect(parsed![0]).toMatchObject({
+        field: "tags",
+        operator: "contains",
+        value: "production",
       });
-
-      it("should support trace-specific feedback fields", () => {
-        const oql = OpikQueryLanguage.forTraces(
-          'span_feedback_scores.accuracy > 0.8'
-        );
-        const parsed = oql.getFilterExpressions();
-
-        expect(parsed).toHaveLength(1);
-        expect(parsed![0]).toMatchObject({
-          field: "span_feedback_scores",
-          key: "accuracy",
-          operator: ">",
-          value: "0.8",
-        });
+      expect(parsed![1]).toMatchObject({
+        field: "version_count",
+        operator: ">",
+        value: "1",
       });
-
-      it("should reject span-only fields", () => {
-        expect(() => {
-          OpikQueryLanguage.forTraces('trace_id = "123"');
-        }).toThrow(/is not supported/);
+      expect(parsed![2]).toMatchObject({
+        field: "created_by",
+        operator: "=",
+        value: "user@example.com",
       });
     });
 
-    describe("spans", () => {
-      it("should support span-specific fields", () => {
-        const oql = OpikQueryLanguage.forSpans('trace_id = "123"');
-        const parsed = oql.getFilterExpressions();
+    it("should parse prompt queries with date filters", () => {
+      const oql = OpikQueryLanguage.forPrompts(
+        'created_at >= "2024-01-01T00:00:00Z" and template_structure = "chat"'
+      );
+      const parsed = oql.getFilterExpressions();
 
-        expect(parsed).toHaveLength(1);
-        expect(parsed![0]).toMatchObject({
-          field: "trace_id",
-          operator: "=",
-          value: "123",
-        });
+      expect(parsed).toHaveLength(2);
+      expect(parsed![0]).toMatchObject({
+        field: "created_at",
+        operator: ">=",
+        value: "2024-01-01T00:00:00Z",
       });
-
-      it("should support model and provider fields", () => {
-        const oql = OpikQueryLanguage.forSpans(
-          'model = "gpt-4" and provider = "openai"'
-        );
-        const parsed = oql.getFilterExpressions();
-
-        expect(parsed).toHaveLength(2);
-        expect(parsed![0]).toMatchObject({
-          field: "model",
-          operator: "=",
-          value: "gpt-4",
-        });
-        expect(parsed![1]).toMatchObject({
-          field: "provider",
-          operator: "=",
-          value: "openai",
-        });
-      });
-
-      it("should reject trace-only fields", () => {
-        expect(() => {
-          OpikQueryLanguage.forSpans('thread_id = "123"');
-        }).toThrow(/is not supported/);
-      });
-    });
-
-    describe("threads", () => {
-      it("should support thread-specific fields", () => {
-        const oql = OpikQueryLanguage.forThreads(
-          'number_of_messages > 5 and first_message contains "hello"'
-        );
-        const parsed = oql.getFilterExpressions();
-
-        expect(parsed).toHaveLength(2);
-        expect(parsed![0]).toMatchObject({
-          field: "number_of_messages",
-          operator: ">",
-          value: "5",
-        });
-        expect(parsed![1]).toMatchObject({
-          field: "first_message",
-          operator: "contains",
-          value: "hello",
-        });
-      });
-
-      it("should support thread status field", () => {
-        const oql = OpikQueryLanguage.forThreads('status = "active"');
-        const parsed = oql.getFilterExpressions();
-
-        expect(parsed).toHaveLength(1);
-        expect(parsed![0]).toMatchObject({
-          field: "status",
-          operator: "=",
-          value: "active",
-        });
-      });
-
-      it("should reject span-only fields", () => {
-        expect(() => {
-          OpikQueryLanguage.forThreads('model = "gpt-4"');
-        }).toThrow(/is not supported/);
-      });
-    });
-
-    describe("dataset items", () => {
-      it("should support dataset-specific fields", () => {
-        const oql = OpikQueryLanguage.forDatasetItems('source = "manual"');
-        const parsed = oql.getFilterExpressions();
-
-        expect(parsed).toHaveLength(1);
-        expect(parsed![0]).toMatchObject({
-          field: "source",
-          operator: "=",
-          value: "manual",
-        });
-      });
-
-      it("should support data field with nested key", () => {
-        const oql = OpikQueryLanguage.forDatasetItems('data.input = "test"');
-        const parsed = oql.getFilterExpressions();
-
-        expect(parsed).toHaveLength(1);
-        expect(parsed![0]).toMatchObject({
-          field: "data",
-          key: "input",
-          operator: "=",
-          value: "test",
-        });
-      });
-
-      it("should reject trace-only fields", () => {
-        expect(() => {
-          OpikQueryLanguage.forDatasetItems('thread_id = "123"');
-        }).toThrow(/is not supported/);
+      expect(parsed![1]).toMatchObject({
+        field: "template_structure",
+        operator: "=",
+        value: "chat",
       });
     });
   });

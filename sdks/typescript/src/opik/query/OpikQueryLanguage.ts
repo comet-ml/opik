@@ -24,14 +24,11 @@ import {
   TraceOQLConfig,
   SpanOQLConfig,
   ThreadOQLConfig,
-  DatasetItemOQLConfig,
   PromptOQLConfig,
-} from "./config";
+} from "./configs";
 
 // Re-export types for backward compatibility
 export type { FilterExpression };
-
-const DEFAULT_CONFIG = new TraceOQLConfig();
 
 /**
  * This class implements a parser that can be used to convert a filter string into a list of filters that the BE expects.
@@ -52,7 +49,7 @@ export class OpikQueryLanguage {
 
   constructor(queryString?: string, config?: OQLConfig) {
     const normalizedQuery = queryString || "";
-    this.config = config || DEFAULT_CONFIG;
+    this.config = config || new TraceOQLConfig();
 
     this.filterExpressions = normalizedQuery
       ? this.parse(normalizedQuery)
@@ -63,22 +60,30 @@ export class OpikQueryLanguage {
       : null;
   }
 
+  /**
+   * Create an OpikQueryLanguage instance for trace filtering
+   */
   static forTraces(queryString?: string): OpikQueryLanguage {
     return new OpikQueryLanguage(queryString, new TraceOQLConfig());
   }
 
+  /**
+   * Create an OpikQueryLanguage instance for span filtering
+   */
   static forSpans(queryString?: string): OpikQueryLanguage {
     return new OpikQueryLanguage(queryString, new SpanOQLConfig());
   }
 
+  /**
+   * Create an OpikQueryLanguage instance for trace thread filtering
+   */
   static forThreads(queryString?: string): OpikQueryLanguage {
     return new OpikQueryLanguage(queryString, new ThreadOQLConfig());
   }
 
-  static forDatasetItems(queryString?: string): OpikQueryLanguage {
-    return new OpikQueryLanguage(queryString, new DatasetItemOQLConfig());
-  }
-
+  /**
+   * Create an OpikQueryLanguage instance for prompt filtering
+   */
   static forPrompts(queryString?: string): OpikQueryLanguage {
     return new OpikQueryLanguage(queryString, new PromptOQLConfig());
   }
@@ -119,7 +124,11 @@ export class OpikQueryLanguage {
    */
   private parseExpression(tokenizer: QueryTokenizer): FilterExpression {
     const field = FieldParser.parse(tokenizer, this.config);
-    const operator = OperatorParser.parse(tokenizer, this.getFieldName(field), this.config);
+    const operator = OperatorParser.parse(
+      tokenizer,
+      this.getFieldName(field),
+      this.config
+    );
     const value = ValueParser.parse(tokenizer);
 
     return this.buildExpression(field, operator, value);
