@@ -21,10 +21,12 @@ export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=
 ```python
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-provider = TracerProvider()
+resource = Resource.create({"service.name": "prompt-flow-app"})
+provider = TracerProvider(resource=resource)
 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 trace.set_tracer_provider(provider)
 
@@ -33,5 +35,11 @@ trace.set_tracer_provider(provider)
 
 ## Notes
 
-- Keep OTLP transport on HTTP/protobuf for Opik compatibility
-- Include `projectName` in OTEL headers if you want a non-default Opik project
+- Keep OTLP transport on HTTP/protobuf for Opik compatibility.
+- Include `projectName` in OTEL headers if you want a non-default Opik project.
+
+## Source references
+
+- [Prompt Flow tracing and OTEL setup](https://microsoft.github.io/promptflow/how-to-guides/tracing/trace-ui.html)
+- [Prompt Flow with OTEL collector](https://microsoft.github.io/promptflow/how-to-guides/tracing/trace-with-otel.html)
+- [OpenTelemetry Python exporters](https://opentelemetry.io/docs/languages/python/exporters/)

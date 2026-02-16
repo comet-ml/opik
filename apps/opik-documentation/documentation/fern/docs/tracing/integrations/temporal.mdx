@@ -24,22 +24,31 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
 export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
 ```
 
-## Example (Python worker)
+## Example (Python worker/client)
 
 ```python
+from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry import trace
+from temporalio.contrib.opentelemetry import TracingInterceptor
 
-provider = TracerProvider()
+resource = Resource.create({"service.name": "temporal-worker"})
+provider = TracerProvider(resource=resource)
 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 trace.set_tracer_provider(provider)
 
-# Start your Temporal worker/client as usual.
+# Pass interceptor to your Temporal Client and Worker.
+tracing_interceptor = TracingInterceptor()
 ```
 
 ## Notes
 
-- Use HTTP/protobuf OTLP exporter for Opik ingestion
-- Include `projectName` in headers so workflow traces land in the expected project
+- Temporal's Python SDK exposes `TracingInterceptor` for OTEL integration.
+- Include `projectName` in headers so workflow traces land in the expected project.
+
+## Source references
+
+- [Temporal Python SDK OpenTelemetry interceptor](https://github.com/temporalio/sdk-python?tab=readme-ov-file#opentelemetry-support)
+- [OpenTelemetry Python exporters](https://opentelemetry.io/docs/languages/python/exporters/)

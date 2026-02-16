@@ -22,11 +22,14 @@ export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=
 ```python
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-provider = TracerProvider()
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+resource = Resource.create({"service.name": "claude-agent-sdk-app"})
+provider = TracerProvider(resource=resource)
+exporter = OTLPSpanExporter()  # Reads OTEL_EXPORTER_OTLP_* env vars
+provider.add_span_processor(BatchSpanProcessor(exporter))
 trace.set_tracer_provider(provider)
 
 # Initialize and run Claude Agent SDK as usual.
@@ -34,5 +37,12 @@ trace.set_tracer_provider(provider)
 
 ## Notes
 
-- Use OTLP HTTP/protobuf exporter for Opik
-- Add `projectName` in `OTEL_EXPORTER_OTLP_HEADERS` for deterministic project routing
+- Claude Code's official telemetry docs currently describe OTEL metrics/events; this page documents trace export setup for an app that uses Claude SDK calls.
+- Use OTLP HTTP/protobuf exporter for Opik.
+- Add `projectName` in `OTEL_EXPORTER_OTLP_HEADERS` for deterministic project routing.
+
+## Source references
+
+- [Claude Code monitoring and OTEL configuration](https://docs.claude.com/en/docs/claude-code/monitoring-usage)
+- [OpenTelemetry Python exporters](https://opentelemetry.io/docs/languages/python/exporters/)
+- [OpenTelemetry SDK environment variables spec](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/)

@@ -20,19 +20,32 @@ export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=
 ## Example (Python FastAPI + LangServe)
 
 ```python
+from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-provider = TracerProvider()
+resource = Resource.create({"service.name": "langserve-app"})
+provider = TracerProvider(resource=resource)
 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 trace.set_tracer_provider(provider)
+
+app = FastAPI()
+FastAPIInstrumentor.instrument_app(app)
 
 # Register your LangServe routes and run FastAPI as usual.
 ```
 
 ## Notes
 
-- If you instrument LangChain/LangGraph underneath, spans will appear in the same trace
-- Use `projectName` in OTEL headers for project routing
+- If you instrument LangChain/LangGraph underneath, spans will appear in the same trace.
+- Use `projectName` in OTEL headers for project routing.
+
+## Source references
+
+- [LangServe repository](https://github.com/langchain-ai/langserve)
+- [OpenTelemetry Python FastAPI instrumentation](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/fastapi/fastapi.html)
+- [OpenTelemetry Python exporters](https://opentelemetry.io/docs/languages/python/exporters/)
