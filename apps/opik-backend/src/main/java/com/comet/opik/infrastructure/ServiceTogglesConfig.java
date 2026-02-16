@@ -53,5 +53,5 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;
     @JsonProperty
-    @NotNull boolean onlineScoringDirectDataEnabled;
+    @NotNull boolean onlineEvaluationOptionalVariableMappingEnabled;
 }

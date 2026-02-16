@@ -172,7 +172,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED,
   );
   const isDirectJsonPathEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.ONLINE_SCORING_DIRECT_DATA_ENABLED,
+    FeatureToggleKeys.ONLINE_EVALUATION_OPTIONAL_VARIABLE_MAPPING_ENABLED,
   );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();

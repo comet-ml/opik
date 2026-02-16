@@ -356,7 +356,7 @@ public class OnlineScoringEngine {
         JsonNode extract(TraceSection section);
     }
 
-    public static Map<String, Object> toFullSectionObjectData(Trace trace) {
+    static Map<String, Object> toFullSectionObjectData(Trace trace) {
         return toFullSectionObjectData(section -> switch (section) {
             case INPUT -> trace.input();
             case OUTPUT -> trace.output();
@@ -364,7 +364,7 @@ public class OnlineScoringEngine {
         });
     }
 
-    public static Map<String, Object> toFullSectionObjectData(Span span) {
+    static Map<String, Object> toFullSectionObjectData(Span span) {
         return toFullSectionObjectData(section -> switch (section) {
             case INPUT -> span.input();
             case OUTPUT -> span.output();
@@ -381,7 +381,7 @@ public class OnlineScoringEngine {
                 data.put(key, OBJECT_MAPPER.convertValue(jsonSection, Object.class));
             }
         }
-        return data;
+        return Collections.unmodifiableMap(data);
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
