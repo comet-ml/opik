@@ -263,20 +263,11 @@ const buildSystemPrompt = (
       : "updating the existing";
   const dataTypeLabel = context.dataType === "trace" ? "trace" : "thread";
 
-  // Use the catalog's generatePrompt for component documentation and data paths
+  // Use the catalog's generatePrompt for component documentation (no data paths table)
   const catalogPrompt = generatePrompt(customViewCatalog, {
-    includeDataPaths: true,
-    sourceData: context.data as SourceData,
-    maxDataDepth: 4,
+    includeDataPaths: false,
     existingTree: context.currentTree ?? undefined,
   });
-
-  // Extract widget catalog and data paths from the generated prompt
-  // The catalog prompt contains both, so we use it as widget_catalog
-  const widgetCatalog = catalogPrompt;
-
-  // Build data paths section
-  const dataPaths = `Available data paths are documented in the widget catalog above.`;
 
   // Build format instructions
   const formatInstructions = context.currentTree
@@ -292,14 +283,19 @@ const buildSystemPrompt = (
       )}\n\`\`\``
     : "";
 
+  // Build raw source data section (AI extracts paths directly from JSON)
+  const sourceDataSection = context.data
+    ? `## Source Data\n\nBelow is the raw ${dataTypeLabel} data. Use JSON Pointer paths (e.g., {"path": "/input"}) to bind widgets to this data:\n\n\`\`\`json\n${JSON.stringify(context.data, null, 2)}\n\`\`\``
+    : "";
+
   // If custom template provided, substitute variables
   if (customTemplate) {
     return customTemplate
       .replace(/\{\{intent_summary\}\}/g, context.intentSummary)
       .replace(/\{\{action\}\}/g, action)
       .replace(/\{\{data_type\}\}/g, dataTypeLabel)
-      .replace(/\{\{widget_catalog\}\}/g, widgetCatalog)
-      .replace(/\{\{data_paths\}\}/g, dataPaths)
+      .replace(/\{\{widget_catalog\}\}/g, catalogPrompt)
+      .replace(/\{\{data_paths\}\}/g, sourceDataSection)
       .replace(/\{\{format_instructions\}\}/g, formatInstructions)
       .replace(/\{\{current_tree\}\}/g, currentTreeSection);
   }
@@ -353,7 +349,7 @@ ${dataTypeDescription}
 - Bind dynamic data using { "path": "/json/pointer/path" } syntax (e.g., { "path": "/model" }, { "path": "/tools/0/name" })
 - Static values (like section titles) should be literal strings: "My Title"`;
 
-  return `${catalogPrompt}\n\n${SCHEMA_GENERATION_RULES}\n\n${formatInstructions}\n\n${contextSection}`;
+  return `${catalogPrompt}\n\n${SCHEMA_GENERATION_RULES}\n\n${formatInstructions}\n\n${sourceDataSection}\n\n${contextSection}`;
 };
 
 /**
