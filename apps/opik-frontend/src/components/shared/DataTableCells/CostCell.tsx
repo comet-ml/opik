@@ -5,6 +5,7 @@ import isNumber from "lodash/isNumber";
 
 import { formatCost, FormatCostOptions } from "@/lib/money";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
   SplitCellRenderContent,
@@ -18,7 +19,9 @@ const CostCell = <TData,>(context: CellContext<TData, string>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {formatCost(value, { modifier: "short" })}
+      <TooltipWrapper content={formatCost(value, { modifier: "full" })}>
+        <span>{formatCost(value)}</span>
+      </TooltipWrapper>
     </CellWrapper>
   );
 };
@@ -40,7 +43,11 @@ const CompareCostCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
     const value = get(item, accessor);
     if (!isNumber(value)) return "-";
 
-    return formatter(value, { modifier: "short" });
+    return (
+      <TooltipWrapper content={formatCost(value, { modifier: "full" })}>
+        <span>{formatter(value)}</span>
+      </TooltipWrapper>
+    );
   };
 
   return (
@@ -74,7 +81,7 @@ const CostAggregationCell = <TData,>(context: CellContext<TData, string>) => {
   let value = "-";
 
   if (isNumber(rawValue)) {
-    value = dataFormatter(rawValue, { modifier: "short" });
+    value = dataFormatter(rawValue, {});
   }
 
   return (
@@ -82,7 +89,13 @@ const CostAggregationCell = <TData,>(context: CellContext<TData, string>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <span className="truncate text-light-slate">{value}</span>
+      {isNumber(rawValue) ? (
+        <TooltipWrapper content={formatCost(rawValue, { modifier: "full" })}>
+          <span className="truncate text-light-slate">{value}</span>
+        </TooltipWrapper>
+      ) : (
+        <span className="truncate text-light-slate">{value}</span>
+      )}
     </CellWrapper>
   );
 };

@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -78,7 +79,9 @@ public record Span(
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @DecimalMin("0.0") BigDecimal totalEstimatedCost,
         String totalEstimatedCostVersion,
         @JsonView({
-                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration){
+                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
+        @JsonView({Span.View.Public.class, Span.View.Write.class,
+                ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @Schema(description = "Time to first token in milliseconds") @PositiveOrZero Double ttft){
 
     @Builder(toBuilder = true)
     public record SpanPage(
@@ -115,7 +118,8 @@ public record Span(
         COMMENTS("comments"),
         TOTAL_ESTIMATED_COST("total_estimated_cost"),
         TOTAL_ESTIMATED_COST_VERSION("total_estimated_cost_version"),
-        DURATION("duration");
+        DURATION("duration"),
+        TTFT("ttft");
 
         @JsonValue
         private final String value;
