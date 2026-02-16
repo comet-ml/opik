@@ -46,9 +46,7 @@ export const getScoreNamesFromRule = (rule: EvaluatorsRule): string[] => {
     return rule.code.schema?.map((s: LLMJudgeSchema) => s.name) || [];
   }
   if (isPythonCodeRule(rule)) {
-    const metricName = extractMetricNameFromPythonCode(
-      rule.code.metric || "",
-    );
+    const metricName = extractMetricNameFromPythonCode(rule.code.metric || "");
     return metricName ? [metricName] : [];
   }
   return [];
