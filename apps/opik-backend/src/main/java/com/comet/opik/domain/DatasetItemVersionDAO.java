@@ -2826,7 +2826,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static String serializeEvaluators(List<EvaluatorItem> evaluators) {
         if (evaluators == null || evaluators.isEmpty()) {
-            return "[]";
+            return EvaluatorItem.EMPTY_LIST_JSON;
         }
         return JsonUtils.writeValueAsString(evaluators);
     }

@@ -15,4 +15,6 @@ public record EvaluatorItem(
         @NotBlank String name,
         @NotNull EvaluatorType type,
         @NotNull JsonNode config) {
+
+    public static final String EMPTY_LIST_JSON = "[]";
 }

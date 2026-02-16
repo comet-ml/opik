@@ -189,7 +189,7 @@ class DatasetItemResultMapper {
             return null;
         }
         return Optional.ofNullable(row.get("evaluators", String.class))
-                .filter(s -> !s.isBlank() && !"[]".equals(s))
+                .filter(s -> !s.isBlank() && !EvaluatorItem.EMPTY_LIST_JSON.equals(s))
                 .map(s -> JsonUtils.readValue(s, EVALUATOR_LIST_TYPE))
                 .orElse(null);
     }
