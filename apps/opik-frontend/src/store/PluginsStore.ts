@@ -7,6 +7,7 @@ import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
 import { WidgetConfigDialogAddStepProps } from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep";
+import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -25,6 +26,7 @@ type PluginStore = {
   WorkspaceSelector: React.ComponentType | null;
   StartPreference: React.ComponentType | null;
   WidgetConfigDialogAddStep: React.ComponentType<WidgetConfigDialogAddStepProps> | null;
+  DashboardWidgetGrid: React.ComponentType<DashboardWidgetGridProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -45,6 +47,7 @@ const PLUGIN_NAMES = [
   "WorkspaceSelector",
   "StartPreference",
   "WidgetConfigDialogAddStep",
+  "DashboardWidgetGrid",
   "init",
 ];
 
@@ -63,6 +66,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   WorkspaceSelector: null,
   StartPreference: null,
   WidgetConfigDialogAddStep: null,
+  DashboardWidgetGrid: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

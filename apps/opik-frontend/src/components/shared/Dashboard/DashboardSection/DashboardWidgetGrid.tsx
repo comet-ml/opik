@@ -23,27 +23,24 @@ import {
   selectWidgetResolver,
 } from "@/store/DashboardStore";
 import DashboardWidgetGridEmpty from "./DashboardWidgetGridEmpty";
-import useUserPermission from "@/plugins/comet/useUserPermission";
 import DashboardWidgetDisabled from "../DashboardWidget/DashboardWidgetDisabled";
 
 const ResponsiveGridLayout = WidthProvider(GridLayout);
 
-interface DashboardWidgetGridProps {
+export interface DashboardWidgetGridProps {
   sectionId: string;
   widgets: DashboardWidget[];
   layout: DashboardLayout;
 }
 
 const DashboardWidgetGrid: React.FunctionComponent<
-  DashboardWidgetGridProps
-> = ({ sectionId, widgets, layout }) => {
+  DashboardWidgetGridProps & { canViewExperiments: boolean }
+> = ({ sectionId, widgets, layout, canViewExperiments }) => {
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,
   );
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const updateLayout = useDashboardStore(selectUpdateLayout);
-
-  const { canViewExperiments } = useUserPermission();
 
   const handleAddWidget = () => {
     onAddEditWidgetCallback?.({ sectionId });
