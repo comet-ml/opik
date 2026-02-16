@@ -662,7 +662,10 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setPopupOpen(true)}>
+              <DropdownMenuItem
+                onClick={() => setPopupOpen(true)}
+                variant="destructive"
+              >
                 <Trash className="mr-2 size-4" />
                 Delete
               </DropdownMenuItem>
