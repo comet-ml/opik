@@ -332,10 +332,11 @@ async def get_agent(
         f"api_base={proxy_base_url}, workspace={current_user.workspace_name}, "
         f"has_session_token={current_user.session_token is not None}"
     )
-    
+
     import litellm
+
     litellm.disable_aiohttp_transport = True
-    
+
     llm_model = LiteLlm(
         model_name,
         api_base=proxy_base_url,

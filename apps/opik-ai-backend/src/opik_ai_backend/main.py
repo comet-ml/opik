@@ -18,6 +18,7 @@ if settings.new_relic_license_key:
     newrelic.agent.initialize()
 
 import aiohttp
+import openai
 import sentry_sdk
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
@@ -612,7 +613,9 @@ def get_fast_api_app(
     ):
         """Set or update feedback for an OpikAssist conversation session."""
         if settings.opik_internal_url is None:
-            logger.debug("Internal monitoring not configured, skipping feedback submission")
+            logger.debug(
+                "Internal monitoring not configured, skipping feedback submission"
+            )
             return {"status": "ok"}
 
         # Validate feedback value
@@ -686,7 +689,9 @@ def get_fast_api_app(
     ):
         """Remove feedback for an OpikAssist conversation session."""
         if settings.opik_internal_url is None:
-            logger.debug("Internal monitoring not configured, skipping feedback deletion")
+            logger.debug(
+                "Internal monitoring not configured, skipping feedback deletion"
+            )
             return
 
         session_id = get_session_id_from_trace_id(trace_id)
@@ -810,7 +815,10 @@ def get_fast_api_app(
                     sse_event_str = process_event_for_sse(event)
                     if sse_event_str:
                         yield sse_event_str
-                logger.debug(f"Runner completed for trace {trace_id}, {event_count} events")
+            except openai.OpenAIError as e:
+                logger.exception("LLM provider error in event_generator: %s", e)
+                error_msg = json.dumps({"error": str(e)})
+                yield f"data: {error_msg}\n\n"
             except Exception as e:
                 logger.exception("Error in event_generator: %s", e)
                 error_msg = json.dumps(
@@ -819,6 +827,10 @@ def get_fast_api_app(
                     }
                 )
                 yield f"data: {error_msg}\n\n"
+
+            logger.debug(
+                "Runner completed for trace %s, %d events", trace_id, event_count
+            )
 
         # Returns a streaming response with the proper media type for SSE
         return StreamingResponse(
