@@ -23,7 +23,11 @@ import {
   COLUMN_NAME_ID,
   SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
-import { getExperimentScore, RowWithScores } from "./scoresUtils";
+import {
+  getExperimentScore,
+  parseScoreColumnId,
+  RowWithScores,
+} from "@/lib/feedback-scores";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   buildGroupFieldName,
@@ -159,6 +163,7 @@ export const useExperimentsTableConfig = <
       ...dynamicScoresColumns.map(
         ({ label, id, columnType, type: scoreType }) => {
           const actualType = scoreType || SCORE_TYPE_FEEDBACK;
+          const scoreName = parseScoreColumnId(id)?.scoreName;
 
           const columnData: ColumnData<T> = {
             id,
@@ -172,6 +177,7 @@ export const useExperimentsTableConfig = <
             customMeta: {
               accessorFn: (aggregation: ExperimentsAggregations) =>
                 getExperimentScore(id, aggregation)?.value,
+              scoreName,
             },
           };
 

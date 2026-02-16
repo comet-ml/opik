@@ -207,6 +207,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         """
         info_dict: Dict[str, Any] = {
             "name": self.name,
+            "template_structure": "chat",
             "version": {
                 "template": self.template,
             },

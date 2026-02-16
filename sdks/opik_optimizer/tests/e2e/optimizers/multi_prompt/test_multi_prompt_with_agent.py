@@ -45,7 +45,7 @@ def create_multi_prompt_dict() -> dict[str, ChatPrompt]:
                 "and identify the main topic from the input."
             ),
             user="{text}",
-            model="openai/gpt-4o-mini",
+            model="openai/gpt-5-nano",
         ),
         "respond": ChatPrompt(
             name="respond",
@@ -54,7 +54,7 @@ def create_multi_prompt_dict() -> dict[str, ChatPrompt]:
                 "based on the analysis provided."
             ),
             user="Analysis: {analysis}\n\nOriginal question: {text}",
-            model="openai/gpt-4o-mini",
+            model="openai/gpt-5-nano",
         ),
     }
 
