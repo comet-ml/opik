@@ -84,7 +84,7 @@ const trackedOpenAI = trackOpenAI(openai);
 async function streamingExample() {
   // Create a streaming chat completion
   const stream = await trackedOpenAI.chat.completions.create({
-    model: "gpt-3.5-turbo",
+    model: "gpt-5-nano",
     messages: [{ role: "user", content: "What is streaming?" }],
     stream: true,
     // Include usage in the stream
