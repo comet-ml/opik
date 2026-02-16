@@ -13,6 +13,10 @@ title: Observability for OpenAI Codex with Opik
 
 Use this guide if you run Codex (CLI/IDE/app) and want its OTEL trace exporter to send telemetry to Opik.
 
+<Callout type="info">
+The block structure below follows the current Codex runtime config shape used in local `config.toml` (`[otel.trace_exporter.otlp-http]`).
+</Callout>
+
 ## Where to configure Codex
 
 Codex reads configuration from:
@@ -95,6 +99,7 @@ Applies when:
 You have enabled Codex OTEL export and selected OTLP/HTTP exporter in config.
 
 Required fields:
+- `trace_exporter = "otlp-http"` under `[otel]`
 - `otel.trace_exporter` exporter block (`otlp-http`)
 - `endpoint`
 - `protocol` (`binary` or `json`, binary recommended)
@@ -108,6 +113,7 @@ Minimal valid config:
 
 ```toml
 [otel]
+trace_exporter = "otlp-http"
 log_user_prompt = false
 
 [otel.trace_exporter.otlp-http]
@@ -116,11 +122,17 @@ protocol = "binary"
 headers = { "Authorization" = "<your-api-key>", "Comet-Workspace" = "<your-workspace>", "projectName" = "<your-project-name>" }
 ```
 
+## Validation
+
+1. Run a Codex session after updating `config.toml`.
+2. Confirm OTLP HTTP requests are sent to `/otel/v1/traces`.
+3. Verify traces appear in the expected Opik workspace/project.
+
 ## Notes
 
 - Codex telemetry export is opt-in.
 - Keep `log_user_prompt = false` unless your policy explicitly allows prompt text export.
-- Codex docs also reference `otel.exporter` settings in some examples. Prefer the key path documented in the config reference for your installed Codex version.
+- If your Codex build uses a different exporter key path, align with your installed version's config reference.
 
 ## Source references
 

@@ -60,6 +60,10 @@ Required inputs:
 - interceptor attached to both paths where needed
 - OTEL endpoint/header env vars
 
+Optional inputs:
+- explicit resource/service-name attributes
+- collector-based enrichment/sampling
+
 Minimal valid setup:
 
 ```python
@@ -73,6 +77,12 @@ tracing_interceptor = TracingInterceptor()
 # client = await Client.connect("localhost:7233", interceptors=[tracing_interceptor])
 # worker = Worker(client, task_queue="my-task-queue", workflows=[...], activities=[...], interceptors=[tracing_interceptor])
 ```
+
+## Validation
+
+1. Start worker and client with `TracingInterceptor`.
+2. Execute a workflow with at least one activity.
+3. Confirm workflow/activity spans land in the expected Opik project.
 
 ## Source references
 

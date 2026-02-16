@@ -37,6 +37,7 @@ Required fields:
 
 Optional fields:
 - `quarkus.otel.exporter.otlp.traces.headers` (`projectName` strongly recommended)
+- `quarkus.application.name` (for `service.name` attribution)
 
 Minimal valid setup:
 
@@ -47,6 +48,12 @@ quarkus.otel.exporter.otlp.traces.endpoint=https://www.comet.com/opik/api/v1/pri
 quarkus.otel.exporter.otlp.traces.protocol=http/protobuf
 quarkus.otel.exporter.otlp.traces.headers=Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>
 ```
+
+## Validation
+
+1. Start your Quarkus app with OTEL enabled.
+2. Trigger a LangChain4j-backed endpoint/action.
+3. Confirm spans with your configured `service.name` and project headers arrive in Opik.
 
 ## Source references
 
