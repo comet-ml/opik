@@ -172,8 +172,8 @@ class RemoteAuthService implements AuthService {
         var credentials = validateApiKeyAndGetCredentials(workspaceName, apiKey, path, requiredPermissions);
         if (credentials.shouldCache()) {
             log.debug("Caching user and workspace id for API key");
-            cacheService.cache(apiKey, workspaceName, credentials.userName(), credentials.workspaceId(),
-                    credentials.workspaceName(), credentials.quotas);
+            cacheService.cache(apiKey, workspaceName, requiredPermissions, credentials.userName(),
+                    credentials.workspaceId(), credentials.workspaceName(), credentials.quotas);
         }
         setCredentialIntoContext(credentials.userName(), credentials.workspaceId(),
                 Optional.ofNullable(credentials.workspaceName()).orElse(workspaceName), credentials.quotas);
@@ -182,7 +182,8 @@ class RemoteAuthService implements AuthService {
 
     private ValidatedAuthCredentials validateApiKeyAndGetCredentials(String workspaceName, String apiKey, String path,
             List<String> requiredPermissions) {
-        var credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName);
+        var credentials = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName,
+                requiredPermissions);
         if (credentials.isEmpty()) {
             log.debug("User and workspace id not found in cache for API key");
             try (var response = client.target(URI.create(reactServiceUrl.url()))

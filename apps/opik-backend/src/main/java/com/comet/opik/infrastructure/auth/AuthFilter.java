@@ -47,8 +47,8 @@ public class AuthFilter implements ContainerRequestFilter {
 
     @SuppressWarnings("unchecked")
     private List<String> getRequiredPermissions(ContainerRequestContext context) {
-        Object fromRequest = context.getProperty(AuthDynamicFeature.REQUIRED_PERMISSIONS_PROPERTY);
-        return fromRequest instanceof List ? (List<String>) fromRequest : List.of();
+        Object permissionsValue = context.getProperty(AuthDynamicFeature.REQUIRED_PERMISSIONS_PROPERTY);
+        return permissionsValue instanceof List ? (List<String>) permissionsValue : List.of();
     }
 
     HttpHeaders getHttpHeaders(ContainerRequestContext context) {
