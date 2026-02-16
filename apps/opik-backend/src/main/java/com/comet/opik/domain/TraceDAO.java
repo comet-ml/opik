@@ -57,7 +57,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.ErrorInfo.ERROR_INFO_TYPE;
 import static com.comet.opik.api.Trace.TracePage;
@@ -76,6 +75,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.ValidationUtils.CLICKHOUSE_FIXED_STRING_UUID_FIELD_NULL_VALUE;
 import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 import static java.util.function.Predicate.not;
+import static java.util.stream.Collectors.*;
 
 @ImplementedBy(TraceDAOImpl.class)
 interface TraceDAO {
@@ -105,6 +105,8 @@ interface TraceDAO {
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId, Connection connection);
 
     Mono<UUID> getProjectIdFromTrace(UUID traceId);
+
+    Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(List<UUID> traceIds);
 
     Flux<BiInformation> getTraceBIInformation(Map<UUID, Instant> excludedProjectIds);
 
@@ -1876,6 +1878,18 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    private static final String SELECT_PROJECT_IDS_BY_TRACE_IDS = """
+            SELECT
+                id,
+                any(project_id) AS project_id
+            FROM traces
+            WHERE id IN :trace_ids
+            AND workspace_id = :workspace_id
+            GROUP BY id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
     private static final String SELECT_TRACES_STATS = """
              WITH spans_data AS (
                 SELECT
@@ -2821,7 +2835,7 @@ class TraceDAOImpl implements TraceDAO {
                         .orElse(null))
                 .metadata(metadata)
                 .tags(Optional.ofNullable(getValue(exclude, Trace.TraceField.TAGS, row, "tags", String[].class))
-                        .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
+                        .map(tags -> Arrays.stream(tags).collect(toSet()))
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
                 .comments(Optional
@@ -3062,12 +3076,12 @@ class TraceDAOImpl implements TraceDAO {
                             .stream()
                             .flatMap(List::stream)
                             .map(SortingField::field)
-                            .collect(Collectors.toSet());
+                            .collect(toSet());
 
                     Set<String> fields = exclude.stream()
                             .map(Trace.TraceField::getValue)
                             .filter(field -> !sortingFields.contains(field))
-                            .collect(Collectors.toSet());
+                            .collect(toSet());
 
                     // check feedback_scores as well because it's a special case
                     if (fields.contains(Trace.TraceField.FEEDBACK_SCORES.getValue())
@@ -3377,7 +3391,7 @@ class TraceDAOImpl implements TraceDAO {
                                     StatsMapper.mapProjectStats(row, "trace_count"))))
                             .map(Map::entrySet)
                             .flatMap(Flux::fromIterable)
-                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
                 });
     }
 
@@ -3462,6 +3476,32 @@ class TraceDAOImpl implements TraceDAO {
 
     @Override
     @WithSpan
+    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(@NonNull List<UUID> traceIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(traceIds), "Argument 'traceIds' must not be empty");
+
+        log.info("Getting project_ids for '{}' trace_ids", traceIds.size());
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(SELECT_PROJECT_IDS_BY_TRACE_IDS, "get_project_ids_by_trace_ids",
+                    workspaceId, traceIds.size());
+
+            var statement = connection.createStatement(template.render())
+                    .bind("trace_ids", traceIds.toArray(UUID[]::new));
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> Map.entry(row.get("id", UUID.class),
+                            row.get("project_id", UUID.class))))
+                    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue))
+                    .doFinally(signalType -> {
+                        if (signalType == SignalType.ON_COMPLETE) {
+                            log.info("Got project_ids for '{}' trace_ids", traceIds.size());
+                        }
+                    });
+        }));
+    }
+
+    @Override
+    @WithSpan
     public Mono<Set<UUID>> getTraceIdsByThreadIds(@NonNull UUID projectId, @NonNull List<String> threadIds,
             @NonNull Connection connection) {
         Preconditions.checkArgument(!threadIds.isEmpty(), "threadIds must not be empty");
@@ -3481,7 +3521,7 @@ class TraceDAOImpl implements TraceDAO {
             return Mono.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment))
                     .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("id", UUID.class)))
-                    .collect(Collectors.toSet());
+                    .collect(toSet());
         });
     }
 
