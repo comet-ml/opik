@@ -25,7 +25,7 @@ import ProjectsPage from "@/components/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/components/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/components/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/components/pages/PromptsPage/PromptsPage";
-import PromptPage from "@/components/pages/PromptPage/PromptPage";
+import PromptPage from "@/components/pages/PromptPage/PromptPageEntry";
 import RedirectProjects from "@/components/redirect/RedirectProjects";
 import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";

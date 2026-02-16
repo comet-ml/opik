@@ -27,6 +27,7 @@ type PluginStore = {
   StartPreference: React.ComponentType | null;
   WidgetConfigDialogAddStep: React.ComponentType<WidgetConfigDialogAddStepProps> | null;
   DashboardWidgetGrid: React.ComponentType<DashboardWidgetGridProps> | null;
+  PromptPage: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -48,6 +49,7 @@ const PLUGIN_NAMES = [
   "StartPreference",
   "WidgetConfigDialogAddStep",
   "DashboardWidgetGrid",
+  "PromptPage",
   "init",
 ];
 
@@ -67,6 +69,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   StartPreference: null,
   WidgetConfigDialogAddStep: null,
   DashboardWidgetGrid: null,
+  PromptPage: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
