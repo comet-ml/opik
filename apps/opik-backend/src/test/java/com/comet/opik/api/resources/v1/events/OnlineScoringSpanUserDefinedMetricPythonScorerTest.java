@@ -299,7 +299,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
 
             SpanUserDefinedMetricPythonCode code = new SpanUserDefinedMetricPythonCode(
                     "def score(input, output): return [...]",
-                    Map.of("input", "input", "output", "output"));
+                    null);
 
             SpanToScoreUserDefinedMetricPython message = SpanToScoreUserDefinedMetricPython.builder()
                     .span(span)
