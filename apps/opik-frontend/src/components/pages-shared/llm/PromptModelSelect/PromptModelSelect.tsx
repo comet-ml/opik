@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search, Settings2 } from "lucide-react";
 import { ListAction } from "@/components/ui/list-action";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Input } from "@/components/ui/input";
@@ -328,6 +328,7 @@ const PromptModelSelect = ({
                 setOpenConfigDialog(true);
               }}
             >
+              <Settings2 className="size-3.5 shrink-0" />
               Manage AI providers
             </ListAction>
           </div>
