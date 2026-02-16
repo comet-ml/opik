@@ -1,5 +1,5 @@
 import useUserPermission from "@/plugins/comet/useUserPermission";
-import StartPreferenceContent from "@/components/shared/OnboardingOverlay/steps/StartPreferenceContent";
+import StartPreferenceContent from "@/components/shared/OnboardingOverlay/steps/StartPreference";
 
 const StartPreference = () => {
   const { canViewExperiments } = useUserPermission();
