@@ -25,8 +25,6 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { transformExperimentScores } from "@/lib/feedback-scores";
-import useUserPermission from "@/plugins/comet/useUserPermission";
-
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
 export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
@@ -89,10 +87,11 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-const EvaluationSection: React.FunctionComponent = () => {
+const EvaluationSection: React.FC<{ canViewExperiments: boolean }> = ({
+  canViewExperiments,
+}) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { canViewExperiments } = useUserPermission();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);

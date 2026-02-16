@@ -1,6 +1,6 @@
 import React from "react";
 import ObservabilitySection from "@/components/pages/HomePage/ObservabilitySection";
-import EvaluationSection from "@/components/pages/HomePage/EvaluationSection";
+import EvaluationSection from "@/components/pages/HomePage/EvaluationSectionEntry";
 import GetStartedSection from "@/components/pages/HomePage/GetStartedSection";
 import { calculateWorkspaceName } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
