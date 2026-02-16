@@ -67,14 +67,11 @@ class DatasetItem(pydantic.BaseModel):
     def get_content(
         self,
         include_id: bool = False,
-        include_evaluators: bool = False,
-        include_execution_policy: bool = False,
     ) -> Dict[str, Any]:
         """
-        Get the content of the dataset item (extra fields).
+        Get the data content of the dataset item (extra fields).
 
-        Note: evaluators and execution_policy are not included in content
-        as they are sent via dedicated API fields.
+        Note: evaluators and execution_policy are not included in data content
 
         Args:
             include_id: Whether to include the item ID in the content.
@@ -90,11 +87,14 @@ class DatasetItem(pydantic.BaseModel):
 
     def content_hash(self) -> str:
         content = self.get_content()
-        # Convert the dictionary to a JSON string with sorted keys for consistency
-        json_string = json.dumps(content, sort_keys=True)
 
-        # Compute the SHA256 hash of the JSON string
+        if self.evaluators is not None:
+            content["evaluators"] = [e.model_dump() for e in self.evaluators]
+
+        if self.execution_policy is not None:
+            content["execution_policy"] = self.execution_policy.model_dump()
+
+        json_string = json.dumps(content, sort_keys=True)
         hash_object = hashlib.sha256(json_string.encode())
 
-        # Return the hexadecimal representation of the hash
         return hash_object.hexdigest()
