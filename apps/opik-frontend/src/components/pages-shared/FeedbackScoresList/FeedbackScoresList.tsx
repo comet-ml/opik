@@ -20,7 +20,7 @@ const FeedbackScoresList: React.FunctionComponent<FeedbackScoresListProps> = ({
   return (
     <div className={cn("flex min-h-7 items-center gap-2", className)}>
       <TooltipWrapper content="Feedback scores">
-        <PenLine className="mx-1 size-4 shrink-0" />
+        <PenLine className="mx-1 size-4 shrink-0 text-muted-slate" />
       </TooltipWrapper>
       <div className="flex gap-1 overflow-x-auto">
         {scores.map((score) => (
