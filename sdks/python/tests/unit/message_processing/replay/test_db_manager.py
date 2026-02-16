@@ -177,15 +177,22 @@ class TestRegisterMessage:
         row = cursor.fetchone()
         assert row[0] == db_manager.MessageStatus.failed
 
-    def test_register_message__manager_not_initialized__ignores_message(self):
+    def test_register_message__manager_failed__ignores_message(self):
         """Test that registering a message on an uninitialized manager is ignored."""
         conn = sqlite3.connect(":memory:", check_same_thread=False)
-        conn.execute("CREATE TABLE messages (id INTEGER)")  # Force init failure
+        conn.execute(
+            "CREATE TABLE messages (id INTEGER)"
+        )  # Force failure on a register message operation
         mgr = db_manager.DBManager(conn=conn, batch_size=10, batch_replay_delay=0.1)
 
         try:
             message = _create_trace_message(message_id=1)
-            mgr.register_message(message)  # Should not raise
+            with pytest.raises(sqlite3.OperationalError):
+                mgr.register_message(message)  # the first operation should fail
+
+            mgr.register_message(
+                message
+            )  # Should not raise as DBManager marked as failed
         finally:
             mgr.close()
 

@@ -81,22 +81,41 @@ class ReplayManager(threading.Thread):
 
     def register_message(self, message: messages.BaseMessage) -> None:
         """Registers a message to be replayed if the connection is lost."""
-        self._db_manager.register_message(message)
+        try:
+            self._db_manager.register_message(message)
+        except Exception as ex:
+            LOGGER.error(
+                "Failed to register message for replay, reason: %s", ex, exc_info=True
+            )
 
     def unregister_message(self, message_id: int) -> None:
         """Unregisters a message from being replayed if the connection is lost."""
-        self._db_manager.update_message(
-            message_id, status=db_manager.MessageStatus.delivered
-        )
+        try:
+            self._db_manager.update_message(
+                message_id, status=db_manager.MessageStatus.delivered
+            )
+        except Exception as ex:
+            LOGGER.error(
+                "Failed to un-register message from replay, reason: %s",
+                ex,
+                exc_info=True,
+            )
 
     def message_sent_failed(
         self, message_id: int, failure_reason: Optional[str] = None
     ) -> None:
         """Notifies the manager that a message was not sent due to a connection failure."""
-        self._monitor.connection_failed(failure_reason=failure_reason)
-        self._db_manager.update_message(
-            message_id, status=db_manager.MessageStatus.failed
-        )
+        try:
+            self._monitor.connection_failed(failure_reason=failure_reason)
+            self._db_manager.update_message(
+                message_id, status=db_manager.MessageStatus.failed
+            )
+        except Exception as ex:
+            LOGGER.error(
+                "Failed to mark message as send-failed in replay manager, reason: %s",
+                ex,
+                exc_info=True,
+            )
 
     def set_replay_callback(self, callback: types.ReplayCallback) -> None:
         """Sets the callback to be invoked when replaying failed messages."""
@@ -143,11 +162,18 @@ class ReplayManager(threading.Thread):
     def _replay_failed_messages(self) -> None:
         with self._replay_lock:
             self._check_replay_callback()
-            # ignore MyPy check because already asserted above
-            replayed = self._db_manager.replay_failed_messages(self._replay_callback)  # type: ignore
+            try:
+                # ignore MyPy check because already asserted above
+                replayed = self._db_manager.replay_failed_messages(
+                    self._replay_callback
+                )  # type: ignore
 
-            if replayed > 0:
-                LOGGER.info(
-                    "Replayed %d messages that was not sent due to server connection issues",
-                    replayed,
+                if replayed > 0:
+                    LOGGER.info(
+                        "Replayed %d messages that was not sent due to server connection issues",
+                        replayed,
+                    )
+            except Exception as ex:
+                LOGGER.error(
+                    "Failed to replay failed messages, reason: %s", ex, exc_info=True
                 )

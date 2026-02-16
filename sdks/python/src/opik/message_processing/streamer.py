@@ -91,6 +91,7 @@ class Streamer:
 
         self._batch_preprocessor.stop()  # stopping causes adding remaining batch messages to the queue
         self._fallback_replay_manager.close()  # stopping can causes replaying of failed messages if connection is restored
+        self._fallback_replay_manager.join(timeout)
 
         self.flush(timeout)
         self._close_queue_consumers()

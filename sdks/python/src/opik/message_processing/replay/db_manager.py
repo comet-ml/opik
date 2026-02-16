@@ -1,3 +1,13 @@
+"""On-disk SQLite message store used by the replay flow to persist messages
+that failed to reach the Opik server. DBManager exposes helpers for the full
+message lifecycle: register_message(s), fetch_failed_messages_batched, and
+replay_failed_messages (which accepts a ReplayCallback, typically Streamer.put,
+to re-inject messages). The manager tracks three states — initialized, closed,
+and failed — and if the underlying database becomes unavailable, it marks itself
+as failed and logs that resiliency features are disabled. The standalone helper
+db_message_to_message raises ValueError for unsupported message types.
+"""
+
 import logging
 import os
 import shutil
@@ -145,7 +155,7 @@ class DBManager:
         except Exception as ex:
             msg = f"Database schema creation failed, reason: {ex}"
             self._mark_as_db_failed(msg)
-            LOGGER.debug(msg, exc_info=True)
+            LOGGER.warning(msg, exc_info=True)
 
     def close(self) -> None:
         """
@@ -223,12 +233,10 @@ class DBManager:
                 with self.conn:
                     self.conn.execute("INSERT INTO messages VALUES (?,?,?,?)", values)
             except Exception as ex:
-                msg = (
-                    "register_message: failed to insert message into DB, reason: %r"
-                    % ex
+                self._mark_as_db_failed(
+                    f"register_message: failed to insert message into DB, reason: {ex}"
                 )
-                self._mark_as_db_failed(msg)
-                LOGGER.debug(msg, exc_info=True)
+                raise
 
     def register_messages(
         self,
@@ -272,9 +280,10 @@ class DBManager:
                         "INSERT INTO messages VALUES (?,?,?,?)", values
                     )
             except Exception as ex:
-                msg = f"register_messages: failed to insert messages into DB, reason: {ex}"
-                self._mark_as_db_failed(msg)
-                LOGGER.debug(msg, exc_info=True)
+                self._mark_as_db_failed(
+                    f"register_messages: failed to insert messages into DB, reason: {ex}"
+                )
+                raise
 
     def _clean_message_leftovers(self, message_id: int) -> None:
         # Cleanup message file
@@ -366,9 +375,10 @@ class DBManager:
                             status,
                         )
             except Exception as ex:
-                msg = f"update_messages_batch: failed to update messages batch in the DB, reason: {ex}"
-                self._mark_as_db_failed(msg)
-                LOGGER.debug(msg, exc_info=True)
+                self._mark_as_db_failed(
+                    f"update_messages_batch: failed to update messages batch in the DB, reason: {ex}"
+                )
+                raise
 
     def update_message(self, message_id: int, status: MessageStatus) -> None:
         """
@@ -414,11 +424,10 @@ class DBManager:
                             (status, message_id),
                         )
             except Exception as ex:
-                msg = (
+                self._mark_as_db_failed(
                     f"update_message: failed to update message in the DB, reason: {ex}"
                 )
-                self._mark_as_db_failed(msg)
-                LOGGER.debug(msg, exc_info=True)
+                raise
 
     def replay_failed_messages(self, replay_callback: ReplayCallback) -> int:
         """
@@ -466,10 +475,10 @@ class DBManager:
                             len(db_messages),
                         )
                 except Exception as ex:
-                    msg = f"replay_failed_messages: failed to update messages in the DB, reason: {ex}"
-                    self._mark_as_db_failed(msg)
-                    LOGGER.debug(msg, exc_info=True)
-                    return total_replayed
+                    self._mark_as_db_failed(
+                        f"replay_failed_messages: failed to update messages in the DB, reason: {ex}"
+                    )
+                    raise
 
                 replayed = self._replay_messages(
                     db_messages=db_messages, replay_callback=replay_callback
@@ -607,11 +616,18 @@ class DBManager:
         last_seen_id = -1
         while True:
             batch: List[DBMessage] = []
-            rows = self.conn.execute(
-                "SELECT message_id, message_type, message_json FROM messages "
-                "WHERE status = ? AND message_id > ? ORDER BY message_id LIMIT ?",
-                (MessageStatus.failed, last_seen_id, batch_size),
-            )
+            try:
+                rows = self.conn.execute(
+                    "SELECT message_id, message_type, message_json FROM messages "
+                    "WHERE status = ? AND message_id > ? ORDER BY message_id LIMIT ?",
+                    (MessageStatus.failed, last_seen_id, batch_size),
+                )
+            except Exception as ex:
+                self._mark_as_db_failed(
+                    f"fetch_failed_messages_batched: failed to fetch failed messages from the DB, reason: {ex}"
+                )
+                raise
+
             for row in rows:
                 batch.append(
                     DBMessage(

@@ -70,16 +70,18 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             LOGGER.debug("Unknown type of message - %s", message_type.__name__)
             return
 
-        # TODO: insert here adding new messages to the reply manager
+        # register a message with the reply manager
+        self._replay_manager.register_message(message)
 
+        should_unregister_message = True
         try:
             handler(message)
 
-            # TODO: insert here marking message as delivered
         except rest_api_core.ApiError as exception:
             if exception.status_code == 409:
                 # sometimes a retry mechanism works in a way that it sends the same request 2 times.
                 # if the backend rejects the second request, we don't want users to see an error.
+                self._replay_manager.unregister_message(message.message_id)
                 return
             elif exception.status_code == 429:
                 if exception.headers is not None:
@@ -118,13 +120,16 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 exc_info=True,
                 extra={"error_tracking_extra": error_tracking_extra},
             )
-        except (httpx.ConnectError, httpx.TimeoutException):
+        except (httpx.ConnectError, httpx.TimeoutException) as ex:
+            should_unregister_message = False
             LOGGER.warning(
-                "Failed to process message: '%s' due to connection error. Retrying...",
+                "Failed to process message: '%s' due to connection error. Will be retried later when connection is restored.",
                 message_type.__name__,
             )
-            # TODO: insert here marking message as failed
-
+            # mark a message as failed with replay manager due to a connection error
+            self._replay_manager.message_sent_failed(
+                message.message_id, failure_reason=str(ex)
+            )
         except Exception as exception:
             error_tracking_extra = _generate_error_tracking_extra(exception, message)
             LOGGER.error(
@@ -135,6 +140,10 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
                 extra={"error_tracking_extra": error_tracking_extra},
             )
             LOGGER.warning(logging_messages.MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY)
+
+        # unregister a message from the reply manager because it is delivered or other error occurred
+        if should_unregister_message:
+            self._replay_manager.unregister_message(message.message_id)
 
     def _process_create_span_message(
         self,
