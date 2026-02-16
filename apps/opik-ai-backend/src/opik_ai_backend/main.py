@@ -791,21 +791,26 @@ def get_fast_api_app(
                 runner = await _get_runner_for_agent(
                     opik_client=opik_client,
                     trace_id=trace_id,
+                    current_user=current_user,
                 )
 
                 message = types.Content(
                     role="user", parts=[types.Part(text=req.message)]
                 )
+                logger.debug(f"Starting runner.run_async for trace {trace_id}")
+                event_count = 0
                 async for event in runner.run_async(
                     user_id=current_user.user_id,
                     session_id=session_id,
                     new_message=message,
                     run_config=RunConfig(streaming_mode=stream_mode),
                 ):
+                    event_count += 1
                     # Process the event for SSE streaming
                     sse_event_str = process_event_for_sse(event)
                     if sse_event_str:
                         yield sse_event_str
+                logger.debug(f"Runner completed for trace {trace_id}, {event_count} events")
             except Exception as e:
                 logger.exception("Error in event_generator: %s", e)
                 error_msg = json.dumps(
@@ -828,11 +833,13 @@ def get_fast_api_app(
     async def _get_runner_for_agent(
         opik_client: OpikBackendClient,
         trace_id: str,
+        current_user: UserContext,
     ) -> Runner:
         """Returns the runner for the given app."""
         root_agent = await get_agent(
             opik_client=opik_client,
             trace_id=trace_id,
+            current_user=current_user,
             opik_metadata=None,
         )
         runner = get_runner(agent=root_agent, session_service=session_service)
