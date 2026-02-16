@@ -296,37 +296,53 @@ class EvaluationEngine:
         description: str,
         total_items: Optional[int] = None,
         default_execution_policy: Optional[ExecutionPolicy] = None,
+        is_evaluation_suite: bool = False,
     ) -> List[test_result.TestResult]:
+        # Two modes:
+        # 1. trial_count > 1 (legacy evaluate() API): run all items trial_count times
+        #    with separate progress bars per trial
+        # 2. is_evaluation_suite (evaluation suite): each item has its own
+        #    runs_per_item, show single progress bar for all items
+
+        if not is_evaluation_suite:
+            return self._compute_test_results_with_trials(
+                dataset_items=dataset_items,
+                task=task,
+                experiment_=experiment_,
+                trial_count=trial_count,
+                description=description,
+                total_items=total_items,
+            )
+
+        return self._compute_test_results_with_execution_policy(
+            dataset_items=dataset_items,
+            task=task,
+            experiment_=experiment_,
+            description=description,
+            total_items=total_items,
+            default_execution_policy=default_execution_policy,
+        )
+
+    def _compute_test_results_with_trials(
+        self,
+        dataset_items: Iterator[dataset_item.DatasetItem],
+        task: LLMTask,
+        experiment_: Optional[experiment.Experiment],
+        trial_count: int,
+        description: str,
+        total_items: Optional[int] = None,
+    ) -> List[test_result.TestResult]:
+        """
+        Legacy mode: run all items trial_count times with separate progress bars.
+        Used when evaluate() is called with trial_count > 1.
+        """
         test_results: List[test_result.TestResult] = []
 
-        # Build effective default policy:
-        # - If trial_count > 1 is explicitly provided, use it (backward compatibility)
-        # - Otherwise, use default_execution_policy from dataset
-        effective_default_policy: ExecutionPolicy
-        if trial_count > 1:
-            # Explicit trial_count takes precedence (backward compatibility)
-            effective_default_policy = {
-                "runs_per_item": trial_count,
-                "pass_threshold": 1,
-            }
-            initial_trial_count = trial_count
-        elif default_execution_policy is not None:
-            effective_default_policy = default_execution_policy
-            initial_trial_count = default_execution_policy.get("runs_per_item", 1)
-        else:
-            effective_default_policy = {
-                "runs_per_item": 1,
-                "pass_threshold": 1,
-            }
-            initial_trial_count = 1
-
-        # Cache dataset items and their runs_per_item for multiple trials
+        # Cache dataset items for multiple trials
         dataset_items_cache: List[dataset_item.DatasetItem] = []
-        item_runs_cache: List[int] = []
-        max_runs_per_item = initial_trial_count
 
-        # First pass: process all items for trial 0 and determine max runs_per_item
-        desc = f"{description} trial 0" if initial_trial_count > 1 else description
+        # First trial: process all items
+        desc = f"{description} trial 0" if trial_count > 1 else description
         executor: evaluation_tasks_executor.StreamingExecutor[
             test_result.TestResult
         ] = evaluation_tasks_executor.StreamingExecutor(
@@ -338,23 +354,6 @@ class EvaluationEngine:
         with executor:
             for item in dataset_items:
                 dataset_items_cache.append(item)
-                item_policy = get_item_execution_policy(item, effective_default_policy)
-                item_runs = item_policy.get("runs_per_item", 1)
-                item_runs_cache.append(item_runs)
-                max_runs_per_item = max(max_runs_per_item, item_runs)
-
-                # Store resolved execution policy in the item for suite result construction
-                if default_execution_policy is not None:
-                    from opik.api_objects.dataset.dataset_item import (
-                        ExecutionPolicyItem,
-                    )
-
-                    item.execution_policy = ExecutionPolicyItem(
-                        runs_per_item=item_policy.get("runs_per_item", 1),
-                        pass_threshold=item_policy.get("pass_threshold", 1),
-                    )
-
-                # Trial 0: always run (trial_id=0 < item_runs for any item_runs >= 1)
                 evaluation_task = functools.partial(
                     self._compute_test_result_for_llm_task,
                     item=item,
@@ -366,32 +365,90 @@ class EvaluationEngine:
 
             test_results += executor.get_results()
 
-        # Subsequent trials: use cached items and their runs_per_item
-        for trial_id in range(1, max_runs_per_item):
+        # Subsequent trials
+        for trial_id in range(1, trial_count):
             desc = f"{description} trial {trial_id}"
 
             executor = evaluation_tasks_executor.StreamingExecutor(
                 workers=self._workers,
                 verbose=self._verbose,
                 desc=desc,
-                total=total_items,
+                total=len(dataset_items_cache),
             )
             with executor:
-                for item, item_runs in zip(dataset_items_cache, item_runs_cache):
-                    # Only run if this trial_id is within item's runs_per_item
-                    if trial_id < item_runs:
-                        evaluation_task = functools.partial(
-                            self._compute_test_result_for_llm_task,
-                            item=item,
-                            task=task,
-                            trial_id=trial_id,
-                            experiment_=experiment_,
-                        )
-                        executor.submit(evaluation_task)
+                for item in dataset_items_cache:
+                    evaluation_task = functools.partial(
+                        self._compute_test_result_for_llm_task,
+                        item=item,
+                        task=task,
+                        trial_id=trial_id,
+                        experiment_=experiment_,
+                    )
+                    executor.submit(evaluation_task)
 
                 test_results += executor.get_results()
 
         return test_results
+
+    def _compute_test_results_with_execution_policy(
+        self,
+        dataset_items: Iterator[dataset_item.DatasetItem],
+        task: LLMTask,
+        experiment_: Optional[experiment.Experiment],
+        description: str,
+        total_items: Optional[int] = None,
+        default_execution_policy: Optional[ExecutionPolicy] = None,
+    ) -> List[test_result.TestResult]:
+        """
+        Single progress bar mode for all items.
+        Each item runs according to its execution_policy (runs_per_item).
+        """
+        effective_default_policy: ExecutionPolicy = default_execution_policy or {
+            "runs_per_item": 1,
+            "pass_threshold": 1,
+        }
+
+        # Collect all evaluation tasks
+        evaluation_tasks: List[functools.partial[test_result.TestResult]] = []
+
+        for item in dataset_items:
+            item_policy = get_item_execution_policy(item, effective_default_policy)
+            item_runs = item_policy.get("runs_per_item", 1)
+
+            # Store resolved execution policy in the item for suite result construction
+            item.execution_policy = dataset_item.ExecutionPolicyItem(
+                runs_per_item=item_policy.get("runs_per_item", 1),
+                pass_threshold=item_policy.get("pass_threshold", 1),
+            )
+
+            # Create tasks for all runs of this item
+            for run_id in range(item_runs):
+                evaluation_task = functools.partial(
+                    self._compute_test_result_for_llm_task,
+                    item=item,
+                    task=task,
+                    trial_id=run_id,
+                    experiment_=experiment_,
+                )
+                evaluation_tasks.append(evaluation_task)
+
+        # Single progress bar for all runs
+        # Hide score postfix for evaluation suites
+        total_runs = len(evaluation_tasks) if evaluation_tasks else total_items
+        executor: evaluation_tasks_executor.StreamingExecutor[
+            test_result.TestResult
+        ] = evaluation_tasks_executor.StreamingExecutor(
+            workers=self._workers,
+            verbose=self._verbose,
+            desc=description,
+            total=total_runs,
+            show_score_postfix=False,
+        )
+        with executor:
+            for evaluation_task in evaluation_tasks:
+                executor.submit(evaluation_task)
+
+            return executor.get_results()
 
     def _update_test_result_with_task_span_metrics(
         self,
@@ -487,10 +544,13 @@ class EvaluationEngine:
         trial_count: int,
         experiment_: Optional[experiment.Experiment],
         dataset_filter_string: Optional[str] = None,
+        is_evaluation_suite: bool = False,
     ) -> List[test_result.TestResult]:
         # Extract suite config from dataset (set by create_evaluation_suite).
         # This includes evaluators and execution_policy for evaluation suites.
-        default_execution_policy = dataset_.get_execution_policy()
+        default_execution_policy = (
+            dataset_.get_execution_policy() if is_evaluation_suite else None
+        )
         suite_evaluators = dataset_.get_evaluators()
         if suite_evaluators:
             self._suite_regular_metrics = (
@@ -545,6 +605,7 @@ class EvaluationEngine:
                 description="Evaluation",
                 total_items=total_items,
                 default_execution_policy=default_execution_policy,
+                is_evaluation_suite=is_evaluation_suite,
             )
 
         LOGGER.debug(
@@ -561,6 +622,7 @@ class EvaluationEngine:
                 description="Evaluation",
                 total_items=total_items,
                 default_execution_policy=default_execution_policy,
+                is_evaluation_suite=is_evaluation_suite,
             )
             self._update_test_results_with_task_span_metrics(
                 test_results=test_results,

@@ -26,11 +26,13 @@ class StreamingExecutor(Generic[T]):
         verbose: int,
         desc: str = "Evaluation",
         total: Optional[int] = None,
+        show_score_postfix: bool = True,
     ):
         self._workers = workers
         self._verbose = verbose
         self._desc = desc
         self._total = total
+        self._show_score_postfix = show_score_postfix
         self._task_count = 0
         self._pool: futures.ThreadPoolExecutor
         self._submitted_futures: List[futures.Future[T]] = []
@@ -87,7 +89,11 @@ class StreamingExecutor(Generic[T]):
                             score_counts[score.name] += 1
 
                     # Update progress bar with running averages
-                    if self._progress_bar is not None and score_counts:
+                    if (
+                        self._progress_bar is not None
+                        and score_counts
+                        and self._show_score_postfix
+                    ):
                         postfix_dict = {
                             name: f"{score_totals[name] / score_counts[name]:.4f}"
                             for name in score_counts

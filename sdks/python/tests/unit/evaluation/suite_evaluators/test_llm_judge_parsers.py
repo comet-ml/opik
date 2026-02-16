@@ -18,7 +18,11 @@ class TestBuildResponseFormatModel:
     def test_build_response_format_model__multiple_assertions__creates_model_with_all_fields(
         self,
     ):
-        assertions = ["Response is accurate", "Response is helpful", "No hallucinations"]
+        assertions = [
+            "Response is accurate",
+            "Response is helpful",
+            "No hallucinations",
+        ]
 
         model = llm_judge_parsers.build_response_format_model(assertions)
 
@@ -190,10 +194,10 @@ class TestParseModelOutput:
     def test_parse_model_output__assertion_with_special_characters__handles_correctly(
         self,
     ):
-        assertions = ["Response doesn't contain \"quotes\" or special chars: {}/\\"]
+        assertions = ['Response doesn\'t contain "quotes" or special chars: {}/\\']
         content = json.dumps(
             {
-                "Response doesn't contain \"quotes\" or special chars: {}/\\": {
+                'Response doesn\'t contain "quotes" or special chars: {}/\\': {
                     "value": True,
                     "reason": "No special chars found",
                     "confidence": 0.85,
@@ -206,6 +210,6 @@ class TestParseModelOutput:
         assert len(results) == 1
         assert (
             results[0].name
-            == "Response doesn't contain \"quotes\" or special chars: {}/\\"
+            == 'Response doesn\'t contain "quotes" or special chars: {}/\\'
         )
         assert results[0].value is True

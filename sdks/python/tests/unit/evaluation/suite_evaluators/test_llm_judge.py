@@ -194,9 +194,7 @@ class TestLLMJudgeFromConfig:
                     name="test", type="BOOLEAN", description="Test"
                 ),
             ],
-            messages=[
-                llm_judge_config.LLMJudgeMessage(role="USER", content="test")
-            ],
+            messages=[llm_judge_config.LLMJudgeMessage(role="USER", content="test")],
         )
 
         evaluator = llm_judge.LLMJudge.from_config(config, track=False)

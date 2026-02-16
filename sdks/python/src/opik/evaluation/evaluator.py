@@ -225,6 +225,7 @@ def evaluate(
         experiment_scoring_functions=experiment_scoring_functions,
         dataset_filter_string=dataset_filter_string,
         evaluator_model=None,
+        is_evaluation_suite=False,
     )
 
 
@@ -316,6 +317,7 @@ def evaluate_suite(
         experiment_scoring_functions=[],
         dataset_filter_string=None,
         evaluator_model=evaluator_model,
+        is_evaluation_suite=True,
     )
 
 
@@ -337,6 +339,7 @@ def _evaluate_task(
     experiment_scoring_functions: List[ExperimentScoreFunction],
     dataset_filter_string: Optional[str],
     evaluator_model: Optional[str],
+    is_evaluation_suite: bool,
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -359,6 +362,7 @@ def _evaluate_task(
             trial_count=trial_count,
             experiment_=experiment,
             dataset_filter_string=dataset_filter_string,
+            is_evaluation_suite=is_evaluation_suite,
         )
 
     total_time = time.time() - start_time
@@ -974,6 +978,7 @@ def evaluate_optimization_trial(
         experiment_scoring_functions=experiment_scoring_functions,
         dataset_filter_string=dataset_filter_string,
         evaluator_model=None,
+        is_evaluation_suite=False,
     )
 
 
