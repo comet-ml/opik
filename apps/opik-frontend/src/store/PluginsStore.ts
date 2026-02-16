@@ -7,7 +7,7 @@ import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
 import { WidgetConfigDialogAddStepProps } from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep";
-import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid";
+import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid/DashboardWidgetGrid";
 import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuItems";
 import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
 import { PromptPageExperimentsTabProps } from "@/components/pages/PromptPage/PromptPageExperimentsTab";

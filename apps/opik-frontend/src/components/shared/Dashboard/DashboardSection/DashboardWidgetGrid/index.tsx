@@ -3,18 +3,16 @@ import DashboardWidgetGridContent, {
   DashboardWidgetGridProps,
 } from "./DashboardWidgetGrid";
 
-const DashboardWidgetGridEntry: React.FC<DashboardWidgetGridProps> = (
-  props,
-) => {
-  const DashboardWidgetGrid = usePluginsStore(
+const DashboardWidgetGrid: React.FC<DashboardWidgetGridProps> = (props) => {
+  const DashboardWidgetGridComponent = usePluginsStore(
     (state) => state.DashboardWidgetGrid,
   );
 
-  if (DashboardWidgetGrid) {
-    return <DashboardWidgetGrid {...props} />;
+  if (DashboardWidgetGridComponent) {
+    return <DashboardWidgetGridComponent {...props} />;
   }
 
   return <DashboardWidgetGridContent {...props} canViewExperiments />;
 };
 
-export default DashboardWidgetGridEntry;
+export default DashboardWidgetGrid;

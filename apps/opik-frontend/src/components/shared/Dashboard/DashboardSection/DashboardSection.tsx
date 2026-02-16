@@ -13,7 +13,7 @@ import {
 import { useDashboardStore } from "@/store/DashboardStore";
 import { cn } from "@/lib/utils";
 import DashboardSectionHeader from "./DashboardSectionHeader";
-import DashboardWidgetGrid from "./DashboardWidgetGridEntry";
+import DashboardWidgetGrid from "./DashboardWidgetGrid";
 import { useSectionCollapseStorage } from "@/lib/dashboard/sectionCollapseStorage";
 import get from "lodash/get";
 
