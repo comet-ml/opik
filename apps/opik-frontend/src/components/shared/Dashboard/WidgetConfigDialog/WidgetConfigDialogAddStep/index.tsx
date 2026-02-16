@@ -3,18 +3,18 @@ import WidgetConfigDialogAddStepContent, {
   WidgetConfigDialogAddStepProps,
 } from "./WidgetConfigDialogAddStep";
 
-const WidgetConfigDialogAddStepEntry: React.FC<
-  WidgetConfigDialogAddStepProps
-> = (props) => {
-  const WidgetConfigDialogAddStep = usePluginsStore(
+const WidgetConfigDialogAddStep: React.FC<WidgetConfigDialogAddStepProps> = (
+  props,
+) => {
+  const WidgetConfigDialogAddStepComponent = usePluginsStore(
     (state) => state.WidgetConfigDialogAddStep,
   );
 
-  if (WidgetConfigDialogAddStep) {
-    return <WidgetConfigDialogAddStep {...props} />;
+  if (WidgetConfigDialogAddStepComponent) {
+    return <WidgetConfigDialogAddStepComponent {...props} />;
   }
 
   return <WidgetConfigDialogAddStepContent {...props} canViewExperiments />;
 };
 
-export default WidgetConfigDialogAddStepEntry;
+export default WidgetConfigDialogAddStep;
