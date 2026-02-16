@@ -13,7 +13,6 @@ from opik import id_helpers
 from opik.api_objects.prompt import base_prompt
 from opik.api_objects.dataset import dataset, dataset_item
 from opik.evaluation import evaluator as opik_evaluator
-from opik.evaluation.engine import types as engine_types
 from opik.evaluation.suite_evaluators import llm_judge
 
 from . import suite_result_constructor
@@ -145,18 +144,32 @@ class EvaluationSuite:
 
         item_id = id_helpers.generate_id()
 
-        item_content = dict(data)
-
-        # Store evaluation config (evaluators and execution_policy) under a single key
-        eval_config: Dict[str, Any] = {}
+        # Convert LLMJudge evaluators to EvaluatorItem format for the API
+        evaluator_items = None
         if evaluators:
-            eval_config["evaluators"] = [e.to_config().model_dump() for e in evaluators]
-        if execution_policy:
-            eval_config["execution_policy"] = execution_policy
-        if eval_config:
-            item_content[engine_types.EVALUATION_CONFIG_KEY] = eval_config
+            evaluator_items = [
+                dataset_item.EvaluatorItem(
+                    name=e.name,
+                    type="llm_judge",
+                    config=e.to_config().model_dump(),
+                )
+                for e in evaluators
+            ]
 
-        ds_item = dataset_item.DatasetItem(id=item_id, **item_content)
+        # Convert execution_policy to ExecutionPolicyItem format for the API
+        execution_policy_item = None
+        if execution_policy:
+            execution_policy_item = dataset_item.ExecutionPolicyItem(
+                runs_per_item=execution_policy.get("runs_per_item"),
+                pass_threshold=execution_policy.get("pass_threshold"),
+            )
+
+        ds_item = dataset_item.DatasetItem(
+            id=item_id,
+            evaluators=evaluator_items,
+            execution_policy=execution_policy_item,
+            **data,
+        )
         self._dataset.__internal_api__insert_items_as_dataclasses__([ds_item])
 
         return self

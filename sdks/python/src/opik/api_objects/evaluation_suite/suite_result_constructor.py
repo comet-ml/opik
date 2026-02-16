@@ -6,10 +6,10 @@ including pass/fail determination based on execution policies.
 """
 
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Dict, List, Optional
 
+from opik.api_objects.dataset import dataset_item
 from opik.evaluation import evaluation_result, test_result
-from opik.evaluation.engine import types as engine_types
 
 from . import types as suite_types
 
@@ -21,7 +21,7 @@ def build_suite_result(
     Build an EvaluationSuiteResult from an EvaluationResult.
 
     Groups test results by dataset item and computes pass/fail status
-    based on execution policies stored in each item's content.
+    based on execution policies stored in each item.
 
     Pass/fail logic:
     - A RUN passes if all its assertion scores pass (value=True or value=1)
@@ -35,22 +35,22 @@ def build_suite_result(
         EvaluationSuiteResult with pass/fail status for each item and the suite.
     """
     results_by_item: Dict[str, List[test_result.TestResult]] = defaultdict(list)
-    item_contents: Dict[str, Dict[str, Any]] = {}
+    items_cache: Dict[str, Optional[dataset_item.DatasetItem]] = {}
 
     for result in eval_result.test_results:
         item_id = result.test_case.dataset_item_id
         results_by_item[item_id].append(result)
-        if item_id not in item_contents:
-            item_contents[item_id] = result.test_case.dataset_item_content
+        if item_id not in items_cache:
+            items_cache[item_id] = result.test_case.dataset_item
 
     item_results: Dict[str, suite_types.ItemResult] = {}
     items_passed = 0
 
     for item_id, item_test_results in results_by_item.items():
-        item_content = item_contents.get(item_id, {})
-        eval_config = item_content.get(engine_types.EVALUATION_CONFIG_KEY, {})
-        item_policy = eval_config.get("execution_policy", {})
-        pass_threshold = item_policy.get("pass_threshold", 1)
+        item = items_cache.get(item_id)
+        pass_threshold = 1
+        if item is not None and item.execution_policy is not None:
+            pass_threshold = item.execution_policy.pass_threshold or 1
 
         runs_passed = sum(
             1

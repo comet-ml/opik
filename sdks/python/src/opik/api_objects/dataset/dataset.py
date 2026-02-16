@@ -22,6 +22,8 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
     dataset_version_public,
+    evaluator_item_write as rest_evaluator_item,
+    execution_policy_write as rest_execution_policy,
 )
 from opik.message_processing.batching import sequence_splitter
 from opik import id_helpers
@@ -448,6 +450,45 @@ class Dataset(DatasetExportOperations):
             return None
         return versions_response.content[0]
 
+    def _convert_to_rest_item(
+        self, item: dataset_item.DatasetItem
+    ) -> rest_dataset_item.DatasetItemWrite:
+        """Convert a DatasetItem to REST API format.
+
+        Args:
+            item: The DatasetItem to convert.
+
+        Returns:
+            DatasetItemWrite object ready for REST API.
+        """
+        evaluators = None
+        if item.evaluators:
+            evaluators = [
+                rest_evaluator_item.EvaluatorItemWrite(
+                    name=e.name,
+                    type=e.type,  # type: ignore
+                    config=e.config,
+                )
+                for e in item.evaluators
+            ]
+
+        execution_policy = None
+        if item.execution_policy:
+            execution_policy = rest_execution_policy.ExecutionPolicyWrite(
+                runs_per_item=item.execution_policy.runs_per_item,
+                pass_threshold=item.execution_policy.pass_threshold,
+            )
+
+        return rest_dataset_item.DatasetItemWrite(
+            id=item.id,  # type: ignore
+            trace_id=item.trace_id,  # type: ignore
+            span_id=item.span_id,  # type: ignore
+            source=item.source,  # type: ignore
+            data=item.get_content(),
+            evaluators=evaluators,
+            execution_policy=execution_policy,
+        )
+
     def _insert_batch_with_retry(
         self,
         batch: List[rest_dataset_item.DatasetItemWrite],
@@ -487,16 +528,7 @@ class Dataset(DatasetExportOperations):
             self._hashes.add(item_hash)
             self._id_to_hash[item.id] = item_hash
 
-        rest_items = [
-            rest_dataset_item.DatasetItemWrite(
-                id=item.id,  # type: ignore
-                trace_id=item.trace_id,  # type: ignore
-                span_id=item.span_id,  # type: ignore
-                source=item.source,  # type: ignore
-                data=item.get_content(),
-            )
-            for item in deduplicated_items
-        ]
+        rest_items = [self._convert_to_rest_item(item) for item in deduplicated_items]
 
         batches = sequence_splitter.split_into_batches(
             rest_items,

@@ -94,11 +94,33 @@ def stream_dataset_items(
                 else:
                     dataset_items_ids_left.remove(item_id)
 
+            # Convert evaluators from REST format to DatasetItem format
+            evaluators = None
+            if item.evaluators:
+                evaluators = [
+                    dataset_item.EvaluatorItem(
+                        name=e.name,
+                        type=e.type,
+                        config=e.config,
+                    )
+                    for e in item.evaluators
+                ]
+
+            # Convert execution_policy from REST format to DatasetItem format
+            execution_policy = None
+            if item.execution_policy:
+                execution_policy = dataset_item.ExecutionPolicyItem(
+                    runs_per_item=item.execution_policy.runs_per_item,
+                    pass_threshold=item.execution_policy.pass_threshold,
+                )
+
             reconstructed_item = dataset_item.DatasetItem(
                 id=item.id,
                 trace_id=item.trace_id,
                 span_id=item.span_id,
                 source=item.source,
+                evaluators=evaluators,
+                execution_policy=execution_policy,
                 **item.data,
             )
 

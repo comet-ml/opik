@@ -1,11 +1,10 @@
-from opik.evaluation.suite_evaluators import LLMJudge
-from opik.evaluation.suite_evaluators import opik_llm_judge_config as llm_judge_config
+from opik.evaluation.suite_evaluators import llm_judge, opik_llm_judge_config
 
 
 class TestLLMJudgeInit:
     def test_init__with_string_assertions__stores_texts(self):
         """Test that string assertions are stored directly."""
-        evaluator = LLMJudge(
+        evaluator = llm_judge.LLMJudge(
             assertions=[
                 "Response is factually correct",
                 "No hallucinated information",
@@ -18,7 +17,7 @@ class TestLLMJudgeInit:
         assert evaluator.assertions[1] == "No hallucinated information"
 
     def test_init__with_custom_name__uses_custom_name(self):
-        evaluator = LLMJudge(
+        evaluator = llm_judge.LLMJudge(
             assertions=["Test assertion"],
             name="custom_evaluator",
             track=False,
@@ -27,7 +26,7 @@ class TestLLMJudgeInit:
         assert evaluator.name == "custom_evaluator"
 
     def test_init__with_track_false__sets_track(self):
-        evaluator = LLMJudge(
+        evaluator = llm_judge.LLMJudge(
             assertions=["Test assertion"],
             track=False,
         )
@@ -35,7 +34,7 @@ class TestLLMJudgeInit:
         assert evaluator.track is False
 
     def test_init__with_track_true__sets_track(self):
-        evaluator = LLMJudge(
+        evaluator = llm_judge.LLMJudge(
             assertions=["Test assertion"],
             track=True,
         )
@@ -45,7 +44,7 @@ class TestLLMJudgeInit:
     def test_assertions_property__returns_copy__modifications_dont_affect_original(
         self,
     ):
-        evaluator = LLMJudge(
+        evaluator = llm_judge.LLMJudge(
             assertions=["Test assertion"],
             track=False,
         )
@@ -58,7 +57,7 @@ class TestLLMJudgeInit:
 
 class TestLLMJudgeToConfig:
     def test_to_config__basic__returns_valid_config(self):
-        evaluator = LLMJudge(
+        evaluator = llm_judge.LLMJudge(
             assertions=[
                 "Response is accurate",
                 "Response is helpful",
@@ -96,7 +95,7 @@ class TestLLMJudgeToConfig:
         assert "- Response is helpful" in config_dict["messages"][0]["content"]
 
     def test_to_config__without_optional_params__uses_defaults(self):
-        evaluator = LLMJudge(
+        evaluator = llm_judge.LLMJudge(
             assertions=["Test"],
             track=False,
         )
@@ -108,7 +107,7 @@ class TestLLMJudgeToConfig:
         assert config.model.seed is None
 
     def test_to_config__serializes_to_dict_with_schema_alias(self):
-        evaluator = LLMJudge(
+        evaluator = llm_judge.LLMJudge(
             assertions=["Test"],
             track=False,
         )
@@ -122,21 +121,22 @@ class TestLLMJudgeToConfig:
 
 class TestLLMJudgeFromConfig:
     def test_from_config__valid_config__creates_evaluator(self):
-        config = llm_judge_config.LLMJudgeConfig(
-            model=llm_judge_config.LLMJudgeModelConfig(temperature=0.5, seed=42),
+        config = opik_llm_judge_config.LLMJudgeConfig(
+            name="restored_evaluator",
+            model=opik_llm_judge_config.LLMJudgeModelConfig(temperature=0.5, seed=42),
             variables={"input": "input", "output": "output"},
             schema=[
-                llm_judge_config.LLMJudgeSchemaItem(
+                opik_llm_judge_config.LLMJudgeSchemaItem(
                     name="accurate", type="BOOLEAN", description="Is accurate"
                 ),
-                llm_judge_config.LLMJudgeSchemaItem(
+                opik_llm_judge_config.LLMJudgeSchemaItem(
                     name="helpful", type="BOOLEAN", description="Is helpful"
                 ),
             ],
             messages=[],
         )
 
-        evaluator = LLMJudge.from_config(config, name="restored_evaluator", track=False)
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
 
         assert evaluator.name == "restored_evaluator"
         # from_config extracts description as assertion texts
@@ -145,24 +145,25 @@ class TestLLMJudgeFromConfig:
 
     def test_from_config__no_model_name__uses_default(self):
         """When config has no model name, from_config uses the default model."""
-        config = llm_judge_config.LLMJudgeConfig(
-            model=llm_judge_config.LLMJudgeModelConfig(temperature=0.5),
+        config = opik_llm_judge_config.LLMJudgeConfig(
+            name="test",
+            model=opik_llm_judge_config.LLMJudgeModelConfig(temperature=0.5),
             variables={"input": "input", "output": "output"},
             schema=[
-                llm_judge_config.LLMJudgeSchemaItem(
+                opik_llm_judge_config.LLMJudgeSchemaItem(
                     name="test", type="BOOLEAN", description="Test"
                 ),
             ],
             messages=[],
         )
 
-        evaluator = LLMJudge.from_config(config, name="test", track=False)
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
 
         # The evaluator should use the default model name internally
-        assert evaluator._model_name == llm_judge_config.DEFAULT_MODEL_NAME
+        assert evaluator._model_name == opik_llm_judge_config.DEFAULT_MODEL_NAME
 
     def test_from_config__roundtrip__preserves_assertions(self):
-        original = LLMJudge(
+        original = llm_judge.LLMJudge(
             assertions=[
                 "Factually correct",
                 "Relevant to question",
@@ -174,7 +175,7 @@ class TestLLMJudgeFromConfig:
         )
 
         config = original.to_config()
-        restored = LLMJudge.from_config(config, name="my_evaluator", track=False)
+        restored = llm_judge.LLMJudge.from_config(config, track=False)
 
         assert restored.name == original.name
         # Assertions should be preserved
@@ -183,18 +184,21 @@ class TestLLMJudgeFromConfig:
 
     def test_from_config__config_model_params__temperature_and_seed_preserved(self):
         """Temperature and seed from config are preserved, model name is not saved."""
-        config = llm_judge_config.LLMJudgeConfig(
-            model=llm_judge_config.LLMJudgeModelConfig(temperature=0.7, seed=123),
+        config = opik_llm_judge_config.LLMJudgeConfig(
+            name="test",
+            model=opik_llm_judge_config.LLMJudgeModelConfig(temperature=0.7, seed=123),
             variables={"input": "input", "output": "output"},
             schema=[
-                llm_judge_config.LLMJudgeSchemaItem(
+                opik_llm_judge_config.LLMJudgeSchemaItem(
                     name="test", type="BOOLEAN", description="Test"
                 ),
             ],
-            messages=[llm_judge_config.LLMJudgeMessage(role="USER", content="test")],
+            messages=[
+                opik_llm_judge_config.LLMJudgeMessage(role="USER", content="test")
+            ],
         )
 
-        evaluator = LLMJudge.from_config(config, name="test", track=False)
+        evaluator = llm_judge.LLMJudge.from_config(config, track=False)
         new_config = evaluator.to_config()
         new_config_dict = new_config.model_dump(by_alias=True, exclude_none=True)
 

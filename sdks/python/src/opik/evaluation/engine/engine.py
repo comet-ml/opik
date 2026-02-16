@@ -15,7 +15,7 @@ from opik.evaluation.suite_evaluators import opik_llm_judge_config, llm_judge
 from opik.message_processing.emulation import models
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
-from .types import EvaluationTask, EVALUATION_CONFIG_KEY
+from .types import EvaluationTask
 from ..metrics import base_metric, score_result
 
 
@@ -27,7 +27,7 @@ EVALUATION_STREAM_DATASET_BATCH_SIZE = 200  # The limit is 10x smaller than the 
 
 
 def get_item_execution_policy(
-    dataset_item_content: Dict[str, Any],
+    item: dataset_item.DatasetItem,
     default_policy: ExecutionPolicy,
 ) -> ExecutionPolicy:
     """
@@ -37,59 +37,66 @@ def get_item_execution_policy(
     Item-level values override default values.
 
     Args:
-        dataset_item_content: The dataset item content dict.
+        item: The dataset item.
         default_policy: Default execution policy from suite level.
 
     Returns:
         Merged execution policy for this item.
     """
-    eval_config = dataset_item_content.get(EVALUATION_CONFIG_KEY, {})
-    item_policy = eval_config.get("execution_policy")
-    if item_policy is None:
+    if item.execution_policy is None:
         return default_policy
 
     return {
-        "runs_per_item": item_policy.get(
-            "runs_per_item", default_policy.get("runs_per_item", 1)
+        "runs_per_item": (
+            item.execution_policy.runs_per_item
+            if item.execution_policy.runs_per_item is not None
+            else default_policy.get("runs_per_item", 1)
         ),
-        "pass_threshold": item_policy.get(
-            "pass_threshold", default_policy.get("pass_threshold", 1)
+        "pass_threshold": (
+            item.execution_policy.pass_threshold
+            if item.execution_policy.pass_threshold is not None
+            else default_policy.get("pass_threshold", 1)
         ),
     }
 
 
 def _extract_item_evaluators(
-    dataset_item_content: Dict[str, Any],
+    item: dataset_item.DatasetItem,
     evaluator_model: Optional[str],
 ) -> List[base_metric.BaseMetric]:
     """
-    Extract evaluators from dataset item content.
+    Extract evaluators from dataset item.
 
-    If the item has evaluator configs stored under __evaluation_config__.evaluators,
-    instantiate LLMJudge evaluators from those configs.
+    If the item has evaluator configs, instantiate LLMJudge evaluators from them.
 
     Args:
-        dataset_item_content: The dataset item content dict.
+        item: The dataset item.
         evaluator_model: Optional model name to use for LLMJudge evaluators.
 
     Returns:
-        List of evaluator instances extracted from the item content.
+        List of evaluator instances extracted from the item.
     """
-    eval_config = dataset_item_content.get(EVALUATION_CONFIG_KEY, {})
-    evaluator_configs = eval_config.get("evaluators")
-    if not evaluator_configs:
+    if not item.evaluators:
         return []
 
     evaluators: List[base_metric.BaseMetric] = []
-    for config_dict in evaluator_configs:
+    for evaluator_item in item.evaluators:
         try:
-            config = opik_llm_judge_config.LLMJudgeConfig(**config_dict)
-            evaluator = llm_judge.LLMJudge.from_config(config, model=evaluator_model)
-            evaluators.append(evaluator)
+            if evaluator_item.type == "llm_judge":
+                config = opik_llm_judge_config.LLMJudgeConfig(**evaluator_item.config)
+                evaluator = llm_judge.LLMJudge.from_config(
+                    config, model=evaluator_model
+                )
+                evaluators.append(evaluator)
+            else:
+                LOGGER.warning(
+                    "Unsupported evaluator type: %s. Only 'llm_judge' is supported.",
+                    evaluator_item.type,
+                )
         except Exception as e:
             LOGGER.warning(
                 "Failed to instantiate evaluator from config: %s. Error: %s",
-                config_dict,
+                evaluator_item.config,
                 e,
             )
 
@@ -156,14 +163,15 @@ class EvaluationEngine:
 
     def _build_metrics_evaluator(
         self,
-        dataset_item_content: Dict[str, Any],
+        item: Optional[dataset_item.DatasetItem],
     ) -> metrics_evaluator.MetricsEvaluator:
         """Build a MetricsEvaluator with suite-level + item-level metrics."""
         all_metrics: List[base_metric.BaseMetric] = list(self._suite_regular_metrics)
-        item_evaluators = _extract_item_evaluators(
-            dataset_item_content, evaluator_model=self._evaluator_model
-        )
-        all_metrics.extend(item_evaluators)
+        if item is not None:
+            item_evaluators = _extract_item_evaluators(
+                item, evaluator_model=self._evaluator_model
+            )
+            all_metrics.extend(item_evaluators)
 
         return metrics_evaluator.MetricsEvaluator(
             scoring_metrics=all_metrics,
@@ -176,7 +184,7 @@ class EvaluationEngine:
         test_case_: test_case.TestCase,
         trial_id: int = 0,
     ) -> test_result.TestResult:
-        item_evaluator = self._build_metrics_evaluator(test_case_.dataset_item_content)
+        item_evaluator = self._build_metrics_evaluator(test_case_.dataset_item)
         score_results, mapped_scoring_inputs = item_evaluator.compute_regular_scores(
             dataset_item_content=test_case_.dataset_item_content,
             task_output=test_case_.task_output,
@@ -237,13 +245,8 @@ class EvaluationEngine:
             task = opik.track(name=name)(task)  # type: ignore[attr-defined,has-type]
 
         item_content = item.get_content(include_id=True)
-        # Filter out evaluation config from task input (user shouldn't see it)
-        # but keep it in item_content for suite result construction
-        task_input = {
-            k: v for k, v in item_content.items() if k != EVALUATION_CONFIG_KEY
-        }
         trace_data = trace.TraceData(
-            input=task_input,
+            input=item_content,
             name=EVALUATION_TASK_NAME,
             created_by="evaluation",
             project_name=self._project_name,
@@ -255,9 +258,9 @@ class EvaluationEngine:
             trace_data=trace_data,
             client=self._client,
         ):
-            LOGGER.debug("Task started, input: %s", task_input)
+            LOGGER.debug("Task started, input: %s", item_content)
             try:
-                task_output_ = task(task_input)
+                task_output_ = task(item_content)
             except Exception as exception:
                 if exception_analyzer.is_llm_provider_rate_limit_error(exception):
                     LOGGER.error(
@@ -274,6 +277,7 @@ class EvaluationEngine:
                 dataset_item_id=item.id,
                 task_output=task_output_,
                 dataset_item_content=item_content,
+                dataset_item=item,
             )
             test_result_ = self._compute_test_result_for_test_case(
                 test_case_=test_case_,
@@ -333,23 +337,20 @@ class EvaluationEngine:
         with executor:
             for item in dataset_items:
                 dataset_items_cache.append(item)
-                item_content = item.get_content(include_id=False)
-                item_policy = get_item_execution_policy(
-                    item_content, effective_default_policy
-                )
+                item_policy = get_item_execution_policy(item, effective_default_policy)
                 item_runs = item_policy.get("runs_per_item", 1)
                 item_runs_cache.append(item_runs)
                 max_runs_per_item = max(max_runs_per_item, item_runs)
 
-                # Store resolved execution policy only when using evaluation suites
-                # (i.e., when default_execution_policy is explicitly provided)
+                # Store resolved execution policy in the item for suite result construction
                 if default_execution_policy is not None:
-                    if item.model_extra is None:
-                        item.model_extra = {}
-                    if EVALUATION_CONFIG_KEY not in item.model_extra:
-                        item.model_extra[EVALUATION_CONFIG_KEY] = {}
-                    item.model_extra[EVALUATION_CONFIG_KEY]["execution_policy"] = (
-                        item_policy
+                    from opik.api_objects.dataset.dataset_item import (
+                        ExecutionPolicyItem,
+                    )
+
+                    item.execution_policy = ExecutionPolicyItem(
+                        runs_per_item=item_policy.get("runs_per_item", 1),
+                        pass_threshold=item_policy.get("pass_threshold", 1),
                     )
 
                 # Trial 0: always run (trial_id=0 < item_runs for any item_runs >= 1)

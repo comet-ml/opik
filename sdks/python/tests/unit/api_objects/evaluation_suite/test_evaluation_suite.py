@@ -7,7 +7,7 @@ from opik.api_objects.evaluation_suite import evaluation_suite
 from opik.api_objects.evaluation_suite import suite_result_constructor
 from opik.api_objects.evaluation_suite import types as suite_types
 from opik.api_objects.evaluation_suite import validators
-from opik.evaluation.engine import types as engine_types
+from opik.api_objects.dataset import dataset_item
 from opik.evaluation import suite_evaluators
 from opik.evaluation import metrics
 from opik.evaluation import evaluation_result
@@ -139,18 +139,23 @@ def _make_test_result(
     execution_policy: dict | None = None,
 ) -> test_result.TestResult:
     """Helper to create a TestResult with score results."""
-    dataset_item_content = {}
+    ds_item = None
     if execution_policy is not None:
-        dataset_item_content[engine_types.EVALUATION_CONFIG_KEY] = {
-            "execution_policy": execution_policy
-        }
+        ds_item = dataset_item.DatasetItem(
+            id=dataset_item_id,
+            execution_policy=dataset_item.ExecutionPolicyItem(
+                runs_per_item=execution_policy.get("runs_per_item"),
+                pass_threshold=execution_policy.get("pass_threshold"),
+            ),
+        )
 
     return test_result.TestResult(
         test_case=test_case.TestCase(
             trace_id=f"trace-{dataset_item_id}-{trial_id}",
             dataset_item_id=dataset_item_id,
             task_output={"output": "test"},
-            dataset_item_content=dataset_item_content,
+            dataset_item_content={},
+            dataset_item=ds_item,
         ),
         score_results=[
             score_result.ScoreResult(name=name, value=value) for name, value in scores
@@ -357,20 +362,21 @@ class TestBuildSuiteResult:
 
     def test_build_suite_result__integer_scores__treats_1_as_pass_0_as_fail(self):
         """Scores with integer values: 1 = pass, 0 = fail."""
+        ds_item = dataset_item.DatasetItem(
+            id="item-1",
+            execution_policy=dataset_item.ExecutionPolicyItem(
+                runs_per_item=1,
+                pass_threshold=1,
+            ),
+        )
         test_results = [
             test_result.TestResult(
                 test_case=test_case.TestCase(
                     trace_id="trace-1",
                     dataset_item_id="item-1",
                     task_output={"output": "test"},
-                    dataset_item_content={
-                        engine_types.EVALUATION_CONFIG_KEY: {
-                            "execution_policy": {
-                                "runs_per_item": 1,
-                                "pass_threshold": 1,
-                            }
-                        }
-                    },
+                    dataset_item_content={},
+                    dataset_item=ds_item,
                 ),
                 score_results=[
                     score_result.ScoreResult(name="A1", value=1),
@@ -388,20 +394,21 @@ class TestBuildSuiteResult:
 
     def test_build_suite_result__integer_score_zero__run_fails(self):
         """Scores with integer value 0 should fail the run."""
+        ds_item = dataset_item.DatasetItem(
+            id="item-1",
+            execution_policy=dataset_item.ExecutionPolicyItem(
+                runs_per_item=1,
+                pass_threshold=1,
+            ),
+        )
         test_results = [
             test_result.TestResult(
                 test_case=test_case.TestCase(
                     trace_id="trace-1",
                     dataset_item_id="item-1",
                     task_output={"output": "test"},
-                    dataset_item_content={
-                        engine_types.EVALUATION_CONFIG_KEY: {
-                            "execution_policy": {
-                                "runs_per_item": 1,
-                                "pass_threshold": 1,
-                            }
-                        }
-                    },
+                    dataset_item_content={},
+                    dataset_item=ds_item,
                 ),
                 score_results=[
                     score_result.ScoreResult(name="A1", value=1),
