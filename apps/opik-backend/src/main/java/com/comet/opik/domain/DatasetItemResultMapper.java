@@ -3,13 +3,17 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.Sets;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
+import io.r2dbc.spi.RowMetadata;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -165,6 +169,8 @@ class DatasetItemResultMapper {
                             .map(Arrays::asList)
                             .map(Set::copyOf)
                             .orElse(null))
+                    .evaluators(getEvaluators(row, rowMetadata))
+                    .executionPolicy(getExecutionPolicy(row, rowMetadata))
                     .datasetItemId(datasetItemId)
                     .experimentItems(getExperimentItems(row.get("experiment_items_array", List[].class)))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
@@ -173,6 +179,29 @@ class DatasetItemResultMapper {
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
                     .build();
         });
+    }
+
+    private static final TypeReference<List<EvaluatorItem>> EVALUATOR_LIST_TYPE = new TypeReference<>() {
+    };
+
+    private static List<EvaluatorItem> getEvaluators(Row row, RowMetadata rowMetadata) {
+        if (!rowMetadata.contains("evaluators")) {
+            return null;
+        }
+        return Optional.ofNullable(row.get("evaluators", String.class))
+                .filter(s -> !s.isBlank() && !EvaluatorItem.EMPTY_LIST_JSON.equals(s))
+                .map(s -> JsonUtils.readValue(s, EVALUATOR_LIST_TYPE))
+                .orElse(null);
+    }
+
+    private static ExecutionPolicy getExecutionPolicy(Row row, RowMetadata rowMetadata) {
+        if (!rowMetadata.contains("execution_policy")) {
+            return null;
+        }
+        return Optional.ofNullable(row.get("execution_policy", String.class))
+                .filter(s -> !s.isBlank())
+                .map(s -> JsonUtils.readValue(s, ExecutionPolicy.class))
+                .orElse(null);
     }
 
     private static Map<String, JsonNode> getData(Row row) {
