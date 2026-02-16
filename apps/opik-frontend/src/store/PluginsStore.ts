@@ -6,6 +6,11 @@ import { GoogleColabCardCoreProps } from "@/components/pages-shared/onboarding/G
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
+import { WidgetConfigDialogAddStepProps } from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep/WidgetConfigDialogAddStep";
+import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid/DashboardWidgetGrid";
+import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuItems";
+import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
+import { PromptPageExperimentsTabProps } from "@/components/pages/PromptPage/PromptPageExperimentsTab";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -19,9 +24,17 @@ type PluginStore = {
   }> | null;
   InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
   SidebarInviteDevButton: React.ComponentType<SidebarInviteDevButtonProps> | null;
+  SideBarMenuItems: React.ComponentType<SideBarMenuItemsProps> | null;
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
+  WidgetConfigDialogAddStep: React.ComponentType<WidgetConfigDialogAddStepProps> | null;
+  DashboardWidgetGrid: React.ComponentType<DashboardWidgetGridProps> | null;
+  EvaluationSection: React.ComponentType | null;
+  ExperimentsGuard: React.ComponentType | null;
+  StartPreferenceExperimentsLink: React.ComponentType<ExperimentsLinkProps> | null;
+  PromptPageExperimentsTabTrigger: React.ComponentType | null;
+  PromptPageExperimentsTabContent: React.ComponentType<PromptPageExperimentsTabProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -37,9 +50,17 @@ const PLUGIN_NAMES = [
   "RetentionBanner",
   "InviteDevButton",
   "SidebarInviteDevButton",
+  "SideBarMenuItems",
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
+  "WidgetConfigDialogAddStep",
+  "DashboardWidgetGrid",
+  "EvaluationSection",
+  "ExperimentsGuard",
+  "StartPreferenceExperimentsLink",
+  "PromptPageExperimentsTabTrigger",
+  "PromptPageExperimentsTabContent",
   "init",
 ];
 
@@ -53,9 +74,17 @@ const usePluginsStore = create<PluginStore>((set) => ({
   RetentionBanner: null,
   InviteDevButton: null,
   SidebarInviteDevButton: null,
+  SideBarMenuItems: null,
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,
+  WidgetConfigDialogAddStep: null,
+  DashboardWidgetGrid: null,
+  EvaluationSection: null,
+  ExperimentsGuard: null,
+  StartPreferenceExperimentsLink: null,
+  PromptPageExperimentsTabTrigger: null,
+  PromptPageExperimentsTabContent: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
