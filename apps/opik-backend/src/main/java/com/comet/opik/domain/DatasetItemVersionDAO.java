@@ -338,8 +338,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_item_id,
                 data_hash,
                 tags,
-                COALESCE(xxHash64(evaluators), 0) as evaluators_hash,
-                COALESCE(xxHash64(execution_policy), 0) as execution_policy_hash
+                evaluators_hash,
+                execution_policy_hash
             FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
