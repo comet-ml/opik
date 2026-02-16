@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
@@ -31,6 +32,10 @@ public record DatasetItem(
         @JsonView({DatasetItem.View.Public.class,
                 DatasetItem.View.Write.class}) @Schema(implementation = JsonNode.class, ref = "JsonNode") @NotEmpty Map<String, JsonNode> data,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) Set<String> tags,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) List<@Valid EvaluatorItem> evaluators,
+        @JsonView({DatasetItem.View.Public.class,
+                DatasetItem.View.Write.class}) @Valid ExecutionPolicy executionPolicy,
         @JsonView({
                 DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<ExperimentItem> experimentItems,
         @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
