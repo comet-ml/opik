@@ -1,7 +1,15 @@
+import { formatDate } from "@/lib/date";
+
+const ISO_DATE_REGEXP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+
+function isIsoDateString(value: string): boolean {
+  return ISO_DATE_REGEXP.test(value);
+}
+
 /**
  * Safely converts a value to a displayable string.
  * - Objects/arrays are JSON stringified (compact or pretty based on `compact` flag)
- * - Strings are returned as-is
+ * - Strings are returned as-is (ISO dates are formatted)
  * - null/undefined return empty string
  * - Other primitives are converted via String()
  */
@@ -10,6 +18,9 @@ export function toDisplayString(value: unknown, compact = true): string {
     return "";
   }
   if (typeof value === "string") {
+    if (isIsoDateString(value)) {
+      return formatDate(value, { includeSeconds: true });
+    }
     return value;
   }
   if (typeof value === "object") {
