@@ -1220,7 +1220,9 @@ class Opik:
             exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
         """
         filters_ = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=trace_filter_public.TraceFilterPublic
+            filter_string,
+            parsed_item_class=trace_filter_public.TraceFilterPublic,
+            entity_type="traces",
         )
 
         search_functor = functools.partial(
@@ -1314,7 +1316,9 @@ class Opik:
             exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
         """
         filters = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=span_filter_public.SpanFilterPublic
+            filter_string,
+            parsed_item_class=span_filter_public.SpanFilterPublic,
+            entity_type="spans",
         )
 
         search_functor = functools.partial(

@@ -109,7 +109,9 @@ class ThreadsClient:
             >>>     max_results=10)
         """
         filters = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=trace_thread_filter.TraceThreadFilter
+            filter_string,
+            parsed_item_class=trace_thread_filter.TraceThreadFilter,
+            entity_type="threads",
         )
 
         project_name = project_name or self._opik_client.project_name
