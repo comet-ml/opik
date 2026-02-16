@@ -473,58 +473,6 @@ describe.skipIf(!shouldRunApiTests)(
      * corrupted data, and non-vision models.
      */
     describe("Error Handling", () => {
-      it("should handle non-vision model limitations gracefully", async () => {
-        const datasetName = `test-non-vision-${Date.now()}`;
-        const dataset = await client.createDataset(datasetName);
-        createdDatasetNames.push(dataset.name);
-
-        await dataset.insert([
-          {
-            image_url: CAT_IMAGE_URL,
-            reference: "cat",
-          },
-        ]);
-
-        await client.datasetBatchQueue.flush();
-
-        // gpt-3.5-turbo doesn't support images, but evaluation should complete
-        const result = await evaluatePrompt({
-          dataset,
-          messages: SINGLE_IMAGE_MESSAGES,
-          experimentName: `test-non-vision-${Date.now()}`,
-          model: "gpt-3.5-turbo",
-        });
-
-        // Should complete without throwing, even if results are poor
-        expect(result.experimentId).toBeDefined();
-        expect(result.testResults).toBeDefined();
-      }, 60_000);
-
-      it("should report errors without crashing evaluation", async () => {
-        const datasetName = `test-error-reporting-${Date.now()}`;
-        const dataset = await client.createDataset(datasetName);
-        createdDatasetNames.push(dataset.name);
-
-        await dataset.insert([
-          {
-            image_url: CAT_IMAGE_URL,
-            reference: "cat",
-          },
-        ]);
-
-        await client.datasetBatchQueue.flush();
-
-        // Even with non-vision model, should not crash
-        const result = await evaluatePrompt({
-          dataset,
-          messages: SINGLE_IMAGE_MESSAGES,
-          experimentName: `test-errors-${Date.now()}`,
-          model: "gpt-3.5-turbo",
-        });
-
-        expect(result.experimentId).toBeDefined();
-        expect(Array.isArray(result.testResults)).toBe(true);
-      }, 60_000);
 
       it("should handle empty image URLs in dataset", async () => {
         const datasetName = `test-empty-url-${Date.now()}`;

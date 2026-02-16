@@ -308,7 +308,7 @@ describe.skipIf(!shouldRunApiTests)("LLM Judge Metrics Integration", () => {
   describe("Metric Configuration", () => {
     it("should work with custom model configuration", async () => {
       const metric = new AnswerRelevance({
-        model: "gpt-4o",
+        model: "gpt-5-nano",
         temperature: 0.3,
         requireContext: false,
       });

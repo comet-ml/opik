@@ -9,7 +9,7 @@ import { type SupportedModelId } from "./providerDetection";
 /**
  * Default model used when no model is specified in evaluation functions.
  */
-const DEFAULT_MODEL: SupportedModelId = "gpt-4o";
+const DEFAULT_MODEL: SupportedModelId = "gpt-5-nano";
 
 /**
  * Factory function to create model instances with type-safe provider options.
@@ -17,14 +17,14 @@ const DEFAULT_MODEL: SupportedModelId = "gpt-4o";
  * Supports multiple providers (OpenAI, Anthropic, Google Gemini) with automatic
  * provider detection based on model ID patterns.
  *
- * @param modelId - Model ID (e.g., 'gpt-4o', 'claude-3-5-sonnet-latest', 'gemini-2.0-flash')
+ * @param modelId - Model ID (e.g., 'gpt-5-nano', 'claude-3-5-sonnet-latest', 'gemini-2.0-flash')
  * @param options - Optional provider-specific configuration options
  * @returns An OpikBaseModel instance
  *
  * @example
  * ```typescript
  * // OpenAI with organization
- * const model1 = createModel('gpt-4o', {
+ * const model1 = createModel('gpt-5-nano', {
  *   apiKey: 'sk-...',
  *   organization: 'org-123'
  * });
@@ -63,7 +63,7 @@ export function createModel(
  * import { anthropic } from '@ai-sdk/anthropic';
  *
  * // OpenAI with custom settings
- * const customOpenAI = openai('gpt-4o', {
+ * const customOpenAI = openai('gpt-5-nano', {
  *   structuredOutputs: true,
  * });
  * const model1 = createModelFromInstance(customOpenAI);
@@ -123,7 +123,7 @@ function createInvalidModelTypeError(model: unknown): Error {
 
   return new Error(
     `Invalid model type. Expected one of:
-  - string (model ID like 'gpt-4o', 'claude-3-5-sonnet-latest')
+  - string (model ID like 'gpt-5-nano', 'claude-3-5-sonnet-latest')
   - LanguageModel instance from Vercel AI SDK
   - OpikBaseModel instance
   - undefined (uses default model: ${DEFAULT_MODEL})
@@ -136,7 +136,7 @@ Received: ${receivedType} ${receivedValue}`
  * Resolves a model identifier to an OpikBaseModel instance.
  *
  * This function implements a resolution strategy that handles multiple input types:
- * 1. undefined/null → Creates default model (gpt-4o)
+ * 1. undefined/null → Creates default model (gpt-5-nano)
  * 2. string → Creates model from model ID
  * 3. OpikBaseModel → Returns as-is
  * 4. LanguageModel → Wraps in OpikBaseModel adapter
@@ -154,13 +154,13 @@ Received: ${receivedType} ${receivedValue}`
  * const model1 = resolveModel();
  *
  * // Using model ID
- * const model2 = resolveModel('gpt-4o');
+ * const model2 = resolveModel('gpt-5-nano');
  *
  * // Using OpikBaseModel instance
- * const model3 = resolveModel(new VercelAIChatModel('gpt-4o'));
+ * const model3 = resolveModel(new VercelAIChatModel('gpt-5-nano'));
  *
  * // Using LanguageModel instance
- * const model4 = resolveModel(openai('gpt-4o'));
+ * const model4 = resolveModel(openai('gpt-5-nano'));
  * ```
  */
 
