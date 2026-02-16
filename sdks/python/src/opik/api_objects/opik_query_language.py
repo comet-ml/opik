@@ -297,6 +297,100 @@ class DatasetItemOQLConfig(OQLConfig):
         return ["data"]
 
 
+class PromptVersionOQLConfig(OQLConfig):
+    """OQL configuration for prompt version filtering."""
+
+    @property
+    def columns(self) -> Dict[str, str]:
+        return {
+            "id": "string",
+            "commit": "string",
+            "template": "string",
+            "change_description": "string",
+            "metadata": "dictionary",
+            "type": "string",
+            "tags": "list",
+            "created_at": "date_time",
+            "created_by": "string",
+        }
+
+    @property
+    def supported_operators(self) -> Dict[str, List[str]]:
+        return {
+            "id": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+            ],
+            "commit": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+            ],
+            "template": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+            ],
+            "change_description": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+            ],
+            "metadata": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                ">=",
+                "<",
+                "<=",
+            ],
+            "type": ["=", "!="],
+            "tags": ["contains"],
+            "created_at": ["=", "!=", ">", ">=", "<", "<="],
+            "created_by": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+            ],
+            "default": [
+                "=",
+                "!=",
+                "contains",
+                "not_contains",
+                "starts_with",
+                "ends_with",
+                ">",
+                ">=",
+                "<",
+                "<=",
+            ],
+        }
+
+    @property
+    def dictionary_fields(self) -> List[str]:
+        return ["metadata"]
+
+
 OPERATORS_WITHOUT_VALUES = {"is_empty", "is_not_empty"}
 
 # Default config for backward compatibility
@@ -352,6 +446,17 @@ class OpikQueryLanguage:
         queries raise ValueError during parsing.
         """
         return cls(query_string, DatasetItemOQLConfig())
+
+    @classmethod
+    def for_prompt_versions(cls, query_string: Optional[str]) -> "OpikQueryLanguage":
+        """
+        Creates a parser for filtering prompt versions using OQL syntax. Use this when searching
+        or filtering prompt version history. Returns an OpikQueryLanguage instance preconfigured
+        with PromptVersionOQLConfig that validates prompt version fields like tags, template,
+        commit, metadata, and created_at. Empty or None query_string yields no filters; malformed
+        queries raise ValueError during parsing.
+        """
+        return cls(query_string, PromptVersionOQLConfig())
 
     def get_filter_expressions(self) -> Optional[List[Dict[str, Any]]]:
         return self._filter_expressions

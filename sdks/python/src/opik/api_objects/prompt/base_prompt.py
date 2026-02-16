@@ -32,6 +32,12 @@ class BasePrompt(ABC):
 
     @property
     @abstractmethod
+    def version_id(self) -> str:
+        """The unique identifier of the prompt version."""
+        pass
+
+    @property
+    @abstractmethod
     def metadata(self) -> Optional[Dict[str, Any]]:
         """The metadata dictionary associated with the prompt."""
         pass
