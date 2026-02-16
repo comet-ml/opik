@@ -1,6 +1,6 @@
 import datetime
 import logging
-from typing import Optional, Dict, Any, List, TypeVar, Type, Union
+from typing import Optional, Dict, Any, List, TypeVar, Type, Union, Literal
 
 import opik.llm_usage as llm_usage
 from . import opik_query_language, validation_helpers, constants
@@ -106,7 +106,7 @@ def add_usage_to_metadata(
 def parse_filter_expressions(
     filter_string: Optional[str],
     parsed_item_class: Type[FilterParsedItemT],
-    entity_type: str = "traces",
+    entity_type: Literal["traces", "threads", "spans"],
 ) -> OptionalFilterParsedItemList:
     """
     Parses filter expressions from a filter string using a specified class for parsed items.
