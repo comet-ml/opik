@@ -21,7 +21,6 @@ import {
   WidgetEditorHandle,
 } from "@/types/dashboard";
 import { createDefaultWidgetConfig } from "@/lib/dashboard/utils";
-import useUserPermission from "@/plugins/comet/useUserPermission";
 
 enum DialogStep {
   ADD = "add",
@@ -46,11 +45,9 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   const previewWidget = useDashboardStore((state) => state.previewWidget);
   const setPreviewWidget = useDashboardStore(selectSetPreviewWidget);
 
-  const { canViewExperiments } = useUserPermission();
-
   const EditorComponent =
     previewWidget?.type && widgetResolver
-      ? widgetResolver({ type: previewWidget.type, canViewExperiments })?.Editor
+      ? widgetResolver({ type: previewWidget.type })?.Editor
       : null;
 
   useEffect(() => {
