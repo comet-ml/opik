@@ -1,13 +1,13 @@
 ---
-description: Export RubyLLM traces to Opik using OpenTelemetry.
+description: Export RubyLLM application traces to Opik using Ruby OpenTelemetry SDK.
 headline: RubyLLM | Opik Documentation
-og:description: Connect RubyLLM OpenTelemetry traces to Opik using OTLP.
+og:description: RubyLLM apps can be observed through standard Ruby OpenTelemetry setup and OTLP export.
 og:site_name: Opik Documentation
 og:title: RubyLLM Integration - Opik
 title: Observability for RubyLLM with Opik
 ---
 
-[RubyLLM](https://rubyllm.com/) applications can emit OpenTelemetry spans and send them to Opik via OTLP.
+[RubyLLM](https://rubyllm.com/) does not currently publish a dedicated OTEL bootstrap. Use standard Ruby OpenTelemetry SDK/exporter setup in the host app.
 
 ## OTLP configuration
 
@@ -16,7 +16,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/ote
 export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
 ```
 
-## Example (Ruby)
+## Example (Ruby OpenTelemetry SDK)
 
 ```ruby
 require "opentelemetry/sdk"
@@ -31,13 +31,8 @@ OpenTelemetry.tracer_provider = provider
 # Run your RubyLLM workflow as usual.
 ```
 
-## Notes
-
-- Ensure OTLP endpoint points to Opik's `/api/v1/private/otel`.
-- Add `projectName` header for explicit project routing.
-
 ## Source references
 
 - [RubyLLM docs](https://rubyllm.com/)
-- [OpenTelemetry Ruby OTLP exporter](https://open-telemetry.github.io/opentelemetry-ruby/opentelemetry-exporter-otlp/v0.29.0/)
-- [OpenTelemetry Ruby SDK](https://open-telemetry.github.io/opentelemetry-ruby/opentelemetry-sdk/v1.7.0/)
+- [OpenTelemetry Ruby SDK docs](https://open-telemetry.github.io/opentelemetry-ruby/opentelemetry-sdk/v1.7.0/)
+- [OpenTelemetry Ruby OTLP exporter docs](https://open-telemetry.github.io/opentelemetry-ruby/opentelemetry-exporter-otlp/v0.29.0/)

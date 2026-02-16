@@ -1,5 +1,5 @@
 ---
-description: Observe Quarkus LangChain4j applications in Opik using OpenTelemetry.
+description: Observe Quarkus LangChain4j applications in Opik using Quarkus OTEL configuration.
 headline: Quarkus LangChain4j | Opik Documentation
 og:description: Configure Quarkus OpenTelemetry export to send LangChain4j traces to Opik.
 og:site_name: Opik Documentation
@@ -7,28 +7,17 @@ og:title: Quarkus LangChain4j Integration - Opik
 title: Observability for Quarkus LangChain4j with Opik
 ---
 
-[Quarkus LangChain4j](https://docs.quarkiverse.io/quarkus-langchain4j/dev/index.html) supports OpenTelemetry tracing through the Quarkus OTEL stack.
+[Quarkus LangChain4j](https://docs.quarkiverse.io/quarkus-langchain4j/dev/index.html) uses Quarkus OpenTelemetry configuration for export.
 
-## OTLP configuration
-
-```bash wordWrap
-export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
-export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
-```
-
-## Example (`application.properties`)
+## `application.properties` example
 
 ```properties
 quarkus.otel.enabled=true
 quarkus.otel.traces.enabled=true
-quarkus.otel.exporter.otlp.endpoint=${OTEL_EXPORTER_OTLP_ENDPOINT}
-quarkus.otel.exporter.otlp.headers=${OTEL_EXPORTER_OTLP_HEADERS}
+quarkus.otel.exporter.otlp.traces.endpoint=https://www.comet.com/opik/api/v1/private/otel
+quarkus.otel.exporter.otlp.traces.headers=Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>
+quarkus.otel.exporter.otlp.traces.protocol=http/protobuf
 ```
-
-## Notes
-
-- Keep OTLP protocol on HTTP for Opik ingestion.
-- Include `projectName` in OTEL headers to route traces to the right Opik project.
 
 ## Source references
 

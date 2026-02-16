@@ -1,14 +1,13 @@
 ---
-description: Monitor Temporal AI workflows in Opik using OpenTelemetry OTLP export.
+description: Monitor Temporal workflows in Opik with Temporal's OpenTelemetry interceptor.
 headline: Temporal | Opik Documentation
-og:description: Send Temporal workflow traces to Opik with OpenTelemetry for durable
-  workflow observability.
+og:description: Temporal Python SDK uses TracingInterceptor for OpenTelemetry integration.
 og:site_name: Opik Documentation
 og:title: Temporal Integration - Opik
 title: Observability for Temporal with Opik
 ---
 
-[Temporal](https://temporal.io/) workflows can emit OpenTelemetry spans from workers and activities. Route those spans to Opik to inspect end-to-end LLM workflows and tool execution.
+[Temporal](https://temporal.io/) Python SDK provides OpenTelemetry integration through `TracingInterceptor`.
 
 ## OTLP configuration
 
@@ -24,31 +23,30 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
 export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
 ```
 
-## Example (Python worker/client)
+## Example (Temporal Python SDK)
 
 ```python
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from temporalio.client import Client
+from temporalio.worker import Worker
 from temporalio.contrib.opentelemetry import TracingInterceptor
 
-resource = Resource.create({"service.name": "temporal-worker"})
-provider = TracerProvider(resource=resource)
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
-trace.set_tracer_provider(provider)
-
-# Pass interceptor to your Temporal Client and Worker.
 tracing_interceptor = TracingInterceptor()
+
+client = await Client.connect(
+    "localhost:7233",
+    interceptors=[tracing_interceptor],
+)
+
+worker = Worker(
+    client,
+    task_queue="my-task-queue",
+    workflows=[...],
+    activities=[...],
+    interceptors=[tracing_interceptor],
+)
 ```
-
-## Notes
-
-- Temporal's Python SDK exposes `TracingInterceptor` for OTEL integration.
-- Include `projectName` in headers so workflow traces land in the expected project.
 
 ## Source references
 
-- [Temporal Python SDK OpenTelemetry interceptor](https://github.com/temporalio/sdk-python?tab=readme-ov-file#opentelemetry-support)
+- [Temporal Python SDK OpenTelemetry support](https://github.com/temporalio/sdk-python?tab=readme-ov-file#opentelemetry-support)
 - [OpenTelemetry Python exporters](https://opentelemetry.io/docs/languages/python/exporters/)

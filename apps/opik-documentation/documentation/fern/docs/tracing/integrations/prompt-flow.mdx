@@ -1,13 +1,13 @@
 ---
-description: Send Prompt Flow traces to Opik via OpenTelemetry OTLP.
+description: Configure Prompt Flow tracing and OTLP export for Opik.
 headline: Prompt Flow | Opik Documentation
-og:description: Configure Prompt Flow OpenTelemetry export for Opik-based trace analysis.
+og:description: Prompt Flow tracing is enabled through Prompt Flow APIs; OTLP export follows OpenTelemetry configuration.
 og:site_name: Opik Documentation
 og:title: Prompt Flow Integration - Opik
 title: Observability for Prompt Flow with Opik
 ---
 
-[Prompt Flow](https://microsoft.github.io/promptflow/) supports OpenTelemetry-based tracing that can be exported to Opik.
+[Prompt Flow](https://microsoft.github.io/promptflow/) uses its own tracing APIs. OTLP export is configured through OpenTelemetry settings.
 
 ## OTLP configuration
 
@@ -16,30 +16,23 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/ote
 export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
 ```
 
-## Example (Python)
+## Example (Prompt Flow tracing API)
 
 ```python
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from promptflow.tracing import start_trace
 
-resource = Resource.create({"service.name": "prompt-flow-app"})
-provider = TracerProvider(resource=resource)
-provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
-trace.set_tracer_provider(provider)
+# Enable Prompt Flow tracing for your app/session.
+start_trace()
 
 # Run prompt flow pipeline as usual.
 ```
 
 ## Notes
 
-- Keep OTLP transport on HTTP/protobuf for Opik compatibility.
-- Include `projectName` in OTEL headers if you want a non-default Opik project.
+- Prompt Flow traces and OTEL export behavior are controlled by Prompt Flow tracing integration and OTEL configuration.
+- Keep `projectName` in OTEL headers for explicit Opik project routing.
 
 ## Source references
 
-- [Prompt Flow tracing and OTEL setup](https://microsoft.github.io/promptflow/how-to-guides/tracing/trace-ui.html)
-- [Prompt Flow with OTEL collector](https://microsoft.github.io/promptflow/how-to-guides/tracing/trace-with-otel.html)
-- [OpenTelemetry Python exporters](https://opentelemetry.io/docs/languages/python/exporters/)
+- [Prompt Flow tracing docs](https://microsoft.github.io/promptflow/how-to-guides/tracing/index.html)
+- [Prompt Flow tracing with OTEL collector](https://microsoft.github.io/promptflow/how-to-guides/tracing/trace-with-otel.html)

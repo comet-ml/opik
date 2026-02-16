@@ -1,14 +1,13 @@
 ---
-description: Send LangServe traces to Opik using OpenTelemetry-compatible instrumentation.
+description: Send LangServe app traces to Opik using host-stack OpenTelemetry instrumentation.
 headline: LangServe | Opik Documentation
-og:description: Add OpenTelemetry tracing to LangServe deployments and inspect them in
-  Opik.
+og:description: LangServe has no dedicated OTEL bootstrap; use FastAPI/app-level instrumentation and OTLP export.
 og:site_name: Opik Documentation
 og:title: LangServe Integration - Opik
 title: Observability for LangServe with Opik
 ---
 
-[LangServe](https://github.com/langchain-ai/langserve) apps can be traced with OpenTelemetry and sent to Opik's OTLP endpoint.
+[LangServe](https://github.com/langchain-ai/langserve) does not define its own OTEL bootstrap flow. In practice, you instrument the hosting app (typically FastAPI) and export spans via OTLP.
 
 ## OTLP configuration
 
@@ -17,7 +16,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/ote
 export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>'
 ```
 
-## Example (Python FastAPI + LangServe)
+## Example (FastAPI host)
 
 ```python
 from fastapi import FastAPI
@@ -36,16 +35,11 @@ trace.set_tracer_provider(provider)
 app = FastAPI()
 FastAPIInstrumentor.instrument_app(app)
 
-# Register your LangServe routes and run FastAPI as usual.
+# Mount LangServe routes and run FastAPI.
 ```
-
-## Notes
-
-- If you instrument LangChain/LangGraph underneath, spans will appear in the same trace.
-- Use `projectName` in OTEL headers for project routing.
 
 ## Source references
 
 - [LangServe repository](https://github.com/langchain-ai/langserve)
-- [OpenTelemetry Python FastAPI instrumentation](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/fastapi/fastapi.html)
+- [OpenTelemetry FastAPI instrumentation](https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/fastapi/fastapi.html)
 - [OpenTelemetry Python exporters](https://opentelemetry.io/docs/languages/python/exporters/)
