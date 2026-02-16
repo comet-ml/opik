@@ -4,7 +4,7 @@ import useLocalStorageState from "use-local-storage-state";
 import WorkspaceStatisticSection from "@/components/pages/HomePage/WorkspaceStatisticSection";
 import OverallPerformanceSection from "@/components/pages/HomePage/OverallPerformanceSection";
 import ObservabilitySection from "@/components/pages/HomePage/ObservabilitySection";
-import EvaluationSection from "@/components/pages/HomePage/EvaluationSectionEntry";
+import EvaluationSection from "@/components/pages/HomePage/EvaluationSection";
 import OptimizationRunsSection from "@/components/pages/HomePage/OptimizationRunsSection";
 import WelcomeBanner from "@/components/pages/HomePage/WecomeBanner";
 
