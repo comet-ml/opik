@@ -43,7 +43,11 @@ const CompareCostCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
     const value = get(item, accessor);
     if (!isNumber(value)) return "-";
 
-    return formatter(value);
+    return (
+      <TooltipWrapper content={formatCost(value, { modifier: "full" })}>
+        <span>{formatter(value)}</span>
+      </TooltipWrapper>
+    );
   };
 
   return (
