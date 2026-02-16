@@ -41,7 +41,6 @@ public interface OpenTelemetryService {
 @Slf4j
 class OpenTelemetryServiceImpl implements OpenTelemetryService {
     private static final String OPEN_INFERENCE = "OpenInference";
-    private static final String OPEN_LIT = "OpenLIT";
     private static final String LANGFUSE = "LangFuse";
     private static final String LIVE_KIT = "LiveKit";
     private static final String LOGFIRE = "Logfire";
@@ -125,7 +124,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
         }
 
         if (normalized.contains("openlit")) {
-            return OPEN_LIT;
+            return LOGFIRE;
         }
 
         if (normalized.contains("langfuse")) {
