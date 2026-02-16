@@ -102,11 +102,12 @@ public class AuthCredentialsCacheServiceTest {
                 WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue());
 
         cacheService.cache(apiKey, workspaceName, cachedPermissions, userName, workspaceId, workspaceName, null);
-        var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, resolvedPermissions);
+        var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName,
+                resolvedPermissions);
 
         assertThat(resolved).isEmpty();
     }
-    
+
     @Test
     void testNoRequiredPermissions() {
         String apiKey = getRandomId();
@@ -116,7 +117,7 @@ public class AuthCredentialsCacheServiceTest {
 
         var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, null);
         assertThat(resolved).isEmpty();
-        
+
         cacheService.cache(apiKey, workspaceName, null, userName, workspaceId, workspaceName, null);
 
         resolveAndAssertOnValidCache(apiKey, workspaceName, null, userName, workspaceId);
@@ -140,7 +141,8 @@ public class AuthCredentialsCacheServiceTest {
         resolveAndAssertOnValidCache(apiKey, workspaceName, bothPermissions, userName, workspaceId);
     }
 
-    private void resolveAndAssertOnValidCache(String apiKey, String workspaceName, List<String> bothPermissions, String expectedUserName, String expectedWorkspaceId) {
+    private void resolveAndAssertOnValidCache(String apiKey, String workspaceName, List<String> bothPermissions,
+            String expectedUserName, String expectedWorkspaceId) {
         var resolved = cacheService.resolveApiKeyUserAndWorkspaceIdFromCache(apiKey, workspaceName, bothPermissions);
 
         assertThat(resolved).isPresent();
@@ -151,5 +153,5 @@ public class AuthCredentialsCacheServiceTest {
     private String getRandomId() {
         return RandomStringUtils.secure().nextAlphanumeric(10);
     }
-    
+
 }

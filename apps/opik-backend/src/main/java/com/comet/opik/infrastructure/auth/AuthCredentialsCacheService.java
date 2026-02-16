@@ -8,10 +8,12 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.redisson.api.RMapReactive;
 import org.redisson.api.RedissonReactiveClient;
+import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -61,17 +63,27 @@ class AuthCredentialsCacheService implements CacheService {
                 .map(params -> new WorkspaceMetadataCache(params.get(WORKSPACE_ID_KEY), getQuotas(params)));
     }
 
+    /**
+     * Fetches access entries per permission in parallel, verifies all are present and returns the username
+     */
     private Optional<String> getUserNameFromAccessCache(String apiKey, String workspaceName,
-            List<String> requiredPermissions) {
+                                                        List<String> requiredPermissions) {
         List<String> permissionKeys = getKeysForPermissions(apiKey, workspaceName, requiredPermissions);
-        List<String> userNamesFromCache = permissionKeys.stream()
-                .map(key -> (String) redissonClient.getBucket(key).get().block())
-                .filter(StringUtils::isNotBlank)
-                .toList();
-        if (userNamesFromCache.size() < permissionKeys.size()) { //not all requested permissions are in cache
+        var values = Flux.fromIterable(permissionKeys)
+                .flatMap(key -> redissonClient.getBucket(key).get())
+                .collectList()
+                .block();
+        if (CollectionUtils.isEmpty(values)) {
             return Optional.empty();
         }
-        return Optional.of(userNamesFromCache.getLast());
+        List<String> userNames = values.stream()
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .toList();
+        if (userNames.size() != permissionKeys.size()) {
+            return Optional.empty();
+        }
+        return Optional.of(userNames.getFirst());
     }
 
     @Override
