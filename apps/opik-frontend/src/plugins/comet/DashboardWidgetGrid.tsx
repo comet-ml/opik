@@ -1,7 +1,7 @@
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import DashboardWidgetGridContent, {
   DashboardWidgetGridProps,
-} from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid";
+} from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid/DashboardWidgetGrid";
 
 const DashboardWidgetGrid: React.FC<DashboardWidgetGridProps> = (props) => {
   const { canViewExperiments } = useUserPermission();

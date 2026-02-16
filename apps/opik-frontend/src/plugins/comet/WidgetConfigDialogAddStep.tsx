@@ -1,7 +1,7 @@
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import WidgetConfigDialogAddStepContent, {
   WidgetConfigDialogAddStepProps,
-} from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep";
+} from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep/WidgetConfigDialogAddStep";
 
 const WidgetConfigDialogAddStep: React.FC<WidgetConfigDialogAddStepProps> = (
   props,
