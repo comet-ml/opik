@@ -413,7 +413,7 @@ class TestLoopExceptionHandling:
 
         assert call_count >= 3, "Thread should have survived the first two exceptions"
 
-    def test_loop__replay_raises__thread_continues(
+    def test_loop__replay_callback_raises__thread_continues(
         self,
         manager_monitor: Tuple[
             replay_manager.ReplayManager, connection_monitor.OpikConnectionMonitor
@@ -424,6 +424,10 @@ class TestLoopExceptionHandling:
 
         msg = _create_trace_message(message_id=1)
         rm.db_manager.register_message(msg, status=db_manager.MessageStatus.failed)
+        # mark connection as restored to enable replay callback
+        monitor.tick.return_value = (
+            connection_monitor.ConnectionStatus.connection_restored
+        )
 
         call_count = 0
 
@@ -442,6 +446,8 @@ class TestLoopExceptionHandling:
 
         rm.close()
         rm.join(timeout=2)
+
+        assert call_count >= 2, "Loop should have continued despite replay errors"
 
         assert rm.is_alive() is False, "Thread should have exited cleanly"
 
