@@ -23,7 +23,7 @@ export interface FilterExpression {
   field: string;
   key?: string;
   operator: string;
-  value: string;
+  value: string | null;
   type?: ColumnType;
 }
 
@@ -54,5 +54,5 @@ export interface OperatorToken {
  * Token representing a parsed value
  */
 export interface ValueToken {
-  value: string;
+  value: string | null;
 }

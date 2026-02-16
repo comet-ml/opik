@@ -39,3 +39,8 @@ export const OPERATOR_SETS = {
     "is_not_empty",
   ],
 } as const;
+
+/**
+ * Operators that don't require a value
+ */
+export const OPERATORS_WITHOUT_VALUES = ["is_empty", "is_not_empty"] as const;

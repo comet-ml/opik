@@ -139,6 +139,73 @@ describe("OpikQueryLanguage", () => {
       });
     });
 
+    it("should parse is_empty operator for lists", () => {
+      const oql = new OpikQueryLanguage("tags is_empty");
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "tags",
+        operator: "is_empty",
+        value: null,
+      });
+    });
+
+    it("should parse is_not_empty operator for lists", () => {
+      const oql = new OpikQueryLanguage("tags is_not_empty");
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "tags",
+        operator: "is_not_empty",
+        value: null,
+      });
+    });
+
+    it("should parse is_empty operator for feedback scores", () => {
+      const oql = new OpikQueryLanguage("feedback_scores is_empty");
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "feedback_scores",
+        operator: "is_empty",
+        value: null,
+      });
+    });
+
+    it("should parse is_not_empty operator for feedback scores", () => {
+      const oql = new OpikQueryLanguage("feedback_scores is_not_empty");
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "feedback_scores",
+        operator: "is_not_empty",
+        value: null,
+      });
+    });
+
+    it("should parse valueless operators in complex query", () => {
+      const oql = OpikQueryLanguage.forTraces(
+        'tags is_not_empty and duration > 100'
+      );
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(2);
+      expect(parsed![0]).toMatchObject({
+        field: "tags",
+        operator: "is_not_empty",
+        value: null,
+      });
+      expect(parsed![1]).toMatchObject({
+        field: "duration",
+        operator: ">",
+        value: "100",
+      });
+    });
+
     it("should parse multiple filters with AND", () => {
       const oql = OpikQueryLanguage.forThreads(
         'status = "active" and duration > 100'

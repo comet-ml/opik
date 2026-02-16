@@ -112,7 +112,7 @@ function parseFilterStringGeneric<TFilter, TOperator>(
     const filter: {
       field: string;
       operator: TOperator;
-      value: string;
+      value: string | null;
       key?: string;
     } = {
       field: expr.field,

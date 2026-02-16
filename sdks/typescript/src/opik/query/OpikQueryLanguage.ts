@@ -26,6 +26,7 @@ import {
   ThreadOQLConfig,
   PromptOQLConfig,
 } from "./configs";
+import { OPERATORS_WITHOUT_VALUES } from "./constants";
 
 // Re-export types for backward compatibility
 export type { FilterExpression };
@@ -129,7 +130,9 @@ export class OpikQueryLanguage {
       this.getFieldName(field),
       this.config
     );
-    const value = ValueParser.parse(tokenizer);
+    const value = (OPERATORS_WITHOUT_VALUES as readonly string[]).includes(operator.operator)
+      ? { value: null }
+      : ValueParser.parse(tokenizer);
 
     return this.buildExpression(field, operator, value);
   }
