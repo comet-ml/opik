@@ -70,7 +70,9 @@ import { ColumnData } from "@/types/shared";
 import {
   DEFAULT_PYTHON_CODE_THREAD_DATA,
   DEFAULT_PYTHON_CODE_TRACE_DATA,
+  DEFAULT_PYTHON_CODE_TRACE_DATA_DIRECT,
   DEFAULT_PYTHON_CODE_SPAN_DATA,
+  DEFAULT_PYTHON_CODE_SPAN_DATA_DIRECT,
   LLM_PROMPT_CUSTOM_THREAD_TEMPLATE,
   LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
   LLM_PROMPT_CUSTOM_SPAN_TEMPLATE,
@@ -139,6 +141,15 @@ const DEFAULT_PYTHON_CODE_DATA: Record<
   [EVALUATORS_RULE_SCOPE.span]: DEFAULT_PYTHON_CODE_SPAN_DATA,
 };
 
+const DEFAULT_PYTHON_CODE_DATA_DIRECT: Record<
+  EVALUATORS_RULE_SCOPE,
+  PythonCodeObject
+> = {
+  [EVALUATORS_RULE_SCOPE.trace]: DEFAULT_PYTHON_CODE_TRACE_DATA_DIRECT,
+  [EVALUATORS_RULE_SCOPE.thread]: DEFAULT_PYTHON_CODE_THREAD_DATA,
+  [EVALUATORS_RULE_SCOPE.span]: DEFAULT_PYTHON_CODE_SPAN_DATA_DIRECT,
+};
+
 type AddEditRuleDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -174,6 +185,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isDirectJsonPathEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.ONLINE_EVALUATION_OPTIONAL_VARIABLE_MAPPING_ENABLED,
   );
+  const pythonCodeDefaults = isDirectJsonPathEnabled
+    ? DEFAULT_PYTHON_CODE_DATA_DIRECT
+    : DEFAULT_PYTHON_CODE_DATA;
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const { isOpen, setIsOpen, requestConfirm, confirm, cancel } =
@@ -219,7 +233,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
           ? (defaultRule.code as PythonCodeObject)
-          : cloneDeep(DEFAULT_PYTHON_CODE_DATA[formScope]),
+          : cloneDeep(pythonCodeDefaults[formScope]),
       llmJudgeDetails:
         defaultRule && isLLMJudgeRule(defaultRule)
           ? convertLLMJudgeObjectToLLMJudgeData(
@@ -284,7 +298,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         pythonCodeDetails:
           defaultRule && isPythonCodeRule(defaultRule)
             ? (defaultRule.code as PythonCodeObject)
-            : cloneDeep(DEFAULT_PYTHON_CODE_DATA[formScope]),
+            : cloneDeep(pythonCodeDefaults[formScope]),
         llmJudgeDetails:
           defaultRule && isLLMJudgeRule(defaultRule)
             ? convertLLMJudgeObjectToLLMJudgeData(
@@ -323,7 +337,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         );
         form.setValue(
           "pythonCodeDetails",
-          cloneDeep(DEFAULT_PYTHON_CODE_DATA[value]),
+          cloneDeep(pythonCodeDefaults[value]),
         );
       };
 
@@ -436,7 +450,10 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       return {
         ...ruleData,
         code: {
-          ...convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails),
+          ...convertLLMJudgeDataToLLMJudgeObject(
+            formData.llmJudgeDetails,
+            conversionOptions,
+          ),
           variables: undefined,
         },
       } as EvaluatorsRule;
@@ -679,7 +696,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 } else {
                                   form.setValue(
                                     "pythonCodeDetails",
-                                    cloneDeep(DEFAULT_PYTHON_CODE_DATA[scope]),
+                                    cloneDeep(pythonCodeDefaults[scope]),
                                   );
                                 }
                               }}
