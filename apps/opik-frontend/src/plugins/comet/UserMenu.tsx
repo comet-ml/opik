@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import { ListAction } from "@/components/ui/list-action";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -313,13 +314,17 @@ const UserMenu = () => {
                       </span>
                       <Copy className="ml-2 size-3 shrink-0" />
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <a
-                      className="comet-body-s flex justify-center"
-                      href={buildUrl("account-settings/apiKeys", workspaceName)}
-                    >
-                      <Button variant="link">Manage API keys</Button>
-                    </a>
+                    <DropdownMenuSeparator className="my-1" />
+                    <ListAction asChild>
+                      <a
+                        href={buildUrl(
+                          "account-settings/apiKeys",
+                          workspaceName,
+                        )}
+                      >
+                        Manage API keys
+                      </a>
+                    </ListAction>
                   </DropdownMenuSubContent>
                 </DropdownMenuPortal>
               </DropdownMenuSub>
