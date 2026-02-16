@@ -9,6 +9,7 @@ import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTr
 import { WidgetConfigDialogAddStepProps } from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep";
 import { DashboardWidgetGridProps } from "@/components/shared/Dashboard/DashboardSection/DashboardWidgetGrid";
 import { SideBarMenuItemsProps } from "@/components/layout/SideBar/SideBarMenuItems";
+import { ExperimentsLinkProps } from "@/components/shared/OnboardingOverlay/steps/StartPreference/ExperimentsLink";
 
 type PluginStore = {
   Logo: React.ComponentType<{ expanded: boolean }> | null;
@@ -31,6 +32,7 @@ type PluginStore = {
   PromptPage: React.ComponentType | null;
   EvaluationSection: React.ComponentType | null;
   ExperimentsGuard: React.ComponentType | null;
+  StartPreferenceExperimentsLink: React.ComponentType<ExperimentsLinkProps> | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -55,6 +57,7 @@ const PLUGIN_NAMES = [
   "PromptPage",
   "EvaluationSection",
   "ExperimentsGuard",
+  "StartPreferenceExperimentsLink",
   "init",
 ];
 
@@ -77,6 +80,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   PromptPage: null,
   EvaluationSection: null,
   ExperimentsGuard: null,
+  StartPreferenceExperimentsLink: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

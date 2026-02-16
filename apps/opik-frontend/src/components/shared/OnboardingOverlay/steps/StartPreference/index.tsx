@@ -1,9 +1,10 @@
 import React from "react";
 import { Link } from "@tanstack/react-router";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
-import OnboardingStep from "../OnboardingStep";
 import useAppStore from "@/store/AppStore";
-import useUserPermission from "@/plugins/comet/useUserPermission";
+import usePluginsStore from "@/store/PluginsStore";
+import OnboardingStep from "@/components/shared/OnboardingOverlay/OnboardingStep";
+import ExperimentsLink from "./ExperimentsLink";
 
 const OPTIONS = {
   TRACE_APP: "Trace an app – Debug and analyze every AI interaction",
@@ -18,11 +19,27 @@ const FEATURE_FLAG_KEY = "onboarding-start-exploring-test";
 const StartPreference: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const variant = useFeatureFlagVariantKey(FEATURE_FLAG_KEY);
-  const { canViewExperiments } = useUserPermission();
+
+  const ExperimentsLinkComponent = usePluginsStore(
+    (state) => state.StartPreferenceExperimentsLink,
+  );
 
   // A/B test: control shows "Skip", test shows "Start exploring Opik"
   // Enhanced flow also opens create experiment dialog when clicking "Run evaluations"
   const showEnhancedOnboarding = variant === "test";
+
+  const experimentsLink = ExperimentsLinkComponent ? (
+    <ExperimentsLinkComponent
+      optionDescription={OPTIONS.RUN_EVALUATIONS}
+      showEnhancedOnboarding={showEnhancedOnboarding}
+    />
+  ) : (
+    <ExperimentsLink
+      optionDescription={OPTIONS.RUN_EVALUATIONS}
+      showEnhancedOnboarding={showEnhancedOnboarding}
+      canViewExperiments
+    />
+  );
 
   return (
     <OnboardingStep className="max-w-full">
@@ -51,25 +68,7 @@ const StartPreference: React.FC = () => {
           <OnboardingStep.AnswerCard option={OPTIONS.TEST_PROMPTS} />
         </Link>
 
-        {canViewExperiments && (
-          <Link
-            to="/$workspaceName/experiments"
-            params={{ workspaceName }}
-            search={
-              showEnhancedOnboarding
-                ? {
-                    new: {
-                      experiment: true,
-                      datasetName: "Opik Demo Questions",
-                    },
-                  }
-                : undefined
-            }
-            className="w-full"
-          >
-            <OnboardingStep.AnswerCard option={OPTIONS.RUN_EVALUATIONS} />
-          </Link>
-        )}
+        {experimentsLink}
       </OnboardingStep.AnswerList>
 
       {showEnhancedOnboarding ? (
