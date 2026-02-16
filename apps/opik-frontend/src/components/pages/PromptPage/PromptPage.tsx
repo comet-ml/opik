@@ -14,11 +14,11 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
-const PromptPage: React.FC<{ canViewExperiments: boolean }> = ({
-  canViewExperiments,
-}) => {
+const PromptPage: React.FunctionComponent = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
+  const { canViewExperiments } = useUserPermission();
 
   const promptId = usePromptIdFromURL();
 
