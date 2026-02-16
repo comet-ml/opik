@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import cloneDeep from "lodash/cloneDeep";
 import get from "lodash/get";
 import { z } from "zod";
@@ -185,6 +185,20 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isDirectJsonPathEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.ONLINE_EVALUATION_OPTIONAL_VARIABLE_MAPPING_ENABLED,
   );
+  const hasExistingMappings = useMemo(() => {
+    if (!defaultRule) return false;
+    if (isLLMJudgeRule(defaultRule)) {
+      const variables = defaultRule.code.variables;
+      return !!variables && Object.keys(variables).length > 0;
+    }
+    if (isPythonCodeRule(defaultRule)) {
+      const args =
+        "arguments" in defaultRule.code ? defaultRule.code.arguments : undefined;
+      return !!args && Object.keys(args).length > 0;
+    }
+    return false;
+  }, [defaultRule]);
+  const hideVariables = isDirectJsonPathEnabled && !hasExistingMappings;
   const pythonCodeDefaults = isDirectJsonPathEnabled
     ? DEFAULT_PYTHON_CODE_DATA_DIRECT
     : DEFAULT_PYTHON_CODE_DATA;
@@ -434,7 +448,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       type: ruleType,
     };
 
-    const conversionOptions = { skipVariables: isDirectJsonPathEnabled };
+    const conversionOptions = { skipVariables: hideVariables };
 
     if (ruleType === EVALUATORS_RULE_TYPE.llm_judge) {
       return {
@@ -469,7 +483,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       } as EvaluatorsRule;
     }
 
-    const pythonCode = isDirectJsonPathEnabled
+    const pythonCode = hideVariables
       ? { ...formData.pythonCodeDetails, arguments: {} }
       : formData.pythonCodeDetails;
 
@@ -477,7 +491,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       ...ruleData,
       code: pythonCode,
     } as EvaluatorsRule;
-  }, [form, isDirectJsonPathEnabled]);
+  }, [form, hideVariables]);
 
   const createPrompt = useCallback(() => {
     createMutate(
@@ -737,14 +751,14 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                     form={form}
                     projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
-                    hideVariables={isDirectJsonPathEnabled}
+                    hideVariables={hideVariables}
                   />
                 ) : (
                   <PythonCodeRuleDetails
                     form={form}
                     projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
-                    hideVariables={isDirectJsonPathEnabled}
+                    hideVariables={hideVariables}
                   />
                 )}
 
