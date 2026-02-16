@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import OnboardingStep from "../OnboardingStep";
 import useAppStore from "@/store/AppStore";
+import useUserPermission from "@/plugins/comet/useUserPermission";
 
 const OPTIONS = {
   TRACE_APP: "Trace an app – Debug and analyze every AI interaction",
@@ -14,15 +15,10 @@ const OPTIONS = {
 
 const FEATURE_FLAG_KEY = "onboarding-start-exploring-test";
 
-interface StartPreferenceContentProps {
-  canViewExperiments: boolean;
-}
-
-const StartPreferenceContent: React.FC<StartPreferenceContentProps> = ({
-  canViewExperiments,
-}) => {
+const StartPreference: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const variant = useFeatureFlagVariantKey(FEATURE_FLAG_KEY);
+  const { canViewExperiments } = useUserPermission();
 
   // A/B test: control shows "Skip", test shows "Start exploring Opik"
   // Enhanced flow also opens create experiment dialog when clicking "Run evaluations"
@@ -87,4 +83,4 @@ const StartPreferenceContent: React.FC<StartPreferenceContentProps> = ({
   );
 };
 
-export default StartPreferenceContent;
+export default StartPreference;

@@ -3,7 +3,7 @@ import OnboardingProvider, { useOnboarding } from "./OnboardingOverlayContext";
 import { ONBOARDING_STEPS } from "./constants";
 import Role from "./steps/Role";
 import AIJourney from "./steps/AIJourney";
-import StartPreference from "./steps/StartPreference";
+import StartPreference from "./steps/StartPreferenceContent";
 import imageOnboardingUrl from "/images/onboarding.png";
 
 const STEP_IMAGES = {

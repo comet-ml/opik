@@ -26,7 +26,6 @@ type PluginStore = {
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
-  StartPreference: React.ComponentType | null;
   WidgetConfigDialogAddStep: React.ComponentType<WidgetConfigDialogAddStepProps> | null;
   DashboardWidgetGrid: React.ComponentType<DashboardWidgetGridProps> | null;
   PromptPage: React.ComponentType | null;
@@ -51,7 +50,6 @@ const PLUGIN_NAMES = [
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
-  "StartPreference",
   "WidgetConfigDialogAddStep",
   "DashboardWidgetGrid",
   "PromptPage",
@@ -74,7 +72,6 @@ const usePluginsStore = create<PluginStore>((set) => ({
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,
-  StartPreference: null,
   WidgetConfigDialogAddStep: null,
   DashboardWidgetGrid: null,
   PromptPage: null,
