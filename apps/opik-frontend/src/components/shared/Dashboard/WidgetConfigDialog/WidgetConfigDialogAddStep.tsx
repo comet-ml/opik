@@ -5,7 +5,6 @@ import {
   selectWidgetResolver,
 } from "@/store/DashboardStore";
 import { getAllWidgetTypes } from "@/components/shared/Dashboard/widgets/widgetRegistry";
-import useUserPermission from "@/plugins/comet/useUserPermission";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const CATEGORY_CONFIG: Record<
@@ -26,15 +25,14 @@ const CATEGORY_CONFIG: Record<
   },
 };
 
-interface WidgetConfigDialogAddStepProps {
+export interface WidgetConfigDialogAddStepProps {
   onSelectWidget: (widgetType: string) => void;
 }
 
 const WidgetConfigDialogAddStep: React.FunctionComponent<
-  WidgetConfigDialogAddStepProps
-> = ({ onSelectWidget }) => {
+  WidgetConfigDialogAddStepProps & { canViewExperiments: boolean }
+> = ({ canViewExperiments, onSelectWidget }) => {
   const widgetResolver = useDashboardStore(selectWidgetResolver);
-  const { canViewExperiments } = useUserPermission();
 
   const widgetOptions = useMemo(() => {
     if (!widgetResolver) return [];

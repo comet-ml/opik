@@ -14,7 +14,7 @@ import {
   selectWidgetResolver,
   selectSetPreviewWidget,
 } from "@/store/DashboardStore";
-import WidgetConfigDialogAddStep from "./WidgetConfigDialogAddStep";
+import WidgetConfigDialogAddStep from "./WidgetConfigDialogAddStepEntry";
 import {
   DashboardWidget,
   WidgetConfigDialogProps,
