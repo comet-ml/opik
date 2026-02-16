@@ -7024,6 +7024,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7033,10 +7037,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7556,6 +7556,10 @@ components:
           format: float
         enabled:
           type: boolean
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7565,10 +7569,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7906,6 +7906,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7915,10 +7919,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8352,6 +8352,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -8361,10 +8365,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8446,6 +8446,10 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -8455,10 +8459,6 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9313,6 +9313,13 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         input:
           $ref: "#/components/schemas/JsonListString"
         output:
@@ -9841,6 +9848,10 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
         input:
           $ref: "#/components/schemas/JsonListString_Compare"
         output:
@@ -10283,6 +10294,10 @@ components:
         trace_id:
           type: string
           format: uuid
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -11058,6 +11073,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace:
       required:
       - start_time
@@ -11150,6 +11169,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:
@@ -11351,6 +11374,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -11387,6 +11414,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
       description: "Please provide either none, only one of evaluate_task_result or\
@@ -13697,10 +13728,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -13815,10 +13846,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -13910,10 +13941,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
     Prompt_Detail:
       required:
       - name
@@ -13934,10 +13965,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -14072,10 +14103,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
-          default: text
           enum:
           - text
           - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -14332,6 +14363,9 @@ components:
           type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
+        ttft:
+          type: number
+          format: double
     ErrorInfo_Write:
       required:
       - exception_type
@@ -14410,6 +14444,10 @@ components:
           type: number
         total_estimated_cost_version:
           type: string
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     SpanBatch:
       required:
       - spans
@@ -14598,6 +14636,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
     ValueEntry_Public:
       type: object
       properties:
@@ -14791,6 +14833,9 @@ components:
           $ref: "#/components/schemas/ErrorInfo"
         thread_id:
           type: string
+        ttft:
+          type: number
+          format: double
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -14876,6 +14921,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
     TraceBatch:
@@ -15097,6 +15146,10 @@ components:
             precision
           format: double
           readOnly: true
+        ttft:
+          type: number
+          description: Time to first token in milliseconds
+          format: double
         thread_id:
           type: string
         visibility_mode:
@@ -15486,6 +15539,14 @@ components:
             \ the frontend will limit pagination to prevent performance issues. Default:\
             \ true (truncation enabled)."
           example: true
+        color_map:
+          type: object
+          additionalProperties:
+            type: string
+            description: "Workspace-level color map. Maps label names to hex color\
+              \ values (e.g. #FF0000). Max 10000 entries."
+          description: "Workspace-level color map. Maps label names to hex color values\
+            \ (e.g. #FF0000). Max 10000 entries."
     WorkspaceMetricsSummaryResponse:
       type: object
       properties:

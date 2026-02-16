@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import isFunction from "lodash/isFunction";
+import isNumber from "lodash/isNumber";
 import { CircleX, MessageSquareMore } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,9 @@ import {
   extractReasonsFromValueByAuthor,
   getIsMultiValueFeedbackScore,
   categoryOptionLabelRenderer,
+  formatScoreDisplay,
 } from "@/lib/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type FeedbackScoreTagProps = {
   label: string;
@@ -75,12 +78,21 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
     </FeedbackScoreReasonTooltip>
   ) : null;
 
-  // Determine what to display as the value
-  // For categorical scores, use categoryOptionLabelRenderer to show "CategoryName (value)"
-  // For regular scores, show the value directly
+  const formattedValue = formatScoreDisplay(value);
+
   const displayValue = category
-    ? categoryOptionLabelRenderer(category, value)
-    : value;
+    ? categoryOptionLabelRenderer(category, formattedValue)
+    : formattedValue;
+
+  const fullPrecisionDisplayValue = isNumber(value)
+    ? category
+      ? categoryOptionLabelRenderer(category, value)
+      : String(value)
+    : undefined;
+
+  const isMultiValue = getIsMultiValueFeedbackScore(valueByAuthor);
+  const showFullPrecisionTooltip =
+    !isMultiValue && fullPrecisionDisplayValue !== undefined;
 
   // Content that will be wrapped in hover card for multi-value or rendered directly for single value
   const tagContent = (
@@ -102,12 +114,18 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       </div>
 
       {/* Value */}
-      <span
-        data-testid="feedback-score-tag-value"
-        className="comet-body-s-accented min-w-0 truncate"
+      <TooltipWrapper
+        content={
+          showFullPrecisionTooltip ? fullPrecisionDisplayValue : undefined
+        }
       >
-        {displayValue}
-      </span>
+        <span
+          data-testid="feedback-score-tag-value"
+          className="comet-body-s-accented shrink-0"
+        >
+          {displayValue}
+        </span>
+      </TooltipWrapper>
     </div>
   );
 

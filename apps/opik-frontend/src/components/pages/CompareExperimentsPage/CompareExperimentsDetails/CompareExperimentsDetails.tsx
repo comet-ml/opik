@@ -15,7 +15,8 @@ import NavigationTag from "@/components/shared/NavigationTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { AggregatedFeedbackScore } from "@/types/shared";
+import { SCORE_TYPE_FEEDBACK, SCORE_TYPE_EXPERIMENT } from "@/types/shared";
+import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdFilter } from "@/lib/filters";
 import ViewSelector, {
   VIEW_TYPE,
@@ -30,19 +31,18 @@ type ExperimentScoreTagsProps = {
 const ExperimentScoreTags: React.FunctionComponent<
   ExperimentScoreTagsProps
 > = ({ experiment }) => {
-  const markScores = (
-    scores: AggregatedFeedbackScore[] | undefined,
-    isFeedbackScore: boolean,
-  ) =>
-    (scores ?? []).map((score) => ({
-      ...score,
-      isFeedbackScore,
-    }));
-
   const allScores = sortBy(
     [
-      ...markScores(experiment?.feedback_scores, true),
-      ...markScores(experiment?.experiment_scores, false),
+      ...(experiment?.feedback_scores ?? []).map((score) => ({
+        ...score,
+        colorKey: score.name,
+        name: getScoreDisplayName(score.name, SCORE_TYPE_FEEDBACK),
+      })),
+      ...(experiment?.experiment_scores ?? []).map((score) => ({
+        ...score,
+        colorKey: score.name,
+        name: getScoreDisplayName(score.name, SCORE_TYPE_EXPERIMENT),
+      })),
     ],
     "name",
   );
@@ -52,8 +52,8 @@ const ExperimentScoreTags: React.FunctionComponent<
       {allScores.map((score) => (
         <FeedbackScoreTag
           key={score.name + score.value}
-          label={score.isFeedbackScore ? `${score.name} (avg)` : score.name}
-          colorKey={score.name}
+          label={score.name}
+          colorKey={score.colorKey}
           value={score.value}
         />
       ))}

@@ -16,6 +16,7 @@ class ExperimentItemCompare(UniversalBaseModel):
     experiment_id: str
     dataset_item_id: str
     trace_id: str
+    project_id: typing.Optional[str] = None
     input: typing.Optional[JsonListStringCompare] = None
     output: typing.Optional[JsonListStringCompare] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreCompare]] = None

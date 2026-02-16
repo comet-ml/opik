@@ -14,6 +14,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import PercentageTrend from "@/components/shared/PercentageTrend/PercentageTrend";
 import { formatCost } from "@/lib/money";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { calculatePercentageChange } from "@/lib/utils";
 import {
   getChartData,
@@ -81,14 +82,18 @@ export const CostOverview: React.FC<CostOverviewProps> = ({
           <div>
             <div className="flex items-center gap-2">
               {!isPending && (
-                <div className="comet-title-l text-foreground-secondary">
-                  {isNumber(data?.current)
-                    ? formatCost(data?.current, {
-                        modifier: "kFormat",
-                        noValue: "$0",
-                      })
-                    : "$ -"}
-                </div>
+                <TooltipWrapper
+                  content={formatCost(data?.current, { modifier: "full" })}
+                >
+                  <div className="comet-title-l text-foreground-secondary">
+                    {isNumber(data?.current)
+                      ? formatCost(data?.current, {
+                          modifier: "kFormat",
+                          noValue: "$0",
+                        })
+                      : "$ -"}
+                  </div>
+                </TooltipWrapper>
               )}
               <PercentageTrend
                 percentage={calculatePercentageChange(

@@ -1220,7 +1220,9 @@ class Opik:
             exceptions.SearchTimeoutError if wait_for_at_least traces are not found within the specified timeout.
         """
         filters_ = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=trace_filter_public.TraceFilterPublic
+            filter_string,
+            parsed_item_class=trace_filter_public.TraceFilterPublic,
+            entity_type="traces",
         )
 
         search_functor = functools.partial(
@@ -1314,7 +1316,9 @@ class Opik:
             exceptions.SearchTimeoutError if wait_for_at_least spans are not found within the specified timeout.
         """
         filters = helpers.parse_filter_expressions(
-            filter_string, parsed_item_class=span_filter_public.SpanFilterPublic
+            filter_string,
+            parsed_item_class=span_filter_public.SpanFilterPublic,
+            entity_type="spans",
         )
 
         search_functor = functools.partial(
@@ -1582,18 +1586,64 @@ class Opik:
             name, fern_prompt_version
         )
 
-    def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
+    def get_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        filter_string: Optional[str] = None,
+    ) -> List[prompt_module.Prompt]:
         """
         Retrieve all text prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "customer"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
             List[Prompt]: A list of text Prompt instances for the given name, or an empty list if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
+
+        Example:
+            # Get all versions of a prompt
+            versions = client.get_prompt_history(name="my-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                filter_string='tags contains "production"'
+            )
+
+            # Search for specific text in template or change description fields
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                search="customer"
+            )
+
+            # Combine search and filtering
+            versions = client.get_prompt_history(
+                name="my-prompt",
+                search="customer",
+                filter_string='tags contains "production"'
+            )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
@@ -1607,7 +1657,9 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a text prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, filter_string=filter_string
+        )
 
         result = [
             prompt_module.Prompt.from_fern_prompt_version(name, version)
@@ -1615,18 +1667,64 @@ class Opik:
         ]
         return result
 
-    def get_chat_prompt_history(self, name: str) -> List[prompt_module.ChatPrompt]:
+    def get_chat_prompt_history(
+        self,
+        name: str,
+        search: Optional[str] = None,
+        filter_string: Optional[str] = None,
+    ) -> List[prompt_module.ChatPrompt]:
         """
         Retrieve all chat prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
+            search: Optional search text to find in template or change description fields.
+            filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
+                The format is: "<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+
+                Supported columns include:
+                - `id`, `commit`, `template`, `change_description`, `created_by`: String fields with full operator support
+                - `metadata`: Dictionary field (use dot notation, e.g., "metadata.environment")
+                - `type`: Enum field (=, != only)
+                - `tags`: List field (use "contains" operator only)
+                - `created_at`: DateTime field (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
+
+                Examples:
+                - `tags contains "production"` - Filter by tag
+                - `tags contains "v1" AND tags contains "production"` - Filter by multiple tags
+                - `template contains "helpful assistant"` - Filter by template content
+                - `created_by = "user@example.com"` - Filter by creator
+                - `created_at >= "2024-01-01T00:00:00Z"` - Filter by creation date
+                - `metadata.environment = "prod"` - Filter by metadata field
 
         Returns:
             List[ChatPrompt]: A list of ChatPrompt instances for the given name, or an empty list if not found.
 
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+
+        Example:
+            # Get all versions of a chat prompt
+            versions = client.get_chat_prompt_history(name="my-chat-prompt")
+
+            # Filter by tags (versions containing "production" tag)
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                filter_string='tags contains "production"'
+            )
+
+            # Search for specific text in template or change description fields
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                search="helpful assistant"
+            )
+
+            # Combine search and filtering
+            versions = client.get_chat_prompt_history(
+                name="my-chat-prompt",
+                search="helpful assistant",
+                filter_string='tags contains "production"'
+            )
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
@@ -1640,7 +1738,9 @@ class Opik:
             return []
 
         # Now get all versions (we know it's a chat prompt)
-        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(
+            name=name, search=search, filter_string=filter_string
+        )
 
         result = [
             prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
@@ -1764,6 +1864,24 @@ class Opik:
             An instance of the ExperimentsClient initialized with a cached REST client.
         """
         return experiments_client.ExperimentsClient(self._rest_client)
+
+    def get_prompts_client(self) -> prompt_client.PromptClient:
+        """
+        Retrieves an instance of `PromptClient` for bulk prompt operations.
+
+        Use this client for operations like updating prompt version tags in batch.
+
+        Returns:
+            An instance of the PromptClient initialized with a cached REST client.
+
+        Example:
+            prompts_client = client.get_prompts_client()
+            prompts_client.batch_update_prompt_version_tags(
+                version_ids=["version-id-1", "version-id-2"],
+                tags=["production", "v2"]
+            )
+        """
+        return prompt_client.PromptClient(self._rest_client)
 
     def _create_annotation_queue(
         self,
