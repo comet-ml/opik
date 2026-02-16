@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 
 import WorkspaceGuard from "@/components/layout/WorkspaceGuard/WorkspaceGuard";
+import ExperimentsGuard from "@/components/layout/ExperimentsGuard";
 import SMEPageLayout from "@/components/layout/SMEPageLayout/SMEPageLayout";
 import DatasetItemsPage from "@/components/pages/DatasetItemsPage/DatasetItemsPage";
 import DatasetPage from "@/components/pages/DatasetPage/DatasetPage";
@@ -215,6 +216,7 @@ const tracesRoute = createRoute({
 const experimentsRoute = createRoute({
   path: "/experiments",
   getParentRoute: () => workspaceRoute,
+  component: ExperimentsGuard,
   staticData: {
     title: "Experiments",
   },
