@@ -318,6 +318,11 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForMysql.image.tag | float | `1.36` |  |
 | component.backend.waitForMysql.mysql.host | string | `"opik-mysql"` |  |
 | component.backend.waitForMysql.mysql.port | int | `3306` |  |
+| component.frontend.aiBackendUpstreamConfig.gzip | string | `"off"` |  |
+| component.frontend.aiBackendUpstreamConfig.proxy_buffering | string | `"off"` |  |
+| component.frontend.aiBackendUpstreamConfig.proxy_connect_timeout | int | `90` |  |
+| component.frontend.aiBackendUpstreamConfig.proxy_read_timeout | int | `300` |  |
+| component.frontend.aiBackendUpstreamConfig.proxy_send_timeout | int | `300` |  |
 | component.frontend.autoscaling.enabled | bool | `false` |  |
 | component.frontend.awsResolver | bool | `false` |  |
 | component.frontend.backendConfigMap.enabled | bool | `false` |  |
