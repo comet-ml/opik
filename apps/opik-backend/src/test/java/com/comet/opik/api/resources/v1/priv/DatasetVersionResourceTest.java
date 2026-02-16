@@ -16,6 +16,9 @@ import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
+import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.EvaluatorType;
+import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Span;
@@ -3650,6 +3653,263 @@ class DatasetVersionResourceTest {
 
             var finalVersion = getLatestVersion(datasetId);
             assertThat(finalVersion.itemsTotal()).isEqualTo(0);
+        }
+    }
+
+    @Nested
+    @DisplayName("Evaluators and Execution Policy:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class EvaluatorsAndExecutionPolicy {
+
+        @Test
+        @DisplayName("Success: Create items with evaluators and executionPolicy, then read them back")
+        void createItems__whenEvaluatorsAndExecutionPolicy__thenFieldsReturned() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var evaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build(),
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.CODE_METRIC)
+                            .config(JsonUtils.getJsonNodeFromString("{\"threshold\":0.5}"))
+                            .build());
+
+            var executionPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(3)
+                    .passThreshold(2)
+                    .build();
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .evaluators(evaluators)
+                    .executionPolicy(executionPolicy)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Read back
+            var returnedItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "latest", API_KEY, TEST_WORKSPACE).content();
+            assertThat(returnedItems).hasSize(1);
+
+            var returnedItem = returnedItems.getFirst();
+            assertThat(returnedItem.evaluators()).isEqualTo(evaluators);
+            assertThat(returnedItem.executionPolicy()).isEqualTo(executionPolicy);
+        }
+
+        @Test
+        @DisplayName("Success: Editing only evaluators bumps dataset version as modified")
+        void applyChanges__whenOnlyEvaluatorsChanged__thenItemIsModified() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var originalEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build());
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .evaluators(originalEvaluators)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(1);
+
+            // Edit only evaluators — data stays the same
+            var newEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.CODE_METRIC)
+                            .config(JsonUtils.getJsonNodeFromString("{\"threshold\":0.8}"))
+                            .build());
+
+            var editedItem = DatasetItemEdit.builder()
+                    .id(v1Items.getFirst().id())
+                    .evaluators(newEvaluators)
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .editedItems(List.of(editedItem))
+                    .tags(List.of("v2"))
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version2.itemsTotal()).isEqualTo(1);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+            assertThat(version2.itemsAdded()).isEqualTo(0);
+            assertThat(version2.itemsDeleted()).isEqualTo(0);
+
+            // Verify the evaluator was actually updated
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items.getFirst().evaluators()).isEqualTo(newEvaluators);
+        }
+
+        @Test
+        @DisplayName("Success: Editing only executionPolicy bumps dataset version as modified")
+        void applyChanges__whenOnlyExecutionPolicyChanged__thenItemIsModified() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var originalPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(1)
+                    .passThreshold(1)
+                    .build();
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .executionPolicy(originalPolicy)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, version1.versionHash(),
+                    DatasetVersionTag.builder().tag("v1").build(), API_KEY, TEST_WORKSPACE);
+
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v1Items).hasSize(1);
+
+            // Edit only executionPolicy — data stays the same
+            var newPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(5)
+                    .passThreshold(3)
+                    .build();
+
+            var editedItem = DatasetItemEdit.builder()
+                    .id(v1Items.getFirst().id())
+                    .executionPolicy(newPolicy)
+                    .build();
+
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(version1.id())
+                    .editedItems(List.of(editedItem))
+                    .tags(List.of("v2"))
+                    .build();
+
+            var version2 = datasetResourceClient.applyDatasetItemChanges(
+                    datasetId, changes, false, API_KEY, TEST_WORKSPACE);
+
+            assertThat(version2.itemsTotal()).isEqualTo(1);
+            assertThat(version2.itemsModified()).isEqualTo(1);
+            assertThat(version2.itemsAdded()).isEqualTo(0);
+            assertThat(version2.itemsDeleted()).isEqualTo(0);
+
+            // Verify the execution policy was actually updated
+            var v2Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
+            assertThat(v2Items.getFirst().executionPolicy()).isEqualTo(newPolicy);
+        }
+
+        @Test
+        @DisplayName("Success: Batch update evaluators and executionPolicy on items")
+        void batchUpdate__whenEvaluatorsAndExecutionPolicy__thenFieldsUpdated() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"" + UUID.randomUUID() + "\"")))
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            var newEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name(UUID.randomUUID().toString())
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build());
+            var newPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(4)
+                    .passThreshold(2)
+                    .build();
+
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of(v1Items.getFirst().id()))
+                    .update(DatasetItemUpdate.builder()
+                            .evaluators(newEvaluators)
+                            .executionPolicy(newPolicy)
+                            .build())
+                    .build();
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(latestItems).hasSize(1);
+
+            var updatedItem = latestItems.getFirst();
+            assertThat(updatedItem.evaluators()).isEqualTo(newEvaluators);
+            assertThat(updatedItem.executionPolicy()).isEqualTo(newPolicy);
+        }
+
+        @Test
+        @DisplayName("Error: Create items with invalid executionPolicy (runsPerItem > 100) should be rejected")
+        void createItems__whenInvalidExecutionPolicy__thenReturn422() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var invalidPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(999)
+                    .passThreshold(1)
+                    .build();
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .executionPolicy(invalidPolicy)
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+
+            try (var response = datasetResourceClient.callCreateDatasetItems(batch, TEST_WORKSPACE, API_KEY)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(422);
+            }
         }
     }
 }

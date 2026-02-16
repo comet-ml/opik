@@ -7024,10 +7024,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7037,6 +7033,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7556,10 +7556,6 @@ components:
           format: float
         enabled:
           type: boolean
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7569,6 +7565,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7906,10 +7906,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7919,6 +7915,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8352,10 +8352,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -8365,6 +8361,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8446,10 +8446,6 @@ components:
             type: string
             description: Multiple project IDs (new field for multi-project support)
             format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -8459,6 +8455,10 @@ components:
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
           - span_user_defined_metric_python
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -9057,7 +9057,44 @@ components:
           items:
             type: string
             description: Tags
+        evaluators:
+          type: array
+          description: Evaluators
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
       description: Dataset item update request
+    EvaluatorItem:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode"
+    ExecutionPolicy:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     Dataset:
       required:
       - name
@@ -9246,6 +9283,12 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
         experiment_items:
           type: array
           readOnly: true
@@ -9498,6 +9541,42 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Write"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Write"
+    EvaluatorItem_Write:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Write"
+    ExecutionPolicy_Write:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     CreateDatasetItemsFromSpansRequest:
       required:
       - enrichment_options
@@ -9806,6 +9885,12 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Compare"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
         experiment_items:
           type: array
           readOnly: true
@@ -9829,6 +9914,36 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Compare:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Compare"
+    ExecutionPolicy_Compare:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -9956,6 +10071,8 @@ components:
         items:
           type: object
       - type: string
+    JsonNode_Compare:
+      type: object
     ValueEntry_Compare:
       type: object
       properties:
@@ -10252,6 +10369,12 @@ components:
           type: array
           items:
             type: string
+        evaluators:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvaluatorItem_Public"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Public"
         experiment_items:
           type: array
           readOnly: true
@@ -10275,6 +10398,36 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    EvaluatorItem_Public:
+      required:
+      - config
+      - name
+      - type
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        type:
+          type: string
+          enum:
+          - llm_judge
+          - code_metric
+        config:
+          $ref: "#/components/schemas/JsonNode_Public"
+    ExecutionPolicy_Public:
+      type: object
+      properties:
+        runs_per_item:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+        pass_threshold:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
     ExperimentItem_Public:
       required:
       - dataset_item_id
@@ -13728,10 +13881,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -13846,10 +13999,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -13941,10 +14094,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
     Prompt_Detail:
       required:
       - name
@@ -13965,10 +14118,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -14103,10 +14256,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array

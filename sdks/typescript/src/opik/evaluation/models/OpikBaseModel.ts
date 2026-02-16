@@ -84,7 +84,7 @@ export abstract class OpikBaseModel {
   /**
    * Creates a new model instance.
    *
-   * @param modelName - The name of the model (e.g., 'gpt-4o', 'claude-3-opus')
+   * @param modelName - The name of the model (e.g., 'gpt-5-nano', 'claude-3-opus')
    */
   constructor(public readonly modelName: string) {}
 
@@ -100,7 +100,7 @@ export abstract class OpikBaseModel {
    *
    * @example
    * ```typescript
-   * const model = new VercelAIChatModel('gpt-4o');
+   * const model = new VercelAIChatModel('gpt-5-nano');
    *
    * // Simple text generation
    * const response = await model.generateString('What is 2+2?');
@@ -133,7 +133,7 @@ export abstract class OpikBaseModel {
    *
    * @example
    * ```typescript
-   * const model = new VercelAIChatModel('gpt-4o');
+   * const model = new VercelAIChatModel('gpt-5-nano');
    * const response = await model.generateProviderResponse([
    *   { role: 'user', content: 'Hello!' }
    * ]);
