@@ -116,14 +116,13 @@ public class TagOperations {
                 + ", [toString(throwIf(1, '" + TAG_LIMIT_ERROR + "'))]"
                 + ", " + innerGuarded + ")";
 
-        return """
+        return ("""
                 <if(tags_to_add || tags)>
                     """ + guarded + """
                 <elseif(tags_to_remove)>
                     arrayFilter(x -> NOT has(:tags_to_remove, x), TAGS_COL)
                 <else>
                     TAGS_COL
-                <endif>"""
-                .replace("TAGS_COL", tagsColumnRef);
+                <endif>""").replace("TAGS_COL", tagsColumnRef);
     }
 }
