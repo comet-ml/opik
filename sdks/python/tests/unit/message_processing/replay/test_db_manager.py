@@ -561,6 +561,85 @@ class TestReplayManagerStatusProperties:
         assert mgr.failed
 
 
+class TestFailedMessagesCount:
+    def test_failed_messages_count__no_failed_messages__returns_zero(
+        self, manager: db_manager.DBManager
+    ):
+        """Test that count returns 0 when there are no failed messages."""
+        message = _create_trace_message(message_id=1)
+        manager.register_message(message)  # Status is 'registered', not 'failed'
+
+        result = manager.failed_messages_count()
+
+        assert result == 0
+
+    def test_failed_messages_count__with_failed_messages__returns_correct_count(
+        self, manager: db_manager.DBManager
+    ):
+        """Test that count returns the correct number of failed messages."""
+        for i in range(5):
+            msg = _create_trace_message(message_id=i + 1, trace_id=f"trace-{i}")
+            manager.register_message(msg, status=db_manager.MessageStatus.failed)
+
+        result = manager.failed_messages_count()
+
+        assert result == 5
+
+    def test_failed_messages_count__mixed_statuses__counts_only_failed(
+        self, manager: db_manager.DBManager
+    ):
+        """Test that only messages with 'failed' status are counted."""
+        # Register some as 'registered' and some as 'failed'
+        for i in range(3):
+            msg = _create_trace_message(message_id=i + 1, trace_id=f"trace-{i}")
+            manager.register_message(msg)  # registered status
+
+        for i in range(3, 5):
+            msg = _create_trace_message(message_id=i + 1, trace_id=f"trace-{i}")
+            manager.register_message(msg, status=db_manager.MessageStatus.failed)
+
+        result = manager.failed_messages_count()
+
+        assert result == 2
+
+    def test_failed_messages_count__manager_not_initialized__returns_negative_one(self):
+        """Test that count returns -1 when the manager is not initialized."""
+        conn = sqlite3.connect(":memory:", check_same_thread=False)
+        conn.close()
+        mgr = db_manager.DBManager(conn=conn, batch_size=10, batch_replay_delay=0.1)
+
+        result = mgr.failed_messages_count()
+
+        assert result == -1
+
+    def test_failed_messages_count__manager_closed__returns_negative_one(
+        self, manager: db_manager.DBManager
+    ):
+        """Test that count returns -1 when the manager is closed."""
+        msg = _create_trace_message(message_id=1)
+        manager.register_message(msg, status=db_manager.MessageStatus.failed)
+        manager.close()
+
+        result = manager.failed_messages_count()
+
+        assert result == -1
+
+    def test_failed_messages_count__db_error__returns_negative_one_and_marks_failed(
+        self, manager: db_manager.DBManager
+    ):
+        """Test that a DB error returns -1 and marks the manager as failed."""
+        msg = _create_trace_message(message_id=1)
+        manager.register_message(msg, status=db_manager.MessageStatus.failed)
+
+        # Force a DB error by dropping the messages table
+        manager.conn.execute("DROP TABLE messages")
+
+        result = manager.failed_messages_count()
+
+        assert result == -1
+        assert manager.failed
+
+
 class TestDbMessageToMessage:
     def test_db_message_to_message__supported_type__returns_correct_message(
         self, manager: db_manager.DBManager

@@ -625,6 +625,28 @@ class DBManager:
             last_seen_id = batch[-1].id
             yield batch
 
+    def failed_messages_count(self) -> int:
+        """Returns the number of failed messages in the DB."""
+        if not self.initialized:
+            LOGGER.debug("Not initialized - failed messages count ignored")
+            return -1
+
+        with self.__lock__:
+            if self.closed:
+                LOGGER.warning("Already closed - failed messages count ignored")
+                return -1
+
+            try:
+                return self.conn.execute(
+                    "SELECT COUNT(*) FROM messages WHERE status = ?",
+                    (MessageStatus.failed,),
+                ).fetchone()[0]
+            except Exception as ex:
+                msg = f"failed_messages_count: failed to get failed messages count, reason: {ex}"
+                LOGGER.error(msg)
+                self._mark_as_db_failed(msg)
+                return -1
+
     def _mark_as_db_failed(self, message: str) -> None:
         self.status = DBManagerStatus.error
         LOGGER.error(
