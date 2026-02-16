@@ -2368,6 +2368,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         template.add("merge_tags", true);
                     }
                 }
+                if (batchUpdate.update().evaluators() != null) {
+                    template.add("evaluators", true);
+                }
+                if (batchUpdate.update().executionPolicy() != null) {
+                    template.add("execution_policy", true);
+                }
 
                 // Add either item IDs or filters based on what's provided
                 if (batchUpdate.ids() != null && !batchUpdate.ids().isEmpty()) {
@@ -2413,6 +2419,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 }
                 if (batchUpdate.update().tags() != null) {
                     statement.bind("tags", batchUpdate.update().tags().toArray(new String[0]));
+                }
+                if (batchUpdate.update().evaluators() != null) {
+                    statement.bind("evaluators", serializeEvaluators(batchUpdate.update().evaluators()));
+                }
+                if (batchUpdate.update().executionPolicy() != null) {
+                    statement.bind("execution_policy",
+                            serializeExecutionPolicy(batchUpdate.update().executionPolicy()));
                 }
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "batch_update_items");

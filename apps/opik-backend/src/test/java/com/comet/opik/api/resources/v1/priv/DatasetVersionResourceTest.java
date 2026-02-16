@@ -3844,5 +3844,60 @@ class DatasetVersionResourceTest {
             assertThat(v2Items.getFirst().executionPolicy().runsPerItem()).isEqualTo(5);
             assertThat(v2Items.getFirst().executionPolicy().passThreshold()).isEqualTo(3);
         }
+
+        @Test
+        @DisplayName("Success: Batch update evaluators and executionPolicy on items")
+        void batchUpdate__whenEvaluatorsAndExecutionPolicy__thenFieldsUpdated() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            var items = List.of(DatasetItem.builder()
+                    .source(DatasetItemSource.SDK)
+                    .data(Map.of("input", JsonUtils.getJsonNodeFromString("\"test\"")))
+                    .build());
+
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .batchGroupId(UUID.randomUUID())
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            var version1 = getLatestVersion(datasetId);
+            var v1Items = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, version1.versionHash(), API_KEY, TEST_WORKSPACE).content();
+
+            var newEvaluators = List.of(
+                    EvaluatorItem.builder()
+                            .name("batch-evaluator")
+                            .type(EvaluatorType.LLM_JUDGE)
+                            .config(JsonUtils.getJsonNodeFromString("{\"model\":\"gpt-4\"}"))
+                            .build());
+            var newPolicy = ExecutionPolicy.builder()
+                    .runsPerItem(4)
+                    .passThreshold(2)
+                    .build();
+
+            var batchUpdate = DatasetItemBatchUpdate.builder()
+                    .ids(Set.of(v1Items.getFirst().id()))
+                    .update(DatasetItemUpdate.builder()
+                            .evaluators(newEvaluators)
+                            .executionPolicy(newPolicy)
+                            .build())
+                    .build();
+            datasetResourceClient.batchUpdateDatasetItems(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            var latestItems = datasetResourceClient.getDatasetItems(
+                    datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
+            assertThat(latestItems).hasSize(1);
+
+            var updatedItem = latestItems.getFirst();
+            assertThat(updatedItem.evaluators()).hasSize(1);
+            assertThat(updatedItem.evaluators().getFirst().name()).isEqualTo("batch-evaluator");
+            assertThat(updatedItem.evaluators().getFirst().type()).isEqualTo(EvaluatorType.LLM_JUDGE);
+
+            assertThat(updatedItem.executionPolicy()).isNotNull();
+            assertThat(updatedItem.executionPolicy().runsPerItem()).isEqualTo(4);
+            assertThat(updatedItem.executionPolicy().passThreshold()).isEqualTo(2);
+        }
     }
 }
