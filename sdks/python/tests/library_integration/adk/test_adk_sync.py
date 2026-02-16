@@ -1870,6 +1870,16 @@ def test_adk__llm_call__time_to_first_token_tracked_in_span_ttft_field(fake_back
             f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
         )
 
+    # Verify trace-level TTFT (time from trace start to first LLM token)
+    assert trace_tree.ttft is not None, "Trace should have ttft field set"
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
+
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
@@ -1932,6 +1942,18 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
         assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
             f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
         )
+
+    # Verify trace-level TTFT for streaming responses
+    assert trace_tree.ttft is not None, (
+        "Trace should have ttft field set for streaming responses"
+    )
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
@@ -2000,6 +2022,16 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
         "Expected at least two distinct TTFT values for multiple LLM calls"
     )
 
+    # Verify trace-level TTFT (set once from the first LLM call)
+    assert trace_tree.ttft is not None, "Trace should have ttft field set"
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
+
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
 def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_backend):
@@ -2049,9 +2081,11 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
     llm_spans = [span for span in trace_tree.spans if span.type == "llm"]
     assert len(llm_spans) > 0, "Expected at least one LLM span"
 
+    any_span_has_ttft = False
     for llm_span in llm_spans:
         if llm_span.output is not None and llm_span.usage is not None:
             if llm_span.ttft is not None:
+                any_span_has_ttft = True
                 assert isinstance(llm_span.ttft, (int, float)), (
                     f"ttft should be a number, got {type(llm_span.ttft)}"
                 )
@@ -2063,6 +2097,18 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
                 f"LLM span without content should not have ttft set. "
                 f"Span output: {llm_span.output}, usage: {llm_span.usage}, ttft: {llm_span.ttft}"
             )
+
+    # Trace TTFT should be set if any LLM span had content (first token detected)
+    if any_span_has_ttft:
+        assert trace_tree.ttft is not None, (
+            "Trace should have ttft if any LLM span has ttft"
+        )
+        assert isinstance(trace_tree.ttft, (int, float)), (
+            f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+        )
+        assert trace_tree.ttft >= 0, (
+            f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+        )
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
@@ -2119,3 +2165,15 @@ def test_adk__llm_call__time_to_first_token_tracked_for_sequential_agents(fake_b
         assert llm_span.ttft < MAX_REASONABLE_TTFT_MS, (
             f"ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {llm_span.ttft}"
         )
+
+    # Verify trace-level TTFT for sequential agents
+    assert trace_tree.ttft is not None, (
+        "Trace should have ttft field set for sequential agents"
+    )
+    assert isinstance(trace_tree.ttft, (int, float)), (
+        f"Trace ttft should be a number, got {type(trace_tree.ttft)}"
+    )
+    assert trace_tree.ttft >= 0, f"Trace ttft should be non-negative, got {trace_tree.ttft}"
+    assert trace_tree.ttft < MAX_REASONABLE_TTFT_MS, (
+        f"Trace ttft should be reasonable (< {MAX_REASONABLE_TTFT_MS}ms), got {trace_tree.ttft}"
+    )
