@@ -47,6 +47,7 @@ class BackendEmulatorMessageProcessor(
         error_info: Optional[ErrorInfoDict],
         thread_id: Optional[str],
         last_updated_at: Optional[datetime.datetime] = None,
+        ttft: Optional[float] = None,
     ) -> models.TraceModel:
         if spans is None:
             spans = []
@@ -68,6 +69,7 @@ class BackendEmulatorMessageProcessor(
             error_info=error_info,
             thread_id=thread_id,
             last_updated_at=last_updated_at,
+            ttft=ttft,
         )
 
     def create_span_model(

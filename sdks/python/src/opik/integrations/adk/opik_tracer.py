@@ -66,8 +66,10 @@ class OpikTracer:
     def _init_internal_attributes(self) -> None:
         self._last_model_output: Optional[Dict[str, Any]] = None
         self._opik_client = opik_client.get_client_cached()
-        # Track time-to-first-token in nanoseconds: map span_id -> (request_start_time_ns, first_token_time_ns)
+        # Track time-to-first-token in nanoseconds for spans: map span_id -> (request_start_time_ns, first_token_time_ns)
         self._ttft_tracking: Dict[str, Tuple[int, Optional[int]]] = {}
+        # Track time-to-first-token in nanoseconds for traces: map trace_id -> trace_start_time_ns
+        self._trace_ttft_tracking: Dict[str, int] = {}
 
         patchers.patch_adk(
             self._opik_client, distributed_headers=self._distributed_headers
@@ -133,6 +135,10 @@ class OpikTracer:
         try:
             current_trace = context_storage.get_trace_data()
             current_span = context_storage.top_span_data()
+
+            # Track trace start time for trace-level TTFT (time from trace start to first LLM token)
+            if current_trace is not None and current_trace.id not in self._trace_ttft_tracking:
+                self._trace_ttft_tracking[current_trace.id] = time.perf_counter_ns()
 
             thread_id, session_metadata = (
                 callback_context_info_extractors.try_get_session_info(callback_context)
@@ -307,6 +313,15 @@ class OpikTracer:
                         first_token_time_ns,
                     )
 
+                    # Also set trace-level TTFT (time from trace start to first LLM token)
+                    # This is only set once per trace (on the first LLM call's first token)
+                    current_trace = context_storage.get_trace_data()
+                    if current_trace is not None:
+                        trace_start_time_ns = self._trace_ttft_tracking.pop(current_trace.id, None)
+                        if trace_start_time_ns is not None:
+                            trace_ttft_ms = (first_token_time_ns - trace_start_time_ns) / 1_000_000
+                            current_trace.ttft = trace_ttft_ms
+
             # Ignore partial chunks for final processing, ADK will call this method with the full response at the end
             # Note: We intentionally keep the TTFT tracking entry for partial chunks since ADK will call
             # this method again with the final non-partial response, where we'll properly clean it up
@@ -444,6 +459,7 @@ class OpikTracer:
         state.pop("_opik_client", None)
         # Don't serialize TTFT tracking as it's runtime state
         state.pop("_ttft_tracking", None)
+        state.pop("_trace_ttft_tracking", None)
         return state
 
     def __setstate__(self, state: Dict[str, Any]) -> None:

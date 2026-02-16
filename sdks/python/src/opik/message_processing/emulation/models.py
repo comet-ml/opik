@@ -182,3 +182,4 @@ class TraceModel:
     thread_id: Optional[str] = None
     last_updated_at: Optional[datetime.datetime] = None
     attachments: Optional[List[AttachmentModel]] = None
+    ttft: Optional[float] = None

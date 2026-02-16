@@ -26,6 +26,7 @@ class TraceData(ObservationData):
     id: str = dataclasses.field(default_factory=id_helpers.generate_id)
     created_by: Optional[CreatedByType] = None
     thread_id: Optional[str] = None
+    ttft: Optional[float] = None
 
     def create_child_span_data(
         self,
@@ -105,4 +106,5 @@ class TraceData(ObservationData):
             "error_info": self.error_info,
             "thread_id": self.thread_id,
             "attachments": self.attachments,
+            "ttft": self.ttft,
         }

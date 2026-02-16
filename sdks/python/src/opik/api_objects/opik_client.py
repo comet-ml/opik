@@ -243,6 +243,7 @@ class Opik:
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
         attachments: Optional[List[Attachment]] = None,
+        ttft: Optional[float] = None,
         **ignored_kwargs: Any,
     ) -> trace.Trace:
         """
@@ -290,6 +291,7 @@ class Opik:
             error_info=error_info,
             thread_id=thread_id,
             last_updated_at=last_updated_at,
+            ttft=ttft,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(trace_id=id, project_name=project_name)
