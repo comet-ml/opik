@@ -66,8 +66,8 @@ class OpikTracer:
     def _init_internal_attributes(self) -> None:
         self._last_model_output: Optional[Dict[str, Any]] = None
         self._opik_client = opik_client.get_client_cached()
-        # Track time-to-first-token: map span_id -> (request_start_time, first_token_time)
-        self._ttft_tracking: Dict[str, Tuple[float, Optional[float]]] = {}
+        # Track time-to-first-token in nanoseconds: map span_id -> (request_start_time_ns, first_token_time_ns)
+        self._ttft_tracking: Dict[str, Tuple[int, Optional[int]]] = {}
 
         patchers.patch_adk(
             self._opik_client, distributed_headers=self._distributed_headers
@@ -103,7 +103,7 @@ class OpikTracer:
 
     def _safe_ttft_tracking(
         self, span_id: Optional[str], pop: bool = False
-    ) -> Tuple[Optional[float], Optional[float]]:
+    ) -> Tuple[Optional[int], Optional[int]]:
         """
         Safely retrieve time-to-first-token tracking data for a span.
 
@@ -112,8 +112,8 @@ class OpikTracer:
             pop: If True, remove the entry after fetching. If False, keep it.
 
         Returns:
-            Tuple of (request_start_time, first_token_time). Returns (None, None) if
-            span_id is None or not found in tracking.
+            Tuple of (request_start_time_ns, first_token_time_ns) in nanoseconds.
+            Returns (None, None) if span_id is None or not found in tracking.
         """
         if span_id is None or span_id not in self._ttft_tracking:
             return (None, None)
@@ -243,9 +243,9 @@ class OpikTracer:
 
             context_storage.add_span_data(result.span_data)
 
-            # Track request start time for time-to-first-token calculation
-            request_start_time = time.time()
-            self._ttft_tracking[result.span_data.id] = (request_start_time, None)
+            # Track request start time in nanoseconds for time-to-first-token calculation
+            request_start_time_ns = time.perf_counter_ns()
+            self._ttft_tracking[result.span_data.id] = (request_start_time_ns, None)
         except Exception as e:
             LOGGER.error(f"Failed during before_model_callback(): {e}", exc_info=True)
 
@@ -289,22 +289,22 @@ class OpikTracer:
             # Track time-to-first-token: detect first token arrival
             # We check for first token on EVERY callback (including partial chunks)
             # to catch the first moment content appears
-            request_start_time, first_token_time = self._safe_ttft_tracking(
+            request_start_time_ns, first_token_time_ns = self._safe_ttft_tracking(
                 span_id, pop=False
             )
             if (
-                first_token_time is None
-                and request_start_time is not None
+                first_token_time_ns is None
+                and request_start_time_ns is not None
                 and span_id is not None
             ):
                 # Check if this response contains actual content (first token)
                 # Content can be text or function calls (tool calls)
                 if self._has_response_content(llm_response):
-                    # First token detected - record the time
-                    first_token_time = time.time()
+                    # First token detected - record the time in nanoseconds
+                    first_token_time_ns = time.perf_counter_ns()
                     self._ttft_tracking[span_id] = (
-                        request_start_time,
-                        first_token_time,
+                        request_start_time_ns,
+                        first_token_time_ns,
                     )
 
             # Ignore partial chunks for final processing, ADK will call this method with the full response at the end
@@ -327,19 +327,18 @@ class OpikTracer:
                     exc_info=True,
                 )
 
-            # Calculate time-to-first-token and add to metadata
-            metadata_update = {}
-            request_start_time, first_token_time = self._safe_ttft_tracking(
+            # Calculate time-to-first-token in milliseconds with nanosecond precision
+            request_start_time_ns, first_token_time_ns = self._safe_ttft_tracking(
                 span_id, pop=True
             )
-            if first_token_time is not None and request_start_time is not None:
-                time_to_first_token = first_token_time - request_start_time
-                metadata_update["time_to_first_token"] = time_to_first_token
+            if first_token_time_ns is not None and request_start_time_ns is not None:
+                # Convert nanoseconds to milliseconds (1 ms = 1,000,000 ns)
+                ttft_ms = (first_token_time_ns - request_start_time_ns) / 1_000_000
+                current_span.ttft = ttft_ms
 
-            # Merge with existing metadata
+            # Update metadata for span status
             if current_span.metadata is None:
                 current_span.metadata = {}
-            current_span.metadata.update(metadata_update)
             current_span.metadata[llm_span_helpers.SPAN_STATUS] = (
                 llm_span_helpers.LLMSpanStatus.READY_FOR_FINALIZATION.value
             )

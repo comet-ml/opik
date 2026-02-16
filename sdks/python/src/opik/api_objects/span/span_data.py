@@ -30,6 +30,7 @@ class SpanData(ObservationData):
     model: Optional[str] = None
     provider: Optional[Union[str, LLMProvider]] = None
     total_cost: Optional[float] = None
+    ttft: Optional[float] = None
 
     def create_child_span_data(
         self,
@@ -48,6 +49,7 @@ class SpanData(ObservationData):
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
         attachments: Optional[List[attachment.Attachment]] = None,
+        ttft: Optional[float] = None,
     ) -> "SpanData":
         start_time = (
             start_time if start_time is not None else datetime_helpers.local_timestamp()
@@ -71,6 +73,7 @@ class SpanData(ObservationData):
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            ttft=ttft,
         )
 
     @property
@@ -117,6 +120,7 @@ class SpanData(ObservationData):
             "error_info": self.error_info,
             "total_cost": self.total_cost,
             "attachments": self.attachments,
+            "ttft": self.ttft,
         }
 
     def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:

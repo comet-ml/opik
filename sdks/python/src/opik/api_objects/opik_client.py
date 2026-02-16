@@ -409,6 +409,7 @@ class Opik:
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
         attachments: Optional[List[Attachment]] = None,
+        ttft: Optional[float] = None,
     ) -> span.Span:
         """
         Create and log a new span.
@@ -500,6 +501,7 @@ class Opik:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            ttft=ttft,
         )
 
     def update_span(

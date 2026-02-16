@@ -169,6 +169,7 @@ class Span:
         error_info: Optional[ErrorInfoDict] = None,
         total_cost: Optional[float] = None,
         attachments: Optional[List[attachment.Attachment]] = None,
+        ttft: Optional[float] = None,
     ) -> "Span":
         """
         Create a new child span within the current span.
@@ -219,6 +220,7 @@ class Span:
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            ttft=ttft,
         )
 
     def log_feedback_score(
@@ -285,6 +287,7 @@ def create_span(
     error_info: Optional[ErrorInfoDict] = None,
     total_cost: Optional[float] = None,
     attachments: Optional[List[attachment.Attachment]] = None,
+    ttft: Optional[float] = None,
 ) -> Span:
     span_id = span_id if span_id is not None else id_helpers.generate_id()
     start_time = (
@@ -319,6 +322,7 @@ def create_span(
         error_info=error_info,
         total_cost=total_cost,
         last_updated_at=datetime_helpers.local_timestamp(),
+        ttft=ttft,
     )
     message_streamer.put(create_span_message)
 

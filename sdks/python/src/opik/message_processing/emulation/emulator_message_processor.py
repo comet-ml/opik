@@ -285,6 +285,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         error_info: Optional[ErrorInfoDict],
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
+        ttft: Optional[float] = None,
     ) -> models.SpanModel:
         """
         Abstract method to create a span model representing a span of a trace.
@@ -409,6 +410,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             last_updated_at=message.last_updated_at,
             spans=None,
             feedback_scores=None,
+            ttft=message.ttft,
         )
 
         self._save_span(
@@ -428,6 +430,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             "tags": message.tags,
             "input": message.input,
             "total_cost": message.total_cost,
+            "ttft": message.ttft,
         }
         cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
         span.__dict__.update(cleaned_update_payload)
@@ -513,6 +516,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             spans=None,
             feedback_scores=None,
             error_info=error_info,
+            ttft=message.ttft,
         )
 
         self._save_span(

@@ -110,6 +110,7 @@ class CreateSpanMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
     last_updated_at: Optional[datetime.datetime]
+    ttft: Optional[float] = None
 
     def __post_init__(self) -> None:
         if self.input is not None:
@@ -146,6 +147,7 @@ class UpdateSpanMessage(BaseMessage):
     provider: Optional[Union[LLMProvider, str]]
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
+    ttft: Optional[float] = None
 
     def __post_init__(self) -> None:
         if self.input is not None:
